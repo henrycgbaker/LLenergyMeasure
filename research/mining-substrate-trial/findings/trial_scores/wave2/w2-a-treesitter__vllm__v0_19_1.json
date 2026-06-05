@@ -1,0 +1,23 @@
+{
+  "strategy_id": "w2-a-treesitter",
+  "engine": "vllm",
+  "engine_version": "v0.19.1",
+  "schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-treesitter/vllm/v0_19_1/schema.json",
+  "invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-treesitter/vllm/v0_19_1/invariants.proposed.yaml",
+  "observations": [
+    "invariants: missing validator source: config.py"
+  ],
+  "wall_sec": {
+    "schema": 0.02209907499491237,
+    "invariants": 0.0437709650141187,
+    "total": 0.09021763401688077
+  },
+  "energy_wh": null,
+  "extra": {
+    "task": "both",
+    "engine_param_count": 183,
+    "sampling_param_count": 32,
+    "defs_count": 0,
+    "invariant_count": 44
+  }
+}

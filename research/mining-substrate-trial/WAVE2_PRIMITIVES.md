@@ -12,6 +12,7 @@ Comprehensive ≠ exhaustive. We characterise every axis but only probe interact
 |---|---|---|
 | `hand-walker` | Engine source via handwritten AST walker (Wave 1 baseline; current main) | Free per-bump; expensive per-version-vendoring |
 | `tree-sitter-universal` | Engine source via tree-sitter queries | Free per-bump; near-zero per-version |
+| `improved-det` | Engine source via 7 targeted tree-sitter/AST primitives (class-fanout, env enumerator, silent-norm detector, mechanical-gap probe, validator-convention walker, decorator-validator walker, aggregator __post_init__ walker) | Free per-bump; near-zero per-version. Implemented `w2-a-improved-det`; leads tree-sitter on invariant recall vs GT on every engine (Wave 2.1). |
 | `framework-reflection` | Engine via `Model.__fields__` / `dataclass.fields` / `msgspec.json.schema` | Near-zero per-bump; needs full engine importable |
 | `runtime-trace` | Engine via monkey-patched validators + synthetic config perturbations | Medium per-bump; needs full engine importable |
 | `behavioural-fuzz` | Engine via hypothesis-style fuzzing | Medium per-bump; needs full engine runnable |

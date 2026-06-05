@@ -1,0 +1,35 @@
+{
+  "strategy_id": "w2-a-improved-det",
+  "engine": "vllm",
+  "engine_version": "v0.19.1",
+  "schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det/vllm/v0_19_1/schema.json",
+  "invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det/vllm/v0_19_1/invariants.proposed.yaml",
+  "observations": [
+    "schema: missing source file: config.py",
+    "invariants: missing validator source: config.py"
+  ],
+  "wall_sec": {
+    "schema": 0.029280182003276423,
+    "invariants": 0.03419101898907684,
+    "total": 0.09014086599927396
+  },
+  "energy_wh": null,
+  "extra": {
+    "env_footguns": 0,
+    "env_count": 227,
+    "primitives_fired": [
+      "p1",
+      "p2",
+      "p3",
+      "p4",
+      "p5",
+      "p7"
+    ],
+    "task": "both",
+    "source_root": "/tmp/trial_vllm_v0_19_1_venv/src/vllm",
+    "engine_param_count": 183,
+    "sampling_param_count": 32,
+    "defs_count": 0,
+    "invariant_count": 45
+  }
+}

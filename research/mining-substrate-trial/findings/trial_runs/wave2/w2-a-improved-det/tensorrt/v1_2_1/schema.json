@@ -1,0 +1,2082 @@
+{
+  "schema_version": "2.0.0",
+  "engine": "tensorrt",
+  "engine_version": "1.2.1",
+  "discovered_at": "2026-06-05T01:35:58.362461+00:00",
+  "engine_params": {
+    "garbage_collection_gen0_threshold": {
+      "type": "integer",
+      "default": "Field(\n        default=20000,\n        description=\n        \"Threshold for Python garbage collection of generation 0 objects.\"\n        \"Lower values trigger more frequent garbage collection.\",\n        status=\"beta\")"
+    },
+    "cuda_graph_config": {
+      "type": {
+        "description": "Upstream type: Optional[CudaGraphConfig] | None"
+      },
+      "default": "Field(\n        default_factory=CudaGraphConfig,\n        description=\"CUDA graph config.If true, use CUDA graphs for decoding. \\\n        CUDA graphs are only created for the batch sizes in cuda_graph_config.batch_sizes, \\\n        and are enabled for batches that consist of decoding requests *only* \\\n        (the reason is that it's hard to capture a single graph with prefill requests \\\n        since the input shapes are a function of the sequence lengths).\\\n         Note that each CUDA graph can use up to 200 MB of extra memory.\",\n        status=\"beta\")"
+    },
+    "attention_dp_config": {
+      "type": {
+        "description": "Upstream type: Optional[AttentionDpConfig] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\"Optimized load-balancing for the DP Attention scheduler.\",\n        status=\"beta\")"
+    },
+    "disable_overlap_scheduler": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"Disable the overlap scheduler.\",\n        status=\"beta\")"
+    },
+    "moe_config": {
+      "type": {
+        "description": "Upstream type: MoeConfig"
+      },
+      "default": "Field(default_factory=MoeConfig,\n                                  description=\"MoE config.\",\n                                  status=\"beta\")"
+    },
+    "nvfp4_gemm_config": {
+      "type": {
+        "description": "Upstream type: Nvfp4GemmConfig"
+      },
+      "default": "Field(\n        default_factory=Nvfp4GemmConfig,\n        description=\"NVFP4 GEMM backend config.\",\n        status=\"beta\")"
+    },
+    "attn_backend": {
+      "type": "string",
+      "default": "Field(default='TRTLLM',\n                              description=\"Attention backend to use.\",\n                              status=\"beta\")"
+    },
+    "sampler_type": {
+      "type": {
+        "description": "Upstream type: Union[str, SamplerType]"
+      },
+      "default": "Field(\n        default=SamplerType.auto,\n        description=\n        \"The type of sampler to use. Options are TRTLLMSampler, TorchSampler or auto. Defaults to auto, which will use TorchSampler unless BeamSearch is requested.\",\n        status=\"beta\")"
+    },
+    "sampler_force_async_worker": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"Force usage of the async worker in the sampler for D2H \"\n        \"copies, even if confidential compute is not active. Normally, the \"\n        \"async worker should only be used when confidential compute is active. \"\n        \"This argument is provided to enable it for testing purposes, \"\n        \"irrespective of confidential compute state.\",\n        status=\"prototype\")"
+    },
+    "enable_iter_perf_stats": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"Enable iteration performance statistics.\",\n        status=\"prototype\")"
+    },
+    "enable_iter_req_stats": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\n        \"If true, enables per request stats per iteration. Must also set enable_iter_perf_stats to true to get request stats.\",\n        status=\"prototype\")"
+    },
+    "print_iter_log": {
+      "type": "boolean",
+      "default": "Field(default=False,\n                                 description=\"Print iteration logs.\",\n                                 status=\"beta\")"
+    },
+    "perf_metrics_max_requests": {
+      "type": "integer",
+      "default": "Field(\n        default=0,\n        description=\n        \"The maximum number of requests for perf metrics. Must also set request_perf_metrics to true to get perf metrics.\",\n        status=\"prototype\")"
+    },
+    "batch_wait_timeout_ms": {
+      "type": "number",
+      "default": "Field(\n        default=0,\n        description=\n        \"If greater than 0, the request queue might wait up to batch_wait_timeout_ms to receive max_batch_size requests, if fewer than max_batch_size requests are currently available. If 0, no waiting occurs.\",\n        status=\"prototype\")"
+    },
+    "batch_wait_timeout_iters": {
+      "type": "integer",
+      "default": "Field(\n        default=0,\n        description=\n        \"Maximum number of iterations the scheduler will wait to accumulate new coming requests for improved GPU utilization efficiency. If greater than 0, the scheduler will delay batch processing to gather more requests up to the specified iteration limit. If 0, disables timeout-iters-based batching delays.\",\n        status=\"prototype\")"
+    },
+    "batch_wait_max_tokens_ratio": {
+      "type": "number",
+      "default": "Field(\n        default=0,\n        description=\n        \"Token accumulation threshold ratio for batch scheduling optimization. If greater than 0, the scheduler will accumulate requests locally until the total token count reaches batch_wait_max_tokens_ratio * max_num_tokens. This mechanism enhances GPU utilization efficiency by ensuring adequate batch sizes.If 0 disables token-based batching delays.\",\n        status=\"prototype\")"
+    },
+    "torch_compile_config": {
+      "type": {
+        "description": "Upstream type: Optional[TorchCompileConfig] | None"
+      },
+      "default": "Field(\n        default=None, description=\"Torch compile config.\", status=\"prototype\")"
+    },
+    "enable_autotuner": {
+      "type": "boolean",
+      "default": "Field(\n        default=True,\n        description=\n        \"Enable autotuner for all tunable ops. This flag is for debugging purposes only, and the performance may significantly degrade if set to false.\",\n        status=\"prototype\")"
+    },
+    "enable_layerwise_nvtx_marker": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"If true, enable layerwise nvtx marker.\",\n        status=\"beta\")"
+    },
+    "load_format": {
+      "type": {
+        "description": "Upstream type: Literal['auto', 'dummy']"
+      },
+      "default": "Field(\n        default='auto',\n        description=\"The format to load the model.\",\n        json_schema_extra={\"type\": \"Literal['auto', 'dummy']\"})"
+    },
+    "enable_min_latency": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\n        \"If true, enable min-latency mode. Currently only used for Llama4.\",\n        status=\"beta\",\n    )"
+    },
+    "stream_interval": {
+      "type": "integer",
+      "default": "Field(\n        default=1,\n        description=\n        \"The iteration interval to create responses under the streaming mode. \"\n        \"Set this to a larger value when the batch size is large, which helps reduce the streaming overhead.\",\n    )"
+    },
+    "force_dynamic_quantization": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"If true, force dynamic quantization. Defaults to False.\",\n        status=\"prototype\",\n    )"
+    },
+    "allreduce_strategy": {
+      "type": {
+        "description": "Upstream type: Optional[Literal[\n        'AUTO', 'NCCL', 'UB', 'MINLATENCY', 'ONESHOT', 'TWOSHOT',\n        'LOWPRECISION', 'MNNVL',\n        'NCCL_SYMMETRIC']] | None"
+      },
+      "default": "Field(default='AUTO',\n                                   description=\"Allreduce strategy to use.\",\n                                   status=\"beta\")"
+    },
+    "checkpoint_loader": {
+      "type": {
+        "description": "Upstream type: Optional[object] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\n        \"The checkpoint loader to use for this LLM instance. You may use a custom checkpoint loader by subclassing \"\n        \"`BaseCheckpointLoader` and providing an instance of the subclass here to load weights from a custom \"\n        \"checkpoint format.\\n\"\n        \"If neither checkpoint_format nor checkpoint_loader are provided, checkpoint_format will be set to HF \"\n        \"and the default HfCheckpointLoader will be used.\\n\"\n        \"If checkpoint_format and checkpoint_loader are both provided, checkpoint_loader will be ignored.\",\n        json_schema_extra={\n            \"type\":\n            \"Optional[tensorrt_llm._torch.models.checkpoints.BaseCheckpointLoader]\"\n        },\n        status=\"prototype\",\n    )"
+    },
+    "checkpoint_format": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\n        \"The format of the provided checkpoint. You may use a custom checkpoint format by subclassing \"\n        \"`BaseCheckpointLoader` and registering it with `register_checkpoint_loader`.\\n\"\n        \"If neither checkpoint_format nor checkpoint_loader are provided, checkpoint_format will be set to HF \"\n        \"and the default HfCheckpointLoader will be used.\\n\"\n        \"If checkpoint_format and checkpoint_loader are both provided, checkpoint_loader will be ignored.\",\n        status=\"prototype\",\n    )"
+    },
+    "kv_connector_config": {
+      "type": {
+        "description": "Upstream type: Optional[KvCacheConnectorConfig] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\"The config for KV cache connector.\",\n        status=\"prototype\",\n    )"
+    },
+    "mm_encoder_only": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\n        \"Only load/execute the vision encoder part of the full model. Defaults to False.\",\n        status=\"prototype\",\n    )"
+    },
+    "ray_worker_extension_cls": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The full worker extension class name including module path.\"\n        \"Allows users to extend the functions of the RayGPUWorker class.\",\n        status=\"prototype\")"
+    },
+    "ray_placement_config": {
+      "type": {
+        "description": "Upstream type: Optional[RayPlacementConfig] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\n        \"Placement config for RayGPUWorker. Only used with AsyncLLM and orchestrator_type='ray'.\",\n        exclude=True,\n        status=\"prototype\")"
+    },
+    "enable_sleep": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\n        \"Enable LLM sleep feature. Sleep feature requires extra setup that may slowdown model loading.\"\n        \"Only enable it if you intend to use this feature.\",\n        status=\"prototype\")"
+    },
+    "disable_flashinfer_sampling": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\n        \"Disable the use of FlashInfer.sampling. This option is likely to be removed in the future.\",\n        status=\"prototype\",\n    )"
+    },
+    "max_stats_len": {
+      "type": "integer",
+      "default": "Field(\n        default=1000,\n        description=\"The max number of performance statistic entries.\",\n        status=\"prototype\",\n    )"
+    },
+    "model_config": {
+      "default": "{\n        \"arbitrary_types_allowed\": True,\n        \"extra\": \"forbid\",\n    }"
+    },
+    "model": {
+      "type": {
+        "description": "Upstream type: Union[str, Path]"
+      },
+      "default": "Field(\n        description=\n        \"The path to the model checkpoint or the model name from the Hugging Face Hub.\"\n    )"
+    },
+    "tokenizer": {
+      "type": {
+        "description": "Upstream type: Optional[Union[\n        str, Path, TokenizerBase, PreTrainedTokenizerBase]] | None"
+      },
+      "default": "Field(\n            description=\n            \"The path to the tokenizer checkpoint or the tokenizer name from the Hugging Face Hub.\",\n            default=None)"
+    },
+    "tokenizer_mode": {
+      "type": {
+        "description": "Upstream type: Literal['auto', 'slow']"
+      },
+      "default": "Field(\n        default='auto',\n        description=\"The mode to initialize the tokenizer.\",\n        json_schema_extra={\"type\": \"Literal['auto', 'slow']\"})"
+    },
+    "custom_tokenizer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"Specify a custom tokenizer implementation. Accepts either: \"\n        \"(1) a built-in alias (e.g., 'deepseek_v32'), or \"\n        \"(2) a Python import path (e.g., 'tensorrt_llm.tokenizer.deepseek_v32.DeepseekV32Tokenizer'). \"\n        \"The tokenizer class must implement 'from_pretrained(path, **kwargs)' and the TokenizerBase interface.\",\n        status=\"prototype\")"
+    },
+    "skip_tokenizer_init": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"Whether to skip the tokenizer initialization.\")"
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": "Field(\n        default=False, description=\"Whether to trust the remote code.\")"
+    },
+    "tensor_parallel_size": {
+      "type": "integer",
+      "default": "Field(default=1,\n                                      description=\"The tensor parallel size.\")"
+    },
+    "dtype": {
+      "type": "string",
+      "default": "Field(default=\"auto\",\n                       description=\"The data type to use for the model.\")"
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None, description=\"The revision to use for the model.\")"
+    },
+    "tokenizer_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None, description=\"The revision to use for the tokenizer.\")"
+    },
+    "pipeline_parallel_size": {
+      "type": "integer",
+      "default": "Field(\n        default=1, description=\"The pipeline parallel size.\")"
+    },
+    "context_parallel_size": {
+      "type": "integer",
+      "default": "Field(default=1,\n                                       description=\"The context parallel size.\")"
+    },
+    "gpus_per_node": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The number of GPUs per node.\",\n        status=\"beta\",\n        validate_default=True)"
+    },
+    "moe_cluster_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The cluster parallel size for MoE models's expert weights.\",\n        status=\"beta\")"
+    },
+    "moe_tensor_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The tensor parallel size for MoE models's expert weights.\")"
+    },
+    "moe_expert_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The expert parallel size for MoE models's expert weights.\")"
+    },
+    "enable_attention_dp": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"Enable attention data parallel.\",\n        status=\"beta\")"
+    },
+    "enable_lm_head_tp_in_adp": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"Enable LM head TP in attention dp.\",\n        status=\"prototype\")"
+    },
+    "pp_partition": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\n        \"Pipeline parallel partition, a list of each rank's layer number.\",\n        status=\"prototype\")"
+    },
+    "cp_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": "Field(default_factory=dict,\n                                      description=\"Context parallel config.\",\n                                      status=\"prototype\")"
+    },
+    "fail_fast_on_attention_window_too_large": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\n        \"Fail fast when attention window is too large to fit even a single sequence in the KV cache.\",\n        status=\"prototype\")"
+    },
+    "enable_lora": {
+      "type": "boolean",
+      "default": "Field(default=False, description=\"Enable LoRA.\")"
+    },
+    "lora_config": {
+      "type": {
+        "description": "Upstream type: Optional[LoraConfig] | None"
+      },
+      "default": "Field(\n        default=None, description=\"LoRA configuration for the model.\")"
+    },
+    "kv_cache_config": {
+      "type": {
+        "description": "Upstream type: KvCacheConfig"
+      },
+      "default": "Field(default_factory=KvCacheConfig,\n                                           description=\"KV cache config.\")"
+    },
+    "enable_chunked_prefill": {
+      "type": "boolean",
+      "default": "Field(default=False,\n                                         description=\"Enable chunked prefill.\")"
+    },
+    "guided_decoding_backend": {
+      "type": {
+        "description": "Upstream type: Optional[Literal[\"xgrammar\", \"llguidance\"]] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\n        \"Guided decoding backend. llguidance is supported in PyTorch backend only.\"\n    )"
+    },
+    "batched_logits_processor": {
+      "type": {
+        "description": "Upstream type: Optional[object] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\"Batched logits processor.\",\n        json_schema_extra={\n            \"type\": f\"Optional[{get_type_repr(BatchedLogitsProcessor)}]\"\n        })"
+    },
+    "iter_stats_max_iterations": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The maximum number of iterations for iter stats.\",\n        status=\"prototype\")"
+    },
+    "request_stats_max_iterations": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The maximum number of iterations for request stats.\",\n        status=\"prototype\")"
+    },
+    "peft_cache_config": {
+      "type": {
+        "description": "Upstream type: Optional[PeftCacheConfig] | None"
+      },
+      "default": "Field(\n        default=None, description=\"PEFT cache config.\", status=\"prototype\")"
+    },
+    "scheduler_config": {
+      "type": {
+        "description": "Upstream type: SchedulerConfig"
+      },
+      "default": "Field(default_factory=SchedulerConfig,\n                                              description=\"Scheduler config.\",\n                                              status=\"prototype\")"
+    },
+    "cache_transceiver_config": {
+      "type": {
+        "description": "Upstream type: Optional[CacheTransceiverConfig] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\"Cache transceiver config.\",\n        status=\"prototype\")"
+    },
+    "sparse_attention_config": {
+      "type": {
+        "description": "Upstream type: Optional[SparseAttentionConfig] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\"Sparse attention config.\",\n        status=\"prototype\")"
+    },
+    "speculative_config": {
+      "type": {
+        "description": "Upstream type: SpeculativeConfig"
+      },
+      "default": "Field(\n        default=None, description=\"Speculative decoding config.\")"
+    },
+    "max_batch_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(default=None,\n                                          description=\"The maximum batch size.\")"
+    },
+    "max_input_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None, description=\"The maximum input length.\")"
+    },
+    "max_seq_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=None, description=\"The maximum sequence length.\")"
+    },
+    "max_beam_width": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(default=None,\n                                          description=\"The maximum beam width.\")"
+    },
+    "max_num_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "Field(\n        default=8192, description=\"The maximum number of tokens.\")"
+    },
+    "gather_generation_logits": {
+      "type": "boolean",
+      "default": "Field(\n        default=False,\n        description=\"Gather generation logits.\",\n        status=\"prototype\")"
+    },
+    "num_postprocess_workers": {
+      "type": "integer",
+      "default": "Field(\n        default=0,\n        description=\n        \"The number of processes used for postprocessing the generated tokens, including detokenization.\",\n        status=\"prototype\")"
+    },
+    "postprocess_tokenizer_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The path to the tokenizer directory for postprocessing.\",\n        status=\"prototype\")"
+    },
+    "reasoning_parser": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The parser to separate reasoning content from output.\",\n        status=\"prototype\")"
+    },
+    "decoding_config": {
+      "type": {
+        "description": "Upstream type: Optional[object] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\"The decoding config.\",\n        json_schema_extra={\n            \"type\": \"Optional[tensorrt_llm.llmapi.llm_args.DecodingConfig]\"\n        },\n        status=\"deprecated\",\n        deprecated=\"Use speculative_config instead.\",\n    )"
+    },
+    "mpi_session": {
+      "type": {
+        "description": "Upstream type: Optional[object] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\"The optional MPI session to use for this LLM instance.\",\n        json_schema_extra={\"type\": \"Optional[MpiSession]\"},\n        exclude=True,\n        alias=\"_mpi_session\")"
+    },
+    "otlp_traces_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"Target URL to which OpenTelemetry traces will be sent.\",\n        alias=\"otlp_traces_endpoint\",\n        status=\"prototype\")"
+    },
+    "backend": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\"The backend to use for this LLM instance.\",\n        exclude_json_schema=True,  # hide from API references\n        validate_default=True,\n        status=\"deprecated\",\n    )"
+    },
+    "return_perf_metrics": {
+      "type": "boolean",
+      "default": "Field(default=False,\n                                      description=\"Return perf metrics.\",\n                                      status=\"prototype\")"
+    },
+    "orchestrator_type": {
+      "type": {
+        "description": "Upstream type: Optional[Literal[\"rpc\", \"ray\"]] | None"
+      },
+      "default": "Field(\n        default=None,\n        description=\n        \"The orchestrator type to use. Defaults to None, which uses MPI.\",\n        status=\"prototype\",\n    )"
+    },
+    "env_overrides": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": "Field(\n        default=None,\n        description=\n        \"[EXPERIMENTAL] Environment variable overrides. NOTE: import-time-cached env vars in the code won't update unless the code fetches them from os.environ on demand.\",\n        status=\"prototype\")"
+    }
+  },
+  "sampling_params": {
+    "end_id": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "pad_id": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_tokens": {
+      "type": "integer",
+      "default": 32
+    },
+    "bad": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "bad_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "stop": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "stop_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "include_stop_str_in_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "embedding_bias": {
+      "type": {
+        "description": "Upstream type: Optional[torch.Tensor] | None"
+      },
+      "default": null
+    },
+    "logits_processor": {
+      "type": {
+        "description": "Upstream type: Optional[Union[LogitsProcessor, List[LogitsProcessor]]] | None"
+      },
+      "default": null
+    },
+    "apply_batched_logits_processor": {
+      "type": "boolean",
+      "default": false
+    },
+    "n": {
+      "type": "integer",
+      "default": 1
+    },
+    "best_of": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "use_beam_search": {
+      "type": "boolean",
+      "default": false
+    },
+    "top_k": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p_min": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p_reset_ids": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p_decay": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "temperature": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "min_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "beam_search_diversity_rate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "repetition_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "presence_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "frequency_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "prompt_ignore_length": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "length_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "early_stopping": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "no_repeat_ngram_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "min_p": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "beam_width_array": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "prompt_logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "return_context_logits": {
+      "type": "boolean",
+      "default": false
+    },
+    "return_generation_logits": {
+      "type": "boolean",
+      "default": false
+    },
+    "exclude_input_from_output": {
+      "type": "boolean",
+      "default": true
+    },
+    "return_encoder_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "return_perf_metrics": {
+      "type": "boolean",
+      "default": false
+    },
+    "additional_model_outputs": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "lookahead_config": {
+      "type": {
+        "description": "Upstream type: Optional[tllme.LookaheadDecodingConfig] | None"
+      },
+      "default": null
+    },
+    "guided_decoding": {
+      "type": {
+        "description": "Upstream type: Optional[GuidedDecodingParams] | None"
+      },
+      "default": null
+    },
+    "ignore_eos": {
+      "type": "boolean",
+      "default": false
+    },
+    "detokenize": {
+      "type": "boolean",
+      "default": true
+    },
+    "add_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "truncate_prompt_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "skip_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "spaces_between_special_tokens": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "$defs": {
+    "CudaGraphConfig": {
+      "type": "object",
+      "properties": {
+        "batch_sizes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"List of batch sizes to create CUDA graphs for.\")"
+        },
+        "max_batch_size": {
+          "type": "integer",
+          "default": "Field(\n        default=0, description=\"Maximum batch size for CUDA graphs.\")"
+        },
+        "enable_padding": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"If true, batches are rounded up to the nearest cuda_graph_batch_size. This is usually a net win for performance.\"\n    )"
+        }
+      }
+    },
+    "GuidedDecodingConfig": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": {
+            "description": "Upstream type: GuidedDecodingBackend"
+          },
+          "default": "Field(\n        default=GuidedDecodingBackend.XGRAMMAR,\n        description=\"The backend for guided decoding config.\")"
+        },
+        "encoded_vocab": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The encoded vocab for guided decoding config.\")"
+        },
+        "tokenizer_str": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The tokenizer string for guided decoding config.\")"
+        },
+        "stop_token_ids": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The stop token ids for guided decoding config.\")"
+        }
+      }
+    },
+    "BaseSparseAttentionConfig": {
+      "type": "object",
+      "properties": {
+        "seq_len_threshold": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"The sequence length threshold for separating short and long sequences.\"\n    )"
+        }
+      }
+    },
+    "MoeLoadBalancerConfig": {
+      "type": "object",
+      "properties": {
+        "num_slots": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "initial_global_assignments": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        repr=False  # Exclude this large dict from model representation\n    )"
+        },
+        "layer_updates_per_iter": {
+          "type": "integer",
+          "default": 0
+        }
+      }
+    },
+    "MoeConfig": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": {
+            "description": "Upstream type: Literal[\"CUTLASS\", \"CUTEDSL\", \"WIDEEP\", \"TRTLLM\", \"DEEPGEMM\",\n                     \"VANILLA\",\n                     \"TRITON\"]"
+          },
+          "default": "Field(default='CUTLASS',\n                                       description=\"MoE backend to use.\")"
+        },
+        "max_num_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"If set, at most max_num_tokens tokens will be sent to torch.ops.trtllm.fused_moe at the same time. If the number of tokens exceeds max_num_tokens, the input tensors will be split into chunks and a for loop will be used.\"\n    )"
+        },
+        "load_balancer": {
+          "type": {
+            "description": "Upstream type: Optional[Union[object, str]] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"Configuration for MoE load balancing.\",\n        json_schema_extra={\"type\": \"Union[MoeLoadBalancerConfig, dict, str]\"})"
+        },
+        "disable_finalize_fusion": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"Disable FC2+finalize kernel fusion in CUTLASS MoE backend. Setting this to True recovers deterministic numerical behavior with top-k > 2.\"\n    )"
+        },
+        "use_low_precision_moe_combine": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"Use low precision combine in MoE operations (only for NVFP4 quantization). When enabled, uses lower precision for combining expert outputs to improve performance.\"\n    )"
+        }
+      }
+    },
+    "Nvfp4GemmConfig": {
+      "type": "object",
+      "properties": {
+        "allowed_backends": {
+          "type": "array",
+          "default": "Field(\n        default=['cutlass', 'cublaslt', 'cuda_core'],\n        description=\"List of backends to consider for auto-selection. \"\n        \"Default excludes 'cutedsl' for faster build time. \"\n        \"Add 'cutedsl' for extreme performance at the cost of longer server launch time. \"\n        \"Valid values: 'cutlass', 'cublaslt', 'cutedsl', 'cuda_core'.\")"
+        }
+      }
+    },
+    "AttentionDpConfig": {
+      "type": "object",
+      "properties": {
+        "enable_balance": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                                 description=\"Whether to enable balance.\")"
+        },
+        "timeout_iters": {
+          "type": "integer",
+          "default": "Field(\n        default=50, description=\"The number of iterations to timeout.\")"
+        },
+        "batching_wait_iters": {
+          "type": "integer",
+          "default": "Field(\n        default=10,\n        description=\"The number of iterations to wait for batching.\")"
+        }
+      }
+    },
+    "CalibConfig": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": {
+            "description": "Upstream type: Literal['cuda',\n                    'cpu']"
+          },
+          "default": "Field(default='cuda',\n                                   description=\"The device to run calibration.\")"
+        },
+        "calib_dataset": {
+          "type": "string",
+          "default": "Field(\n        default='cnn_dailymail',\n        description=\"The name or local path of calibration dataset.\")"
+        },
+        "calib_batches": {
+          "type": "integer",
+          "default": "Field(\n        default=512,\n        description=\"The number of batches that the calibration runs.\")"
+        },
+        "calib_batch_size": {
+          "type": "integer",
+          "default": "Field(\n        default=1, description=\"The batch size that the calibration runs.\")"
+        },
+        "calib_max_seq_length": {
+          "type": "integer",
+          "default": "Field(\n        default=512,\n        description=\"The maximum sequence length that the calibration runs.\")"
+        },
+        "random_seed": {
+          "type": "integer",
+          "default": "Field(\n        default=1234, description=\"The random seed used for calibration.\")"
+        },
+        "tokenizer_max_seq_length": {
+          "type": "integer",
+          "default": "Field(\n        default=2048,\n        description=\n        \"The maximum sequence length to initialize tokenizer for calibration.\")"
+        }
+      }
+    },
+    "DecodingBaseConfig": {
+      "type": "object",
+      "properties": {
+        "max_draft_len": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "max_total_draft_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "speculative_model": {
+          "type": {
+            "description": "Upstream type: Optional[Union[str, Path]] | None"
+          },
+          "default": "Field(\n        default=None,\n        validation_alias=AliasChoices(\"speculative_model\",\n                                      \"speculative_model_dir\"))"
+        },
+        "max_concurrency": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "draft_len_schedule": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        },
+        "load_format": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "acceptance_window": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "acceptance_length_threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "allow_advanced_sampling": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "KvCacheConnectorConfig": {
+      "type": "object",
+      "properties": {
+        "connector_module": {
+          "type": "string",
+          "default": "Field(\n        ...,\n        description=\n        \"The import path to the connector module. It will be imported with `importlib.import_module`.\"\n    )"
+        },
+        "connector_scheduler_class": {
+          "type": "string",
+          "default": "Field(\n        ..., description=\"The class name of the scheduler within the module.\")"
+        },
+        "connector_worker_class": {
+          "type": "string",
+          "default": "Field(\n        ..., description=\"The class name of the worker within the module.\")"
+        }
+      }
+    },
+    "EagleDecodingConfig": {
+      "type": "object",
+      "properties": {
+        "eagle_choices": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null
+        },
+        "greedy_sampling": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "posterior_threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "use_dynamic_tree": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
+        "dynamic_tree_max_topK": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "num_eagle_layers": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "max_non_leaves_per_layer": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "eagle3_one_model": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "eagle3_layers_to_capture": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null
+        },
+        "eagle3_model_arch": {
+          "type": "string",
+          "default": "llama3"
+        },
+        "decoding_type": {
+          "type": {
+            "description": "Upstream type: ClassVar[str]"
+          },
+          "default": "Eagle"
+        }
+      }
+    },
+    "SaveHiddenStatesDecodingConfig": {
+      "type": "object",
+      "properties": {
+        "output_directory": {
+          "type": "string"
+        },
+        "write_interval": {
+          "type": "integer",
+          "default": 20
+        },
+        "file_prefix": {
+          "type": "string",
+          "default": "data"
+        },
+        "eagle3_layers_to_capture": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null
+        },
+        "max_total_draft_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(default=1, init=False)"
+        },
+        "eagle_choices": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(default=None, init=False)"
+        },
+        "decoding_type": {
+          "type": {
+            "description": "Upstream type: ClassVar[str]"
+          },
+          "default": "SaveState"
+        }
+      }
+    },
+    "RayPlacementConfig": {
+      "type": "object",
+      "properties": {
+        "defer_workers_init": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Defer Ray worker initialization until async setup.\")"
+        },
+        "placement_groups": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"List of Ray placement groups, one per node. \"\n        \"Each element must be a ray.util.placement_group.PlacementGroup instance.\"\n    )"
+        },
+        "placement_bundle_indices": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"List of bundle indices for each placement group. \"\n        \"Outer list corresponds to placement_groups, inner list contains bundle indices for that group.\"\n    )"
+        },
+        "per_worker_gpu_share": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"GPU fraction per worker for colocation scenarios. \"\n        \"Example: 0.1 means 10 actors can share one GPU. Defaults to 1.0 (one actor per GPU).\"\n    )"
+        }
+      }
+    },
+    "DynamicBatchConfig": {
+      "type": "object",
+      "properties": {
+        "enable_batch_size_tuning": {
+          "type": "boolean",
+          "default": "Field(\n        description=\"Controls if the batch size should be tuned dynamically\")"
+        },
+        "enable_max_num_tokens_tuning": {
+          "type": "boolean",
+          "default": "Field(\n        description=\"Controls if the max num tokens should be tuned dynamically\"\n    )"
+        },
+        "dynamic_batch_moving_average_window": {
+          "type": "integer",
+          "default": "Field(\n        description=\n        \"The window size for moving average of input and output length which is used to calculate dynamic batch size and max num tokens\"\n    )"
+        }
+      }
+    },
+    "SchedulerConfig": {
+      "type": "object",
+      "properties": {
+        "capacity_scheduler_policy": {
+          "type": {
+            "description": "Upstream type: CapacitySchedulerPolicy"
+          },
+          "default": "Field(\n        default=CapacitySchedulerPolicy.GUARANTEED_NO_EVICT,\n        description=\"The capacity scheduler policy to use\")"
+        },
+        "context_chunking_policy": {
+          "type": {
+            "description": "Upstream type: Optional[ContextChunkingPolicy] | None"
+          },
+          "default": "Field(\n        default=None, description=\"The context chunking policy to use\")"
+        },
+        "dynamic_batch_config": {
+          "type": {
+            "description": "Upstream type: Optional[DynamicBatchConfig] | None"
+          },
+          "default": "Field(\n        default=None, description=\"The dynamic batch config to use\")"
+        }
+      }
+    },
+    "PeftCacheConfig": {
+      "type": "object",
+      "properties": {
+        "num_host_module_layer": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"number of max sized 1-layer 1-module adapterSize=1 sets of weights that can be stored in host cache\"\n        \", affects host cache size and overrides value of host_cache_size\")"
+        },
+        "num_device_module_layer": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"number of max sized 1-layer 1-module sets of weights that can be stored in device cache\"\n        \", affects device cache size and overrides value of device_cache_percent\"\n    )"
+        },
+        "optimal_adapter_size": {
+          "type": "integer",
+          "default": "Field(\n        default=\n        8,  # There are tests to keep the default value consistent with the pybind default value\n        description=\"optimal adapter size used to set page width\")"
+        },
+        "max_adapter_size": {
+          "type": "integer",
+          "default": "Field(\n        default=64,\n        description=\"max supported adapter size. Used to compute minimum\")"
+        },
+        "num_put_workers": {
+          "type": "integer",
+          "default": "Field(\n        default=1,\n        description=\n        \"number of worker threads used to put weights into host cache\")"
+        },
+        "num_ensure_workers": {
+          "type": "integer",
+          "default": "Field(\n        default=1,\n        description=\n        \"number of worker threads used to copy weights from host to device\")"
+        },
+        "num_copy_streams": {
+          "type": "integer",
+          "default": "Field(\n        default=1,\n        description=\"number of streams used to copy weights from host to device\"\n    )"
+        },
+        "max_pages_per_block_host": {
+          "type": "integer",
+          "default": "Field(\n        default=24,\n        description=\"Number of cache pages per allocation block (host)\")"
+        },
+        "max_pages_per_block_device": {
+          "type": "integer",
+          "default": "Field(\n        default=8,\n        description=\"Number of cache pages per allocation block (device)\")"
+        },
+        "device_cache_percent": {
+          "type": "number",
+          "default": "Field(\n        default=0.02,\n        description=\n        \"Proportion of free device memory after engine load to use for cache, as a fraction from 0 to 1\"\n    )"
+        },
+        "host_cache_size": {
+          "type": "integer",
+          "default": "Field(\n        default=1024**3, description=\"size in bytes to use for host cache\")"
+        },
+        "lora_prefetch_dir": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"folder to store the LoRA weights we hope to load during engine initialization, currently not supported\"\n    )"
+        }
+      }
+    },
+    "LookaheadDecodingConfig": {
+      "type": "object",
+      "properties": {
+        "max_window_size": {
+          "type": "integer",
+          "default": "Field(\n        default=_LookaheadDecodingConfig.get_default_lookahead_decoding_window(\n        ),\n        description=\"Number of NGrams in lookahead branch per step.\")"
+        },
+        "max_ngram_size": {
+          "type": "integer",
+          "default": "Field(\n        default=_LookaheadDecodingConfig.get_default_lookahead_decoding_ngram(),\n        description=\"Number of tokens per NGram.\")"
+        },
+        "max_verification_set_size": {
+          "type": "integer",
+          "default": "Field(\n        default=_LookaheadDecodingConfig.\n        get_default_lookahead_decoding_verification_set(),\n        description=\"Number of NGrams in verification branch per step.\")"
+        },
+        "decoding_type": {
+          "type": {
+            "description": "Upstream type: ClassVar[str]"
+          },
+          "default": "Lookahead"
+        }
+      }
+    },
+    "KvCacheConfig": {
+      "type": "object",
+      "properties": {
+        "enable_block_reuse": {
+          "type": "boolean",
+          "default": "Field(\n        default=True,\n        description=\n        \"Controls if KV cache blocks can be reused for different requests.\")"
+        },
+        "max_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"The maximum number of tokens that should be stored in the KV cache. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used.\"\n    )"
+        },
+        "max_attention_window": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"Size of the attention window for each sequence. Only the last tokens will be stored in the KV cache. If the number of elements in `max_attention_window` is less than the number of layers, `max_attention_window` will be repeated multiple times to the number of layers.\"\n    )"
+        },
+        "sink_token_length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"Number of sink tokens (tokens to always keep in attention window).\")"
+        },
+        "free_gpu_memory_fraction": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": "Field(\n        default=0.9,\n        description=\n        \"The fraction of GPU memory fraction that should be allocated for the KV cache. Default is 90%. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used.\"\n    )"
+        },
+        "host_cache_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"Size of the host cache in bytes. If both `max_tokens` and `host_cache_size` are specified, memory corresponding to the minimum will be used.\"\n    )"
+        },
+        "onboard_blocks": {
+          "type": "boolean",
+          "default": "Field(\n        default=True, description=\"Controls if blocks are onboarded.\")"
+        },
+        "cross_kv_cache_fraction": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"The fraction of the KV Cache memory should be reserved for cross attention. If set to p, self attention will use 1-p of KV Cache memory and cross attention will use p of KV Cache memory. Default is 50%. Should only be set when using encoder-decoder model.\"\n    )"
+        },
+        "secondary_offload_min_priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"Only blocks with priority > mSecondaryOfflineMinPriority can be offloaded to secondary memory.\"\n    )"
+        },
+        "event_buffer_max_size": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"Maximum size of the event buffer. If set to 0, the event buffer will not be used.\"\n    )"
+        },
+        "attention_dp_events_gather_period_ms": {
+          "type": "integer",
+          "default": "Field(\n        default=5,\n        description=\n        \"The period in milliseconds to gather attention DP events across ranks.\"\n    )"
+        },
+        "enable_partial_reuse": {
+          "type": "boolean",
+          "default": "Field(\n        default=True,\n        description=\n        \"Whether blocks that are only partially matched can be reused.\")"
+        },
+        "copy_on_partial_reuse": {
+          "type": "boolean",
+          "default": "Field(\n        default=True,\n        description=\n        \"Whether partially matched blocks that are in use can be reused after copying them.\"\n    )"
+        },
+        "use_uvm": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                          description=\"Whether to use UVM for the KV cache.\")"
+        },
+        "max_gpu_total_bytes": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"The maximum size in bytes of GPU memory that can be allocated for the KV cache. If both `max_gpu_total_bytes` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be allocated.\"\n    )"
+        },
+        "dtype": {
+          "type": "string",
+          "default": "Field(default=\"auto\",\n                       description=\"The data type to use for the KV cache.\")"
+        },
+        "mamba_ssm_cache_dtype": {
+          "type": {
+            "description": "Upstream type: Literal[\n        \"auto\", \"float16\", \"bfloat16\", \"float32\"]"
+          },
+          "default": "Field(\n            default=\"auto\",\n            description=\n            \"The data type to use for the Mamba SSM cache. If set to 'auto', the data type will be inferred from the model config.\"\n        )"
+        },
+        "tokens_per_block": {
+          "type": "integer",
+          "default": "Field(default=32,\n                                  description=\"The number of tokens per block.\")"
+        }
+      }
+    },
+    "ExtendedRuntimePerfKnobConfig": {
+      "type": "object",
+      "properties": {
+        "multi_block_mode": {
+          "type": "boolean",
+          "default": "Field(\n        default=True, description=\"Whether to use multi-block mode.\")"
+        },
+        "enable_context_fmha_fp32_acc": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Whether to enable context FMHA FP32 accumulation.\")"
+        },
+        "cuda_graph_mode": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                                  description=\"Whether to use CUDA graph mode.\")"
+        },
+        "cuda_graph_cache_size": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"Number of cuda graphs to be cached in the runtime. The larger the cache, the better the perf, but more GPU memory is consumed.\"\n    )"
+        }
+      }
+    },
+    "CacheTransceiverConfig": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": {
+            "description": "Upstream type: Optional[Literal[\n        \"DEFAULT\", \"UCX\", \"NIXL\", \"MOONCAKE\", \"MPI\"]] | None"
+          },
+          "default": "Field(\n            default=None,\n            description=\n            \"The communication backend type to use for the cache transceiver.\")"
+        },
+        "max_tokens_in_buffer": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The max number of tokens the transfer buffer can fit.\")"
+        },
+        "kv_transfer_timeout_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        gt=0,\n        description=\n        \"Timeout in milliseconds for KV cache transfer. Requests exceeding this timeout will be cancelled.\"\n    )"
+        },
+        "kv_transfer_sender_future_timeout_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=1000,\n        gt=0,\n        description=\n        \"Timeout in milliseconds to wait for the sender future to be ready when scheduled batch size is 0. This allows the request to be eventually cancelled by the user or because of kv_transfer_timeout_ms\"\n    )"
+        }
+      }
+    },
+    "BaseLlmArgs": {
+      "type": "object",
+      "properties": {
+        "model_config": {
+          "default": "{\n        \"arbitrary_types_allowed\": True,\n        \"extra\": \"forbid\",\n    }"
+        },
+        "model": {
+          "type": {
+            "description": "Upstream type: Union[str, Path]"
+          },
+          "default": "Field(\n        description=\n        \"The path to the model checkpoint or the model name from the Hugging Face Hub.\"\n    )"
+        },
+        "tokenizer": {
+          "type": {
+            "description": "Upstream type: Optional[Union[\n        str, Path, TokenizerBase, PreTrainedTokenizerBase]] | None"
+          },
+          "default": "Field(\n            description=\n            \"The path to the tokenizer checkpoint or the tokenizer name from the Hugging Face Hub.\",\n            default=None)"
+        },
+        "tokenizer_mode": {
+          "type": {
+            "description": "Upstream type: Literal['auto', 'slow']"
+          },
+          "default": "Field(\n        default='auto',\n        description=\"The mode to initialize the tokenizer.\",\n        json_schema_extra={\"type\": \"Literal['auto', 'slow']\"})"
+        },
+        "custom_tokenizer": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"Specify a custom tokenizer implementation. Accepts either: \"\n        \"(1) a built-in alias (e.g., 'deepseek_v32'), or \"\n        \"(2) a Python import path (e.g., 'tensorrt_llm.tokenizer.deepseek_v32.DeepseekV32Tokenizer'). \"\n        \"The tokenizer class must implement 'from_pretrained(path, **kwargs)' and the TokenizerBase interface.\",\n        status=\"prototype\")"
+        },
+        "skip_tokenizer_init": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Whether to skip the tokenizer initialization.\")"
+        },
+        "trust_remote_code": {
+          "type": "boolean",
+          "default": "Field(\n        default=False, description=\"Whether to trust the remote code.\")"
+        },
+        "tensor_parallel_size": {
+          "type": "integer",
+          "default": "Field(default=1,\n                                      description=\"The tensor parallel size.\")"
+        },
+        "dtype": {
+          "type": "string",
+          "default": "Field(default=\"auto\",\n                       description=\"The data type to use for the model.\")"
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None, description=\"The revision to use for the model.\")"
+        },
+        "tokenizer_revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None, description=\"The revision to use for the tokenizer.\")"
+        },
+        "pipeline_parallel_size": {
+          "type": "integer",
+          "default": "Field(\n        default=1, description=\"The pipeline parallel size.\")"
+        },
+        "context_parallel_size": {
+          "type": "integer",
+          "default": "Field(default=1,\n                                       description=\"The context parallel size.\")"
+        },
+        "gpus_per_node": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The number of GPUs per node.\",\n        status=\"beta\",\n        validate_default=True)"
+        },
+        "moe_cluster_parallel_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The cluster parallel size for MoE models's expert weights.\",\n        status=\"beta\")"
+        },
+        "moe_tensor_parallel_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The tensor parallel size for MoE models's expert weights.\")"
+        },
+        "moe_expert_parallel_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The expert parallel size for MoE models's expert weights.\")"
+        },
+        "enable_attention_dp": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Enable attention data parallel.\",\n        status=\"beta\")"
+        },
+        "enable_lm_head_tp_in_adp": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Enable LM head TP in attention dp.\",\n        status=\"prototype\")"
+        },
+        "pp_partition": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"Pipeline parallel partition, a list of each rank's layer number.\",\n        status=\"prototype\")"
+        },
+        "cp_config": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": "Field(default_factory=dict,\n                                      description=\"Context parallel config.\",\n                                      status=\"prototype\")"
+        },
+        "load_format": {
+          "type": {
+            "description": "Upstream type: Literal['auto', 'dummy']"
+          },
+          "default": "Field(\n        default='auto',\n        description=\"The format to load the model.\",\n        json_schema_extra={\"type\": \"Literal['auto', 'dummy']\"})"
+        },
+        "fail_fast_on_attention_window_too_large": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"Fail fast when attention window is too large to fit even a single sequence in the KV cache.\",\n        status=\"prototype\")"
+        },
+        "enable_lora": {
+          "type": "boolean",
+          "default": "Field(default=False, description=\"Enable LoRA.\")"
+        },
+        "lora_config": {
+          "type": {
+            "description": "Upstream type: Optional[LoraConfig] | None"
+          },
+          "default": "Field(\n        default=None, description=\"LoRA configuration for the model.\")"
+        },
+        "kv_cache_config": {
+          "type": {
+            "description": "Upstream type: KvCacheConfig"
+          },
+          "default": "Field(default_factory=KvCacheConfig,\n                                           description=\"KV cache config.\")"
+        },
+        "enable_chunked_prefill": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                                         description=\"Enable chunked prefill.\")"
+        },
+        "guided_decoding_backend": {
+          "type": {
+            "description": "Upstream type: Optional[Literal[\"xgrammar\", \"llguidance\"]] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\n        \"Guided decoding backend. llguidance is supported in PyTorch backend only.\"\n    )"
+        },
+        "batched_logits_processor": {
+          "type": {
+            "description": "Upstream type: Optional[object] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"Batched logits processor.\",\n        json_schema_extra={\n            \"type\": f\"Optional[{get_type_repr(BatchedLogitsProcessor)}]\"\n        })"
+        },
+        "iter_stats_max_iterations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The maximum number of iterations for iter stats.\",\n        status=\"prototype\")"
+        },
+        "request_stats_max_iterations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The maximum number of iterations for request stats.\",\n        status=\"prototype\")"
+        },
+        "peft_cache_config": {
+          "type": {
+            "description": "Upstream type: Optional[PeftCacheConfig] | None"
+          },
+          "default": "Field(\n        default=None, description=\"PEFT cache config.\", status=\"prototype\")"
+        },
+        "scheduler_config": {
+          "type": {
+            "description": "Upstream type: SchedulerConfig"
+          },
+          "default": "Field(default_factory=SchedulerConfig,\n                                              description=\"Scheduler config.\",\n                                              status=\"prototype\")"
+        },
+        "cache_transceiver_config": {
+          "type": {
+            "description": "Upstream type: Optional[CacheTransceiverConfig] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"Cache transceiver config.\",\n        status=\"prototype\")"
+        },
+        "sparse_attention_config": {
+          "type": {
+            "description": "Upstream type: Optional[SparseAttentionConfig] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"Sparse attention config.\",\n        status=\"prototype\")"
+        },
+        "speculative_config": {
+          "type": {
+            "description": "Upstream type: SpeculativeConfig"
+          },
+          "default": "Field(\n        default=None, description=\"Speculative decoding config.\")"
+        },
+        "max_batch_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(default=None,\n                                          description=\"The maximum batch size.\")"
+        },
+        "max_input_len": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None, description=\"The maximum input length.\")"
+        },
+        "max_seq_len": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=None, description=\"The maximum sequence length.\")"
+        },
+        "max_beam_width": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(default=None,\n                                          description=\"The maximum beam width.\")"
+        },
+        "max_num_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": "Field(\n        default=8192, description=\"The maximum number of tokens.\")"
+        },
+        "gather_generation_logits": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Gather generation logits.\",\n        status=\"prototype\")"
+        },
+        "num_postprocess_workers": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"The number of processes used for postprocessing the generated tokens, including detokenization.\",\n        status=\"prototype\")"
+        },
+        "postprocess_tokenizer_dir": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The path to the tokenizer directory for postprocessing.\",\n        status=\"prototype\")"
+        },
+        "reasoning_parser": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The parser to separate reasoning content from output.\",\n        status=\"prototype\")"
+        },
+        "decoding_config": {
+          "type": {
+            "description": "Upstream type: Optional[object] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"The decoding config.\",\n        json_schema_extra={\n            \"type\": \"Optional[tensorrt_llm.llmapi.llm_args.DecodingConfig]\"\n        },\n        status=\"deprecated\",\n        deprecated=\"Use speculative_config instead.\",\n    )"
+        },
+        "mpi_session": {
+          "type": {
+            "description": "Upstream type: Optional[object] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"The optional MPI session to use for this LLM instance.\",\n        json_schema_extra={\"type\": \"Optional[MpiSession]\"},\n        exclude=True,\n        alias=\"_mpi_session\")"
+        },
+        "otlp_traces_endpoint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"Target URL to which OpenTelemetry traces will be sent.\",\n        alias=\"otlp_traces_endpoint\",\n        status=\"prototype\")"
+        },
+        "backend": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The backend to use for this LLM instance.\",\n        exclude_json_schema=True,  # hide from API references\n        validate_default=True,\n        status=\"deprecated\",\n    )"
+        },
+        "return_perf_metrics": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                                      description=\"Return perf metrics.\",\n                                      status=\"prototype\")"
+        },
+        "orchestrator_type": {
+          "type": {
+            "description": "Upstream type: Optional[Literal[\"rpc\", \"ray\"]] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\n        \"The orchestrator type to use. Defaults to None, which uses MPI.\",\n        status=\"prototype\",\n    )"
+        },
+        "env_overrides": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"[EXPERIMENTAL] Environment variable overrides. NOTE: import-time-cached env vars in the code won't update unless the code fetches them from os.environ on demand.\",\n        status=\"prototype\")"
+        }
+      }
+    },
+    "TrtLlmArgs": {
+      "type": "object",
+      "properties": {
+        "enable_tqdm": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                              description=\"Enable tqdm for progress bar.\")"
+        },
+        "workspace": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(default=None,\n                                     description=\"The workspace for the model.\")"
+        },
+        "enable_build_cache": {
+          "type": {
+            "description": "Upstream type: object"
+          },
+          "default": "Field(\n        default=False,\n        description=\"Enable build cache.\",\n        json_schema_extra={\n            \"type\": f\"Union[{get_type_repr(BuildCacheConfig)}, bool]\"\n        })"
+        },
+        "extended_runtime_perf_knob_config": {
+          "type": {
+            "description": "Upstream type: Optional[\n        ExtendedRuntimePerfKnobConfig] | None"
+          },
+          "default": "Field(\n            default=None, description=\"Extended runtime perf knob config.\")"
+        },
+        "calib_config": {
+          "type": {
+            "description": "Upstream type: Optional[CalibConfig] | None"
+          },
+          "default": "Field(\n        default=None, description=\"Calibration config.\", validate_default=True)"
+        },
+        "quant_config": {
+          "type": {
+            "description": "Upstream type: Optional[QuantConfig] | None"
+          },
+          "default": "Field(\n        default=None, description=\"Quantization config.\", validate_default=True)"
+        },
+        "embedding_parallel_mode": {
+          "type": "string",
+          "default": "Field(\n        default='SHARDING_ALONG_VOCAB',\n        description=\"The embedding parallel mode.\")"
+        },
+        "fast_build": {
+          "type": "boolean",
+          "default": "Field(default=False, description=\"Enable fast build.\")"
+        },
+        "build_config": {
+          "type": {
+            "description": "Upstream type: Optional[BuildConfig] | None"
+          },
+          "default": "Field(default=None,\n                                                description=\"Build config.\")"
+        },
+        "enable_prompt_adapter": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                                        description=\"Enable prompt adapter.\")"
+        },
+        "max_prompt_adapter_token": {
+          "type": "integer",
+          "default": "Field(\n        default=0, description=\"The maximum number of prompt adapter tokens.\")"
+        },
+        "batching_type": {
+          "type": {
+            "description": "Upstream type: Optional[BatchingType] | None"
+          },
+          "default": "Field(default=None,\n                                                  description=\"Batching type.\")"
+        },
+        "normalize_log_probs": {
+          "type": "boolean",
+          "default": "Field(\n        default=False, description=\"Normalize log probabilities.\")"
+        }
+      }
+    },
+    "TorchCompileConfig": {
+      "type": "object",
+      "properties": {
+        "enable_fullgraph": {
+          "type": "boolean",
+          "default": "Field(\n        default=True,\n        description=\"Enable full graph compilation in torch.compile.\")"
+        },
+        "enable_inductor": {
+          "type": "boolean",
+          "default": "Field(\n        default=False, description=\"Enable inductor backend in torch.compile.\")"
+        },
+        "enable_piecewise_cuda_graph": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Enable piecewise CUDA graph in torch.compile.\")"
+        },
+        "capture_num_tokens": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"List of num of tokens to capture the piecewise CUDA graph for. If not provided, the number of tokens will be the same as cuda_graph_config.batch_sizes.\"\n    )"
+        },
+        "enable_userbuffers": {
+          "type": "boolean",
+          "default": "Field(\n        default=True,\n        description=\n        \"When torch compile is enabled, userbuffers is enabled by default.\")"
+        },
+        "max_num_streams": {
+          "type": "integer",
+          "default": "Field(\n        default=1,\n        description=\n        \"The maximum number of CUDA streams to use for torch.compile.\")"
+        }
+      }
+    },
+    "TorchLlmArgs": {
+      "type": "object",
+      "properties": {
+        "garbage_collection_gen0_threshold": {
+          "type": "integer",
+          "default": "Field(\n        default=20000,\n        description=\n        \"Threshold for Python garbage collection of generation 0 objects.\"\n        \"Lower values trigger more frequent garbage collection.\",\n        status=\"beta\")"
+        },
+        "cuda_graph_config": {
+          "type": {
+            "description": "Upstream type: Optional[CudaGraphConfig] | None"
+          },
+          "default": "Field(\n        default_factory=CudaGraphConfig,\n        description=\"CUDA graph config.If true, use CUDA graphs for decoding. \\\n        CUDA graphs are only created for the batch sizes in cuda_graph_config.batch_sizes, \\\n        and are enabled for batches that consist of decoding requests *only* \\\n        (the reason is that it's hard to capture a single graph with prefill requests \\\n        since the input shapes are a function of the sequence lengths).\\\n         Note that each CUDA graph can use up to 200 MB of extra memory.\",\n        status=\"beta\")"
+        },
+        "attention_dp_config": {
+          "type": {
+            "description": "Upstream type: Optional[AttentionDpConfig] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"Optimized load-balancing for the DP Attention scheduler.\",\n        status=\"beta\")"
+        },
+        "disable_overlap_scheduler": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Disable the overlap scheduler.\",\n        status=\"beta\")"
+        },
+        "moe_config": {
+          "type": {
+            "description": "Upstream type: MoeConfig"
+          },
+          "default": "Field(default_factory=MoeConfig,\n                                  description=\"MoE config.\",\n                                  status=\"beta\")"
+        },
+        "nvfp4_gemm_config": {
+          "type": {
+            "description": "Upstream type: Nvfp4GemmConfig"
+          },
+          "default": "Field(\n        default_factory=Nvfp4GemmConfig,\n        description=\"NVFP4 GEMM backend config.\",\n        status=\"beta\")"
+        },
+        "attn_backend": {
+          "type": "string",
+          "default": "Field(default='TRTLLM',\n                              description=\"Attention backend to use.\",\n                              status=\"beta\")"
+        },
+        "sampler_type": {
+          "type": {
+            "description": "Upstream type: Union[str, SamplerType]"
+          },
+          "default": "Field(\n        default=SamplerType.auto,\n        description=\n        \"The type of sampler to use. Options are TRTLLMSampler, TorchSampler or auto. Defaults to auto, which will use TorchSampler unless BeamSearch is requested.\",\n        status=\"beta\")"
+        },
+        "sampler_force_async_worker": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Force usage of the async worker in the sampler for D2H \"\n        \"copies, even if confidential compute is not active. Normally, the \"\n        \"async worker should only be used when confidential compute is active. \"\n        \"This argument is provided to enable it for testing purposes, \"\n        \"irrespective of confidential compute state.\",\n        status=\"prototype\")"
+        },
+        "enable_iter_perf_stats": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"Enable iteration performance statistics.\",\n        status=\"prototype\")"
+        },
+        "enable_iter_req_stats": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"If true, enables per request stats per iteration. Must also set enable_iter_perf_stats to true to get request stats.\",\n        status=\"prototype\")"
+        },
+        "print_iter_log": {
+          "type": "boolean",
+          "default": "Field(default=False,\n                                 description=\"Print iteration logs.\",\n                                 status=\"beta\")"
+        },
+        "perf_metrics_max_requests": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"The maximum number of requests for perf metrics. Must also set request_perf_metrics to true to get perf metrics.\",\n        status=\"prototype\")"
+        },
+        "batch_wait_timeout_ms": {
+          "type": "number",
+          "default": "Field(\n        default=0,\n        description=\n        \"If greater than 0, the request queue might wait up to batch_wait_timeout_ms to receive max_batch_size requests, if fewer than max_batch_size requests are currently available. If 0, no waiting occurs.\",\n        status=\"prototype\")"
+        },
+        "batch_wait_timeout_iters": {
+          "type": "integer",
+          "default": "Field(\n        default=0,\n        description=\n        \"Maximum number of iterations the scheduler will wait to accumulate new coming requests for improved GPU utilization efficiency. If greater than 0, the scheduler will delay batch processing to gather more requests up to the specified iteration limit. If 0, disables timeout-iters-based batching delays.\",\n        status=\"prototype\")"
+        },
+        "batch_wait_max_tokens_ratio": {
+          "type": "number",
+          "default": "Field(\n        default=0,\n        description=\n        \"Token accumulation threshold ratio for batch scheduling optimization. If greater than 0, the scheduler will accumulate requests locally until the total token count reaches batch_wait_max_tokens_ratio * max_num_tokens. This mechanism enhances GPU utilization efficiency by ensuring adequate batch sizes.If 0 disables token-based batching delays.\",\n        status=\"prototype\")"
+        },
+        "torch_compile_config": {
+          "type": {
+            "description": "Upstream type: Optional[TorchCompileConfig] | None"
+          },
+          "default": "Field(\n        default=None, description=\"Torch compile config.\", status=\"prototype\")"
+        },
+        "enable_autotuner": {
+          "type": "boolean",
+          "default": "Field(\n        default=True,\n        description=\n        \"Enable autotuner for all tunable ops. This flag is for debugging purposes only, and the performance may significantly degrade if set to false.\",\n        status=\"prototype\")"
+        },
+        "enable_layerwise_nvtx_marker": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"If true, enable layerwise nvtx marker.\",\n        status=\"beta\")"
+        },
+        "load_format": {
+          "type": {
+            "description": "Upstream type: Union[str, LoadFormat]"
+          },
+          "default": "Field(\n        default=LoadFormat.AUTO,\n        description=\n        \"How to load the model weights. By default, detect the weight type from the model checkpoint.\"\n    )"
+        },
+        "enable_min_latency": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"If true, enable min-latency mode. Currently only used for Llama4.\",\n        status=\"beta\",\n    )"
+        },
+        "stream_interval": {
+          "type": "integer",
+          "default": "Field(\n        default=1,\n        description=\n        \"The iteration interval to create responses under the streaming mode. \"\n        \"Set this to a larger value when the batch size is large, which helps reduce the streaming overhead.\",\n    )"
+        },
+        "force_dynamic_quantization": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\"If true, force dynamic quantization. Defaults to False.\",\n        status=\"prototype\",\n    )"
+        },
+        "allreduce_strategy": {
+          "type": {
+            "description": "Upstream type: Optional[Literal[\n        'AUTO', 'NCCL', 'UB', 'MINLATENCY', 'ONESHOT', 'TWOSHOT',\n        'LOWPRECISION', 'MNNVL',\n        'NCCL_SYMMETRIC']] | None"
+          },
+          "default": "Field(default='AUTO',\n                                   description=\"Allreduce strategy to use.\",\n                                   status=\"beta\")"
+        },
+        "checkpoint_loader": {
+          "type": {
+            "description": "Upstream type: Optional[object] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\n        \"The checkpoint loader to use for this LLM instance. You may use a custom checkpoint loader by subclassing \"\n        \"`BaseCheckpointLoader` and providing an instance of the subclass here to load weights from a custom \"\n        \"checkpoint format.\\n\"\n        \"If neither checkpoint_format nor checkpoint_loader are provided, checkpoint_format will be set to HF \"\n        \"and the default HfCheckpointLoader will be used.\\n\"\n        \"If checkpoint_format and checkpoint_loader are both provided, checkpoint_loader will be ignored.\",\n        json_schema_extra={\n            \"type\":\n            \"Optional[tensorrt_llm._torch.models.checkpoints.BaseCheckpointLoader]\"\n        },\n        status=\"prototype\",\n    )"
+        },
+        "checkpoint_format": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\n        \"The format of the provided checkpoint. You may use a custom checkpoint format by subclassing \"\n        \"`BaseCheckpointLoader` and registering it with `register_checkpoint_loader`.\\n\"\n        \"If neither checkpoint_format nor checkpoint_loader are provided, checkpoint_format will be set to HF \"\n        \"and the default HfCheckpointLoader will be used.\\n\"\n        \"If checkpoint_format and checkpoint_loader are both provided, checkpoint_loader will be ignored.\",\n        status=\"prototype\",\n    )"
+        },
+        "kv_connector_config": {
+          "type": {
+            "description": "Upstream type: Optional[KvCacheConnectorConfig] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\"The config for KV cache connector.\",\n        status=\"prototype\",\n    )"
+        },
+        "mm_encoder_only": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"Only load/execute the vision encoder part of the full model. Defaults to False.\",\n        status=\"prototype\",\n    )"
+        },
+        "ray_worker_extension_cls": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "Field(\n        default=None,\n        description=\"The full worker extension class name including module path.\"\n        \"Allows users to extend the functions of the RayGPUWorker class.\",\n        status=\"prototype\")"
+        },
+        "ray_placement_config": {
+          "type": {
+            "description": "Upstream type: Optional[RayPlacementConfig] | None"
+          },
+          "default": "Field(\n        default=None,\n        description=\n        \"Placement config for RayGPUWorker. Only used with AsyncLLM and orchestrator_type='ray'.\",\n        exclude=True,\n        status=\"prototype\")"
+        },
+        "enable_sleep": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"Enable LLM sleep feature. Sleep feature requires extra setup that may slowdown model loading.\"\n        \"Only enable it if you intend to use this feature.\",\n        status=\"prototype\")"
+        },
+        "disable_flashinfer_sampling": {
+          "type": "boolean",
+          "default": "Field(\n        default=False,\n        description=\n        \"Disable the use of FlashInfer.sampling. This option is likely to be removed in the future.\",\n        status=\"prototype\",\n    )"
+        },
+        "max_stats_len": {
+          "type": "integer",
+          "default": "Field(\n        default=1000,\n        description=\"The max number of performance statistic entries.\",\n        status=\"prototype\",\n    )"
+        }
+      }
+    },
+    "CachedStage": {
+      "type": "object",
+      "properties": {
+        "parent": {
+          "type": {
+            "description": "Upstream type: BuildCache"
+          }
+        },
+        "cache_root": {
+          "type": {
+            "description": "Upstream type: Path"
+          }
+        },
+        "inputs": {
+          "type": "array"
+        },
+        "kind": {
+          "type": {
+            "description": "Upstream type: \"CacheRecord.Kind\""
+          }
+        },
+        "force_rebuild": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "CacheRecord": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": {
+            "description": "Upstream type: Kind"
+          }
+        },
+        "storage_gb": {
+          "type": "number"
+        },
+        "path": {
+          "type": {
+            "description": "Upstream type: Path"
+          }
+        },
+        "time": {
+          "type": {
+            "description": "Upstream type: datetime.datetime"
+          }
+        }
+      }
+    }
+  },
+  "engine_envs": {
+    "_count": 4,
+    "TRT_LLM_NO_LIB_INIT": {
+      "name": "TRT_LLM_NO_LIB_INIT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "TRTLLM_PRINT_STACKS_PERIOD": {
+      "name": "TRTLLM_PRINT_STACKS_PERIOD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "IS_BUILDING": {
+      "name": "IS_BUILDING",
+      "x-source": "os.environ[...]"
+    },
+    "RAY_LOCAL_WORLD_SIZE": {
+      "name": "RAY_LOCAL_WORLD_SIZE",
+      "x-source": "os.getenv/environ.get"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "strategy_id": "w2-a-improved-det",
+  "engine": "tensorrt",
+  "engine_version": "v1.2.1",
+  "schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det/tensorrt/v1_2_1/schema.json",
+  "invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det/tensorrt/v1_2_1/invariants.proposed.yaml",
+  "observations": [],
+  "wall_sec": {
+    "schema": 0.06920353299938142,
+    "invariants": 0.10590203999890946,
+    "total": 0.23582799901487306
+  },
+  "energy_wh": null,
+  "extra": {
+    "env_footguns": 0,
+    "env_count": 4,
+    "primitives_fired": [
+      "p1",
+      "p2",
+      "p3",
+      "p4",
+      "p5",
+      "p6",
+      "p7"
+    ],
+    "task": "both",
+    "source_root": "/tmp/trial_tensorrt_v1_2_1_venv/src/tensorrt",
+    "engine_param_count": 84,
+    "sampling_param_count": 48,
+    "defs_count": 26,
+    "invariant_count": 99
+  }
+}

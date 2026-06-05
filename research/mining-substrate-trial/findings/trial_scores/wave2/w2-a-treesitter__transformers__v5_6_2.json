@@ -1,0 +1,21 @@
+{
+  "strategy_id": "w2-a-treesitter",
+  "engine": "transformers",
+  "engine_version": "v5.6.2",
+  "schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-treesitter/transformers/v5_6_2/schema.json",
+  "invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-treesitter/transformers/v5_6_2/invariants.proposed.yaml",
+  "observations": [],
+  "wall_sec": {
+    "schema": 0.09264252299908549,
+    "invariants": 0.04203817099914886,
+    "total": 0.16104638201068155
+  },
+  "energy_wh": null,
+  "extra": {
+    "task": "both",
+    "engine_param_count": 28,
+    "sampling_param_count": 71,
+    "defs_count": 1,
+    "invariant_count": 45
+  }
+}

@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
-engine_version: 4.57.3
-mined_at: '2026-06-05T01:35:52.248819+00:00'
+engine_version: 5.6.2
+mined_at: '2026-06-05T01:35:52.998835+00:00'
 invariants:
 - id: transformers_generationconfig_validate_early_stopping_not_in
   engine: transformers
@@ -12,7 +12,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 543
+    line_at_scan: 605
   match:
     engine: transformers
     fields:
@@ -29,7 +29,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 545
+    line_at_scan: 607
   match:
     engine: transformers
     fields:
@@ -45,7 +45,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 547
+    line_at_scan: 609
   match:
     engine: transformers
     fields:
@@ -61,7 +61,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 554
+    line_at_scan: 619
   match:
     engine: transformers
     fields:
@@ -78,28 +78,30 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 560
+    line_at_scan: 625
   match:
     engine: transformers
     fields:
       transformers.sampling.compile_config:
         type_is_not: ''
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact_temperature
+- id: transformers_generationconfig_validate_do_sample_present_temperature
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 576
+    line_at_scan: 644
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: 0
-      transformers.sampling.temperature: 0
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.temperature:
+        present: true
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_temperature_not_equal
   engine: transformers
@@ -110,28 +112,30 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 576
+    line_at_scan: 644
   match:
     engine: transformers
     fields:
       transformers.sampling.temperature:
         not_equal: 0
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact_top_p
+- id: transformers_generationconfig_validate_do_sample_present_top_p
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 580
+    line_at_scan: 648
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: 0
-      transformers.sampling.top_p: 0
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.top_p:
+        present: true
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_top_p_not_equal
   engine: transformers
@@ -142,28 +146,30 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 580
+    line_at_scan: 648
   match:
     engine: transformers
     fields:
       transformers.sampling.top_p:
         not_equal: 0
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact_min_p
+- id: transformers_generationconfig_validate_do_sample_present_min_p
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 582
+    line_at_scan: 650
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: 0
-      transformers.sampling.min_p: 0
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.min_p:
+        present: true
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_min_p_present
   engine: transformers
@@ -174,28 +180,64 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 582
+    line_at_scan: 650
   match:
     engine: transformers
     fields:
       transformers.sampling.min_p:
         present: true
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact_typical_p
+- id: transformers_generationconfig_validate_do_sample_present_top_h
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 584
+    line_at_scan: 652
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: 0
-      transformers.sampling.typical_p: 0
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.top_h:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_top_h_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `top_h` (present)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 652
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_h:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_present_typical_p
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 654
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.typical_p:
+        present: true
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_typical_p_not_equal
   engine: transformers
@@ -206,28 +248,30 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 584
+    line_at_scan: 654
   match:
     engine: transformers
     fields:
       transformers.sampling.typical_p:
         not_equal: 0
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact_top_k
+- id: transformers_generationconfig_validate_do_sample_present_top_k
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 588
+    line_at_scan: 658
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: 0
-      transformers.sampling.top_k: 0
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.top_k:
+        present: true
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_top_k_not_equal
   engine: transformers
@@ -238,28 +282,30 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 588
+    line_at_scan: 658
   match:
     engine: transformers
     fields:
       transformers.sampling.top_k:
         not_equal: 0
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact_epsilon_cutoff
+- id: transformers_generationconfig_validate_do_sample_present_epsilon_cutoff
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 590
+    line_at_scan: 660
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: 0
-      transformers.sampling.epsilon_cutoff: 0
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.epsilon_cutoff:
+        present: true
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_epsilon_cutoff_not_equal
   engine: transformers
@@ -270,28 +316,30 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 590
+    line_at_scan: 660
   match:
     engine: transformers
     fields:
       transformers.sampling.epsilon_cutoff:
         not_equal: 0
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact_eta_cutoff
+- id: transformers_generationconfig_validate_do_sample_present_eta_cutoff
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (present)
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 594
+    line_at_scan: 664
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: 0
-      transformers.sampling.eta_cutoff: 0
+      transformers.sampling.do_sample:
+        present: true
+      transformers.sampling.eta_cutoff:
+        present: true
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_eta_cutoff_not_equal
   engine: transformers
@@ -302,7 +350,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 594
+    line_at_scan: 664
   match:
     engine: transformers
     fields:
@@ -318,7 +366,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 605
+    line_at_scan: 675
   match:
     engine: transformers
     fields:
@@ -334,7 +382,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 605
+    line_at_scan: 675
   match:
     engine: transformers
     fields:
@@ -350,7 +398,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 609
+    line_at_scan: 679
   match:
     engine: transformers
     fields:
@@ -366,45 +414,30 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 609
+    line_at_scan: 679
   match:
     engine: transformers
     fields:
       transformers.sampling.length_penalty:
         not_equal: 0
   added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_num_return_sequences_not_equal_do_sample
+- id: transformers_generationconfig_validate_num_return_sequences_gt_do_sample
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` (not_equal)
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` (gt)
   severity: error
   native_type: transformers.GenerationConfig
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 617
+    line_at_scan: 687
   match:
     engine: transformers
     fields:
       transformers.sampling.num_return_sequences:
-        not_equal: 0
+        '>': 0
       transformers.sampling.do_sample:
-        not_equal: 0
-  added_by: wave2_a_treesitter
-- id: transformers_generationconfig_validate_do_sample_exact
-  engine: transformers
-  library: transformers
-  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
-  severity: error
-  native_type: transformers.GenerationConfig
-  miner_source:
-    path: generation/configuration_utils.py
-    method: validate
-    line_at_scan: 617
-  match:
-    engine: transformers
-    fields:
-      transformers.sampling.do_sample: 0
+        '>': 0
   added_by: wave2_a_treesitter
 - id: transformers_generationconfig_validate_strict_present
   engine: transformers
@@ -415,27 +448,11 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 683
+    line_at_scan: 756
   match:
     engine: transformers
     fields:
       transformers.sampling.strict:
-        present: true
-  added_by: wave2_a_treesitter
-- id: transformers_generationconfig_from_pretrained_token_present
-  engine: transformers
-  library: transformers
-  invariant_under_test: GenerationConfig.from_pretrained flags `token` (present)
-  severity: error
-  native_type: transformers.GenerationConfig
-  miner_source:
-    path: generation/configuration_utils.py
-    method: from_pretrained
-    line_at_scan: 878
-  match:
-    engine: transformers
-    fields:
-      transformers.sampling.token:
         present: true
   added_by: wave2_a_treesitter
 - id: transformers_watermarkingconfig_validate_seeding_scheme_not_in
@@ -447,7 +464,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 1302
+    line_at_scan: 1366
   match:
     engine: transformers
     fields:
@@ -464,7 +481,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 1310
+    line_at_scan: 1374
   match:
     engine: transformers
     fields:
@@ -480,7 +497,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 1318
+    line_at_scan: 1382
   match:
     engine: transformers
     fields:
@@ -497,7 +514,7 @@ invariants:
   miner_source:
     path: generation/configuration_utils.py
     method: validate
-    line_at_scan: 1407
+    line_at_scan: 1471
   match:
     engine: transformers
     fields:
@@ -514,7 +531,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: __init__
-    line_at_scan: 485
+    line_at_scan: 467
   match:
     engine: transformers
     fields:
@@ -532,7 +549,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: __init__
-    line_at_scan: 494
+    line_at_scan: 476
   match:
     engine: transformers
     fields:
@@ -549,7 +566,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: __init__
-    line_at_scan: 473
+    line_at_scan: 455
   match:
     engine: transformers
     fields:
@@ -565,7 +582,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: __init__
-    line_at_scan: 473
+    line_at_scan: 455
   match:
     engine: transformers
     fields:
@@ -582,7 +599,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: __init__
-    line_at_scan: 497
+    line_at_scan: 479
   match:
     engine: transformers
     fields:
@@ -599,7 +616,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: load_in_4bit
-    line_at_scan: 518
+    line_at_scan: 500
   match:
     engine: transformers
     fields:
@@ -615,7 +632,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 542
+    line_at_scan: 524
   match:
     engine: transformers
     fields:
@@ -631,7 +648,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 545
+    line_at_scan: 527
   match:
     engine: transformers
     fields:
@@ -647,7 +664,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 548
+    line_at_scan: 530
   match:
     engine: transformers
     fields:
@@ -664,7 +681,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 551
+    line_at_scan: 533
   match:
     engine: transformers
     fields:
@@ -681,7 +698,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 553
+    line_at_scan: 535
   match:
     engine: transformers
     fields:
@@ -698,7 +715,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 556
+    line_at_scan: 538
   match:
     engine: transformers
     fields:
@@ -714,7 +731,7 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 562
+    line_at_scan: 544
   match:
     engine: transformers
     fields:
@@ -731,26 +748,10 @@ invariants:
   miner_source:
     path: utils/quantization_config.py
     method: post_init
-    line_at_scan: 565
+    line_at_scan: 547
   match:
     engine: transformers
     fields:
       transformers.bnb_4bit_use_double_quant:
         type_is_not: ''
-  added_by: wave2_a_treesitter
-- id: transformers_bitsandbytesconfig_post_init_load_in_4bit_ge
-  engine: transformers
-  library: transformers
-  invariant_under_test: BitsAndBytesConfig.post_init flags `load_in_4bit` (ge)
-  severity: error
-  native_type: transformers.BitsAndBytesConfig
-  miner_source:
-    path: utils/quantization_config.py
-    method: post_init
-    line_at_scan: 568
-  match:
-    engine: transformers
-    fields:
-      transformers.load_in_4bit:
-        '>=': 0
   added_by: wave2_a_treesitter

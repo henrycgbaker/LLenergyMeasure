@@ -1,0 +1,7 @@
+{
+  "status": "deferred",
+  "strategy_id": "w2-a-pydantic-native",
+  "engine": "vllm",
+  "version_slug": "v0_19_1",
+  "reason": "a_pydantic_native is vllm 0.7.3-only; got engine='vllm' version='v0.19.1'"
+}

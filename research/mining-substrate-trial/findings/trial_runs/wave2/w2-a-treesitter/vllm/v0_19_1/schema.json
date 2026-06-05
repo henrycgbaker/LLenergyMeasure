@@ -1,0 +1,1133 @@
+{
+  "schema_version": "2.0.0",
+  "engine": "vllm",
+  "engine_version": "0.19.1",
+  "discovered_at": "2026-06-05T01:35:54.461153+00:00",
+  "engine_params": {
+    "model": {
+      "type": "string",
+      "default": "ModelConfig.model"
+    },
+    "enable_return_routed_experts": {
+      "type": "boolean",
+      "default": "ModelConfig.enable_return_routed_experts"
+    },
+    "model_weights": {
+      "type": "string",
+      "default": "ModelConfig.model_weights"
+    },
+    "served_model_name": {
+      "type": {
+        "description": "Upstream type: str | list[str] | None | None"
+      },
+      "default": "ModelConfig.served_model_name"
+    },
+    "tokenizer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.tokenizer"
+    },
+    "hf_config_path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.hf_config_path"
+    },
+    "runner": {
+      "type": {
+        "description": "Upstream type: RunnerOption"
+      },
+      "default": "ModelConfig.runner"
+    },
+    "convert": {
+      "type": {
+        "description": "Upstream type: ConvertOption"
+      },
+      "default": "ModelConfig.convert"
+    },
+    "skip_tokenizer_init": {
+      "type": "boolean",
+      "default": "ModelConfig.skip_tokenizer_init"
+    },
+    "enable_prompt_embeds": {
+      "type": "boolean",
+      "default": "ModelConfig.enable_prompt_embeds"
+    },
+    "tokenizer_mode": {
+      "type": {
+        "description": "Upstream type: TokenizerMode | str"
+      },
+      "default": "ModelConfig.tokenizer_mode"
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": "ModelConfig.trust_remote_code"
+    },
+    "allowed_local_media_path": {
+      "type": "string",
+      "default": "ModelConfig.allowed_local_media_path"
+    },
+    "allowed_media_domains": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "ModelConfig.allowed_media_domains"
+    },
+    "download_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "LoadConfig.download_dir"
+    },
+    "safetensors_load_strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "LoadConfig.safetensors_load_strategy"
+    },
+    "load_format": {
+      "type": {
+        "description": "Upstream type: str | LoadFormats"
+      },
+      "default": "LoadConfig.load_format"
+    },
+    "config_format": {
+      "type": "string",
+      "default": "ModelConfig.config_format"
+    },
+    "dtype": {
+      "type": {
+        "description": "Upstream type: ModelDType"
+      },
+      "default": "ModelConfig.dtype"
+    },
+    "kv_cache_dtype": {
+      "type": {
+        "description": "Upstream type: CacheDType"
+      },
+      "default": "CacheConfig.cache_dtype"
+    },
+    "seed": {
+      "type": "integer",
+      "default": "ModelConfig.seed"
+    },
+    "max_model_len": {
+      "type": "integer",
+      "default": "ModelConfig.max_model_len"
+    },
+    "cudagraph_capture_sizes": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "(\n        CompilationConfig.cudagraph_capture_sizes\n    )"
+    },
+    "max_cudagraph_capture_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "get_field(\n        CompilationConfig, \"max_cudagraph_capture_size\"\n    )"
+    },
+    "distributed_executor_backend": {
+      "type": {
+        "description": "Upstream type: (\n        str | DistributedExecutorBackend | type[Executor] | None\n    ) | None"
+      },
+      "default": "ParallelConfig.distributed_executor_backend"
+    },
+    "pipeline_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.pipeline_parallel_size"
+    },
+    "master_addr": {
+      "type": "string",
+      "default": "ParallelConfig.master_addr"
+    },
+    "master_port": {
+      "type": "integer",
+      "default": "ParallelConfig.master_port"
+    },
+    "nnodes": {
+      "type": "integer",
+      "default": "ParallelConfig.nnodes"
+    },
+    "node_rank": {
+      "type": "integer",
+      "default": "ParallelConfig.node_rank"
+    },
+    "distributed_timeout_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "ParallelConfig.distributed_timeout_seconds"
+    },
+    "tensor_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.tensor_parallel_size"
+    },
+    "prefill_context_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.prefill_context_parallel_size"
+    },
+    "decode_context_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.decode_context_parallel_size"
+    },
+    "dcp_comm_backend": {
+      "type": {
+        "description": "Upstream type: DCPCommBackend"
+      },
+      "default": "ParallelConfig.dcp_comm_backend"
+    },
+    "dcp_kv_cache_interleave_size": {
+      "type": "integer",
+      "default": "ParallelConfig.dcp_kv_cache_interleave_size"
+    },
+    "cp_kv_cache_interleave_size": {
+      "type": "integer",
+      "default": "ParallelConfig.cp_kv_cache_interleave_size"
+    },
+    "data_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.data_parallel_size"
+    },
+    "data_parallel_rank": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_start_rank": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_size_local": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_address": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_rpc_port": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_hybrid_lb": {
+      "type": "boolean",
+      "default": false
+    },
+    "data_parallel_external_lb": {
+      "type": "boolean",
+      "default": false
+    },
+    "data_parallel_backend": {
+      "type": {
+        "description": "Upstream type: DataParallelBackend"
+      },
+      "default": "ParallelConfig.data_parallel_backend"
+    },
+    "enable_expert_parallel": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_expert_parallel"
+    },
+    "enable_ep_weight_filter": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_ep_weight_filter"
+    },
+    "moe_backend": {
+      "type": {
+        "description": "Upstream type: MoEBackend"
+      },
+      "default": "KernelConfig.moe_backend"
+    },
+    "all2all_backend": {
+      "type": {
+        "description": "Upstream type: All2AllBackend"
+      },
+      "default": "ParallelConfig.all2all_backend"
+    },
+    "enable_elastic_ep": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_elastic_ep"
+    },
+    "enable_dbo": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_dbo"
+    },
+    "ubatch_size": {
+      "type": "integer",
+      "default": "ParallelConfig.ubatch_size"
+    },
+    "dbo_decode_token_threshold": {
+      "type": "integer",
+      "default": "ParallelConfig.dbo_decode_token_threshold"
+    },
+    "dbo_prefill_token_threshold": {
+      "type": "integer",
+      "default": "ParallelConfig.dbo_prefill_token_threshold"
+    },
+    "disable_nccl_for_dp_synchronization": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": "(\n        ParallelConfig.disable_nccl_for_dp_synchronization\n    )"
+    },
+    "eplb_config": {
+      "type": {
+        "description": "Upstream type: EPLBConfig"
+      },
+      "default": "get_field(ParallelConfig, \"eplb_config\")"
+    },
+    "enable_eplb": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_eplb"
+    },
+    "expert_placement_strategy": {
+      "type": {
+        "description": "Upstream type: ExpertPlacementStrategy"
+      },
+      "default": "(\n        ParallelConfig.expert_placement_strategy\n    )"
+    },
+    "max_parallel_loading_workers": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "(\n        ParallelConfig.max_parallel_loading_workers\n    )"
+    },
+    "block_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "enable_prefix_caching": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "prefix_caching_hash_algo": {
+      "type": {
+        "description": "Upstream type: PrefixCachingHashAlgo"
+      },
+      "default": "(\n        CacheConfig.prefix_caching_hash_algo\n    )"
+    },
+    "disable_sliding_window": {
+      "type": "boolean",
+      "default": "ModelConfig.disable_sliding_window"
+    },
+    "disable_cascade_attn": {
+      "type": "boolean",
+      "default": "ModelConfig.disable_cascade_attn"
+    },
+    "offload_backend": {
+      "type": "string",
+      "default": "OffloadConfig.offload_backend"
+    },
+    "cpu_offload_gb": {
+      "type": "number",
+      "default": "UVAOffloadConfig.cpu_offload_gb"
+    },
+    "cpu_offload_params": {
+      "type": "array",
+      "default": "get_field(UVAOffloadConfig, \"cpu_offload_params\")"
+    },
+    "offload_group_size": {
+      "type": "integer",
+      "default": "PrefetchOffloadConfig.offload_group_size"
+    },
+    "offload_num_in_group": {
+      "type": "integer",
+      "default": "PrefetchOffloadConfig.offload_num_in_group"
+    },
+    "offload_prefetch_step": {
+      "type": "integer",
+      "default": "PrefetchOffloadConfig.offload_prefetch_step"
+    },
+    "offload_params": {
+      "type": "array",
+      "default": "get_field(PrefetchOffloadConfig, \"offload_params\")"
+    },
+    "gpu_memory_utilization": {
+      "type": "number",
+      "default": "CacheConfig.gpu_memory_utilization"
+    },
+    "kv_cache_memory_bytes": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "CacheConfig.kv_cache_memory_bytes"
+    },
+    "max_num_batched_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_num_partial_prefills": {
+      "type": "integer",
+      "default": "SchedulerConfig.max_num_partial_prefills"
+    },
+    "max_long_partial_prefills": {
+      "type": "integer",
+      "default": "SchedulerConfig.max_long_partial_prefills"
+    },
+    "long_prefill_token_threshold": {
+      "type": "integer",
+      "default": "SchedulerConfig.long_prefill_token_threshold"
+    },
+    "max_num_seqs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_logprobs": {
+      "type": "integer",
+      "default": "ModelConfig.max_logprobs"
+    },
+    "logprobs_mode": {
+      "type": {
+        "description": "Upstream type: LogprobsMode"
+      },
+      "default": "ModelConfig.logprobs_mode"
+    },
+    "disable_log_stats": {
+      "type": "boolean",
+      "default": false
+    },
+    "aggregate_engine_logging": {
+      "type": "boolean",
+      "default": false
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.revision"
+    },
+    "code_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.code_revision"
+    },
+    "hf_token": {
+      "type": {
+        "description": "Upstream type: bool | str | None | None"
+      },
+      "default": "ModelConfig.hf_token"
+    },
+    "hf_overrides": {
+      "type": {
+        "description": "Upstream type: HfOverrides"
+      },
+      "default": "get_field(ModelConfig, \"hf_overrides\")"
+    },
+    "tokenizer_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.tokenizer_revision"
+    },
+    "quantization": {
+      "type": {
+        "description": "Upstream type: QuantizationMethods | str | None | None"
+      },
+      "default": "ModelConfig.quantization"
+    },
+    "allow_deprecated_quantization": {
+      "type": "boolean",
+      "default": "ModelConfig.allow_deprecated_quantization"
+    },
+    "enforce_eager": {
+      "type": "boolean",
+      "default": "ModelConfig.enforce_eager"
+    },
+    "disable_custom_all_reduce": {
+      "type": "boolean",
+      "default": "ParallelConfig.disable_custom_all_reduce"
+    },
+    "language_model_only": {
+      "type": "boolean",
+      "default": "MultiModalConfig.language_model_only"
+    },
+    "limit_mm_per_prompt": {
+      "type": "object",
+      "default": "get_field(\n        MultiModalConfig, \"limit_per_prompt\"\n    )"
+    },
+    "enable_mm_embeds": {
+      "type": "boolean",
+      "default": "MultiModalConfig.enable_mm_embeds"
+    },
+    "interleave_mm_strings": {
+      "type": "boolean",
+      "default": "MultiModalConfig.interleave_mm_strings"
+    },
+    "media_io_kwargs": {
+      "type": "object",
+      "default": "get_field(\n        MultiModalConfig, \"media_io_kwargs\"\n    )"
+    },
+    "mm_processor_kwargs": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": "MultiModalConfig.mm_processor_kwargs"
+    },
+    "mm_processor_cache_gb": {
+      "type": "number",
+      "default": "MultiModalConfig.mm_processor_cache_gb"
+    },
+    "mm_processor_cache_type": {
+      "type": {
+        "description": "Upstream type: MMCacheType | None | None"
+      },
+      "default": "(\n        MultiModalConfig.mm_processor_cache_type\n    )"
+    },
+    "mm_shm_cache_max_object_size_mb": {
+      "type": "integer",
+      "default": "(\n        MultiModalConfig.mm_shm_cache_max_object_size_mb\n    )"
+    },
+    "mm_encoder_only": {
+      "type": "boolean",
+      "default": "MultiModalConfig.mm_encoder_only"
+    },
+    "mm_encoder_tp_mode": {
+      "type": {
+        "description": "Upstream type: MMEncoderTPMode"
+      },
+      "default": "MultiModalConfig.mm_encoder_tp_mode"
+    },
+    "mm_encoder_attn_backend": {
+      "type": {
+        "description": "Upstream type: AttentionBackendEnum | str | None | None"
+      },
+      "default": "(\n        MultiModalConfig.mm_encoder_attn_backend\n    )"
+    },
+    "io_processor_plugin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "renderer_num_workers": {
+      "type": "integer",
+      "default": 1
+    },
+    "skip_mm_profiling": {
+      "type": "boolean",
+      "default": "MultiModalConfig.skip_mm_profiling"
+    },
+    "video_pruning_rate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": "MultiModalConfig.video_pruning_rate"
+    },
+    "mm_tensor_ipc": {
+      "type": {
+        "description": "Upstream type: MMTensorIPC"
+      },
+      "default": "MultiModalConfig.mm_tensor_ipc"
+    },
+    "enable_lora": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_loras": {
+      "type": "integer",
+      "default": "LoRAConfig.max_loras"
+    },
+    "max_lora_rank": {
+      "type": {
+        "description": "Upstream type: MaxLoRARanks"
+      },
+      "default": "LoRAConfig.max_lora_rank"
+    },
+    "default_mm_loras": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": "LoRAConfig.default_mm_loras"
+    },
+    "fully_sharded_loras": {
+      "type": "boolean",
+      "default": "LoRAConfig.fully_sharded_loras"
+    },
+    "max_cpu_loras": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "LoRAConfig.max_cpu_loras"
+    },
+    "lora_dtype": {
+      "type": {
+        "description": "Upstream type: str | torch.dtype | None | None"
+      },
+      "default": "LoRAConfig.lora_dtype"
+    },
+    "lora_target_modules": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "LoRAConfig.target_modules"
+    },
+    "enable_tower_connector_lora": {
+      "type": "boolean",
+      "default": "LoRAConfig.enable_tower_connector_lora"
+    },
+    "specialize_active_lora": {
+      "type": "boolean",
+      "default": "LoRAConfig.specialize_active_lora"
+    },
+    "ray_workers_use_nsight": {
+      "type": "boolean",
+      "default": "ParallelConfig.ray_workers_use_nsight"
+    },
+    "num_gpu_blocks_override": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "CacheConfig.num_gpu_blocks_override"
+    },
+    "model_loader_extra_config": {
+      "type": "object",
+      "default": "get_field(LoadConfig, \"model_loader_extra_config\")"
+    },
+    "ignore_patterns": {
+      "type": {
+        "description": "Upstream type: str | list[str]"
+      },
+      "default": "get_field(LoadConfig, \"ignore_patterns\")"
+    },
+    "enable_chunked_prefill": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_chunked_mm_input": {
+      "type": "boolean",
+      "default": "SchedulerConfig.disable_chunked_mm_input"
+    },
+    "scheduler_reserve_full_isl": {
+      "type": "boolean",
+      "default": "SchedulerConfig.scheduler_reserve_full_isl"
+    },
+    "disable_hybrid_kv_cache_manager": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": "(\n        SchedulerConfig.disable_hybrid_kv_cache_manager\n    )"
+    },
+    "structured_outputs_config": {
+      "type": {
+        "description": "Upstream type: StructuredOutputsConfig"
+      },
+      "default": "get_field(\n        VllmConfig, \"structured_outputs_config\"\n    )"
+    },
+    "reasoning_parser": {
+      "type": "string",
+      "default": "StructuredOutputsConfig.reasoning_parser"
+    },
+    "reasoning_parser_plugin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "show_hidden_metrics_for_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "(\n        ObservabilityConfig.show_hidden_metrics_for_version\n    )"
+    },
+    "otlp_traces_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ObservabilityConfig.otlp_traces_endpoint"
+    },
+    "collect_detailed_traces": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "(\n        ObservabilityConfig.collect_detailed_traces\n    )"
+    },
+    "kv_cache_metrics": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.kv_cache_metrics"
+    },
+    "kv_cache_metrics_sample": {
+      "type": "number",
+      "default": "get_field(\n        ObservabilityConfig, \"kv_cache_metrics_sample\"\n    )"
+    },
+    "cudagraph_metrics": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.cudagraph_metrics"
+    },
+    "enable_layerwise_nvtx_tracing": {
+      "type": "boolean",
+      "default": "(\n        ObservabilityConfig.enable_layerwise_nvtx_tracing\n    )"
+    },
+    "enable_mfu_metrics": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.enable_mfu_metrics"
+    },
+    "enable_logging_iteration_details": {
+      "type": "boolean",
+      "default": "(\n        ObservabilityConfig.enable_logging_iteration_details\n    )"
+    },
+    "enable_mm_processor_stats": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.enable_mm_processor_stats"
+    },
+    "scheduling_policy": {
+      "type": {
+        "description": "Upstream type: SchedulerPolicy"
+      },
+      "default": "SchedulerConfig.policy"
+    },
+    "scheduler_cls": {
+      "type": {
+        "description": "Upstream type: str | type[object] | None | None"
+      },
+      "default": "SchedulerConfig.scheduler_cls"
+    },
+    "pooler_config": {
+      "type": {
+        "description": "Upstream type: PoolerConfig | None | None"
+      },
+      "default": "ModelConfig.pooler_config"
+    },
+    "compilation_config": {
+      "type": {
+        "description": "Upstream type: CompilationConfig"
+      },
+      "default": "get_field(VllmConfig, \"compilation_config\")"
+    },
+    "attention_config": {
+      "type": {
+        "description": "Upstream type: AttentionConfig"
+      },
+      "default": "get_field(VllmConfig, \"attention_config\")"
+    },
+    "kernel_config": {
+      "type": {
+        "description": "Upstream type: KernelConfig"
+      },
+      "default": "get_field(VllmConfig, \"kernel_config\")"
+    },
+    "enable_flashinfer_autotune": {
+      "type": "boolean",
+      "default": "get_field(\n        KernelConfig, \"enable_flashinfer_autotune\"\n    )"
+    },
+    "worker_cls": {
+      "type": "string",
+      "default": "ParallelConfig.worker_cls"
+    },
+    "worker_extension_cls": {
+      "type": "string",
+      "default": "ParallelConfig.worker_extension_cls"
+    },
+    "profiler_config": {
+      "type": {
+        "description": "Upstream type: ProfilerConfig"
+      },
+      "default": "get_field(VllmConfig, \"profiler_config\")"
+    },
+    "kv_transfer_config": {
+      "type": {
+        "description": "Upstream type: KVTransferConfig | None | None"
+      },
+      "default": null
+    },
+    "kv_events_config": {
+      "type": {
+        "description": "Upstream type: KVEventsConfig | None | None"
+      },
+      "default": null
+    },
+    "ec_transfer_config": {
+      "type": {
+        "description": "Upstream type: ECTransferConfig | None | None"
+      },
+      "default": null
+    },
+    "reasoning_config": {
+      "type": {
+        "description": "Upstream type: ReasoningConfig"
+      },
+      "default": "get_field(VllmConfig, \"reasoning_config\")"
+    },
+    "generation_config": {
+      "type": "string",
+      "default": "ModelConfig.generation_config"
+    },
+    "enable_sleep_mode": {
+      "type": "boolean",
+      "default": "ModelConfig.enable_sleep_mode"
+    },
+    "override_generation_config": {
+      "type": "object",
+      "default": "get_field(\n        ModelConfig, \"override_generation_config\"\n    )"
+    },
+    "model_impl": {
+      "type": "string",
+      "default": "ModelConfig.model_impl"
+    },
+    "override_attention_dtype": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.override_attention_dtype"
+    },
+    "attention_backend": {
+      "type": {
+        "description": "Upstream type: AttentionBackendEnum | None | None"
+      },
+      "default": "AttentionConfig.backend"
+    },
+    "calculate_kv_scales": {
+      "type": "boolean",
+      "default": "CacheConfig.calculate_kv_scales"
+    },
+    "kv_cache_dtype_skip_layers": {
+      "type": "array",
+      "default": "get_field(\n        CacheConfig, \"kv_cache_dtype_skip_layers\"\n    )"
+    },
+    "mamba_cache_dtype": {
+      "type": {
+        "description": "Upstream type: MambaDType"
+      },
+      "default": "CacheConfig.mamba_cache_dtype"
+    },
+    "mamba_ssm_cache_dtype": {
+      "type": {
+        "description": "Upstream type: MambaDType"
+      },
+      "default": "CacheConfig.mamba_ssm_cache_dtype"
+    },
+    "mamba_block_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "get_field(CacheConfig, \"mamba_block_size\")"
+    },
+    "mamba_cache_mode": {
+      "type": {
+        "description": "Upstream type: MambaCacheMode"
+      },
+      "default": "CacheConfig.mamba_cache_mode"
+    },
+    "additional_config": {
+      "type": "object",
+      "default": "get_field(VllmConfig, \"additional_config\")"
+    },
+    "use_tqdm_on_load": {
+      "type": "boolean",
+      "default": "LoadConfig.use_tqdm_on_load"
+    },
+    "pt_load_map_location": {
+      "type": {
+        "description": "Upstream type: str | dict[str, str]"
+      },
+      "default": "LoadConfig.pt_load_map_location"
+    },
+    "logits_processors": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "(\n        ModelConfig.logits_processors\n    )"
+    },
+    "async_scheduling": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": "SchedulerConfig.async_scheduling"
+    },
+    "stream_interval": {
+      "type": "integer",
+      "default": "SchedulerConfig.stream_interval"
+    },
+    "kv_sharing_fast_prefill": {
+      "type": "boolean",
+      "default": "CacheConfig.kv_sharing_fast_prefill"
+    },
+    "optimization_level": {
+      "type": {
+        "description": "Upstream type: OptimizationLevel"
+      },
+      "default": "VllmConfig.optimization_level"
+    },
+    "performance_mode": {
+      "type": {
+        "description": "Upstream type: PerformanceMode"
+      },
+      "default": "VllmConfig.performance_mode"
+    },
+    "kv_offloading_size": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": "CacheConfig.kv_offloading_size"
+    },
+    "kv_offloading_backend": {
+      "type": {
+        "description": "Upstream type: KVOffloadingBackend"
+      },
+      "default": "CacheConfig.kv_offloading_backend"
+    },
+    "tokens_only": {
+      "type": "boolean",
+      "default": false
+    },
+    "shutdown_timeout": {
+      "type": "integer",
+      "default": 0
+    },
+    "weight_transfer_config": {
+      "type": {
+        "description": "Upstream type: WeightTransferConfig | None | None"
+      },
+      "default": "get_field(\n        VllmConfig,\n        \"weight_transfer_config\",\n    )"
+    },
+    "fail_on_environ_validation": {
+      "type": "boolean",
+      "default": false
+    },
+    "gdn_prefill_backend": {
+      "type": {
+        "description": "Upstream type: Literal[\"flashinfer\", \"triton\"] | None | None"
+      },
+      "default": null
+    }
+  },
+  "sampling_params": {
+    "n": {
+      "type": "integer",
+      "default": 1
+    },
+    "presence_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "frequency_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "repetition_penalty": {
+      "type": "number",
+      "default": 1.0
+    },
+    "temperature": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_p": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_k": {
+      "type": "integer",
+      "default": 0
+    },
+    "min_p": {
+      "type": "number",
+      "default": 0.0
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "stop": {
+      "type": {
+        "description": "Upstream type: str | list[str] | None | None"
+      },
+      "default": null
+    },
+    "stop_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "ignore_eos": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 16
+    },
+    "min_tokens": {
+      "type": "integer",
+      "default": 0
+    },
+    "logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "prompt_logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "flat_logprobs": {
+      "type": "boolean",
+      "default": false
+    },
+    "detokenize": {
+      "type": "boolean",
+      "default": true
+    },
+    "skip_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "spaces_between_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "include_stop_str_in_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "output_kind": {
+      "type": {
+        "description": "Upstream type: RequestOutputKind"
+      },
+      "default": "RequestOutputKind.CUMULATIVE"
+    },
+    "skip_clone": {
+      "type": "boolean",
+      "default": false
+    },
+    "output_text_buffer_length": {
+      "type": "integer",
+      "default": 0
+    },
+    "structured_outputs": {
+      "type": {
+        "description": "Upstream type: StructuredOutputsParams | None | None"
+      },
+      "default": null
+    },
+    "logit_bias": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "allowed_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "extra_args": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "bad_words": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "skip_reading_prefix_cache": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "thinking_token_budget": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "repetition_detection": {
+      "type": {
+        "description": "Upstream type: RepetitionDetectionParams | None | None"
+      },
+      "default": null
+    }
+  }
+}

@@ -1,0 +1,780 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.19.1
+mined_at: '2026-06-05T01:35:57.487608+00:00'
+invariants:
+- id: vllm_structuredoutputsparams___post_init___count_gt
+  engine: vllm
+  library: vllm
+  invariant_under_test: StructuredOutputsParams.__post_init__ flags `count` (gt)
+  severity: error
+  native_type: vllm.StructuredOutputsParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 67
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.count:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_structuredoutputsparams___post_init___count_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: StructuredOutputsParams.__post_init__ flags `count` (lt)
+  severity: error
+  native_type: vllm.StructuredOutputsParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 72
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.count:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_repetitiondetectionparams___post_init___max_pattern_size_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: RepetitionDetectionParams.__post_init__ flags `max_pattern_size`
+    (lt)
+  severity: error
+  native_type: vllm.RepetitionDetectionParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 129
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_pattern_size:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_repetitiondetectionparams___post_init___max_pattern_size_gt
+  engine: vllm
+  library: vllm
+  invariant_under_test: RepetitionDetectionParams.__post_init__ flags `max_pattern_size`
+    (gt)
+  severity: error
+  native_type: vllm.RepetitionDetectionParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 139
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_pattern_size:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams___post_init___temperature_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams.__post_init__ flags `temperature` (lt)
+  severity: warning
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 374
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams___post_init___stop_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams.__post_init__ flags `stop` (present)
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 388
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: vllm_samplingparams___post_init___stop_token_ids_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams.__post_init__ flags `stop_token_ids` (present)
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 393
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop_token_ids:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: vllm_samplingparams___post_init___bad_words_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams.__post_init__ flags `bad_words` (present)
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 396
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.bad_words:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: vllm_samplingparams___post_init___skip_reading_prefix_cache_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams.__post_init__ flags `skip_reading_prefix_cache`
+    (present)
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 425
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.skip_reading_prefix_cache:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: vllm_samplingparams__verify_args_n_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `n` (type_is_not)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 428
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: vllm_samplingparams__verify_args_n_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `n` (lt)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 430
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_n_gt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `n` (gt)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 433
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_presence_penalty_le
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `presence_penalty` (le)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 439
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.presence_penalty:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_frequency_penalty_le
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `frequency_penalty` (le)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 443
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.frequency_penalty:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_repetition_penalty_le
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `repetition_penalty` (le)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 447
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_top_p_le
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `top_p` (le)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 458
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_p:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_top_k_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `top_k` (lt)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 465
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_top_k_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `top_k` (type_is_not)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 469
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: vllm_samplingparams__verify_args_min_p_le
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `min_p` (le)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 473
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_p:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_max_tokens_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `max_tokens` (lt)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 475
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_min_tokens_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `min_tokens` (lt)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 481
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_max_tokens_gt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `max_tokens` (gt)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 485
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_logprobs_not_equal
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `logprobs` (not_equal)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 490
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_prompt_logprobs_not_equal
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `prompt_logprobs` (not_equal)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 496
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__verify_args_stop_token_ids_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `stop_token_ids` (type_is_not)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 507
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop_token_ids:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: vllm_samplingparams__verify_args_stop_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags `stop` (type_is_not)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 512
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: vllm_samplingparams__validate_logprobs_logprobs_unknown
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_logprobs flags `logprobs` (unknown)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_logprobs
+    line_at_scan: 644
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs: {}
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_logprobs_logprobs_unknown_num_logprobs
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_logprobs flags `logprobs` (unknown)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_logprobs
+    line_at_scan: 647
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs: {}
+      vllm.sampling.num_logprobs: {}
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: vllm_samplingparams__validate_logprobs_logprobs_unknown_max_logprobs
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_logprobs flags `logprobs` (unknown)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_logprobs
+    line_at_scan: 647
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs: {}
+      vllm.sampling.max_logprobs: {}
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: vllm_samplingparams__validate_logprobs_prompt_logprobs_unknown
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_logprobs flags `prompt_logprobs`
+    (unknown)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_logprobs
+    line_at_scan: 656
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs: {}
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_logprobs_prompt_logprobs_unknown_num_prompt_logprobs
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_logprobs flags `prompt_logprobs`
+    (unknown)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_logprobs
+    line_at_scan: 659
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs: {}
+      vllm.sampling.num_prompt_logprobs: {}
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: vllm_samplingparams__validate_logprobs_prompt_logprobs_unknown_max_logprobs
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_logprobs flags `prompt_logprobs`
+    (unknown)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_logprobs
+    line_at_scan: 659
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs: {}
+      vllm.sampling.max_logprobs: {}
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: vllm_samplingparams__validate_logit_bias_invalid_token_ids_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_logit_bias flags `invalid_token_ids`
+    (present)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_logit_bias
+    line_at_scan: 679
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.invalid_token_ids:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_allowed_token_ids_allowed_token_ids_exact
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_allowed_token_ids flags `allowed_token_ids`
+    (exact)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_allowed_token_ids
+    line_at_scan: 699
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.allowed_token_ids: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_allowed_token_ids_tokenizer_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_allowed_token_ids flags `tokenizer`
+    (present)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_allowed_token_ids
+    line_at_scan: 706
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.tokenizer:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_spec_decode_min_p_gt
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_spec_decode flags `min_p` (gt)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_spec_decode
+    line_at_scan: 728
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_p:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_structured_outputs_structured_outputs_unknown
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_structured_outputs flags `structured_outputs`
+    (unknown)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_structured_outputs
+    line_at_scan: 748
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.structured_outputs: {}
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_structured_outputs_structured_outputs_not_equal
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_structured_outputs flags `structured_outputs`
+    (not_equal)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_structured_outputs
+    line_at_scan: 754
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.structured_outputs:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_structured_outputs_structured_outputs_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_structured_outputs flags `structured_outputs`
+    (type_is_not)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_structured_outputs
+    line_at_scan: 767
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.structured_outputs:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: vllm_samplingparams__validate_structured_outputs_backend_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_structured_outputs flags `backend`
+    (present)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_structured_outputs
+    line_at_scan: 797
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.backend:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_structured_outputs_is_mistral_tokenizer_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_structured_outputs flags `is_mistral_tokenizer`
+    (present)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_structured_outputs
+    line_at_scan: 802
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.is_mistral_tokenizer:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_samplingparams__validate_structured_outputs_backend_exact
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._validate_structured_outputs flags `backend`
+    (exact)
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate_structured_outputs
+    line_at_scan: 812
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.backend: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_engineargs___post_init___huggingface_hub_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: EngineArgs.__post_init__ flags `huggingface_hub` (present)
+  severity: warning
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: engine/arg_utils.py
+    method: __post_init__
+    line_at_scan: 661
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.huggingface_hub:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_engineargs___post_init___model_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: EngineArgs.__post_init__ flags `model` (present)
+  severity: warning
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: engine/arg_utils.py
+    method: __post_init__
+    line_at_scan: 664
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.model:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: vllm_engineargs___post_init___tokenizer_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: EngineArgs.__post_init__ flags `tokenizer` (present)
+  severity: warning
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: engine/arg_utils.py
+    method: __post_init__
+    line_at_scan: 670
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5

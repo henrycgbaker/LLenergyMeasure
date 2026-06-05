@@ -28,9 +28,9 @@
   "schema_recall": 0.8125,
   "schema_reference_count": 112,
   "schema_type_accuracy": 0.4725274725274725,
-  "scored_at": "2026-06-05T01:13:19.865353+00:00",
+  "scored_at": "2026-06-05T01:35:52.362937+00:00",
   "scoring_format_version": "1.0.0",
   "strategy": "w2-a-treesitter",
   "version_slug": "v4_57_3",
-  "wall_clock_sec": 0.1821416809980292
+  "wall_clock_sec": 0.18330348300514743
 }

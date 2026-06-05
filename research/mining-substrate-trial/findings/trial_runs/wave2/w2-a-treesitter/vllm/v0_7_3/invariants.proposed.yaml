@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: vllm
 engine_version: 0.7.3
-mined_at: '2026-06-05T01:13:19.241784+00:00'
+mined_at: '2026-06-05T01:35:53.768174+00:00'
 invariants:
 - id: vllm_samplingparams___post_init___best_of_present_n
   engine: vllm

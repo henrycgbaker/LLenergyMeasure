@@ -28,9 +28,9 @@
   "schema_recall": 0.7232142857142857,
   "schema_reference_count": 112,
   "schema_type_accuracy": 0.5061728395061729,
-  "scored_at": "2026-06-05T01:19:02.280038+00:00",
+  "scored_at": "2026-06-05T01:35:55.264504+00:00",
   "scoring_format_version": "1.0.0",
   "strategy": "w2-a-improved-det",
   "version_slug": "v4_57_3",
-  "wall_clock_sec": 0.21771330997580662
+  "wall_clock_sec": 0.203540515009081
 }

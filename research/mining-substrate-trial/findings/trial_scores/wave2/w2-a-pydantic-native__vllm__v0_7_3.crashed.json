@@ -11,7 +11,7 @@
     "ModuleNotFoundError: No module named 'vllm'\n",
     "\nThe above exception was the direct cause of the following exception:\n\n",
     "Traceback (most recent call last):\n",
-    "  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/scripts/wave2_runner.py\", line 184, in run_one\n    output: CellOutput = run_cell(engine=engine, version=version, **extras)\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+    "  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/scripts/wave2_runner.py\", line 222, in run_one\n    output: CellOutput = run_cell(engine=engine, version=version, **forwarded)\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
     "  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/scripts/strategies/wave2/a_pydantic_native.py\", line 183, in run_cell\n    raise RuntimeError(\n",
     "RuntimeError: a_pydantic_native requires vllm installed in the trial venv. Install via `uv add vllm==0.7.3` in the wave2 venv.\n"
   ]

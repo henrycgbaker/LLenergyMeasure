@@ -4091,3 +4091,37 @@ Read all three `version_delta.md`. The three bumps are independently large, but 
 
 These three deltas are the empirical core of the bump-survivability characterisation (Axis 8). Itemised counts: transformers ~19 added / 23 removed / 24 reworked; vllm +82 EngineArgs / +154 env / ~10 invariant relocations; tensorrt +81 schema / +17 invariants / 3 pydantic migrations / 1 alias flip.
 
+## 2026-06-05 ~03:50 CEST - Wave 2.1 substrate matrix vs GT (static substrates)
+
+Built the GT-scoring harness (gt_adapter.py + gt_scoring.py) because the GT envelope does NOT match the locked scorer's shape (GT uses `subconfigs` not `$defs.properties`; GT invariants are flat `native_field`/`predicate_kind` with `match: null` vs the scorer's `match.fields`; plus namespace + predicate-kind convention drift). The "just point score_cell at GT" assumption in WAVE2_NEXT_SESSION was wrong. The harness canonicalises GT + adds a convention-TOLERANT matcher (invariants on `(leaf_field, coarse_predicate_bucket)`, schema on field-name; namespace dropped). Reports STRICT (locked-scorer lower bound) + TOLERANT (headline). Matching tables logged in `findings/wave2_deviations.md` (pre-registered-protocol deviation, on record).
+
+Ran `scripts/run_substrate_matrix.py`: 3 substrates x 6 (engine,version) cells, scored vs GT. 10/18 cells scored; results in `findings/wave2_substrate_matrix.json`.
+
+### Headline: tolerant recall vs GT (improved-det vs tree-sitter)
+
+| substrate | engine | version | schema r/p | invariant r/p | strict inv r |
+|---|---|---|---|---|---|
+| tree-sitter | transformers | v4.57.3 | 0.366/0.909 | 0.202/0.605 | 0.042 |
+| improved-det | transformers | v4.57.3 | 0.374/0.911 | **0.404**/0.630 | 0.025 |
+| tree-sitter | transformers | v5.6.2 | 0.351/0.913 | 0.208/0.568 | 0.057 |
+| improved-det | transformers | v5.6.2 | 0.428/0.928 | **0.416**/0.609 | 0.028 |
+| tree-sitter | vllm | v0.7.3 | 0.615/0.992 | 0.434/0.398 | 0.425 |
+| improved-det | vllm | v0.7.3 | **0.972**/0.954 | **0.513**/0.438 | 0.475 |
+| tree-sitter | vllm | v0.19.1 | 0.519/1.000 | 0.118/0.229 | 0.127 |
+| improved-det | vllm | v0.19.1 | 0.519/1.000 | **0.147**/0.286 | 0.141 |
+| improved-det | tensorrt | v0.21.0 | 0.635/0.951 | 0.270/0.395 | 0.213 |
+| improved-det | tensorrt | v1.2.1 | 0.685/0.964 | 0.400/0.381 | 0.215 |
+
+### Findings
+
+1. **improved-det dominates tree-sitter on invariant recall on every shared cell** (transformers ~0.41 vs ~0.20 = 2x; vllm v_old 0.513 vs 0.434). The 7-primitive set (env enumerator + silent-norm detector + validator-convention + decorator + aggregator __post_init__ walkers) is the difference. On schema recall improved-det also leads (vllm v_old 0.972 vs 0.615).
+2. **Bump-survivability cliff at the vllm v0.7.3 -> v0.19.1 bump:** invariant recall collapses for BOTH static substrates (improved-det 0.513 -> 0.147; tree-sitter 0.434 -> 0.118). Cause is exactly 0.2's convergent-pattern-2: v0.19's refactor moved a large fraction of invariants to declarative `Field(ge/gt/le/Literal)` (raise pydantic.ValidationError, not a grep-able `raise`) + per-platform `check_and_update_config`. The static substrates were built for imperative raises and do not parse declarative constraints. This is the single strongest empirical argument for a NEW Primitive 8 (declarative-Field constraint extractor) AND for the LLM-extend tail. tensorrt does NOT show the cliff (improved-det 0.270 -> 0.400 actually RISES) because tensorrt's bump moved surface from opaque metaclass/C++ INTO plain pydantic (convergent-pattern-4) - net easier to mine.
+3. **Strict << tolerant for invariants** (e.g. transformers strict 0.025 vs tolerant 0.404; ~16x gap). Almost all of the apparent strict "miss" is namespace/predicate-label convention drift, NOT genuine absence. Confirms tolerant is the correct research headline and that cross-catalogue identity matching is convention-fragile (a finding in itself for any production gate that set-compares catalogues).
+4. **High invariant precision is NOT achieved** (0.23-0.63 tolerant) - the static substrates over-emit (raise-sites that are not LLEM-scope invariants). This is the precision side the runtime-validate gate is designed to clean up; recorded for the assembly-shape analysis.
+
+### Coverage gaps (honest, for synthesis)
+
+- tree-sitter substrate does not support tensorrt (registry `engines` excludes it) - 2 cells `unsupported_engine`.
+- pydantic-native (framework-reflection) registry supports only vllm; and it imports the engine at runtime -> crashed (vllm v0.7.3, engine not in project venv) / deferred (v0.19.1). Framework-reflection needs a per-version importable engine = per-version GPU container; DEFERRED (infra-bound, not a substrate-quality result). 6 cells unscored.
+- So the version-correct static-substrate comparison this session rests on tree-sitter (4 cells) + improved-det (6 cells). Sufficient for the substrate-frontier + bump-survivability deliverables; framework-reflection / runtime-trace / behavioural-fuzz deferred to a GPU-container run.
+

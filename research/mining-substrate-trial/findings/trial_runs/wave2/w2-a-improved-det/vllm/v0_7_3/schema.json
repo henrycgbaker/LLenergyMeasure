@@ -2,7 +2,7 @@
   "schema_version": "2.0.0",
   "engine": "vllm",
   "engine_version": "0.7.3",
-  "discovered_at": "2026-06-05T01:19:01.429765+00:00",
+  "discovered_at": "2026-06-05T01:35:56.620877+00:00",
   "engine_params": {
     "model": {
       "type": "string",

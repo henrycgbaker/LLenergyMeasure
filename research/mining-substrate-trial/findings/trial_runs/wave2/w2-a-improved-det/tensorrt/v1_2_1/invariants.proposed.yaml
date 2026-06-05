@@ -1,0 +1,1787 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 1.2.1
+mined_at: '2026-06-05T01:35:58.536066+00:00'
+invariants:
+- id: tensorrt_cudagraphconfig_validate_cuda_graph_max_batch_size_max_batch_size_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: CudaGraphConfig.validate_cuda_graph_max_batch_size flags `max_batch_size`
+    (lt)
+  severity: error
+  native_type: tensorrt.CudaGraphConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_cuda_graph_max_batch_size
+    line_at_scan: 129
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_nvfp4gemmconfig_validate_allowed_backends_invalid_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Nvfp4GemmConfig.validate_allowed_backends flags `invalid`
+    (present)
+  severity: error
+  native_type: tensorrt.Nvfp4GemmConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_allowed_backends
+    line_at_scan: 495
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.invalid:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_nvfp4gemmconfig_validate_allowed_backends_allowed_backends_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Nvfp4GemmConfig.validate_allowed_backends flags `allowed_backends`
+    (present)
+  severity: error
+  native_type: tensorrt.Nvfp4GemmConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_allowed_backends
+    line_at_scan: 499
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_decodingbaseconfig__validate_acceptance_window_acceptance_window_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: DecodingBaseConfig._validate_acceptance_window flags `acceptance_window`
+    (lt)
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: _validate_acceptance_window
+    line_at_scan: 699
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.acceptance_window:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_decodingbaseconfig__validate_acceptance_length_threshold_acceptance_length_threshold_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: DecodingBaseConfig._validate_acceptance_length_threshold flags
+    `acceptance_length_threshold` (lt)
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: _validate_acceptance_length_threshold
+    line_at_scan: 709
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.acceptance_length_threshold:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: DecodingBaseConfig.validate_draft_len_schedule_and_sort flags
+    `draft_len_schedule` (present)
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_draft_len_schedule_and_sort
+    line_at_scan: 723
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: DecodingBaseConfig.validate_draft_len_schedule_and_sort flags
+    `draft_len_schedule` (lt)
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_draft_len_schedule_and_sort
+    line_at_scan: 726
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: DecodingBaseConfig.validate_draft_len_schedule_and_sort flags
+    `draft_len_schedule` (not_in)
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_draft_len_schedule_and_sort
+    line_at_scan: 736
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: DecodingBaseConfig.validate_draft_len_schedule_and_sort flags
+    `draft_len_schedule` (not_equal)
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_draft_len_schedule_and_sort
+    line_at_scan: 744
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: DecodingBaseConfig.validate_draft_len_schedule_and_sort flags
+    `draft_len_schedule` (gt)
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_draft_len_schedule_and_sort
+    line_at_scan: 753
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_eagledecodingconfig_validate_eagle_choices_eagle_choices_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_choices flags `eagle_choices`
+    (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_choices
+    line_at_scan: 871
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_eagledecodingconfig_validate_eagle_choices_eagle_choices_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_choices flags `eagle_choices`
+    (type_is_not)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_choices
+    line_at_scan: 875
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_max_draft_len_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `max_draft_len`
+    (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 886
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_eagle_choices_present_use_dynamic_tree
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `eagle_choices`
+    (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 900
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        present: true
+      tensorrt.use_dynamic_tree:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_eagle_choices_present_num_eagle_layers
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `eagle_choices`
+    (present)
+  severity: warning
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 907
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        present: true
+      tensorrt.num_eagle_layers:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `use_dynamic_tree`
+    (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 919
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present_max_draft_len
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `use_dynamic_tree`
+    (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 923
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+      tensorrt.max_draft_len:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present_dynamic_tree_max_topk
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `use_dynamic_tree`
+    (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 927
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+      tensorrt.dynamic_tree_max_topK:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present_max_total_draft_tokens
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `use_dynamic_tree`
+    (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 931
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+      tensorrt.max_total_draft_tokens:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_eagle3_layers_to_capture_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate_eagle_config flags `eagle3_layers_to_capture`
+    (present)
+  severity: dormant
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 893
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle3_layers_to_capture:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_eagledecodingconfig_validate_speculative_model_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: EagleDecodingConfig.validate flags `speculative_model` (present)
+  severity: error
+  native_type: tensorrt.EagleDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate
+    line_at_scan: 945
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_model:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_savehiddenstatesdecodingconfig_model_post_init__last_hidden_in_save_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SaveHiddenStatesDecodingConfig.model_post_init flags `_last_hidden_in_save`
+    (present)
+  severity: dormant
+  native_type: tensorrt.SaveHiddenStatesDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: model_post_init
+    line_at_scan: 1005
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._last_hidden_in_save:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_savehiddenstatesdecodingconfig_validate_output_directory_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SaveHiddenStatesDecodingConfig.validate flags `output_directory`
+    (present)
+  severity: error
+  native_type: tensorrt.SaveHiddenStatesDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate
+    line_at_scan: 1017
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.output_directory:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_rayplacementconfig_validate_ray_placement_has_pgs_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: RayPlacementConfig.validate_ray_placement flags `has_pgs`
+    (not_equal)
+  severity: error
+  native_type: tensorrt.RayPlacementConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 1226
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.has_pgs:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_rayplacementconfig_validate_ray_placement_has_pgs_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: RayPlacementConfig.validate_ray_placement flags `has_pgs`
+    (present)
+  severity: error
+  native_type: tensorrt.RayPlacementConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 1231
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.has_pgs:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_rayplacementconfig_validate_ray_placement_placement_groups_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: RayPlacementConfig.validate_ray_placement flags `placement_groups`
+    (not_equal)
+  severity: error
+  native_type: tensorrt.RayPlacementConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 1232
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.placement_groups:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_rayplacementconfig_validate_ray_placement_placementgroup_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: RayPlacementConfig.validate_ray_placement flags `PlacementGroup`
+    (present)
+  severity: error
+  native_type: tensorrt.RayPlacementConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 1237
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.PlacementGroup:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_rayplacementconfig_validate_ray_placement_pg_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: RayPlacementConfig.validate_ray_placement flags `pg` (type_is_not)
+  severity: error
+  native_type: tensorrt.RayPlacementConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 1239
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pg:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: tensorrt_rayplacementconfig_validate_ray_placement_per_worker_gpu_share_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: RayPlacementConfig.validate_ray_placement flags `per_worker_gpu_share`
+    (present)
+  severity: error
+  native_type: tensorrt.RayPlacementConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 1244
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.per_worker_gpu_share:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_rayplacementconfig_validate_ray_placement_per_worker_gpu_share_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: RayPlacementConfig.validate_ray_placement flags `per_worker_gpu_share`
+    (le)
+  severity: error
+  native_type: tensorrt.RayPlacementConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 1245
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.per_worker_gpu_share:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_lookaheaddecodingconfig_validate_positive_values_max_window_size_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values flags `max_window_size`
+    (le)
+  severity: error
+  native_type: tensorrt.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 1579
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_window_size:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_lookaheaddecodingconfig_validate_positive_values_max_ngram_size_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values flags `max_ngram_size`
+    (le)
+  severity: error
+  native_type: tensorrt.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 1579
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_ngram_size:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_lookaheaddecodingconfig_validate_positive_values_max_verification_set_size_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values flags `max_verification_set_size`
+    (le)
+  severity: error
+  native_type: tensorrt.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 1579
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_verification_set_size:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_kvcacheconfig_validate_free_gpu_memory_fraction_free_gpu_memory_fraction_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: KvCacheConfig.validate_free_gpu_memory_fraction flags `free_gpu_memory_fraction`
+    (le)
+  severity: error
+  native_type: tensorrt.KvCacheConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_free_gpu_memory_fraction
+    line_at_scan: 1737
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.free_gpu_memory_fraction:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_kvcacheconfig_validate_max_gpu_total_bytes_max_gpu_total_bytes_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: KvCacheConfig.validate_max_gpu_total_bytes flags `max_gpu_total_bytes`
+    (lt)
+  severity: error
+  native_type: tensorrt.KvCacheConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_max_gpu_total_bytes
+    line_at_scan: 1746
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_gpu_total_bytes:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_kvcacheconfig_validate_max_attention_window_max_attention_window_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: KvCacheConfig.validate_max_attention_window flags `max_attention_window`
+    (type_is_not)
+  severity: error
+  native_type: tensorrt.KvCacheConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_max_attention_window
+    line_at_scan: 1759
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_attention_window:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_kvcacheconfig_validate_max_attention_window_max_attention_window_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: KvCacheConfig.validate_max_attention_window flags `max_attention_window`
+    (le)
+  severity: error
+  native_type: tensorrt.KvCacheConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_max_attention_window
+    line_at_scan: 1768
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_attention_window:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_basellmargs_validate_dtype_dtype_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_dtype flags `dtype` (lt)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_dtype
+    line_at_scan: 2200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_basellmargs_validate_dtype_dtype_exact
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_dtype flags `dtype` (exact)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_dtype
+    line_at_scan: 2203
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_basellmargs_validate_gpus_per_node_gpus_per_node_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_gpus_per_node flags `gpus_per_node` (present)
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_gpus_per_node
+    line_at_scan: 2212
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gpus_per_node:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_basellmargs_validate_model_model_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_model flags `model` (type_is_not)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model
+    line_at_scan: 2221
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_basellmargs_validate_parallel_config_moe_cluster_parallel_size_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_parallel_config flags `moe_cluster_parallel_size`
+    (present)
+  severity: dormant
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_parallel_config
+    line_at_scan: 2228
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_cluster_parallel_size:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_basellmargs_validate_parallel_config_moe_tensor_parallel_size_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_parallel_config flags `moe_tensor_parallel_size`
+    (present)
+  severity: dormant
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_parallel_config
+    line_at_scan: 2231
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_tensor_parallel_size:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_basellmargs_validate_parallel_config_moe_expert_parallel_size_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_parallel_config flags `moe_expert_parallel_size`
+    (present)
+  severity: dormant
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_parallel_config
+    line_at_scan: 2234
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_expert_parallel_size:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_basellmargs_set_default_max_input_len_max_input_len_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.set_default_max_input_len flags `max_input_len`
+    (present)
+  severity: dormant
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: set_default_max_input_len
+    line_at_scan: 2253
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_basellmargs_validate_and_init_tokenizer_skip_tokenizer_init_present_custom_tokenizer
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_and_init_tokenizer flags `skip_tokenizer_init`
+    (present)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_and_init_tokenizer
+    line_at_scan: 2261
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.skip_tokenizer_init:
+        present: true
+      tensorrt.custom_tokenizer:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_basellmargs_validate_and_init_tokenizer_skip_tokenizer_init_present_tokenizer
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_and_init_tokenizer flags `skip_tokenizer_init`
+    (present)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_and_init_tokenizer
+    line_at_scan: 2263
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.skip_tokenizer_init:
+        present: true
+      tensorrt.tokenizer:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_basellmargs_validate_runtime_args_max_batch_size_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_runtime_args flags `max_batch_size` (present)
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_runtime_args
+    line_at_scan: 2305
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_basellmargs_validate_runtime_args_max_batch_size_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_runtime_args flags `max_batch_size` (gt)
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_runtime_args
+    line_at_scan: 2306
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_basellmargs_validate_lora_config_consistency_lora_config_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_lora_config_consistency flags `lora_config`
+    (present)
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 2314
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_basellmargs_validate_lora_config_consistency_lora_config_exact
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_lora_config_consistency flags `lora_config`
+    (exact)
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 2315
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_basellmargs_validate_lora_config_consistency_enable_lora_exact
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_lora_config_consistency flags `enable_lora`
+    (exact)
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 2321
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_basellmargs_validate_peft_cache_config_peft_cache_config_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.validate_peft_cache_config flags `peft_cache_config`
+    (present)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_peft_cache_config
+    line_at_scan: 2343
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.peft_cache_config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_init_build_config_build_config_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.init_build_config flags `build_config` (present)
+  severity: dormant
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: init_build_config
+    line_at_scan: 2430
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.build_config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_build_config_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `build_config` (type_is_not)
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2439
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.build_config:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_num_tokens_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `max_num_tokens` (present)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2449
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_num_tokens_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `max_num_tokens` (gt)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2450
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `max_seq_len` (present)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2455
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `max_seq_len` (not_equal)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2456
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_beam_width_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `max_beam_width` (present)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2460
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_beam_width_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `max_beam_width` (not_equal)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2461
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_input_len_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params flags
+    `max_input_len` (not_equal)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2466
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_speculative_config flags `speculative_config`
+    (present)
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 2504
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_present_max_draft_len
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_speculative_config flags `speculative_config`
+    (present)
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 2515
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+      tensorrt.max_draft_len:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_speculative_config flags `speculative_config`
+    (gt)
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 2525
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_model_format_misc flags `backend` (not_in)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model_format_misc
+    line_at_scan: 2626
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in_model_format
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_model_format_misc flags `backend` (not_in)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model_format_misc
+    line_at_scan: 2633
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
+      tensorrt.model_format:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in_tllm_engine
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_model_format_misc flags `backend` (not_in)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model_format_misc
+    line_at_scan: 2633
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
+      tensorrt.TLLM_ENGINE:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in_build_config
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_model_format_misc flags `backend` (not_in)
+  severity: warning
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model_format_misc
+    line_at_scan: 2634
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
+      tensorrt.build_config:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_trtllmargs_validate_enable_build_cache_enable_build_cache_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_enable_build_cache flags `enable_build_cache`
+    (type_is_not)
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_enable_build_cache
+    line_at_scan: 2688
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_build_cache:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: tensorrt_trtllmargs_validate_kv_cache_dtype_kv_cache_config_exact
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.validate_kv_cache_dtype flags `kv_cache_config`
+    (exact)
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_kv_cache_dtype
+    line_at_scan: 2695
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_config: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchcompileconfig_validate_capture_num_tokens_capture_num_tokens_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchCompileConfig.validate_capture_num_tokens flags `capture_num_tokens`
+    (present)
+  severity: error
+  native_type: tensorrt.TorchCompileConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_capture_num_tokens
+    line_at_scan: 2740
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capture_num_tokens:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_torchcompileconfig_validate_torch_compile_max_num_streams_max_num_streams_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchCompileConfig.validate_torch_compile_max_num_streams
+    flags `max_num_streams` (lt)
+  severity: error
+  native_type: tensorrt.TorchCompileConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_torch_compile_max_num_streams
+    line_at_scan: 2758
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_streams:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_torchllmargs_convert_load_format_load_format_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.convert_load_format flags `load_format` (not_in)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: convert_load_format
+    line_at_scan: 3010
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p6
+- id: tensorrt_torchllmargs_validate_speculative_config_speculative_config_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_speculative_config flags `speculative_config`
+    (type_is_not)
+  severity: warning
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 3063
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: tensorrt_torchllmargs_validate_speculative_config_speculative_config_present_backend
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_speculative_config flags `speculative_config`
+    (present)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 3065
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+      tensorrt.backend:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: tensorrt_torchllmargs_validate_stream_interval_stream_interval_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_stream_interval flags `stream_interval`
+    (le)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_stream_interval
+    line_at_scan: 3085
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.stream_interval:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_checkpoint_format_checkpoint_format_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_checkpoint_format flags `checkpoint_format`
+    (present)
+  severity: warning
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_checkpoint_format
+    line_at_scan: 3092
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.checkpoint_format:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_load_balancer_moe_config_type_is_not
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_load_balancer flags `moe_config` (type_is_not)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_load_balancer
+    line_at_scan: 3108
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_config:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: tensorrt_torchllmargs_validate_load_balancer_moe_config_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_load_balancer flags `moe_config` (present)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_load_balancer
+    line_at_scan: 3109
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_cuda_graph_config_config_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_cuda_graph_config flags `config` (present)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_cuda_graph_config
+    line_at_scan: 3146
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_cuda_graph_config_config_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_cuda_graph_config flags `config` (not_equal)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_cuda_graph_config
+    line_at_scan: 3148
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.config:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_sync_quant_config_with_kv_cache_config_dtype_quant_config_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.sync_quant_config_with_kv_cache_config_dtype
+    flags `quant_config` (present)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: sync_quant_config_with_kv_cache_config_dtype
+    line_at_scan: 3185
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.quant_config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_helix_tokens_per_block_cp_tokens_per_block_exact
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_helix_tokens_per_block flags `cp_tokens_per_block`
+    (exact)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_helix_tokens_per_block
+    line_at_scan: 3208
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.cp_tokens_per_block: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_attention_dp_config_config_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_attention_dp_config flags `config` (lt)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_attention_dp_config
+    line_at_scan: 3248
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.config:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_batch_wait_timeout_ms_batch_wait_timeout_ms_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_batch_wait_timeout_ms flags `batch_wait_timeout_ms`
+    (lt)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_batch_wait_timeout_ms
+    line_at_scan: 3261
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_ms:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_batch_wait_timeout_iters_batch_wait_timeout_iters_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_batch_wait_timeout_iters flags `batch_wait_timeout_iters`
+    (lt)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_batch_wait_timeout_iters
+    line_at_scan: 3267
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_iters:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_batch_wait_max_tokens_ratio_batch_wait_max_tokens_ratio_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_batch_wait_max_tokens_ratio flags `batch_wait_max_tokens_ratio`
+    (lt)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_batch_wait_max_tokens_ratio
+    line_at_scan: 3275
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_max_tokens_ratio:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_ray_worker_extension_cls_ray_worker_extension_cls_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_ray_worker_extension_cls flags `ray_worker_extension_cls`
+    (not_equal)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_worker_extension_cls
+    line_at_scan: 3283
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_worker_extension_cls:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_torchllmargs_validate_ray_placement_config_ray_placement_config_not_equal
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.validate_ray_placement_config flags `ray_placement_config`
+    (not_equal)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_ray_placement_config
+    line_at_scan: 3291
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_placement_config:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_guideddecodingparams__validate_num_guides_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: GuidedDecodingParams._validate flags `num_guides` (gt)
+  severity: error
+  native_type: tensorrt.GuidedDecodingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 36
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.num_guides:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_samplingparams___post_init___pad_id_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams.__post_init__ flags `pad_id` (present)
+  severity: dormant
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 280
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pad_id:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_samplingparams___post_init___best_of_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams.__post_init__ flags `best_of` (present)
+  severity: dormant
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 282
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: tensorrt_samplingparams__validate_top_p_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams._validate flags `top_p` (lt)
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 300
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.top_p:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_samplingparams__validate_top_k_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams._validate flags `top_k` (lt)
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 302
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.top_k:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_samplingparams__validate_temperature_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams._validate flags `temperature` (lt)
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 304
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.temperature:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_samplingparams__validate_best_of_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams._validate flags `best_of` (lt)
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 307
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_samplingparams__validate_best_of_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams._validate flags `best_of` (gt)
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 310
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: tensorrt_samplingparams__validate_truncate_prompt_tokens_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SamplingParams._validate flags `truncate_prompt_tokens` (lt)
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 324
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.truncate_prompt_tokens:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
