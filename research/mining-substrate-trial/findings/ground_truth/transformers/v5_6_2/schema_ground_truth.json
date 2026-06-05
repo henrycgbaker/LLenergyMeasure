@@ -1,0 +1,813 @@
+{
+  "schema_version": "2.0.0",
+  "engine": "transformers",
+  "engine_version": "5.6.2",
+  "ground_truth_built_at": "2026-06-05",
+  "ground_truth_method": "hand-curated from transformers v5.6.2 source (pip wheel 5.6.2, source-only) plus huggingface_hub.constants pass-through (carried from v4.57.3 GT, version-pinned to huggingface_hub not transformers)",
+  "ground_truth_reviewer_check": "every entry has source.file + source.line; verify by opening the file at that line in the v5.6.2 tag (github.com/huggingface/transformers/blob/v5.6.2/src/...)",
+  "engine_params": {
+    "pretrained_model_name_or_path": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Model id, local dir, or None (when state_dict + config supplied).",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3732, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "config": {
+      "anyOf": [{"type": "object", "description": "PreTrainedConfig"}, {"type": "string"}, {"type": "object", "description": "PathLike"}, {"type": "null"}],
+      "default": null,
+      "description": "Note: class renamed PretrainedConfig -> PreTrainedConfig in v5.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3734, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "cache_dir": {
+      "anyOf": [{"type": "string"}, {"type": "object", "description": "PathLike"}, {"type": "null"}],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3735, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "ignore_mismatched_sizes": {
+      "type": "boolean",
+      "default": false,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3736, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "force_download": {
+      "type": "boolean",
+      "default": false,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3737, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "local_files_only": {
+      "type": "boolean",
+      "default": false,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3738, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "token": {
+      "anyOf": [{"type": "string"}, {"type": "boolean"}, {"type": "null"}],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3739, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "revision": {
+      "type": "string",
+      "default": "main",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3740, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "use_safetensors": {
+      "type": ["boolean", "null"],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3741, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "weights_only": {
+      "type": "boolean",
+      "default": true,
+      "description": "Now an explicit keyword in the v5 signature (was a kwargs.pop in v4.57.3).",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3742, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "fusion_config": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "NEW in v5: dict[str, bool | dict] controlling module fusion. Promoted to explicit signature.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3743, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "disable_mmap": {
+      "type": ["boolean", "null"],
+      "default": null,
+      "description": "NEW in v5: disables memory-mapped safetensors loading. Promoted to explicit signature.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3744, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "state_dict": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "Override of state_dict to use instead of loading from the checkpoint.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3988, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "proxies": {
+      "type": ["object", "null"],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3989, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "tqdm_class": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "NEW kwarg in v5: custom tqdm progress-bar class forwarded to the checkpoint resolver.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3990, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "output_loading_info": {
+      "type": "boolean",
+      "default": false,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3991, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "_from_pipeline": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Internal: pipeline source tag (added to user_agent telemetry).",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3992, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "_from_auto": {
+      "type": "boolean",
+      "default": false,
+      "description": "Internal: signals call came from Auto* class.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3993, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "dtype": {
+      "anyOf": [{"type": "string"}, {"type": "object", "description": "torch.dtype"}, {"type": "null"}],
+      "default": "auto",
+      "description": "Canonical name. In v5 the resolved default is 'auto' (line 4014-4015: if dtype is None -> 'auto'), a behavioural change from v4.57.3 where the unresolved default was None.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3994, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "torch_dtype": {
+      "anyOf": [{"type": "string"}, {"type": "object", "description": "torch.dtype"}, {"type": "null"}],
+      "default": null,
+      "description": "Deprecated; aliased to dtype (comment 'kept for BC'). If both supplied, dtype wins.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3995, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "device_map": {
+      "anyOf": [{"type": "string"}, {"type": "object"}, {"type": "integer"}, {"type": "null"}],
+      "enum_for_string_form": ["auto", "balanced", "balanced_low_0", "sequential"],
+      "default": null,
+      "description": "v5 routes device_map through check_and_set_device_map() in integrations/accelerate.py. Same four named strings OR a torch device spec. Int -> {'': N}. Negative int raises. Requires accelerate.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3996, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "max_memory": {
+      "type": ["object", "null"],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3997, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "offload_folder": {
+      "anyOf": [{"type": "string"}, {"type": "object", "description": "PathLike"}, {"type": "null"}],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3998, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "offload_buffers": {
+      "type": "boolean",
+      "default": false,
+      "source": {"file": "transformers/modeling_utils.py", "line": 3999, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "quantization_config": {
+      "anyOf": [{"type": "object", "description": "QuantizationConfigMixin"}, {"type": "object"}, {"type": "null"}],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 4000, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "subfolder": {
+      "type": "string",
+      "default": "",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4001, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "_commit_hash": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Internal: short-circuits hash resolution if known.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4002, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "variant": {
+      "type": ["string", "null"],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 4003, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "adapter_kwargs": {
+      "type": ["object", "null"],
+      "default": {},
+      "description": "PEFT adapter loader kwargs (LoRA / IA3 etc.). Empty dict by default.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4004, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "adapter_name": {
+      "type": "string",
+      "default": "default",
+      "description": "PEFT adapter logical name.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4005, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "generation_config": {
+      "anyOf": [{"type": "object", "description": "GenerationConfig"}, {"type": "null"}],
+      "default": null,
+      "description": "Override of the model's bundled generation config.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4006, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "gguf_file": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Path to a GGUF checkpoint. Mutually exclusive with quantization_config and with disk-offload device_map. Requires accelerate.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4007, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "tp_plan": {
+      "anyOf": [{"type": "string"}, {"type": "object"}, {"type": "null"}],
+      "default": null,
+      "description": "v5: now accepts a dict[str, str] plan OR 'auto' (no longer 'auto'-only). Mutually exclusive with device_map. Requires torch>=2.5.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4008, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "tp_size": {
+      "type": ["integer", "null"],
+      "default": null,
+      "description": "Tensor parallel degree. Raises if set without tp_plan.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4009, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "distributed_config": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "DistributedConfig instance. If set, forces tp_plan='auto'.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4010, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "device_mesh": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "torch.distributed.DeviceMesh. If >1D must contain a 'tp' dim.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4011, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "trust_remote_code": {
+      "type": ["boolean", "null"],
+      "default": null,
+      "source": {"file": "transformers/modeling_utils.py", "line": 4012, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "allow_all_kernels": {
+      "type": "boolean",
+      "default": false,
+      "description": "NEW kwarg in v5: relaxes the HF kernel-hub allowlist when use_kernels is on.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 3998, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "use_kernels": {
+      "type": "boolean",
+      "default": false,
+      "description": "Opt-in path to HF kernel-hub attention kernels. Auto-forced True if kernel_config is set (with warning).",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4000, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "kernel_config": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "NEW kwarg in v5: explicit kernel-hub kernel mapping. Setting it auto-enables use_kernels with a warning_once.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4001, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "key_mapping": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "Optional state-dict key rename map; auto-applied for VLM classes when None.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4002, "qualname": "PreTrainedModel.from_pretrained.kwargs"}
+    },
+    "attn_implementation": {
+      "type": ["string", "null"],
+      "enum_hint": ["eager", "sdpa", "flash_attention_2", "flash_attention_3", "<namespace>/<repo>[@rev][:kernel]"],
+      "default": null,
+      "description": "Set on config via config._attn_implementation. Plus any registered ALL_ATTENTION_FUNCTIONS key; plus HF kernel-hub repo specs.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4090, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "experts_implementation": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "NEW in v5: MoE experts kernel selection. Set on config via config._experts_implementation (parallel to attn_implementation).",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4093, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "code_revision": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Git revision for the trust_remote_code modeling repo (separate from `revision`).",
+      "source": {"file": "transformers/models/auto/auto_factory.py", "line": null, "qualname": "_BaseAutoModelClass.from_pretrained"}
+    },
+    "mirror": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "v5: silently popped no-op. Part of the dead-kwargs sweep at line 4008 ('Not used anymore -- remove them from the kwargs').",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4008, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "_fast_init": {
+      "type": "boolean",
+      "default": true,
+      "description": "v5: silently popped no-op (dead-kwargs sweep line 4008).",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4008, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "low_cpu_mem_usage": {
+      "type": ["boolean", "null"],
+      "default": null,
+      "description": "v5: silently popped no-op (dead-kwargs sweep line 4008). Lazy-init is always-on. Accepted but dead.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4008, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "from_tf": {
+      "type": "boolean",
+      "default": false,
+      "description": "v5: silently popped no-op (dead-kwargs sweep line 4008). TF loading removed; kwarg accepted but dead. In v4.57.3 it actually selected the TF loader.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4008, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "from_flax": {
+      "type": "boolean",
+      "default": false,
+      "description": "v5: silently popped no-op (dead-kwargs sweep line 4008). Flax loading removed; kwarg accepted but dead.",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4008, "qualname": "PreTrainedModel.from_pretrained"}
+    },
+    "offload_state_dict": {
+      "type": ["boolean", "null"],
+      "default": null,
+      "description": "v5: silently popped no-op (dead-kwargs sweep line 4008).",
+      "source": {"file": "transformers/modeling_utils.py", "line": 4008, "qualname": "PreTrainedModel.from_pretrained"}
+    }
+  },
+  "sampling_params": {
+    "_NOTE_v5_default_refactor": "BREAKING v5 CHANGE: every GenerationConfig field defaults to None in __init__ (kwargs.pop(name, None)). The effective defaults shown below live in GenerationConfig._get_default_generation_params() (line 551) and are applied lazily at generate-time, NOT in __init__. The 'default' values below are the EFFECTIVE defaults from _get_default_generation_params(); the literal __init__ default is None for all fields. This decouples 'what the config object holds' from 'what generate() uses'.",
+    "max_length": {"type": "integer", "default": 20, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 354, "qualname": "GenerationConfig.__init__"}, "effective_default_source": {"line": 553, "qualname": "GenerationConfig._get_default_generation_params"}},
+    "max_new_tokens": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 355, "qualname": "GenerationConfig.__init__"}},
+    "min_length": {"type": "integer", "default": 0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 356, "qualname": "GenerationConfig.__init__"}},
+    "min_new_tokens": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 357, "qualname": "GenerationConfig.__init__"}},
+    "early_stopping": {"anyOf": [{"type": "boolean"}, {"type": "string", "enum": ["never"]}], "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 358, "qualname": "GenerationConfig.__init__"}},
+    "max_time": {"type": ["number", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 359, "qualname": "GenerationConfig.__init__"}},
+    "stop_strings": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 360, "qualname": "GenerationConfig.__init__"}},
+    "do_sample": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 363, "qualname": "GenerationConfig.__init__"}},
+    "num_beams": {"type": "integer", "default": 1, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 364, "qualname": "GenerationConfig.__init__"}},
+    "use_cache": {"type": "boolean", "default": true, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 367, "qualname": "GenerationConfig.__init__"}},
+    "cache_implementation": {"type": ["string", "null"], "enum": ["static", "offloaded_static", "sliding_window", "hybrid", "hybrid_chunked", "offloaded_hybrid", "offloaded_hybrid_chunked", "dynamic", "dynamic_full", "offloaded", "quantized"], "validate_extra_value": "paged", "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 368, "qualname": "GenerationConfig.__init__"}, "enum_source": {"file": "transformers/generation/configuration_utils.py", "line": 58, "qualname": "ALL_CACHE_IMPLEMENTATIONS"}, "validate_source": {"line": 618, "qualname": "GenerationConfig.validate", "note": "valid_cache_implementations = ALL_CACHE_IMPLEMENTATIONS + ('paged',)"}},
+    "cache_config": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 369, "qualname": "GenerationConfig.__init__"}},
+    "prefill_chunk_size": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 443, "qualname": "GenerationConfig.__init__"}},
+    "temperature": {"type": "number", "default": 1.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 372, "qualname": "GenerationConfig.__init__"}},
+    "top_k": {"type": "integer", "default": 50, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 373, "qualname": "GenerationConfig.__init__"}},
+    "top_p": {"type": "number", "default": 1.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 374, "qualname": "GenerationConfig.__init__"}},
+    "min_p": {"type": ["number", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 375, "qualname": "GenerationConfig.__init__"}},
+    "top_h": {"type": ["number", "null"], "default": null, "description": "NEW in v5: top-H (entropy-based) sampling control. Greedy-strip dormant warning at validate line 652.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 376, "qualname": "GenerationConfig.__init__"}},
+    "typical_p": {"type": "number", "default": 1.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 377, "qualname": "GenerationConfig.__init__"}},
+    "epsilon_cutoff": {"type": "number", "default": 0.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 378, "qualname": "GenerationConfig.__init__"}},
+    "eta_cutoff": {"type": "number", "default": 0.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 379, "qualname": "GenerationConfig.__init__"}},
+    "repetition_penalty": {"type": "number", "default": 1.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 380, "qualname": "GenerationConfig.__init__"}},
+    "encoder_repetition_penalty": {"type": "number", "default": 1.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 381, "qualname": "GenerationConfig.__init__"}},
+    "length_penalty": {"type": "number", "default": 1.0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 382, "qualname": "GenerationConfig.__init__"}},
+    "no_repeat_ngram_size": {"type": "integer", "default": 0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 383, "qualname": "GenerationConfig.__init__"}},
+    "bad_words_ids": {"type": ["array", "null"], "items": {"type": "array", "items": {"type": "integer"}}, "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 384, "qualname": "GenerationConfig.__init__"}},
+    "renormalize_logits": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 385, "qualname": "GenerationConfig.__init__"}},
+    "forced_bos_token_id": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 386, "qualname": "GenerationConfig.__init__"}},
+    "forced_eos_token_id": {"anyOf": [{"type": "integer"}, {"type": "array", "items": {"type": "integer"}}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 387, "qualname": "GenerationConfig.__init__"}},
+    "remove_invalid_values": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 388, "qualname": "GenerationConfig.__init__"}},
+    "exponential_decay_length_penalty": {"anyOf": [{"type": "array", "items": [{"type": "integer"}, {"type": "number"}]}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 389, "qualname": "GenerationConfig.__init__"}},
+    "suppress_tokens": {"type": ["array", "null"], "items": {"type": "integer"}, "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 390, "qualname": "GenerationConfig.__init__"}},
+    "begin_suppress_tokens": {"type": ["array", "null"], "items": {"type": "integer"}, "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 391, "qualname": "GenerationConfig.__init__"}},
+    "sequence_bias": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 392, "qualname": "GenerationConfig.__init__"}},
+    "token_healing": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 393, "qualname": "GenerationConfig.__init__"}},
+    "guidance_scale": {"type": ["number", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 394, "qualname": "GenerationConfig.__init__"}},
+    "watermarking_config": {"anyOf": [{"$ref": "#/$defs/WatermarkingConfig"}, {"$ref": "#/$defs/SynthIDTextWatermarkingConfig"}, {"type": "object"}, {"type": "null"}], "default": null, "description": "If a BaseWatermarkingConfig instance, kept as-is; .validate() delegated in GenerationConfig.validate.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 396, "qualname": "GenerationConfig.__init__"}},
+    "num_return_sequences": {"type": "integer", "default": 1, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 401, "qualname": "GenerationConfig.__init__"}},
+    "output_attentions": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 402, "qualname": "GenerationConfig.__init__"}},
+    "output_hidden_states": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 403, "qualname": "GenerationConfig.__init__"}},
+    "output_scores": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 404, "qualname": "GenerationConfig.__init__"}},
+    "output_logits": {"type": ["boolean", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 405, "qualname": "GenerationConfig.__init__"}},
+    "return_dict_in_generate": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 406, "qualname": "GenerationConfig.__init__"}},
+    "pad_token_id": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 409, "qualname": "GenerationConfig.__init__"}},
+    "bos_token_id": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 410, "qualname": "GenerationConfig.__init__"}},
+    "eos_token_id": {"anyOf": [{"type": "integer"}, {"type": "array", "items": {"type": "integer"}}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 411, "qualname": "GenerationConfig.__init__"}},
+    "encoder_no_repeat_ngram_size": {"type": "integer", "default": 0, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 414, "qualname": "GenerationConfig.__init__"}},
+    "decoder_start_token_id": {"anyOf": [{"type": "integer"}, {"type": "array", "items": {"type": "integer"}}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 415, "qualname": "GenerationConfig.__init__"}},
+    "is_assistant": {"type": ["boolean", "null"], "default": null, "description": "v5: now a regular kwargs.pop (was hard-coded False in v4.57.3). Effective default still falsey.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 418, "qualname": "GenerationConfig.__init__"}},
+    "num_assistant_tokens": {"type": "integer", "default": 20, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 419, "qualname": "GenerationConfig.__init__"}},
+    "num_assistant_tokens_schedule": {"type": "string", "enum": ["constant", "heuristic", "heuristic_transient"], "default": "constant", "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 420, "qualname": "GenerationConfig.__init__"}},
+    "assistant_confidence_threshold": {"type": "number", "default": 0.4, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 421, "qualname": "GenerationConfig.__init__"}},
+    "prompt_lookup_num_tokens": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 422, "qualname": "GenerationConfig.__init__"}},
+    "max_matching_ngram_size": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 423, "qualname": "GenerationConfig.__init__"}},
+    "assistant_early_exit": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 424, "qualname": "GenerationConfig.__init__"}},
+    "assistant_lookbehind": {"type": "integer", "default": 10, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 425, "qualname": "GenerationConfig.__init__"}},
+    "target_lookbehind": {"type": "integer", "default": 10, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 426, "qualname": "GenerationConfig.__init__"}},
+    "compile_config": {"$ref": "#/$defs/CompileConfig", "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 429, "qualname": "GenerationConfig.__init__"}},
+    "disable_compile": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 430, "qualname": "GenerationConfig.__init__"}},
+    "continuous_batching_config": {"$ref": "#/$defs/ContinuousBatchingConfig", "default": null, "description": "NEW in v5: ContinuousBatchingConfig dataclass for generate_batch / continuous-batching context manager. NOT validated inside GenerationConfig.validate().", "source": {"file": "transformers/generation/configuration_utils.py", "line": 432, "qualname": "GenerationConfig.__init__"}},
+    "low_memory": {"type": ["boolean", "null"], "default": null, "description": "Deprecated; scheduled for removal in v4.62.0 (note retained in v5 source).", "source": {"file": "transformers/generation/configuration_utils.py", "line": 435, "qualname": "GenerationConfig.__init__"}},
+    "penalty_alpha": {"type": ["number", "null"], "default": null, "description": "Deprecated (contrastive search trigger).", "source": {"file": "transformers/generation/configuration_utils.py", "line": 436, "qualname": "GenerationConfig.__init__"}},
+    "dola_layers": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "integer"}}, {"type": "null"}], "default": null, "description": "Deprecated (DoLa trigger).", "source": {"file": "transformers/generation/configuration_utils.py", "line": 437, "qualname": "GenerationConfig.__init__"}},
+    "diversity_penalty": {"type": "number", "default": 0.0, "init_default": null, "description": "Deprecated (moved to Hub).", "source": {"file": "transformers/generation/configuration_utils.py", "line": 438, "qualname": "GenerationConfig.__init__"}},
+    "num_beam_groups": {"type": "integer", "default": 1, "init_default": null, "description": "Deprecated (moved to Hub).", "source": {"file": "transformers/generation/configuration_utils.py", "line": 439, "qualname": "GenerationConfig.__init__"}},
+    "constraints": {"type": ["array", "null"], "default": null, "description": "Deprecated; constrained beam-search trigger.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 440, "qualname": "GenerationConfig.__init__"}},
+    "force_words_ids": {"type": ["array", "null"], "default": null, "description": "Deprecated; constrained beam-search trigger.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 441, "qualname": "GenerationConfig.__init__"}},
+    "_commit_hash": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 446, "qualname": "GenerationConfig.__init__"}},
+    "_from_model_config": {"type": "boolean", "default": false, "init_default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 447, "qualname": "GenerationConfig.__init__"}},
+    "transformers_version": {"type": "string", "default": "5.6.2", "source": {"file": "transformers/generation/configuration_utils.py", "line": 448, "qualname": "GenerationConfig.__init__"}}
+  },
+  "_removed_sampling_params_vs_v4_57_3": {
+    "return_legacy_cache": "REMOVED in v5. Was a kwargs.pop field + cache-strip arm of validate() in v4.57.3 (line 352). No longer present in __init__ or validate."
+  },
+  "quantization_configs": {
+    "BitsAndBytesConfig": {"$ref": "#/$defs/BitsAndBytesConfig"},
+    "GPTQConfig": {"$ref": "#/$defs/GPTQConfig"},
+    "AwqConfig": {"$ref": "#/$defs/AwqConfig"},
+    "AqlmConfig": {"$ref": "#/$defs/AqlmConfig"},
+    "VptqConfig": {"$ref": "#/$defs/VptqConfig"},
+    "QuantoConfig": {"$ref": "#/$defs/QuantoConfig"},
+    "EetqConfig": {"$ref": "#/$defs/EetqConfig"},
+    "HqqConfig": {"$ref": "#/$defs/HqqConfig"},
+    "AutoRoundConfig": {"$ref": "#/$defs/AutoRoundConfig"},
+    "CompressedTensorsConfig": {"$ref": "#/$defs/CompressedTensorsConfig"},
+    "FbgemmFp8Config": {"$ref": "#/$defs/FbgemmFp8Config"},
+    "HiggsConfig": {"$ref": "#/$defs/HiggsConfig"},
+    "FPQuantConfig": {"$ref": "#/$defs/FPQuantConfig"},
+    "TorchAoConfig": {"$ref": "#/$defs/TorchAoConfig"},
+    "BitNetQuantConfig": {"$ref": "#/$defs/BitNetQuantConfig"},
+    "SpQRConfig": {"$ref": "#/$defs/SpQRConfig"},
+    "FineGrainedFP8Config": {"$ref": "#/$defs/FineGrainedFP8Config"},
+    "QuarkConfig": {"$ref": "#/$defs/QuarkConfig"},
+    "Mxfp4Config": {"$ref": "#/$defs/Mxfp4Config"},
+    "MetalConfig": {"$ref": "#/$defs/MetalConfig"},
+    "FourOverSixConfig": {"$ref": "#/$defs/FourOverSixConfig"},
+    "SinqConfig": {"$ref": "#/$defs/SinqConfig"}
+  },
+  "watermarking_configs": {
+    "WatermarkingConfig": {"$ref": "#/$defs/WatermarkingConfig"},
+    "SynthIDTextWatermarkingConfig": {"$ref": "#/$defs/SynthIDTextWatermarkingConfig"}
+  },
+  "cache_classes": {
+    "_NOTE_v5_refactor": "BREAKING v5 CHANGE: the monolithic Cache taxonomy was rearchitected into a layer-mixin composition model. Top-level Cache classes reduced from 13 (v4.57.3) to 4. Per-layer behaviour now lives in CacheLayerMixin subclasses. SlidingWindowCache is a deprecated alias of StaticCache (line 1574). HybridCache, HybridChunkedCache, OffloadedCache, OffloadedStaticCache, OffloadedHybridCache, SinkCache, MambaCache, QuantoQuantizedCache, HQQQuantizedCache removed as top-level classes.",
+    "DynamicCache": {"file": "transformers/cache_utils.py", "line": 1173},
+    "StaticCache": {"file": "transformers/cache_utils.py", "line": 1292},
+    "QuantizedCache": {"file": "transformers/cache_utils.py", "line": 1374},
+    "EncoderDecoderCache": {"file": "transformers/cache_utils.py", "line": 1430},
+    "SlidingWindowCache": {"file": "transformers/cache_utils.py", "line": 1574, "alias_of": "StaticCache", "deprecated": true},
+    "_cache_layer_classes": {
+      "CacheLayerMixin": {"file": "transformers/cache_utils.py", "line": 26},
+      "DynamicLayer": {"file": "transformers/cache_utils.py", "line": 88},
+      "DynamicSlidingWindowLayer": {"file": "transformers/cache_utils.py", "line": 166},
+      "StaticLayer": {"file": "transformers/cache_utils.py", "line": 247},
+      "StaticSlidingWindowLayer": {"file": "transformers/cache_utils.py", "line": 357},
+      "QuantizedLayer": {"file": "transformers/cache_utils.py", "line": 484},
+      "QuantoQuantizedLayer": {"file": "transformers/cache_utils.py", "line": 560},
+      "HQQQuantizedLayer": {"file": "transformers/cache_utils.py", "line": 615},
+      "LinearAttentionCacheLayerMixin": {"file": "transformers/cache_utils.py", "line": 672},
+      "LinearAttentionLayer": {"file": "transformers/cache_utils.py", "line": 734},
+      "LinearAttentionAndFullAttentionLayer": {"file": "transformers/cache_utils.py", "line": 807}
+    }
+  },
+  "env_vars": {
+    "_NOTE_v5_hub_simplification": "BREAKING v5 CHANGE: transformers/utils/hub.py was slimmed from 1162 LOC to 949. The transformers-owned legacy cache/endpoint env-var reads were removed: TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE, HUGGINGFACE_CO_RESOLVE_ENDPOINT, HUGGINGFACE_CO_STAGING, TORCH_HOME, XDG_CACHE_HOME. is_offline_mode is now imported directly from huggingface_hub (line 40), so the transformers-local _is_offline_mode import-time binding AND the TRANSFORMERS_OFFLINE read are GONE. Offline gating is fully delegated to huggingface_hub.constants.HF_HUB_OFFLINE.",
+    "HF_MODULES_CACHE": {"default_resolution": "{HF_HOME}/modules", "behavior": "Where dynamic (trust_remote_code) module source files are cached.", "source": {"file": "transformers/utils/hub.py", "line": 92, "qualname": "HF_MODULES_CACHE"}},
+    "TRANSFORMERS_VERBOSITY": {"enum": ["debug", "info", "warning", "error", "critical", "detail"], "behavior": "Override of default logger level. 'detail' enables DEBUG with filename+lineno. Unknown value logs an error and falls through to default WARNING.", "source": {"file": "transformers/utils/logging.py", "line": 64, "qualname": "_get_default_logging_level"}},
+    "TRANSFORMERS_NO_ADVISORY_WARNINGS": {"enum_truthy": ["1", "ON", "YES", "TRUE"], "behavior": "If truthy, suppresses logger.warning_advice calls.", "source": {"file": "transformers/utils/logging.py", "line": 322, "qualname": "warning_advice"}},
+    "CI": {"behavior": "NEW read in v5 logging: if set, tweaks logger flush behaviour for CI environments.", "source": {"file": "transformers/utils/logging.py", "line": 114, "qualname": "_configure_library_root_logger"}},
+    "TRANSFORMERS_IS_CI": {"behavior": "If truthy (ENV_VARS_TRUE_VALUES), suppresses Hub telemetry user-agent enrichment.", "source": {"file": "transformers/utils/hub.py", "line": 200, "qualname": "http_user_agent"}},
+    "ECS_CONTAINER_METADATA_URI": {"behavior": "AWS ECS telemetry probe for user-agent enrichment.", "source": {"file": "transformers/utils/hub.py", "line": 163, "qualname": "_telemetry"}},
+    "SM_FRAMEWORK_PARAMS": {"behavior": "SageMaker framework params (JSON) for telemetry user-agent.", "source": {"file": "transformers/utils/hub.py", "line": 170, "qualname": "define_sagemaker_information"}},
+    "TRAINING_JOB_ARN": {"behavior": "SageMaker training-job ARN for telemetry.", "source": {"file": "transformers/utils/hub.py", "line": 172, "qualname": "define_sagemaker_information"}},
+    "SM_FRAMEWORK_MODULE": {"source": {"file": "transformers/utils/hub.py", "line": 176, "qualname": "define_sagemaker_information"}},
+    "AWS_REGION": {"source": {"file": "transformers/utils/hub.py", "line": 177, "qualname": "define_sagemaker_information"}},
+    "SM_NUM_GPUS": {"default_resolution": "0", "source": {"file": "transformers/utils/hub.py", "line": 178, "qualname": "define_sagemaker_information"}},
+    "SM_NUM_CPUS": {"default_resolution": "0", "source": {"file": "transformers/utils/hub.py", "line": 179, "qualname": "define_sagemaker_information"}},
+    "TRUST_REMOTE_CODE": {"behavior": "Legacy env var checked by RAG / RealmRetriever / TransfoXL tokenizer paths to short-circuit the trust_remote_code prompt. NOT used by the modern AutoClass.from_pretrained path.", "source": {"file": "transformers/models/rag/retrieval_rag.py", "line": null, "qualname": "RAG retrievers"}},
+    "WORLD_SIZE": {"upstream": "torch.distributed launcher", "behavior": "If set and >0 while device_map='auto', logger.info warns about distributed-vs-auto interaction.", "source": {"file": "transformers/modeling_utils.py", "line": 4036, "qualname": "PreTrainedModel.from_pretrained"}},
+    "LOCAL_RANK": {"upstream": "torch.distributed launcher", "behavior": "Used by initialize_tensor_parallelism to set the local accelerator device when tp_plan is set.", "source": {"file": "transformers/integrations/tensor_parallel.py", "line": 81, "qualname": "initialize_tensor_parallelism"}},
+    "RANK": {"upstream": "torch.distributed launcher", "behavior": "NEW dependency surface in v5: read by initialize_tensor_parallelism to init the process group for tp_plan.", "source": {"file": "transformers/integrations/tensor_parallel.py", "line": 62, "qualname": "initialize_tensor_parallelism"}},
+    "HF_HOME": {"upstream": "huggingface_hub.constants", "default_resolution": "{XDG_CACHE_HOME or ~/.cache}/huggingface", "behavior": "Root of HF cache hierarchy. In v5 this is the only cache root (legacy TRANSFORMERS_CACHE removed).", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HOME"}},
+    "HF_HUB_CACHE": {"upstream": "huggingface_hub.constants", "default_resolution": "{HF_HOME}/hub", "source": {"file": "transformers/utils/hub.py", "line": 392, "qualname": "constants.HF_HUB_CACHE"}},
+    "HUGGINGFACE_HUB_CACHE": {"upstream": "huggingface_hub.constants", "behavior": "Older alias of HF_HUB_CACHE.", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HUGGINGFACE_HUB_CACHE"}},
+    "HF_ASSETS_CACHE": {"upstream": "huggingface_hub.constants", "default_resolution": "{HF_HOME}/assets", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_ASSETS_CACHE"}},
+    "HF_XET_CACHE": {"upstream": "huggingface_hub.constants", "default_resolution": "{HF_HOME}/xet", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_XET_CACHE"}},
+    "HF_TOKEN": {"upstream": "huggingface_hub.constants", "behavior": "Bearer token for authenticated requests. Read when token kwarg is None.", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_TOKEN"}},
+    "HF_TOKEN_PATH": {"upstream": "huggingface_hub.constants", "default_resolution": "{HF_HOME}/token", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_TOKEN_PATH"}},
+    "HF_STORED_TOKENS_PATH": {"upstream": "huggingface_hub.constants", "default_resolution": "{HF_HOME}/stored_tokens", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_STORED_TOKENS_PATH"}},
+    "HF_HUB_OFFLINE": {"upstream": "huggingface_hub.constants", "behavior": "If truthy, forces local_files_only=True. In v5 transformers calls huggingface_hub.is_offline_mode() directly (imported at hub.py:40), so the v4.57.3 transformers-local import-time-binding gotcha NO LONGER applies in transformers itself; the binding semantics are now whatever huggingface_hub does. is_offline_mode() is consulted at from_pretrained line 4017.", "source": {"file": "transformers/modeling_utils.py", "line": 4017, "qualname": "PreTrainedModel.from_pretrained"}},
+    "HF_ENDPOINT": {"upstream": "huggingface_hub.constants", "behavior": "Base URL for Hub API/file resolution. v5 reads it via constants.ENDPOINT (no transformers-local HUGGINGFACE_CO_RESOLVE_ENDPOINT shim).", "source": {"file": "transformers/utils/hub.py", "line": 499, "qualname": "constants.ENDPOINT"}},
+    "HF_HUB_DISABLE_TELEMETRY": {"upstream": "huggingface_hub.constants", "behavior": "If True, transformers omits the X-User-Agent telemetry suffix.", "source": {"file": "transformers/utils/hub.py", "line": 195, "qualname": "http_user_agent"}},
+    "HF_HUB_DISABLE_IMPLICIT_TOKEN": {"upstream": "huggingface_hub.constants", "behavior": "Disables automatic token resolution from cached login.", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_DISABLE_IMPLICIT_TOKEN"}},
+    "HF_HUB_DISABLE_PROGRESS_BARS": {"upstream": "huggingface_hub.constants", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_DISABLE_PROGRESS_BARS"}},
+    "HF_HUB_DISABLE_SYMLINKS_WARNING": {"upstream": "huggingface_hub.constants", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_DISABLE_SYMLINKS_WARNING"}},
+    "HF_HUB_DISABLE_EXPERIMENTAL_WARNING": {"upstream": "huggingface_hub.constants", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_DISABLE_EXPERIMENTAL_WARNING"}},
+    "HF_HUB_DISABLE_XET": {"upstream": "huggingface_hub.constants", "behavior": "Disables xet-backed downloads.", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_DISABLE_XET"}},
+    "HF_HUB_ENABLE_HF_TRANSFER": {"upstream": "huggingface_hub.constants", "behavior": "Opt-in to hf_transfer accelerated downloads; requires hf_transfer pkg.", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_ENABLE_HF_TRANSFER"}},
+    "HF_HUB_DOWNLOAD_TIMEOUT": {"upstream": "huggingface_hub.constants", "default_resolution": "10", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_DOWNLOAD_TIMEOUT"}},
+    "HF_HUB_ETAG_TIMEOUT": {"upstream": "huggingface_hub.constants", "default_resolution": "10", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_ETAG_TIMEOUT"}},
+    "HF_HUB_USER_AGENT_ORIGIN": {"upstream": "huggingface_hub.constants", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_HUB_USER_AGENT_ORIGIN"}},
+    "HF_DEBUG": {"upstream": "huggingface_hub.constants", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_DEBUG"}},
+    "HF_TRANSFER_CONCURRENCY": {"upstream": "huggingface_hub.constants", "default_resolution": "100", "source": {"file": "huggingface_hub/constants.py", "line": null, "qualname": "HF_TRANSFER_CONCURRENCY"}}
+  },
+  "_removed_env_vars_vs_v4_57_3": {
+    "TRANSFORMERS_CACHE": "REMOVED from transformers/utils/hub.py in v5. Use HF_HOME.",
+    "PYTORCH_TRANSFORMERS_CACHE": "REMOVED.",
+    "PYTORCH_PRETRAINED_BERT_CACHE": "REMOVED.",
+    "HUGGINGFACE_CO_RESOLVE_ENDPOINT": "REMOVED. Use HF_ENDPOINT (via constants.ENDPOINT).",
+    "HUGGINGFACE_CO_STAGING": "REMOVED from transformers-local hub.py.",
+    "TORCH_HOME": "No longer read by transformers.utils.hub.",
+    "XDG_CACHE_HOME": "No longer read directly by transformers.utils.hub (still used inside huggingface_hub HF_HOME resolution).",
+    "TRANSFORMERS_OFFLINE": "No longer read by transformers in v5. Offline gating is fully delegated to huggingface_hub.constants.HF_HUB_OFFLINE via the imported is_offline_mode()."
+  },
+  "pipeline_kwargs": {
+    "_NOTE_v5": "v5 dropped the `framework` kwarg from the pipeline() signature (was 'pt'/'tf'/None in v4.57.3; TF support removed). 16 explicit keyword params now (was 17). The real impl is at line 440; lines 383-431 are typed @overload stubs.",
+    "task": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 441, "qualname": "pipeline"}},
+    "model": {"type": ["string", "object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 442, "qualname": "pipeline"}},
+    "config": {"type": ["string", "object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 443, "qualname": "pipeline"}},
+    "tokenizer": {"type": ["string", "object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 444, "qualname": "pipeline"}},
+    "feature_extractor": {"type": ["string", "object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 445, "qualname": "pipeline"}},
+    "image_processor": {"type": ["string", "object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 446, "qualname": "pipeline"}},
+    "processor": {"type": ["string", "object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 447, "qualname": "pipeline"}},
+    "revision": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 448, "qualname": "pipeline"}},
+    "use_fast": {"type": "boolean", "default": true, "source": {"file": "transformers/pipelines/__init__.py", "line": 449, "qualname": "pipeline"}},
+    "token": {"anyOf": [{"type": "string"}, {"type": "boolean"}, {"type": "null"}], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 450, "qualname": "pipeline"}},
+    "device": {"anyOf": [{"type": "integer"}, {"type": "string"}, {"type": "object", "description": "torch.device"}, {"type": "null"}], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 451, "qualname": "pipeline"}},
+    "device_map": {"anyOf": [{"type": "string"}, {"type": "object"}, {"type": "null"}], "default": null, "description": "Mutually exclusive with device.", "source": {"file": "transformers/pipelines/__init__.py", "line": 452, "qualname": "pipeline"}},
+    "dtype": {"anyOf": [{"type": "string"}, {"type": "object", "description": "torch.dtype"}, {"type": "null"}], "default": "auto", "description": "pipeline() defaults to 'auto'. (from_pretrained now ALSO resolves None->'auto' in v5, so the v4.57.3 divergence is closed.)", "source": {"file": "transformers/pipelines/__init__.py", "line": 453, "qualname": "pipeline"}},
+    "trust_remote_code": {"type": ["boolean", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 454, "qualname": "pipeline"}},
+    "model_kwargs": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 455, "qualname": "pipeline"}},
+    "pipeline_class": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/pipelines/__init__.py", "line": 456, "qualname": "pipeline"}}
+  },
+  "$defs": {
+    "WatermarkingConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "greenlist_ratio": {"type": "number", "default": 0.25, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1349, "qualname": "WatermarkingConfig.__init__"}},
+        "bias": {"type": "number", "default": 2.0, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1350, "qualname": "WatermarkingConfig.__init__"}},
+        "hashing_key": {"type": "integer", "default": 15485863, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1351, "qualname": "WatermarkingConfig.__init__"}},
+        "seeding_scheme": {"type": "string", "enum": ["lefthash", "selfhash"], "default": "lefthash", "source": {"file": "transformers/generation/configuration_utils.py", "line": 1352, "qualname": "WatermarkingConfig.__init__"}},
+        "context_width": {"type": "integer", "default": 1, "minimum": 1, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1353, "qualname": "WatermarkingConfig.__init__"}}
+      }
+    },
+    "SynthIDTextWatermarkingConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "ngram_len": {"type": "integer", "default": null, "description": "Required positional; no default.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 1450, "qualname": "SynthIDTextWatermarkingConfig.__init__"}},
+        "keys": {"type": "array", "items": {"type": "integer"}, "default": null, "description": "Required positional; no default.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 1451, "qualname": "SynthIDTextWatermarkingConfig.__init__"}},
+        "context_history_size": {"type": "integer", "default": 1024, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1452, "qualname": "SynthIDTextWatermarkingConfig.__init__"}},
+        "sampling_table_seed": {"type": "integer", "default": 0, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1453, "qualname": "SynthIDTextWatermarkingConfig.__init__"}},
+        "sampling_table_size": {"type": "integer", "default": 65536, "maximum": 16777216, "description": "Must be <= 2**24.", "source": {"file": "transformers/generation/configuration_utils.py", "line": 1454, "qualname": "SynthIDTextWatermarkingConfig.__init__"}},
+        "skip_first_ngram_calls": {"type": "boolean", "default": false, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1455, "qualname": "SynthIDTextWatermarkingConfig.__init__"}},
+        "debug_mode": {"type": "boolean", "default": false, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1456, "qualname": "SynthIDTextWatermarkingConfig.__init__"}}
+      }
+    },
+    "CompileConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "fullgraph": {"type": "boolean", "default": false, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1532, "qualname": "CompileConfig"}},
+        "dynamic": {"type": ["boolean", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1533, "qualname": "CompileConfig"}},
+        "backend": {"anyOf": [{"type": "string"}, {"type": "object", "description": "Callable"}], "default": "inductor", "source": {"file": "transformers/generation/configuration_utils.py", "line": 1534, "qualname": "CompileConfig"}},
+        "mode": {"type": "string", "default": "reduce-overhead", "source": {"file": "transformers/generation/configuration_utils.py", "line": 1535, "qualname": "CompileConfig"}},
+        "options": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1536, "qualname": "CompileConfig"}}
+      }
+    },
+    "ContinuousBatchingConfig": {
+      "type": "object",
+      "_note": "NEW dataclass in v5. 19 fields. Drives generate_batch / continuous_batching_context_manager. Not validated in GenerationConfig.validate().",
+      "properties": {
+        "block_size": {"type": "integer", "default": 256, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1603, "qualname": "ContinuousBatchingConfig"}},
+        "num_blocks": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1607, "qualname": "ContinuousBatchingConfig"}},
+        "max_batch_tokens": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1608, "qualname": "ContinuousBatchingConfig"}},
+        "max_memory_percent": {"type": "number", "default": 0.8, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1611, "qualname": "ContinuousBatchingConfig"}},
+        "max_blocks_per_request": {"type": ["integer", "null"], "default": 0, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1615, "qualname": "ContinuousBatchingConfig"}},
+        "allow_block_sharing": {"type": "boolean", "default": true, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1619, "qualname": "ContinuousBatchingConfig"}},
+        "use_async_batching": {"type": ["boolean", "null"], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1623, "qualname": "ContinuousBatchingConfig"}},
+        "use_cuda_graph": {"anyOf": [{"type": "boolean"}, {"type": "array", "items": {"type": "boolean"}}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1628, "qualname": "ContinuousBatchingConfig"}},
+        "q_padding_interval_size": {"type": "integer", "default": 0, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1633, "qualname": "ContinuousBatchingConfig"}},
+        "kv_padding_interval_size": {"type": "integer", "default": 0, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1634, "qualname": "ContinuousBatchingConfig"}},
+        "max_cached_graphs": {"type": "integer", "default": 0, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1635, "qualname": "ContinuousBatchingConfig"}},
+        "varlen_compile_config": {"anyOf": [{"$ref": "#/$defs/CompileConfig"}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1640, "qualname": "ContinuousBatchingConfig"}},
+        "decode_compile_config": {"anyOf": [{"$ref": "#/$defs/CompileConfig"}, {"type": "null"}], "default": null, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1641, "qualname": "ContinuousBatchingConfig"}},
+        "use_default_compile_configs": {"type": "boolean", "default": false, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1643, "qualname": "ContinuousBatchingConfig"}},
+        "scheduler_type": {"type": "string", "default": "fifo", "source": {"file": "transformers/generation/configuration_utils.py", "line": 1646, "qualname": "ContinuousBatchingConfig"}},
+        "return_logprobs": {"type": "boolean", "default": false, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1650, "qualname": "ContinuousBatchingConfig"}},
+        "max_queue_size": {"type": "integer", "default": 0, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1653, "qualname": "ContinuousBatchingConfig"}},
+        "per_request_processors": {"type": "boolean", "default": false, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1657, "qualname": "ContinuousBatchingConfig"}},
+        "drop_unsupported_processors": {"type": "boolean", "default": true, "source": {"file": "transformers/generation/configuration_utils.py", "line": 1660, "qualname": "ContinuousBatchingConfig"}}
+      }
+    },
+    "BitsAndBytesConfig": {
+      "type": "object",
+      "_note": "Field surface unchanged from v4.57.3.",
+      "properties": {
+        "load_in_8bit": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 441, "qualname": "BitsAndBytesConfig.__init__"}},
+        "load_in_4bit": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 442, "qualname": "BitsAndBytesConfig.__init__"}},
+        "llm_int8_threshold": {"type": "number", "default": 6.0, "source": {"file": "transformers/utils/quantization_config.py", "line": 443, "qualname": "BitsAndBytesConfig.__init__"}},
+        "llm_int8_skip_modules": {"type": ["array", "null"], "items": {"type": "string"}, "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 444, "qualname": "BitsAndBytesConfig.__init__"}},
+        "llm_int8_enable_fp32_cpu_offload": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 445, "qualname": "BitsAndBytesConfig.__init__"}},
+        "llm_int8_has_fp16_weight": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 446, "qualname": "BitsAndBytesConfig.__init__"}},
+        "bnb_4bit_compute_dtype": {"anyOf": [{"type": "string"}, {"type": "object", "description": "torch.dtype"}, {"type": "null"}], "default": "torch.float32", "description": "Init signature default None; resolved to torch.float32.", "source": {"file": "transformers/utils/quantization_config.py", "line": 447, "qualname": "BitsAndBytesConfig.__init__"}},
+        "bnb_4bit_quant_type": {"type": "string", "enum": ["fp4", "nf4"], "default": "fp4", "source": {"file": "transformers/utils/quantization_config.py", "line": 448, "qualname": "BitsAndBytesConfig.__init__"}},
+        "bnb_4bit_use_double_quant": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 449, "qualname": "BitsAndBytesConfig.__init__"}},
+        "bnb_4bit_quant_storage": {"anyOf": [{"type": "string"}, {"type": "object", "description": "torch.dtype"}, {"type": "null"}], "default": "torch.uint8", "source": {"file": "transformers/utils/quantization_config.py", "line": 450, "qualname": "BitsAndBytesConfig.__init__"}}
+      }
+    },
+    "GPTQConfig": {
+      "type": "object",
+      "_note": "v5 deltas: NEW field act_group_aware (default True; auto-disabled when desc_act=True). checkpoint_format RENAMED to format (legacy key still accepted via kwargs). REMOVED fields: use_exllama, use_cuda_fp16, exllama_config.",
+      "properties": {
+        "bits": {"type": "integer", "enum": [2, 3, 4, 8], "source": {"file": "transformers/utils/quantization_config.py", "line": 683, "qualname": "GPTQConfig.__init__"}},
+        "tokenizer": {"type": ["string", "object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 684, "qualname": "GPTQConfig.__init__"}},
+        "dataset": {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "string", "enum": ["wikitext2", "c4", "c4-new"]}, {"type": "null"}], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 685, "qualname": "GPTQConfig.__init__"}},
+        "group_size": {"type": "integer", "default": 128, "description": "Must be > 0 or == -1.", "source": {"file": "transformers/utils/quantization_config.py", "line": 686, "qualname": "GPTQConfig.__init__"}},
+        "damp_percent": {"type": "number", "default": 0.1, "exclusiveMinimum": 0, "exclusiveMaximum": 1, "source": {"file": "transformers/utils/quantization_config.py", "line": 687, "qualname": "GPTQConfig.__init__"}},
+        "desc_act": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 688, "qualname": "GPTQConfig.__init__"}},
+        "act_group_aware": {"type": "boolean", "default": true, "description": "NEW in v5. GAR group-aware activation order. Forced to False when desc_act=True (with warning).", "source": {"file": "transformers/utils/quantization_config.py", "line": 689, "qualname": "GPTQConfig.__init__"}},
+        "sym": {"type": "boolean", "default": true, "source": {"file": "transformers/utils/quantization_config.py", "line": 690, "qualname": "GPTQConfig.__init__"}},
+        "true_sequential": {"type": "boolean", "default": true, "source": {"file": "transformers/utils/quantization_config.py", "line": 691, "qualname": "GPTQConfig.__init__"}},
+        "format": {"type": "string", "default": "gptq", "description": "RENAMED from checkpoint_format. Lowercased. 'gptq' (v1) or 'gptq_v2'. Legacy checkpoint_format kwarg still honoured.", "source": {"file": "transformers/utils/quantization_config.py", "line": 692, "qualname": "GPTQConfig.__init__"}},
+        "meta": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 693, "qualname": "GPTQConfig.__init__"}},
+        "backend": {"type": ["string", "null"], "default": null, "description": "Resolves to 'auto' post-init.", "source": {"file": "transformers/utils/quantization_config.py", "line": 694, "qualname": "GPTQConfig.__init__"}},
+        "model_seqlen": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 695, "qualname": "GPTQConfig.__init__"}},
+        "block_name_to_quantize": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 696, "qualname": "GPTQConfig.__init__"}},
+        "module_name_preceding_first_block": {"type": ["array", "null"], "items": {"type": "string"}, "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 697, "qualname": "GPTQConfig.__init__"}},
+        "batch_size": {"type": "integer", "default": 1, "source": {"file": "transformers/utils/quantization_config.py", "line": 698, "qualname": "GPTQConfig.__init__"}},
+        "pad_token_id": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 699, "qualname": "GPTQConfig.__init__"}},
+        "max_input_length": {"type": ["integer", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 700, "qualname": "GPTQConfig.__init__"}},
+        "cache_block_outputs": {"type": "boolean", "default": true, "source": {"file": "transformers/utils/quantization_config.py", "line": 701, "qualname": "GPTQConfig.__init__"}},
+        "modules_in_block_to_quantize": {"type": ["array", "null"], "default": null, "description": "Requires optimum >= 1.15.0.", "source": {"file": "transformers/utils/quantization_config.py", "line": 702, "qualname": "GPTQConfig.__init__"}}
+      }
+    },
+    "AwqConfig": {
+      "type": "object",
+      "_note": "BREAKING v5 rework: AwqConfig now SUBCLASSES GPTQConfig. The `version` field was replaced by `format` (AwqFormat enum), and `backend` is now an AwqBackend enum. REMOVED fields: version (legacy key still accepted), do_fuse, fuse_max_seq_len, modules_to_fuse, exllama_config. zero_point and modules_to_not_convert retained; inherits GPTQConfig fields.",
+      "properties": {
+        "bits": {"type": "integer", "default": 4, "source": {"file": "transformers/utils/quantization_config.py", "line": 820, "qualname": "AwqConfig.__init__"}},
+        "group_size": {"type": "integer", "default": 128, "source": {"file": "transformers/utils/quantization_config.py", "line": 821, "qualname": "AwqConfig.__init__"}},
+        "zero_point": {"type": "boolean", "default": true, "source": {"file": "transformers/utils/quantization_config.py", "line": 822, "qualname": "AwqConfig.__init__"}},
+        "backend": {"type": "string", "enum": ["autoawq", "auto", "auto_trainable", "machete", "marlin", "exllama_v2", "exllama_v1", "gemm", "gemm_triton", "gemv", "gemv_fast", "torch_awq", "torch_fused_awq"], "default": "auto", "description": "AwqBackend enum. Legacy 'autoawq' coerced to 'auto'. 'llm-awq' value re-routes to format=LLM_AWQ + backend=auto in post_init.", "source": {"file": "transformers/utils/quantization_config.py", "line": 823, "qualname": "AwqConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 824, "qualname": "AwqConfig.__init__"}},
+        "format": {"type": "string", "enum": ["gemm", "gemv", "gemv_fast", "llm-awq"], "default": "gemm", "description": "AwqFormat enum (replaces legacy `version`). Legacy `version` kwarg lowercased into format.", "source": {"file": "transformers/utils/quantization_config.py", "line": 827, "qualname": "AwqConfig.__init__"}}
+      }
+    },
+    "AqlmConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "in_group_size": {"type": "integer", "default": 8, "source": {"file": "transformers/utils/quantization_config.py", "line": 883, "qualname": "AqlmConfig.__init__"}},
+        "out_group_size": {"type": "integer", "default": 1, "source": {"file": "transformers/utils/quantization_config.py", "line": 884, "qualname": "AqlmConfig.__init__"}},
+        "num_codebooks": {"type": "integer", "default": 1, "source": {"file": "transformers/utils/quantization_config.py", "line": 885, "qualname": "AqlmConfig.__init__"}},
+        "nbits_per_codebook": {"type": "integer", "default": 16, "source": {"file": "transformers/utils/quantization_config.py", "line": 886, "qualname": "AqlmConfig.__init__"}},
+        "linear_weights_not_to_quantize": {"type": ["array", "null"], "items": {"type": "string"}, "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 887, "qualname": "AqlmConfig.__init__"}}
+      }
+    },
+    "VptqConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "enable_proxy_error": {"type": "boolean", "default": false, "description": "Must be False (post_init raises otherwise).", "source": {"file": "transformers/utils/quantization_config.py", "line": 994, "qualname": "VptqConfig.__init__"}},
+        "config_for_layers": {"type": "object", "default": {}, "source": {"file": "transformers/utils/quantization_config.py", "line": 994, "qualname": "VptqConfig.__init__"}},
+        "shared_layer_config": {"type": "object", "default": {}, "source": {"file": "transformers/utils/quantization_config.py", "line": 994, "qualname": "VptqConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 994, "qualname": "VptqConfig.__init__"}}
+      }
+    },
+    "QuantoConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "weights": {"type": "string", "enum": ["float8", "int8", "int4", "int2"], "default": "int8", "source": {"file": "transformers/utils/quantization_config.py", "line": 1035, "qualname": "QuantoConfig.__init__"}},
+        "activations": {"type": ["string", "null"], "enum": [null, "int8", "float8"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1035, "qualname": "QuantoConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1035, "qualname": "QuantoConfig.__init__"}}
+      }
+    },
+    "EetqConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "weights": {"type": "string", "enum": ["int8"], "default": "int8", "source": {"file": "transformers/utils/quantization_config.py", "line": 1074, "qualname": "EetqConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1074, "qualname": "EetqConfig.__init__"}}
+      }
+    },
+    "HqqConfig": {
+      "type": "object",
+      "_note": "Field surface unchanged from v4.57.3.",
+      "properties": {
+        "nbits": {"type": "integer", "default": 4, "enum": [1, 2, 3, 4, 8], "source": {"file": "transformers/utils/quantization_config.py", "line": 300, "qualname": "HqqConfig.__init__"}},
+        "group_size": {"type": "integer", "default": 64, "source": {"file": "transformers/utils/quantization_config.py", "line": 301, "qualname": "HqqConfig.__init__"}},
+        "view_as_float": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 302, "qualname": "HqqConfig.__init__"}},
+        "axis": {"type": ["integer", "null"], "enum": [0, 1, null], "default": null, "description": "Resolves to 1 if None.", "source": {"file": "transformers/utils/quantization_config.py", "line": 303, "qualname": "HqqConfig.__init__"}},
+        "dynamic_config": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 304, "qualname": "HqqConfig.__init__"}},
+        "skip_modules": {"type": "array", "items": {"type": "string"}, "default": ["lm_head"], "source": {"file": "transformers/utils/quantization_config.py", "line": 305, "qualname": "HqqConfig.__init__"}}
+      }
+    },
+    "AutoRoundConfig": {
+      "type": "object",
+      "_note": "Field surface unchanged from v4.57.3 (packing_format set internally).",
+      "properties": {
+        "bits": {"type": "integer", "enum": [2, 3, 4, 8], "default": 4, "source": {"file": "transformers/utils/quantization_config.py", "line": 221, "qualname": "AutoRoundConfig.__init__"}},
+        "group_size": {"type": "integer", "default": 128, "source": {"file": "transformers/utils/quantization_config.py", "line": 222, "qualname": "AutoRoundConfig.__init__"}},
+        "sym": {"type": "boolean", "default": true, "source": {"file": "transformers/utils/quantization_config.py", "line": 223, "qualname": "AutoRoundConfig.__init__"}},
+        "backend": {"type": "string", "default": "auto", "source": {"file": "transformers/utils/quantization_config.py", "line": 224, "qualname": "AutoRoundConfig.__init__"}}
+      }
+    },
+    "CompressedTensorsConfig": {
+      "type": "object",
+      "_note": "v5: constructor now eagerly imports compressed_tensors and model_validate's the nested config; run_compressed is the primary user knob. Field surface effectively reduced to the loader-facing attrs.",
+      "properties": {
+        "config_groups": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1120, "qualname": "CompressedTensorsConfig.__init__"}},
+        "format": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1120, "qualname": "CompressedTensorsConfig.__init__"}},
+        "quantization_status": {"type": ["string", "null"], "default": "initialized", "source": {"file": "transformers/utils/quantization_config.py", "line": 1120, "qualname": "CompressedTensorsConfig.__init__"}},
+        "kv_cache_scheme": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1120, "qualname": "CompressedTensorsConfig.__init__"}},
+        "sparsity_config": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1120, "qualname": "CompressedTensorsConfig.__init__"}},
+        "run_compressed": {"type": "boolean", "default": true, "source": {"file": "transformers/utils/quantization_config.py", "line": 1121, "qualname": "CompressedTensorsConfig.__init__"}}
+      }
+    },
+    "FbgemmFp8Config": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "activation_scale_ub": {"type": "number", "default": 1200.0, "source": {"file": "transformers/utils/quantization_config.py", "line": 1291, "qualname": "FbgemmFp8Config.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1291, "qualname": "FbgemmFp8Config.__init__"}}
+      }
+    },
+    "HiggsConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "bits": {"type": "integer", "enum": [2, 3, 4], "default": 4, "source": {"file": "transformers/utils/quantization_config.py", "line": 446, "qualname": "HiggsConfig.__init__"}},
+        "p": {"type": "integer", "enum": [1, 2], "default": 2, "source": {"file": "transformers/utils/quantization_config.py", "line": 446, "qualname": "HiggsConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 446, "qualname": "HiggsConfig.__init__"}},
+        "hadamard_size": {"type": "integer", "default": 512, "source": {"file": "transformers/utils/quantization_config.py", "line": 446, "qualname": "HiggsConfig.__init__"}},
+        "group_size": {"type": "integer", "enum": [64, 128, 256], "default": 256, "description": "hadamard_size must be divisible by group_size.", "source": {"file": "transformers/utils/quantization_config.py", "line": 446, "qualname": "HiggsConfig.__init__"}},
+        "tune_metadata": {"type": ["object", "null"], "default": {}, "source": {"file": "transformers/utils/quantization_config.py", "line": 446, "qualname": "HiggsConfig.__init__"}}
+      }
+    },
+    "FPQuantConfig": {
+      "type": "object",
+      "_note": "v5 delta: backward_dtype now allows ['bf16', 'mxfp8', 'mxfp4'] (was bf16-only). Cross-field: non-bf16 backward only valid with mxfp4 forward.",
+      "properties": {
+        "forward_dtype": {"type": "string", "enum": ["nvfp4", "mxfp4"], "default": "nvfp4", "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}},
+        "forward_method": {"type": "string", "enum": ["abs_max", "quest"], "default": "abs_max", "description": "When forward_dtype == 'nvfp4', only 'abs_max' is allowed.", "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}},
+        "backward_dtype": {"type": "string", "enum": ["bf16", "mxfp8", "mxfp4"], "default": "bf16", "description": "v5: enum widened from bf16-only.", "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}},
+        "store_master_weights": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}},
+        "hadamard_group_size": {"type": ["integer", "null"], "default": null, "description": "Resolves to 16 (nvfp4) or 32 (mxfp4) when None. Allowed sets differ per forward_dtype.", "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}},
+        "pseudoquantization": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}},
+        "transform_init": {"type": "string", "enum": ["hadamard", "identity", "gsr"], "default": "hadamard", "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": ["lm_head"], "description": "Resolved to ['lm_head'] when None.", "source": {"file": "transformers/utils/quantization_config.py", "line": 506, "qualname": "FPQuantConfig.__init__"}}
+      }
+    },
+    "TorchAoConfig": {
+      "type": "object",
+      "_note": "Field surface unchanged from v4.57.3.",
+      "properties": {
+        "quant_type": {"anyOf": [{"type": "string"}, {"type": "object", "description": "torchao AOBaseConfig"}], "source": {"file": "transformers/utils/quantization_config.py", "line": 608, "qualname": "TorchAoConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 608, "qualname": "TorchAoConfig.__init__"}},
+        "include_input_output_embeddings": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 608, "qualname": "TorchAoConfig.__init__"}},
+        "untie_embedding_weights": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 608, "qualname": "TorchAoConfig.__init__"}}
+      }
+    },
+    "BitNetQuantConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 703, "qualname": "BitNetQuantConfig.__init__"}},
+        "linear_class": {"type": "string", "enum": ["bitlinear", "autobitlinear"], "default": "bitlinear", "source": {"file": "transformers/utils/quantization_config.py", "line": 703, "qualname": "BitNetQuantConfig.__init__"}},
+        "quantization_mode": {"type": "string", "enum": ["online", "offline"], "default": "offline", "source": {"file": "transformers/utils/quantization_config.py", "line": 703, "qualname": "BitNetQuantConfig.__init__"}},
+        "use_rms_norm": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 703, "qualname": "BitNetQuantConfig.__init__"}},
+        "rms_norm_eps": {"type": ["number", "null"], "default": 1e-6, "source": {"file": "transformers/utils/quantization_config.py", "line": 703, "qualname": "BitNetQuantConfig.__init__"}}
+      }
+    },
+    "SpQRConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "bits": {"type": "integer", "enum": [3], "default": 3, "source": {"file": "transformers/utils/quantization_config.py", "line": 753, "qualname": "SpQRConfig.__init__"}},
+        "beta1": {"type": "integer", "enum": [16], "default": 16, "source": {"file": "transformers/utils/quantization_config.py", "line": 753, "qualname": "SpQRConfig.__init__"}},
+        "beta2": {"type": "integer", "enum": [16], "default": 16, "source": {"file": "transformers/utils/quantization_config.py", "line": 753, "qualname": "SpQRConfig.__init__"}},
+        "shapes": {"type": ["object", "null"], "default": {}, "source": {"file": "transformers/utils/quantization_config.py", "line": 753, "qualname": "SpQRConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "items": {"type": "string"}, "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 753, "qualname": "SpQRConfig.__init__"}}
+      }
+    },
+    "FineGrainedFP8Config": {
+      "type": "object",
+      "_note": "v5 deltas: NEW field dequantize. activation_scheme enum widened to ['dynamic', 'static'] (was dynamic-only). quant_method is now QuantizationMethod.FP8.",
+      "properties": {
+        "activation_scheme": {"type": "string", "enum": ["dynamic", "static"], "default": "dynamic", "description": "v5: 'static' now accepted.", "source": {"file": "transformers/utils/quantization_config.py", "line": 809, "qualname": "FineGrainedFP8Config.__init__"}},
+        "weight_block_size": {"type": "array", "items": {"type": "integer"}, "default": [128, 128], "description": "Must be a tuple/list of length 2 with positive entries.", "source": {"file": "transformers/utils/quantization_config.py", "line": 809, "qualname": "FineGrainedFP8Config.__init__"}},
+        "dequantize": {"type": "boolean", "default": false, "description": "NEW in v5: dequantize the model during loading.", "source": {"file": "transformers/utils/quantization_config.py", "line": 809, "qualname": "FineGrainedFP8Config.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 809, "qualname": "FineGrainedFP8Config.__init__"}}
+      }
+    },
+    "QuarkConfig": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3 (legacy + 1.0+ export routing).",
+      "properties": {
+        "quant_method": {"type": "string", "description": "Required key; values like 'fp8' or 'awq' route to legacy parser.", "source": {"file": "transformers/utils/quantization_config.py", "line": 841, "qualname": "QuarkConfig.__init__"}},
+        "export": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 841, "qualname": "QuarkConfig.__init__"}}
+      }
+    },
+    "Mxfp4Config": {
+      "type": "object",
+      "_note": "Unchanged from v4.57.3.",
+      "properties": {
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 895, "qualname": "Mxfp4Config.__init__"}},
+        "dequantize": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 895, "qualname": "Mxfp4Config.__init__"}}
+      }
+    },
+    "MetalConfig": {
+      "type": "object",
+      "_note": "NEW in v5: Apple Silicon (MPS) affine quantization via mlx-quantization-metal-kernels.",
+      "properties": {
+        "bits": {"type": "integer", "enum": [2, 4, 8], "default": 4, "source": {"file": "transformers/utils/quantization_config.py", "line": 1810, "qualname": "MetalConfig.__init__"}},
+        "group_size": {"type": "integer", "default": 64, "description": "Must be positive.", "source": {"file": "transformers/utils/quantization_config.py", "line": 1811, "qualname": "MetalConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1812, "qualname": "MetalConfig.__init__"}},
+        "dequantize": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 1813, "qualname": "MetalConfig.__init__"}}
+      }
+    },
+    "FourOverSixConfig": {
+      "type": "object",
+      "_note": "NEW in v5: 'Four Over Six' adaptive NVFP4 quantization (arxiv 2512.02010). No post_init validators (free-form string fields).",
+      "properties": {
+        "activation_dtype": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1901, "qualname": "FourOverSixConfig.__init__"}},
+        "activation_scale_rule": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1902, "qualname": "FourOverSixConfig.__init__"}},
+        "dtype": {"type": "string", "enum_hint": ["nvfp4", "mxfp4"], "default": "nvfp4", "source": {"file": "transformers/utils/quantization_config.py", "line": 1903, "qualname": "FourOverSixConfig.__init__"}},
+        "gradient_dtype": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1904, "qualname": "FourOverSixConfig.__init__"}},
+        "gradient_scale_rule": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1905, "qualname": "FourOverSixConfig.__init__"}},
+        "keep_master_weights": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 1906, "qualname": "FourOverSixConfig.__init__"}},
+        "matmul_backend": {"type": ["string", "null"], "enum_hint": ["cutlass", "pytorch"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1907, "qualname": "FourOverSixConfig.__init__"}},
+        "output_dtype": {"type": ["string", "null"], "enum_hint": ["bfloat16", "float16"], "default": "bfloat16", "source": {"file": "transformers/utils/quantization_config.py", "line": 1908, "qualname": "FourOverSixConfig.__init__"}},
+        "quantize_backend": {"type": ["string", "null"], "enum_hint": ["cuda", "triton", "pytorch"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1909, "qualname": "FourOverSixConfig.__init__"}},
+        "scale_rule": {"type": "string", "enum_hint": ["mse", "mae", "abs_max", "static_6", "static_4"], "default": "mse", "source": {"file": "transformers/utils/quantization_config.py", "line": 1910, "qualname": "FourOverSixConfig.__init__"}},
+        "weight_dtype": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1911, "qualname": "FourOverSixConfig.__init__"}},
+        "weight_scale_2d": {"type": "boolean", "default": false, "source": {"file": "transformers/utils/quantization_config.py", "line": 1912, "qualname": "FourOverSixConfig.__init__"}},
+        "weight_scale_rule": {"type": ["string", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1913, "qualname": "FourOverSixConfig.__init__"}},
+        "module_config_overrides": {"type": ["object", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1914, "qualname": "FourOverSixConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": ["lm_head"], "source": {"file": "transformers/utils/quantization_config.py", "line": 1915, "qualname": "FourOverSixConfig.__init__"}}
+      }
+    },
+    "SinqConfig": {
+      "type": "object",
+      "_note": "NEW in v5: SINQ / A-SINQ weight-only quantization.",
+      "properties": {
+        "nbits": {"type": "integer", "default": 4, "source": {"file": "transformers/utils/quantization_config.py", "line": 1964, "qualname": "SinqConfig.__init__"}},
+        "group_size": {"type": "integer", "default": 64, "description": "Should be a multiple of 8 (warning otherwise).", "source": {"file": "transformers/utils/quantization_config.py", "line": 1965, "qualname": "SinqConfig.__init__"}},
+        "tiling_mode": {"type": "string", "default": "1D", "source": {"file": "transformers/utils/quantization_config.py", "line": 1966, "qualname": "SinqConfig.__init__"}},
+        "method": {"type": "string", "enum": ["sinq", "asinq"], "default": "sinq", "source": {"file": "transformers/utils/quantization_config.py", "line": 1967, "qualname": "SinqConfig.__init__"}},
+        "modules_to_not_convert": {"type": ["array", "null"], "default": null, "source": {"file": "transformers/utils/quantization_config.py", "line": 1968, "qualname": "SinqConfig.__init__"}}
+      }
+    }
+  }
+}

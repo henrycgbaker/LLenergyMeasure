@@ -91,6 +91,14 @@ WAVE2_REGISTRY: dict[str, Wave2StrategyEntry] = {
         tier="A",
         notes="Universal tree-sitter query walker. NOT YET IMPLEMENTED (raises NotImplementedError).",
     ),
+    "w2-a-improved-det": Wave2StrategyEntry(
+        strategy_id="w2-a-improved-det",
+        module="strategies.wave2.a_improved_det",
+        engines=("transformers", "vllm", "tensorrt"),
+        tier="A",
+        notes="Improved-det 7-primitive walker (class-fanout + env + silent-norm + "
+        "membership-gate + validator-naming + decorator + aggregator).",
+    ),
     "w2-h15-closed-loop": Wave2StrategyEntry(
         strategy_id="w2-h15-closed-loop",
         module="strategies.wave2.h15_closed_loop",

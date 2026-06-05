@@ -1,0 +1,1206 @@
+{
+  "$defs": {
+    "AqlmConfig": {
+      "properties": {
+        "in_group_size": {
+          "type": "integer"
+        },
+        "linear_weights_not_to_quantize": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "nbits_per_codebook": {
+          "type": "integer"
+        },
+        "num_codebooks": {
+          "type": "integer"
+        },
+        "out_group_size": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "AutoRoundConfig": {
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "bits": {
+          "type": "integer"
+        },
+        "group_size": {
+          "type": "integer"
+        },
+        "sym": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "AwqConfig": {
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "bits": {
+          "type": "integer"
+        },
+        "do_fuse": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "exllama_config": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "fuse_max_seq_len": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "group_size": {
+          "type": "integer"
+        },
+        "modules_to_fuse": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        },
+        "zero_point": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "BitNetQuantConfig": {
+      "properties": {
+        "linear_class": {
+          "type": "string"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "quantization_mode": {
+          "type": "string"
+        },
+        "rms_norm_eps": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "use_rms_norm": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "BitsAndBytesConfig": {
+      "properties": {
+        "bnb_4bit_compute_dtype": {},
+        "bnb_4bit_quant_storage": {},
+        "bnb_4bit_quant_type": {
+          "type": "string"
+        },
+        "bnb_4bit_use_double_quant": {
+          "type": "boolean"
+        },
+        "llm_int8_enable_fp32_cpu_offload": {
+          "type": "boolean"
+        },
+        "llm_int8_has_fp16_weight": {
+          "type": "boolean"
+        },
+        "llm_int8_skip_modules": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "llm_int8_threshold": {
+          "type": "number"
+        },
+        "load_in_4bit": {
+          "type": "boolean"
+        },
+        "load_in_8bit": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "CompileConfig": {
+      "properties": {
+        "backend": {},
+        "dynamic": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "fullgraph": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "options": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "CompressedTensorsConfig": {
+      "properties": {
+        "config_groups": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "format": {
+          "type": "string"
+        },
+        "global_compression_ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ignore": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "kv_cache_scheme": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "quant_method": {
+          "type": "string"
+        },
+        "quantization_status": {
+          "type": "string"
+        },
+        "run_compressed": {
+          "type": "boolean"
+        },
+        "sparsity_config": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "EetqConfig": {
+      "properties": {
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "weights": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FPQuantConfig": {
+      "properties": {
+        "backward_dtype": {
+          "type": "string"
+        },
+        "forward_dtype": {
+          "type": "string"
+        },
+        "forward_method": {
+          "type": "string"
+        },
+        "hadamard_group_size": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "pseudoquantization": {
+          "type": "boolean"
+        },
+        "store_master_weights": {
+          "type": "boolean"
+        },
+        "transform_init": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FbgemmFp8Config": {
+      "properties": {
+        "activation_scale_ub": {
+          "type": "number"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "FineGrainedFP8Config": {
+      "properties": {
+        "activation_scheme": {
+          "type": "string"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "weight_block_size": {
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "GPTQConfig": {
+      "properties": {
+        "backend": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "batch_size": {
+          "type": "integer"
+        },
+        "bits": {
+          "type": "integer"
+        },
+        "block_name_to_quantize": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cache_block_outputs": {
+          "type": "boolean"
+        },
+        "checkpoint_format": {
+          "type": "string"
+        },
+        "damp_percent": {
+          "type": "number"
+        },
+        "dataset": {},
+        "desc_act": {
+          "type": "boolean"
+        },
+        "exllama_config": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "group_size": {
+          "type": "integer"
+        },
+        "max_input_length": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "meta": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "model_seqlen": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "module_name_preceding_first_block": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "modules_in_block_to_quantize": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "pad_token_id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sym": {
+          "type": "boolean"
+        },
+        "tokenizer": {
+          "type": [
+            "string",
+            "object",
+            "null"
+          ]
+        },
+        "true_sequential": {
+          "type": "boolean"
+        },
+        "use_cuda_fp16": {
+          "type": "boolean"
+        },
+        "use_exllama": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "HiggsConfig": {
+      "properties": {
+        "bits": {
+          "type": "integer"
+        },
+        "group_size": {
+          "type": "integer"
+        },
+        "hadamard_size": {
+          "type": "integer"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "p": {
+          "type": "integer"
+        },
+        "tune_metadata": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "HqqConfig": {
+      "properties": {
+        "axis": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "dynamic_config": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "group_size": {
+          "type": "integer"
+        },
+        "nbits": {
+          "type": "integer"
+        },
+        "skip_modules": {
+          "type": "array"
+        },
+        "view_as_float": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "Mxfp4Config": {
+      "properties": {
+        "dequantize": {
+          "type": "boolean"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "QuantoConfig": {
+      "properties": {
+        "activations": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "weights": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "QuarkConfig": {
+      "properties": {
+        "export": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "quant_method": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SpQRConfig": {
+      "properties": {
+        "beta1": {
+          "type": "integer"
+        },
+        "beta2": {
+          "type": "integer"
+        },
+        "bits": {
+          "type": "integer"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "shapes": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SynthIDTextWatermarkingConfig": {
+      "properties": {
+        "context_history_size": {
+          "type": "integer"
+        },
+        "debug_mode": {
+          "type": "boolean"
+        },
+        "keys": {
+          "type": "array"
+        },
+        "ngram_len": {
+          "type": "integer"
+        },
+        "sampling_table_seed": {
+          "type": "integer"
+        },
+        "sampling_table_size": {
+          "type": "integer"
+        },
+        "skip_first_ngram_calls": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "TorchAoConfig": {
+      "properties": {
+        "include_input_output_embeddings": {
+          "type": "boolean"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "quant_type": {},
+        "untie_embedding_weights": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "VptqConfig": {
+      "properties": {
+        "config_for_layers": {
+          "type": "object"
+        },
+        "enable_proxy_error": {
+          "type": "boolean"
+        },
+        "modules_to_not_convert": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "shared_layer_config": {
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "WatermarkingConfig": {
+      "properties": {
+        "bias": {
+          "type": "number"
+        },
+        "context_width": {
+          "type": "integer"
+        },
+        "greenlist_ratio": {
+          "type": "number"
+        },
+        "hashing_key": {
+          "type": "integer"
+        },
+        "seeding_scheme": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "cache_classes": {
+      "properties": {
+        "DynamicCache": {},
+        "EncoderDecoderCache": {},
+        "HQQQuantizedCache": {},
+        "HybridCache": {},
+        "HybridChunkedCache": {},
+        "OffloadedCache": {},
+        "OffloadedHybridCache": {},
+        "OffloadedStaticCache": {},
+        "QuantizedCache": {},
+        "QuantoQuantizedCache": {},
+        "SinkCache": {},
+        "SlidingWindowCache": {},
+        "StaticCache": {}
+      },
+      "type": "object"
+    },
+    "config": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "device": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "device_map": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "dtype": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "feature_extractor": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "framework": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "image_processor": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "model": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "model_kwargs": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "pipeline_class": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "processor": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "quantization_configs": {
+      "properties": {
+        "AqlmConfig": {},
+        "AutoRoundConfig": {},
+        "AwqConfig": {},
+        "BitNetQuantConfig": {},
+        "BitsAndBytesConfig": {},
+        "CompressedTensorsConfig": {},
+        "EetqConfig": {},
+        "FPQuantConfig": {},
+        "FbgemmFp8Config": {},
+        "FineGrainedFP8Config": {},
+        "GPTQConfig": {},
+        "HiggsConfig": {},
+        "HqqConfig": {},
+        "Mxfp4Config": {},
+        "QuantoConfig": {},
+        "QuarkConfig": {},
+        "SpQRConfig": {},
+        "TorchAoConfig": {},
+        "VptqConfig": {}
+      },
+      "type": "object"
+    },
+    "revision": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "task": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "token": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "tokenizer": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "trust_remote_code": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "use_fast": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "watermarking_configs": {
+      "properties": {
+        "SynthIDTextWatermarkingConfig": {},
+        "WatermarkingConfig": {}
+      },
+      "type": "object"
+    }
+  },
+  "engine_params": {
+    "adapter_kwargs": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "adapter_name": {
+      "type": "string"
+    },
+    "attn_implementation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cache_dir": {},
+    "code_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "config": {},
+    "device_map": {},
+    "device_mesh": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "distributed_config": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "dtype": {},
+    "force_download": {
+      "type": "boolean"
+    },
+    "from_flax": {
+      "type": "boolean"
+    },
+    "from_tf": {
+      "type": "boolean"
+    },
+    "generation_config": {},
+    "gguf_file": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ignore_mismatched_sizes": {
+      "type": "boolean"
+    },
+    "key_mapping": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "load_in_4bit": {
+      "type": "boolean"
+    },
+    "load_in_8bit": {
+      "type": "boolean"
+    },
+    "local_files_only": {
+      "type": "boolean"
+    },
+    "low_cpu_mem_usage": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "max_memory": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "mirror": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "offload_buffers": {
+      "type": "boolean"
+    },
+    "offload_folder": {},
+    "offload_state_dict": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "output_loading_info": {
+      "type": "boolean"
+    },
+    "pretrained_model_name_or_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "proxies": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "quantization_config": {},
+    "resume_download": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "revision": {
+      "type": "string"
+    },
+    "state_dict": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "subfolder": {
+      "type": "string"
+    },
+    "token": {},
+    "torch_dtype": {},
+    "tp_plan": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tp_size": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "trust_remote_code": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "use_auth_token": {},
+    "use_kernels": {
+      "type": "boolean"
+    },
+    "use_safetensors": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "variant": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "weights_only": {
+      "type": "boolean"
+    }
+  },
+  "sampling_params": {
+    "assistant_confidence_threshold": {
+      "type": "number"
+    },
+    "assistant_early_exit": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "assistant_lookbehind": {
+      "type": "integer"
+    },
+    "bad_words_ids": {
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "begin_suppress_tokens": {
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "bos_token_id": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "cache_config": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "cache_implementation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "compile_config": {},
+    "constraints": {
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "decoder_start_token_id": {},
+    "disable_compile": {
+      "type": "boolean"
+    },
+    "diversity_penalty": {
+      "type": "number"
+    },
+    "do_sample": {
+      "type": "boolean"
+    },
+    "dola_layers": {},
+    "early_stopping": {},
+    "encoder_no_repeat_ngram_size": {
+      "type": "integer"
+    },
+    "encoder_repetition_penalty": {
+      "type": "number"
+    },
+    "eos_token_id": {},
+    "epsilon_cutoff": {
+      "type": "number"
+    },
+    "eta_cutoff": {
+      "type": "number"
+    },
+    "exponential_decay_length_penalty": {},
+    "force_words_ids": {
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "forced_bos_token_id": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "forced_eos_token_id": {},
+    "guidance_scale": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "is_assistant": {
+      "type": "boolean"
+    },
+    "length_penalty": {
+      "type": "number"
+    },
+    "low_memory": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "max_length": {
+      "type": "integer"
+    },
+    "max_matching_ngram_size": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_new_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_time": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "min_length": {
+      "type": "integer"
+    },
+    "min_new_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "min_p": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "no_repeat_ngram_size": {
+      "type": "integer"
+    },
+    "num_assistant_tokens": {
+      "type": "integer"
+    },
+    "num_assistant_tokens_schedule": {
+      "type": "string"
+    },
+    "num_beam_groups": {
+      "type": "integer"
+    },
+    "num_beams": {
+      "type": "integer"
+    },
+    "num_return_sequences": {
+      "type": "integer"
+    },
+    "output_attentions": {
+      "type": "boolean"
+    },
+    "output_hidden_states": {
+      "type": "boolean"
+    },
+    "output_logits": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "output_scores": {
+      "type": "boolean"
+    },
+    "pad_token_id": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "penalty_alpha": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "prefill_chunk_size": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "prompt_lookup_num_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "remove_invalid_values": {
+      "type": "boolean"
+    },
+    "renormalize_logits": {
+      "type": "boolean"
+    },
+    "repetition_penalty": {
+      "type": "number"
+    },
+    "return_dict_in_generate": {
+      "type": "boolean"
+    },
+    "return_legacy_cache": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "sequence_bias": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "stop_strings": {},
+    "suppress_tokens": {
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "target_lookbehind": {
+      "type": "integer"
+    },
+    "temperature": {
+      "type": "number"
+    },
+    "token_healing": {
+      "type": "boolean"
+    },
+    "top_k": {
+      "type": "integer"
+    },
+    "top_p": {
+      "type": "number"
+    },
+    "transformers_version": {
+      "type": "string"
+    },
+    "typical_p": {
+      "type": "number"
+    },
+    "use_cache": {
+      "type": "boolean"
+    },
+    "watermarking_config": {}
+  }
+}

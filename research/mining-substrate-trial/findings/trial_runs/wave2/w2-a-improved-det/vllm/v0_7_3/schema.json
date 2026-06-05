@@ -1,0 +1,2060 @@
+{
+  "schema_version": "2.0.0",
+  "engine": "vllm",
+  "engine_version": "0.7.3",
+  "discovered_at": "2026-06-05T01:19:01.429765+00:00",
+  "engine_params": {
+    "model": {
+      "type": "string",
+      "default": "facebook/opt-125m"
+    },
+    "served_model_name": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "tokenizer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "task": {
+      "type": {
+        "description": "Upstream type: TaskOption"
+      },
+      "default": "auto"
+    },
+    "skip_tokenizer_init": {
+      "type": "boolean",
+      "default": false
+    },
+    "tokenizer_mode": {
+      "type": "string",
+      "default": "auto"
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": false
+    },
+    "allowed_local_media_path": {
+      "type": "string",
+      "default": ""
+    },
+    "download_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "load_format": {
+      "type": "string",
+      "default": "auto"
+    },
+    "config_format": {
+      "type": {
+        "description": "Upstream type: ConfigFormat"
+      },
+      "default": "ConfigFormat.AUTO"
+    },
+    "dtype": {
+      "type": "string",
+      "default": "auto"
+    },
+    "kv_cache_dtype": {
+      "type": "string",
+      "default": "auto"
+    },
+    "seed": {
+      "type": "integer",
+      "default": 0
+    },
+    "max_model_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "distributed_executor_backend": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str,\n                                                 Type[ExecutorBase]]] | None"
+      },
+      "default": null
+    },
+    "pipeline_parallel_size": {
+      "type": "integer",
+      "default": 1
+    },
+    "tensor_parallel_size": {
+      "type": "integer",
+      "default": 1
+    },
+    "max_parallel_loading_workers": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "block_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "enable_prefix_caching": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_sliding_window": {
+      "type": "boolean",
+      "default": false
+    },
+    "use_v2_block_manager": {
+      "type": "boolean",
+      "default": true
+    },
+    "swap_space": {
+      "type": "number",
+      "default": 4
+    },
+    "cpu_offload_gb": {
+      "type": "number",
+      "default": 0
+    },
+    "gpu_memory_utilization": {
+      "type": "number",
+      "default": 0.9
+    },
+    "max_num_batched_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_num_partial_prefills": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 1
+    },
+    "max_long_partial_prefills": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 1
+    },
+    "long_prefill_token_threshold": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 0
+    },
+    "max_num_seqs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_logprobs": {
+      "type": "integer",
+      "default": 20
+    },
+    "disable_log_stats": {
+      "type": "boolean",
+      "default": false
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "code_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "rope_scaling": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "rope_theta": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "hf_overrides": {
+      "type": {
+        "description": "Upstream type: Optional[HfOverrides] | None"
+      },
+      "default": null
+    },
+    "tokenizer_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "quantization": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "enforce_eager": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "max_seq_len_to_capture": {
+      "type": "integer",
+      "default": 8192
+    },
+    "disable_custom_all_reduce": {
+      "type": "boolean",
+      "default": false
+    },
+    "tokenizer_pool_size": {
+      "type": "integer",
+      "default": 0
+    },
+    "tokenizer_pool_type": {
+      "type": {
+        "description": "Upstream type: Union[str, Type[\"BaseTokenizerGroup\"]]"
+      },
+      "default": "ray"
+    },
+    "tokenizer_pool_extra_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "limit_mm_per_prompt": {
+      "type": {
+        "description": "Upstream type: Optional[Mapping[str, int]] | None"
+      },
+      "default": null
+    },
+    "mm_processor_kwargs": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_mm_preprocessor_cache": {
+      "type": "boolean",
+      "default": false
+    },
+    "enable_lora": {
+      "type": "boolean",
+      "default": false
+    },
+    "enable_lora_bias": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_loras": {
+      "type": "integer",
+      "default": 1
+    },
+    "max_lora_rank": {
+      "type": "integer",
+      "default": 16
+    },
+    "enable_prompt_adapter": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_prompt_adapters": {
+      "type": "integer",
+      "default": 1
+    },
+    "max_prompt_adapter_token": {
+      "type": "integer",
+      "default": 0
+    },
+    "fully_sharded_loras": {
+      "type": "boolean",
+      "default": false
+    },
+    "lora_extra_vocab_size": {
+      "type": "integer",
+      "default": 256
+    },
+    "long_lora_scaling_factors": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "lora_dtype": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, torch.dtype]] | None"
+      },
+      "default": "auto"
+    },
+    "max_cpu_loras": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "device": {
+      "type": "string",
+      "default": "auto"
+    },
+    "num_scheduler_steps": {
+      "type": "integer",
+      "default": 1
+    },
+    "multi_step_stream_outputs": {
+      "type": "boolean",
+      "default": true
+    },
+    "ray_workers_use_nsight": {
+      "type": "boolean",
+      "default": false
+    },
+    "num_gpu_blocks_override": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "num_lookahead_slots": {
+      "type": "integer",
+      "default": 0
+    },
+    "model_loader_extra_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "ignore_patterns": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "preemption_mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "scheduler_delay_factor": {
+      "type": "number",
+      "default": 0.0
+    },
+    "enable_chunked_prefill": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "guided_decoding_backend": {
+      "type": "string",
+      "default": "xgrammar"
+    },
+    "logits_processor_pattern": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_model_quantization": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_draft_tensor_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "num_speculative_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_disable_mqa_scorer": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": false
+    },
+    "speculative_max_model_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_disable_by_batch_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "ngram_prompt_lookup_max": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "ngram_prompt_lookup_min": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "spec_decoding_acceptance_method": {
+      "type": "string",
+      "default": "rejection_sampler"
+    },
+    "typical_acceptance_sampler_posterior_threshold": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "typical_acceptance_sampler_posterior_alpha": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "qlora_adapter_name_or_path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_logprobs_during_spec_decoding": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "otlp_traces_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "collect_detailed_traces": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_async_output_proc": {
+      "type": "boolean",
+      "default": false
+    },
+    "scheduling_policy": {
+      "type": {
+        "description": "Upstream type: Literal[\"fcfs\", \"priority\"]"
+      },
+      "default": "fcfs"
+    },
+    "scheduler_cls": {
+      "type": {
+        "description": "Upstream type: Union[str, Type[object]]"
+      },
+      "default": "vllm.core.scheduler.Scheduler"
+    },
+    "override_neuron_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "override_pooler_config": {
+      "type": {
+        "description": "Upstream type: Optional[PoolerConfig] | None"
+      },
+      "default": null
+    },
+    "compilation_config": {
+      "type": {
+        "description": "Upstream type: Optional[CompilationConfig] | None"
+      },
+      "default": null
+    },
+    "worker_cls": {
+      "type": "string",
+      "default": "auto"
+    },
+    "kv_transfer_config": {
+      "type": {
+        "description": "Upstream type: Optional[KVTransferConfig] | None"
+      },
+      "default": null
+    },
+    "generation_config": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "override_generation_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "enable_sleep_mode": {
+      "type": "boolean",
+      "default": false
+    },
+    "model_impl": {
+      "type": "string",
+      "default": "auto"
+    },
+    "calculate_kv_scales": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "additional_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "sampling_params": {
+    "n": {
+      "type": "integer",
+      "default": 1
+    },
+    "best_of": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "presence_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "frequency_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "repetition_penalty": {
+      "type": "number",
+      "default": 1.0
+    },
+    "temperature": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_p": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_k": {
+      "type": "integer",
+      "default": -1
+    },
+    "min_p": {
+      "type": "number",
+      "default": 0.0
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "stop": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "stop_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "bad_words": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "ignore_eos": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 16
+    },
+    "min_tokens": {
+      "type": "integer",
+      "default": 0
+    },
+    "logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "prompt_logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "detokenize": {
+      "type": "boolean",
+      "default": true
+    },
+    "skip_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "spaces_between_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "logits_processors": {
+      "type": [
+        "any",
+        "null"
+      ],
+      "default": null
+    },
+    "include_stop_str_in_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "truncate_prompt_tokens": {
+      "type": {
+        "description": "Upstream type: Optional[Annotated[int, msgspec.Meta(ge=1)]] | None"
+      },
+      "default": null
+    },
+    "output_kind": {
+      "type": {
+        "description": "Upstream type: RequestOutputKind"
+      },
+      "default": "RequestOutputKind.CUMULATIVE"
+    },
+    "output_text_buffer_length": {
+      "type": "integer",
+      "default": 0
+    },
+    "guided_decoding": {
+      "type": {
+        "description": "Upstream type: Optional[GuidedDecodingParams] | None"
+      },
+      "default": null
+    },
+    "logit_bias": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "allowed_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "$defs": {
+    "ModelConfig": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "task": {
+          "type": {
+            "description": "Upstream type: Union[TaskOption, Literal[\"draft\"]]"
+          }
+        },
+        "tokenizer": {
+          "type": "string"
+        },
+        "tokenizer_mode": {
+          "type": "string"
+        },
+        "trust_remote_code": {
+          "type": "boolean"
+        },
+        "dtype": {
+          "type": {
+            "description": "Upstream type: Union[str, torch.dtype]"
+          }
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "allowed_local_media_path": {
+          "type": "string",
+          "default": ""
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "code_revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "rope_scaling": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        },
+        "rope_theta": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "tokenizer_revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "max_model_len": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "spec_target_max_model_len": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "quantization": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "enforce_eager": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "max_seq_len_to_capture": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "max_logprobs": {
+          "type": "integer",
+          "default": 20
+        },
+        "disable_sliding_window": {
+          "type": "boolean",
+          "default": false
+        },
+        "skip_tokenizer_init": {
+          "type": "boolean",
+          "default": false
+        },
+        "served_model_name": {
+          "type": {
+            "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+          },
+          "default": null
+        },
+        "limit_mm_per_prompt": {
+          "type": {
+            "description": "Upstream type: Optional[Mapping[str, int]] | None"
+          },
+          "default": null
+        },
+        "use_async_output_proc": {
+          "type": "boolean",
+          "default": true
+        },
+        "config_format": {
+          "type": {
+            "description": "Upstream type: ConfigFormat"
+          },
+          "default": "ConfigFormat.AUTO"
+        },
+        "hf_overrides": {
+          "type": {
+            "description": "Upstream type: Optional[HfOverrides] | None"
+          },
+          "default": null
+        },
+        "mm_processor_kwargs": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        },
+        "disable_mm_preprocessor_cache": {
+          "type": "boolean",
+          "default": false
+        },
+        "override_neuron_config": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        },
+        "override_pooler_config": {
+          "type": {
+            "description": "Upstream type: Optional[\"PoolerConfig\"] | None"
+          },
+          "default": null
+        },
+        "logits_processor_pattern": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "generation_config": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "enable_sleep_mode": {
+          "type": "boolean",
+          "default": false
+        },
+        "override_generation_config": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        },
+        "model_impl": {
+          "type": {
+            "description": "Upstream type: Union[str, ModelImpl]"
+          },
+          "default": "ModelImpl.AUTO"
+        }
+      }
+    },
+    "CacheConfig": {
+      "type": "object",
+      "properties": {
+        "block_size": {
+          "type": "integer"
+        },
+        "gpu_memory_utilization": {
+          "type": "number"
+        },
+        "swap_space": {
+          "type": "number"
+        },
+        "cache_dtype": {
+          "type": "string"
+        },
+        "is_attention_free": {
+          "type": "boolean",
+          "default": false
+        },
+        "num_gpu_blocks_override": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "sliding_window": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "enable_prefix_caching": {
+          "type": "boolean",
+          "default": false
+        },
+        "cpu_offload_gb": {
+          "type": "number",
+          "default": 0
+        },
+        "calculate_kv_scales": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "TokenizerPoolConfig": {
+      "type": "object",
+      "properties": {
+        "pool_size": {
+          "type": "integer"
+        },
+        "pool_type": {
+          "type": {
+            "description": "Upstream type: Union[str, Type[\"BaseTokenizerGroup\"]]"
+          }
+        },
+        "extra_config": {
+          "type": "object"
+        }
+      }
+    },
+    "LoadConfig": {
+      "type": "object",
+      "properties": {
+        "load_format": {
+          "type": {
+            "description": "Upstream type: Union[str, LoadFormat, \"BaseModelLoader\"]"
+          },
+          "default": "LoadFormat.AUTO"
+        },
+        "download_dir": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "model_loader_extra_config": {
+          "type": {
+            "description": "Upstream type: Optional[Union[str, dict]] | None"
+          },
+          "default": "field(\n        default_factory=dict)"
+        },
+        "ignore_patterns": {
+          "type": {
+            "description": "Upstream type: Optional[Union[List[str], str]] | None"
+          },
+          "default": null
+        }
+      }
+    },
+    "ParallelConfig": {
+      "type": "object",
+      "properties": {
+        "pipeline_parallel_size": {
+          "type": "integer",
+          "default": 1
+        },
+        "tensor_parallel_size": {
+          "type": "integer",
+          "default": 1
+        },
+        "max_parallel_loading_workers": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "disable_custom_all_reduce": {
+          "type": "boolean",
+          "default": false
+        },
+        "tokenizer_pool_config": {
+          "type": {
+            "description": "Upstream type: Optional[TokenizerPoolConfig] | None"
+          },
+          "default": null
+        },
+        "ray_workers_use_nsight": {
+          "type": "boolean",
+          "default": false
+        },
+        "placement_group": {
+          "type": {
+            "description": "Upstream type: Optional[\"PlacementGroup\"] | None"
+          },
+          "default": null
+        },
+        "distributed_executor_backend": {
+          "type": {
+            "description": "Upstream type: Optional[Union[str,\n                                                 Type[\"ExecutorBase\"]]] | None"
+          },
+          "default": null
+        },
+        "worker_cls": {
+          "type": "string",
+          "default": "auto"
+        },
+        "sd_worker_cls": {
+          "type": "string",
+          "default": "auto"
+        },
+        "world_size": {
+          "type": "integer",
+          "default": "field(init=False)"
+        },
+        "rank": {
+          "type": "integer",
+          "default": 0
+        }
+      }
+    },
+    "SchedulerConfig": {
+      "type": "object",
+      "properties": {
+        "runner_type": {
+          "type": "string",
+          "default": "generate"
+        },
+        "max_num_batched_tokens": {
+          "type": "integer",
+          "default": "field(default=None)"
+        },
+        "max_num_seqs": {
+          "type": "integer",
+          "default": 128
+        },
+        "max_model_len": {
+          "type": "integer",
+          "default": 8192
+        },
+        "max_num_partial_prefills": {
+          "type": "integer",
+          "default": 1
+        },
+        "max_long_partial_prefills": {
+          "type": "integer",
+          "default": 1
+        },
+        "long_prefill_token_threshold": {
+          "type": "integer",
+          "default": 0
+        },
+        "num_lookahead_slots": {
+          "type": "integer",
+          "default": 0
+        },
+        "delay_factor": {
+          "type": "number",
+          "default": 0.0
+        },
+        "enable_chunked_prefill": {
+          "type": "boolean",
+          "default": false
+        },
+        "is_multimodal_model": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_num_encoder_input_tokens": {
+          "type": "integer",
+          "default": "field(default=None)"
+        },
+        "encoder_cache_size": {
+          "type": "integer",
+          "default": "field(default=None)"
+        },
+        "preemption_mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "num_scheduler_steps": {
+          "type": "integer",
+          "default": 1
+        },
+        "multi_step_stream_outputs": {
+          "type": "boolean",
+          "default": false
+        },
+        "send_delta_data": {
+          "type": "boolean",
+          "default": false
+        },
+        "policy": {
+          "type": "string",
+          "default": "fcfs"
+        },
+        "chunked_prefill_enabled": {
+          "type": "boolean",
+          "default": "field(init=False)"
+        },
+        "scheduler_cls": {
+          "type": {
+            "description": "Upstream type: Union[str, Type[object]]"
+          },
+          "default": "vllm.core.scheduler.Scheduler"
+        }
+      }
+    },
+    "SpeculativeConfig": {
+      "type": "object",
+      "properties": {
+        "draft_model_config": {
+          "type": {
+            "description": "Upstream type: ModelConfig"
+          }
+        },
+        "draft_parallel_config": {
+          "type": {
+            "description": "Upstream type: ParallelConfig"
+          }
+        },
+        "num_speculative_tokens": {
+          "type": "integer"
+        },
+        "speculative_disable_mqa_scorer": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "speculative_disable_by_batch_size": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ngram_prompt_lookup_max": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ngram_prompt_lookup_min": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "draft_token_acceptance_method": {
+          "type": "string"
+        },
+        "typical_acceptance_sampler_posterior_threshold": {
+          "type": "number"
+        },
+        "typical_acceptance_sampler_posterior_alpha": {
+          "type": "number"
+        },
+        "disable_logprobs": {
+          "type": "boolean"
+        },
+        "disable_log_stats": {
+          "type": "boolean"
+        }
+      }
+    },
+    "LoRAConfig": {
+      "type": "object",
+      "properties": {
+        "max_lora_rank": {
+          "type": "integer"
+        },
+        "max_loras": {
+          "type": "integer"
+        },
+        "fully_sharded_loras": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_cpu_loras": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "lora_dtype": {
+          "type": {
+            "description": "Upstream type: Optional[Union[torch.dtype, str]] | None"
+          },
+          "default": null
+        },
+        "lora_extra_vocab_size": {
+          "type": "integer",
+          "default": 256
+        },
+        "lora_vocab_padding_size": {
+          "type": {
+            "description": "Upstream type: ClassVar[int]"
+          },
+          "default": 256
+        },
+        "long_lora_scaling_factors": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null
+        },
+        "bias_enabled": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "PromptAdapterConfig": {
+      "type": "object",
+      "properties": {
+        "max_prompt_adapters": {
+          "type": "integer"
+        },
+        "max_prompt_adapter_token": {
+          "type": "integer"
+        },
+        "max_cpu_prompt_adapters": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "prompt_adapter_dtype": {
+          "type": {
+            "description": "Upstream type: Optional[torch.dtype] | None"
+          },
+          "default": null
+        }
+      }
+    },
+    "MultiModalConfig": {
+      "type": "object",
+      "properties": {
+        "limit_per_prompt": {
+          "type": {
+            "description": "Upstream type: Mapping[str, int]"
+          },
+          "default": "field(default_factory=dict)"
+        }
+      }
+    },
+    "PoolerConfig": {
+      "type": "object",
+      "properties": {
+        "pooling_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "normalize": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "softmax": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "step_tag_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "returned_token_ids": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "DecodingConfig": {
+      "type": "object",
+      "properties": {
+        "guided_decoding_backend": {
+          "type": "string",
+          "default": "xgrammar"
+        }
+      }
+    },
+    "ObservabilityConfig": {
+      "type": "object",
+      "properties": {
+        "otlp_traces_endpoint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "collect_model_forward_time": {
+          "type": "boolean",
+          "default": false
+        },
+        "collect_model_execute_time": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "KVTransferConfig": {
+      "type": "object",
+      "properties": {
+        "kv_connector": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "kv_buffer_device": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "cuda"
+        },
+        "kv_buffer_size": {
+          "type": "number",
+          "default": 1000000000.0
+        },
+        "kv_role": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "kv_rank": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "kv_parallel_size": {
+          "type": "integer",
+          "default": 1
+        },
+        "kv_ip": {
+          "type": "string",
+          "default": "127.0.0.1"
+        },
+        "kv_port": {
+          "type": "integer",
+          "default": 14579
+        }
+      }
+    },
+    "CompilationConfig": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "integer",
+          "default": 0
+        },
+        "debug_dump_path": {
+          "type": "string",
+          "default": ""
+        },
+        "cache_dir": {
+          "type": "string",
+          "default": ""
+        },
+        "backend": {
+          "type": "string",
+          "default": ""
+        },
+        "custom_ops": {
+          "type": "array",
+          "default": "Field(default_factory=list)"
+        },
+        "splitting_ops": {
+          "type": "array",
+          "default": "Field(default=None)"
+        },
+        "use_inductor": {
+          "type": "boolean",
+          "default": true
+        },
+        "compile_sizes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": "Field(default=None)"
+        },
+        "inductor_compile_config": {
+          "type": "object",
+          "default": "Field(default_factory=dict)"
+        },
+        "inductor_passes": {
+          "type": "object",
+          "default": "Field(default_factory=dict)"
+        },
+        "use_cudagraph": {
+          "type": "boolean",
+          "default": false
+        },
+        "cudagraph_num_of_warmups": {
+          "type": "integer",
+          "default": 0
+        },
+        "cudagraph_capture_sizes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null
+        },
+        "cudagraph_copy_inputs": {
+          "type": "boolean",
+          "default": false
+        },
+        "pass_config": {
+          "type": {
+            "description": "Upstream type: PassConfig"
+          },
+          "default": "Field(default_factory=PassConfig)"
+        },
+        "max_capture_size": {
+          "type": "integer",
+          "default": "PrivateAttr"
+        },
+        "local_cache_dir": {
+          "type": "string",
+          "default": "PrivateAttr"
+        },
+        "bs_to_padded_graph_size": {
+          "type": "array",
+          "default": "PrivateAttr"
+        },
+        "enabled_custom_ops": {
+          "type": {
+            "description": "Upstream type: Counter[str]"
+          },
+          "default": "PrivateAttr"
+        },
+        "disabled_custom_ops": {
+          "type": {
+            "description": "Upstream type: Counter[str]"
+          },
+          "default": "PrivateAttr"
+        },
+        "traced_files": {
+          "type": "array",
+          "default": "PrivateAttr"
+        },
+        "compilation_time": {
+          "type": "number",
+          "default": "PrivateAttr"
+        },
+        "static_forward_context": {
+          "type": "object",
+          "default": "PrivateAttr"
+        }
+      }
+    },
+    "PassConfig": {
+      "type": "object",
+      "properties": {
+        "dump_graph_stages": {
+          "type": "array",
+          "default": "Field(default_factory=list)"
+        },
+        "dump_graph_dir": {
+          "type": {
+            "description": "Upstream type: Path"
+          },
+          "default": "Field(default=Path(\".\"))"
+        },
+        "enable_fusion": {
+          "type": "boolean",
+          "default": true
+        },
+        "enable_reshape": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "VllmConfig": {
+      "type": "object",
+      "properties": {
+        "model_config": {
+          "type": {
+            "description": "Upstream type: ModelConfig"
+          },
+          "default": "field(default=None, init=True)"
+        },
+        "cache_config": {
+          "type": {
+            "description": "Upstream type: CacheConfig"
+          },
+          "default": "field(default=None, init=True)"
+        },
+        "parallel_config": {
+          "type": {
+            "description": "Upstream type: ParallelConfig"
+          },
+          "default": "field(default_factory=ParallelConfig,\n                                            init=True)"
+        },
+        "scheduler_config": {
+          "type": {
+            "description": "Upstream type: SchedulerConfig"
+          },
+          "default": "field(default_factory=SchedulerConfig,\n                                              init=True)"
+        },
+        "device_config": {
+          "type": {
+            "description": "Upstream type: DeviceConfig"
+          },
+          "default": "field(default=None,\n                                        init=True)"
+        },
+        "load_config": {
+          "type": {
+            "description": "Upstream type: LoadConfig"
+          },
+          "default": "field(default=None, init=True)"
+        },
+        "lora_config": {
+          "type": {
+            "description": "Upstream type: Optional[LoRAConfig] | None"
+          },
+          "default": null
+        },
+        "speculative_config": {
+          "type": {
+            "description": "Upstream type: Optional[SpeculativeConfig] | None"
+          },
+          "default": null
+        },
+        "decoding_config": {
+          "type": {
+            "description": "Upstream type: Optional[DecodingConfig] | None"
+          },
+          "default": null
+        },
+        "observability_config": {
+          "type": {
+            "description": "Upstream type: Optional[ObservabilityConfig] | None"
+          },
+          "default": null
+        },
+        "prompt_adapter_config": {
+          "type": {
+            "description": "Upstream type: Optional[PromptAdapterConfig] | None"
+          },
+          "default": null
+        },
+        "quant_config": {
+          "type": {
+            "description": "Upstream type: Optional[QuantizationConfig] | None"
+          },
+          "default": null
+        },
+        "compilation_config": {
+          "type": {
+            "description": "Upstream type: CompilationConfig"
+          },
+          "default": "field(default=None,\n                                                  init=True)"
+        },
+        "kv_transfer_config": {
+          "type": {
+            "description": "Upstream type: KVTransferConfig"
+          },
+          "default": "field(default=None,\n                                                 init=True)"
+        },
+        "additional_config": {
+          "type": {
+            "description": "Upstream type: SupportsHash"
+          },
+          "default": "field(default=None,\n                                            init=True)"
+        },
+        "instance_id": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    }
+  },
+  "engine_envs": {
+    "_count": 92,
+    "XDG_CACHE_HOME": {
+      "name": "XDG_CACHE_HOME",
+      "x-source": "os.getenv/environ.get"
+    },
+    "XDG_CONFIG_HOME": {
+      "name": "XDG_CONFIG_HOME",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TARGET_DEVICE": {
+      "name": "VLLM_TARGET_DEVICE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "MAX_JOBS": {
+      "name": "MAX_JOBS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "NVCC_THREADS": {
+      "name": "NVCC_THREADS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_PRECOMPILED": {
+      "name": "VLLM_USE_PRECOMPILED",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PRECOMPILED_WHEEL_LOCATION": {
+      "name": "VLLM_PRECOMPILED_WHEEL_LOCATION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "CMAKE_BUILD_TYPE": {
+      "name": "CMAKE_BUILD_TYPE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VERBOSE": {
+      "name": "VERBOSE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CONFIG_ROOT": {
+      "name": "VLLM_CONFIG_ROOT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CACHE_ROOT": {
+      "name": "VLLM_CACHE_ROOT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_HOST_IP": {
+      "name": "VLLM_HOST_IP",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PORT": {
+      "name": "VLLM_PORT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RPC_BASE_PATH": {
+      "name": "VLLM_RPC_BASE_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_MODELSCOPE": {
+      "name": "VLLM_USE_MODELSCOPE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RINGBUFFER_WARNING_INTERVAL": {
+      "name": "VLLM_RINGBUFFER_WARNING_INTERVAL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "CUDA_HOME": {
+      "name": "CUDA_HOME",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NCCL_SO_PATH": {
+      "name": "VLLM_NCCL_SO_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "LD_LIBRARY_PATH": {
+      "name": "LD_LIBRARY_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_TRITON_FLASH_ATTN": {
+      "name": "VLLM_USE_TRITON_FLASH_ATTN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_FLASH_ATTN_VERSION": {
+      "name": "VLLM_FLASH_ATTN_VERSION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TEST_DYNAMO_FULLGRAPH_CAPTURE": {
+      "name": "VLLM_TEST_DYNAMO_FULLGRAPH_CAPTURE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "LOCAL_RANK": {
+      "name": "LOCAL_RANK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "CUDA_VISIBLE_DEVICES": {
+      "name": "CUDA_VISIBLE_DEVICES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENGINE_ITERATION_TIMEOUT_S": {
+      "name": "VLLM_ENGINE_ITERATION_TIMEOUT_S",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_API_KEY": {
+      "name": "VLLM_API_KEY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "S3_ACCESS_KEY_ID": {
+      "name": "S3_ACCESS_KEY_ID",
+      "x-source": "os.getenv/environ.get"
+    },
+    "S3_SECRET_ACCESS_KEY": {
+      "name": "S3_SECRET_ACCESS_KEY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "S3_ENDPOINT_URL": {
+      "name": "S3_ENDPOINT_URL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USAGE_STATS_SERVER": {
+      "name": "VLLM_USAGE_STATS_SERVER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NO_USAGE_STATS": {
+      "name": "VLLM_NO_USAGE_STATS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DO_NOT_TRACK": {
+      "name": "VLLM_DO_NOT_TRACK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "DO_NOT_TRACK": {
+      "name": "DO_NOT_TRACK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USAGE_SOURCE": {
+      "name": "VLLM_USAGE_SOURCE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CONFIGURE_LOGGING": {
+      "name": "VLLM_CONFIGURE_LOGGING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_CONFIG_PATH": {
+      "name": "VLLM_LOGGING_CONFIG_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_LEVEL": {
+      "name": "VLLM_LOGGING_LEVEL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_PREFIX": {
+      "name": "VLLM_LOGGING_PREFIX",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGITS_PROCESSOR_THREADS": {
+      "name": "VLLM_LOGITS_PROCESSOR_THREADS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TRACE_FUNCTION": {
+      "name": "VLLM_TRACE_FUNCTION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ATTENTION_BACKEND": {
+      "name": "VLLM_ATTENTION_BACKEND",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_FLASHINFER_FORCE_TENSOR_CORES": {
+      "name": "VLLM_FLASHINFER_FORCE_TENSOR_CORES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PP_LAYER_PARTITION": {
+      "name": "VLLM_PP_LAYER_PARTITION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CPU_KVCACHE_SPACE": {
+      "name": "VLLM_CPU_KVCACHE_SPACE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CPU_OMP_THREADS_BIND": {
+      "name": "VLLM_CPU_OMP_THREADS_BIND",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_OPENVINO_DEVICE": {
+      "name": "VLLM_OPENVINO_DEVICE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_OPENVINO_KVCACHE_SPACE": {
+      "name": "VLLM_OPENVINO_KVCACHE_SPACE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_OPENVINO_CPU_KV_CACHE_PRECISION": {
+      "name": "VLLM_OPENVINO_CPU_KV_CACHE_PRECISION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_OPENVINO_ENABLE_QUANTIZED_WEIGHTS": {
+      "name": "VLLM_OPENVINO_ENABLE_QUANTIZED_WEIGHTS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_RAY_SPMD_WORKER": {
+      "name": "VLLM_USE_RAY_SPMD_WORKER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_RAY_COMPILED_DAG": {
+      "name": "VLLM_USE_RAY_COMPILED_DAG",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_RAY_COMPILED_DAG_NCCL_CHANNEL": {
+      "name": "VLLM_USE_RAY_COMPILED_DAG_NCCL_CHANNEL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_RAY_COMPILED_DAG_OVERLAP_COMM": {
+      "name": "VLLM_USE_RAY_COMPILED_DAG_OVERLAP_COMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_WORKER_MULTIPROC_METHOD": {
+      "name": "VLLM_WORKER_MULTIPROC_METHOD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ASSETS_CACHE": {
+      "name": "VLLM_ASSETS_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_IMAGE_FETCH_TIMEOUT": {
+      "name": "VLLM_IMAGE_FETCH_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_VIDEO_FETCH_TIMEOUT": {
+      "name": "VLLM_VIDEO_FETCH_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_AUDIO_FETCH_TIMEOUT": {
+      "name": "VLLM_AUDIO_FETCH_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MM_INPUT_CACHE_SIZE": {
+      "name": "VLLM_MM_INPUT_CACHE_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_XLA_CACHE_PATH": {
+      "name": "VLLM_XLA_CACHE_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_FUSED_MOE_CHUNK_SIZE": {
+      "name": "VLLM_FUSED_MOE_CHUNK_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NO_DEPRECATION_WARNING": {
+      "name": "VLLM_NO_DEPRECATION_WARNING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_KEEP_ALIVE_ON_ENGINE_DEATH": {
+      "name": "VLLM_KEEP_ALIVE_ON_ENGINE_DEATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLOW_LONG_MAX_MODEL_LEN": {
+      "name": "VLLM_ALLOW_LONG_MAX_MODEL_LEN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TEST_FORCE_FP8_MARLIN": {
+      "name": "VLLM_TEST_FORCE_FP8_MARLIN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TEST_FORCE_LOAD_FORMAT": {
+      "name": "VLLM_TEST_FORCE_LOAD_FORMAT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RPC_TIMEOUT": {
+      "name": "VLLM_RPC_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TORCH_PROFILER_DIR": {
+      "name": "VLLM_TORCH_PROFILER_DIR",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_TRITON_AWQ": {
+      "name": "VLLM_USE_TRITON_AWQ",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLOW_RUNTIME_LORA_UPDATING": {
+      "name": "VLLM_ALLOW_RUNTIME_LORA_UPDATING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SKIP_P2P_CHECK": {
+      "name": "VLLM_SKIP_P2P_CHECK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_V1": {
+      "name": "VLLM_USE_V1",
+      "x-source": "os.getenv/environ.get"
+    },
+    "K_SCALE_CONSTANT": {
+      "name": "K_SCALE_CONSTANT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "V_SCALE_CONSTANT": {
+      "name": "V_SCALE_CONSTANT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_V1_MULTIPROCESSING": {
+      "name": "VLLM_ENABLE_V1_MULTIPROCESSING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOG_BATCHSIZE_INTERVAL": {
+      "name": "VLLM_LOG_BATCHSIZE_INTERVAL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DISABLE_COMPILE_CACHE": {
+      "name": "VLLM_DISABLE_COMPILE_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SERVER_DEV_MODE": {
+      "name": "VLLM_SERVER_DEV_MODE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_V1_OUTPUT_PROC_CHUNK_SIZE": {
+      "name": "VLLM_V1_OUTPUT_PROC_CHUNK_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MLA_DISABLE": {
+      "name": "VLLM_MLA_DISABLE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MLA_PERFORM_MATRIX_ABSORPTION": {
+      "name": "VLLM_MLA_PERFORM_MATRIX_ABSORPTION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MLA_DISABLE_REQUANTIZATION": {
+      "name": "VLLM_MLA_DISABLE_REQUANTIZATION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_MOE_ALIGN_BLOCK_SIZE_TRITON": {
+      "name": "VLLM_ENABLE_MOE_ALIGN_BLOCK_SIZE_TRITON",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RAY_PER_WORKER_GPUS": {
+      "name": "VLLM_RAY_PER_WORKER_GPUS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RAY_BUNDLE_INDICES": {
+      "name": "VLLM_RAY_BUNDLE_INDICES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CUDA_MEM_ALIGN_KV_CACHE": {
+      "name": "VLLM_CUDA_MEM_ALIGN_KV_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CUDART_SO_PATH": {
+      "name": "VLLM_CUDART_SO_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CONTIGUOUS_PA": {
+      "name": "VLLM_CONTIGUOUS_PA",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_SAMPLER": {
+      "name": "VLLM_USE_FLASHINFER_SAMPLER",
+      "x-source": "os.environ[...]"
+    },
+    "VLLM_PLUGINS": {
+      "name": "VLLM_PLUGINS",
+      "x-source": "os.environ[...]"
+    },
+    "VLLM_DISABLED_KERNELS": {
+      "name": "VLLM_DISABLED_KERNELS",
+      "x-source": "os.environ[...]"
+    },
+    "VLLM_USE_HPU_CONTIGUOUS_CACHE_FETCH": {
+      "name": "VLLM_USE_HPU_CONTIGUOUS_CACHE_FETCH",
+      "x-source": "lambda",
+      "x-footgun": "attr VLLM_USE_HPU_CONTIGUOUS_CACHE_FETCH reads VLLM_CONTIGUOUS_PA"
+    }
+  }
+}

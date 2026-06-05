@@ -1,0 +1,1305 @@
+schema_version: ground_truth/1.0.0
+engine: vllm
+engine_version: 0.19.1
+engine_git_tag: v0.19.1
+venv_src_root: /tmp/trial_vllm_v0_19_1_venv/src/vllm
+established_at: '2026-06-05'
+established_by: human-supervised LLM, vllm 0.19.1 source-walk (subpackage layout)
+methodology_ref: research/mining-substrate-trial/findings/ground_truth/vllm/v0_19_1/methodology.md
+
+scope_notes:
+- Invariants here are constraints vLLM 0.19.1 enforces at config / params construction time
+  (raise ValueError/TypeError/RuntimeError/NotImplementedError, warn-and-clamp, silently normalise).
+- STRUCTURAL DELTA vs v0.7.3 - the flat vllm/config.py is gone. Each invariant now lives in a
+  per-concern module under vllm/config/* (model.py, cache.py, scheduler.py, speculative.py, ...) or
+  in a @model_validator / @field_validator (pydantic) instead of an imperative _verify_* method.
+- A full source sweep found ~200 raise/assert/warn sites across vllm/config/*, sampling_params.py,
+  pooling_params.py and vllm/platforms/* (vs ~60 enumerated for v0.7.3). This catalogue captures the
+  LLEM-scope subset (caller-touchable, config-construction-time, energy/fairness-relevant), matching the
+  v0.7.3 GT scope. The long tail (compile-internal asserts, distributed-init races, kernel-dispatch
+  NotImplementedError) is intentionally OUT of scope - flagged in methodology.md.
+- Severity vocabulary - error, warning, dormant, deprecated. Outcome vocabulary - error, warning_emit,
+  dormant_silent, deprecation_warning.
+- in_baseline refers to the v0.7.3 LLEM baseline; for v0.19.1 there is NO engine_versions baseline yet,
+  so in_baseline encodes "was this invariant present (by predicate) in the v0.7.3 GROUND TRUTH" to keep
+  version-delta traceability. delta_v073 explains add/remove/rename vs the v0.7.3 GT.
+
+predicate_kind_legend:
+  lt: <
+  le: <=
+  gt: '>'
+  ge: '>='
+  eq: ==
+  ne: '!='
+  in: in_set
+  not_in: not_in_set
+  type_check: isinstance check
+  cross_field_lt: x < @other
+  cross_field_gt: x > @other
+  mutually_exclusive: at-most-one-of fields may be set
+
+invariants:
+
+# ============================================================================
+# SamplingParams (vllm/sampling_params.py) - msgspec.Struct
+# ============================================================================
+
+- id: vllm_samplingparams_raises_n_not_type_int
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: type_check
+  native_field: n
+  predicate_value: int
+  message_template: 'n must be an int, but is of type {type(self.n)}'
+  kwargs_positive: {n: 'str'}
+  kwargs_negative: {n: 1}
+  source: {file: vllm/sampling_params.py, line: 428, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: UNCHANGED (was sampling_params.py:353).
+
+- id: vllm_samplingparams_raises_n_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: n
+  predicate_value: 1
+  message_template: 'n must be at least 1, got {self.n}.'
+  kwargs_positive: {n: 0}
+  kwargs_negative: {n: 1}
+  source: {file: vllm/sampling_params.py, line: 430, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: UNCHANGED.
+
+- id: vllm_samplingparams_raises_n_gt_max_n_sequences
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_runtime_combo
+  native_field: n
+  predicate_value: '@envs.VLLM_MAX_N_SEQUENCES (default 16384)'
+  message_template: 'n must be at most {max_n}, got {self.n}. To increase this limit, set the VLLM_MAX_N_SEQUENCES environment variable.'
+  kwargs_positive: {n: 99999}
+  kwargs_negative: {n: 1}
+  source: {file: vllm/sampling_params.py, line: 433, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 - new env-var-gated upper bound on n (VLLM_MAX_N_SEQUENCES).
+
+- id: vllm_samplingparams_raises_presence_penalty_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_inclusive
+  native_field: presence_penalty
+  predicate_value: [-2.0, 2.0]
+  message_template: 'presence_penalty must be in [-2, 2], got {self.presence_penalty}.'
+  kwargs_positive: {presence_penalty: 2.1}
+  kwargs_negative: {presence_penalty: 2.0}
+  source: {file: vllm/sampling_params.py, line: 439, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was sampling_params.py:358).
+
+- id: vllm_samplingparams_raises_frequency_penalty_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_inclusive
+  native_field: frequency_penalty
+  predicate_value: [-2.0, 2.0]
+  message_template: 'frequency_penalty must be in [-2, 2], got {self.frequency_penalty}.'
+  kwargs_positive: {frequency_penalty: -2.5}
+  kwargs_negative: {frequency_penalty: -2.0}
+  source: {file: vllm/sampling_params.py, line: 443, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was sampling_params.py:361).
+
+- id: vllm_samplingparams_raises_repetition_penalty_le_0
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: le
+  native_field: repetition_penalty
+  predicate_value: 0.0
+  message_template: 'repetition_penalty must be greater than zero, got {self.repetition_penalty}.'
+  kwargs_positive: {repetition_penalty: 0.0}
+  kwargs_negative: {repetition_penalty: 0.5}
+  source: {file: vllm/sampling_params.py, line: 447, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: CHANGED - v0.7.3 enforced the closed band (0, 2] (rejected repetition_penalty > 2);
+    v0.19.1 only enforces > 0 (the upper bound 2 was dropped). A repetition_penalty of 5.0 now passes.
+
+- id: vllm_samplingparams_raises_temperature_lt_0
+  severity: error
+  outcome: error
+  exception_type: VLLMValidationError
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: temperature
+  predicate_value: 0.0
+  message_template: 'temperature must be non-negative, got {self.temperature}.'
+  kwargs_positive: {temperature: -1.0}
+  kwargs_negative: {temperature: 0.0}
+  source: {file: vllm/sampling_params.py, line: 452, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: CHANGED exception type - now raises VLLMValidationError (new typed exception in v0.19.1
+    carrying parameter/value), not bare ValueError.
+
+- id: vllm_samplingparams_warning_temperature_clamped_to_min
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.SamplingParams
+  predicate_kind: in_open_range
+  native_field: temperature
+  predicate_value: '(0.0, 1e-2)'
+  message_template: 'temperature %s is less than %s, which may cause numerical errors nan or inf in tensors. We have maxed it out to %s.'
+  kwargs_positive: {temperature: 0.001}
+  kwargs_negative: {temperature: 0.011}
+  silent_normalisation: {field: temperature, declared: 0.001, observed: 0.01}
+  source: {file: vllm/sampling_params.py, line: 374, qualname: 'SamplingParams.__post_init__'}
+  in_baseline: false
+  delta_v073: UNCHANGED (was sampling_params.py:303). _MAX_TEMP=1e-2.
+
+- id: vllm_samplingparams_raises_top_p_out_of_range
+  severity: error
+  outcome: error
+  exception_type: VLLMValidationError
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_half_open
+  native_field: top_p
+  predicate_value: '(0, 1]'
+  message_template: 'top_p must be in (0, 1], got {self.top_p}.'
+  kwargs_positive: {top_p: 0.0}
+  kwargs_negative: {top_p: 0.5}
+  source: {file: vllm/sampling_params.py, line: 458, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: CHANGED exception type to VLLMValidationError; predicate unchanged.
+
+- id: vllm_samplingparams_raises_top_k_lt_neg1
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: top_k
+  predicate_value: -1
+  message_template: 'top_k must be 0 (disable), or at least 1, got {self.top_k}.'
+  kwargs_positive: {top_k: -2}
+  kwargs_negative: {top_k: 0}
+  source: {file: vllm/sampling_params.py, line: 465, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: CHANGED - v0.7.3 disable-sentinel was -1 and the predicate rejected `top_k < -1 OR top_k == 0`;
+    v0.19.1 default is 0, disable-sentinel is 0 (with -1 still quietly accepted), predicate now rejects only top_k < -1.
+    top_k=0 is now VALID (it is the new disable value), whereas in v0.7.3 it raised.
+
+- id: vllm_samplingparams_raises_top_k_not_type_int
+  severity: error
+  outcome: error
+  exception_type: TypeError
+  native_type: vllm.SamplingParams
+  predicate_kind: type_check
+  native_field: top_k
+  predicate_value: int
+  message_template: 'top_k must be an integer, got {type(self.top_k).__name__}'
+  kwargs_positive: {top_k: 1.0}
+  kwargs_negative: {top_k: 1}
+  source: {file: vllm/sampling_params.py, line: 469, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: UNCHANGED.
+
+- id: vllm_samplingparams_raises_min_p_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_inclusive
+  native_field: min_p
+  predicate_value: [0.0, 1.0]
+  message_template: 'min_p must be in [0, 1], got {self.min_p}.'
+  kwargs_positive: {min_p: 1.5}
+  kwargs_negative: {min_p: 0.5}
+  source: {file: vllm/sampling_params.py, line: 473, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was sampling_params.py:378).
+
+- id: vllm_samplingparams_raises_max_tokens_lt_1
+  severity: error
+  outcome: error
+  exception_type: VLLMValidationError
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: max_tokens
+  predicate_value: 1
+  message_template: 'max_tokens must be at least 1, got {self.max_tokens}.'
+  kwargs_positive: {max_tokens: 0}
+  kwargs_negative: {max_tokens: 1}
+  source: {file: vllm/sampling_params.py, line: 475, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: CHANGED exception type to VLLMValidationError.
+
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: min_tokens
+  predicate_value: 0
+  message_template: 'min_tokens must be greater than or equal to 0, got {self.min_tokens}.'
+  kwargs_positive: {min_tokens: -1}
+  kwargs_negative: {min_tokens: 0}
+  source: {file: vllm/sampling_params.py, line: 481, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: UNCHANGED.
+
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_gt
+  native_field: min_tokens
+  predicate_value: '@max_tokens'
+  message_template: 'min_tokens must be less than or equal to max_tokens={self.max_tokens}, got {self.min_tokens}.'
+  kwargs_positive: {max_tokens: 1, min_tokens: 2}
+  kwargs_negative: {max_tokens: 1, min_tokens: 1}
+  source: {file: vllm/sampling_params.py, line: 485, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: UNCHANGED.
+
+- id: vllm_samplingparams_raises_logprobs_lt_0
+  severity: error
+  outcome: error
+  exception_type: VLLMValidationError
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: logprobs
+  predicate_value: 0
+  message_template: 'logprobs must be non-negative or -1, got {self.logprobs}.'
+  kwargs_positive: {logprobs: -2}
+  kwargs_negative: {logprobs: 0}
+  source: {file: vllm/sampling_params.py, line: 490, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: CHANGED - v0.19.1 now also accepts logprobs == -1 (means "all logprobs"); only < 0 AND != -1 raises.
+    Exception type now VLLMValidationError.
+
+- id: vllm_samplingparams_raises_prompt_logprobs_lt_0
+  severity: error
+  outcome: error
+  exception_type: VLLMValidationError
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: prompt_logprobs
+  predicate_value: 0
+  message_template: 'prompt_logprobs must be non-negative or -1, got {self.prompt_logprobs}.'
+  kwargs_positive: {prompt_logprobs: -2}
+  kwargs_negative: {prompt_logprobs: 0}
+  source: {file: vllm/sampling_params.py, line: 501, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+  delta_v073: CHANGED - now accepts -1; exception type VLLMValidationError.
+
+- id: vllm_samplingparams_raises_stop_token_ids_not_all_int
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: all_type_check
+  native_field: stop_token_ids
+  predicate_value: int
+  message_template: 'stop_token_ids must contain only integers, got {self.stop_token_ids}.'
+  kwargs_positive: {stop_token_ids: ['a']}
+  kwargs_negative: {stop_token_ids: [1, 2]}
+  source: {file: vllm/sampling_params.py, line: 508, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 - new per-element int check on stop_token_ids.
+
+- id: vllm_samplingparams_raises_stop_contains_empty_string
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: any_falsy_in_list
+  native_field: stop
+  predicate_value: 'any(not s for s in stop)'
+  message_template: 'stop cannot contain an empty string.'
+  kwargs_positive: {stop: ['']}
+  kwargs_negative: {stop: ['STOP']}
+  source: {file: vllm/sampling_params.py, line: 513, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was sampling_params.py:402).
+
+- id: vllm_samplingparams_raises_stop_requires_detokenize
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_combo
+  native_field: stop
+  predicate_value: 'stop non-empty AND detokenize is False'
+  message_template: 'stop strings are only supported when detokenize is True. Set detokenize=True to use stop.'
+  kwargs_positive: {stop: ['STOP'], detokenize: false}
+  kwargs_negative: {stop: ['STOP'], detokenize: true}
+  source: {file: vllm/sampling_params.py, line: 515, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was sampling_params.py:404).
+
+- id: vllm_samplingparams_raises_greedy_requires_n_eq_1
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_combo
+  native_field: n
+  predicate_value: 'temperature < 1e-5 (_SAMPLING_EPS) AND n > 1'
+  message_template: 'n must be 1 when using greedy sampling, got {self.n}.'
+  kwargs_positive: {temperature: 0.0, n: 2}
+  kwargs_negative: {temperature: 0.0, n: 1}
+  source: {file: vllm/sampling_params.py, line: 522, qualname: 'SamplingParams._verify_greedy_sampling'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was sampling_params.py:412).
+
+- id: vllm_samplingparams_dormant_seed_eq_neg1
+  severity: dormant
+  outcome: dormant_silent
+  emission_channel: none
+  native_type: vllm.SamplingParams
+  predicate_kind: eq
+  native_field: seed
+  predicate_value: -1
+  silent_normalisation: {field: seed, declared: -1, observed: null}
+  kwargs_positive: {seed: -1}
+  kwargs_negative: {seed: 0}
+  source: {file: vllm/sampling_params.py, line: 384, qualname: 'SamplingParams.__post_init__'}
+  in_baseline: true
+  delta_v073: UNCHANGED.
+
+# NOTE: v0.7.3 invariants REMOVED in v0.19.1:
+#   - vllm_samplingparams_raises_delta_output_kind_requires_best_of_eq_n (best_of/output_kind cross-check) -
+#     best_of and _real_n fields were removed from SamplingParams; gone.
+#   - vllm_samplingparams_raises_best_of_lt_ref_n - same reason; gone.
+#   - vllm_samplingparams_raises_truncate_prompt_tokens_lt_1 - truncate_prompt_tokens field removed from SamplingParams.
+
+# ============================================================================
+# StructuredOutputsParams (RENAMED from GuidedDecodingParams) - sampling_params.py
+# ============================================================================
+
+- id: vllm_structuredoutputsparams_raises_multiple_modes_set
+  severity: error
+  outcome: error
+  native_type: vllm.sampling_params.StructuredOutputsParams
+  predicate_kind: mutually_exclusive
+  native_field: '[json, regex, choice, grammar, json_object, structural_tag]'
+  predicate_value: 'count(present) > 1'
+  message_template: 'You can only use one kind of structured outputs constraint but multiple are specified: {self.__dict__}'
+  kwargs_positive: {json: '{"type":"object"}', regex: '\d+'}
+  kwargs_negative: {json: '{"type":"object"}'}
+  source: {file: vllm/sampling_params.py, line: 67, qualname: 'StructuredOutputsParams.__post_init__'}
+  in_baseline: false
+  delta_v073: RENAMED from GuidedDecodingParams.__post_init__ (was sampling_params.py:67). structural_tag joins the
+    mutually-exclusive set (new field).
+
+- id: vllm_structuredoutputsparams_raises_no_mode_set
+  severity: error
+  outcome: error
+  native_type: vllm.sampling_params.StructuredOutputsParams
+  predicate_kind: mutually_exclusive
+  native_field: '[json, regex, choice, grammar, json_object, structural_tag]'
+  predicate_value: 'count(present) < 1'
+  message_template: 'You must use one kind of structured outputs constraint but none are specified: {self.__dict__}'
+  kwargs_positive: {}
+  kwargs_negative: {json: '{"type":"object"}'}
+  source: {file: vllm/sampling_params.py, line: 72, qualname: 'StructuredOutputsParams.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 - v0.7.3 GuidedDecodingParams allowed all-None (no constraint); v0.19.1 now
+    REQUIRES exactly one constraint mode (raises when none set).
+
+# ============================================================================
+# RepetitionDetectionParams - NEW struct in v0.19.1
+# ============================================================================
+
+- id: vllm_repetitiondetectionparams_raises_pattern_sizes_invalid
+  severity: error
+  outcome: error
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  predicate_kind: cross_field_combo
+  native_field: '[max_pattern_size, min_pattern_size]'
+  predicate_value: 'max_pattern_size < 0 OR min_pattern_size < 0 OR min_pattern_size > max_pattern_size'
+  message_template: 'max_pattern_size, min_pattern_size must be >=0, with min_pattern_size <= max_pattern_size. Set both to 0 to disable repetitive pattern detection.'
+  kwargs_positive: {max_pattern_size: 2, min_pattern_size: 5}
+  kwargs_negative: {max_pattern_size: 5, min_pattern_size: 2}
+  source: {file: vllm/sampling_params.py, line: 134, qualname: 'RepetitionDetectionParams.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED (entire struct new in v0.19.1).
+
+- id: vllm_repetitiondetectionparams_raises_min_count_lt_2
+  severity: error
+  outcome: error
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  predicate_kind: cross_field_combo
+  native_field: min_count
+  predicate_value: 'max_pattern_size > 0 AND min_count < 2'
+  message_template: 'min_count must be >= 2 to detect repetitive patterns in engine output. If you do not wish to detect repetitive patterns, set max_pattern_size to 0.'
+  kwargs_positive: {max_pattern_size: 3, min_count: 1}
+  kwargs_negative: {max_pattern_size: 3, min_count: 2}
+  source: {file: vllm/sampling_params.py, line: 140, qualname: 'RepetitionDetectionParams.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED (new struct).
+
+# ============================================================================
+# CacheConfig (vllm/config/cache.py) - pydantic dataclass
+# ============================================================================
+
+- id: vllm_cacheconfig_field_constraint_gpu_memory_utilization_range
+  severity: error
+  outcome: error
+  exception_type: pydantic.ValidationError
+  native_type: vllm.config.CacheConfig
+  predicate_kind: not_in_range_half_open
+  native_field: gpu_memory_utilization
+  predicate_value: '(0, 1]'
+  message_template: 'Field(default=0.9, gt=0, le=1) - pydantic enforces 0 < gpu_memory_utilization <= 1'
+  kwargs_positive: {gpu_memory_utilization: 1.1}
+  kwargs_negative: {gpu_memory_utilization: 0.9}
+  source: {file: vllm/config/cache.py, line: 41, qualname: 'CacheConfig.gpu_memory_utilization'}
+  in_baseline: true
+  delta_v073: CHANGED enforcement mechanism - v0.7.3 had an imperative `> 1.0` raise in CacheConfig._verify_args
+    (config.py:1087); v0.19.1 expresses it DECLARATIVELY as Field(gt=0, le=1) on the dataclass field, so
+    pydantic raises a ValidationError at construction. Note v0.19.1 also rejects gpu_memory_utilization <= 0.
+
+- id: vllm_cacheconfig_field_constraint_mamba_block_size_gt_0
+  severity: error
+  outcome: error
+  exception_type: pydantic.ValidationError
+  native_type: vllm.config.CacheConfig
+  predicate_kind: le
+  native_field: mamba_block_size
+  predicate_value: 0
+  message_template: 'Field(default=None, gt=0)'
+  kwargs_positive: {mamba_block_size: 0}
+  kwargs_negative: {mamba_block_size: 16}
+  source: {file: vllm/config/cache.py, line: 97, qualname: 'CacheConfig.mamba_block_size'}
+  in_baseline: false
+  delta_v073: ADDED (mamba support new).
+
+# NOTE: v0.7.3 CacheConfig invariants on cache_dtype enum, prefix_caching+sliding_window NotImplementedError,
+# and swap_space-too-large are no longer in CacheConfig at v0.19.1. cache_dtype is now the CacheDType Literal
+# (declarative); the prefix_caching/sliding-window incompatibility moved out of CacheConfig. swap_space was
+# removed from CacheConfig entirely (offload is now OffloadConfig). See version_delta.md.
+
+# ============================================================================
+# LoRAConfig (vllm/config/lora.py) - pydantic dataclass, @model_validator
+# ============================================================================
+
+- id: vllm_loraconfig_dormant_max_cpu_loras_unset
+  severity: dormant
+  outcome: dormant_silent
+  emission_channel: none
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: is_none
+  native_field: max_cpu_loras
+  predicate_value: null
+  silent_normalisation: {field: max_cpu_loras, declared: null, observed: '@max_loras'}
+  kwargs_positive: {max_lora_rank: 16, max_loras: 1, max_cpu_loras: null}
+  kwargs_negative: {max_lora_rank: 16, max_loras: 1, max_cpu_loras: 1}
+  source: {file: vllm/config/lora.py, line: 101, qualname: 'LoRAConfig._validate_lora_config'}
+  in_baseline: true
+  delta_v073: UNCHANGED behaviour; moved to @model_validator (was config.py:2196).
+
+- id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+  severity: error
+  outcome: error
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: cross_field_lt
+  native_field: max_cpu_loras
+  predicate_value: '@max_loras'
+  message_template: 'max_cpu_loras ({max_cpu_loras}) must be >= max_loras ({max_loras}).'
+  kwargs_positive: {max_lora_rank: 16, max_loras: 2, max_cpu_loras: 1}
+  kwargs_negative: {max_lora_rank: 16, max_loras: 2, max_cpu_loras: 2}
+  source: {file: vllm/config/lora.py, line: 103, qualname: 'LoRAConfig._validate_lora_config'}
+  in_baseline: true
+  delta_v073: UNCHANGED.
+
+- id: vllm_loraconfig_field_constraint_max_loras_ge_1
+  severity: error
+  outcome: error
+  exception_type: pydantic.ValidationError
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: lt
+  native_field: max_loras
+  predicate_value: 1
+  message_template: 'Field(default=1, ge=1)'
+  kwargs_positive: {max_loras: 0}
+  kwargs_negative: {max_loras: 1}
+  source: {file: vllm/config/lora.py, line: 34, qualname: 'LoRAConfig.max_loras'}
+  in_baseline: true
+  delta_v073: CHANGED mechanism - was imperative raise (config.py:2194); now declarative Field(ge=1).
+
+# NOTE: v0.7.3 LoRAConfig enum checks on max_lora_rank {8,16,...} and lora_extra_vocab_size {0,256,512}
+# are now expressed as the MaxLoRARanks Literal type (declarative); lora_extra_vocab_size FIELD REMOVED.
+# vllm_loraconfig_raises_cpu_offload_with_lora (LoRA + cpu_offload) is GONE - cpu_offload moved to OffloadConfig.
+
+# ============================================================================
+# SchedulerConfig (vllm/config/scheduler.py)
+# ============================================================================
+
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_combo
+  native_field: max_num_batched_tokens
+  predicate_value: 'max_num_batched_tokens < max_model_len AND not enable_chunked_prefill'
+  message_template: 'max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}). ...'
+  kwargs_positive: {max_num_batched_tokens: 100, max_model_len: 200, enable_chunked_prefill: false}
+  kwargs_negative: {max_num_batched_tokens: 200, max_model_len: 200, enable_chunked_prefill: false}
+  source: {file: vllm/config/scheduler.py, line: 264, qualname: 'SchedulerConfig.verify_max_model_len'}
+  in_baseline: true
+  delta_v073: UNCHANGED predicate; moved into verify_max_model_len(max_model_len) (was _verify_args at config.py:1574).
+
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_lt
+  native_field: max_num_batched_tokens
+  predicate_value: '@max_num_seqs'
+  message_template: 'max_num_batched_tokens ({max_num_batched_tokens}) must be greater than or equal to max_num_seqs ({max_num_seqs}).'
+  kwargs_positive: {max_num_batched_tokens: 1, max_num_seqs: 2}
+  kwargs_negative: {max_num_batched_tokens: 2, max_num_seqs: 2}
+  source: {file: vllm/config/scheduler.py, line: 273, qualname: 'SchedulerConfig.verify_max_model_len'}
+  in_baseline: true
+  delta_v073: UNCHANGED.
+
+- id: vllm_schedulerconfig_warning_batched_tokens_exceeds_seqs_times_model_len
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_gt
+  native_field: max_num_batched_tokens
+  predicate_value: '@(max_num_seqs * max_model_len)'
+  message_template: 'max_num_batched_tokens (%d) exceeds max_num_seqs * max_model_len (%d). This may lead to unexpected behavior.'
+  kwargs_positive: {max_num_batched_tokens: 999999, max_num_seqs: 1, max_model_len: 10}
+  kwargs_negative: {max_num_batched_tokens: 10, max_num_seqs: 1, max_model_len: 10}
+  source: {file: vllm/config/scheduler.py, line: 281, qualname: 'SchedulerConfig.verify_max_model_len'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1.
+
+- id: vllm_schedulerconfig_raises_partial_prefills_requires_chunked_prefill
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_combo
+  native_field: max_num_partial_prefills
+  predicate_value: 'max_num_partial_prefills > 1 AND not enable_chunked_prefill'
+  message_template: 'Chunked prefill must be enabled to set max_num_partial_prefills > 1.'
+  kwargs_positive: {max_num_partial_prefills: 2, enable_chunked_prefill: false}
+  kwargs_negative: {max_num_partial_prefills: 2, enable_chunked_prefill: true}
+  source: {file: vllm/config/scheduler.py, line: 289, qualname: 'SchedulerConfig.verify_max_model_len'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:1608).
+
+- id: vllm_schedulerconfig_raises_long_prefill_token_threshold_gt_ref_max_model_len
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_gt
+  native_field: long_prefill_token_threshold
+  predicate_value: '@max_model_len (only when max_num_partial_prefills > 1)'
+  message_template: 'long_prefill_token_threshold ({long_prefill_token_threshold}) cannot be greater than the max_model_len ({max_model_len}).'
+  kwargs_positive: {max_num_partial_prefills: 2, long_prefill_token_threshold: 99999, max_model_len: 1024, enable_chunked_prefill: true}
+  kwargs_negative: {max_num_partial_prefills: 2, long_prefill_token_threshold: 100, max_model_len: 1024, enable_chunked_prefill: true}
+  source: {file: vllm/config/scheduler.py, line: 295, qualname: 'SchedulerConfig.verify_max_model_len'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:1612).
+
+- id: vllm_schedulerconfig_raises_max_long_partial_prefills_gt_max_num_partial_prefills
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_gt
+  native_field: max_long_partial_prefills
+  predicate_value: '@max_num_partial_prefills'
+  message_template: 'self.max_long_partial_prefills must be less than or equal to self.max_num_partial_prefills.'
+  kwargs_positive: {max_num_partial_prefills: 2, max_long_partial_prefills: 3}
+  kwargs_negative: {max_num_partial_prefills: 2, max_long_partial_prefills: 2}
+  source: {file: vllm/config/scheduler.py, line: 302, qualname: 'SchedulerConfig.verify_max_model_len'}
+  in_baseline: false
+  delta_v073: CHANGED - v0.7.3 enforced the full band 1 <= x <= max_num_partial_prefills; v0.19.1 only checks
+    the upper bound (lower bound now via Field(ge=1) on the field).
+
+- id: vllm_schedulerconfig_field_constraints_ge
+  severity: error
+  outcome: error
+  exception_type: pydantic.ValidationError
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: ge
+  native_field: '[max_num_batched_tokens(ge=1), max_num_seqs(ge=1), max_num_partial_prefills(ge=1), max_long_partial_prefills(ge=1), stream_interval(ge=1)]'
+  predicate_value: 1
+  message_template: 'pydantic Field(ge=1) on each listed field'
+  kwargs_positive: {max_num_seqs: 0}
+  kwargs_negative: {max_num_seqs: 1}
+  source: {file: vllm/config/scheduler.py, line: 48, qualname: 'SchedulerConfig (Field declarations)'}
+  in_baseline: true
+  delta_v073: CHANGED mechanism - several lower-bound raises (num_scheduler_steps>=1, max_num_partial_prefills>=1)
+    are now declarative Field(ge=1). num_scheduler_steps / num_lookahead_slots FIELDS REMOVED in v0.19.1.
+
+# ============================================================================
+# SpeculativeConfig (vllm/config/speculative.py) - GREW; @model_validator
+# ============================================================================
+
+- id: vllm_speculativeconfig_raises_tensor_parallel_size_set
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: is_not_none
+  native_field: tensor_parallel_size
+  predicate_value: 'tensor_parallel_size is not None'
+  message_template: "'tensor_parallel_size' is not a valid argument in the speculative_config. Please pass 'draft_tensor_parallel_size' instead."
+  kwargs_positive: {tensor_parallel_size: 2}
+  kwargs_negative: {draft_tensor_parallel_size: 2}
+  source: {file: vllm/config/speculative.py, line: 772, qualname: 'SpeculativeConfig._verify_args'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 - new guard steering callers to draft_tensor_parallel_size.
+
+- id: vllm_speculativeconfig_raises_missing_num_speculative_tokens
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: is_none
+  native_field: num_speculative_tokens
+  predicate_value: null
+  message_template: 'num_speculative_tokens must be provided with speculative model unless the draft model config contains an n_predict parameter.'
+  kwargs_positive: {model: 'draft', num_speculative_tokens: null}
+  kwargs_negative: {model: 'draft', num_speculative_tokens: 1}
+  source: {file: vllm/config/speculative.py, line: 778, qualname: 'SpeculativeConfig._verify_args'}
+  in_baseline: true
+  delta_v073: UNCHANGED predicate (was config.py:1909).
+
+- id: vllm_speculativeconfig_raises_num_speculative_tokens_le_0
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: le
+  native_field: num_speculative_tokens
+  predicate_value: 0
+  message_template: 'Expected num_speculative_tokens to be greater than zero ({num_speculative_tokens}).'
+  kwargs_positive: {num_speculative_tokens: 0}
+  kwargs_negative: {num_speculative_tokens: 1}
+  source: {file: vllm/config/speculative.py, line: 784, qualname: 'SpeculativeConfig._verify_args'}
+  in_baseline: true
+  delta_v073: UNCHANGED predicate (was config.py:2098). Also declaratively Field(gt=0) at line 71.
+
+- id: vllm_speculativeconfig_raises_draft_max_model_len_override
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: cross_field_gt
+  native_field: max_model_len
+  predicate_value: '@draft_max_model_len or @target_max_model_len'
+  message_template: 'speculative_max_model_len cannot be larger than draft/target max_model_len'
+  kwargs_positive: {max_model_len: 999999}
+  kwargs_negative: {max_model_len: 1024}
+  source: {file: vllm/config/speculative.py, line: 677, qualname: 'SpeculativeConfig._maybe_override_draft_max_model_len'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:1959).
+
+- id: vllm_speculativeconfig_raises_draft_tp_not_1_or_target
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: not_in
+  native_field: draft_tensor_parallel_size
+  predicate_value: '[1, @target_tensor_parallel_size]'
+  message_template: 'speculative_draft_tensor_parallel_size cannot be other value than 1 or target model tensor_parallel_size'
+  kwargs_positive: {draft_tensor_parallel_size: 3, target_tp: 2}
+  kwargs_negative: {draft_tensor_parallel_size: 1, target_tp: 2}
+  source: {file: vllm/config/speculative.py, line: 724, qualname: 'SpeculativeConfig._verify_and_get_draft_tp'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:1997).
+
+- id: vllm_speculativeconfig_raises_unequal_vocab_size_draft_model
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: cross_config_combo
+  native_field: draft_model_config.vocab_size
+  predicate_value: 'method==draft_model AND target_vocab_size != draft_vocab_size'
+  message_template: 'Target and draft model should have the same vocabulary size.'
+  kwargs_positive: {method: draft_model, draft_model: 'mismatched-vocab'}
+  kwargs_negative: {method: draft_model, draft_model: 'matched-vocab'}
+  source: {file: vllm/config/speculative.py, line: 835, qualname: 'SpeculativeConfig.verify_equal_vocab_size_if_draft_model'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1.
+
+# NOTE: SpeculativeConfig was RESTRUCTURED. v0.7.3 fields ngram_prompt_lookup_max/min are now
+# prompt_lookup_max/min (RENAMED, declarative Field(ge=1)); spec_decoding_acceptance_method / typical_acceptance_*
+# are GONE, replaced by rejection_sample_method Literal['strict',...] + synthetic_acceptance_rate. New suffix-decoding
+# fields (suffix_decoding_max_tree_depth, ...) with _validate_suffix_decoding raises. method= Literal replaces
+# speculative_model string sentinels. Net: config grew from ~13 to 28 fields. See version_delta.md.
+
+# ============================================================================
+# KVTransferConfig (vllm/config/kv_transfer.py)
+# ============================================================================
+
+- id: vllm_kvtransferconfig_raises_unknown_kv_role
+  severity: error
+  outcome: error
+  native_type: vllm.config.KVTransferConfig
+  predicate_kind: not_in
+  native_field: kv_role
+  predicate_value: ['kv_producer', 'kv_consumer', 'kv_both', null]
+  message_template: 'Unsupported kv_role: {kv_role}. Supported roles are {get_args(KVRole)}'
+  kwargs_positive: {kv_role: invalid_role}
+  kwargs_negative: {kv_role: kv_producer}
+  source: {file: vllm/config/kv_transfer.py, line: 98, qualname: 'KVTransferConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:2737, then model_post_init; now plain __post_init__ as pydantic dataclass).
+
+- id: vllm_kvtransferconfig_raises_connector_without_role
+  severity: error
+  outcome: error
+  native_type: vllm.config.KVTransferConfig
+  predicate_kind: cross_field_combo
+  native_field: kv_role
+  predicate_value: 'kv_connector is not None AND kv_role is None'
+  message_template: 'Please specify kv_role when kv_connector is set, supported roles are {get_args(KVRole)}'
+  kwargs_positive: {kv_connector: PyNcclConnector, kv_role: null}
+  kwargs_negative: {kv_connector: PyNcclConnector, kv_role: kv_producer}
+  source: {file: vllm/config/kv_transfer.py, line: 103, qualname: 'KVTransferConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:2745).
+
+# ============================================================================
+# ECTransferConfig - NEW class, mirrors KVTransferConfig (embedding-cache transfer)
+# ============================================================================
+
+- id: vllm_ectransferconfig_raises_unknown_ec_role
+  severity: error
+  outcome: error
+  native_type: vllm.config.ECTransferConfig
+  predicate_kind: not_in
+  native_field: ec_role
+  predicate_value: '@get_args(ECRole)'
+  message_template: 'Unsupported ec_role: {ec_role}. ...'
+  kwargs_positive: {ec_role: invalid_role}
+  kwargs_negative: {ec_role: ec_producer}
+  source: {file: vllm/config/ec_transfer.py, line: 83, qualname: 'ECTransferConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED (entire class new in v0.19.1).
+
+- id: vllm_ectransferconfig_raises_connector_without_role
+  severity: error
+  outcome: error
+  native_type: vllm.config.ECTransferConfig
+  predicate_kind: cross_field_combo
+  native_field: ec_role
+  predicate_value: 'ec_connector is not None AND ec_role is None'
+  message_template: 'Please specify ec_role when ec_connector is set ...'
+  kwargs_positive: {ec_connector: SomeConnector, ec_role: null}
+  kwargs_negative: {ec_connector: SomeConnector, ec_role: ec_producer}
+  source: {file: vllm/config/ec_transfer.py, line: 89, qualname: 'ECTransferConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED (new class).
+
+# ============================================================================
+# StructuredOutputsConfig (RENAMED from DecodingConfig) - vllm/config/structured_outputs.py
+# ============================================================================
+
+- id: vllm_structuredoutputsconfig_raises_disable_whitespace_unsupported_backend
+  severity: error
+  outcome: error
+  native_type: vllm.config.StructuredOutputsConfig
+  predicate_kind: cross_field_combo
+  native_field: disable_any_whitespace
+  predicate_value: "disable_any_whitespace AND backend not in {xgrammar, guidance}"
+  message_template: 'disable_any_whitespace is only supported for xgrammar and guidance backends.'
+  kwargs_positive: {disable_any_whitespace: true, backend: outlines}
+  kwargs_negative: {disable_any_whitespace: true, backend: xgrammar}
+  source: {file: vllm/config/structured_outputs.py, line: 65, qualname: 'StructuredOutputsConfig._validate_structured_output_config'}
+  in_baseline: false
+  delta_v073: ADDED. DecodingConfig (v0.7.3) was a single guided_decoding_backend enum field; v0.19.1
+    StructuredOutputsConfig adds disable_any_whitespace / disable_additional_properties with backend-compat
+    cross-checks. The bare unknown-backend enum raise is now declarative (StructuredOutputsBackend Literal).
+
+- id: vllm_structuredoutputsconfig_raises_disable_additional_props_unsupported_backend
+  severity: error
+  outcome: error
+  native_type: vllm.config.StructuredOutputsConfig
+  predicate_kind: cross_field_combo
+  native_field: disable_additional_properties
+  predicate_value: "disable_additional_properties AND backend != 'guidance'"
+  message_template: 'disable_additional_properties is only supported for the guidance backend.'
+  kwargs_positive: {disable_additional_properties: true, backend: xgrammar}
+  kwargs_negative: {disable_additional_properties: true, backend: guidance}
+  source: {file: vllm/config/structured_outputs.py, line: 69, qualname: 'StructuredOutputsConfig._validate_structured_output_config'}
+  in_baseline: false
+  delta_v073: ADDED.
+
+# ============================================================================
+# ObservabilityConfig (vllm/config/observability.py)
+# ============================================================================
+
+- id: vllm_observabilityconfig_raises_otlp_without_opentelemetry
+  severity: error
+  outcome: error
+  native_type: vllm.config.ObservabilityConfig
+  predicate_kind: cross_runtime_combo
+  native_field: otlp_traces_endpoint
+  predicate_value: 'otlp_traces_endpoint set AND not is_tracing_available()'
+  message_template: 'OpenTelemetry is not available. Unable to configure otlp_traces_endpoint. ...'
+  kwargs_positive: {otlp_traces_endpoint: 'http://collector:4317', env_no_opentelemetry: true}
+  kwargs_negative: {otlp_traces_endpoint: null}
+  source: {file: vllm/config/observability.py, line: 128, qualname: 'ObservabilityConfig._validate_otlp_traces_endpoint'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:2672); now a @field_validator.
+
+- id: vllm_observabilityconfig_raises_detailed_traces_without_endpoint
+  severity: error
+  outcome: error
+  native_type: vllm.config.ObservabilityConfig
+  predicate_kind: cross_field_combo
+  native_field: collect_detailed_traces
+  predicate_value: 'collect_detailed_traces set AND not otlp_traces_endpoint'
+  message_template: 'collect_detailed_traces requires --otlp-traces-endpoint to be set.'
+  kwargs_positive: {collect_detailed_traces: [all], otlp_traces_endpoint: null}
+  kwargs_negative: {collect_detailed_traces: [all], otlp_traces_endpoint: 'http://c:4317'}
+  source: {file: vllm/config/observability.py, line: 149, qualname: 'ObservabilityConfig._validate_tracing_config'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1.
+
+# ============================================================================
+# OffloadConfig - NEW class (absorbs v0.7.3 cpu_offload_gb / swap_space)
+# ============================================================================
+
+- id: vllm_offloadconfig_raises_num_in_group_gt_group_size
+  severity: error
+  outcome: error
+  native_type: vllm.config.OffloadConfig
+  predicate_kind: cross_field_gt
+  native_field: prefetch.offload_num_in_group
+  predicate_value: '@prefetch.offload_group_size'
+  message_template: 'offload_num_in_group ({n}) must be <= offload_group_size ({g})'
+  kwargs_positive: {offload_backend: prefetch, offload_group_size: 2, offload_num_in_group: 5}
+  kwargs_negative: {offload_backend: prefetch, offload_group_size: 5, offload_num_in_group: 2}
+  source: {file: vllm/config/offload.py, line: 101, qualname: 'OffloadConfig.validate_offload_config'}
+  in_baseline: false
+  delta_v073: ADDED (new class).
+
+# ============================================================================
+# CompilationConfig (vllm/config/compilation.py)
+# ============================================================================
+
+- id: vllm_compilationconfig_assertion_custom_ops_none_and_all
+  severity: error
+  outcome: error
+  exception_type: AssertionError
+  native_type: vllm.config.CompilationConfig
+  predicate_kind: cross_field_combo
+  native_field: custom_ops
+  predicate_value: "custom_ops.count('none') + custom_ops.count('all') > 1"
+  message_template: "Can only specify 'none' or 'all'"
+  kwargs_positive: {custom_ops: ['none', 'all']}
+  kwargs_negative: {custom_ops: ['none']}
+  source: {file: vllm/config/compilation.py, line: 848, qualname: 'CompilationConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:2985).
+
+- id: vllm_compilationconfig_raises_invalid_mode
+  severity: error
+  outcome: error
+  native_type: vllm.config.CompilationConfig
+  predicate_kind: not_in
+  native_field: mode
+  predicate_value: '@CompilationMode (IntEnum NONE/STOCK_TORCH_COMPILE/DYNAMO_TRACE_ONCE/VLLM_COMPILE)'
+  message_template: 'validate_mode_before rejects out-of-range mode'
+  kwargs_positive: {mode: 99}
+  kwargs_negative: {mode: 0}
+  source: {file: vllm/config/compilation.py, line: 796, qualname: 'CompilationConfig.validate_mode_before'}
+  in_baseline: false
+  delta_v073: CHANGED - v0.7.3 had an integer `level` enum {0,1,2,3} (NO_COMPILATION..PIECEWISE); v0.19.1
+    renamed level -> mode with a new CompilationMode IntEnum and a separate CUDAGraphMode enum. Pure rename+split.
+
+# ============================================================================
+# VllmConfig.__post_init__ (vllm/config/vllm.py) - top-level silent normalisations
+# (TASK ITEM 7 - the v0.7.3 MLA/LoRA/cpu_offload overrides)
+# ============================================================================
+
+- id: vllm_vllmconfig_warning_enforce_eager_disables_compile_and_cudagraph
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.VllmConfig
+  predicate_kind: model_property_check
+  native_field: compilation_config.mode
+  predicate_value: 'model_config.enforce_eager is True'
+  message_template: 'Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none'
+  silent_normalisation:
+    fields: [compilation_config.mode, compilation_config.cudagraph_mode]
+    declared: 'user value'
+    observed: 'CompilationMode.NONE / CUDAGraphMode.NONE'
+  kwargs_positive: {enforce_eager: true}
+  kwargs_negative: {enforce_eager: false}
+  source: {file: vllm/config/vllm.py, line: 847, qualname: 'VllmConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED/REPLACED - this is the v0.19.1 mechanism that silently disables torch.compile. In v0.7.3 the
+    silent-disable triggers were LoRA-present and cpu_offload>0 (config.py:3319/3311); those two are GONE.
+    v0.19.1 instead funnels through enforce_eager -> mode=NONE.
+
+- id: vllm_vllmconfig_warning_cudagraph_mode_incompatible_with_compile_mode
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.info
+  native_type: vllm.config.VllmConfig
+  predicate_kind: cross_subconfig_combo
+  native_field: compilation_config.cudagraph_mode
+  predicate_value: 'cudagraph_mode.requires_piecewise_compilation() AND mode != VLLM_COMPILE'
+  message_template: 'Cudagraph mode %s is not compatible with compilation mode %s. Overriding to NONE.'
+  silent_normalisation: {field: compilation_config.cudagraph_mode, declared: 'piecewise-requiring', observed: 'CUDAGraphMode.NONE'}
+  kwargs_positive: {cudagraph_mode: PIECEWISE, compilation_mode: NONE}
+  kwargs_negative: {cudagraph_mode: PIECEWISE, compilation_mode: VLLM_COMPILE}
+  source: {file: vllm/config/vllm.py, line: 907, qualname: 'VllmConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 (cudagraph_mode is a new concept).
+
+- id: vllm_vllmconfig_warning_sequence_parallelism_requires_tp_gt_1
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.VllmConfig
+  predicate_kind: cross_subconfig_combo
+  native_field: compilation_config.pass_config.enable_sp
+  predicate_value: 'enable_sp AND tensor_parallel_size == 1'
+  message_template: 'Sequence Parallelism requires TP>1, disabling'
+  silent_normalisation: {fields: [pass_config.enable_sp, pass_config.fuse_gemm_comms], declared: true, observed: false}
+  kwargs_positive: {enable_sp: true, tensor_parallel_size: 1}
+  kwargs_negative: {enable_sp: true, tensor_parallel_size: 2}
+  source: {file: vllm/config/vllm.py, line: 925, qualname: 'VllmConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1.
+
+- id: vllm_vllmconfig_raises_torch_shm_requires_spawn
+  severity: error
+  outcome: error
+  native_type: vllm.config.VllmConfig
+  predicate_kind: env_var_combo
+  native_field: model_config.multimodal_config.mm_tensor_ipc
+  predicate_value: "mm_tensor_ipc == 'torch_shm' AND VLLM_WORKER_MULTIPROC_METHOD != 'spawn'"
+  message_template: 'torch_shm is known to fail without VLLM_WORKER_MULTIPROC_METHOD set to spawn'
+  kwargs_positive: {mm_tensor_ipc: torch_shm, env_VLLM_WORKER_MULTIPROC_METHOD: fork}
+  kwargs_negative: {mm_tensor_ipc: torch_shm, env_VLLM_WORKER_MULTIPROC_METHOD: spawn}
+  source: {file: vllm/config/vllm.py, line: 828, qualname: 'VllmConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 (env-var-gated).
+
+# ============================================================================
+# ModelConfig (vllm/config/model.py)
+# ============================================================================
+
+- id: vllm_modelconfig_raises_sleep_mode_unsupported_platform
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: platform_combo
+  native_field: enable_sleep_mode
+  predicate_value: 'enable_sleep_mode AND not current_platform.is_sleep_mode_available()'
+  message_template: 'Sleep mode is not supported on current platform.'
+  kwargs_positive: {enable_sleep_mode: true}
+  kwargs_negative: {enable_sleep_mode: false}
+  source: {file: vllm/config/model.py, line: 488, qualname: 'ModelConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: CHANGED - v0.7.3 gated on `not current_platform.is_cuda()` (CUDA-only, config.py:301);
+    v0.19.1 gates on the broader is_sleep_mode_available() platform predicate.
+
+- id: vllm_modelconfig_raises_unknown_quantization_method
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: not_in
+  native_field: quantization
+  predicate_value: '@QUANTIZATION_METHODS (24 methods at v0.19.1)'
+  message_template: 'Unknown quantization method: {quantization}. Must be one of {supported_quantization}.'
+  kwargs_positive: {quantization: invalid_quant}
+  kwargs_negative: {quantization: null}
+  source: {file: vllm/config/model.py, line: 998, qualname: 'ModelConfig._verify_quantization'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:620); the method list grew (13->24, see version_delta.md).
+
+- id: vllm_modelconfig_raises_quantization_method_mismatch
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_combo
+  native_field: quantization
+  predicate_value: 'user quantization != hf_config quant_method (both set)'
+  message_template: 'Quantization method specified in the model config ({quant_method}) does not match the quantization method specified in the quantization argument ({self.quantization}).'
+  kwargs_positive: 'quantization=awq with model whose quant_method=gptq'
+  kwargs_negative: 'quantization=awq with model whose quant_method=awq'
+  source: {file: vllm/config/model.py, line: 988, qualname: 'ModelConfig._verify_quantization'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:613).
+
+- id: vllm_modelconfig_raises_deprecated_quantization_method
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: in
+  native_field: quantization
+  predicate_value: '@DEPRECATED_QUANTIZATION_METHODS (tpu_int8, fbgemm_fp8, fp_quant, experts_int8, petit_nvfp4)'
+  message_template: 'The quantization method %s is deprecated and will be removed in future versions of vLLM. To bypass, set --allow-deprecated-quantization.'
+  kwargs_positive: {quantization: fbgemm_fp8, allow_deprecated_quantization: false}
+  kwargs_negative: {quantization: fbgemm_fp8, allow_deprecated_quantization: true}
+  source: {file: vllm/config/model.py, line: 1012, qualname: 'ModelConfig._verify_quantization'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 - new deprecated-quant gate (with allow_deprecated_quantization escape hatch).
+
+- id: vllm_modelconfig_warning_cuda_graph_disabled_for_bnb_8bit
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_combo
+  native_field: enforce_eager
+  predicate_value: "quantization=='bitsandbytes' AND load_in_8bit AND not enforce_eager"
+  message_template: 'CUDA graph is not supported on BitsAndBytes 8bit yet, fallback to the eager mode.'
+  silent_normalisation: {field: enforce_eager, declared: false, observed: true}
+  kwargs_positive: {quantization: bitsandbytes, model: load_in_8bit_model, enforce_eager: false}
+  kwargs_negative: {quantization: bitsandbytes, model: load_in_8bit_model, enforce_eager: true}
+  source: {file: vllm/config/model.py, line: 1051, qualname: 'ModelConfig._verify_bnb_config'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:658).
+
+- id: vllm_modelconfig_warning_cuda_graph_disabled_encoder_decoder_rocm
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: platform_combo
+  native_field: enforce_eager
+  predicate_value: 'is_encoder_decoder AND not enforce_eager AND current_platform.is_rocm()'
+  message_template: 'CUDA graph is not supported for %s on ROCm yet, fallback to eager mode.'
+  silent_normalisation: {field: enforce_eager, declared: false, observed: true}
+  kwargs_positive: {model: encoder_decoder_model, platform: rocm, enforce_eager: false}
+  kwargs_negative: {model: encoder_decoder_model, platform: rocm, enforce_eager: true}
+  source: {file: vllm/config/model.py, line: 1022, qualname: 'ModelConfig._verify_cuda_graph'}
+  in_baseline: false
+  delta_v073: CHANGED - v0.7.3 gated this on model_type=='mllama' (config.py:640); v0.19.1 generalised it to
+    is_encoder_decoder on ROCm.
+
+- id: vllm_modelconfig_raises_attention_head_div_tensor_parallel
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_config_combo
+  native_field: num_attention_heads
+  predicate_value: 'num_attention_heads % tensor_parallel_size != 0'
+  message_template: 'Total number of attention heads must be divisible by tensor parallel size.'
+  kwargs_positive: {tensor_parallel_size: 3, model: llama-32-heads}
+  kwargs_negative: {tensor_parallel_size: 4, model: llama-32-heads}
+  source: {file: vllm/config/model.py, line: 1112, qualname: 'ModelConfig.verify_with_parallel_config'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:716).
+
+- id: vllm_modelconfig_raises_pipeline_parallel_unsupported_model
+  severity: error
+  outcome: error
+  exception_type: NotImplementedError
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_config_combo
+  native_field: pipeline_parallel_size
+  predicate_value: 'pipeline_parallel_size > 1 AND not is_pp_supported'
+  message_template: 'Pipeline parallelism is not supported for this model. ...'
+  kwargs_positive: {pipeline_parallel_size: 2, model: unsupported-pp-model}
+  kwargs_negative: {pipeline_parallel_size: 1, model: any-model}
+  source: {file: vllm/config/model.py, line: 1125, qualname: 'ModelConfig.verify_with_parallel_config'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:726).
+
+- id: vllm_modelconfig_raises_unknown_dtype
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: not_in
+  native_field: dtype
+  predicate_value: '@_STR_DTYPE_TO_TORCH_DTYPE + auto'
+  message_template: 'Unknown dtype: {dtype!r}'
+  kwargs_positive: {dtype: int8}
+  kwargs_negative: {dtype: float16}
+  source: {file: vllm/config/model.py, line: 1998, qualname: '_get_and_verify_dtype'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:2429).
+
+- id: vllm_modelconfig_raises_max_model_len_exceeds_derived
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_gt
+  native_field: max_model_len
+  predicate_value: '@derived_max_model_len (gated by VLLM_ALLOW_LONG_MAX_MODEL_LEN)'
+  message_template: 'User-specified max_model_len is greater than the derived max_model_len ... set VLLM_ALLOW_LONG_MAX_MODEL_LEN=1'
+  kwargs_positive: {max_model_len: 999999, env_VLLM_ALLOW_LONG_MAX_MODEL_LEN: '0'}
+  kwargs_negative: {max_model_len: 999999, env_VLLM_ALLOW_LONG_MAX_MODEL_LEN: '1'}
+  source: {file: vllm/config/model.py, line: 2178, qualname: '_get_and_verify_max_len'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:2576); env-var-gated.
+
+- id: vllm_modelconfig_deprecation_override_attention_dtype_non_rocm
+  severity: warning
+  outcome: warning_emit
+  emission_channel: warnings.warn
+  native_type: vllm.config.ModelConfig
+  predicate_kind: platform_combo
+  native_field: override_attention_dtype
+  predicate_value: 'override_attention_dtype set AND not current_platform.is_rocm()'
+  message_template: 'override-attention-dtype is set but not using ROCm platform'
+  kwargs_positive: {override_attention_dtype: bfloat16, platform: cuda}
+  kwargs_negative: {override_attention_dtype: null}
+  source: {file: vllm/config/model.py, line: 483, qualname: 'ModelConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 (override_attention_dtype is a new field).
+
+# NOTE: v0.7.3 ModelConfig deprecation warnings for rope_scaling / rope_theta are GONE - those EngineArgs
+# fields were removed (use --hf-overrides). tokenizer_mode enum raise is now declarative (TokenizerMode Literal).
+
+# ============================================================================
+# ParallelConfig (vllm/config/parallel.py)
+# ============================================================================
+
+- id: vllm_parallelconfig_raises_nsight_without_ray
+  severity: error
+  outcome: error
+  native_type: vllm.config.ParallelConfig
+  predicate_kind: cross_field_combo
+  native_field: ray_workers_use_nsight
+  predicate_value: 'ray_workers_use_nsight AND not use_ray'
+  message_template: 'Unable to use nsight profiling unless workers run with Ray.'
+  kwargs_positive: {ray_workers_use_nsight: true, distributed_executor_backend: mp}
+  kwargs_negative: {ray_workers_use_nsight: true, distributed_executor_backend: ray}
+  source: {file: vllm/config/parallel.py, line: 798, qualname: 'ParallelConfig._verify_args'}
+  in_baseline: false
+  delta_v073: UNCHANGED predicate (was config.py:1418).
+
+- id: vllm_parallelconfig_raises_eplb_without_expert_parallel
+  severity: error
+  outcome: error
+  native_type: vllm.config.ParallelConfig
+  predicate_kind: cross_field_combo
+  native_field: enable_eplb
+  predicate_value: 'enable_eplb AND not enable_expert_parallel'
+  message_template: 'enable_expert_parallel must be True to use EPLB.'
+  kwargs_positive: {enable_eplb: true, enable_expert_parallel: false}
+  kwargs_negative: {enable_eplb: true, enable_expert_parallel: true}
+  source: {file: vllm/config/parallel.py, line: 370, qualname: 'ParallelConfig._validate_parallel_config'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 (EPLB / expert-parallel new).
+
+- id: vllm_parallelconfig_raises_elastic_ep_without_eplb
+  severity: error
+  outcome: error
+  native_type: vllm.config.ParallelConfig
+  predicate_kind: cross_field_combo
+  native_field: enable_elastic_ep
+  predicate_value: 'enable_elastic_ep AND not enable_eplb'
+  message_template: 'Elastic EP is only supported with enable_eplb=True.'
+  kwargs_positive: {enable_elastic_ep: true, enable_eplb: false}
+  kwargs_negative: {enable_elastic_ep: true, enable_eplb: true}
+  source: {file: vllm/config/parallel.py, line: 644, qualname: 'ParallelConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1.
+
+# ============================================================================
+# Per-platform check_and_update_config (vllm/platforms/*) - TASK ITEM 8
+# ============================================================================
+
+- id: vllm_cpuplatform_silent_mla_disables_chunked_prefill
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.info
+  native_type: vllm.platforms.cpu.CpuPlatform
+  predicate_kind: platform_combo
+  native_field: scheduler_config.enable_chunked_prefill
+  predicate_value: 'current_platform is non-GPU AND model_config.use_mla'
+  message_template: 'MLA is enabled on a non-GPU platform; forcing chunked prefill and prefix caching to be disabled.'
+  silent_normalisation: {field: scheduler_config.enable_chunked_prefill, declared: true, observed: false}
+  kwargs_positive: {platform: cpu, model: deepseek_v2_mla}
+  kwargs_negative: {platform: cuda, model: deepseek_v2_mla}
+  source: {file: vllm/platforms/cpu.py, line: 362, qualname: 'CpuPlatform.check_and_update_config'}
+  in_baseline: false
+  delta_v073: MOVED + NARROWED - in v0.7.3 the "MLA disables chunked_prefill+prefix_caching" silent override
+    lived in VllmConfig.__post_init__ (config.py:3328) and fired on ALL platforms. In v0.19.1 it MOVED into the
+    per-platform check_and_update_config and now fires ONLY on non-GPU platforms (CPU). On CUDA, MLA no longer
+    force-disables prefix caching. This is the single biggest invariant relocation in the bump-pair.
+
+- id: vllm_cpuplatform_raises_chunked_prefill_fp8_kv_cache
+  severity: error
+  outcome: error
+  exception_type: RuntimeError
+  native_type: vllm.platforms.cpu.CpuPlatform
+  predicate_kind: cross_config_combo
+  native_field: cache_config.cache_dtype
+  predicate_value: '(enable_chunked_prefill OR enable_prefix_caching) AND is_quantized_kv_cache(cache_dtype)'
+  message_template: 'Chunked-prefill and prefix-cache on the CPU backend is not compatible with FP8 KV cache.'
+  kwargs_positive: {platform: cpu, enable_chunked_prefill: true, cache_dtype: fp8}
+  kwargs_negative: {platform: cpu, enable_chunked_prefill: true, cache_dtype: auto}
+  source: {file: vllm/platforms/cpu.py, line: 181, qualname: 'CpuPlatform.check_and_update_config'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 (CPU FP8 KV-cache incompatibility).
+
+- id: vllm_cpuplatform_silent_fp8_kv_cache_fallback
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.platforms.cpu.CpuPlatform
+  predicate_kind: platform_combo
+  native_field: cache_config.cache_dtype
+  predicate_value: "platform is CPU AND cache_dtype.startswith('fp8')"
+  message_template: "CPU backend doesn't support KV cache quantization fallback to auto."
+  silent_normalisation: {field: cache_config.cache_dtype, declared: fp8, observed: auto}
+  kwargs_positive: {platform: cpu, cache_dtype: fp8_e4m3}
+  kwargs_negative: {platform: cpu, cache_dtype: auto}
+  source: {file: vllm/platforms/cpu.py, line: 186, qualname: 'CpuPlatform.check_and_update_config'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1.
+
+- id: vllm_cudaplatform_silent_disable_chunked_mm_input_prefix_lm
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.platforms.cuda.CudaPlatformBase
+  predicate_kind: cross_config_combo
+  native_field: scheduler_config.disable_chunked_mm_input
+  predicate_value: 'is_mm_prefix_lm AND is_multimodal_model AND not disable_chunked_mm_input'
+  message_template: 'Forcing --disable_chunked_mm_input for models with multimodal-bidirectional attention.'
+  silent_normalisation: {field: scheduler_config.disable_chunked_mm_input, declared: false, observed: true}
+  kwargs_positive: {platform: cuda, model: mm-prefix-lm}
+  kwargs_negative: {platform: cuda, model: text-only}
+  source: {file: vllm/platforms/cuda.py, line: 199, qualname: 'CudaPlatformBase.check_and_update_config'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1.
+
+- id: vllm_xpuplatform_silent_disable_cudagraph_no_xpu_graph
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.platforms.xpu.XPUPlatform
+  predicate_kind: platform_combo
+  native_field: compilation_config.cudagraph_mode
+  predicate_value: 'platform is XPU AND (not supports_xpu_graph() OR not VLLM_XPU_ENABLE_XPU_GRAPH OR world_size_across_dp > 1)'
+  message_template: 'XPU Graph is not supported / disabled, disabling cudagraph_mode.'
+  silent_normalisation: {field: compilation_config.cudagraph_mode, declared: user, observed: CUDAGraphMode.NONE}
+  kwargs_positive: {platform: xpu, env_VLLM_XPU_ENABLE_XPU_GRAPH: '0'}
+  kwargs_negative: {platform: xpu, env_VLLM_XPU_ENABLE_XPU_GRAPH: '1'}
+  source: {file: vllm/platforms/xpu.py, line: 180, qualname: 'XPUPlatform.check_and_update_config'}
+  in_baseline: false
+  delta_v073: ADDED in v0.19.1 (XPU platform support).
+
+# ============================================================================
+# PoolerConfig (vllm/config/pooler.py) - out of LLEM text-gen scope, enumerated for completeness
+# ============================================================================
+
+- id: vllm_poolerconfig_raises_both_pooling_type_and_seq_pooling_type
+  severity: error
+  outcome: error
+  native_type: vllm.config.PoolerConfig
+  predicate_kind: mutually_exclusive
+  native_field: '[pooling_type, seq_pooling_type]'
+  predicate_value: 'pooling_type set AND seq_pooling_type set'
+  message_template: 'Cannot set both `pooling_type` and `seq_pooling_type`'
+  kwargs_positive: {pooling_type: MEAN, seq_pooling_type: MEAN}
+  kwargs_negative: {pooling_type: MEAN}
+  source: {file: vllm/config/pooler.py, line: 103, qualname: 'PoolerConfig.__post_init__'}
+  in_baseline: false
+  delta_v073: ADDED (PoolerConfig grew from 5 to 11 fields; seq/tok pooling-type split is new). Out of LLEM scope.

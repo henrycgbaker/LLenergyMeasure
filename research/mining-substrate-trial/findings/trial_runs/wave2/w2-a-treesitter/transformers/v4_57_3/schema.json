@@ -2,7 +2,412 @@
   "schema_version": "2.0.0",
   "engine": "transformers",
   "engine_version": "4.57.3",
-  "discovered_at": "2026-06-04T22:01:06.277887+00:00",
-  "engine_params": {},
-  "sampling_params": {}
+  "discovered_at": "2026-06-05T01:13:19.600379+00:00",
+  "engine_params": {
+    "config_class": {
+      "default": null
+    },
+    "base_model_prefix": {
+      "default": ""
+    },
+    "main_input_name": {
+      "default": "input_ids"
+    },
+    "model_tags": {
+      "default": null
+    },
+    "is_parallelizable": {
+      "default": false
+    },
+    "supports_gradient_checkpointing": {
+      "default": false
+    },
+    "config": {
+      "type": {
+        "description": "Upstream type: PretrainedConfig"
+      }
+    },
+    "load_in_8bit": {
+      "default": false
+    },
+    "load_in_4bit": {
+      "default": false
+    },
+    "llm_int8_threshold": {
+      "default": 6.0
+    },
+    "llm_int8_skip_modules": {
+      "default": null
+    },
+    "llm_int8_enable_fp32_cpu_offload": {
+      "default": false
+    },
+    "llm_int8_has_fp16_weight": {
+      "default": false
+    },
+    "bnb_4bit_compute_dtype": {
+      "default": null
+    },
+    "bnb_4bit_quant_type": {
+      "default": "fp4"
+    },
+    "bnb_4bit_use_double_quant": {
+      "default": false
+    },
+    "bnb_4bit_quant_storage": {
+      "default": null
+    },
+    "pretrained_model_name_or_path": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, os.PathLike]] | None"
+      }
+    },
+    "cache_dir": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, os.PathLike]] | None"
+      },
+      "default": null
+    },
+    "ignore_mismatched_sizes": {
+      "type": "boolean",
+      "default": false
+    },
+    "force_download": {
+      "type": "boolean",
+      "default": false
+    },
+    "local_files_only": {
+      "type": "boolean",
+      "default": false
+    },
+    "token": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, bool]] | None"
+      },
+      "default": null
+    },
+    "revision": {
+      "type": "string",
+      "default": "main"
+    },
+    "use_safetensors": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "weights_only": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "sampling_params": {
+    "extra_output_flags": {
+      "default": "(\"output_attentions\", \"output_hidden_states\", \"output_scores\", \"output_logits\")"
+    },
+    "max_length": {
+      "default": 20,
+      "x-source": "kwargs_pop"
+    },
+    "max_new_tokens": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "min_length": {
+      "default": 0,
+      "x-source": "kwargs_pop"
+    },
+    "min_new_tokens": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "early_stopping": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "max_time": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "stop_strings": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "do_sample": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "num_beams": {
+      "default": 1,
+      "x-source": "kwargs_pop"
+    },
+    "use_cache": {
+      "default": true,
+      "x-source": "kwargs_pop"
+    },
+    "cache_implementation": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "cache_config": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "return_legacy_cache": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "prefill_chunk_size": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "temperature": {
+      "default": 1.0,
+      "x-source": "kwargs_pop"
+    },
+    "top_k": {
+      "default": 50,
+      "x-source": "kwargs_pop"
+    },
+    "top_p": {
+      "default": 1.0,
+      "x-source": "kwargs_pop"
+    },
+    "min_p": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "typical_p": {
+      "default": 1.0,
+      "x-source": "kwargs_pop"
+    },
+    "epsilon_cutoff": {
+      "default": 0.0,
+      "x-source": "kwargs_pop"
+    },
+    "eta_cutoff": {
+      "default": 0.0,
+      "x-source": "kwargs_pop"
+    },
+    "repetition_penalty": {
+      "default": 1.0,
+      "x-source": "kwargs_pop"
+    },
+    "encoder_repetition_penalty": {
+      "default": 1.0,
+      "x-source": "kwargs_pop"
+    },
+    "length_penalty": {
+      "default": 1.0,
+      "x-source": "kwargs_pop"
+    },
+    "no_repeat_ngram_size": {
+      "default": 0,
+      "x-source": "kwargs_pop"
+    },
+    "bad_words_ids": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "renormalize_logits": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "forced_bos_token_id": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "forced_eos_token_id": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "remove_invalid_values": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "exponential_decay_length_penalty": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "suppress_tokens": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "begin_suppress_tokens": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "sequence_bias": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "token_healing": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "guidance_scale": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "num_return_sequences": {
+      "default": 1,
+      "x-source": "kwargs_pop"
+    },
+    "output_attentions": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "output_hidden_states": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "output_scores": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "output_logits": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "return_dict_in_generate": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "pad_token_id": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "bos_token_id": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "eos_token_id": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "encoder_no_repeat_ngram_size": {
+      "default": 0,
+      "x-source": "kwargs_pop"
+    },
+    "decoder_start_token_id": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "num_assistant_tokens": {
+      "default": 20,
+      "x-source": "kwargs_pop"
+    },
+    "num_assistant_tokens_schedule": {
+      "default": "constant",
+      "x-source": "kwargs_pop"
+    },
+    "assistant_confidence_threshold": {
+      "default": 0.4,
+      "x-source": "kwargs_pop"
+    },
+    "prompt_lookup_num_tokens": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "max_matching_ngram_size": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "assistant_early_exit": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "assistant_lookbehind": {
+      "default": 10,
+      "x-source": "kwargs_pop"
+    },
+    "target_lookbehind": {
+      "default": 10,
+      "x-source": "kwargs_pop"
+    },
+    "compile_config": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "disable_compile": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "low_memory": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "penalty_alpha": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "dola_layers": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "diversity_penalty": {
+      "default": 0.0,
+      "x-source": "kwargs_pop"
+    },
+    "num_beam_groups": {
+      "default": 1,
+      "x-source": "kwargs_pop"
+    },
+    "constraints": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "force_words_ids": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "_from_model_config": {
+      "default": false,
+      "x-source": "kwargs_pop"
+    },
+    "_commit_hash": {
+      "default": null,
+      "x-source": "kwargs_pop"
+    },
+    "transformers_version": {
+      "default": "__version__",
+      "x-source": "kwargs_pop"
+    }
+  },
+  "$defs": {
+    "CompileConfig": {
+      "type": "object",
+      "properties": {
+        "fullgraph": {
+          "type": "boolean",
+          "default": false
+        },
+        "dynamic": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "backend": {
+          "type": {
+            "description": "Upstream type: Union[str, Callable]"
+          },
+          "default": "inductor"
+        },
+        "mode": {
+          "type": "string",
+          "default": "reduce-overhead"
+        },
+        "options": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    }
+  }
 }

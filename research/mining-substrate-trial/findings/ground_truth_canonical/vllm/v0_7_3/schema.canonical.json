@@ -1,0 +1,1031 @@
+{
+  "$defs": {
+    "CacheConfig": {
+      "properties": {
+        "is_attention_free": {
+          "type": "boolean"
+        },
+        "num_cpu_blocks": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "num_gpu_blocks": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sliding_window": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "CompilationConfig": {
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "cache_dir": {
+          "type": "string"
+        },
+        "compile_sizes": {},
+        "cudagraph_capture_sizes": {},
+        "cudagraph_copy_inputs": {
+          "type": "boolean"
+        },
+        "cudagraph_num_of_warmups": {
+          "type": "integer"
+        },
+        "custom_ops": {
+          "type": "array"
+        },
+        "debug_dump_path": {
+          "type": "string"
+        },
+        "inductor_compile_config": {
+          "type": "object"
+        },
+        "inductor_passes": {
+          "type": "object"
+        },
+        "level": {
+          "type": "integer"
+        },
+        "pass_config": {
+          "type": "object"
+        },
+        "splitting_ops": {},
+        "use_cudagraph": {
+          "type": "boolean"
+        },
+        "use_inductor": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "CompilationConfig.PassConfig": {
+      "properties": {
+        "dump_graph_dir": {
+          "type": "string"
+        },
+        "dump_graph_stages": {
+          "type": "array"
+        },
+        "enable_fusion": {
+          "type": "boolean"
+        },
+        "enable_reshape": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "DecodingConfig": {
+      "properties": {
+        "guided_decoding_backend": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "DeviceConfig": {
+      "properties": {
+        "device": {},
+        "device_type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "KVTransferConfig": {
+      "properties": {
+        "kv_buffer_device": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kv_buffer_size": {
+          "type": "number"
+        },
+        "kv_connector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kv_ip": {
+          "type": "string"
+        },
+        "kv_parallel_size": {
+          "type": "integer"
+        },
+        "kv_port": {
+          "type": "integer"
+        },
+        "kv_rank": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "kv_role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LoRAConfig": {
+      "properties": {
+        "bias_enabled": {
+          "type": "boolean"
+        },
+        "fully_sharded_loras": {
+          "type": "boolean"
+        },
+        "long_lora_scaling_factors": {},
+        "lora_dtype": {},
+        "lora_extra_vocab_size": {
+          "type": "integer"
+        },
+        "lora_vocab_padding_size": {
+          "type": "integer"
+        },
+        "max_cpu_loras": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_lora_rank": {
+          "type": "integer"
+        },
+        "max_loras": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "LoadConfig": {
+      "properties": {
+        "download_dir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ignore_patterns": {},
+        "load_format": {},
+        "model_loader_extra_config": {}
+      },
+      "type": "object"
+    },
+    "ModelConfig": {
+      "properties": {
+        "spec_target_max_model_len": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "use_async_output_proc": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "MultiModalConfig": {
+      "properties": {
+        "limit_per_prompt": {
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "ObservabilityConfig": {
+      "properties": {
+        "collect_model_execute_time": {
+          "type": "boolean"
+        },
+        "collect_model_forward_time": {
+          "type": "boolean"
+        },
+        "otlp_traces_endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ParallelConfig": {
+      "properties": {
+        "disable_custom_all_reduce": {
+          "type": "boolean"
+        },
+        "distributed_executor_backend": {},
+        "max_parallel_loading_workers": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pipeline_parallel_size": {
+          "type": "integer"
+        },
+        "placement_group": {},
+        "rank": {
+          "type": "integer"
+        },
+        "ray_workers_use_nsight": {
+          "type": "boolean"
+        },
+        "sd_worker_cls": {
+          "type": "string"
+        },
+        "tensor_parallel_size": {
+          "type": "integer"
+        },
+        "tokenizer_pool_config": {},
+        "worker_cls": {
+          "type": "string"
+        },
+        "world_size": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "PoolerConfig": {
+      "properties": {
+        "normalize": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pooling_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "returned_token_ids": {},
+        "softmax": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "step_tag_id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PromptAdapterConfig": {
+      "properties": {
+        "max_cpu_prompt_adapters": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_prompt_adapter_token": {
+          "type": "integer"
+        },
+        "max_prompt_adapters": {
+          "type": "integer"
+        },
+        "prompt_adapter_dtype": {}
+      },
+      "type": "object"
+    },
+    "SchedulerConfig": {
+      "properties": {
+        "chunked_prefill_enabled": {
+          "type": "boolean"
+        },
+        "delay_factor": {
+          "type": "number"
+        },
+        "enable_chunked_prefill": {
+          "type": "boolean"
+        },
+        "encoder_cache_size": {
+          "type": "integer"
+        },
+        "is_multimodal_model": {
+          "type": "boolean"
+        },
+        "long_prefill_token_threshold": {
+          "type": "integer"
+        },
+        "max_long_partial_prefills": {
+          "type": "integer"
+        },
+        "max_model_len": {
+          "type": "integer"
+        },
+        "max_num_batched_tokens": {
+          "type": "integer"
+        },
+        "max_num_encoder_input_tokens": {
+          "type": "integer"
+        },
+        "max_num_partial_prefills": {
+          "type": "integer"
+        },
+        "max_num_seqs": {
+          "type": "integer"
+        },
+        "multi_step_stream_outputs": {
+          "type": "boolean"
+        },
+        "num_lookahead_slots": {
+          "type": "integer"
+        },
+        "num_scheduler_steps": {
+          "type": "integer"
+        },
+        "policy": {
+          "type": "string"
+        },
+        "preemption_mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runner_type": {
+          "type": "string"
+        },
+        "scheduler_cls": {},
+        "send_delta_data": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "SpeculativeConfig": {
+      "properties": {
+        "disable_log_stats": {
+          "type": "boolean"
+        },
+        "disable_logprobs": {
+          "type": "boolean"
+        },
+        "draft_model_config": {
+          "type": "object"
+        },
+        "draft_parallel_config": {
+          "type": "object"
+        },
+        "draft_token_acceptance_method": {
+          "type": "string"
+        },
+        "ngram_prompt_lookup_max": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ngram_prompt_lookup_min": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "num_speculative_tokens": {
+          "type": "integer"
+        },
+        "speculative_disable_by_batch_size": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "speculative_disable_mqa_scorer": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "typical_acceptance_sampler_posterior_alpha": {
+          "type": "number"
+        },
+        "typical_acceptance_sampler_posterior_threshold": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "TokenizerPoolConfig": {
+      "properties": {
+        "extra_config": {
+          "type": "object"
+        },
+        "pool_size": {
+          "type": "integer"
+        },
+        "pool_type": {}
+      },
+      "type": "object"
+    },
+    "VllmConfig": {
+      "properties": {
+        "additional_config": {},
+        "cache_config": {
+          "type": "object"
+        },
+        "compilation_config": {
+          "type": "object"
+        },
+        "decoding_config": {},
+        "device_config": {
+          "type": "object"
+        },
+        "instance_id": {
+          "type": "string"
+        },
+        "kv_transfer_config": {},
+        "load_config": {
+          "type": "object"
+        },
+        "lora_config": {},
+        "model_config": {
+          "type": "object"
+        },
+        "observability_config": {},
+        "parallel_config": {
+          "type": "object"
+        },
+        "prompt_adapter_config": {},
+        "quant_config": {},
+        "scheduler_config": {
+          "type": "object"
+        },
+        "speculative_config": {}
+      },
+      "type": "object"
+    },
+    "additional_data": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "backend": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "choice": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "grammar": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "json": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "json_object": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "regex": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    },
+    "whitespace_pattern": {
+      "properties": {
+        "source": {}
+      },
+      "type": "object"
+    }
+  },
+  "engine_params": {
+    "additional_config": {},
+    "allowed_local_media_path": {
+      "type": "string"
+    },
+    "block_size": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "calculate_kv_scales": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "code_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "collect_detailed_traces": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "compilation_config": {},
+    "config_format": {
+      "type": "object"
+    },
+    "cpu_offload_gb": {
+      "type": "number"
+    },
+    "device": {
+      "type": "string"
+    },
+    "disable_async_output_proc": {
+      "type": "boolean"
+    },
+    "disable_custom_all_reduce": {
+      "type": "boolean"
+    },
+    "disable_log_stats": {
+      "type": "boolean"
+    },
+    "disable_logprobs_during_spec_decoding": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "disable_mm_preprocessor_cache": {
+      "type": "boolean"
+    },
+    "disable_sliding_window": {
+      "type": "boolean"
+    },
+    "distributed_executor_backend": {},
+    "download_dir": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dtype": {
+      "type": "string"
+    },
+    "enable_chunked_prefill": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "enable_lora": {
+      "type": "boolean"
+    },
+    "enable_lora_bias": {
+      "type": "boolean"
+    },
+    "enable_prefix_caching": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "enable_prompt_adapter": {
+      "type": "boolean"
+    },
+    "enable_sleep_mode": {
+      "type": "boolean"
+    },
+    "enforce_eager": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "fully_sharded_loras": {
+      "type": "boolean"
+    },
+    "generation_config": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "gpu_memory_utilization": {
+      "type": "number"
+    },
+    "guided_decoding_backend": {
+      "type": "string"
+    },
+    "hf_overrides": {},
+    "ignore_patterns": {},
+    "kv_cache_dtype": {
+      "type": "string"
+    },
+    "kv_transfer_config": {},
+    "limit_mm_per_prompt": {},
+    "load_format": {
+      "type": "string"
+    },
+    "logits_processor_pattern": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "long_lora_scaling_factors": {},
+    "long_prefill_token_threshold": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "lora_dtype": {},
+    "lora_extra_vocab_size": {
+      "type": "integer"
+    },
+    "max_cpu_loras": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_logprobs": {
+      "type": "integer"
+    },
+    "max_long_partial_prefills": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_lora_rank": {
+      "type": "integer"
+    },
+    "max_loras": {
+      "type": "integer"
+    },
+    "max_model_len": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_num_batched_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_num_partial_prefills": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_num_seqs": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_parallel_loading_workers": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_prompt_adapter_token": {
+      "type": "integer"
+    },
+    "max_prompt_adapters": {
+      "type": "integer"
+    },
+    "max_seq_len_to_capture": {
+      "type": "integer"
+    },
+    "mm_processor_kwargs": {},
+    "model": {
+      "type": "string"
+    },
+    "model_impl": {
+      "type": "string"
+    },
+    "model_loader_extra_config": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "multi_step_stream_outputs": {
+      "type": "boolean"
+    },
+    "ngram_prompt_lookup_max": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "ngram_prompt_lookup_min": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "num_gpu_blocks_override": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "num_lookahead_slots": {
+      "type": "integer"
+    },
+    "num_scheduler_steps": {
+      "type": "integer"
+    },
+    "num_speculative_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "otlp_traces_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "override_generation_config": {},
+    "override_neuron_config": {},
+    "override_pooler_config": {},
+    "pipeline_parallel_size": {
+      "type": "integer"
+    },
+    "preemption_mode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "qlora_adapter_name_or_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "quantization": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ray_workers_use_nsight": {
+      "type": "boolean"
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "rope_scaling": {},
+    "rope_theta": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "scheduler_cls": {},
+    "scheduler_delay_factor": {
+      "type": "number"
+    },
+    "scheduling_policy": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "served_model_name": {},
+    "skip_tokenizer_init": {
+      "type": "boolean"
+    },
+    "spec_decoding_acceptance_method": {
+      "type": "string"
+    },
+    "speculative_disable_by_batch_size": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "speculative_disable_mqa_scorer": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "speculative_draft_tensor_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "speculative_max_model_len": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "speculative_model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "speculative_model_quantization": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "swap_space": {
+      "type": "number"
+    },
+    "task": {
+      "type": "string"
+    },
+    "tensor_parallel_size": {
+      "type": "integer"
+    },
+    "tokenizer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tokenizer_mode": {
+      "type": "string"
+    },
+    "tokenizer_pool_extra_config": {},
+    "tokenizer_pool_size": {
+      "type": "integer"
+    },
+    "tokenizer_pool_type": {},
+    "tokenizer_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trust_remote_code": {
+      "type": "boolean"
+    },
+    "typical_acceptance_sampler_posterior_alpha": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "typical_acceptance_sampler_posterior_threshold": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "worker_cls": {
+      "type": "string"
+    }
+  },
+  "sampling_params": {
+    "allowed_token_ids": {},
+    "bad_words": {},
+    "beam_width": {
+      "type": "integer"
+    },
+    "best_of": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "detokenize": {
+      "type": "boolean"
+    },
+    "frequency_penalty": {
+      "type": "number"
+    },
+    "guided_decoding": {},
+    "ignore_eos": {
+      "type": "boolean"
+    },
+    "include_stop_str_in_output": {
+      "type": "boolean"
+    },
+    "length_penalty": {
+      "type": "number"
+    },
+    "logit_bias": {},
+    "logits_processors": {
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "max_tokens": {
+      "type": "integer"
+    },
+    "min_p": {
+      "type": "number"
+    },
+    "min_tokens": {
+      "type": "integer"
+    },
+    "n": {
+      "type": "integer"
+    },
+    "output_kind": {
+      "type": "integer"
+    },
+    "output_text_buffer_length": {
+      "type": "integer"
+    },
+    "presence_penalty": {
+      "type": "number"
+    },
+    "prompt_logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "repetition_penalty": {
+      "type": "number"
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "skip_special_tokens": {
+      "type": "boolean"
+    },
+    "spaces_between_special_tokens": {
+      "type": "boolean"
+    },
+    "stop": {},
+    "stop_token_ids": {},
+    "temperature": {
+      "type": "number"
+    },
+    "top_k": {
+      "type": "integer"
+    },
+    "top_p": {
+      "type": "number"
+    },
+    "truncate_prompt_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  }
+}

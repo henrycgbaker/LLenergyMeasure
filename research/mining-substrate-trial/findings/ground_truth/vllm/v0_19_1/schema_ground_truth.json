@@ -1,0 +1,7042 @@
+{
+ "schema_version": "ground_truth/1.0.0",
+ "engine": "vllm",
+ "engine_version": "0.19.1",
+ "engine_git_tag": "v0.19.1",
+ "venv_src_root": "/tmp/trial_vllm_v0_19_1_venv/src/vllm",
+ "established_at": "2026-06-05",
+ "established_by": "human-supervised LLM, vllm 0.19.1 source-walk (subpackage layout)",
+ "methodology_ref": "research/mining-substrate-trial/findings/ground_truth/vllm/v0_19_1/methodology.md",
+ "scope_notes": [
+  "Covers the vLLM v0.19.1 PUBLIC config surface a benchmark caller can plausibly touch.",
+  "STRUCTURAL DELTA vs v0.7.3: the flat vllm/config.py (~3490 LOC) is GONE. v0.19.1 ships a SUBPACKAGE vllm/config/* with one module per concern (model.py, cache.py, parallel.py, scheduler.py, speculative.py, compilation.py, etc.). Qualnames are e.g. vllm.config.model.ModelConfig but the public re-export vllm.config.ModelConfig still resolves (config/__init__.py).",
+  "Config classes are now @config-decorated pydantic dataclasses (vllm.config.utils.config wraps pydantic.dataclasses.dataclass), several with Field(ge=, gt=, le=) declarative constraints captured inline in default_expr. v0.7.3 mixed plain classes / msgspec / pydantic BaseModel.",
+  "EngineArgs is a THIN OVERLAY: field defaults reference subconfig class attributes; the authoritative literal default lives in the subconfig field (subconfigs namespace).",
+  "Fields with citation file/line use 1-based line numbers as displayed by Read tool against /tmp/trial_vllm_v0_19_1_venv/src/vllm/.",
+  "type_annotation is the verbatim source annotation string (ast.unparse); default_expr is the verbatim RHS. Field(...) / get_field(...) / field(...) wrappers are preserved so declarative constraints (ge/gt/le) and init=False markers stay visible.",
+  "engine_envs enumerates every key in vllm.envs.environment_variables (238 keys at v0.19.1, up from 84 at v0.7.3). Runtime control surface outside the dataclass tree; the baseline misses it entirely.",
+  "InitVar fields on ModelConfig (limit_mm_per_prompt, mm_* etc.) are constructor-only shims that forward into the nested MultiModalConfig; flagged via type_annotation starting with InitVar[."
+ ],
+ "namespaces": [
+  "engine_params",
+  "sampling_params",
+  "beam_search_params",
+  "pooling_params",
+  "structured_outputs_params",
+  "repetition_detection_params",
+  "subconfigs",
+  "engine_envs"
+ ],
+ "engine_params": {
+  "_source": {
+   "file": "vllm/engine/arg_utils.py",
+   "qualname": "EngineArgs",
+   "lines_at_scan": "372-638"
+  },
+  "_note": "v0.19.1 EngineArgs is a @dataclass (line 373) that acts as a THIN OVERLAY over the vllm.config.* subpackage. Most field DEFAULTS are class-attribute references to a subconfig (e.g. `model: str = ModelConfig.model`) or `get_field(SubConfig, 'name')` for mutable defaults; a handful are literal (e.g. `enable_lora: bool = False`, `block_size=None`). The authoritative literal default therefore lives in the referenced subconfig field, captured in the `subconfigs` namespace. `default_expr` is the verbatim RHS expression as written in EngineArgs. 185 fields total (v0.7.3 had 103). __post_init__ (line 640) coerces dict->dataclass for compilation_config/attention_config/kernel_config/eplb_config/weight_transfer_config and loads plugins.",
+  "_field_count": 185,
+  "model": {
+   "type_annotation": "str",
+   "default_expr": "ModelConfig.model",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 376
+   }
+  },
+  "enable_return_routed_experts": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.enable_return_routed_experts",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 377
+   }
+  },
+  "model_weights": {
+   "type_annotation": "str",
+   "default_expr": "ModelConfig.model_weights",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 378
+   }
+  },
+  "served_model_name": {
+   "type_annotation": "str | list[str] | None",
+   "default_expr": "ModelConfig.served_model_name",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 379
+   }
+  },
+  "tokenizer": {
+   "type_annotation": "str | None",
+   "default_expr": "ModelConfig.tokenizer",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 380
+   }
+  },
+  "hf_config_path": {
+   "type_annotation": "str | None",
+   "default_expr": "ModelConfig.hf_config_path",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 381
+   }
+  },
+  "runner": {
+   "type_annotation": "RunnerOption",
+   "default_expr": "ModelConfig.runner",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 382
+   }
+  },
+  "convert": {
+   "type_annotation": "ConvertOption",
+   "default_expr": "ModelConfig.convert",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 383
+   }
+  },
+  "skip_tokenizer_init": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.skip_tokenizer_init",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 384
+   }
+  },
+  "enable_prompt_embeds": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.enable_prompt_embeds",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 385
+   }
+  },
+  "tokenizer_mode": {
+   "type_annotation": "TokenizerMode | str",
+   "default_expr": "ModelConfig.tokenizer_mode",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 386
+   }
+  },
+  "trust_remote_code": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.trust_remote_code",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 387
+   }
+  },
+  "allowed_local_media_path": {
+   "type_annotation": "str",
+   "default_expr": "ModelConfig.allowed_local_media_path",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 388
+   }
+  },
+  "allowed_media_domains": {
+   "type_annotation": "list[str] | None",
+   "default_expr": "ModelConfig.allowed_media_domains",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 389
+   }
+  },
+  "download_dir": {
+   "type_annotation": "str | None",
+   "default_expr": "LoadConfig.download_dir",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 390
+   }
+  },
+  "safetensors_load_strategy": {
+   "type_annotation": "str | None",
+   "default_expr": "LoadConfig.safetensors_load_strategy",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 391
+   }
+  },
+  "load_format": {
+   "type_annotation": "str | LoadFormats",
+   "default_expr": "LoadConfig.load_format",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 392
+   }
+  },
+  "config_format": {
+   "type_annotation": "str",
+   "default_expr": "ModelConfig.config_format",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 393
+   }
+  },
+  "dtype": {
+   "type_annotation": "ModelDType",
+   "default_expr": "ModelConfig.dtype",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 394
+   }
+  },
+  "kv_cache_dtype": {
+   "type_annotation": "CacheDType",
+   "default_expr": "CacheConfig.cache_dtype",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 395
+   }
+  },
+  "seed": {
+   "type_annotation": "int",
+   "default_expr": "ModelConfig.seed",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 396
+   }
+  },
+  "max_model_len": {
+   "type_annotation": "int",
+   "default_expr": "ModelConfig.max_model_len",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 397
+   }
+  },
+  "cudagraph_capture_sizes": {
+   "type_annotation": "list[int] | None",
+   "default_expr": "CompilationConfig.cudagraph_capture_sizes",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 398
+   }
+  },
+  "max_cudagraph_capture_size": {
+   "type_annotation": "int | None",
+   "default_expr": "get_field(CompilationConfig, 'max_cudagraph_capture_size')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 401
+   }
+  },
+  "distributed_executor_backend": {
+   "type_annotation": "str | DistributedExecutorBackend | type[Executor] | None",
+   "default_expr": "ParallelConfig.distributed_executor_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 407
+   }
+  },
+  "pipeline_parallel_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.pipeline_parallel_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 411
+   }
+  },
+  "master_addr": {
+   "type_annotation": "str",
+   "default_expr": "ParallelConfig.master_addr",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 412
+   }
+  },
+  "master_port": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.master_port",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 413
+   }
+  },
+  "nnodes": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.nnodes",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 414
+   }
+  },
+  "node_rank": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.node_rank",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 415
+   }
+  },
+  "distributed_timeout_seconds": {
+   "type_annotation": "int | None",
+   "default_expr": "ParallelConfig.distributed_timeout_seconds",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 416
+   }
+  },
+  "tensor_parallel_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.tensor_parallel_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 417
+   }
+  },
+  "prefill_context_parallel_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.prefill_context_parallel_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 418
+   }
+  },
+  "decode_context_parallel_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.decode_context_parallel_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 419
+   }
+  },
+  "dcp_comm_backend": {
+   "type_annotation": "DCPCommBackend",
+   "default_expr": "ParallelConfig.dcp_comm_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 420
+   }
+  },
+  "dcp_kv_cache_interleave_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.dcp_kv_cache_interleave_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 421
+   }
+  },
+  "cp_kv_cache_interleave_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.cp_kv_cache_interleave_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 422
+   }
+  },
+  "data_parallel_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.data_parallel_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 423
+   }
+  },
+  "data_parallel_rank": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 424
+   }
+  },
+  "data_parallel_start_rank": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 425
+   }
+  },
+  "data_parallel_size_local": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 426
+   }
+  },
+  "data_parallel_address": {
+   "type_annotation": "str | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 427
+   }
+  },
+  "data_parallel_rpc_port": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 428
+   }
+  },
+  "data_parallel_hybrid_lb": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 429
+   }
+  },
+  "data_parallel_external_lb": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 430
+   }
+  },
+  "data_parallel_backend": {
+   "type_annotation": "DataParallelBackend",
+   "default_expr": "ParallelConfig.data_parallel_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 431
+   }
+  },
+  "enable_expert_parallel": {
+   "type_annotation": "bool",
+   "default_expr": "ParallelConfig.enable_expert_parallel",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 432
+   }
+  },
+  "enable_ep_weight_filter": {
+   "type_annotation": "bool",
+   "default_expr": "ParallelConfig.enable_ep_weight_filter",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 433
+   }
+  },
+  "moe_backend": {
+   "type_annotation": "MoEBackend",
+   "default_expr": "KernelConfig.moe_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 434
+   }
+  },
+  "all2all_backend": {
+   "type_annotation": "All2AllBackend",
+   "default_expr": "ParallelConfig.all2all_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 435
+   }
+  },
+  "enable_elastic_ep": {
+   "type_annotation": "bool",
+   "default_expr": "ParallelConfig.enable_elastic_ep",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 436
+   }
+  },
+  "enable_dbo": {
+   "type_annotation": "bool",
+   "default_expr": "ParallelConfig.enable_dbo",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 437
+   }
+  },
+  "ubatch_size": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.ubatch_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 438
+   }
+  },
+  "dbo_decode_token_threshold": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.dbo_decode_token_threshold",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 439
+   }
+  },
+  "dbo_prefill_token_threshold": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig.dbo_prefill_token_threshold",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 440
+   }
+  },
+  "disable_nccl_for_dp_synchronization": {
+   "type_annotation": "bool | None",
+   "default_expr": "ParallelConfig.disable_nccl_for_dp_synchronization",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 441
+   }
+  },
+  "eplb_config": {
+   "type_annotation": "EPLBConfig",
+   "default_expr": "get_field(ParallelConfig, 'eplb_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 444
+   }
+  },
+  "enable_eplb": {
+   "type_annotation": "bool",
+   "default_expr": "ParallelConfig.enable_eplb",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 445
+   }
+  },
+  "expert_placement_strategy": {
+   "type_annotation": "ExpertPlacementStrategy",
+   "default_expr": "ParallelConfig.expert_placement_strategy",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 446
+   }
+  },
+  "_api_process_count": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig._api_process_count",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 449
+   }
+  },
+  "_api_process_rank": {
+   "type_annotation": "int",
+   "default_expr": "ParallelConfig._api_process_rank",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 450
+   }
+  },
+  "max_parallel_loading_workers": {
+   "type_annotation": "int | None",
+   "default_expr": "ParallelConfig.max_parallel_loading_workers",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 451
+   }
+  },
+  "block_size": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 454
+   }
+  },
+  "enable_prefix_caching": {
+   "type_annotation": "bool | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 455
+   }
+  },
+  "prefix_caching_hash_algo": {
+   "type_annotation": "PrefixCachingHashAlgo",
+   "default_expr": "CacheConfig.prefix_caching_hash_algo",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 456
+   }
+  },
+  "disable_sliding_window": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.disable_sliding_window",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 459
+   }
+  },
+  "disable_cascade_attn": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.disable_cascade_attn",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 460
+   }
+  },
+  "offload_backend": {
+   "type_annotation": "str",
+   "default_expr": "OffloadConfig.offload_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 461
+   }
+  },
+  "cpu_offload_gb": {
+   "type_annotation": "float",
+   "default_expr": "UVAOffloadConfig.cpu_offload_gb",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 462
+   }
+  },
+  "cpu_offload_params": {
+   "type_annotation": "set[str]",
+   "default_expr": "get_field(UVAOffloadConfig, 'cpu_offload_params')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 463
+   }
+  },
+  "offload_group_size": {
+   "type_annotation": "int",
+   "default_expr": "PrefetchOffloadConfig.offload_group_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 464
+   }
+  },
+  "offload_num_in_group": {
+   "type_annotation": "int",
+   "default_expr": "PrefetchOffloadConfig.offload_num_in_group",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 465
+   }
+  },
+  "offload_prefetch_step": {
+   "type_annotation": "int",
+   "default_expr": "PrefetchOffloadConfig.offload_prefetch_step",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 466
+   }
+  },
+  "offload_params": {
+   "type_annotation": "set[str]",
+   "default_expr": "get_field(PrefetchOffloadConfig, 'offload_params')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 467
+   }
+  },
+  "gpu_memory_utilization": {
+   "type_annotation": "float",
+   "default_expr": "CacheConfig.gpu_memory_utilization",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 468
+   }
+  },
+  "kv_cache_memory_bytes": {
+   "type_annotation": "int | None",
+   "default_expr": "CacheConfig.kv_cache_memory_bytes",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 469
+   }
+  },
+  "max_num_batched_tokens": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 470
+   }
+  },
+  "max_num_partial_prefills": {
+   "type_annotation": "int",
+   "default_expr": "SchedulerConfig.max_num_partial_prefills",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 471
+   }
+  },
+  "max_long_partial_prefills": {
+   "type_annotation": "int",
+   "default_expr": "SchedulerConfig.max_long_partial_prefills",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 472
+   }
+  },
+  "long_prefill_token_threshold": {
+   "type_annotation": "int",
+   "default_expr": "SchedulerConfig.long_prefill_token_threshold",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 473
+   }
+  },
+  "max_num_seqs": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 474
+   }
+  },
+  "max_logprobs": {
+   "type_annotation": "int",
+   "default_expr": "ModelConfig.max_logprobs",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 475
+   }
+  },
+  "logprobs_mode": {
+   "type_annotation": "LogprobsMode",
+   "default_expr": "ModelConfig.logprobs_mode",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 476
+   }
+  },
+  "disable_log_stats": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 477
+   }
+  },
+  "aggregate_engine_logging": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 478
+   }
+  },
+  "revision": {
+   "type_annotation": "str | None",
+   "default_expr": "ModelConfig.revision",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 479
+   }
+  },
+  "code_revision": {
+   "type_annotation": "str | None",
+   "default_expr": "ModelConfig.code_revision",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 480
+   }
+  },
+  "hf_token": {
+   "type_annotation": "bool | str | None",
+   "default_expr": "ModelConfig.hf_token",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 481
+   }
+  },
+  "hf_overrides": {
+   "type_annotation": "HfOverrides",
+   "default_expr": "get_field(ModelConfig, 'hf_overrides')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 482
+   }
+  },
+  "tokenizer_revision": {
+   "type_annotation": "str | None",
+   "default_expr": "ModelConfig.tokenizer_revision",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 483
+   }
+  },
+  "quantization": {
+   "type_annotation": "QuantizationMethods | str | None",
+   "default_expr": "ModelConfig.quantization",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 484
+   }
+  },
+  "allow_deprecated_quantization": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.allow_deprecated_quantization",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 485
+   }
+  },
+  "enforce_eager": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.enforce_eager",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 486
+   }
+  },
+  "disable_custom_all_reduce": {
+   "type_annotation": "bool",
+   "default_expr": "ParallelConfig.disable_custom_all_reduce",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 487
+   }
+  },
+  "language_model_only": {
+   "type_annotation": "bool",
+   "default_expr": "MultiModalConfig.language_model_only",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 488
+   }
+  },
+  "limit_mm_per_prompt": {
+   "type_annotation": "dict[str, int | dict[str, int]]",
+   "default_expr": "get_field(MultiModalConfig, 'limit_per_prompt')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 489
+   }
+  },
+  "enable_mm_embeds": {
+   "type_annotation": "bool",
+   "default_expr": "MultiModalConfig.enable_mm_embeds",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 492
+   }
+  },
+  "interleave_mm_strings": {
+   "type_annotation": "bool",
+   "default_expr": "MultiModalConfig.interleave_mm_strings",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 493
+   }
+  },
+  "media_io_kwargs": {
+   "type_annotation": "dict[str, dict[str, Any]]",
+   "default_expr": "get_field(MultiModalConfig, 'media_io_kwargs')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 494
+   }
+  },
+  "mm_processor_kwargs": {
+   "type_annotation": "dict[str, Any] | None",
+   "default_expr": "MultiModalConfig.mm_processor_kwargs",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 497
+   }
+  },
+  "mm_processor_cache_gb": {
+   "type_annotation": "float",
+   "default_expr": "MultiModalConfig.mm_processor_cache_gb",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 498
+   }
+  },
+  "mm_processor_cache_type": {
+   "type_annotation": "MMCacheType | None",
+   "default_expr": "MultiModalConfig.mm_processor_cache_type",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 499
+   }
+  },
+  "mm_shm_cache_max_object_size_mb": {
+   "type_annotation": "int",
+   "default_expr": "MultiModalConfig.mm_shm_cache_max_object_size_mb",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 502
+   }
+  },
+  "mm_encoder_only": {
+   "type_annotation": "bool",
+   "default_expr": "MultiModalConfig.mm_encoder_only",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 505
+   }
+  },
+  "mm_encoder_tp_mode": {
+   "type_annotation": "MMEncoderTPMode",
+   "default_expr": "MultiModalConfig.mm_encoder_tp_mode",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 506
+   }
+  },
+  "mm_encoder_attn_backend": {
+   "type_annotation": "AttentionBackendEnum | str | None",
+   "default_expr": "MultiModalConfig.mm_encoder_attn_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 507
+   }
+  },
+  "io_processor_plugin": {
+   "type_annotation": "str | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 510
+   }
+  },
+  "renderer_num_workers": {
+   "type_annotation": "int",
+   "default_expr": "1",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 511
+   }
+  },
+  "skip_mm_profiling": {
+   "type_annotation": "bool",
+   "default_expr": "MultiModalConfig.skip_mm_profiling",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 512
+   }
+  },
+  "video_pruning_rate": {
+   "type_annotation": "float | None",
+   "default_expr": "MultiModalConfig.video_pruning_rate",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 513
+   }
+  },
+  "mm_tensor_ipc": {
+   "type_annotation": "MMTensorIPC",
+   "default_expr": "MultiModalConfig.mm_tensor_ipc",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 514
+   }
+  },
+  "enable_lora": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 516
+   }
+  },
+  "max_loras": {
+   "type_annotation": "int",
+   "default_expr": "LoRAConfig.max_loras",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 517
+   }
+  },
+  "max_lora_rank": {
+   "type_annotation": "MaxLoRARanks",
+   "default_expr": "LoRAConfig.max_lora_rank",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 518
+   }
+  },
+  "default_mm_loras": {
+   "type_annotation": "dict[str, str] | None",
+   "default_expr": "LoRAConfig.default_mm_loras",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 519
+   }
+  },
+  "fully_sharded_loras": {
+   "type_annotation": "bool",
+   "default_expr": "LoRAConfig.fully_sharded_loras",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 520
+   }
+  },
+  "max_cpu_loras": {
+   "type_annotation": "int | None",
+   "default_expr": "LoRAConfig.max_cpu_loras",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 521
+   }
+  },
+  "lora_dtype": {
+   "type_annotation": "str | torch.dtype | None",
+   "default_expr": "LoRAConfig.lora_dtype",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 522
+   }
+  },
+  "lora_target_modules": {
+   "type_annotation": "list[str] | None",
+   "default_expr": "LoRAConfig.target_modules",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 523
+   }
+  },
+  "enable_tower_connector_lora": {
+   "type_annotation": "bool",
+   "default_expr": "LoRAConfig.enable_tower_connector_lora",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 524
+   }
+  },
+  "specialize_active_lora": {
+   "type_annotation": "bool",
+   "default_expr": "LoRAConfig.specialize_active_lora",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 525
+   }
+  },
+  "ray_workers_use_nsight": {
+   "type_annotation": "bool",
+   "default_expr": "ParallelConfig.ray_workers_use_nsight",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 527
+   }
+  },
+  "num_gpu_blocks_override": {
+   "type_annotation": "int | None",
+   "default_expr": "CacheConfig.num_gpu_blocks_override",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 528
+   }
+  },
+  "model_loader_extra_config": {
+   "type_annotation": "dict",
+   "default_expr": "get_field(LoadConfig, 'model_loader_extra_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 529
+   }
+  },
+  "ignore_patterns": {
+   "type_annotation": "str | list[str]",
+   "default_expr": "get_field(LoadConfig, 'ignore_patterns')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 530
+   }
+  },
+  "enable_chunked_prefill": {
+   "type_annotation": "bool | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 532
+   }
+  },
+  "disable_chunked_mm_input": {
+   "type_annotation": "bool",
+   "default_expr": "SchedulerConfig.disable_chunked_mm_input",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 533
+   }
+  },
+  "scheduler_reserve_full_isl": {
+   "type_annotation": "bool",
+   "default_expr": "SchedulerConfig.scheduler_reserve_full_isl",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 535
+   }
+  },
+  "disable_hybrid_kv_cache_manager": {
+   "type_annotation": "bool | None",
+   "default_expr": "SchedulerConfig.disable_hybrid_kv_cache_manager",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 537
+   }
+  },
+  "structured_outputs_config": {
+   "type_annotation": "StructuredOutputsConfig",
+   "default_expr": "get_field(VllmConfig, 'structured_outputs_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 541
+   }
+  },
+  "reasoning_parser": {
+   "type_annotation": "str",
+   "default_expr": "StructuredOutputsConfig.reasoning_parser",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 544
+   }
+  },
+  "reasoning_parser_plugin": {
+   "type_annotation": "str | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 545
+   }
+  },
+  "speculative_config": {
+   "type_annotation": "dict[str, Any] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 547
+   }
+  },
+  "show_hidden_metrics_for_version": {
+   "type_annotation": "str | None",
+   "default_expr": "ObservabilityConfig.show_hidden_metrics_for_version",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 549
+   }
+  },
+  "otlp_traces_endpoint": {
+   "type_annotation": "str | None",
+   "default_expr": "ObservabilityConfig.otlp_traces_endpoint",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 552
+   }
+  },
+  "collect_detailed_traces": {
+   "type_annotation": "list[DetailedTraceModules] | None",
+   "default_expr": "ObservabilityConfig.collect_detailed_traces",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 553
+   }
+  },
+  "kv_cache_metrics": {
+   "type_annotation": "bool",
+   "default_expr": "ObservabilityConfig.kv_cache_metrics",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 556
+   }
+  },
+  "kv_cache_metrics_sample": {
+   "type_annotation": "float",
+   "default_expr": "get_field(ObservabilityConfig, 'kv_cache_metrics_sample')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 557
+   }
+  },
+  "cudagraph_metrics": {
+   "type_annotation": "bool",
+   "default_expr": "ObservabilityConfig.cudagraph_metrics",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 560
+   }
+  },
+  "enable_layerwise_nvtx_tracing": {
+   "type_annotation": "bool",
+   "default_expr": "ObservabilityConfig.enable_layerwise_nvtx_tracing",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 561
+   }
+  },
+  "enable_mfu_metrics": {
+   "type_annotation": "bool",
+   "default_expr": "ObservabilityConfig.enable_mfu_metrics",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 564
+   }
+  },
+  "enable_logging_iteration_details": {
+   "type_annotation": "bool",
+   "default_expr": "ObservabilityConfig.enable_logging_iteration_details",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 565
+   }
+  },
+  "enable_mm_processor_stats": {
+   "type_annotation": "bool",
+   "default_expr": "ObservabilityConfig.enable_mm_processor_stats",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 568
+   }
+  },
+  "scheduling_policy": {
+   "type_annotation": "SchedulerPolicy",
+   "default_expr": "SchedulerConfig.policy",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 569
+   }
+  },
+  "scheduler_cls": {
+   "type_annotation": "str | type[object] | None",
+   "default_expr": "SchedulerConfig.scheduler_cls",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 570
+   }
+  },
+  "pooler_config": {
+   "type_annotation": "PoolerConfig | None",
+   "default_expr": "ModelConfig.pooler_config",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 572
+   }
+  },
+  "compilation_config": {
+   "type_annotation": "CompilationConfig",
+   "default_expr": "get_field(VllmConfig, 'compilation_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 573
+   }
+  },
+  "attention_config": {
+   "type_annotation": "AttentionConfig",
+   "default_expr": "get_field(VllmConfig, 'attention_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 574
+   }
+  },
+  "kernel_config": {
+   "type_annotation": "KernelConfig",
+   "default_expr": "get_field(VllmConfig, 'kernel_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 575
+   }
+  },
+  "enable_flashinfer_autotune": {
+   "type_annotation": "bool",
+   "default_expr": "get_field(KernelConfig, 'enable_flashinfer_autotune')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 576
+   }
+  },
+  "worker_cls": {
+   "type_annotation": "str",
+   "default_expr": "ParallelConfig.worker_cls",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 579
+   }
+  },
+  "worker_extension_cls": {
+   "type_annotation": "str",
+   "default_expr": "ParallelConfig.worker_extension_cls",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 580
+   }
+  },
+  "profiler_config": {
+   "type_annotation": "ProfilerConfig",
+   "default_expr": "get_field(VllmConfig, 'profiler_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 582
+   }
+  },
+  "kv_transfer_config": {
+   "type_annotation": "KVTransferConfig | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 584
+   }
+  },
+  "kv_events_config": {
+   "type_annotation": "KVEventsConfig | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 585
+   }
+  },
+  "ec_transfer_config": {
+   "type_annotation": "ECTransferConfig | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 587
+   }
+  },
+  "reasoning_config": {
+   "type_annotation": "ReasoningConfig",
+   "default_expr": "get_field(VllmConfig, 'reasoning_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 588
+   }
+  },
+  "generation_config": {
+   "type_annotation": "str",
+   "default_expr": "ModelConfig.generation_config",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 590
+   }
+  },
+  "enable_sleep_mode": {
+   "type_annotation": "bool",
+   "default_expr": "ModelConfig.enable_sleep_mode",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 591
+   }
+  },
+  "override_generation_config": {
+   "type_annotation": "dict[str, Any]",
+   "default_expr": "get_field(ModelConfig, 'override_generation_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 592
+   }
+  },
+  "model_impl": {
+   "type_annotation": "str",
+   "default_expr": "ModelConfig.model_impl",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 595
+   }
+  },
+  "override_attention_dtype": {
+   "type_annotation": "str | None",
+   "default_expr": "ModelConfig.override_attention_dtype",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 596
+   }
+  },
+  "attention_backend": {
+   "type_annotation": "AttentionBackendEnum | None",
+   "default_expr": "AttentionConfig.backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 597
+   }
+  },
+  "calculate_kv_scales": {
+   "type_annotation": "bool",
+   "default_expr": "CacheConfig.calculate_kv_scales",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 599
+   }
+  },
+  "kv_cache_dtype_skip_layers": {
+   "type_annotation": "list[str]",
+   "default_expr": "get_field(CacheConfig, 'kv_cache_dtype_skip_layers')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 600
+   }
+  },
+  "mamba_cache_dtype": {
+   "type_annotation": "MambaDType",
+   "default_expr": "CacheConfig.mamba_cache_dtype",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 603
+   }
+  },
+  "mamba_ssm_cache_dtype": {
+   "type_annotation": "MambaDType",
+   "default_expr": "CacheConfig.mamba_ssm_cache_dtype",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 604
+   }
+  },
+  "mamba_block_size": {
+   "type_annotation": "int | None",
+   "default_expr": "get_field(CacheConfig, 'mamba_block_size')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 605
+   }
+  },
+  "mamba_cache_mode": {
+   "type_annotation": "MambaCacheMode",
+   "default_expr": "CacheConfig.mamba_cache_mode",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 606
+   }
+  },
+  "additional_config": {
+   "type_annotation": "dict[str, Any]",
+   "default_expr": "get_field(VllmConfig, 'additional_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 608
+   }
+  },
+  "use_tqdm_on_load": {
+   "type_annotation": "bool",
+   "default_expr": "LoadConfig.use_tqdm_on_load",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 610
+   }
+  },
+  "pt_load_map_location": {
+   "type_annotation": "str | dict[str, str]",
+   "default_expr": "LoadConfig.pt_load_map_location",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 611
+   }
+  },
+  "logits_processors": {
+   "type_annotation": "list[str | type[LogitsProcessor]] | None",
+   "default_expr": "ModelConfig.logits_processors",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 613
+   }
+  },
+  "async_scheduling": {
+   "type_annotation": "bool | None",
+   "default_expr": "SchedulerConfig.async_scheduling",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 618
+   }
+  },
+  "stream_interval": {
+   "type_annotation": "int",
+   "default_expr": "SchedulerConfig.stream_interval",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 620
+   }
+  },
+  "kv_sharing_fast_prefill": {
+   "type_annotation": "bool",
+   "default_expr": "CacheConfig.kv_sharing_fast_prefill",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 622
+   }
+  },
+  "optimization_level": {
+   "type_annotation": "OptimizationLevel",
+   "default_expr": "VllmConfig.optimization_level",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 623
+   }
+  },
+  "performance_mode": {
+   "type_annotation": "PerformanceMode",
+   "default_expr": "VllmConfig.performance_mode",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 624
+   }
+  },
+  "kv_offloading_size": {
+   "type_annotation": "float | None",
+   "default_expr": "CacheConfig.kv_offloading_size",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 626
+   }
+  },
+  "kv_offloading_backend": {
+   "type_annotation": "KVOffloadingBackend",
+   "default_expr": "CacheConfig.kv_offloading_backend",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 627
+   }
+  },
+  "tokens_only": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 628
+   }
+  },
+  "shutdown_timeout": {
+   "type_annotation": "int",
+   "default_expr": "0",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 630
+   }
+  },
+  "weight_transfer_config": {
+   "type_annotation": "WeightTransferConfig | None",
+   "default_expr": "get_field(VllmConfig, 'weight_transfer_config')",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 632
+   }
+  },
+  "fail_on_environ_validation": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 637
+   }
+  },
+  "gdn_prefill_backend": {
+   "type_annotation": "Literal['flashinfer', 'triton'] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/engine/arg_utils.py",
+    "line": 638
+   }
+  }
+ },
+ "sampling_params": {
+  "_source": {
+   "file": "vllm/sampling_params.py",
+   "qualname": "SamplingParams",
+   "line": 156
+  },
+  "n": {
+   "type_annotation": "int",
+   "default_expr": "1",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 170
+   }
+  },
+  "presence_penalty": {
+   "type_annotation": "float",
+   "default_expr": "0.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 181
+   }
+  },
+  "frequency_penalty": {
+   "type_annotation": "float",
+   "default_expr": "0.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 185
+   }
+  },
+  "repetition_penalty": {
+   "type_annotation": "float",
+   "default_expr": "1.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 189
+   }
+  },
+  "temperature": {
+   "type_annotation": "float",
+   "default_expr": "1.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 193
+   }
+  },
+  "top_p": {
+   "type_annotation": "float",
+   "default_expr": "1.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 197
+   }
+  },
+  "top_k": {
+   "type_annotation": "int",
+   "default_expr": "0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 200
+   }
+  },
+  "min_p": {
+   "type_annotation": "float",
+   "default_expr": "0.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 203
+   }
+  },
+  "seed": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 207
+   }
+  },
+  "stop": {
+   "type_annotation": "str | list[str] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 209
+   }
+  },
+  "stop_token_ids": {
+   "type_annotation": "list[int] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 212
+   }
+  },
+  "ignore_eos": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 216
+   }
+  },
+  "max_tokens": {
+   "type_annotation": "int | None",
+   "default_expr": "16",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 219
+   }
+  },
+  "min_tokens": {
+   "type_annotation": "int",
+   "default_expr": "0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 221
+   }
+  },
+  "logprobs": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 224
+   }
+  },
+  "prompt_logprobs": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 232
+   }
+  },
+  "flat_logprobs": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 235
+   }
+  },
+  "detokenize": {
+   "type_annotation": "bool",
+   "default_expr": "True",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 244
+   }
+  },
+  "skip_special_tokens": {
+   "type_annotation": "bool",
+   "default_expr": "True",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 246
+   }
+  },
+  "spaces_between_special_tokens": {
+   "type_annotation": "bool",
+   "default_expr": "True",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 248
+   }
+  },
+  "include_stop_str_in_output": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 250
+   }
+  },
+  "output_kind": {
+   "type_annotation": "RequestOutputKind",
+   "default_expr": "RequestOutputKind.CUMULATIVE",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 252
+   }
+  },
+  "skip_clone": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 253
+   }
+  },
+  "output_text_buffer_length": {
+   "type_annotation": "int",
+   "default_expr": "0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 262
+   }
+  },
+  "_eos_token_id": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 263
+   }
+  },
+  "_all_stop_token_ids": {
+   "type_annotation": "set[int]",
+   "default_expr": "msgspec.field(default_factory=set)",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 264
+   }
+  },
+  "structured_outputs": {
+   "type_annotation": "StructuredOutputsParams | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 267
+   }
+  },
+  "logit_bias": {
+   "type_annotation": "dict[int, float] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 269
+   }
+  },
+  "allowed_token_ids": {
+   "type_annotation": "list[int] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 272
+   }
+  },
+  "extra_args": {
+   "type_annotation": "dict[str, Any] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 275
+   }
+  },
+  "bad_words": {
+   "type_annotation": "list[str] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 281
+   }
+  },
+  "_bad_words_token_ids": {
+   "type_annotation": "list[list[int]] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 285
+   }
+  },
+  "skip_reading_prefix_cache": {
+   "type_annotation": "bool | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 287
+   }
+  },
+  "thinking_token_budget": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 288
+   }
+  },
+  "repetition_detection": {
+   "type_annotation": "RepetitionDetectionParams | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 291
+   }
+  },
+  "_note": "msgspec.Struct (PydanticMsgspecMixin + msgspec.Struct, line 156-162), NOT a dataclass. Validation in __post_init__ (line 373) -> _verify_args (line 427) -> _verify_greedy_sampling (line 521). v0.19 DELTAS vs v0.7.3: top_k default 0 (was -1); new fields flat_logprobs, skip_clone, extra_args, thinking_token_budget, repetition_detection (nested RepetitionDetectionParams), skip_reading_prefix_cache, _bad_words_token_ids, _eos_token_id; `structured_outputs` replaces `guided_decoding`; `best_of`/`_real_n` REMOVED (beam/best_of split out); n now capped by envs.VLLM_MAX_N_SEQUENCES (default 16384)."
+ },
+ "beam_search_params": {
+  "_source": {
+   "file": "vllm/sampling_params.py",
+   "qualname": "BeamSearchParams",
+   "line": 909
+  },
+  "beam_width": {
+   "type_annotation": "int",
+   "default_expr": "<no-default/REQUIRED>",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 917
+   }
+  },
+  "max_tokens": {
+   "type_annotation": "int",
+   "default_expr": "<no-default/REQUIRED>",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 918
+   }
+  },
+  "ignore_eos": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 919
+   }
+  },
+  "temperature": {
+   "type_annotation": "float",
+   "default_expr": "0.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 920
+   }
+  },
+  "length_penalty": {
+   "type_annotation": "float",
+   "default_expr": "1.0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 921
+   }
+  },
+  "include_stop_str_in_output": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 922
+   }
+  },
+  "_note": "msgspec.Struct, line 909. Mode-exclusive with SamplingParams. Identical 6-field shape to v0.7.3."
+ },
+ "pooling_params": {
+  "_source": {
+   "file": "vllm/pooling_params.py",
+   "qualname": "PoolingParams",
+   "line": 37
+  },
+  "use_activation": {
+   "type_annotation": "bool | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 52
+   }
+  },
+  "dimensions": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 57
+   }
+  },
+  "step_tag_id": {
+   "type_annotation": "int | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 61
+   }
+  },
+  "returned_token_ids": {
+   "type_annotation": "list[int] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 62
+   }
+  },
+  "task": {
+   "type_annotation": "PoolingTask | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 65
+   }
+  },
+  "requires_token_ids": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 66
+   }
+  },
+  "skip_reading_prefix_cache": {
+   "type_annotation": "bool | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 67
+   }
+  },
+  "late_interaction_params": {
+   "type_annotation": "LateInteractionParams | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 68
+   }
+  },
+  "extra_kwargs": {
+   "type_annotation": "dict[str, Any] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 69
+   }
+  },
+  "output_kind": {
+   "type_annotation": "RequestOutputKind",
+   "default_expr": "RequestOutputKind.FINAL_ONLY",
+   "source": {
+    "file": "vllm/pooling_params.py",
+    "line": 70
+   }
+  },
+  "_note": "@dataclass, line 37. GREW substantially from v0.7.3 (1 placeholder field -> 10 fields). Out of LLEM text-gen scope but enumerated. Validation in verify/_set_default_parameters/_verify_valid_parameters.",
+  "_scope_flag": "out_of_llem_scope_v0_19_1"
+ },
+ "structured_outputs_params": {
+  "_source": {
+   "file": "vllm/sampling_params.py",
+   "qualname": "StructuredOutputsParams",
+   "line": 37
+  },
+  "json": {
+   "type_annotation": "str | dict | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 39
+   }
+  },
+  "regex": {
+   "type_annotation": "str | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 40
+   }
+  },
+  "choice": {
+   "type_annotation": "list[str] | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 41
+   }
+  },
+  "grammar": {
+   "type_annotation": "str | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 42
+   }
+  },
+  "json_object": {
+   "type_annotation": "bool | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 43
+   }
+  },
+  "disable_any_whitespace": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 45
+   }
+  },
+  "disable_additional_properties": {
+   "type_annotation": "bool",
+   "default_expr": "False",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 46
+   }
+  },
+  "whitespace_pattern": {
+   "type_annotation": "str | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 47
+   }
+  },
+  "structural_tag": {
+   "type_annotation": "str | None",
+   "default_expr": "None",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 48
+   }
+  },
+  "_backend": {
+   "type_annotation": "str | None",
+   "default_expr": "field(default=None, init=False)",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 50
+   }
+  },
+  "_backend_was_auto": {
+   "type_annotation": "bool",
+   "default_expr": "field(default=False, init=False)",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 52
+   }
+  },
+  "_note": "RENAMED from GuidedDecodingParams (v0.7.3). @dataclass, line 37. __post_init__ (line 55) enforces exactly-one-constraint (count>1 -> error; count<1 -> error - NEW vs v0.7.3 which only rejected >1). New field `structural_tag` joins the mutually-exclusive set; new `disable_additional_properties`, `structural_tag`."
+ },
+ "repetition_detection_params": {
+  "_source": {
+   "file": "vllm/sampling_params.py",
+   "qualname": "RepetitionDetectionParams",
+   "line": 111
+  },
+  "max_pattern_size": {
+   "type_annotation": "int",
+   "default_expr": "0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 114
+   }
+  },
+  "min_pattern_size": {
+   "type_annotation": "int",
+   "default_expr": "0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 118
+   }
+  },
+  "min_count": {
+   "type_annotation": "int",
+   "default_expr": "0",
+   "source": {
+    "file": "vllm/sampling_params.py",
+    "line": 123
+   }
+  },
+  "_note": "NEW in v0.19.1 (no v0.7.3 equivalent). @dataclass line 110. Nested under SamplingParams.repetition_detection. __post_init__ line 128 validates pattern sizes and min_count>=2."
+ },
+ "subconfigs": {
+  "AttentionConfig": {
+   "_source": {
+    "file": "vllm/config/attention.py",
+    "qualname": "AttentionConfig",
+    "line": 13
+   },
+   "_decorators": [
+    "config"
+   ],
+   "backend": {
+    "type_annotation": "AttentionBackendEnum | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 16
+    }
+   },
+   "flash_attn_version": {
+    "type_annotation": "Literal[2, 3, 4] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 19
+    }
+   },
+   "use_prefill_decode_attention": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 23
+    }
+   },
+   "flash_attn_max_num_splits_for_cuda_graph": {
+    "type_annotation": "int",
+    "default_expr": "32",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 27
+    }
+   },
+   "use_cudnn_prefill": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 30
+    }
+   },
+   "use_trtllm_ragged_deepseek_prefill": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 33
+    }
+   },
+   "use_trtllm_attention": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 36
+    }
+   },
+   "disable_flashinfer_prefill": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 40
+    }
+   },
+   "disable_flashinfer_q_quantization": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 43
+    }
+   },
+   "use_prefill_query_quantization": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/attention.py",
+     "line": 46
+    }
+   }
+  },
+  "CacheConfig": {
+   "_source": {
+    "file": "vllm/config/cache.py",
+    "qualname": "CacheConfig",
+    "line": 31
+   },
+   "_decorators": [
+    "config"
+   ],
+   "DEFAULT_BLOCK_SIZE": {
+    "type_annotation": "ClassVar[int]",
+    "default_expr": "16",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 34
+    }
+   },
+   "block_size": {
+    "type_annotation": "SkipValidation[int]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 36
+    }
+   },
+   "user_specified_block_size": {
+    "type_annotation": "bool",
+    "default_expr": "field(default=False, init=False)",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 39
+    }
+   },
+   "gpu_memory_utilization": {
+    "type_annotation": "float",
+    "default_expr": "Field(default=0.9, gt=0, le=1)",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 41
+    }
+   },
+   "cache_dtype": {
+    "type_annotation": "CacheDType",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 49
+    }
+   },
+   "is_attention_free": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 57
+    }
+   },
+   "num_gpu_blocks_override": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 60
+    }
+   },
+   "sliding_window": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 63
+    }
+   },
+   "enable_prefix_caching": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 66
+    }
+   },
+   "prefix_caching_hash_algo": {
+    "type_annotation": "PrefixCachingHashAlgo",
+    "default_expr": "'sha256'",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 68
+    }
+   },
+   "calculate_kv_scales": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 84
+    }
+   },
+   "kv_cache_dtype_skip_layers": {
+    "type_annotation": "list[str]",
+    "default_expr": "field(default_factory=list)",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 89
+    }
+   },
+   "cpu_kvcache_space_bytes": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 92
+    }
+   },
+   "mamba_page_size_padded": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 94
+    }
+   },
+   "mamba_block_size": {
+    "type_annotation": "int | None",
+    "default_expr": "Field(default=None, gt=0)",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 97
+    }
+   },
+   "mamba_cache_dtype": {
+    "type_annotation": "MambaDType",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 101
+    }
+   },
+   "mamba_ssm_cache_dtype": {
+    "type_annotation": "MambaDType",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 105
+    }
+   },
+   "mamba_cache_mode": {
+    "type_annotation": "MambaCacheMode",
+    "default_expr": "'none'",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 109
+    }
+   },
+   "num_gpu_blocks": {
+    "type_annotation": "int | None",
+    "default_expr": "field(default=None, init=False)",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 120
+    }
+   },
+   "num_cpu_blocks": {
+    "type_annotation": "int | None",
+    "default_expr": "field(default=None, init=False)",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 122
+    }
+   },
+   "kv_sharing_fast_prefill": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 125
+    }
+   },
+   "kv_cache_memory_bytes": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 135
+    }
+   },
+   "kv_offloading_size": {
+    "type_annotation": "float | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 144
+    }
+   },
+   "kv_offloading_backend": {
+    "type_annotation": "KVOffloadingBackend",
+    "default_expr": "'native'",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 150
+    }
+   },
+   "_block_size_resolved": {
+    "type_annotation": "bool",
+    "default_expr": "field(default=False, init=False)",
+    "source": {
+     "file": "vllm/config/cache.py",
+     "line": 195
+    }
+   }
+  },
+  "PassConfig": {
+   "_source": {
+    "file": "vllm/config/compilation.py",
+    "qualname": "PassConfig",
+    "line": 105
+   },
+   "_decorators": [
+    "config"
+   ],
+   "fuse_norm_quant": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 119
+    }
+   },
+   "fuse_act_quant": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 121
+    }
+   },
+   "fuse_attn_quant": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 123
+    }
+   },
+   "eliminate_noops": {
+    "type_annotation": "bool",
+    "default_expr": "Field(default=True)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 125
+    }
+   },
+   "enable_sp": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 127
+    }
+   },
+   "fuse_gemm_comms": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 131
+    }
+   },
+   "fuse_allreduce_rms": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 133
+    }
+   },
+   "fuse_minimax_qk_norm": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 135
+    }
+   },
+   "enable_qk_norm_rope_fusion": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 137
+    }
+   },
+   "fuse_act_padding": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 141
+    }
+   },
+   "fuse_rope_kvcache": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 143
+    }
+   },
+   "rope_kvcache_fusion_max_token_num": {
+    "type_annotation": "int",
+    "default_expr": "256",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 146
+    }
+   },
+   "fi_allreduce_fusion_max_size_mb": {
+    "type_annotation": "float | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 151
+    }
+   },
+   "sp_min_token_num": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 169
+    }
+   }
+  },
+  "DynamicShapesConfig": {
+   "_source": {
+    "file": "vllm/config/compilation.py",
+    "qualname": "DynamicShapesConfig",
+    "line": 318
+   },
+   "_decorators": [
+    "config"
+   ],
+   "type": {
+    "type_annotation": "DynamicShapesType",
+    "default_expr": "DynamicShapesType.BACKED",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 321
+    }
+   },
+   "evaluate_guards": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 331
+    }
+   },
+   "assume_32_bit_indexing": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 343
+    }
+   }
+  },
+  "CompilationConfig": {
+   "_source": {
+    "file": "vllm/config/compilation.py",
+    "qualname": "CompilationConfig",
+    "line": 361
+   },
+   "_decorators": [
+    "config"
+   ],
+   "mode": {
+    "type_annotation": "CompilationMode",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 410
+    }
+   },
+   "debug_dump_path": {
+    "type_annotation": "Path | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 424
+    }
+   },
+   "cache_dir": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 426
+    }
+   },
+   "compile_cache_save_format": {
+    "type_annotation": "Literal['binary', 'unpacked']",
+    "default_expr": "field(default_factory=lambda: envs.VLLM_COMPILE_CACHE_SAVE_FORMAT)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 430
+    }
+   },
+   "backend": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 439
+    }
+   },
+   "custom_ops": {
+    "type_annotation": "list[str]",
+    "default_expr": "field(default_factory=list)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 458
+    }
+   },
+   "splitting_ops": {
+    "type_annotation": "list[str] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 471
+    }
+   },
+   "compile_mm_encoder": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 489
+    }
+   },
+   "cudagraph_mm_encoder": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 497
+    }
+   },
+   "encoder_cudagraph_token_budgets": {
+    "type_annotation": "list[int]",
+    "default_expr": "field(default_factory=list)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 502
+    }
+   },
+   "encoder_cudagraph_max_images_per_batch": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 511
+    }
+   },
+   "compile_sizes": {
+    "type_annotation": "list[int | str] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 519
+    }
+   },
+   "compile_ranges_endpoints": {
+    "type_annotation": "list[int] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 524
+    }
+   },
+   "inductor_compile_config": {
+    "type_annotation": "dict",
+    "default_expr": "field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 539
+    }
+   },
+   "inductor_passes": {
+    "type_annotation": "dict[str, str]",
+    "default_expr": "field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 543
+    }
+   },
+   "cudagraph_mode": {
+    "type_annotation": "CUDAGraphMode",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 551
+    }
+   },
+   "cudagraph_num_of_warmups": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 587
+    }
+   },
+   "cudagraph_capture_sizes": {
+    "type_annotation": "list[int]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 592
+    }
+   },
+   "cudagraph_copy_inputs": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 596
+    }
+   },
+   "cudagraph_specialize_lora": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 604
+    }
+   },
+   "use_inductor_graph_partition": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 613
+    }
+   },
+   "pass_config": {
+    "type_annotation": "PassConfig",
+    "default_expr": "field(default_factory=PassConfig)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 633
+    }
+   },
+   "max_cudagraph_capture_size": {
+    "type_annotation": "int",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 636
+    }
+   },
+   "dynamic_shapes_config": {
+    "type_annotation": "DynamicShapesConfig",
+    "default_expr": "field(default_factory=DynamicShapesConfig)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 653
+    }
+   },
+   "local_cache_dir": {
+    "type_annotation": "str",
+    "default_expr": "field(default=None, init=False)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 658
+    }
+   },
+   "fast_moe_cold_start": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 661
+    }
+   },
+   "enabled_custom_ops": {
+    "type_annotation": "Counter[str]",
+    "default_expr": "field(default_factory=Counter, init=False)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 686
+    }
+   },
+   "disabled_custom_ops": {
+    "type_annotation": "Counter[str]",
+    "default_expr": "field(default_factory=Counter, init=False)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 688
+    }
+   },
+   "traced_files": {
+    "type_annotation": "set[str]",
+    "default_expr": "field(default_factory=set, init=False)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 690
+    }
+   },
+   "compilation_time": {
+    "type_annotation": "float",
+    "default_expr": "field(default=0.0, init=False)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 692
+    }
+   },
+   "static_forward_context": {
+    "type_annotation": "dict[str, Any]",
+    "default_expr": "field(default_factory=dict, init=False)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 695
+    }
+   },
+   "static_all_moe_layers": {
+    "type_annotation": "list[str]",
+    "default_expr": "field(default_factory=list, init=False)",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 700
+    }
+   },
+   "_attention_ops": {
+    "type_annotation": "ClassVar[list[str]]",
+    "default_expr": "['vllm::unified_attention', 'vllm::unified_attention_with_output', 'vllm::unified_mla_attention', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::plamo2_mamba_mixer', 'vllm::gdn_attention_core', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::kda_attention', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer']",
+    "source": {
+     "file": "vllm/config/compilation.py",
+     "line": 706
+    }
+   }
+  },
+  "DeviceConfig": {
+   "_source": {
+    "file": "vllm/config/device.py",
+    "qualname": "DeviceConfig",
+    "line": 17
+   },
+   "_decorators": [
+    "config(config=ConfigDict(arbitrary_types_allowed=True))"
+   ],
+   "device": {
+    "type_annotation": "SkipValidation[Device | torch.device | None]",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/device.py",
+     "line": 20
+    }
+   },
+   "device_type": {
+    "type_annotation": "str",
+    "default_expr": "field(init=False)",
+    "source": {
+     "file": "vllm/config/device.py",
+     "line": 26
+    }
+   }
+  },
+  "ECTransferConfig": {
+   "_source": {
+    "file": "vllm/config/ec_transfer.py",
+    "qualname": "ECTransferConfig",
+    "line": 16
+   },
+   "_decorators": [
+    "config"
+   ],
+   "ec_connector": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 19
+    }
+   },
+   "engine_id": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 23
+    }
+   },
+   "ec_buffer_device": {
+    "type_annotation": "str | None",
+    "default_expr": "'cuda'",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 26
+    }
+   },
+   "ec_buffer_size": {
+    "type_annotation": "float",
+    "default_expr": "1000000000.0",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 30
+    }
+   },
+   "ec_role": {
+    "type_annotation": "ECRole | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 34
+    }
+   },
+   "ec_rank": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 38
+    }
+   },
+   "ec_parallel_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 43
+    }
+   },
+   "ec_ip": {
+    "type_annotation": "str",
+    "default_expr": "'127.0.0.1'",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 47
+    }
+   },
+   "ec_port": {
+    "type_annotation": "int",
+    "default_expr": "14579",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 50
+    }
+   },
+   "ec_connector_extra_config": {
+    "type_annotation": "dict[str, Any]",
+    "default_expr": "field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 53
+    }
+   },
+   "ec_connector_module_path": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/ec_transfer.py",
+     "line": 56
+    }
+   }
+  },
+  "KernelConfig": {
+   "_source": {
+    "file": "vllm/config/kernel.py",
+    "qualname": "KernelConfig",
+    "line": 26
+   },
+   "_decorators": [
+    "config"
+   ],
+   "enable_flashinfer_autotune": {
+    "type_annotation": "bool",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kernel.py",
+     "line": 29
+    }
+   },
+   "moe_backend": {
+    "type_annotation": "MoEBackend",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/kernel.py",
+     "line": 32
+    }
+   }
+  },
+  "KVEventsConfig": {
+   "_source": {
+    "file": "vllm/config/kv_events.py",
+    "qualname": "KVEventsConfig",
+    "line": 11
+   },
+   "_decorators": [
+    "config"
+   ],
+   "enable_kv_cache_events": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 14
+    }
+   },
+   "publisher": {
+    "type_annotation": "Literal['null', 'zmq']",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 19
+    }
+   },
+   "endpoint": {
+    "type_annotation": "str",
+    "default_expr": "'tcp://*:5557'",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 23
+    }
+   },
+   "replay_endpoint": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 27
+    }
+   },
+   "buffer_steps": {
+    "type_annotation": "int",
+    "default_expr": "10000",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 31
+    }
+   },
+   "hwm": {
+    "type_annotation": "int",
+    "default_expr": "100000",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 36
+    }
+   },
+   "max_queue_size": {
+    "type_annotation": "int",
+    "default_expr": "100000",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 41
+    }
+   },
+   "topic": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/kv_events.py",
+     "line": 45
+    }
+   }
+  },
+  "KVTransferConfig": {
+   "_source": {
+    "file": "vllm/config/kv_transfer.py",
+    "qualname": "KVTransferConfig",
+    "line": 23
+   },
+   "_decorators": [
+    "config"
+   ],
+   "kv_connector": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 26
+    }
+   },
+   "engine_id": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 30
+    }
+   },
+   "kv_buffer_device": {
+    "type_annotation": "str",
+    "default_expr": "field(default_factory=kv_buffer_device_default_factory)",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 33
+    }
+   },
+   "kv_buffer_size": {
+    "type_annotation": "float",
+    "default_expr": "1000000000.0",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 37
+    }
+   },
+   "kv_role": {
+    "type_annotation": "KVRole | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 41
+    }
+   },
+   "kv_rank": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 45
+    }
+   },
+   "kv_parallel_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 50
+    }
+   },
+   "kv_ip": {
+    "type_annotation": "str",
+    "default_expr": "'127.0.0.1'",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 54
+    }
+   },
+   "kv_port": {
+    "type_annotation": "int",
+    "default_expr": "14579",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 57
+    }
+   },
+   "kv_connector_extra_config": {
+    "type_annotation": "dict[str, Any]",
+    "default_expr": "field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 60
+    }
+   },
+   "kv_connector_module_path": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 63
+    }
+   },
+   "enable_permute_local_kv": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 67
+    }
+   },
+   "kv_load_failure_policy": {
+    "type_annotation": "Literal['recompute', 'fail']",
+    "default_expr": "'fail'",
+    "source": {
+     "file": "vllm/config/kv_transfer.py",
+     "line": 70
+    }
+   }
+  },
+  "LoadConfig": {
+   "_source": {
+    "file": "vllm/config/load.py",
+    "qualname": "LoadConfig",
+    "line": 23
+   },
+   "_decorators": [
+    "config"
+   ],
+   "load_format": {
+    "type_annotation": "str | LoadFormats",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 26
+    }
+   },
+   "download_dir": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 57
+    }
+   },
+   "safetensors_load_strategy": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 60
+    }
+   },
+   "model_loader_extra_config": {
+    "type_annotation": "dict | TensorizerConfig",
+    "default_expr": "Field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 82
+    }
+   },
+   "device": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 85
+    }
+   },
+   "ignore_patterns": {
+    "type_annotation": "list[str] | str",
+    "default_expr": "Field(default_factory=lambda: ['original/**/*'])",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 88
+    }
+   },
+   "use_tqdm_on_load": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 91
+    }
+   },
+   "pt_load_map_location": {
+    "type_annotation": "str | dict[str, str]",
+    "default_expr": "'cpu'",
+    "source": {
+     "file": "vllm/config/load.py",
+     "line": 94
+    }
+   }
+  },
+  "LoRAConfig": {
+   "_source": {
+    "file": "vllm/config/lora.py",
+    "qualname": "LoRAConfig",
+    "line": 29
+   },
+   "_decorators": [
+    "config(config=ConfigDict(arbitrary_types_allowed=True))"
+   ],
+   "max_lora_rank": {
+    "type_annotation": "MaxLoRARanks",
+    "default_expr": "16",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 32
+    }
+   },
+   "max_loras": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=1, ge=1)",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 34
+    }
+   },
+   "fully_sharded_loras": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 36
+    }
+   },
+   "max_cpu_loras": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 41
+    }
+   },
+   "lora_dtype": {
+    "type_annotation": "torch.dtype | LoRADType",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 44
+    }
+   },
+   "target_modules": {
+    "type_annotation": "list[str] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 46
+    }
+   },
+   "default_mm_loras": {
+    "type_annotation": "dict[str, str] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 50
+    }
+   },
+   "enable_tower_connector_lora": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 60
+    }
+   },
+   "specialize_active_lora": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/lora.py",
+     "line": 65
+    }
+   }
+  },
+  "ModelConfig": {
+   "_source": {
+    "file": "vllm/config/model.py",
+    "qualname": "ModelConfig",
+    "line": 106
+   },
+   "_decorators": [
+    "config(config=ConfigDict(arbitrary_types_allowed=True))"
+   ],
+   "model": {
+    "type_annotation": "str",
+    "default_expr": "'Qwen/Qwen3-0.6B'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 109
+    }
+   },
+   "model_weights": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 113
+    }
+   },
+   "runner": {
+    "type_annotation": "RunnerOption",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 117
+    }
+   },
+   "convert": {
+    "type_annotation": "ConvertOption",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 120
+    }
+   },
+   "tokenizer": {
+    "type_annotation": "str",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 124
+    }
+   },
+   "tokenizer_mode": {
+    "type_annotation": "TokenizerMode | str",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 127
+    }
+   },
+   "trust_remote_code": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 138
+    }
+   },
+   "dtype": {
+    "type_annotation": "ModelDType | torch.dtype",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 141
+    }
+   },
+   "seed": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 151
+    }
+   },
+   "hf_config": {
+    "type_annotation": "PretrainedConfig",
+    "default_expr": "field(init=False)",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 157
+    }
+   },
+   "hf_text_config": {
+    "type_annotation": "PretrainedConfig",
+    "default_expr": "field(init=False)",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 159
+    }
+   },
+   "hf_config_path": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 161
+    }
+   },
+   "allowed_local_media_path": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 164
+    }
+   },
+   "allowed_media_domains": {
+    "type_annotation": "list[str] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 168
+    }
+   },
+   "revision": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 171
+    }
+   },
+   "code_revision": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 174
+    }
+   },
+   "tokenizer_revision": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 178
+    }
+   },
+   "max_model_len": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=None, ge=-1)",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 182
+    }
+   },
+   "spec_target_max_model_len": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 195
+    }
+   },
+   "quantization": {
+    "type_annotation": "QuantizationMethods | str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 197
+    }
+   },
+   "allow_deprecated_quantization": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 202
+    }
+   },
+   "enforce_eager": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 204
+    }
+   },
+   "enable_return_routed_experts": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 209
+    }
+   },
+   "max_logprobs": {
+    "type_annotation": "int",
+    "default_expr": "20",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 211
+    }
+   },
+   "logprobs_mode": {
+    "type_annotation": "LogprobsMode",
+    "default_expr": "'raw_logprobs'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 216
+    }
+   },
+   "disable_sliding_window": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 224
+    }
+   },
+   "disable_cascade_attn": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 228
+    }
+   },
+   "skip_tokenizer_init": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 235
+    }
+   },
+   "enable_prompt_embeds": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 239
+    }
+   },
+   "served_model_name": {
+    "type_annotation": "str | list[str] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 245
+    }
+   },
+   "config_format": {
+    "type_annotation": "str | ConfigFormat",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 253
+    }
+   },
+   "hf_token": {
+    "type_annotation": "bool | str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 260
+    }
+   },
+   "hf_overrides": {
+    "type_annotation": "HfOverrides",
+    "default_expr": "field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 264
+    }
+   },
+   "generation_config": {
+    "type_annotation": "str",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 267
+    }
+   },
+   "override_generation_config": {
+    "type_annotation": "dict[str, Any]",
+    "default_expr": "field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 274
+    }
+   },
+   "enable_sleep_mode": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 279
+    }
+   },
+   "model_impl": {
+    "type_annotation": "str | ModelImpl",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 282
+    }
+   },
+   "override_attention_dtype": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 291
+    }
+   },
+   "logits_processors": {
+    "type_annotation": "list[str | type[LogitsProcessor]] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 293
+    }
+   },
+   "io_processor_plugin": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 296
+    }
+   },
+   "renderer_num_workers": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 298
+    }
+   },
+   "pooler_config": {
+    "type_annotation": "PoolerConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 304
+    }
+   },
+   "multimodal_config": {
+    "type_annotation": "MultiModalConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 309
+    }
+   },
+   "language_model_only": {
+    "type_annotation": "InitVar[bool]",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 312
+    }
+   },
+   "limit_mm_per_prompt": {
+    "type_annotation": "InitVar[dict[str, int | dict[str, int]] | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 313
+    }
+   },
+   "enable_mm_embeds": {
+    "type_annotation": "InitVar[bool | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 314
+    }
+   },
+   "media_io_kwargs": {
+    "type_annotation": "InitVar[dict[str, dict[str, Any]] | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 315
+    }
+   },
+   "mm_processor_kwargs": {
+    "type_annotation": "InitVar[dict[str, Any] | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 316
+    }
+   },
+   "mm_processor_cache_gb": {
+    "type_annotation": "InitVar[float | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 317
+    }
+   },
+   "mm_processor_cache_type": {
+    "type_annotation": "InitVar[MMCacheType | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 318
+    }
+   },
+   "mm_shm_cache_max_object_size_mb": {
+    "type_annotation": "InitVar[int | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 319
+    }
+   },
+   "mm_encoder_only": {
+    "type_annotation": "InitVar[bool | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 320
+    }
+   },
+   "mm_encoder_tp_mode": {
+    "type_annotation": "InitVar[MMEncoderTPMode | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 321
+    }
+   },
+   "mm_encoder_attn_backend": {
+    "type_annotation": "InitVar[AttentionBackendEnum | str | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 322
+    }
+   },
+   "interleave_mm_strings": {
+    "type_annotation": "InitVar[bool | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 323
+    }
+   },
+   "skip_mm_profiling": {
+    "type_annotation": "InitVar[bool | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 324
+    }
+   },
+   "video_pruning_rate": {
+    "type_annotation": "InitVar[float | None]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 325
+    }
+   },
+   "mm_tensor_ipc": {
+    "type_annotation": "InitVar[MMTensorIPC]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/model.py",
+     "line": 326
+    }
+   }
+  },
+  "MultiModalConfig": {
+   "_source": {
+    "file": "vllm/config/multimodal.py",
+    "qualname": "MultiModalConfig",
+    "line": 73
+   },
+   "_decorators": [
+    "config"
+   ],
+   "language_model_only": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 76
+    }
+   },
+   "limit_per_prompt": {
+    "type_annotation": "MMDummyOptions",
+    "default_expr": "Field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 79
+    }
+   },
+   "enable_mm_embeds": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 96
+    }
+   },
+   "media_io_kwargs": {
+    "type_annotation": "dict[str, dict[str, Any]]",
+    "default_expr": "Field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 109
+    }
+   },
+   "mm_processor_kwargs": {
+    "type_annotation": "dict[str, object] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 113
+    }
+   },
+   "mm_processor_cache_gb": {
+    "type_annotation": "float",
+    "default_expr": "Field(default=4, ge=0)",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 122
+    }
+   },
+   "mm_processor_cache_type": {
+    "type_annotation": "MMCacheType",
+    "default_expr": "'lru'",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 131
+    }
+   },
+   "mm_shm_cache_max_object_size_mb": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=128, ge=0)",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 134
+    }
+   },
+   "mm_encoder_only": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 138
+    }
+   },
+   "mm_encoder_tp_mode": {
+    "type_annotation": "MMEncoderTPMode",
+    "default_expr": "'weights'",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 144
+    }
+   },
+   "mm_encoder_attn_backend": {
+    "type_annotation": "AttentionBackendEnum | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 157
+    }
+   },
+   "interleave_mm_strings": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 161
+    }
+   },
+   "skip_mm_profiling": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 164
+    }
+   },
+   "video_pruning_rate": {
+    "type_annotation": "float | None",
+    "default_expr": "Field(default=None, ge=0.0, lt=1.0)",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 171
+    }
+   },
+   "mm_tensor_ipc": {
+    "type_annotation": "MMTensorIPC",
+    "default_expr": "'direct_rpc'",
+    "source": {
+     "file": "vllm/config/multimodal.py",
+     "line": 176
+    }
+   }
+  },
+  "ObservabilityConfig": {
+   "_source": {
+    "file": "vllm/config/observability.py",
+    "qualname": "ObservabilityConfig",
+    "line": 18
+   },
+   "_decorators": [
+    "config"
+   ],
+   "show_hidden_metrics_for_version": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 21
+    }
+   },
+   "otlp_traces_endpoint": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 36
+    }
+   },
+   "collect_detailed_traces": {
+    "type_annotation": "list[DetailedTraceModules] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 39
+    }
+   },
+   "kv_cache_metrics": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 48
+    }
+   },
+   "kv_cache_metrics_sample": {
+    "type_annotation": "float",
+    "default_expr": "Field(default=0.01, gt=0, le=1)",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 53
+    }
+   },
+   "cudagraph_metrics": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 56
+    }
+   },
+   "enable_layerwise_nvtx_tracing": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 60
+    }
+   },
+   "enable_mfu_metrics": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 65
+    }
+   },
+   "enable_mm_processor_stats": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 68
+    }
+   },
+   "enable_logging_iteration_details": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/observability.py",
+     "line": 73
+    }
+   }
+  },
+  "UVAOffloadConfig": {
+   "_source": {
+    "file": "vllm/config/offload.py",
+    "qualname": "UVAOffloadConfig",
+    "line": 16
+   },
+   "_decorators": [
+    "config"
+   ],
+   "cpu_offload_gb": {
+    "type_annotation": "float",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 23
+    }
+   },
+   "cpu_offload_params": {
+    "type_annotation": "set[str]",
+    "default_expr": "Field(default_factory=set)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 34
+    }
+   }
+  },
+  "PrefetchOffloadConfig": {
+   "_source": {
+    "file": "vllm/config/offload.py",
+    "qualname": "PrefetchOffloadConfig",
+    "line": 48
+   },
+   "_decorators": [
+    "config"
+   ],
+   "offload_group_size": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 54
+    }
+   },
+   "offload_num_in_group": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=1, ge=1)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 62
+    }
+   },
+   "offload_prefetch_step": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=1, ge=0)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 66
+    }
+   },
+   "offload_params": {
+    "type_annotation": "set[str]",
+    "default_expr": "Field(default_factory=set)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 70
+    }
+   }
+  },
+  "OffloadConfig": {
+   "_source": {
+    "file": "vllm/config/offload.py",
+    "qualname": "OffloadConfig",
+    "line": 80
+   },
+   "_decorators": [
+    "config"
+   ],
+   "offload_backend": {
+    "type_annotation": "OffloadBackend",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 83
+    }
+   },
+   "uva": {
+    "type_annotation": "UVAOffloadConfig",
+    "default_expr": "Field(default_factory=UVAOffloadConfig)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 91
+    }
+   },
+   "prefetch": {
+    "type_annotation": "PrefetchOffloadConfig",
+    "default_expr": "Field(default_factory=PrefetchOffloadConfig)",
+    "source": {
+     "file": "vllm/config/offload.py",
+     "line": 94
+    }
+   }
+  },
+  "EPLBConfig": {
+   "_source": {
+    "file": "vllm/config/parallel.py",
+    "qualname": "EPLBConfig",
+    "line": 53
+   },
+   "_decorators": [
+    "config"
+   ],
+   "window_size": {
+    "type_annotation": "int",
+    "default_expr": "1000",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 56
+    }
+   },
+   "step_interval": {
+    "type_annotation": "int",
+    "default_expr": "3000",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 58
+    }
+   },
+   "num_redundant_experts": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 66
+    }
+   },
+   "log_balancedness": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 69
+    }
+   },
+   "log_balancedness_interval": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 74
+    }
+   },
+   "use_async": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 78
+    }
+   },
+   "policy": {
+    "type_annotation": "EPLBPolicyOption",
+    "default_expr": "'default'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 83
+    }
+   }
+  },
+  "ParallelConfig": {
+   "_source": {
+    "file": "vllm/config/parallel.py",
+    "qualname": "ParallelConfig",
+    "line": 96
+   },
+   "_decorators": [
+    "config"
+   ],
+   "pipeline_parallel_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 99
+    }
+   },
+   "tensor_parallel_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 101
+    }
+   },
+   "prefill_context_parallel_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 103
+    }
+   },
+   "data_parallel_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 105
+    }
+   },
+   "data_parallel_size_local": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 108
+    }
+   },
+   "data_parallel_rank": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 110
+    }
+   },
+   "data_parallel_rank_local": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 112
+    }
+   },
+   "data_parallel_master_ip": {
+    "type_annotation": "str",
+    "default_expr": "'127.0.0.1'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 115
+    }
+   },
+   "data_parallel_rpc_port": {
+    "type_annotation": "int",
+    "default_expr": "29550",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 117
+    }
+   },
+   "data_parallel_master_port": {
+    "type_annotation": "int",
+    "default_expr": "29500",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 119
+    }
+   },
+   "data_parallel_backend": {
+    "type_annotation": "DataParallelBackend",
+    "default_expr": "'mp'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 121
+    }
+   },
+   "data_parallel_external_lb": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 123
+    }
+   },
+   "data_parallel_hybrid_lb": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 128
+    }
+   },
+   "is_moe_model": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 135
+    }
+   },
+   "enable_expert_parallel": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 137
+    }
+   },
+   "enable_ep_weight_filter": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 139
+    }
+   },
+   "enable_eplb": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 146
+    }
+   },
+   "eplb_config": {
+    "type_annotation": "EPLBConfig",
+    "default_expr": "Field(default_factory=EPLBConfig)",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 148
+    }
+   },
+   "expert_placement_strategy": {
+    "type_annotation": "ExpertPlacementStrategy",
+    "default_expr": "'linear'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 150
+    }
+   },
+   "all2all_backend": {
+    "type_annotation": "All2AllBackend",
+    "default_expr": "'allgather_reducescatter'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 160
+    }
+   },
+   "max_parallel_loading_workers": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 171
+    }
+   },
+   "disable_custom_all_reduce": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 176
+    }
+   },
+   "enable_elastic_ep": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 179
+    }
+   },
+   "enable_dbo": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 182
+    }
+   },
+   "ubatch_size": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 184
+    }
+   },
+   "dbo_decode_token_threshold": {
+    "type_annotation": "int",
+    "default_expr": "32",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 187
+    }
+   },
+   "dbo_prefill_token_threshold": {
+    "type_annotation": "int",
+    "default_expr": "512",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 192
+    }
+   },
+   "disable_nccl_for_dp_synchronization": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 198
+    }
+   },
+   "ray_workers_use_nsight": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 205
+    }
+   },
+   "ray_runtime_env": {
+    "type_annotation": "RuntimeEnv | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 208
+    }
+   },
+   "placement_group": {
+    "type_annotation": "PlacementGroup | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 211
+    }
+   },
+   "distributed_executor_backend": {
+    "type_annotation": "str | DistributedExecutorBackend | type[Executor] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 214
+    }
+   },
+   "worker_cls": {
+    "type_annotation": "str",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 226
+    }
+   },
+   "sd_worker_cls": {
+    "type_annotation": "str",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 229
+    }
+   },
+   "worker_extension_cls": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 232
+    }
+   },
+   "master_addr": {
+    "type_annotation": "str",
+    "default_expr": "'127.0.0.1'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 237
+    }
+   },
+   "master_port": {
+    "type_annotation": "int",
+    "default_expr": "29501",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 240
+    }
+   },
+   "node_rank": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 243
+    }
+   },
+   "nnodes": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 246
+    }
+   },
+   "distributed_timeout_seconds": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 250
+    }
+   },
+   "world_size": {
+    "type_annotation": "int",
+    "default_expr": "Field(init=False)",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 256
+    }
+   },
+   "rank": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 259
+    }
+   },
+   "_data_parallel_master_port_list": {
+    "type_annotation": "list[int]",
+    "default_expr": "Field(default_factory=list)",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 262
+    }
+   },
+   "_coord_store_port": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 267
+    }
+   },
+   "decode_context_parallel_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 271
+    }
+   },
+   "dcp_kv_cache_interleave_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 276
+    }
+   },
+   "dcp_comm_backend": {
+    "type_annotation": "DCPCommBackend",
+    "default_expr": "'ag_rs'",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 283
+    }
+   },
+   "cp_kv_cache_interleave_size": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 291
+    }
+   },
+   "data_parallel_index": {
+    "type_annotation": "int",
+    "default_expr": "Field(init=False)",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 306
+    }
+   },
+   "_api_process_count": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=1, gt=0)",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 310
+    }
+   },
+   "_api_process_rank": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=-1)",
+    "source": {
+     "file": "vllm/config/parallel.py",
+     "line": 319
+    }
+   }
+  },
+  "PoolerConfig": {
+   "_source": {
+    "file": "vllm/config/pooler.py",
+    "qualname": "PoolerConfig",
+    "line": 21
+   },
+   "_decorators": [
+    "config"
+   ],
+   "task": {
+    "type_annotation": "PoolingTask | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 24
+    }
+   },
+   "pooling_type": {
+    "type_annotation": "SequencePoolingType | TokenPoolingType | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 29
+    }
+   },
+   "seq_pooling_type": {
+    "type_annotation": "SequencePoolingType | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 41
+    }
+   },
+   "tok_pooling_type": {
+    "type_annotation": "TokenPoolingType | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 46
+    }
+   },
+   "use_activation": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 51
+    }
+   },
+   "dimensions": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 58
+    }
+   },
+   "enable_chunked_processing": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 63
+    }
+   },
+   "max_embed_len": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 71
+    }
+   },
+   "logit_bias": {
+    "type_annotation": "float | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 81
+    }
+   },
+   "step_tag_id": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 87
+    }
+   },
+   "returned_token_ids": {
+    "type_annotation": "list[int] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/pooler.py",
+     "line": 93
+    }
+   }
+  },
+  "ProfilerConfig": {
+   "_source": {
+    "file": "vllm/config/profiler.py",
+    "qualname": "ProfilerConfig",
+    "line": 34
+   },
+   "_decorators": [
+    "config"
+   ],
+   "profiler": {
+    "type_annotation": "ProfilerKind | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 37
+    }
+   },
+   "torch_profiler_dir": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 43
+    }
+   },
+   "torch_profiler_with_stack": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 48
+    }
+   },
+   "torch_profiler_with_flops": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 53
+    }
+   },
+   "torch_profiler_use_gzip": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 56
+    }
+   },
+   "torch_profiler_dump_cuda_time_total": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 59
+    }
+   },
+   "torch_profiler_record_shapes": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 62
+    }
+   },
+   "torch_profiler_with_memory": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 65
+    }
+   },
+   "ignore_frontend": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 69
+    }
+   },
+   "delay_iterations": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 76
+    }
+   },
+   "max_iterations": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 81
+    }
+   },
+   "warmup_iterations": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 86
+    }
+   },
+   "active_iterations": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=5, ge=1)",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 94
+    }
+   },
+   "wait_iterations": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/profiler.py",
+     "line": 100
+    }
+   }
+  },
+  "ReasoningConfig": {
+   "_source": {
+    "file": "vllm/config/reasoning.py",
+    "qualname": "ReasoningConfig",
+    "line": 12
+   },
+   "_decorators": [
+    "config"
+   ],
+   "reasoning_start_str": {
+    "type_annotation": "str",
+    "default_expr": "'<think>'",
+    "source": {
+     "file": "vllm/config/reasoning.py",
+     "line": 23
+    }
+   },
+   "reasoning_end_str": {
+    "type_annotation": "str",
+    "default_expr": "'</think>'",
+    "source": {
+     "file": "vllm/config/reasoning.py",
+     "line": 25
+    }
+   },
+   "_reasoning_start_token_ids": {
+    "type_annotation": "list[int] | None",
+    "default_expr": "field(default=None, init=False, repr=False)",
+    "source": {
+     "file": "vllm/config/reasoning.py",
+     "line": 28
+    }
+   },
+   "_reasoning_end_token_ids": {
+    "type_annotation": "list[int] | None",
+    "default_expr": "field(default=None, init=False, repr=False)",
+    "source": {
+     "file": "vllm/config/reasoning.py",
+     "line": 33
+    }
+   }
+  },
+  "SchedulerConfig": {
+   "_source": {
+    "file": "vllm/config/scheduler.py",
+    "qualname": "SchedulerConfig",
+    "line": 26
+   },
+   "_decorators": [
+    "config"
+   ],
+   "max_model_len": {
+    "type_annotation": "InitVar[int]",
+    "default_expr": "<no-default/REQUIRED>",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 29
+    }
+   },
+   "is_encoder_decoder": {
+    "type_annotation": "InitVar[bool]",
+    "default_expr": "<no-default/REQUIRED>",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 35
+    }
+   },
+   "DEFAULT_MAX_NUM_BATCHED_TOKENS": {
+    "type_annotation": "ClassVar[int]",
+    "default_expr": "2048",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 42
+    }
+   },
+   "DEFAULT_MAX_NUM_SEQS": {
+    "type_annotation": "ClassVar[int]",
+    "default_expr": "128",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 43
+    }
+   },
+   "runner_type": {
+    "type_annotation": "RunnerType",
+    "default_expr": "'generate'",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 45
+    }
+   },
+   "max_num_batched_tokens": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=DEFAULT_MAX_NUM_BATCHED_TOKENS, ge=1)",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 48
+    }
+   },
+   "max_num_scheduled_tokens": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 55
+    }
+   },
+   "max_num_seqs": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=DEFAULT_MAX_NUM_SEQS, ge=1)",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 62
+    }
+   },
+   "max_num_partial_prefills": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=1, ge=1)",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 69
+    }
+   },
+   "max_long_partial_prefills": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=1, ge=1)",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 73
+    }
+   },
+   "long_prefill_token_threshold": {
+    "type_annotation": "int",
+    "default_expr": "0",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 79
+    }
+   },
+   "enable_chunked_prefill": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 83
+    }
+   },
+   "is_multimodal_model": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 91
+    }
+   },
+   "max_num_encoder_input_tokens": {
+    "type_annotation": "int",
+    "default_expr": "Field(init=False)",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 95
+    }
+   },
+   "encoder_cache_size": {
+    "type_annotation": "int",
+    "default_expr": "Field(init=False)",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 102
+    }
+   },
+   "policy": {
+    "type_annotation": "SchedulerPolicy",
+    "default_expr": "'fcfs'",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 108
+    }
+   },
+   "disable_chunked_mm_input": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 116
+    }
+   },
+   "scheduler_cls": {
+    "type_annotation": "str | type[object] | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 126
+    }
+   },
+   "disable_hybrid_kv_cache_manager": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 131
+    }
+   },
+   "scheduler_reserve_full_isl": {
+    "type_annotation": "bool",
+    "default_expr": "True",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 139
+    }
+   },
+   "async_scheduling": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 145
+    }
+   },
+   "stream_interval": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=1, ge=1)",
+    "source": {
+     "file": "vllm/config/scheduler.py",
+     "line": 150
+    }
+   }
+  },
+  "SpeculativeConfig": {
+   "_source": {
+    "file": "vllm/config/speculative.py",
+    "qualname": "SpeculativeConfig",
+    "line": 65
+   },
+   "_decorators": [
+    "config"
+   ],
+   "enforce_eager": {
+    "type_annotation": "bool | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 68
+    }
+   },
+   "num_speculative_tokens": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=None, gt=0)",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 71
+    }
+   },
+   "model": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 74
+    }
+   },
+   "method": {
+    "type_annotation": "SpeculativeMethod | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 77
+    }
+   },
+   "draft_tensor_parallel_size": {
+    "type_annotation": "int | None",
+    "default_expr": "Field(default=None, ge=1)",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 85
+    }
+   },
+   "tensor_parallel_size": {
+    "type_annotation": "int | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 88
+    }
+   },
+   "quantization": {
+    "type_annotation": "me_quant.QuantizationMethods | str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 93
+    }
+   },
+   "moe_backend": {
+    "type_annotation": "MoEBackend | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 97
+    }
+   },
+   "max_model_len": {
+    "type_annotation": "int | None",
+    "default_expr": "Field(default=None, ge=1)",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 102
+    }
+   },
+   "revision": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 105
+    }
+   },
+   "code_revision": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 109
+    }
+   },
+   "disable_padded_drafter_batch": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 115
+    }
+   },
+   "use_local_argmax_reduction": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 120
+    }
+   },
+   "prompt_lookup_max": {
+    "type_annotation": "int | None",
+    "default_expr": "Field(default=None, ge=1)",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 127
+    }
+   },
+   "prompt_lookup_min": {
+    "type_annotation": "int | None",
+    "default_expr": "Field(default=None, ge=1)",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 130
+    }
+   },
+   "speculative_token_tree": {
+    "type_annotation": "str | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 135
+    }
+   },
+   "parallel_drafting": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 138
+    }
+   },
+   "target_model_config": {
+    "type_annotation": "SkipValidation[ModelConfig]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 145
+    }
+   },
+   "target_parallel_config": {
+    "type_annotation": "SkipValidation[ParallelConfig]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 147
+    }
+   },
+   "draft_model_config": {
+    "type_annotation": "SkipValidation[ModelConfig]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 151
+    }
+   },
+   "draft_parallel_config": {
+    "type_annotation": "SkipValidation[ParallelConfig]",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 153
+    }
+   },
+   "suffix_decoding_max_tree_depth": {
+    "type_annotation": "int",
+    "default_expr": "24",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 157
+    }
+   },
+   "suffix_decoding_max_cached_requests": {
+    "type_annotation": "int",
+    "default_expr": "10000",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 161
+    }
+   },
+   "suffix_decoding_max_spec_factor": {
+    "type_annotation": "float",
+    "default_expr": "1.0",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 167
+    }
+   },
+   "suffix_decoding_min_token_prob": {
+    "type_annotation": "float",
+    "default_expr": "0.1",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 172
+    }
+   },
+   "draft_load_config": {
+    "type_annotation": "LoadConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 177
+    }
+   },
+   "rejection_sample_method": {
+    "type_annotation": "RejectionSampleMethod",
+    "default_expr": "'strict'",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 181
+    }
+   },
+   "synthetic_acceptance_rate": {
+    "type_annotation": "float | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/speculative.py",
+     "line": 187
+    }
+   }
+  },
+  "SpeechToTextConfig": {
+   "_source": {
+    "file": "vllm/config/speech_to_text.py",
+    "qualname": "SpeechToTextConfig",
+    "line": 9
+   },
+   "_decorators": [
+    "config"
+   ],
+   "sample_rate": {
+    "type_annotation": "float",
+    "default_expr": "16000",
+    "source": {
+     "file": "vllm/config/speech_to_text.py",
+     "line": 12
+    }
+   },
+   "max_audio_clip_s": {
+    "type_annotation": "int | None",
+    "default_expr": "30",
+    "source": {
+     "file": "vllm/config/speech_to_text.py",
+     "line": 17
+    }
+   },
+   "overlap_chunk_second": {
+    "type_annotation": "int",
+    "default_expr": "1",
+    "source": {
+     "file": "vllm/config/speech_to_text.py",
+     "line": 23
+    }
+   },
+   "min_energy_split_window_size": {
+    "type_annotation": "int | None",
+    "default_expr": "1600",
+    "source": {
+     "file": "vllm/config/speech_to_text.py",
+     "line": 28
+    }
+   }
+  },
+  "StructuredOutputsConfig": {
+   "_source": {
+    "file": "vllm/config/structured_outputs.py",
+    "qualname": "StructuredOutputsConfig",
+    "line": 18
+   },
+   "_decorators": [
+    "config"
+   ],
+   "backend": {
+    "type_annotation": "StructuredOutputsBackend",
+    "default_expr": "'auto'",
+    "source": {
+     "file": "vllm/config/structured_outputs.py",
+     "line": 21
+    }
+   },
+   "disable_any_whitespace": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/structured_outputs.py",
+     "line": 26
+    }
+   },
+   "disable_additional_properties": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/structured_outputs.py",
+     "line": 31
+    }
+   },
+   "reasoning_parser": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/structured_outputs.py",
+     "line": 35
+    }
+   },
+   "reasoning_parser_plugin": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/structured_outputs.py",
+     "line": 38
+    }
+   },
+   "enable_in_reasoning": {
+    "type_annotation": "bool",
+    "default_expr": "False",
+    "source": {
+     "file": "vllm/config/structured_outputs.py",
+     "line": 41
+    }
+   }
+  },
+  "VllmConfig": {
+   "_source": {
+    "file": "vllm/config/vllm.py",
+    "qualname": "VllmConfig",
+    "line": 251
+   },
+   "_decorators": [
+    "config(config=ConfigDict(arbitrary_types_allowed=True))"
+   ],
+   "model_config": {
+    "type_annotation": "ModelConfig",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 258
+    }
+   },
+   "cache_config": {
+    "type_annotation": "CacheConfig",
+    "default_expr": "Field(default_factory=CacheConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 260
+    }
+   },
+   "parallel_config": {
+    "type_annotation": "ParallelConfig",
+    "default_expr": "Field(default_factory=ParallelConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 262
+    }
+   },
+   "scheduler_config": {
+    "type_annotation": "SchedulerConfig",
+    "default_expr": "Field(default_factory=SchedulerConfig.default_factory)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 264
+    }
+   },
+   "device_config": {
+    "type_annotation": "DeviceConfig",
+    "default_expr": "Field(default_factory=DeviceConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 268
+    }
+   },
+   "load_config": {
+    "type_annotation": "LoadConfig",
+    "default_expr": "Field(default_factory=LoadConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 270
+    }
+   },
+   "offload_config": {
+    "type_annotation": "OffloadConfig",
+    "default_expr": "Field(default_factory=OffloadConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 272
+    }
+   },
+   "attention_config": {
+    "type_annotation": "AttentionConfig",
+    "default_expr": "Field(default_factory=AttentionConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 274
+    }
+   },
+   "kernel_config": {
+    "type_annotation": "KernelConfig",
+    "default_expr": "Field(default_factory=KernelConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 276
+    }
+   },
+   "lora_config": {
+    "type_annotation": "LoRAConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 278
+    }
+   },
+   "speculative_config": {
+    "type_annotation": "SpeculativeConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 280
+    }
+   },
+   "structured_outputs_config": {
+    "type_annotation": "StructuredOutputsConfig",
+    "default_expr": "Field(default_factory=StructuredOutputsConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 282
+    }
+   },
+   "observability_config": {
+    "type_annotation": "ObservabilityConfig",
+    "default_expr": "Field(default_factory=ObservabilityConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 286
+    }
+   },
+   "quant_config": {
+    "type_annotation": "QuantizationConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 290
+    }
+   },
+   "compilation_config": {
+    "type_annotation": "CompilationConfig",
+    "default_expr": "Field(default_factory=CompilationConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 292
+    }
+   },
+   "profiler_config": {
+    "type_annotation": "ProfilerConfig",
+    "default_expr": "Field(default_factory=ProfilerConfig)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 301
+    }
+   },
+   "kv_transfer_config": {
+    "type_annotation": "KVTransferConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 303
+    }
+   },
+   "kv_events_config": {
+    "type_annotation": "KVEventsConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 305
+    }
+   },
+   "ec_transfer_config": {
+    "type_annotation": "ECTransferConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 307
+    }
+   },
+   "reasoning_config": {
+    "type_annotation": "ReasoningConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 309
+    }
+   },
+   "additional_config": {
+    "type_annotation": "dict | SupportsHash",
+    "default_expr": "Field(default_factory=dict)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 314
+    }
+   },
+   "instance_id": {
+    "type_annotation": "str",
+    "default_expr": "''",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 318
+    }
+   },
+   "optimization_level": {
+    "type_annotation": "OptimizationLevel",
+    "default_expr": "OptimizationLevel.O2",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 320
+    }
+   },
+   "performance_mode": {
+    "type_annotation": "PerformanceMode",
+    "default_expr": "'balanced'",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 326
+    }
+   },
+   "weight_transfer_config": {
+    "type_annotation": "WeightTransferConfig | None",
+    "default_expr": "None",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 333
+    }
+   },
+   "shutdown_timeout": {
+    "type_annotation": "int",
+    "default_expr": "Field(default=0, ge=0)",
+    "source": {
+     "file": "vllm/config/vllm.py",
+     "line": 336
+    }
+   }
+  },
+  "WeightTransferConfig": {
+   "_source": {
+    "file": "vllm/config/weight_transfer.py",
+    "qualname": "WeightTransferConfig",
+    "line": 9
+   },
+   "_decorators": [
+    "config"
+   ],
+   "backend": {
+    "type_annotation": "Literal['nccl', 'ipc']",
+    "default_expr": "'nccl'",
+    "source": {
+     "file": "vllm/config/weight_transfer.py",
+     "line": 12
+    }
+   }
+  }
+ },
+ "engine_envs": {
+  "_source": {
+   "file": "vllm/envs.py",
+   "qualname": "environment_variables",
+   "lines_at_scan": "489-1666"
+  },
+  "_count": 238,
+  "_note": "Every key in vllm.envs.environment_variables (238 at v0.19.1 vs 84 at v0.7.3, ~2.8x growth). Each entry is a lambda evaluated lazily on attribute access (envs.VLLM_FOO re-reads os.environ). Behaviour summaries omitted at this scan for the bulk (CI-affordability); high-leverage entries are annotated in delta.md / version_delta.md. The lambda key is authoritative over the TYPE_CHECKING stub. RUNTIME control surface, NOT in baseline coverage.",
+  "_access_pattern": "import vllm.envs as envs; envs.VLLM_USE_V1 (triggers __getattr__ -> environment_variables[name]())",
+  "VLLM_TARGET_DEVICE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 489
+   }
+  },
+  "VLLM_MAIN_CUDA_VERSION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 491
+   }
+  },
+  "VLLM_FLOAT32_MATMUL_PRECISION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 495
+   }
+  },
+  "VLLM_BATCH_INVARIANT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 503
+   }
+  },
+  "MAX_JOBS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 506
+   }
+  },
+  "NVCC_THREADS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 510
+   }
+  },
+  "VLLM_USE_PRECOMPILED": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 512
+   }
+  },
+  "VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 518
+   }
+  },
+  "VLLM_DOCKER_BUILD_CONTEXT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 523
+   }
+  },
+  "CMAKE_BUILD_TYPE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 530
+   }
+  },
+  "VERBOSE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 534
+   }
+  },
+  "VLLM_CONFIG_ROOT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 540
+   }
+  },
+  "VLLM_CACHE_ROOT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 549
+   }
+  },
+  "VLLM_HOST_IP": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 559
+   }
+  },
+  "VLLM_PORT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 564
+   }
+  },
+  "VLLM_RPC_BASE_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 567
+   }
+  },
+  "VLLM_USE_MODELSCOPE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 572
+   }
+  },
+  "VLLM_RINGBUFFER_WARNING_INTERVAL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 577
+   }
+  },
+  "CUDA_HOME": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 582
+   }
+  },
+  "VLLM_NCCL_SO_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 585
+   }
+  },
+  "LD_LIBRARY_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 588
+   }
+  },
+  "VLLM_ROCM_SLEEP_MEM_CHUNK_SIZE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 590
+   }
+  },
+  "VLLM_USE_STANDALONE_COMPILE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 596
+   }
+  },
+  "VLLM_ENABLE_PREGRAD_PASSES": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 605
+   }
+  },
+  "VLLM_PATTERN_MATCH_DEBUG": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 611
+   }
+  },
+  "VLLM_DEBUG_DUMP_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 616
+   }
+  },
+  "VLLM_USE_AOT_COMPILE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 620
+   }
+  },
+  "VLLM_USE_BYTECODE_HOOK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 623
+   }
+  },
+  "VLLM_FORCE_AOT_LOAD": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 629
+   }
+  },
+  "VLLM_USE_MEGA_AOT_ARTIFACT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 633
+   }
+  },
+  "LOCAL_RANK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 636
+   }
+  },
+  "CUDA_VISIBLE_DEVICES": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 638
+   }
+  },
+  "VLLM_ENGINE_ITERATION_TIMEOUT_S": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 640
+   }
+  },
+  "VLLM_ENGINE_READY_TIMEOUT_S": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 645
+   }
+  },
+  "VLLM_API_KEY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 649
+   }
+  },
+  "VLLM_DEBUG_LOG_API_SERVER_RESPONSE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 651
+   }
+  },
+  "S3_ACCESS_KEY_ID": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 656
+   }
+  },
+  "S3_SECRET_ACCESS_KEY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 657
+   }
+  },
+  "S3_ENDPOINT_URL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 658
+   }
+  },
+  "VLLM_USAGE_STATS_SERVER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 660
+   }
+  },
+  "VLLM_NO_USAGE_STATS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 663
+   }
+  },
+  "VLLM_DO_NOT_TRACK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 664
+   }
+  },
+  "VLLM_USAGE_SOURCE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 670
+   }
+  },
+  "VLLM_CONFIGURE_LOGGING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 675
+   }
+  },
+  "VLLM_LOGGING_CONFIG_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 678
+   }
+  },
+  "VLLM_LOGGING_LEVEL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 680
+   }
+  },
+  "VLLM_LOGGING_STREAM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 682
+   }
+  },
+  "VLLM_LOGGING_PREFIX": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 684
+   }
+  },
+  "VLLM_LOGGING_COLOR": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 687
+   }
+  },
+  "NO_COLOR": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 689
+   }
+  },
+  "VLLM_LOG_STATS_INTERVAL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 692
+   }
+  },
+  "VLLM_TRACE_FUNCTION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 698
+   }
+  },
+  "VLLM_USE_FLASHINFER_SAMPLER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 700
+   }
+  },
+  "VLLM_PP_LAYER_PARTITION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 706
+   }
+  },
+  "VLLM_CPU_KVCACHE_SPACE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 709
+   }
+  },
+  "VLLM_CPU_OMP_THREADS_BIND": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 714
+   }
+  },
+  "VLLM_CPU_NUM_OF_RESERVED_CPU": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 717
+   }
+  },
+  "VLLM_CPU_SGL_KERNEL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 723
+   }
+  },
+  "VLLM_ZENTORCH_WEIGHT_PREPACK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 726
+   }
+  },
+  "VLLM_USE_RAY_COMPILED_DAG_CHANNEL_TYPE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 736
+   }
+  },
+  "VLLM_USE_RAY_COMPILED_DAG_OVERLAP_COMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 741
+   }
+  },
+  "VLLM_USE_RAY_WRAPPED_PP_COMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 747
+   }
+  },
+  "VLLM_WORKER_MULTIPROC_METHOD": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 752
+   }
+  },
+  "VLLM_ASSETS_CACHE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 756
+   }
+  },
+  "VLLM_ASSETS_CACHE_MODEL_CLEAN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 764
+   }
+  },
+  "VLLM_IMAGE_FETCH_TIMEOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 769
+   }
+  },
+  "VLLM_VIDEO_FETCH_TIMEOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 772
+   }
+  },
+  "VLLM_AUDIO_FETCH_TIMEOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 777
+   }
+  },
+  "VLLM_MEDIA_FETCH_MAX_RETRIES": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 782
+   }
+  },
+  "VLLM_MEDIA_URL_ALLOW_REDIRECTS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 787
+   }
+  },
+  "VLLM_MEDIA_LOADING_THREAD_COUNT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 793
+   }
+  },
+  "VLLM_MAX_AUDIO_CLIP_FILESIZE_MB": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 799
+   }
+  },
+  "VLLM_VIDEO_LOADER_BACKEND": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 810
+   }
+  },
+  "VLLM_MEDIA_CONNECTOR": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 820
+   }
+  },
+  "VLLM_MM_HASHER_ALGORITHM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 826
+   }
+  },
+  "VLLM_XLA_CACHE_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 834
+   }
+  },
+  "VLLM_XLA_CHECK_RECOMPILATION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 841
+   }
+  },
+  "VLLM_XLA_USE_SPMD": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 845
+   }
+  },
+  "VLLM_SPARSE_INDEXER_MAX_LOGITS_MB": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 849
+   }
+  },
+  "VLLM_KEEP_ALIVE_ON_ENGINE_DEATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 854
+   }
+  },
+  "VLLM_ALLOW_LONG_MAX_MODEL_LEN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 861
+   }
+  },
+  "VLLM_TEST_FORCE_FP8_MARLIN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 867
+   }
+  },
+  "VLLM_TEST_FORCE_LOAD_FORMAT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 871
+   }
+  },
+  "VLLM_RPC_TIMEOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 876
+   }
+  },
+  "VLLM_HTTP_TIMEOUT_KEEP_ALIVE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 878
+   }
+  },
+  "VLLM_MAX_N_SEQUENCES": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 884
+   }
+  },
+  "VLLM_PLUGINS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 890
+   }
+  },
+  "VLLM_LORA_RESOLVER_CACHE_DIR": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 896
+   }
+  },
+  "VLLM_LORA_RESOLVER_HF_REPO_LIST": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 903
+   }
+  },
+  "VLLM_USE_TRITON_AWQ": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 907
+   }
+  },
+  "VLLM_ALLOW_RUNTIME_LORA_UPDATING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 909
+   }
+  },
+  "VLLM_SKIP_P2P_CHECK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 919
+   }
+  },
+  "VLLM_DISABLED_KERNELS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 924
+   }
+  },
+  "VLLM_ENABLE_FLA_PACKED_RECURRENT_DECODE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 927
+   }
+  },
+  "VLLM_DISABLE_PYNCCL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 931
+   }
+  },
+  "VLLM_USE_OINK_OPS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 936
+   }
+  },
+  "VLLM_ROCM_USE_AITER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 941
+   }
+  },
+  "VLLM_ROCM_USE_AITER_PAGED_ATTN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 946
+   }
+  },
+  "VLLM_ROCM_USE_AITER_LINEAR": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 952
+   }
+  },
+  "VLLM_ROCM_USE_AITER_MOE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 957
+   }
+  },
+  "VLLM_ROCM_USE_AITER_RMSNORM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 961
+   }
+  },
+  "VLLM_ROCM_USE_AITER_MLA": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 966
+   }
+  },
+  "VLLM_ROCM_USE_AITER_MHA": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 971
+   }
+  },
+  "VLLM_ROCM_USE_AITER_FP4_ASM_GEMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 976
+   }
+  },
+  "VLLM_ROCM_USE_AITER_TRITON_ROPE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 981
+   }
+  },
+  "VLLM_ROCM_USE_AITER_FP8BMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 986
+   }
+  },
+  "VLLM_ROCM_USE_AITER_FP4BMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 991
+   }
+  },
+  "VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 995
+   }
+  },
+  "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1001
+   }
+  },
+  "VLLM_ROCM_USE_AITER_TRITON_GEMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1007
+   }
+  },
+  "VLLM_ROCM_USE_SKINNY_GEMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1011
+   }
+  },
+  "VLLM_ROCM_FP8_PADDING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1015
+   }
+  },
+  "VLLM_ROCM_MOE_PADDING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1017
+   }
+  },
+  "VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1019
+   }
+  },
+  "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1025
+   }
+  },
+  "VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1034
+   }
+  },
+  "VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1044
+   }
+  },
+  "Q_SCALE_CONSTANT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1048
+   }
+  },
+  "K_SCALE_CONSTANT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1050
+   }
+  },
+  "V_SCALE_CONSTANT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1052
+   }
+  },
+  "VLLM_ENABLE_V1_MULTIPROCESSING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1054
+   }
+  },
+  "VLLM_LOG_BATCHSIZE_INTERVAL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1057
+   }
+  },
+  "VLLM_DISABLE_COMPILE_CACHE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1060
+   }
+  },
+  "VLLM_SERVER_DEV_MODE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1064
+   }
+  },
+  "VLLM_V1_OUTPUT_PROC_CHUNK_SIZE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1072
+   }
+  },
+  "VLLM_MLA_DISABLE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1076
+   }
+  },
+  "VLLM_RAY_PER_WORKER_GPUS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1081
+   }
+  },
+  "VLLM_RAY_BUNDLE_INDICES": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1087
+   }
+  },
+  "VLLM_CUDART_SO_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1090
+   }
+  },
+  "VLLM_DP_RANK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1092
+   }
+  },
+  "VLLM_DP_RANK_LOCAL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1095
+   }
+  },
+  "VLLM_DP_SIZE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1099
+   }
+  },
+  "VLLM_DP_MASTER_IP": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1101
+   }
+  },
+  "VLLM_DP_MASTER_PORT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1103
+   }
+  },
+  "VLLM_MOE_DP_CHUNK_SIZE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1109
+   }
+  },
+  "VLLM_ENABLE_MOE_DP_CHUNK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1110
+   }
+  },
+  "VLLM_RANDOMIZE_DP_DUMMY_INPUTS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1114
+   }
+  },
+  "VLLM_RAY_DP_PACK_STRATEGY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1129
+   }
+  },
+  "VLLM_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1135
+   }
+  },
+  "VLLM_RAY_EXTRA_ENV_VARS_TO_COPY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1142
+   }
+  },
+  "VLLM_CI_USE_S3": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1146
+   }
+  },
+  "VLLM_MODEL_REDIRECT_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1153
+   }
+  },
+  "VLLM_MARLIN_USE_ATOMIC_ADD": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1157
+   }
+  },
+  "VLLM_MXFP4_USE_MARLIN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1162
+   }
+  },
+  "VLLM_MARLIN_INPUT_DTYPE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1166
+   }
+  },
+  "VLLM_DEEPEPLL_NVFP4_DISPATCH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1172
+   }
+  },
+  "VLLM_V1_USE_OUTLINES_CACHE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1178
+   }
+  },
+  "VLLM_TPU_BUCKET_PADDING_GAP": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1184
+   }
+  },
+  "VLLM_TPU_MOST_MODEL_LEN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1189
+   }
+  },
+  "VLLM_TPU_USING_PATHWAYS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1193
+   }
+  },
+  "VLLM_USE_DEEP_GEMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1197
+   }
+  },
+  "VLLM_MOE_USE_DEEP_GEMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1199
+   }
+  },
+  "VLLM_USE_DEEP_GEMM_E8M0": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1203
+   }
+  },
+  "VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1207
+   }
+  },
+  "VLLM_DEEP_GEMM_WARMUP": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1221
+   }
+  },
+  "VLLM_USE_FUSED_MOE_GROUPED_TOPK": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1231
+   }
+  },
+  "VLLM_BLOCKSCALE_FP8_GEMM_FLASHINFER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1236
+   }
+  },
+  "VLLM_USE_FLASHINFER_MOE_FP16": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1240
+   }
+  },
+  "VLLM_USE_FLASHINFER_MOE_FP8": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1244
+   }
+  },
+  "VLLM_USE_FLASHINFER_MOE_FP4": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1248
+   }
+  },
+  "VLLM_USE_FLASHINFER_MOE_INT4": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1252
+   }
+  },
+  "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1257
+   }
+  },
+  "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8_CUTLASS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1264
+   }
+  },
+  "VLLM_USE_FLASHINFER_MOE_MXFP4_BF16": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1269
+   }
+  },
+  "VLLM_XGRAMMAR_CACHE_MB": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1275
+   }
+  },
+  "VLLM_MSGPACK_ZERO_COPY_THRESHOLD": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1283
+   }
+  },
+  "VLLM_ALLOW_INSECURE_SERIALIZATION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1289
+   }
+  },
+  "VLLM_DISABLE_REQUEST_ID_RANDOMIZATION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1294
+   }
+  },
+  "VLLM_NIXL_SIDE_CHANNEL_HOST": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1298
+   }
+  },
+  "VLLM_NIXL_SIDE_CHANNEL_PORT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1302
+   }
+  },
+  "VLLM_MOONCAKE_BOOTSTRAP_PORT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1306
+   }
+  },
+  "VLLM_FLASHINFER_MOE_BACKEND": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1316
+   }
+  },
+  "VLLM_FLASHINFER_ALLREDUCE_BACKEND": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1322
+   }
+  },
+  "VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1328
+   }
+  },
+  "VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1335
+   }
+  },
+  "VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1344
+   }
+  },
+  "VLLM_MOE_ROUTING_SIMULATION_STRATEGY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1353
+   }
+  },
+  "VLLM_TOOL_PARSE_REGEX_TIMEOUT_SECONDS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1357
+   }
+  },
+  "VLLM_MQ_MAX_CHUNK_BYTES_MB": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1363
+   }
+  },
+  "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1368
+   }
+  },
+  "VLLM_KV_CACHE_LAYOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1378
+   }
+  },
+  "VLLM_COMPUTE_NANS_IN_LOGITS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1384
+   }
+  },
+  "VLLM_USE_NVFP4_CT_EMULATIONS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1390
+   }
+  },
+  "VLLM_NIXL_ABORT_REQUEST_TIMEOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1397
+   }
+  },
+  "VLLM_MORIIO_CONNECTOR_READ_MODE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1401
+   }
+  },
+  "VLLM_MORIIO_QP_PER_TRANSFER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1405
+   }
+  },
+  "VLLM_MORIIO_POST_BATCH_SIZE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1409
+   }
+  },
+  "VLLM_MORIIO_NUM_WORKERS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1413
+   }
+  },
+  "VLLM_MOONCAKE_ABORT_REQUEST_TIMEOUT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1415
+   }
+  },
+  "VLLM_HAS_FLASHINFER_CUBIN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1420
+   }
+  },
+  "VLLM_NVFP4_GEMM_BACKEND": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1429
+   }
+  },
+  "VLLM_ENABLE_CUDAGRAPH_GC": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1443
+   }
+  },
+  "VLLM_LOOPBACK_IP": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1447
+   }
+  },
+  "VLLM_PROCESS_NAME_PREFIX": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1451
+   }
+  },
+  "VLLM_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1459
+   }
+  },
+  "VLLM_ENABLE_RESPONSES_API_STORE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1471
+   }
+  },
+  "VLLM_ROCM_FP8_MFMA_PAGE_ATTN": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1475
+   }
+  },
+  "VLLM_ALLREDUCE_USE_SYMM_MEM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1479
+   }
+  },
+  "VLLM_ALLREDUCE_USE_FLASHINFER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1483
+   }
+  },
+  "VLLM_USE_EXPERIMENTAL_PARSER_CONTEXT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1487
+   }
+  },
+  "VLLM_TUNED_CONFIG_FOLDER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1491
+   }
+  },
+  "VLLM_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1496
+   }
+  },
+  "VLLM_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1502
+   }
+  },
+  "VLLM_SYSTEM_START_DATE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1510
+   }
+  },
+  "VLLM_TOOL_JSON_ERROR_AUTOMATIC_RETRY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1514
+   }
+  },
+  "VLLM_CUSTOM_SCOPES_FOR_PROFILING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1518
+   }
+  },
+  "VLLM_NVTX_SCOPES_FOR_PROFILING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1522
+   }
+  },
+  "VLLM_KV_EVENTS_USE_INT_BLOCK_HASHES": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1527
+   }
+  },
+  "VLLM_OBJECT_STORAGE_SHM_BUFFER_NAME": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1534
+   }
+  },
+  "VLLM_DEEPEP_BUFFER_SIZE_MB": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1539
+   }
+  },
+  "VLLM_DEEPEP_HIGH_THROUGHPUT_FORCE_INTRA_NODE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1545
+   }
+  },
+  "VLLM_DEEPEP_LOW_LATENCY_USE_MNNVL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1550
+   }
+  },
+  "VLLM_DBO_COMM_SMS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1555
+   }
+  },
+  "VLLM_ENABLE_INDUCTOR_MAX_AUTOTUNE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1559
+   }
+  },
+  "VLLM_ENABLE_INDUCTOR_COORDINATE_DESCENT_TUNING": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1564
+   }
+  },
+  "VLLM_USE_NCCL_SYMM_MEM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1568
+   }
+  },
+  "VLLM_NCCL_INCLUDE_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1572
+   }
+  },
+  "VLLM_USE_FBGEMM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1574
+   }
+  },
+  "VLLM_GC_DEBUG": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1580
+   }
+  },
+  "VLLM_DEBUG_WORKSPACE": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1583
+   }
+  },
+  "VLLM_DISABLE_SHARED_EXPERTS_STREAM": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1585
+   }
+  },
+  "VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1592
+   }
+  },
+  "VLLM_COMPILE_CACHE_SAVE_FORMAT": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1601
+   }
+  },
+  "VLLM_USE_V2_MODEL_RUNNER": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1605
+   }
+  },
+  "VLLM_LOG_MODEL_INSPECTION": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1611
+   }
+  },
+  "VLLM_DEBUG_MFU_METRICS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1615
+   }
+  },
+  "VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1619
+   }
+  },
+  "VLLM_WEIGHT_OFFLOADING_DISABLE_UVA": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1623
+   }
+  },
+  "VLLM_DISABLE_LOG_LOGO": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1627
+   }
+  },
+  "VLLM_LORA_DISABLE_PDL": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1630
+   }
+  },
+  "VLLM_ENABLE_CUDA_COMPATIBILITY": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1633
+   }
+  },
+  "VLLM_CUDA_COMPATIBILITY_PATH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1638
+   }
+  },
+  "VLLM_ELASTIC_EP_SCALE_UP_LAUNCH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1643
+   }
+  },
+  "VLLM_ELASTIC_EP_DRAIN_REQUESTS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1648
+   }
+  },
+  "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1654
+   }
+  },
+  "VLLM_NIXL_EP_MAX_NUM_RANKS": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1658
+   }
+  },
+  "VLLM_XPU_ENABLE_XPU_GRAPH": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1662
+   }
+  },
+  "VLLM_USE_SIMPLE_KV_OFFLOAD": {
+   "source": {
+    "file": "vllm/envs.py",
+    "line": 1666
+   }
+  }
+ }
+}

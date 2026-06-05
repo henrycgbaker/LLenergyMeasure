@@ -1,0 +1,3677 @@
+invariants:
+- id: generationconfig_early_stopping_allowlist
+  native_field: transformers.sampling.early_stopping
+  predicate_kind: enum
+  predicate_value: &id001
+    in:
+    - true
+    - false
+    - never
+  severity: error
+  message_template: '`early_stopping` must be a boolean or ''never'', but is {early_stopping}.'
+  kwargs_positive:
+    early_stopping: 1.5
+  kwargs_negative:
+    early_stopping: false
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 543
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        not_in: *id001
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: early_stopping
+  _gt_namespace: transformers.sampling
+- id: generationconfig_max_new_tokens_positive
+  native_field: transformers.sampling.max_new_tokens
+  predicate_kind: numeric_range
+  predicate_value: &id002
+    exclusiveMinimum: 0
+    null_allowed: true
+  severity: error
+  message_template: '`max_new_tokens` must be greater than 0, but is {max_new_tokens}.'
+  kwargs_positive:
+    max_new_tokens: -1
+  kwargs_negative:
+    max_new_tokens: 16
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 545
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_new_tokens:
+        present: *id002
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_new_tokens
+  _gt_namespace: transformers.sampling
+- id: generationconfig_pad_token_id_non_negative
+  native_field: transformers.sampling.pad_token_id
+  predicate_kind: numeric_range
+  predicate_value: &id003
+    minimum: 0
+    null_allowed: true
+  severity: dormant
+  message_template: '`pad_token_id` should be positive but got {pad_token_id}. This
+    will cause errors when batch generating, if there is padding. Please set `pad_token_id`
+    explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors
+    in generation
+
+    '
+  kwargs_positive:
+    pad_token_id: -1
+  kwargs_negative:
+    pad_token_id: 0
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 547
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.pad_token_id:
+        present: *id003
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: pad_token_id
+  _gt_namespace: transformers.sampling
+- id: generationconfig_cache_implementation_allowlist
+  native_field: transformers.sampling.cache_implementation
+  predicate_kind: enum
+  predicate_value: &id004
+    in:
+    - static
+    - offloaded_static
+    - sliding_window
+    - hybrid
+    - hybrid_chunked
+    - offloaded_hybrid
+    - offloaded_hybrid_chunked
+    - dynamic
+    - dynamic_full
+    - offloaded
+    - quantized
+    null_allowed: true
+  severity: error
+  message_template: 'Invalid `cache_implementation` ({value}). Choose one of: {ALL_CACHE_IMPLEMENTATIONS}'
+  kwargs_positive:
+    cache_implementation: nonsense
+  kwargs_negative:
+    cache_implementation: null
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 554
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_implementation:
+        not_in: *id004
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: cache_implementation
+  _gt_namespace: transformers.sampling
+- id: generationconfig_compile_config_type
+  native_field: transformers.sampling.compile_config
+  predicate_kind: type_check
+  predicate_value: &id005
+    isinstance: CompileConfig
+    null_allowed: true
+  severity: error
+  message_template: You provided `compile_config` as an instance of {type}, but it
+    must be an instance of `CompileConfig`.
+  kwargs_positive:
+    compile_config: 42
+  kwargs_negative:
+    compile_config: null
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 560
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.compile_config:
+        type_is_not: *id005
+  _gt_coarse_bucket: type
+  _gt_leaf_field: compile_config
+  _gt_namespace: transformers.sampling
+- id: generationconfig_watermarking_config_validate_delegated
+  native_field: transformers.sampling.watermarking_config
+  predicate_kind: cross_field
+  predicate_value: &id006
+    delegate: BaseWatermarkingConfig.validate()
+  severity: error
+  message_template: (Delegates to WatermarkingConfig / SynthIDTextWatermarkingConfig
+    validate; see those invariants.)
+  kwargs_positive: {}
+  kwargs_negative:
+    watermarking_config: null
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 566
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config:
+        present: *id006
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: watermarking_config
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_temperature_not_one_when_greedy
+  native_field: transformers.sampling.temperature
+  predicate_kind: cross_field
+  predicate_value: &id007
+    when:
+      do_sample: false
+    requires: temperature == 1.0
+    null_allowed: false
+  severity: dormant
+  message_template: '`do_sample` is set to `False`. However, `temperature` is set
+    to `{value}` -- this flag is only used in sample-based generation modes. You should
+    set `do_sample=True` or unset `temperature`.'
+  kwargs_positive:
+    do_sample: false
+    temperature: 0.5
+  kwargs_negative:
+    do_sample: true
+    temperature: 0.5
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 576
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.temperature:
+        present: *id007
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: temperature
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_top_p_not_one_when_greedy
+  native_field: transformers.sampling.top_p
+  predicate_kind: cross_field
+  predicate_value: &id008
+    when:
+      do_sample: false
+    requires: top_p == 1.0
+  severity: dormant
+  message_template: '`do_sample` is set to `False`. However, `top_p` is set to `{value}`
+    ...'
+  kwargs_positive:
+    do_sample: false
+    top_p: 0.5
+  kwargs_negative:
+    do_sample: true
+    top_p: 0.5
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 580
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_p:
+        present: *id008
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: top_p
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_min_p_set_when_greedy
+  native_field: transformers.sampling.min_p
+  predicate_kind: cross_field
+  predicate_value: &id009
+    when:
+      do_sample: false
+    requires: min_p is None
+  severity: dormant
+  message_template: '`do_sample` is set to `False`. However, `min_p` is set to `{value}`
+    ...'
+  kwargs_positive:
+    do_sample: false
+    min_p: 0.1
+  kwargs_negative:
+    do_sample: true
+    min_p: 0.1
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 582
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.min_p:
+        present: *id009
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: min_p
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_typical_p_not_one_when_greedy
+  native_field: transformers.sampling.typical_p
+  predicate_kind: cross_field
+  predicate_value: &id010
+    when:
+      do_sample: false
+    requires: typical_p == 1.0
+  severity: dormant
+  message_template: '`do_sample` is set to `False`. However, `typical_p` is set to
+    `{value}` ...'
+  kwargs_positive:
+    do_sample: false
+    typical_p: 0.5
+  kwargs_negative:
+    do_sample: true
+    typical_p: 0.5
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 584
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.typical_p:
+        present: *id010
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: typical_p
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_top_k_not_default_when_greedy
+  native_field: transformers.sampling.top_k
+  predicate_kind: cross_field
+  predicate_value: &id011
+    when:
+      do_sample: false
+    requires: top_k == 50
+  severity: dormant
+  message_template: '`do_sample` is set to `False`. However, `top_k` is set to `{value}`
+    ...'
+  kwargs_positive:
+    do_sample: false
+    top_k: 51
+  kwargs_negative:
+    do_sample: true
+    top_k: 51
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 588
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_k:
+        present: *id011
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: top_k
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_epsilon_cutoff_not_zero_when_greedy
+  native_field: transformers.sampling.epsilon_cutoff
+  predicate_kind: cross_field
+  predicate_value: &id012
+    when:
+      do_sample: false
+    requires: epsilon_cutoff == 0.0
+  severity: dormant
+  message_template: '`do_sample` is set to `False`. However, `epsilon_cutoff` is set
+    to `{value}` ...'
+  kwargs_positive:
+    do_sample: false
+    epsilon_cutoff: 0.5
+  kwargs_negative:
+    do_sample: true
+    epsilon_cutoff: 0.5
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 590
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.epsilon_cutoff:
+        present: *id012
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: epsilon_cutoff
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_eta_cutoff_not_zero_when_greedy
+  native_field: transformers.sampling.eta_cutoff
+  predicate_kind: cross_field
+  predicate_value: &id013
+    when:
+      do_sample: false
+    requires: eta_cutoff == 0.0
+  severity: dormant
+  message_template: '`do_sample` is set to `False`. However, `eta_cutoff` is set to
+    `{value}` ...'
+  kwargs_positive:
+    do_sample: false
+    eta_cutoff: 0.5
+  kwargs_negative:
+    do_sample: true
+    eta_cutoff: 0.5
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 594
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.eta_cutoff:
+        present: *id013
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: eta_cutoff
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_early_stopping_set_when_single_beam
+  native_field: transformers.sampling.early_stopping
+  predicate_kind: cross_field
+  predicate_value: &id014
+    when:
+      num_beams: 1
+    requires: early_stopping is False
+  severity: dormant
+  message_template: '`num_beams` is set to 1. However, `early_stopping` is set to
+    `True` -- this flag is only used in beam-based generation modes. You should set
+    `num_beams>1` or unset `early_stopping`.'
+  kwargs_positive:
+    num_beams: 1
+    early_stopping: true
+  kwargs_negative:
+    num_beams: 2
+    early_stopping: true
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 605
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        present: *id014
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: early_stopping
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_length_penalty_not_one_when_single_beam
+  native_field: transformers.sampling.length_penalty
+  predicate_kind: cross_field
+  predicate_value: &id015
+    when:
+      num_beams: 1
+    requires: length_penalty == 1.0
+    null_allowed: false
+  severity: dormant
+  message_template: '`num_beams` is set to 1. However, `length_penalty` is set to
+    `{value}` ...'
+  kwargs_positive:
+    num_beams: 1
+    length_penalty: 0.5
+  kwargs_negative:
+    num_beams: 2
+    length_penalty: 0.5
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 609
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.length_penalty:
+        present: *id015
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: length_penalty
+  _gt_namespace: transformers.sampling
+- id: generationconfig_num_return_sequences_requires_beams_or_sampling
+  native_field: transformers.sampling.num_return_sequences
+  predicate_kind: cross_field
+  predicate_value: &id016
+    when:
+      num_return_sequences_ne: 1
+      num_beams: 1
+      do_sample: false
+    requires: num_return_sequences == 1
+  severity: error
+  message_template: Greedy methods without beam search do not support `num_return_sequences`
+    different than 1 (got {value}).
+  kwargs_positive:
+    num_return_sequences: 2
+    num_beams: 1
+    do_sample: false
+  kwargs_negative:
+    num_return_sequences: 2
+    num_beams: 1
+    do_sample: true
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 617
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        present: *id016
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: num_return_sequences
+  _gt_namespace: transformers.sampling
+- id: generationconfig_num_return_sequences_le_num_beams
+  native_field: transformers.sampling.num_return_sequences
+  predicate_kind: cross_field
+  predicate_value: &id017
+    when:
+      num_return_sequences_ne: 1
+    requires: num_return_sequences <= num_beams
+  severity: error
+  message_template: '`num_return_sequences` ({value}) has to be smaller or equal to
+    `num_beams` ({num_beams}).'
+  kwargs_positive:
+    num_return_sequences: 4
+    num_beams: 2
+  kwargs_negative:
+    num_return_sequences: 2
+    num_beams: 4
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 622
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        present: *id017
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: num_return_sequences
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_cache_implementation_set_when_use_cache_false
+  native_field: transformers.sampling.cache_implementation
+  predicate_kind: cross_field
+  predicate_value: &id018
+    when:
+      use_cache: false
+    requires: cache_implementation is None
+  severity: dormant
+  message_template: You have set `use_cache` to `False`, but cache_implementation
+    is set to {value}. cache_implementation will have no effect.
+  kwargs_positive:
+    use_cache: false
+    cache_implementation: static
+  kwargs_negative:
+    use_cache: true
+    cache_implementation: static
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 637
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_implementation:
+        present: *id018
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: cache_implementation
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_cache_config_set_when_use_cache_false
+  native_field: transformers.sampling.cache_config
+  predicate_kind: cross_field
+  predicate_value: &id019
+    when:
+      use_cache: false
+    requires: cache_config is None
+  severity: dormant
+  message_template: You have set `use_cache` to `False`, but cache_config is set to
+    {value}. cache_config will have no effect.
+  kwargs_positive:
+    use_cache: false
+    cache_config:
+      x: 1
+  kwargs_negative:
+    use_cache: true
+    cache_config:
+      x: 1
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 637
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_config:
+        present: *id019
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: cache_config
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_return_legacy_cache_set_when_use_cache_false
+  native_field: transformers.sampling.return_legacy_cache
+  predicate_kind: cross_field
+  predicate_value: &id020
+    when:
+      use_cache: false
+    requires: return_legacy_cache is None
+  severity: dormant
+  message_template: You have set `use_cache` to `False`, but return_legacy_cache is
+    set to {value}. return_legacy_cache will have no effect.
+  kwargs_positive:
+    use_cache: false
+    return_legacy_cache: true
+  kwargs_negative:
+    use_cache: true
+    return_legacy_cache: true
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 637
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_legacy_cache:
+        present: *id020
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: return_legacy_cache
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_output_attentions_without_return_dict
+  native_field: transformers.sampling.output_attentions
+  predicate_kind: cross_field
+  predicate_value: &id021
+    when:
+      return_dict_in_generate: false
+    requires: output_attentions is False
+  severity: dormant
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_attentions`
+    is. When `return_dict_in_generate` is not `True`, `output_attentions` is ignored.'
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_attentions: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_attentions: true
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 644
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.output_attentions:
+        present: *id021
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: output_attentions
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_output_hidden_states_without_return_dict
+  native_field: transformers.sampling.output_hidden_states
+  predicate_kind: cross_field
+  predicate_value: &id022
+    when:
+      return_dict_in_generate: false
+    requires: output_hidden_states is False
+  severity: dormant
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states`
+    is. ...'
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_hidden_states: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_hidden_states: true
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 644
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.output_hidden_states:
+        present: *id022
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: output_hidden_states
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_output_scores_without_return_dict
+  native_field: transformers.sampling.output_scores
+  predicate_kind: cross_field
+  predicate_value: &id023
+    when:
+      return_dict_in_generate: false
+    requires: output_scores is False
+  severity: dormant
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_scores`
+    is. ...'
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_scores: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_scores: true
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 644
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.output_scores:
+        present: *id023
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: output_scores
+  _gt_namespace: transformers.sampling
+- id: generationconfig_dormant_output_logits_without_return_dict
+  native_field: transformers.sampling.output_logits
+  predicate_kind: cross_field
+  predicate_value: &id024
+    when:
+      return_dict_in_generate: false
+    requires: output_logits is False
+  severity: dormant
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_logits`
+    is. ...'
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_logits: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_logits: true
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 644
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.output_logits:
+        present: *id024
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: output_logits
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_logits_processor
+  native_field: transformers.sampling.logits_processor
+  predicate_kind: required
+  predicate_value: &id025
+    forbidden: true
+  severity: error
+  message_template: Argument `logits_processor` is not a valid argument of `GenerationConfig`.
+    It should be passed to `generate()` (or a pipeline) directly.
+  kwargs_positive:
+    logits_processor: []
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.logits_processor:
+        present: *id025
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: logits_processor
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_stopping_criteria
+  native_field: transformers.sampling.stopping_criteria
+  predicate_kind: required
+  predicate_value: &id026
+    forbidden: true
+  severity: error
+  message_template: Argument `stopping_criteria` is not a valid argument of `GenerationConfig`.
+    ...
+  kwargs_positive:
+    stopping_criteria: []
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.stopping_criteria:
+        present: *id026
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: stopping_criteria
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_prefix_allowed_tokens_fn
+  native_field: transformers.sampling.prefix_allowed_tokens_fn
+  predicate_kind: required
+  predicate_value: &id027
+    forbidden: true
+  severity: error
+  message_template: Argument `prefix_allowed_tokens_fn` is not a valid argument of
+    `GenerationConfig`. ...
+  kwargs_positive:
+    prefix_allowed_tokens_fn: nop
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.prefix_allowed_tokens_fn:
+        present: *id027
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: prefix_allowed_tokens_fn
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_synced_gpus
+  native_field: transformers.sampling.synced_gpus
+  predicate_kind: required
+  predicate_value: &id028
+    forbidden: true
+  severity: error
+  message_template: Argument `synced_gpus` is not a valid argument of `GenerationConfig`.
+    ...
+  kwargs_positive:
+    synced_gpus: true
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.synced_gpus:
+        present: *id028
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: synced_gpus
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_assistant_model
+  native_field: transformers.sampling.assistant_model
+  predicate_kind: required
+  predicate_value: &id029
+    forbidden: true
+  severity: error
+  message_template: Argument `assistant_model` is not a valid argument of `GenerationConfig`.
+    ...
+  kwargs_positive:
+    assistant_model: nop
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.assistant_model:
+        present: *id029
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: assistant_model
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_streamer
+  native_field: transformers.sampling.streamer
+  predicate_kind: required
+  predicate_value: &id030
+    forbidden: true
+  severity: error
+  message_template: Argument `streamer` is not a valid argument of `GenerationConfig`.
+    ...
+  kwargs_positive:
+    streamer: nop
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.streamer:
+        present: *id030
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: streamer
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_negative_prompt_ids
+  native_field: transformers.sampling.negative_prompt_ids
+  predicate_kind: required
+  predicate_value: &id031
+    forbidden: true
+  severity: error
+  message_template: Argument `negative_prompt_ids` is not a valid argument of `GenerationConfig`.
+    ...
+  kwargs_positive:
+    negative_prompt_ids:
+    - 1
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.negative_prompt_ids:
+        present: *id031
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: negative_prompt_ids
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_negative_prompt_attention_mask
+  native_field: transformers.sampling.negative_prompt_attention_mask
+  predicate_kind: required
+  predicate_value: &id032
+    forbidden: true
+  severity: error
+  message_template: Argument `negative_prompt_attention_mask` is not a valid argument
+    of `GenerationConfig`. ...
+  kwargs_positive:
+    negative_prompt_attention_mask:
+    - 1
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.negative_prompt_attention_mask:
+        present: *id032
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: negative_prompt_attention_mask
+  _gt_namespace: transformers.sampling
+- id: generationconfig_rejects_use_model_defaults
+  native_field: transformers.sampling.use_model_defaults
+  predicate_kind: required
+  predicate_value: &id033
+    forbidden: true
+  severity: error
+  message_template: Argument `use_model_defaults` is not a valid argument of `GenerationConfig`.
+    ...
+  kwargs_positive:
+    use_model_defaults: true
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 664
+    qualname: GenerationConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.use_model_defaults:
+        present: *id033
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: use_model_defaults
+  _gt_namespace: transformers.sampling
+- id: watermarking_seeding_scheme_allowlist
+  native_field: transformers.sampling.watermarking_config.seeding_scheme
+  predicate_kind: enum
+  predicate_value: &id034
+    in:
+    - selfhash
+    - lefthash
+  severity: error
+  message_template: Some of the keys in `watermarking_config` are defined incorrectly.
+    `seeding_scheme` should be [`selfhash`, `lefthash`]` but found {value}
+  kwargs_positive:
+    watermarking_config:
+      seeding_scheme: bad
+  kwargs_negative:
+    watermarking_config:
+      seeding_scheme: lefthash
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 1302
+    qualname: WatermarkingConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config.seeding_scheme:
+        not_in: *id034
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: seeding_scheme
+  _gt_namespace: transformers.sampling.watermarking_config
+- id: watermarking_greenlist_ratio_in_unit_interval
+  native_field: transformers.sampling.watermarking_config.greenlist_ratio
+  predicate_kind: numeric_range
+  predicate_value: &id035
+    minimum: 0.0
+    maximum: 1.0
+  severity: error
+  message_template: Some of the keys in `watermarking_config` are defined incorrectly.
+    `greenlist_ratio` should be in range between 0.0 and 1.0` but found {value}
+  kwargs_positive:
+    watermarking_config:
+      greenlist_ratio: 1.5
+  kwargs_negative:
+    watermarking_config:
+      greenlist_ratio: 0.25
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 1310
+    qualname: WatermarkingConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config.greenlist_ratio:
+        present: *id035
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: greenlist_ratio
+  _gt_namespace: transformers.sampling.watermarking_config
+- id: watermarking_context_width_positive
+  native_field: transformers.sampling.watermarking_config.context_width
+  predicate_kind: numeric_range
+  predicate_value: &id036
+    minimum: 1
+  severity: error
+  message_template: Some of the keys in `watermarking_config` are defined incorrectly.
+    `context_width` should be a positive integer` but found {value}
+  kwargs_positive:
+    watermarking_config:
+      context_width: 0
+  kwargs_negative:
+    watermarking_config:
+      context_width: 1
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 1318
+    qualname: WatermarkingConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config.context_width:
+        present: *id036
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: context_width
+  _gt_namespace: transformers.sampling.watermarking_config
+- id: synthid_sampling_table_size_max
+  native_field: transformers.sampling.watermarking_config.sampling_table_size
+  predicate_kind: numeric_range
+  predicate_value: &id037
+    maximum: 16777216
+  severity: error
+  message_template: Some of the keys in `watermarking_config` are defined incorrectly.
+    `sampling_table_size` should be < 2**24` but found {value}
+  kwargs_positive:
+    watermarking_config:
+      sampling_table_size: 33554432
+  kwargs_negative:
+    watermarking_config:
+      sampling_table_size: 65536
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 1407
+    qualname: SynthIDTextWatermarkingConfig.validate
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config.sampling_table_size:
+        present: *id037
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: sampling_table_size
+  _gt_namespace: transformers.sampling.watermarking_config
+- id: generationconfig_watermarking_config_coerces_dict
+  native_field: transformers.sampling.watermarking_config
+  predicate_kind: cross_field
+  predicate_value: &id038
+    when:
+      watermarking_config_type: dict
+    normalisation: WatermarkingConfig.from_dict(watermarking_config)
+  severity: normalisation
+  message_template: '(silent: dict is constructed into a WatermarkingConfig)'
+  kwargs_positive:
+    watermarking_config:
+      seeding_scheme: lefthash
+  kwargs_negative:
+    watermarking_config: null
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 385
+    qualname: GenerationConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config:
+        present: *id038
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: watermarking_config
+  _gt_namespace: transformers.sampling
+- id: generationconfig_watermarking_config_rejects_nonmapping
+  native_field: transformers.sampling.watermarking_config
+  predicate_kind: type_check
+  predicate_value: &id039
+    isinstance:
+    - BaseWatermarkingConfig
+    - dict
+    - NoneType
+  severity: error
+  message_template: transformers.generation.configuration_utils.WatermarkingConfig()
+    argument after ** must be a mapping, not {type}
+  kwargs_positive:
+    watermarking_config: 42
+  kwargs_negative:
+    watermarking_config: null
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 382
+    qualname: GenerationConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config:
+        type_is_not: *id039
+  _gt_coarse_bucket: type
+  _gt_leaf_field: watermarking_config
+  _gt_namespace: transformers.sampling
+- id: bnb_load_in_4bit_and_8bit_mutually_exclusive_init
+  native_field: transformers.engine.quantization_config.bnb.load_in_4bit
+  predicate_kind: mutual_exclusion
+  predicate_value: &id040
+    fields:
+    - load_in_4bit
+    - load_in_8bit
+  severity: error
+  message_template: load_in_4bit and load_in_8bit are both True, but only one can
+    be used at the same time
+  kwargs_positive:
+    load_in_4bit: true
+    load_in_8bit: true
+  kwargs_negative:
+    load_in_4bit: true
+    load_in_8bit: false
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 473
+    qualname: BitsAndBytesConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.load_in_4bit:
+        present: *id040
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: load_in_4bit
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_load_in_4bit_setter_mutual_exclusion
+  native_field: transformers.engine.quantization_config.bnb.load_in_4bit
+  predicate_kind: mutual_exclusion
+  predicate_value: &id041
+    fields:
+    - load_in_4bit
+    - load_in_8bit
+    via: property_setter
+  severity: error
+  message_template: load_in_4bit and load_in_8bit are both True, but only one can
+    be used at the same time
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 521
+    qualname: BitsAndBytesConfig.load_in_4bit.setter
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.load_in_4bit:
+        present: *id041
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: load_in_4bit
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_load_in_4bit_setter_type
+  native_field: transformers.engine.quantization_config.bnb.load_in_4bit
+  predicate_kind: type_check
+  predicate_value: &id042
+    isinstance: bool
+  severity: error
+  message_template: load_in_4bit must be a boolean
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 518
+    qualname: BitsAndBytesConfig.load_in_4bit.setter
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.load_in_4bit:
+        type_is_not: *id042
+  _gt_coarse_bucket: type
+  _gt_leaf_field: load_in_4bit
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_load_in_8bit_setter_type
+  native_field: transformers.engine.quantization_config.bnb.load_in_8bit
+  predicate_kind: type_check
+  predicate_value: &id043
+    isinstance: bool
+  severity: error
+  message_template: load_in_8bit must be a boolean
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 531
+    qualname: BitsAndBytesConfig.load_in_8bit.setter
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.load_in_8bit:
+        type_is_not: *id043
+  _gt_coarse_bucket: type
+  _gt_leaf_field: load_in_8bit
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_bnb_4bit_compute_dtype_string_or_dtype
+  native_field: transformers.engine.quantization_config.bnb.bnb_4bit_compute_dtype
+  predicate_kind: type_check
+  predicate_value: &id044
+    isinstance:
+    - str
+    - torch.dtype
+    - NoneType
+  severity: error
+  message_template: bnb_4bit_compute_dtype must be a string or a torch.dtype
+  kwargs_positive:
+    bnb_4bit_compute_dtype: 42
+  kwargs_negative:
+    bnb_4bit_compute_dtype: float16
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 491
+    qualname: BitsAndBytesConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.bnb_4bit_compute_dtype:
+        type_is_not: *id044
+  _gt_coarse_bucket: type
+  _gt_leaf_field: bnb_4bit_compute_dtype
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_bnb_4bit_quant_storage_allowlist_str
+  native_field: transformers.engine.quantization_config.bnb.bnb_4bit_quant_storage
+  predicate_kind: enum
+  predicate_value: &id045
+    in:
+    - float16
+    - float32
+    - int8
+    - uint8
+    - float64
+    - bfloat16
+    when_type: str
+  severity: error
+  message_template: '`bnb_4bit_quant_storage` must be a valid string (one of ''float16'',
+    ''float32'', ''int8'', ''uint8'', ''float64'', ''bfloat16'')'
+  kwargs_positive:
+    bnb_4bit_quant_storage: nope
+  kwargs_negative:
+    bnb_4bit_quant_storage: uint8
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 497
+    qualname: BitsAndBytesConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.bnb_4bit_quant_storage:
+        not_in: *id045
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: bnb_4bit_quant_storage
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_bnb_4bit_quant_storage_type
+  native_field: transformers.engine.quantization_config.bnb.bnb_4bit_quant_storage
+  predicate_kind: type_check
+  predicate_value: &id046
+    isinstance:
+    - str
+    - torch.dtype
+    - NoneType
+  severity: error
+  message_template: bnb_4bit_quant_storage must be a string or a torch.dtype
+  kwargs_positive:
+    bnb_4bit_quant_storage: 42
+  kwargs_negative:
+    bnb_4bit_quant_storage: uint8
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 504
+    qualname: BitsAndBytesConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.bnb_4bit_quant_storage:
+        type_is_not: *id046
+  _gt_coarse_bucket: type
+  _gt_leaf_field: bnb_4bit_quant_storage
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_unused_kwargs_log
+  native_field: transformers.engine.quantization_config.bnb.kwargs
+  predicate_kind: cross_field
+  predicate_value: &id047
+    behaviour: logger.info on unknown kwargs (no error)
+  severity: warning
+  message_template: 'Unused kwargs: {keys}. These kwargs are not used in <class ''BitsAndBytesConfig''>.'
+  kwargs_positive:
+    bogus: 1
+  kwargs_negative: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 507
+    qualname: BitsAndBytesConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.kwargs:
+        present: *id047
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: kwargs
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_load_in_4bit_type
+  native_field: transformers.engine.quantization_config.bnb.load_in_4bit
+  predicate_kind: type_check
+  predicate_value: &id048
+    isinstance: bool
+  severity: error
+  message_template: load_in_4bit must be a boolean
+  kwargs_positive:
+    load_in_4bit: '1'
+  kwargs_negative:
+    load_in_4bit: true
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 542
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.load_in_4bit:
+        type_is_not: *id048
+  _gt_coarse_bucket: type
+  _gt_leaf_field: load_in_4bit
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_load_in_8bit_type
+  native_field: transformers.engine.quantization_config.bnb.load_in_8bit
+  predicate_kind: type_check
+  predicate_value: &id049
+    isinstance: bool
+  severity: error
+  message_template: load_in_8bit must be a boolean
+  kwargs_positive:
+    load_in_8bit: '1'
+  kwargs_negative:
+    load_in_8bit: true
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 545
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.load_in_8bit:
+        type_is_not: *id049
+  _gt_coarse_bucket: type
+  _gt_leaf_field: load_in_8bit
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_llm_int8_threshold_type
+  native_field: transformers.engine.quantization_config.bnb.llm_int8_threshold
+  predicate_kind: type_check
+  predicate_value: &id050
+    isinstance: float
+  severity: error
+  message_template: llm_int8_threshold must be a float
+  kwargs_positive:
+    llm_int8_threshold: 6
+  kwargs_negative:
+    llm_int8_threshold: 6.0
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 548
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.llm_int8_threshold:
+        type_is_not: *id050
+  _gt_coarse_bucket: type
+  _gt_leaf_field: llm_int8_threshold
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_llm_int8_skip_modules_type
+  native_field: transformers.engine.quantization_config.bnb.llm_int8_skip_modules
+  predicate_kind: type_check
+  predicate_value: &id051
+    isinstance:
+    - list
+    - NoneType
+  severity: error
+  message_template: llm_int8_skip_modules must be a list of strings
+  kwargs_positive:
+    llm_int8_skip_modules: lm_head
+  kwargs_negative:
+    llm_int8_skip_modules:
+    - lm_head
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 551
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.llm_int8_skip_modules:
+        type_is_not: *id051
+  _gt_coarse_bucket: type
+  _gt_leaf_field: llm_int8_skip_modules
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_llm_int8_enable_fp32_cpu_offload_type
+  native_field: transformers.engine.quantization_config.bnb.llm_int8_enable_fp32_cpu_offload
+  predicate_kind: type_check
+  predicate_value: &id052
+    isinstance: bool
+  severity: error
+  message_template: llm_int8_enable_fp32_cpu_offload must be a boolean
+  kwargs_positive:
+    llm_int8_enable_fp32_cpu_offload: '1'
+  kwargs_negative:
+    llm_int8_enable_fp32_cpu_offload: true
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 553
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.llm_int8_enable_fp32_cpu_offload:
+        type_is_not: *id052
+  _gt_coarse_bucket: type
+  _gt_leaf_field: llm_int8_enable_fp32_cpu_offload
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_llm_int8_has_fp16_weight_type
+  native_field: transformers.engine.quantization_config.bnb.llm_int8_has_fp16_weight
+  predicate_kind: type_check
+  predicate_value: &id053
+    isinstance: bool
+  severity: error
+  message_template: llm_int8_has_fp16_weight must be a boolean
+  kwargs_positive:
+    llm_int8_has_fp16_weight: '1'
+  kwargs_negative:
+    llm_int8_has_fp16_weight: true
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 556
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.llm_int8_has_fp16_weight:
+        type_is_not: *id053
+  _gt_coarse_bucket: type
+  _gt_leaf_field: llm_int8_has_fp16_weight
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_bnb_4bit_compute_dtype_type
+  native_field: transformers.engine.quantization_config.bnb.bnb_4bit_compute_dtype
+  predicate_kind: type_check
+  predicate_value: &id054
+    isinstance:
+    - torch.dtype
+    - NoneType
+  severity: error
+  message_template: bnb_4bit_compute_dtype must be torch.dtype
+  kwargs_positive:
+    bnb_4bit_compute_dtype: oops
+  kwargs_negative:
+    bnb_4bit_compute_dtype: float16
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 559
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.bnb_4bit_compute_dtype:
+        type_is_not: *id054
+  _gt_coarse_bucket: type
+  _gt_leaf_field: bnb_4bit_compute_dtype
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_bnb_4bit_quant_type_type
+  native_field: transformers.engine.quantization_config.bnb.bnb_4bit_quant_type
+  predicate_kind: type_check
+  predicate_value: &id055
+    isinstance: str
+  severity: error
+  message_template: bnb_4bit_quant_type must be a string
+  kwargs_positive:
+    bnb_4bit_quant_type: 4
+  kwargs_negative:
+    bnb_4bit_quant_type: nf4
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 562
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.bnb_4bit_quant_type:
+        type_is_not: *id055
+  _gt_coarse_bucket: type
+  _gt_leaf_field: bnb_4bit_quant_type
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_bnb_4bit_use_double_quant_type
+  native_field: transformers.engine.quantization_config.bnb.bnb_4bit_use_double_quant
+  predicate_kind: type_check
+  predicate_value: &id056
+    isinstance: bool
+  severity: error
+  message_template: bnb_4bit_use_double_quant must be a boolean
+  kwargs_positive:
+    bnb_4bit_use_double_quant: '1'
+  kwargs_negative:
+    bnb_4bit_use_double_quant: true
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 565
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.bnb_4bit_use_double_quant:
+        type_is_not: *id056
+  _gt_coarse_bucket: type
+  _gt_leaf_field: bnb_4bit_use_double_quant
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: bnb_post_init_4bit_requires_bitsandbytes_039
+  native_field: transformers.engine.quantization_config.bnb.load_in_4bit
+  predicate_kind: cross_field
+  predicate_value: &id057
+    when:
+      load_in_4bit: true
+    requires: importlib.metadata.version('bitsandbytes') >= 0.39.0
+    peer_package: bitsandbytes
+  severity: error
+  message_template: 4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade
+    your bitsandbytes version
+  kwargs_positive:
+    load_in_4bit: true
+  kwargs_negative:
+    load_in_4bit: false
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 568
+    qualname: BitsAndBytesConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bnb.load_in_4bit:
+        present: *id057
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: load_in_4bit
+  _gt_namespace: transformers.engine.quantization_config.bnb
+- id: gptq_bits_allowlist
+  native_field: transformers.engine.quantization_config.gptq.bits
+  predicate_kind: enum
+  predicate_value: &id058
+    in:
+    - 2
+    - 3
+    - 4
+    - 8
+  severity: error
+  message_template: Only support quantization to [2,3,4,8] bits but found {value}
+  kwargs_positive:
+    bits: 5
+  kwargs_negative:
+    bits: 4
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 777
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.bits:
+        not_in: *id058
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: bits
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_group_size_positive_or_neg_one
+  native_field: transformers.engine.quantization_config.gptq.group_size
+  predicate_kind: numeric_range
+  predicate_value: &id059
+    forbidden_range: group_size == 0 OR group_size < -1
+  severity: error
+  message_template: group_size must be greater than 0 or equal to -1
+  kwargs_positive:
+    group_size: 0
+  kwargs_negative:
+    group_size: 128
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 779
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.group_size:
+        present: *id059
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: group_size
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_damp_percent_open_unit_interval
+  native_field: transformers.engine.quantization_config.gptq.damp_percent
+  predicate_kind: numeric_range
+  predicate_value: &id060
+    exclusiveMinimum: 0
+    exclusiveMaximum: 1
+  severity: error
+  message_template: damp_percent must between 0 and 1.
+  kwargs_positive:
+    damp_percent: 0
+  kwargs_negative:
+    damp_percent: 0.1
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 781
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.damp_percent:
+        present: *id060
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: damp_percent
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_dataset_allowlist_str
+  native_field: transformers.engine.quantization_config.gptq.dataset
+  predicate_kind: enum
+  predicate_value: &id061
+    in:
+    - wikitext2
+    - c4
+    - c4-new
+    when_type: str
+  severity: error
+  message_template: You have entered a string value for dataset. You can only choose
+    between ['wikitext2','c4','c4-new'], but we found {value}
+  kwargs_positive:
+    dataset: bad
+  kwargs_negative:
+    dataset: wikitext2
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 790
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.dataset:
+        not_in: *id061
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: dataset
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_dataset_ptb_deprecated
+  native_field: transformers.engine.quantization_config.gptq.dataset
+  predicate_kind: enum
+  predicate_value: &id062
+    forbidden_values:
+    - ptb
+    - ptb-new
+  severity: error
+  message_template: '{value} dataset was deprecated. You can only choose between [''wikitext2'',''c4'',''c4-new'']'
+  kwargs_positive:
+    dataset: ptb
+  kwargs_negative:
+    dataset: wikitext2
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 785
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.dataset:
+        not_in: *id062
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: dataset
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_dataset_type
+  native_field: transformers.engine.quantization_config.gptq.dataset
+  predicate_kind: type_check
+  predicate_value: &id063
+    isinstance:
+    - str
+    - list
+    - NoneType
+  severity: error
+  message_template: dataset needs to be either a list of string or a value in ['wikitext2','c4','c4-new'],
+    but we found {value}
+  kwargs_positive:
+    dataset: 42
+  kwargs_negative:
+    dataset: null
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 795
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.dataset:
+        type_is_not: *id063
+  _gt_coarse_bucket: type
+  _gt_leaf_field: dataset
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_exllama_config_requires_version_key
+  native_field: transformers.engine.quantization_config.gptq.exllama_config
+  predicate_kind: required
+  predicate_value: &id064
+    when:
+      exllama_config_not_none: true
+    requires_key: version
+  severity: error
+  message_template: '`exllama_config` needs to have a `version` key.'
+  kwargs_positive:
+    exllama_config: {}
+  kwargs_negative:
+    exllama_config:
+      version: 1
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 819
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.exllama_config:
+        present: *id064
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: exllama_config
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_exllama_config_version_allowlist
+  native_field: transformers.engine.quantization_config.gptq.exllama_config
+  predicate_kind: enum
+  predicate_value: &id065
+    in:
+    - 1
+    - 2
+    key: version
+  severity: error
+  message_template: Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO]
+    - not recognized version {value}
+  kwargs_positive:
+    exllama_config:
+      version: 9
+  kwargs_negative:
+    exllama_config:
+      version: 1
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 821
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.exllama_config:
+        not_in: *id065
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: exllama_config
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: gptq_modules_in_block_requires_optimum_1_15
+  native_field: transformers.engine.quantization_config.gptq.modules_in_block_to_quantize
+  predicate_kind: cross_field
+  predicate_value: &id066
+    when:
+      modules_in_block_to_quantize_not_none: true
+    requires: version.parse(optimum.__version__) >= 1.15.0
+    peer_package: optimum
+  severity: error
+  message_template: You current version of `optimum` does not support `modules_in_block_to_quantize`
+    quantization argument, please upgrade `optimum` package to a version superior
+    than 1.15.0 .
+  kwargs_positive:
+    modules_in_block_to_quantize:
+    - - x
+  kwargs_negative:
+    modules_in_block_to_quantize: null
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 841
+    qualname: GPTQConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.gptq.modules_in_block_to_quantize:
+        present: *id066
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: modules_in_block_to_quantize
+  _gt_namespace: transformers.engine.quantization_config.gptq
+- id: awq_backend_allowlist
+  native_field: transformers.engine.quantization_config.awq.backend
+  predicate_kind: enum
+  predicate_value: &id067
+    in:
+    - autoawq
+    - llm-awq
+  severity: error
+  message_template: Only supported quantization backends in AwqBackendPackingMethod.AUTOAWQ
+    and AwqBackendPackingMethod.LLMAWQ - not recognized backend {value}
+  kwargs_positive:
+    backend: nope
+  kwargs_negative:
+    backend: autoawq
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 950
+    qualname: AwqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.awq.backend:
+        not_in: *id067
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: backend
+  _gt_namespace: transformers.engine.quantization_config.awq
+- id: awq_version_allowlist
+  native_field: transformers.engine.quantization_config.awq.version
+  predicate_kind: enum
+  predicate_value: &id068
+    in:
+    - gemm
+    - gemv
+    - exllama
+    - ipex
+  severity: error
+  message_template: Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV,
+    AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX] - not recognized version {value}
+  kwargs_positive:
+    version: oops
+  kwargs_negative:
+    version: gemm
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 956
+    qualname: AwqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.awq.version:
+        not_in: *id068
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: version
+  _gt_namespace: transformers.engine.quantization_config.awq
+- id: awq_llmawq_requires_cuda_or_xpu
+  native_field: transformers.engine.quantization_config.awq.backend
+  predicate_kind: cross_field
+  predicate_value: &id069
+    when:
+      backend: llm-awq
+    requires: torch.cuda.is_available() or torch.xpu.is_available()
+  severity: error
+  message_template: LLM-AWQ backend is only supported on CUDA and XPU
+  kwargs_positive:
+    backend: llm-awq
+  kwargs_negative:
+    backend: autoawq
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 966
+    qualname: AwqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.awq.backend:
+        present: *id069
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: backend
+  _gt_namespace: transformers.engine.quantization_config.awq
+- id: awq_llmawq_requires_compute_capability_8
+  native_field: transformers.engine.quantization_config.awq.backend
+  predicate_kind: cross_field
+  predicate_value: &id070
+    when:
+      backend: llm-awq
+      cuda_available: true
+    requires: torch.cuda.get_device_capability()[0] >= 8
+  severity: error
+  message_template: LLM-AWQ backend is only supported on CUDA GPUs with compute capability
+    >= 8.0
+  kwargs_positive:
+    backend: llm-awq
+  kwargs_negative:
+    backend: autoawq
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 972
+    qualname: AwqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.awq.backend:
+        present: *id070
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: backend
+  _gt_namespace: transformers.engine.quantization_config.awq
+- id: awq_do_fuse_requires_fuse_max_seq_len
+  native_field: transformers.engine.quantization_config.awq.do_fuse
+  predicate_kind: cross_field
+  predicate_value: &id071
+    when:
+      do_fuse: true
+    requires: fuse_max_seq_len is not None
+  severity: error
+  message_template: You cannot enable fused modules without specifying a `fuse_max_seq_len`,
+    make sure to pass a valid `fuse_max_seq_len` for your usecase
+  kwargs_positive:
+    do_fuse: true
+    fuse_max_seq_len: null
+  kwargs_negative:
+    do_fuse: true
+    fuse_max_seq_len: 2048
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 976
+    qualname: AwqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.awq.do_fuse:
+        present: *id071
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: do_fuse
+  _gt_namespace: transformers.engine.quantization_config.awq
+- id: awq_modules_to_fuse_required_keys
+  native_field: transformers.engine.quantization_config.awq.modules_to_fuse
+  predicate_kind: required
+  predicate_value: &id072
+    when:
+      do_fuse: true
+      modules_to_fuse_not_none: true
+    requires_keys:
+    - hidden_size
+    - num_attention_heads
+    - num_key_value_heads
+    - mlp
+    - attention
+    - layernorm
+    - use_alibi
+  severity: error
+  message_template: Required fields are missing in the fusing mapping, required fields
+    are {required_keys}
+  kwargs_positive:
+    do_fuse: true
+    fuse_max_seq_len: 2048
+    modules_to_fuse:
+      hidden_size: 1
+  kwargs_negative:
+    do_fuse: false
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1017
+    qualname: AwqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.awq.modules_to_fuse:
+        present: *id072
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: modules_to_fuse
+  _gt_namespace: transformers.engine.quantization_config.awq
+- id: awq_exllama_config_version_allowlist
+  native_field: transformers.engine.quantization_config.awq.exllama_config
+  predicate_kind: enum
+  predicate_value: &id073
+    in:
+    - 1
+    - 2
+    key: version
+    when:
+      version: exllama
+      exllama_config_not_none: true
+  severity: error
+  message_template: Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO]
+    - not recognized version {value}
+  kwargs_positive:
+    version: exllama
+    exllama_config:
+      version: 9
+  kwargs_negative:
+    version: gemm
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1041
+    qualname: AwqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.awq.exllama_config:
+        not_in: *id073
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: exllama_config
+  _gt_namespace: transformers.engine.quantization_config.awq
+- id: aqlm_in_group_size_int
+  native_field: transformers.engine.quantization_config.aqlm.in_group_size
+  predicate_kind: type_check
+  predicate_value: &id074
+    isinstance: int
+  severity: error
+  message_template: in_group_size must be a float
+  kwargs_positive:
+    in_group_size: 1.5
+  kwargs_negative:
+    in_group_size: 8
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1096
+    qualname: AqlmConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.aqlm.in_group_size:
+        type_is_not: *id074
+  _gt_coarse_bucket: type
+  _gt_leaf_field: in_group_size
+  _gt_namespace: transformers.engine.quantization_config.aqlm
+- id: aqlm_out_group_size_int
+  native_field: transformers.engine.quantization_config.aqlm.out_group_size
+  predicate_kind: type_check
+  predicate_value: &id075
+    isinstance: int
+  severity: error
+  message_template: out_group_size must be a float
+  kwargs_positive:
+    out_group_size: 1.5
+  kwargs_negative:
+    out_group_size: 1
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1098
+    qualname: AqlmConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.aqlm.out_group_size:
+        type_is_not: *id075
+  _gt_coarse_bucket: type
+  _gt_leaf_field: out_group_size
+  _gt_namespace: transformers.engine.quantization_config.aqlm
+- id: aqlm_num_codebooks_int
+  native_field: transformers.engine.quantization_config.aqlm.num_codebooks
+  predicate_kind: type_check
+  predicate_value: &id076
+    isinstance: int
+  severity: error
+  message_template: num_codebooks must be a float
+  kwargs_positive:
+    num_codebooks: 1.5
+  kwargs_negative:
+    num_codebooks: 1
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1100
+    qualname: AqlmConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.aqlm.num_codebooks:
+        type_is_not: *id076
+  _gt_coarse_bucket: type
+  _gt_leaf_field: num_codebooks
+  _gt_namespace: transformers.engine.quantization_config.aqlm
+- id: aqlm_nbits_per_codebook_int
+  native_field: transformers.engine.quantization_config.aqlm.nbits_per_codebook
+  predicate_kind: type_check
+  predicate_value: &id077
+    isinstance: int
+  severity: error
+  message_template: nbits_per_codebook must be a float
+  kwargs_positive:
+    nbits_per_codebook: 1.5
+  kwargs_negative:
+    nbits_per_codebook: 16
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1102
+    qualname: AqlmConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.aqlm.nbits_per_codebook:
+        type_is_not: *id077
+  _gt_coarse_bucket: type
+  _gt_leaf_field: nbits_per_codebook
+  _gt_namespace: transformers.engine.quantization_config.aqlm
+- id: aqlm_linear_weights_not_to_quantize_type
+  native_field: transformers.engine.quantization_config.aqlm.linear_weights_not_to_quantize
+  predicate_kind: type_check
+  predicate_value: &id078
+    isinstance:
+    - list
+    - NoneType
+  severity: error
+  message_template: linear_weights_not_to_quantize must be a list of strings
+  kwargs_positive:
+    linear_weights_not_to_quantize: x
+  kwargs_negative:
+    linear_weights_not_to_quantize: null
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1105
+    qualname: AqlmConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.aqlm.linear_weights_not_to_quantize:
+        type_is_not: *id078
+  _gt_coarse_bucket: type
+  _gt_leaf_field: linear_weights_not_to_quantize
+  _gt_namespace: transformers.engine.quantization_config.aqlm
+- id: aqlm_linear_weights_normalises_none_to_list
+  native_field: transformers.engine.quantization_config.aqlm.linear_weights_not_to_quantize
+  predicate_kind: cross_field
+  predicate_value: &id079
+    when:
+      linear_weights_not_to_quantize: null
+    normalisation: linear_weights_not_to_quantize = []
+  severity: normalisation
+  message_template: '(silent: None -> [])'
+  kwargs_positive:
+    linear_weights_not_to_quantize: null
+  kwargs_negative:
+    linear_weights_not_to_quantize:
+    - x
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1110
+    qualname: AqlmConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.aqlm.linear_weights_not_to_quantize:
+        present: *id079
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: linear_weights_not_to_quantize
+  _gt_namespace: transformers.engine.quantization_config.aqlm
+- id: vptq_enable_proxy_error_must_be_false
+  native_field: transformers.engine.quantization_config.vptq.enable_proxy_error
+  predicate_kind: identity
+  predicate_value: &id080
+    must_equal: false
+  severity: error
+  message_template: enable_proxy_error should always be False until we support training
+  kwargs_positive:
+    enable_proxy_error: true
+  kwargs_negative:
+    enable_proxy_error: false
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1206
+    qualname: VptqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.vptq.enable_proxy_error:
+        present: *id080
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: enable_proxy_error
+  _gt_namespace: transformers.engine.quantization_config.vptq
+- id: vptq_layer_is_indice_packed_must_be_true
+  native_field: transformers.engine.quantization_config.vptq.config_for_layers.*.is_indice_packed
+  predicate_kind: identity
+  predicate_value: &id081
+    must_equal: true
+  severity: error
+  message_template: is_indice_packed should always be True
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1165
+    qualname: VptqLayerConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.vptq.config_for_layers.*.is_indice_packed:
+        present: *id081
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: is_indice_packed
+  _gt_namespace: transformers.engine.quantization_config.vptq.config_for_layers.*
+- id: quanto_weights_allowlist
+  native_field: transformers.engine.quantization_config.quanto.weights
+  predicate_kind: enum
+  predicate_value: &id082
+    in:
+    - float8
+    - int8
+    - int4
+    - int2
+  severity: error
+  message_template: Only support weights in ['float8', 'int8', 'int4', 'int2'] but
+    found {value}
+  kwargs_positive:
+    weights: bad
+  kwargs_negative:
+    weights: int8
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1245
+    qualname: QuantoConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.quanto.weights:
+        not_in: *id082
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: weights
+  _gt_namespace: transformers.engine.quantization_config.quanto
+- id: quanto_activations_allowlist
+  native_field: transformers.engine.quantization_config.quanto.activations
+  predicate_kind: enum
+  predicate_value: &id083
+    in:
+    - null
+    - int8
+    - float8
+  severity: error
+  message_template: Only support weights in [None, 'int8', 'float8'] but found {value}
+  kwargs_positive:
+    activations: bad
+  kwargs_negative:
+    activations: null
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1247
+    qualname: QuantoConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.quanto.activations:
+        not_in: *id083
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: activations
+  _gt_namespace: transformers.engine.quantization_config.quanto
+- id: eetq_weights_allowlist
+  native_field: transformers.engine.quantization_config.eetq.weights
+  predicate_kind: enum
+  predicate_value: &id084
+    in:
+    - int8
+  severity: error
+  message_template: Only support weights in ['int8'] but found {value}
+  kwargs_positive:
+    weights: int4
+  kwargs_negative:
+    weights: int8
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1281
+    qualname: EetqConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.eetq.weights:
+        not_in: *id084
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: weights
+  _gt_namespace: transformers.engine.quantization_config.eetq
+- id: hqq_axis_allowlist
+  native_field: transformers.engine.quantization_config.hqq.axis
+  predicate_kind: enum
+  predicate_value: &id085
+    in:
+    - 0
+    - 1
+  severity: error
+  message_template: Invalid axis value. Only 0 and 1 are allowed.
+  kwargs_positive:
+    axis: 2
+  kwargs_negative:
+    axis: 1
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 329
+    qualname: HqqConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.hqq.axis:
+        not_in: *id085
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: axis
+  _gt_namespace: transformers.engine.quantization_config.hqq
+- id: hqq_axis_default_to_one_when_none
+  native_field: transformers.engine.quantization_config.hqq.axis
+  predicate_kind: cross_field
+  predicate_value: &id086
+    when:
+      axis: null
+    normalisation: axis = 1
+  severity: normalisation
+  message_template: Setting axis=1 as faster backends such as TorchAO or BitBlas are
+    only compatible with it.
+  kwargs_positive:
+    axis: null
+  kwargs_negative:
+    axis: 0
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 325
+    qualname: HqqConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.hqq.axis:
+        present: *id086
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: axis
+  _gt_namespace: transformers.engine.quantization_config.hqq
+- id: higgs_bits_allowlist
+  native_field: transformers.engine.quantization_config.higgs.bits
+  predicate_kind: enum
+  predicate_value: &id087
+    in:
+    - 2
+    - 3
+    - 4
+  severity: error
+  message_template: bits must be 2, 3, or 4
+  kwargs_positive:
+    bits: 8
+  kwargs_negative:
+    bits: 4
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1544
+    qualname: HiggsConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.higgs.bits:
+        not_in: *id087
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: bits
+  _gt_namespace: transformers.engine.quantization_config.higgs
+- id: higgs_p_allowlist
+  native_field: transformers.engine.quantization_config.higgs.p
+  predicate_kind: enum
+  predicate_value: &id088
+    in:
+    - 1
+    - 2
+  severity: error
+  message_template: p must be 1 or 2. 2 is always better in practice
+  kwargs_positive:
+    p: 3
+  kwargs_negative:
+    p: 2
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1546
+    qualname: HiggsConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.higgs.p:
+        not_in: *id088
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: p
+  _gt_namespace: transformers.engine.quantization_config.higgs
+- id: higgs_group_size_allowlist
+  native_field: transformers.engine.quantization_config.higgs.group_size
+  predicate_kind: enum
+  predicate_value: &id089
+    in:
+    - 64
+    - 128
+    - 256
+  severity: error
+  message_template: group_size must be 64, 128, or 256
+  kwargs_positive:
+    group_size: 100
+  kwargs_negative:
+    group_size: 256
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1548
+    qualname: HiggsConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.higgs.group_size:
+        not_in: *id089
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: group_size
+  _gt_namespace: transformers.engine.quantization_config.higgs
+- id: higgs_hadamard_divisible_by_group_size
+  native_field: transformers.engine.quantization_config.higgs.hadamard_size
+  predicate_kind: cross_field
+  predicate_value: &id090
+    requires: hadamard_size % group_size == 0
+  severity: error
+  message_template: hadamard_size must be divisible by group_size
+  kwargs_positive:
+    hadamard_size: 513
+    group_size: 256
+  kwargs_negative:
+    hadamard_size: 512
+    group_size: 256
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1550
+    qualname: HiggsConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.higgs.hadamard_size:
+        present: *id090
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: hadamard_size
+  _gt_namespace: transformers.engine.quantization_config.higgs
+- id: fpquant_forward_dtype_allowlist
+  native_field: transformers.engine.quantization_config.fpquant.forward_dtype
+  predicate_kind: enum
+  predicate_value: &id091
+    in:
+    - mxfp4
+    - nvfp4
+  severity: error
+  message_template: Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now.
+  kwargs_positive:
+    forward_dtype: int8
+  kwargs_negative:
+    forward_dtype: nvfp4
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1627
+    qualname: FPQuantConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.fpquant.forward_dtype:
+        not_in: *id091
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: forward_dtype
+  _gt_namespace: transformers.engine.quantization_config.fpquant
+- id: fpquant_forward_method_mxfp4_allowlist
+  native_field: transformers.engine.quantization_config.fpquant.forward_method
+  predicate_kind: enum
+  predicate_value: &id092
+    in:
+    - abs_max
+    - quest
+    when:
+      forward_dtype: mxfp4
+  severity: error
+  message_template: Only 'abs_max' and 'quest' are supported for forward_method for
+    'mxfp4'.
+  kwargs_positive:
+    forward_dtype: mxfp4
+    forward_method: oops
+  kwargs_negative:
+    forward_dtype: mxfp4
+    forward_method: abs_max
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1614
+    qualname: FPQuantConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.fpquant.forward_method:
+        not_in: *id092
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: forward_method
+  _gt_namespace: transformers.engine.quantization_config.fpquant
+- id: fpquant_hadamard_group_size_mxfp4_allowlist
+  native_field: transformers.engine.quantization_config.fpquant.hadamard_group_size
+  predicate_kind: enum
+  predicate_value: &id093
+    in:
+    - 32
+    - 64
+    - 128
+    when:
+      forward_dtype: mxfp4
+  severity: error
+  message_template: Only a `hadamard_group_size` of [32, 64, 128] is supported for
+    'mxfp4'.
+  kwargs_positive:
+    forward_dtype: mxfp4
+    hadamard_group_size: 16
+  kwargs_negative:
+    forward_dtype: mxfp4
+    hadamard_group_size: 32
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1618
+    qualname: FPQuantConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.fpquant.hadamard_group_size:
+        not_in: *id093
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: hadamard_group_size
+  _gt_namespace: transformers.engine.quantization_config.fpquant
+- id: fpquant_forward_method_nvfp4_must_be_abs_max
+  native_field: transformers.engine.quantization_config.fpquant.forward_method
+  predicate_kind: identity
+  predicate_value: &id094
+    must_equal: abs_max
+    when:
+      forward_dtype: nvfp4
+  severity: error
+  message_template: Only 'abs_max' is supported for forward_method for 'nvfp4'.
+  kwargs_positive:
+    forward_dtype: nvfp4
+    forward_method: quest
+  kwargs_negative:
+    forward_dtype: nvfp4
+    forward_method: abs_max
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1621
+    qualname: FPQuantConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.fpquant.forward_method:
+        present: *id094
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: forward_method
+  _gt_namespace: transformers.engine.quantization_config.fpquant
+- id: fpquant_hadamard_group_size_nvfp4_allowlist
+  native_field: transformers.engine.quantization_config.fpquant.hadamard_group_size
+  predicate_kind: enum
+  predicate_value: &id095
+    in:
+    - 16
+    - 32
+    - 64
+    - 128
+    when:
+      forward_dtype: nvfp4
+  severity: error
+  message_template: Only a `hadamard_group_size` of [16, 32, 64, 128] is supported
+    for 'nvfp4'.
+  kwargs_positive:
+    forward_dtype: nvfp4
+    hadamard_group_size: 8
+  kwargs_negative:
+    forward_dtype: nvfp4
+    hadamard_group_size: 16
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1625
+    qualname: FPQuantConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.fpquant.hadamard_group_size:
+        not_in: *id095
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: hadamard_group_size
+  _gt_namespace: transformers.engine.quantization_config.fpquant
+- id: fpquant_backward_dtype_bf16_only
+  native_field: transformers.engine.quantization_config.fpquant.backward_dtype
+  predicate_kind: identity
+  predicate_value: &id096
+    must_equal: bf16
+  severity: error
+  message_template: Only 'bf16' is supported for backward_dtype for now.
+  kwargs_positive:
+    backward_dtype: fp16
+  kwargs_negative:
+    backward_dtype: bf16
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1630
+    qualname: FPQuantConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.fpquant.backward_dtype:
+        present: *id096
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: backward_dtype
+  _gt_namespace: transformers.engine.quantization_config.fpquant
+- id: fpquant_transform_init_allowlist
+  native_field: transformers.engine.quantization_config.fpquant.transform_init
+  predicate_kind: enum
+  predicate_value: &id097
+    in:
+    - hadamard
+    - identity
+    - gsr
+  severity: error
+  message_template: Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.
+  kwargs_positive:
+    transform_init: bad
+  kwargs_negative:
+    transform_init: hadamard
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1632
+    qualname: FPQuantConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.fpquant.transform_init:
+        not_in: *id097
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: transform_init
+  _gt_namespace: transformers.engine.quantization_config.fpquant
+- id: torchao_requires_torchao_installed
+  native_field: transformers.engine.quantization_config.torchao
+  predicate_kind: required
+  predicate_value: &id098
+    peer_package_installed: torchao
+  severity: error
+  message_template: TorchAoConfig requires torchao to be installed. Install with `pip
+    install torchao`
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1724
+    qualname: TorchAoConfig._get_ao_version
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.torchao:
+        present: *id098
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: torchao
+  _gt_namespace: transformers.engine.quantization_config
+- id: torchao_quant_type_string_or_aobaseconfig
+  native_field: transformers.engine.quantization_config.torchao.quant_type
+  predicate_kind: type_check
+  predicate_value: &id099
+    isinstance:
+    - str
+    - AOBaseConfig
+    when:
+      torchao_version_gt: 0.9.0
+  severity: error
+  message_template: quant_type must be either a string or an AOBaseConfig instance,
+    got {type}
+  kwargs_positive:
+    quant_type: 42
+  kwargs_negative:
+    quant_type: int4_weight_only
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1738
+    qualname: TorchAoConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.torchao.quant_type:
+        type_is_not: *id099
+  _gt_coarse_bucket: type
+  _gt_leaf_field: quant_type
+  _gt_namespace: transformers.engine.quantization_config.torchao
+- id: torchao_quant_type_string_only_below_0_9
+  native_field: transformers.engine.quantization_config.torchao.quant_type
+  predicate_kind: type_check
+  predicate_value: &id100
+    isinstance: str
+    when:
+      torchao_version_le: 0.9.0
+  severity: error
+  message_template: In torchao <= 0.9.0, quant_type must be a string. Got {type}.
+    Please upgrade to torchao > 0.9.0 to use AOBaseConfig instances.
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1742
+    qualname: TorchAoConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.torchao.quant_type:
+        type_is_not: *id100
+  _gt_coarse_bucket: type
+  _gt_leaf_field: quant_type
+  _gt_namespace: transformers.engine.quantization_config.torchao
+- id: bitnet_linear_class_allowlist
+  native_field: transformers.engine.quantization_config.bitnet.linear_class
+  predicate_kind: enum
+  predicate_value: &id101
+    in:
+    - bitlinear
+    - autobitlinear
+  severity: error
+  message_template: linear_class must be either 'bitlinear' or 'autobitlinear', but
+    got {value}
+  kwargs_positive:
+    linear_class: oops
+  kwargs_negative:
+    linear_class: bitlinear
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1915
+    qualname: BitNetQuantConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bitnet.linear_class:
+        not_in: *id101
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: linear_class
+  _gt_namespace: transformers.engine.quantization_config.bitnet
+- id: bitnet_quantization_mode_allowlist
+  native_field: transformers.engine.quantization_config.bitnet.quantization_mode
+  predicate_kind: enum
+  predicate_value: &id102
+    in:
+    - online
+    - offline
+  severity: error
+  message_template: quantization_mode must be either 'online' or 'offline', but got
+    {value}
+  kwargs_positive:
+    quantization_mode: oops
+  kwargs_negative:
+    quantization_mode: offline
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1917
+    qualname: BitNetQuantConfig.__init__
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.bitnet.quantization_mode:
+        not_in: *id102
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: quantization_mode
+  _gt_namespace: transformers.engine.quantization_config.bitnet
+- id: spqr_bits_type
+  native_field: transformers.engine.quantization_config.spqr.bits
+  predicate_kind: type_check
+  predicate_value: &id103
+    isinstance: int
+  severity: error
+  message_template: bits must be an int
+  kwargs_positive:
+    bits: 3.0
+  kwargs_negative:
+    bits: 3
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1980
+    qualname: SpQRConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.spqr.bits:
+        type_is_not: *id103
+  _gt_coarse_bucket: type
+  _gt_leaf_field: bits
+  _gt_namespace: transformers.engine.quantization_config.spqr
+- id: spqr_bits_must_be_three
+  native_field: transformers.engine.quantization_config.spqr.bits
+  predicate_kind: identity
+  predicate_value: &id104
+    must_equal: 3
+  severity: error
+  message_template: SpQR currently only supports bits = 3
+  kwargs_positive:
+    bits: 4
+  kwargs_negative:
+    bits: 3
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1987
+    qualname: SpQRConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.spqr.bits:
+        present: *id104
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: bits
+  _gt_namespace: transformers.engine.quantization_config.spqr
+- id: spqr_beta1_must_be_sixteen
+  native_field: transformers.engine.quantization_config.spqr.beta1
+  predicate_kind: identity
+  predicate_value: &id105
+    must_equal: 16
+  severity: error
+  message_template: SpQR currently only supports beta1 = 16
+  kwargs_positive:
+    beta1: 8
+  kwargs_negative:
+    beta1: 16
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1989
+    qualname: SpQRConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.spqr.beta1:
+        present: *id105
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: beta1
+  _gt_namespace: transformers.engine.quantization_config.spqr
+- id: spqr_beta2_must_be_sixteen
+  native_field: transformers.engine.quantization_config.spqr.beta2
+  predicate_kind: identity
+  predicate_value: &id106
+    must_equal: 16
+  severity: error
+  message_template: SpQR currently only supports beta2 = 16
+  kwargs_positive:
+    beta2: 8
+  kwargs_negative:
+    beta2: 16
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1991
+    qualname: SpQRConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.spqr.beta2:
+        present: *id106
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: beta2
+  _gt_namespace: transformers.engine.quantization_config.spqr
+- id: spqr_shapes_dict_type
+  native_field: transformers.engine.quantization_config.spqr.shapes
+  predicate_kind: type_check
+  predicate_value: &id107
+    isinstance: dict
+  severity: error
+  message_template: shapes must be a dict
+  kwargs_positive:
+    shapes: oops
+  kwargs_negative:
+    shapes: {}
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 1993
+    qualname: SpQRConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.spqr.shapes:
+        type_is_not: *id107
+  _gt_coarse_bucket: type
+  _gt_leaf_field: shapes
+  _gt_namespace: transformers.engine.quantization_config.spqr
+- id: finegrained_fp8_activation_scheme_must_be_dynamic
+  native_field: transformers.engine.quantization_config.finegrained_fp8.activation_scheme
+  predicate_kind: identity
+  predicate_value: &id108
+    must_equal: dynamic
+  severity: error
+  message_template: Activation scheme {value} not supported
+  kwargs_positive:
+    activation_scheme: static
+  kwargs_negative:
+    activation_scheme: dynamic
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 2029
+    qualname: FineGrainedFP8Config.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.finegrained_fp8.activation_scheme:
+        present: *id108
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: activation_scheme
+  _gt_namespace: transformers.engine.quantization_config.finegrained_fp8
+- id: finegrained_fp8_weight_block_size_length_two
+  native_field: transformers.engine.quantization_config.finegrained_fp8.weight_block_size
+  predicate_kind: cross_field
+  predicate_value: &id109
+    requires: len(weight_block_size) == 2
+  severity: error
+  message_template: weight_block_size must be a tuple of two integers
+  kwargs_positive:
+    weight_block_size:
+    - 128
+  kwargs_negative:
+    weight_block_size:
+    - 128
+    - 128
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 2031
+    qualname: FineGrainedFP8Config.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.finegrained_fp8.weight_block_size:
+        present: *id109
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: weight_block_size
+  _gt_namespace: transformers.engine.quantization_config.finegrained_fp8
+- id: finegrained_fp8_weight_block_size_positive
+  native_field: transformers.engine.quantization_config.finegrained_fp8.weight_block_size
+  predicate_kind: cross_field
+  predicate_value: &id110
+    requires: all(entry > 0 for entry in weight_block_size)
+  severity: error
+  message_template: weight_block_size must be a tuple of two positive integers
+  kwargs_positive:
+    weight_block_size:
+    - -1
+    - 128
+  kwargs_negative:
+    weight_block_size:
+    - 128
+    - 128
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 2033
+    qualname: FineGrainedFP8Config.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.finegrained_fp8.weight_block_size:
+        present: *id110
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: weight_block_size
+  _gt_namespace: transformers.engine.quantization_config.finegrained_fp8
+- id: autoround_bits_allowlist
+  native_field: transformers.engine.quantization_config.autoround.bits
+  predicate_kind: enum
+  predicate_value: &id111
+    in:
+    - 2
+    - 3
+    - 4
+    - 8
+  severity: error
+  message_template: Only support quantization to [2,3,4,8] bits but found {value}
+  kwargs_positive:
+    bits: 5
+  kwargs_negative:
+    bits: 4
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 244
+    qualname: AutoRoundConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.autoround.bits:
+        not_in: *id111
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: bits
+  _gt_namespace: transformers.engine.quantization_config.autoround
+- id: autoround_group_size_positive_or_neg_one
+  native_field: transformers.engine.quantization_config.autoround.group_size
+  predicate_kind: numeric_range
+  predicate_value: &id112
+    forbidden_range: group_size == 0 OR group_size < -1
+  severity: error
+  message_template: group_size must be greater than 0 or equal to -1
+  kwargs_positive:
+    group_size: 0
+  kwargs_negative:
+    group_size: 128
+  source:
+    file: transformers/utils/quantization_config.py
+    line: 246
+    qualname: AutoRoundConfig.post_init
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.quantization_config.autoround.group_size:
+        present: *id112
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: group_size
+  _gt_namespace: transformers.engine.quantization_config.autoround
+- id: from_pretrained_state_dict_vs_model_name_mutual_exclusion
+  native_field: transformers.engine.state_dict
+  predicate_kind: mutual_exclusion
+  predicate_value: &id113
+    fields:
+    - state_dict
+    - pretrained_model_name_or_path
+    also:
+    - state_dict
+    - gguf_file
+  severity: error
+  message_template: '`state_dict` cannot be passed together with a model name or a
+    `gguf_file`. Use one of the two loading strategies.'
+  kwargs_positive:
+    state_dict: {}
+    pretrained_model_name_or_path: x
+  kwargs_negative:
+    state_dict: {}
+    pretrained_model_name_or_path: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4674
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.state_dict:
+        present: *id113
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: state_dict
+  _gt_namespace: transformers.engine
+- id: from_pretrained_tp_size_requires_tp_plan
+  native_field: transformers.engine.tp_size
+  predicate_kind: cross_field
+  predicate_value: &id114
+    when:
+      tp_size_not_none: true
+    requires: tp_plan is not None
+  severity: error
+  message_template: tp_plan has to be set when tp_size is passed.
+  kwargs_positive:
+    tp_size: 2
+    tp_plan: null
+  kwargs_negative:
+    tp_size: 2
+    tp_plan: auto
+  source:
+    file: transformers/modeling_utils.py
+    line: 4678
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.tp_size:
+        present: *id114
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: tp_size
+  _gt_namespace: transformers.engine
+- id: from_pretrained_tp_plan_only_auto
+  native_field: transformers.engine.tp_plan
+  predicate_kind: enum
+  predicate_value: &id115
+    in:
+    - auto
+    - null
+  severity: error
+  message_template: tp_plan supports 'auto' only for now but got {value}.
+  kwargs_positive:
+    tp_plan: custom
+  kwargs_negative:
+    tp_plan: auto
+  source:
+    file: transformers/modeling_utils.py
+    line: 4680
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.tp_plan:
+        not_in: *id115
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: tp_plan
+  _gt_namespace: transformers.engine
+- id: from_pretrained_tp_plan_vs_device_map_mutual_exclusion
+  native_field: transformers.engine.tp_plan
+  predicate_kind: mutual_exclusion
+  predicate_value: &id116
+    fields:
+    - tp_plan
+    - device_map
+  severity: error
+  message_template: '`tp_plan` and `device_map` are mutually exclusive. Choose either
+    one for parallelization.'
+  kwargs_positive:
+    tp_plan: auto
+    device_map: cpu
+  kwargs_negative:
+    tp_plan: auto
+    device_map: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4683
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.tp_plan:
+        present: *id116
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: tp_plan
+  _gt_namespace: transformers.engine
+- id: from_pretrained_device_map_auto_with_world_size_warns
+  native_field: transformers.engine.device_map
+  predicate_kind: cross_field
+  predicate_value: &id117
+    when:
+      device_map: auto
+      env_WORLD_SIZE_gt_0: true
+  severity: warning
+  message_template: 'You''ve set device_map=`auto` while triggering a distributed
+    run with torchrun. This might lead to unexpected behavior. If your plan is to
+    load the model on each device, you should set device_map={'': PartialState().process_index}
+    where PartialState comes from accelerate library'
+  kwargs_positive:
+    device_map: auto
+  kwargs_negative:
+    device_map: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4688
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.device_map:
+        present: *id117
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: device_map
+  _gt_namespace: transformers.engine
+- id: from_pretrained_use_auth_token_vs_token_mutual_exclusion
+  native_field: transformers.engine.use_auth_token
+  predicate_kind: mutual_exclusion
+  predicate_value: &id118
+    fields:
+    - token
+    - use_auth_token
+  severity: error
+  message_template: '`token` and `use_auth_token` are both specified. Please set only
+    the argument `token`.'
+  kwargs_positive:
+    token: x
+    use_auth_token: y
+  kwargs_negative:
+    token: x
+    use_auth_token: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4719
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.use_auth_token:
+        present: *id118
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: use_auth_token
+  _gt_namespace: transformers.engine
+- id: from_pretrained_use_auth_token_deprecation_warning
+  native_field: transformers.engine.use_auth_token
+  predicate_kind: cross_field
+  predicate_value: &id119
+    when:
+      use_auth_token_not_none: true
+  severity: warning
+  message_template: The `use_auth_token` argument is deprecated and will be removed
+    in v5 of Transformers. Please use `token` instead.
+  kwargs_positive:
+    use_auth_token: y
+  kwargs_negative:
+    use_auth_token: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4715
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.use_auth_token:
+        present: *id119
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: use_auth_token
+  _gt_namespace: transformers.engine
+- id: from_pretrained_gguf_requires_accelerate
+  native_field: transformers.engine.gguf_file
+  predicate_kind: cross_field
+  predicate_value: &id120
+    when:
+      gguf_file_not_none: true
+    requires: is_accelerate_available()
+    peer_package: accelerate
+  severity: error
+  message_template: accelerate is required when loading a GGUF file `pip install accelerate`.
+  kwargs_positive:
+    gguf_file: a.gguf
+  kwargs_negative:
+    gguf_file: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4728
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.gguf_file:
+        present: *id120
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: gguf_file
+  _gt_namespace: transformers.engine
+- id: from_pretrained_meta_device_context_raises
+  native_field: transformers.engine.device_map
+  predicate_kind: cross_field
+  predicate_value: &id121
+    when:
+      device_map: null
+      torch_global_default_device: meta
+  severity: error
+  message_template: You are using `from_pretrained` with a meta device context manager
+    or `torch.set_default_device('meta')`. This is an anti-pattern as `from_pretrained`
+    wants to load existing weights...
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4776
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.device_map:
+        present: *id121
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: device_map
+  _gt_namespace: transformers.engine
+- id: from_pretrained_device_map_string_allowlist
+  native_field: transformers.engine.device_map
+  predicate_kind: enum
+  predicate_value: &id122
+    in:
+    - auto
+    - balanced
+    - balanced_low_0
+    - sequential
+    or_else: valid torch device string (cpu, cuda:N, mps, ...)
+  severity: error
+  message_template: When passing device_map as a string, the value needs to be a device
+    name (e.g. cpu, cuda:0) or 'auto', 'balanced', 'balanced_low_0', 'sequential'
+    but found {value}.
+  kwargs_positive:
+    device_map: bogus_label
+  kwargs_negative:
+    device_map: auto
+  source:
+    file: transformers/modeling_utils.py
+    line: 4786
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.device_map:
+        not_in: *id122
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: device_map
+  _gt_namespace: transformers.engine
+- id: from_pretrained_device_map_negative_int
+  native_field: transformers.engine.device_map
+  predicate_kind: numeric_range
+  predicate_value: &id123
+    minimum: 0
+    when_type: int
+  severity: error
+  message_template: You can't pass device_map as a negative int. If you want to put
+    the model on the cpu, pass device_map = 'cpu'
+  kwargs_positive:
+    device_map: -1
+  kwargs_negative:
+    device_map: 0
+  source:
+    file: transformers/modeling_utils.py
+    line: 4796
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.device_map:
+        present: *id123
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: device_map
+  _gt_namespace: transformers.engine
+- id: from_pretrained_device_map_requires_accelerate
+  native_field: transformers.engine.device_map
+  predicate_kind: cross_field
+  predicate_value: &id124
+    when:
+      device_map_not_none: true
+    requires: is_accelerate_available()
+    peer_package: accelerate
+  severity: error
+  message_template: Using a `device_map`, `tp_plan`, `torch.device` context manager
+    or setting `torch.set_default_device(device)` requires `accelerate`. You can install
+    it with `pip install accelerate`
+  kwargs_positive:
+    device_map: auto
+  kwargs_negative:
+    device_map: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4805
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.device_map:
+        present: *id124
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: device_map
+  _gt_namespace: transformers.engine
+- id: from_pretrained_device_map_vs_deepspeed_zero3
+  native_field: transformers.engine.device_map
+  predicate_kind: mutual_exclusion
+  predicate_value: &id125
+    fields:
+    - device_map
+    - deepspeed_zero3
+  severity: error
+  message_template: DeepSpeed Zero-3 is not compatible with passing a `device_map`.
+  kwargs_positive:
+    device_map: auto
+  kwargs_negative:
+    device_map: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4804
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.device_map:
+        present: *id125
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: device_map
+  _gt_namespace: transformers.engine
+- id: from_pretrained_load_in_bit_vs_quantization_config_mutual_exclusion
+  native_field: transformers.engine.load_in_4bit
+  predicate_kind: mutual_exclusion
+  predicate_value: &id126
+    fields:
+    - load_in_{4,8}bit
+    - quantization_config
+  severity: error
+  message_template: You can't pass `load_in_4bit`or `load_in_8bit` as a kwarg when
+    passing `quantization_config` argument at the same time.
+  kwargs_positive:
+    load_in_4bit: true
+    quantization_config: {}
+  kwargs_negative:
+    load_in_4bit: true
+    quantization_config: null
+  source:
+    file: transformers/modeling_utils.py
+    line: 4814
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.load_in_4bit:
+        present: *id126
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: load_in_4bit
+  _gt_namespace: transformers.engine
+- id: from_pretrained_load_in_bit_deprecated_warning
+  native_field: transformers.engine.load_in_4bit
+  predicate_kind: cross_field
+  predicate_value: &id127
+    when:
+      load_in_4bit_or_8bit: true
+  severity: warning
+  message_template: The `load_in_4bit` and `load_in_8bit` arguments are deprecated
+    and will be removed in the future versions. Please, pass a `BitsAndBytesConfig`
+    object in `quantization_config` argument instead.
+  kwargs_positive:
+    load_in_4bit: true
+  kwargs_negative:
+    load_in_4bit: false
+  source:
+    file: transformers/modeling_utils.py
+    line: 4825
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.load_in_4bit:
+        present: *id127
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: load_in_4bit
+  _gt_namespace: transformers.engine
+- id: from_pretrained_quantization_vs_gguf_mutual_exclusion
+  native_field: transformers.engine.gguf_file
+  predicate_kind: mutual_exclusion
+  predicate_value: &id128
+    fields:
+    - gguf_file
+    - quantization_config
+  severity: error
+  message_template: You cannot combine Quantization and loading a model from a GGUF
+    file, try again by making sure you did not passed a `quantization_config` or that
+    you did not load a quantized model from the Hub.
+  kwargs_positive:
+    gguf_file: x
+    quantization_config: {}
+  kwargs_negative:
+    gguf_file: x
+  source:
+    file: transformers/modeling_utils.py
+    line: 4886
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.gguf_file:
+        present: *id128
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: gguf_file
+  _gt_namespace: transformers.engine
+- id: from_pretrained_gguf_disallows_disk_offload
+  native_field: transformers.engine.gguf_file
+  predicate_kind: cross_field
+  predicate_value: &id129
+    when:
+      gguf_file_not_none: true
+      device_map_has_disk: true
+  severity: error
+  message_template: One or more modules is configured to be mapped to disk. Disk offload
+    is not supported for models loaded from GGUF files.
+  kwargs_positive:
+    gguf_file: x
+    device_map:
+      model: disk
+  kwargs_negative:
+    gguf_file: x
+    device_map: cuda
+  source:
+    file: transformers/modeling_utils.py
+    line: 4894
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.gguf_file:
+        present: *id129
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: gguf_file
+  _gt_namespace: transformers.engine
+- id: from_pretrained_safetensors_format_metadata_allowlist
+  native_field: transformers.engine.use_safetensors
+  predicate_kind: enum
+  predicate_value: &id130
+    in:
+    - pt
+    - tf
+    - flax
+    - mlx
+    - null
+    key: safetensors.metadata.format
+  severity: error
+  message_template: Incompatible safetensors file. File metadata is not ['pt', 'tf',
+    'flax', 'mlx'] but {format}
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4943
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.use_safetensors:
+        not_in: *id130
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: use_safetensors
+  _gt_namespace: transformers.engine
+- id: from_pretrained_transformers_weights_must_be_safetensors
+  native_field: transformers.engine.config.transformers_weights
+  predicate_kind: cross_field
+  predicate_value: &id131
+    requires: filename endswith '.safetensors' or '.safetensors.index.json'
+  severity: error
+  message_template: 'The transformers file in the config seems to be incorrect: it
+    is neither a safetensors file (*.safetensors) nor a safetensors index file (*.safetensors.index.json):
+    {filename}'
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4875
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.config.transformers_weights:
+        present: *id131
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: transformers_weights
+  _gt_namespace: transformers.engine.config
+- id: from_pretrained_normalises_torch_dtype_to_dtype
+  native_field: transformers.engine.torch_dtype
+  predicate_kind: cross_field
+  predicate_value: &id132
+    when:
+      torch_dtype_not_none: true
+    normalisation: dtype = dtype if dtype is not None else torch_dtype
+  severity: warning
+  message_template: '`torch_dtype` is deprecated! Use `dtype` instead!'
+  kwargs_positive:
+    torch_dtype: float16
+  kwargs_negative:
+    dtype: float16
+  source:
+    file: transformers/modeling_utils.py
+    line: 4670
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.torch_dtype:
+        present: *id132
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: torch_dtype
+  _gt_namespace: transformers.engine
+- id: from_pretrained_pops_resume_download_silently
+  native_field: transformers.engine.resume_download
+  predicate_kind: cross_field
+  predicate_value: &id133
+    normalisation: silently discarded
+  severity: normalisation
+  message_template: '(no message: kwarg is popped and ignored)'
+  kwargs_positive:
+    resume_download: true
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4662
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.resume_download:
+        present: *id133
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: resume_download
+  _gt_namespace: transformers.engine
+- id: from_pretrained_pops_low_cpu_mem_usage_silently
+  native_field: transformers.engine.low_cpu_mem_usage
+  predicate_kind: cross_field
+  predicate_value: &id134
+    normalisation: silently discarded (always-on now)
+  severity: normalisation
+  message_template: '(no message: kwarg is popped and ignored)'
+  kwargs_positive:
+    low_cpu_mem_usage: true
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4665
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.low_cpu_mem_usage:
+        present: *id134
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: low_cpu_mem_usage
+  _gt_namespace: transformers.engine
+- id: from_pretrained_pops_offload_state_dict_silently
+  native_field: transformers.engine.offload_state_dict
+  predicate_kind: cross_field
+  predicate_value: &id135
+    normalisation: silently discarded
+  severity: normalisation
+  message_template: '(no message: kwarg is popped and ignored)'
+  kwargs_positive:
+    offload_state_dict: true
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4666
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.offload_state_dict:
+        present: *id135
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: offload_state_dict
+  _gt_namespace: transformers.engine
+- id: from_pretrained_pops_fast_init_silently
+  native_field: transformers.engine._fast_init
+  predicate_kind: cross_field
+  predicate_value: &id136
+    normalisation: silently discarded
+  severity: normalisation
+  message_template: '(no message: kwarg is popped and ignored)'
+  kwargs_positive:
+    _fast_init: false
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4664
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine._fast_init:
+        present: *id136
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: _fast_init
+  _gt_namespace: transformers.engine
+- id: from_pretrained_pops_mirror_silently
+  native_field: transformers.engine.mirror
+  predicate_kind: cross_field
+  predicate_value: &id137
+    normalisation: silently discarded
+  severity: normalisation
+  message_template: '(no message: kwarg is popped and ignored)'
+  kwargs_positive:
+    mirror: tuna
+  kwargs_negative: {}
+  source:
+    file: transformers/modeling_utils.py
+    line: 4663
+    qualname: PreTrainedModel.from_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.engine.mirror:
+        present: *id137
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: mirror
+  _gt_namespace: transformers.engine
+- id: generationconfig_save_pretrained_strict_validate
+  native_field: transformers.sampling
+  predicate_kind: cross_field
+  predicate_value: &id138
+    behaviour: validate(strict=True) at save time; ANY dormant warning becomes a refusal-to-save
+      error
+  severity: error
+  message_template: 'GenerationConfig is invalid: <minor_issues>
+
+
+    Fix these issues to save the configuration.'
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 723
+    qualname: GenerationConfig.save_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling:
+        present: *id138
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: sampling
+  _gt_namespace: transformers
+- id: generationconfig_save_pretrained_use_auth_token_deprecated
+  native_field: transformers.sampling
+  predicate_kind: cross_field
+  predicate_value: &id139
+    when:
+      use_auth_token_not_none: true
+  severity: warning
+  message_template: The `use_auth_token` argument is deprecated and will be removed
+    in v5 of Transformers. Please use `token` instead.
+  kwargs_positive:
+    use_auth_token: y
+  kwargs_negative:
+    use_auth_token: null
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 730
+    qualname: GenerationConfig.save_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling:
+        present: *id139
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: sampling
+  _gt_namespace: transformers
+- id: generationconfig_save_pretrained_use_auth_token_vs_token_mutual_exclusion
+  native_field: transformers.sampling
+  predicate_kind: mutual_exclusion
+  predicate_value: &id140
+    fields:
+    - token
+    - use_auth_token
+  severity: error
+  message_template: '`token` and `use_auth_token` are both specified. Please set only
+    the argument `token`.'
+  kwargs_positive:
+    token: x
+    use_auth_token: y
+  kwargs_negative:
+    token: x
+    use_auth_token: null
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 736
+    qualname: GenerationConfig.save_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling:
+        present: *id140
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: sampling
+  _gt_namespace: transformers
+- id: generationconfig_save_pretrained_save_directory_not_file
+  native_field: transformers.sampling
+  predicate_kind: cross_field
+  predicate_value: &id141
+    requires: not os.path.isfile(save_directory)
+  severity: error
+  message_template: Provided path ({save_directory}) should be a directory, not a
+    file
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 743
+    qualname: GenerationConfig.save_pretrained
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling:
+        present: *id141
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: sampling
+  _gt_namespace: transformers
+- id: generationconfig_from_model_config_auto_enables_return_dict
+  native_field: transformers.sampling.return_dict_in_generate
+  predicate_kind: cross_field
+  predicate_value: &id142
+    when:
+      from_model_config: true
+      any_output_flag: true
+    normalisation: return_dict_in_generate = True
+  severity: normalisation
+  message_template: '(silent: any output_* flag forces return_dict_in_generate=True)'
+  kwargs_positive: {}
+  kwargs_negative: {}
+  source:
+    file: transformers/generation/configuration_utils.py
+    line: 1141
+    qualname: GenerationConfig.from_model_config
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate:
+        present: *id142
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: return_dict_in_generate
+  _gt_namespace: transformers.sampling

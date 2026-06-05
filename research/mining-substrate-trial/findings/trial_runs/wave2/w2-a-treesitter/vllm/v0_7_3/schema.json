@@ -2,7 +2,748 @@
   "schema_version": "2.0.0",
   "engine": "vllm",
   "engine_version": "0.7.3",
-  "discovered_at": "2026-06-04T22:01:06.624120+00:00",
-  "engine_params": {},
-  "sampling_params": {}
+  "discovered_at": "2026-06-05T01:13:19.152421+00:00",
+  "engine_params": {
+    "model": {
+      "type": "string",
+      "default": "facebook/opt-125m"
+    },
+    "served_model_name": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "tokenizer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "task": {
+      "type": {
+        "description": "Upstream type: TaskOption"
+      },
+      "default": "auto"
+    },
+    "skip_tokenizer_init": {
+      "type": "boolean",
+      "default": false
+    },
+    "tokenizer_mode": {
+      "type": "string",
+      "default": "auto"
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": false
+    },
+    "allowed_local_media_path": {
+      "type": "string",
+      "default": ""
+    },
+    "download_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "load_format": {
+      "type": "string",
+      "default": "auto"
+    },
+    "config_format": {
+      "type": {
+        "description": "Upstream type: ConfigFormat"
+      },
+      "default": "ConfigFormat.AUTO"
+    },
+    "dtype": {
+      "type": "string",
+      "default": "auto"
+    },
+    "kv_cache_dtype": {
+      "type": "string",
+      "default": "auto"
+    },
+    "seed": {
+      "type": "integer",
+      "default": 0
+    },
+    "max_model_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "distributed_executor_backend": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str,\n                                                 Type[ExecutorBase]]] | None"
+      },
+      "default": null
+    },
+    "pipeline_parallel_size": {
+      "type": "integer",
+      "default": 1
+    },
+    "tensor_parallel_size": {
+      "type": "integer",
+      "default": 1
+    },
+    "max_parallel_loading_workers": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "block_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "enable_prefix_caching": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_sliding_window": {
+      "type": "boolean",
+      "default": false
+    },
+    "use_v2_block_manager": {
+      "type": "boolean",
+      "default": true
+    },
+    "swap_space": {
+      "type": "number",
+      "default": 4
+    },
+    "cpu_offload_gb": {
+      "type": "number",
+      "default": 0
+    },
+    "gpu_memory_utilization": {
+      "type": "number",
+      "default": 0.9
+    },
+    "max_num_batched_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_num_partial_prefills": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 1
+    },
+    "max_long_partial_prefills": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 1
+    },
+    "long_prefill_token_threshold": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 0
+    },
+    "max_num_seqs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_logprobs": {
+      "type": "integer",
+      "default": 20
+    },
+    "disable_log_stats": {
+      "type": "boolean",
+      "default": false
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "code_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "rope_scaling": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "rope_theta": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "hf_overrides": {
+      "type": {
+        "description": "Upstream type: Optional[HfOverrides] | None"
+      },
+      "default": null
+    },
+    "tokenizer_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "quantization": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "enforce_eager": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "max_seq_len_to_capture": {
+      "type": "integer",
+      "default": 8192
+    },
+    "disable_custom_all_reduce": {
+      "type": "boolean",
+      "default": false
+    },
+    "tokenizer_pool_size": {
+      "type": "integer",
+      "default": 0
+    },
+    "tokenizer_pool_type": {
+      "type": {
+        "description": "Upstream type: Union[str, Type[\"BaseTokenizerGroup\"]]"
+      },
+      "default": "ray"
+    },
+    "tokenizer_pool_extra_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "limit_mm_per_prompt": {
+      "type": {
+        "description": "Upstream type: Optional[Mapping[str, int]] | None"
+      },
+      "default": null
+    },
+    "mm_processor_kwargs": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_mm_preprocessor_cache": {
+      "type": "boolean",
+      "default": false
+    },
+    "enable_lora": {
+      "type": "boolean",
+      "default": false
+    },
+    "enable_lora_bias": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_loras": {
+      "type": "integer",
+      "default": 1
+    },
+    "max_lora_rank": {
+      "type": "integer",
+      "default": 16
+    },
+    "enable_prompt_adapter": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_prompt_adapters": {
+      "type": "integer",
+      "default": 1
+    },
+    "max_prompt_adapter_token": {
+      "type": "integer",
+      "default": 0
+    },
+    "fully_sharded_loras": {
+      "type": "boolean",
+      "default": false
+    },
+    "lora_extra_vocab_size": {
+      "type": "integer",
+      "default": 256
+    },
+    "long_lora_scaling_factors": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "lora_dtype": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, torch.dtype]] | None"
+      },
+      "default": "auto"
+    },
+    "max_cpu_loras": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "device": {
+      "type": "string",
+      "default": "auto"
+    },
+    "num_scheduler_steps": {
+      "type": "integer",
+      "default": 1
+    },
+    "multi_step_stream_outputs": {
+      "type": "boolean",
+      "default": true
+    },
+    "ray_workers_use_nsight": {
+      "type": "boolean",
+      "default": false
+    },
+    "num_gpu_blocks_override": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "num_lookahead_slots": {
+      "type": "integer",
+      "default": 0
+    },
+    "model_loader_extra_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "ignore_patterns": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "preemption_mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "scheduler_delay_factor": {
+      "type": "number",
+      "default": 0.0
+    },
+    "enable_chunked_prefill": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "guided_decoding_backend": {
+      "type": "string",
+      "default": "xgrammar"
+    },
+    "logits_processor_pattern": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_model_quantization": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_draft_tensor_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "num_speculative_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_disable_mqa_scorer": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": false
+    },
+    "speculative_max_model_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_disable_by_batch_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "ngram_prompt_lookup_max": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "ngram_prompt_lookup_min": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "spec_decoding_acceptance_method": {
+      "type": "string",
+      "default": "rejection_sampler"
+    },
+    "typical_acceptance_sampler_posterior_threshold": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "typical_acceptance_sampler_posterior_alpha": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "qlora_adapter_name_or_path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_logprobs_during_spec_decoding": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "otlp_traces_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "collect_detailed_traces": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_async_output_proc": {
+      "type": "boolean",
+      "default": false
+    },
+    "scheduling_policy": {
+      "type": {
+        "description": "Upstream type: Literal[\"fcfs\", \"priority\"]"
+      },
+      "default": "fcfs"
+    },
+    "scheduler_cls": {
+      "type": {
+        "description": "Upstream type: Union[str, Type[object]]"
+      },
+      "default": "vllm.core.scheduler.Scheduler"
+    },
+    "override_neuron_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "override_pooler_config": {
+      "type": {
+        "description": "Upstream type: Optional[PoolerConfig] | None"
+      },
+      "default": null
+    },
+    "compilation_config": {
+      "type": {
+        "description": "Upstream type: Optional[CompilationConfig] | None"
+      },
+      "default": null
+    },
+    "worker_cls": {
+      "type": "string",
+      "default": "auto"
+    },
+    "kv_transfer_config": {
+      "type": {
+        "description": "Upstream type: Optional[KVTransferConfig] | None"
+      },
+      "default": null
+    },
+    "generation_config": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "override_generation_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "enable_sleep_mode": {
+      "type": "boolean",
+      "default": false
+    },
+    "model_impl": {
+      "type": "string",
+      "default": "auto"
+    },
+    "calculate_kv_scales": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "additional_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "sampling_params": {
+    "n": {
+      "type": "integer",
+      "default": 1
+    },
+    "best_of": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "presence_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "frequency_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "repetition_penalty": {
+      "type": "number",
+      "default": 1.0
+    },
+    "temperature": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_p": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_k": {
+      "type": "integer",
+      "default": -1
+    },
+    "min_p": {
+      "type": "number",
+      "default": 0.0
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "stop": {
+      "type": {
+        "description": "Upstream type: Optional[Union[str, List[str]]] | None"
+      },
+      "default": null
+    },
+    "stop_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "bad_words": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "ignore_eos": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 16
+    },
+    "min_tokens": {
+      "type": "integer",
+      "default": 0
+    },
+    "logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "prompt_logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "detokenize": {
+      "type": "boolean",
+      "default": true
+    },
+    "skip_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "spaces_between_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "logits_processors": {
+      "type": [
+        "any",
+        "null"
+      ],
+      "default": null
+    },
+    "include_stop_str_in_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "truncate_prompt_tokens": {
+      "type": {
+        "description": "Upstream type: Optional[Annotated[int, msgspec.Meta(ge=1)]] | None"
+      },
+      "default": null
+    },
+    "output_kind": {
+      "type": {
+        "description": "Upstream type: RequestOutputKind"
+      },
+      "default": "RequestOutputKind.CUMULATIVE"
+    },
+    "output_text_buffer_length": {
+      "type": "integer",
+      "default": 0
+    },
+    "guided_decoding": {
+      "type": {
+        "description": "Upstream type: Optional[GuidedDecodingParams] | None"
+      },
+      "default": null
+    },
+    "logit_bias": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "allowed_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    }
+  }
 }

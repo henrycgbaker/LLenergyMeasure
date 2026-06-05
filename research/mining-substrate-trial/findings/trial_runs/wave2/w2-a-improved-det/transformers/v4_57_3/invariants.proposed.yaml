@@ -1,0 +1,1954 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.57.3
+mined_at: '2026-06-05T01:19:02.048112+00:00'
+invariants:
+- id: transformers_generationconfig_validate_early_stopping_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `early_stopping` (not_in)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 543
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_generationconfig_validate_max_new_tokens_le
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `max_new_tokens` (le)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 545
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_new_tokens:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_generationconfig_validate_pad_token_id_lt
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `pad_token_id` (lt)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 547
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.pad_token_id:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_generationconfig_validate_cache_implementation_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `cache_implementation` (not_in)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 554
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_implementation:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_generationconfig_validate_compile_config_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `compile_config` (type_is_not)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 560
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.compile_config:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_generationconfig_validate_do_sample_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 571
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_generationconfig_validate_do_sample_exact_temperature
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 576
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.temperature: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_do_sample_exact_top_p
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 580
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.top_p: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_do_sample_exact_min_p
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 582
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.min_p: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_do_sample_exact_typical_p
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 584
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.typical_p: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_do_sample_exact_top_k
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 588
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.top_k: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_do_sample_exact_epsilon_cutoff
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 590
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.epsilon_cutoff: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_do_sample_exact_eta_cutoff
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 594
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.eta_cutoff: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_num_beams_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 600
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_generationconfig_validate_num_beams_exact_early_stopping
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 605
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 0
+      transformers.sampling.early_stopping: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_num_beams_exact_length_penalty
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` (exact)
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 609
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 0
+      transformers.sampling.length_penalty: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_num_return_sequences_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` (not_equal)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 615
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_generationconfig_validate_num_return_sequences_not_equal_num_beams
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` (not_equal)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 616
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        not_equal: 0
+      transformers.sampling.num_beams:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_num_return_sequences_not_equal_do_sample
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` (not_equal)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 617
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        not_equal: 0
+      transformers.sampling.do_sample:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_generationconfig_validate_num_return_sequences_gt
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` (gt)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 622
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_generationconfig_validate_minor_issues_gt
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `minor_issues` (gt)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 672
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.minor_issues:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_generationconfig_validate_strict_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `strict` (present)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 683
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.strict:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_watermarkingconfig_validate_seeding_scheme_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: WatermarkingConfig.validate flags `seeding_scheme` (not_in)
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1302
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.seeding_scheme:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_watermarkingconfig_validate_greenlist_ratio_le
+  engine: transformers
+  library: transformers
+  invariant_under_test: WatermarkingConfig.validate flags `greenlist_ratio` (le)
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1310
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.greenlist_ratio:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_watermarkingconfig_validate_context_width_ge
+  engine: transformers
+  library: transformers
+  invariant_under_test: WatermarkingConfig.validate flags `context_width` (ge)
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1318
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.context_width:
+        '>=': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_synthidtextwatermarkingconfig_validate_sampling_table_size_gt
+  engine: transformers
+  library: transformers
+  invariant_under_test: SynthIDTextWatermarkingConfig.validate flags `sampling_table_size`
+    (gt)
+  severity: error
+  native_type: transformers.SynthIDTextWatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1407
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.sampling_table_size:
+        '>': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_autoroundconfig_post_init_bits_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: AutoRoundConfig.post_init flags `bits` (not_in)
+  severity: error
+  native_type: transformers.AutoRoundConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 244
+  match:
+    engine: transformers
+    fields:
+      transformers.bits:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_autoroundconfig_post_init_group_size_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: AutoRoundConfig.post_init flags `group_size` (not_equal)
+  severity: error
+  native_type: transformers.AutoRoundConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 246
+  match:
+    engine: transformers
+    fields:
+      transformers.group_size:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_bitsandbytesconfig_post_init_load_in_4bit_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `load_in_4bit` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 542
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_load_in_8bit_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `load_in_8bit` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 545
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_8bit:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_threshold_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_threshold` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 548
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_threshold:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_skip_modules_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_skip_modules`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 551
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_skip_modules:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_enable_fp32_cpu_offload_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_enable_fp32_cpu_offload`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 553
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_enable_fp32_cpu_offload:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_has_fp16_weight_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_has_fp16_weight`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 556
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_has_fp16_weight:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_bnb_4bit_compute_dtype_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `bnb_4bit_compute_dtype`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 559
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_compute_dtype:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_bnb_4bit_quant_type_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `bnb_4bit_quant_type` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 562
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_quant_type:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_bnb_4bit_use_double_quant_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `bnb_4bit_use_double_quant`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 565
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_use_double_quant:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_bitsandbytesconfig_post_init_load_in_4bit_ge
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `load_in_4bit` (ge)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 568
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        '>=': 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_gptqconfig_post_init_damp_percent_lt
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `damp_percent` (lt)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 781
+  match:
+    engine: transformers
+    fields:
+      transformers.damp_percent:
+        <: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_gptqconfig_post_init_dataset_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `dataset` (present)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 783
+  match:
+    engine: transformers
+    fields:
+      transformers.dataset:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_gptqconfig_post_init_dataset_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `dataset` (type_is_not)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 784
+  match:
+    engine: transformers
+    fields:
+      transformers.dataset:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_gptqconfig_post_init_dataset_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `dataset` (exact)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 785
+  match:
+    engine: transformers
+    fields:
+      transformers.dataset: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_gptqconfig_post_init_dataset_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `dataset` (not_in)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 790
+  match:
+    engine: transformers
+    fields:
+      transformers.dataset:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_gptqconfig_post_init_exllama_config_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `exllama_config` (not_in)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 819
+  match:
+    engine: transformers
+    fields:
+      transformers.exllama_config:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_gptqconfig_post_init_bits_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `bits` (exact)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 827
+  match:
+    engine: transformers
+    fields:
+      transformers.bits: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_gptqconfig_post_init_bits_exact_exllama_config
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `bits` (exact)
+  severity: warning
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 828
+  match:
+    engine: transformers
+    fields:
+      transformers.bits: 0
+      transformers.exllama_config: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_bits_exact_is_auto_gptq_available
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `bits` (exact)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 834
+  match:
+    engine: transformers
+    fields:
+      transformers.bits: 0
+      transformers.is_auto_gptq_available: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_bits_exact_optimum_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `bits` (exact)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 837
+  match:
+    engine: transformers
+    fields:
+      transformers.bits: 0
+      transformers.optimum_version: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_bits_exact_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `bits` (exact)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 837
+  match:
+    engine: transformers
+    fields:
+      transformers.bits: 0
+      transformers.version: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_bits_exact_parse
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `bits` (exact)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 837
+  match:
+    engine: transformers
+    fields:
+      transformers.bits: 0
+      transformers.parse: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_bits_exact_autogptq_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `bits` (exact)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 837
+  match:
+    engine: transformers
+    fields:
+      transformers.bits: 0
+      transformers.autogptq_version: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_modules_in_block_to_quantize_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `modules_in_block_to_quantize`
+    (present)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 841
+  match:
+    engine: transformers
+    fields:
+      transformers.modules_in_block_to_quantize:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_gptqconfig_post_init_modules_in_block_to_quantize_present_optimum_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `modules_in_block_to_quantize`
+    (present)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 843
+  match:
+    engine: transformers
+    fields:
+      transformers.modules_in_block_to_quantize:
+        present: true
+      transformers.optimum_version:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_modules_in_block_to_quantize_present_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `modules_in_block_to_quantize`
+    (present)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 843
+  match:
+    engine: transformers
+    fields:
+      transformers.modules_in_block_to_quantize:
+        present: true
+      transformers.version:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_modules_in_block_to_quantize_present_parse
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `modules_in_block_to_quantize`
+    (present)
+  severity: error
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 843
+  match:
+    engine: transformers
+    fields:
+      transformers.modules_in_block_to_quantize:
+        present: true
+      transformers.parse:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_gptqconfig_post_init_backend_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `backend` (present)
+  severity: dormant
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 805
+  match:
+    engine: transformers
+    fields:
+      transformers.backend:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: transformers_gptqconfig_post_init_use_exllama_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `use_exllama` (present)
+  severity: dormant
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 814
+  match:
+    engine: transformers
+    fields:
+      transformers.use_exllama:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: transformers_gptqconfig_post_init_exllama_config_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GPTQConfig.post_init flags `exllama_config` (present)
+  severity: dormant
+  native_type: transformers.GPTQConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 817
+  match:
+    engine: transformers
+    fields:
+      transformers.exllama_config:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: transformers_awqconfig_post_init_backend_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `backend` (not_in)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 950
+  match:
+    engine: transformers
+    fields:
+      transformers.backend:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_awqconfig_post_init_version_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `version` (not_in)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 956
+  match:
+    engine: transformers
+    fields:
+      transformers.version:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_awqconfig_post_init_backend_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `backend` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 966
+  match:
+    engine: transformers
+    fields:
+      transformers.backend: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_awqconfig_post_init_backend_exact_torch
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `backend` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 968
+  match:
+    engine: transformers
+    fields:
+      transformers.backend: 0
+      transformers.torch: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_backend_exact_cuda
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `backend` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 968
+  match:
+    engine: transformers
+    fields:
+      transformers.backend: 0
+      transformers.cuda: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_backend_exact_is_available
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `backend` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 968
+  match:
+    engine: transformers
+    fields:
+      transformers.backend: 0
+      transformers.is_available: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_backend_exact_xpu
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `backend` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 968
+  match:
+    engine: transformers
+    fields:
+      transformers.backend: 0
+      transformers.xpu: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_backend_exact_major
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `backend` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 973
+  match:
+    engine: transformers
+    fields:
+      transformers.backend: 0
+      transformers.major: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_do_fuse_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `do_fuse` (present)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 976
+  match:
+    engine: transformers
+    fields:
+      transformers.do_fuse:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_awqconfig_post_init_do_fuse_present_awq_version_supports_fusing
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `do_fuse` (present)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 989
+  match:
+    engine: transformers
+    fields:
+      transformers.do_fuse:
+        present: true
+      transformers.awq_version_supports_fusing:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_modules_to_not_convert_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `modules_to_not_convert` (present)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 994
+  match:
+    engine: transformers
+    fields:
+      transformers.modules_to_not_convert:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_awqconfig_post_init_modules_to_not_convert_present_awq_version_supports_non_conversion
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `modules_to_not_convert` (present)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1002
+  match:
+    engine: transformers
+    fields:
+      transformers.modules_to_not_convert:
+        present: true
+      transformers.awq_version_supports_non_conversion:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_do_fuse_present_modules_to_fuse
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `do_fuse` (present)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1017
+  match:
+    engine: transformers
+    fields:
+      transformers.do_fuse:
+        present: true
+      transformers.modules_to_fuse:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_version_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `version` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1022
+  match:
+    engine: transformers
+    fields:
+      transformers.version: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_awqconfig_post_init_version_exact_awq_version_supports_exllama
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `version` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1030
+  match:
+    engine: transformers
+    fields:
+      transformers.version: 0
+      transformers.awq_version_supports_exllama: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_awqconfig_post_init_version_exact_exllama_config
+  engine: transformers
+  library: transformers
+  invariant_under_test: AwqConfig.post_init flags `version` (exact)
+  severity: error
+  native_type: transformers.AwqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1039
+  match:
+    engine: transformers
+    fields:
+      transformers.version: 0
+      transformers.exllama_config: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_aqlmconfig_post_init_in_group_size_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: AqlmConfig.post_init flags `in_group_size` (type_is_not)
+  severity: error
+  native_type: transformers.AqlmConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1096
+  match:
+    engine: transformers
+    fields:
+      transformers.in_group_size:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_aqlmconfig_post_init_out_group_size_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: AqlmConfig.post_init flags `out_group_size` (type_is_not)
+  severity: error
+  native_type: transformers.AqlmConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1098
+  match:
+    engine: transformers
+    fields:
+      transformers.out_group_size:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_aqlmconfig_post_init_num_codebooks_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: AqlmConfig.post_init flags `num_codebooks` (type_is_not)
+  severity: error
+  native_type: transformers.AqlmConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1100
+  match:
+    engine: transformers
+    fields:
+      transformers.num_codebooks:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_aqlmconfig_post_init_nbits_per_codebook_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: AqlmConfig.post_init flags `nbits_per_codebook` (type_is_not)
+  severity: error
+  native_type: transformers.AqlmConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1102
+  match:
+    engine: transformers
+    fields:
+      transformers.nbits_per_codebook:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_aqlmconfig_post_init_linear_weights_not_to_quantize_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: AqlmConfig.post_init flags `linear_weights_not_to_quantize`
+    (type_is_not)
+  severity: error
+  native_type: transformers.AqlmConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1105
+  match:
+    engine: transformers
+    fields:
+      transformers.linear_weights_not_to_quantize:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_aqlmconfig_post_init_linear_weights_not_to_quantize_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: AqlmConfig.post_init flags `linear_weights_not_to_quantize`
+    (present)
+  severity: dormant
+  native_type: transformers.AqlmConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1111
+  match:
+    engine: transformers
+    fields:
+      transformers.linear_weights_not_to_quantize:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: transformers_vptqlayerconfig_post_init_is_indice_packed_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: VptqLayerConfig.post_init flags `is_indice_packed` (exact)
+  severity: error
+  native_type: transformers.VptqLayerConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1165
+  match:
+    engine: transformers
+    fields:
+      transformers.is_indice_packed: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_vptqconfig_post_init_enable_proxy_error_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: VptqConfig.post_init flags `enable_proxy_error` (exact)
+  severity: error
+  native_type: transformers.VptqConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1206
+  match:
+    engine: transformers
+    fields:
+      transformers.enable_proxy_error: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_quantoconfig_post_init_weights_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: QuantoConfig.post_init flags `weights` (not_in)
+  severity: error
+  native_type: transformers.QuantoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1245
+  match:
+    engine: transformers
+    fields:
+      transformers.weights:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_quantoconfig_post_init_activations_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: QuantoConfig.post_init flags `activations` (not_in)
+  severity: error
+  native_type: transformers.QuantoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1247
+  match:
+    engine: transformers
+    fields:
+      transformers.activations:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_compressedtensorsconfig_post_init_run_compressed_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: CompressedTensorsConfig.post_init flags `run_compressed` (present)
+  severity: warning
+  native_type: transformers.CompressedTensorsConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1359
+  match:
+    engine: transformers
+    fields:
+      transformers.run_compressed:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_compressedtensorsconfig_post_init_run_compressed_present_is_sparsification_compressed
+  engine: transformers
+  library: transformers
+  invariant_under_test: CompressedTensorsConfig.post_init flags `run_compressed` (present)
+  severity: warning
+  native_type: transformers.CompressedTensorsConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1360
+  match:
+    engine: transformers
+    fields:
+      transformers.run_compressed:
+        present: true
+      transformers.is_sparsification_compressed:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_compressedtensorsconfig_post_init_run_compressed_present_is_quantization_compressed
+  engine: transformers
+  library: transformers
+  invariant_under_test: CompressedTensorsConfig.post_init flags `run_compressed` (present)
+  severity: warning
+  native_type: transformers.CompressedTensorsConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1366
+  match:
+    engine: transformers
+    fields:
+      transformers.run_compressed:
+        present: true
+      transformers.is_quantization_compressed:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_higgsconfig_post_init_p_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: HiggsConfig.post_init flags `p` (not_in)
+  severity: error
+  native_type: transformers.HiggsConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1546
+  match:
+    engine: transformers
+    fields:
+      transformers.p:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_higgsconfig_post_init_group_size_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: HiggsConfig.post_init flags `group_size` (not_in)
+  severity: error
+  native_type: transformers.HiggsConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1548
+  match:
+    engine: transformers
+    fields:
+      transformers.group_size:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_higgsconfig_post_init_hadamard_size_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: HiggsConfig.post_init flags `hadamard_size` (not_equal)
+  severity: error
+  native_type: transformers.HiggsConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1550
+  match:
+    engine: transformers
+    fields:
+      transformers.hadamard_size:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_fpquantconfig_post_init_forward_dtype_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: FPQuantConfig.post_init flags `forward_dtype` (exact)
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1613
+  match:
+    engine: transformers
+    fields:
+      transformers.forward_dtype: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_fpquantconfig_post_init_forward_dtype_exact_forward_method
+  engine: transformers
+  library: transformers
+  invariant_under_test: FPQuantConfig.post_init flags `forward_dtype` (exact)
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1614
+  match:
+    engine: transformers
+    fields:
+      transformers.forward_dtype: 0
+      transformers.forward_method: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_fpquantconfig_post_init_forward_dtype_exact_hadamard_group_size
+  engine: transformers
+  library: transformers
+  invariant_under_test: FPQuantConfig.post_init flags `forward_dtype` (exact)
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1618
+  match:
+    engine: transformers
+    fields:
+      transformers.forward_dtype: 0
+      transformers.hadamard_group_size: 0
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_fpquantconfig_post_init_backward_dtype_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: FPQuantConfig.post_init flags `backward_dtype` (not_equal)
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1630
+  match:
+    engine: transformers
+    fields:
+      transformers.backward_dtype:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_fpquantconfig_post_init_transform_init_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: FPQuantConfig.post_init flags `transform_init` (not_in)
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1632
+  match:
+    engine: transformers
+    fields:
+      transformers.transform_init:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_fpquantconfig_post_init_hadamard_group_size_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: FPQuantConfig.post_init flags `hadamard_group_size` (present)
+  severity: dormant
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1617
+  match:
+    engine: transformers
+    fields:
+      transformers.hadamard_group_size:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p3
+- id: transformers_torchaoconfig_post_init_quant_type_type_is_not_ao_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: TorchAoConfig.post_init flags `quant_type` (type_is_not)
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1735
+  match:
+    engine: transformers
+    fields:
+      transformers.quant_type:
+        type_is_not: ''
+      transformers.ao_version:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_torchaoconfig_post_init_quant_type_type_is_not_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: TorchAoConfig.post_init flags `quant_type` (type_is_not)
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1735
+  match:
+    engine: transformers
+    fields:
+      transformers.quant_type:
+        type_is_not: ''
+      transformers.version:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_torchaoconfig_post_init_quant_type_type_is_not_parse
+  engine: transformers
+  library: transformers
+  invariant_under_test: TorchAoConfig.post_init flags `quant_type` (type_is_not)
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1735
+  match:
+    engine: transformers
+    fields:
+      transformers.quant_type:
+        type_is_not: ''
+      transformers.parse:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p7
+- id: transformers_torchaoconfig_post_init_quant_type_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: TorchAoConfig.post_init flags `quant_type` (type_is_not)
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1738
+  match:
+    engine: transformers
+    fields:
+      transformers.quant_type:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_torchaoconfig__validate_string_quant_type_quant_type_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: TorchAoConfig._validate_string_quant_type flags `quant_type`
+    (not_in)
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: _validate_string_quant_type
+    line_at_scan: 1752
+  match:
+    engine: transformers
+    fields:
+      transformers.quant_type:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_torchaoconfig__validate_string_quant_type_invalid_kwargs_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: TorchAoConfig._validate_string_quant_type flags `invalid_kwargs`
+    (present)
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: _validate_string_quant_type
+    line_at_scan: 1768
+  match:
+    engine: transformers
+    fields:
+      transformers.invalid_kwargs:
+        present: true
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_spqrconfig_post_init_bits_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: SpQRConfig.post_init flags `bits` (type_is_not)
+  severity: error
+  native_type: transformers.SpQRConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1980
+  match:
+    engine: transformers
+    fields:
+      transformers.bits:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_spqrconfig_post_init_beta1_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: SpQRConfig.post_init flags `beta1` (type_is_not)
+  severity: error
+  native_type: transformers.SpQRConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1982
+  match:
+    engine: transformers
+    fields:
+      transformers.beta1:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_spqrconfig_post_init_beta2_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: SpQRConfig.post_init flags `beta2` (type_is_not)
+  severity: error
+  native_type: transformers.SpQRConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1984
+  match:
+    engine: transformers
+    fields:
+      transformers.beta2:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_spqrconfig_post_init_bits_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: SpQRConfig.post_init flags `bits` (not_equal)
+  severity: error
+  native_type: transformers.SpQRConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1987
+  match:
+    engine: transformers
+    fields:
+      transformers.bits:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_spqrconfig_post_init_beta1_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: SpQRConfig.post_init flags `beta1` (not_equal)
+  severity: error
+  native_type: transformers.SpQRConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1989
+  match:
+    engine: transformers
+    fields:
+      transformers.beta1:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_spqrconfig_post_init_beta2_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: SpQRConfig.post_init flags `beta2` (not_equal)
+  severity: error
+  native_type: transformers.SpQRConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1991
+  match:
+    engine: transformers
+    fields:
+      transformers.beta2:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_spqrconfig_post_init_shapes_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: SpQRConfig.post_init flags `shapes` (type_is_not)
+  severity: error
+  native_type: transformers.SpQRConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 1993
+  match:
+    engine: transformers
+    fields:
+      transformers.shapes:
+        type_is_not: ''
+  added_by: wave2_a_improved_det
+  fired_by: p4
+- id: transformers_finegrainedfp8config_post_init_activation_scheme_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: FineGrainedFP8Config.post_init flags `activation_scheme` (not_equal)
+  severity: error
+  native_type: transformers.FineGrainedFP8Config
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 2029
+  match:
+    engine: transformers
+    fields:
+      transformers.activation_scheme:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_finegrainedfp8config_post_init_weight_block_size_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: FineGrainedFP8Config.post_init flags `weight_block_size` (not_equal)
+  severity: error
+  native_type: transformers.FineGrainedFP8Config
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 2031
+  match:
+    engine: transformers
+    fields:
+      transformers.weight_block_size:
+        not_equal: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5
+- id: transformers_finegrainedfp8config_post_init_weight_block_size_le
+  engine: transformers
+  library: transformers
+  invariant_under_test: FineGrainedFP8Config.post_init flags `weight_block_size` (le)
+  severity: error
+  native_type: transformers.FineGrainedFP8Config
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 2033
+  match:
+    engine: transformers
+    fields:
+      transformers.weight_block_size:
+        <=: 0
+  added_by: wave2_a_improved_det
+  fired_by: p5

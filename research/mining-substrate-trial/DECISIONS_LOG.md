@@ -4012,3 +4012,82 @@ Sketching the proposal at `findings/wave2_improved_det_primitives.md` (this comm
 
 Per user: launch at 3am (roughly 2 hrs from this writing). Batch 2 prompts authored now as ready-to-fire artefacts at `findings/wave2_batch2_prompts.md`. Refinements per earlier synthesis baked in.
 
+
+## 2026-06-05 03:03 CEST - Wave 2 autonomous execution kickoff
+
+Scheduled cron fired at 03:03. User is away ~8h; session is autonomous with directive: complete as much of the full Wave 2 plan as possible, defer hard blockers (log them, keep going), discuss blocked items on return. Model policy: Opus 4.8 for every subagent.
+
+### Pre-flight infra findings (verified ~01:30-03:05 CEST)
+
+- **Host CUDA is blocked; GPU work must run in a container.** Host `nvidia-smi` lists all 4 A100-PCIE-40GB, but compute is host-blocked.
+- **Containers only reach 1 of 4 GPUs via raw docker.** `docker run --gpus all`, `--gpus '"device=0,1,2,3"'`, even `--gpus '"device=1"'` ALL return only GPU 0 (same UUID GPU-14d7e768...). Cause: docker daemon runs under `cgroup-parent: ds01.slice` (a MIG/slice partition). CUDA compute verified working in that 1 GPU (40GB free; torch matmul OK). All 4 GPUs idle on host - admin partition, not contention.
+- **Sanctioned multi-GPU path is the DS01 `container` tool** (`container deploy/create/list/retire`; `container create --num-migs=N` / `--prefer-full`). Raw docker is single-partition by default. Implication for the model-scale axis: large/xlarge LLM cells (32B fp16, 70B+, Mixtral 8x22B, DeepSeek-236B) need >40GB and are at risk; small tier (7B/8B fp16 ~14-16GB, 14B fp16 ~28GB) fits 1x40GB. Plan: attempt multi-GPU provisioning via `container`; defer large-model cells if it needs interactive/admin setup.
+- **Engine containers present:** vllm/vllm-openai:v0.19.1, nvcr.io/nvidia/tensorrt-llm/release:1.2.1, plus v_old. No transformers v5 container (GT reads source only, so fine).
+- **Ollama not running** (image present). Must be started in a GPU container before Step-4 LLM cells.
+
+### venv_setup.py spec fix (unblocked the transformers GT agent)
+
+Batch-2 prompt targets transformers **v5.6.2**, but `ENGINE_PIP_SPEC` only had `v5_9_0` -> the build raised `LookupError: No pip spec for (transformers, v5_6_2)`. Verified on PyPI: BOTH 5.6.2 and 5.9.0 exist. The GT prompt artefact and all its output paths use `v5_6_2`, so that is the operative target. Fix: added `("transformers", "v5_6_2"): ("transformers", "5.6.2")` to `ENGINE_PIP_SPEC` (kept v5_9_0 row). vllm v0_19_1 + tensorrt v1_2_1 specs already correct.
+
+### Launched (4 parallel Opus 4.8 background agents)
+
+- Step 0.1 ground truth, 3 agents (verbatim batch-2 prompts): transformers v5.6.2, vllm v0.19.1, tensorrt-llm v1.2.1. GPU-free source reads.
+- Step 0.3 in parallel: `a_improved_det.py` implementation agent (the 7-primitive deterministic substrate from `findings/wave2_improved_det_primitives.md`), smoke-tested against v_old GT.
+
+### Realistic-scope note
+
+WAVE2_EXPERIMENT_QUEUE estimates ~85-135h of compute for a complete Wave 2; the autonomous window is ~8h. Per the queue's "skip and continue, synthesis tolerates partial coverage" discipline, the achievable target this session: Wave 2.0 foundation complete (GT + improved-det + Wave-1 rescore), GPU-free deterministic substrate cells (2.1) run vs GT, LLM cells (2.2/2.4) as far as the single-GPU reality allows, synthesis deliverables (2.6) written with explicit deferral flags. Deferrals itemised for the user's return.
+
+### GPU resolution (container deploy probe + decision)
+
+Probed `container deploy --dry-run` per user steer. Finding: this user's pool is **4 full GPUs, with up to 2 GPUs allocatable per container** (Mode: "Full GPUs - each ~40GB VRAM"). So 2xA100 / 80GB IS reachable - BUT the GPU-count selection is interactive and reads `/dev/tty` directly (fails non-interactively: "/dev/tty: No such device or address"). No `--num-gpus` flag exists on `container create` (only `--num-migs` for fractional + `--prefer-full`).
+
+Decision: run the bulk of LLM cells on a single full A100 (40GB) via raw docker. `trial-ollama` started: `docker run -d --runtime=nvidia --gpus all -p 11435:11434 -v ollama:/root/.ollama ollama/ollama:latest` -> Ollama 0.13.5 serving, 1x A100-40GB visible. Pulling small-tier models (qwen2.5-coder:7b-fp16, deepseek-coder-v2:16b-lite-q4, llama3.1:8b-fp16, phi4:14b-fp16) - all fit 40GB.
+
+DEFERRED (logged for user return): large/xlarge model cells (Qwen2.5-Coder-32B fp16 ~64GB, Llama-3.3-70B fp16 ~140GB, Mixtral 8x22B, DeepSeek-236B). 32B fp16 and 70B-q4 WOULD fit a 2xA100/80GB container, which is reachable via `container deploy` IF driven through a pty (e.g. `script`/`expect`) to answer the interactive "2 GPUs" prompt - deferred as a near-end stretch goal to avoid destabilising the running single-GPU Ollama. 70B+/Mixtral/236B fp16 exceed even 80GB and are genuine Wave-3 / multi-node deferrals on this hardware.
+
+### Step 0.1 complete: batch-2 ground truth landed (3 engines x v_new)
+
+All 3 GT agents completed (Opus 4.8, ~12-17 min each, ~240-265k tokens each). Files validated (JSON + YAML parse, ASCII, citations verified by each agent). Headline counts:
+
+| Engine | bump-pair | schema fields | invariants | env vars | baseline outputs/ existed? |
+|---|---|---|---|---|---|
+| transformers | v4.57.3 -> v5.6.2 | ~110 + 22 quant $defs + cache classes | 118 | 38 | no (v5_6_2 has producers only) |
+| vllm | v0.7.3 -> v0.19.1 | EngineArgs 185 + 29 subconfigs/396 | 79 | 238 | no |
+| tensorrt-llm | v0.21.0 -> v1.2.1 | 438 total (35 subconfig classes) | 92 | 55 | no (empty) |
+
+Note: NONE of the 3 v_new versions had a baseline `outputs/` catalogue (miners never run on v_new). So the baseline-vs-GT delta at v_new is "100% net-new"; the substantive comparison is the per-bump-pair delta (v_old GT -> v_new GT), which is what the self-update axis needs.
+
+### Step 0.2: cross-engine batch-2 synthesis (per-bump-pair deltas)
+
+Read all three `version_delta.md`. The three bumps are independently large, but they share FOUR convergent structural patterns that are directly decision-relevant for substrate + workflow design:
+
+**Convergent pattern 1 - authoritative default moved OUT of the constructor signature (all 3 engines).**
+- transformers: `GenerationConfig` BREAKING refactor - every field is now `kwargs.pop(name, None)`; effective defaults live in `_get_default_generation_params()`, applied lazily at generate-time.
+- vllm: `EngineArgs` defaults are now class-attribute references (`model: str = ModelConfig.model`, `get_field(SubConfig, "x")`); the literal lives in the subconfig field.
+- tensorrt: defaults increasingly resolved from subconfig / C++ (`default_resolved_from_cpp`).
+- IMPLICATION: a substrate (or LLM) that reads `__init__`/signature defaults reads `None`/references, NOT the real defaults. Default-mining must follow the indirection (subconfig field, lazy-default function, pydantic Field default). This is a NEW universal requirement the existing producers do not meet.
+
+**Convergent pattern 2 - imperative `raise` -> declarative pydantic constraints (vllm + tensorrt strongly; transformers least).**
+- vllm: many `if x: raise` became `Field(gt=0, le=1)` / `Literal[...]`; raise `pydantic.ValidationError`, not a grep-able `raise`.
+- tensorrt: BuildConfig / PluginConfig / LoraConfig migrated dataclass/metaclass -> pydantic BaseModel; SamplingParams/KvCacheConfig gained Python `@field_validator` range checks (were C++-only at v0.21).
+- IMPLICATION: a grep-for-`raise` substrate misses a growing fraction of the constraint surface. improved-det Primitive 6 (decorator-discovered validators) is necessary but NOT sufficient - a dedicated `Field(ge/gt/le/Literal)` constraint extractor is a missing primitive (candidate Primitive 8). This is the single most important substrate-design finding from batch 2.
+
+**Convergent pattern 3 - config nesting + subpackage growth (all 3).**
+- vllm: flat `config.py` -> `config/` subpackage, 29 classes; +154 env vars.
+- tensorrt: +17 subconfig classes; flat `cuda_graph_*`/`moe_*` -> nested `CudaGraphConfig`/`MoeConfig`.
+- transformers: cache 13 top-level -> 4 + 11 layer classes.
+- IMPLICATION: a top-level-only walk misses nested knobs. Recursion into nested sub-models is mandatory (improved-det Primitive 1 fan-out must recurse). Source-line citations pinned to `config.py:NNNN` are 100% stale across the vllm bump - a citation-pinned or landmark-pinned producer breaks wholesale.
+
+**Convergent pattern 4 (the hopeful one) - the hardest targets generally got EASIER over the bump.**
+- tensorrt PluginConfig: `PluginConfigMeta` metaclass (the hardest v0.21 static-mining target, invisible to AST) -> plain pydantic fields. Now ordinarily mineable.
+- C++-only validation moving INTO Python (tensorrt SamplingParams top_p/top_k/temperature; KvCacheConfig fractions; CacheTransceiverConfig backend enum supersedes TRTLLM_USE_*_KVCACHE env selection).
+- IMPLICATION: the static-substrate ceiling RISES over time on these engines - upstream is moving surface from opaque (metaclass / C++ / env) toward declarative-Python. Bets on a pydantic/dataclass-reflection substrate get stronger across bumps, not weaker. Counter-trend: more env vars + more dynamic-DP/EP cross-field guards (vllm) push the other way.
+
+**Per-bump-pair "what a v_old-pinned hand-walker mis-reports at v_new" (self-update axis input):**
+- transformers: wrong defaults (lazy refactor), 4 removed kwargs surfaced as live (load_in_8bit/4bit, use_auth_token, resume_download), stale TRANSFORMERS_OFFLINE warning, misses 3 new quant classes + the cache-layer split.
+- vllm: every source citation stale (subpackage move); MLA silent-override moved+narrowed to CpuPlatform (no longer fires on CUDA) - a CHANGED invariant a diff-blind producer would keep asserting wrongly; misses 154 new env vars + all declarative Field constraints.
+- tensorrt: default backend flipped TRT->PyTorch (same `LLM(model=...)` call, different engine - the most behaviourally significant single delta); misses 17 new subconfig classes + nested CudaGraph/Moe knobs.
+
+These three deltas are the empirical core of the bump-survivability characterisation (Axis 8). Itemised counts: transformers ~19 added / 23 removed / 24 reworked; vllm +82 EngineArgs / +154 env / ~10 invariant relocations; tensorrt +81 schema / +17 invariants / 3 pydantic migrations / 1 alias flip.
+

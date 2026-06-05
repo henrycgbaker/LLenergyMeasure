@@ -1,0 +1,1632 @@
+invariants:
+- id: tensorrt_baseLlmArgs_tokenizer_mode_literal
+  native_field: BaseLlmArgs.tokenizer_mode
+  predicate_kind: literal_in
+  predicate_value: &id001
+  - auto
+  - slow
+  severity: error
+  message_template: Input should be 'auto' or 'slow'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 782
+    qualname: BaseLlmArgs.tokenizer_mode
+  kwargs_positive:
+    tokenizer_mode: slow
+  kwargs_negative:
+    tokenizer_mode: __not_a_mode__
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokenizer_mode:
+        not_in: *id001
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: tokenizer_mode
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_format_literal
+  native_field: BaseLlmArgs.load_format
+  predicate_kind: literal_in
+  predicate_value: &id002
+  - auto
+  - dummy
+  severity: error
+  message_template: Input should be 'auto' or 'dummy'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 838
+    qualname: BaseLlmArgs.load_format
+  notes: TorchLlmArgs overrides this with a Union[str, LoadFormat] and a before-validator;
+    see tensorrt_torchLlmArgs_load_format_enum below.
+  kwargs_positive:
+    load_format: auto
+  kwargs_negative:
+    load_format: __invalid__
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        not_in: *id002
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: load_format
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_dtype_bfloat16_sm_lt_80
+  native_field: BaseLlmArgs.dtype
+  predicate_kind: range
+  predicate_value: &id003
+    context: torch.cuda.get_device_properties(0).major < 8 AND dtype == 'bfloat16'
+  severity: error
+  message_template: Pre SM 80 GPUs do not support bfloat16
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1057
+    qualname: BaseLlmArgs.validate_dtype
+  notes: SM-version-dependent; cannot be tested without a CUDA-bearing host.
+  kwargs_positive:
+    dtype: bfloat16
+  kwargs_negative:
+    dtype: float16
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        present: *id003
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: dtype
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_model_type_must_be_str_or_path
+  native_field: BaseLlmArgs.model
+  predicate_kind: type_is
+  predicate_value: &id004
+  - str
+  - Path
+  severity: error
+  message_template: 'Invalid model: {v}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1080
+    qualname: BaseLlmArgs.validate_model
+  kwargs_positive:
+    model: 42
+  kwargs_negative:
+    model: facebook/opt-125m
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        type_is_not: *id004
+  _gt_coarse_bucket: type
+  _gt_leaf_field: model
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_max_batch_size_gt_build_config_max_batch_size
+  native_field: BaseLlmArgs.max_batch_size
+  predicate_kind: range
+  predicate_value: &id005
+    gt: build_config.max_batch_size
+  severity: error
+  message_template: max_batch_size [{max_batch_size}] is greater than build_config.max_batch_size
+    [{self.build_config.max_batch_size}] in build_config
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1218
+    qualname: BaseLlmArgs.validate_build_config_with_runtime_params
+  kwargs_positive:
+    max_batch_size: 999999
+    build_config:
+      max_batch_size: 8
+  kwargs_negative:
+    max_batch_size: 4
+    build_config:
+      max_batch_size: 8
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: *id005
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_batch_size
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_max_num_tokens_gt_build_config_max_num_tokens
+  native_field: BaseLlmArgs.max_num_tokens
+  predicate_kind: range
+  predicate_value: &id006
+    gt: build_config.max_num_tokens
+  severity: error
+  message_template: max_num_tokens [{max_num_tokens}] is greater than build_config.max_num_tokens
+    [{self.build_config.max_num_tokens}] in build_config
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1223
+    qualname: BaseLlmArgs.validate_build_config_with_runtime_params
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        present: *id006
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_num_tokens
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_max_seq_len_diff_build_config_max_seq_len_warns
+  native_field: BaseLlmArgs.max_seq_len
+  predicate_kind: range
+  predicate_value: &id007
+    ne: build_config.max_seq_len
+  severity: warn
+  message_template: max_seq_len [{max_seq_len}] is overridden by build_config.max_seq_len
+    [{self.build_config.max_seq_len}] in build_config
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1228
+    qualname: BaseLlmArgs.validate_build_config_with_runtime_params
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        present: *id007
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_seq_len
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_max_beam_width_diff_build_config_max_beam_width_warns
+  native_field: BaseLlmArgs.max_beam_width
+  predicate_kind: range
+  predicate_value: &id008
+    ne: build_config.max_beam_width
+  severity: warn
+  message_template: max_beam_width [{max_beam_width}] is overridden by build_config.max_beam_width
+    [{self.build_config.max_beam_width}] in build_config
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1233
+    qualname: BaseLlmArgs.validate_build_config_with_runtime_params
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: *id008
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_beam_width
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_max_input_len_diff_build_config_max_input_len_warns
+  native_field: BaseLlmArgs.max_input_len
+  predicate_kind: range
+  predicate_value: &id009
+    ne: build_config.max_input_len
+  severity: warn
+  message_template: max_input_len [{max_input_len}] is overridden by build_config.max_input_len
+    [{self.build_config.max_input_len}] in build_config
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1238
+    qualname: BaseLlmArgs.validate_build_config_with_runtime_params
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        present: *id009
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_input_len
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_speculative_config_unrecognised_type
+  native_field: BaseLlmArgs.speculative_config
+  predicate_kind: type_is
+  predicate_value: &id010
+  - LookaheadDecodingConfig
+  - MedusaDecodingConfig
+  - EagleDecodingConfig
+  - NGramDecodingConfig
+  - DraftTargetDecodingConfig
+  - MTPDecodingConfig
+  severity: error
+  message_template: 'Speculative config type not recognized: {speculative_config}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1356
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        type_is_not: *id010
+  _gt_coarse_bucket: type
+  _gt_leaf_field: speculative_config
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_lora_config_consistency_max_lora_rank_warns
+  native_field: BaseLlmArgs.max_lora_rank
+  predicate_kind: presence_conflict
+  predicate_value: &id011
+    with_lora_config: present
+  severity: warn
+  message_template: max_lora_rank is ignored when lora_config is provided.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1376
+    qualname: BaseLlmArgs.validate_lora_config_consistency
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_lora_rank:
+        present: *id011
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: max_lora_rank
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_lora_config_consistency_max_loras_diff_warns
+  native_field: BaseLlmArgs.max_loras
+  predicate_kind: presence_conflict
+  predicate_value: &id012
+    with_lora_config_and_max_loras_ne_lora_config_max_loras: true
+  severity: warn
+  message_template: max_loras is ignored when lora_config is provided.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1379
+    qualname: BaseLlmArgs.validate_lora_config_consistency
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_loras:
+        present: *id012
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: max_loras
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_lora_config_consistency_max_cpu_loras_diff_warns
+  native_field: BaseLlmArgs.max_cpu_loras
+  predicate_kind: presence_conflict
+  predicate_value: &id013
+    with_lora_config_and_max_cpu_loras_ne_lora_config_max_cpu_loras: true
+  severity: warn
+  message_template: max_cpu_loras is ignored when lora_config is provided.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1382
+    qualname: BaseLlmArgs.validate_lora_config_consistency
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_cpu_loras:
+        present: *id013
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: max_cpu_loras
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_lora_config_consistency_empty_lora_dir_warns
+  native_field: BaseLlmArgs.lora_config.lora_dir
+  predicate_kind: range
+  predicate_value: &id014
+    len_eq: 0
+  severity: warn
+  message_template: lora_dir is empty, so custom embedding or lm head will not be
+    applied.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1387
+    qualname: BaseLlmArgs.validate_lora_config_consistency
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_dir:
+        present: *id014
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: lora_dir
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_lora_config_consistency_enable_lora_ignored_on_pytorch_warns
+  native_field: BaseLlmArgs.enable_lora
+  predicate_kind: presence_conflict
+  predicate_value: &id015
+    with_lora_config_and_backend_in:
+    - pytorch
+    - _autodeploy
+  severity: warn
+  message_template: enable_lora is ignored when lora_config is provided for {self.backend}
+    backend.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1394
+    qualname: BaseLlmArgs.validate_lora_config_consistency
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora:
+        present: *id015
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: enable_lora
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_lora_config_consistency_empty_target_modules_warns
+  native_field: BaseLlmArgs.lora_config.lora_target_modules
+  predicate_kind: range
+  predicate_value: &id016
+    len_eq: 0_and_lora_dir_len_eq_0
+  severity: warn
+  message_template: Both lora_dir and lora_target_modules are empty, so all LoRA modules
+    will be expected. This will lead to serious memory consumption.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1401
+    qualname: BaseLlmArgs.validate_lora_config_consistency
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_target_modules:
+        present: *id016
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: lora_target_modules
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_set_runtime_knobs_from_build_config_override_warns
+  native_field: BaseLlmArgs.max_batch_size_or_max_num_tokens_or_max_seq_len_or_max_input_len_or_max_beam_width
+  predicate_kind: presence_conflict
+  predicate_value: &id017
+    backend_eq_pytorch_and_build_config_value_present_and_differs: true
+  severity: warn
+  message_template: overriding {key} from build_config
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1200
+    qualname: BaseLlmArgs.set_runtime_knobs_from_build_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size_or_max_num_tokens_or_max_seq_len_or_max_input_len_or_max_beam_width:
+        present: *id017
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: max_batch_size_or_max_num_tokens_or_max_seq_len_or_max_input_len_or_max_beam_width
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_validate_model_format_misc_build_config_ignored_for_engine_warns
+  native_field: BaseLlmArgs.build_config
+  predicate_kind: presence_conflict
+  predicate_value: &id018
+    with_model_format_tllm_engine: true
+  severity: warn
+  message_template: The build_config is ignored for model format of TLLM_ENGINE.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1142
+    qualname: BaseLlmArgs.validate_model_format_misc
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.build_config:
+        present: *id018
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: build_config
+  _gt_namespace: tensorrt
+- id: tensorrt_trtLlmArgs_validate_enable_build_cache_type_check
+  native_field: TrtLlmArgs.enable_build_cache
+  predicate_kind: type_is
+  predicate_value: &id019
+  - BuildCacheConfig
+  severity: error
+  message_template: 'Invalid build_cache_config: {self.enable_build_cache}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1589
+    qualname: TrtLlmArgs.validate_enable_build_cache
+  notes: 'Bool True is coerced into BuildCacheConfig() before the type check; only
+    when a
+
+    user passes a truthy non-bool non-BuildCacheConfig value (e.g. a dict, a string,
+
+    or any other object) does the ValueError fire.
+
+    '
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_build_cache:
+        type_is_not: *id019
+  _gt_coarse_bucket: type
+  _gt_leaf_field: enable_build_cache
+  _gt_namespace: tensorrt
+- id: tensorrt_torchLlmArgs_load_format_enum
+  native_field: TorchLlmArgs.load_format
+  predicate_kind: strenum_in
+  predicate_value: &id020
+  - AUTO
+  - DUMMY
+  severity: error
+  message_template: 'Invalid LoadFormat: {v}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1737
+    qualname: TorchLlmArgs.convert_load_format
+  enum_source:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1597
+    qualname: LoadFormat
+  notes: Value is .upper()-cased before lookup, so input is case-insensitive.
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        not_in: *id020
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: load_format
+  _gt_namespace: tensorrt
+- id: tensorrt_torchLlmArgs_validate_cuda_graph_max_batch_size_non_negative
+  native_field: TorchLlmArgs.cuda_graph_max_batch_size
+  predicate_kind: range
+  predicate_value: &id021
+    ge: 0
+  severity: error
+  message_template: cuda_graph_max_batch_size must be non-negative
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1817
+    qualname: TorchLlmArgs.validate_cuda_graph_max_batch_size
+  kwargs_positive:
+    cuda_graph_max_batch_size: -1
+  kwargs_negative:
+    cuda_graph_max_batch_size: 0
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.cuda_graph_max_batch_size:
+        present: *id021
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: cuda_graph_max_batch_size
+  _gt_namespace: tensorrt
+- id: tensorrt_torchLlmArgs_validate_cuda_graph_config_dual_specification
+  native_field: TorchLlmArgs.cuda_graph_batch_sizes
+  predicate_kind: presence_conflict
+  predicate_value: &id022
+    with_cuda_graph_max_batch_size_ne_0_and_list_ne_generated: true
+  severity: error
+  message_template: 'Please don''t set both cuda_graph_batch_sizes and cuda_graph_max_batch_size.
+
+    cuda_graph_batch_sizes: {self.cuda_graph_batch_sizes}, cuda_graph_max_batch_size:
+    {self.cuda_graph_max_batch_size}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1835
+    qualname: TorchLlmArgs.validate_cuda_graph_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.cuda_graph_batch_sizes:
+        present: *id022
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: cuda_graph_batch_sizes
+  _gt_namespace: tensorrt
+- id: tensorrt_torchLlmArgs_validate_moe_load_balancer_file_must_exist
+  native_field: TorchLlmArgs.moe_load_balancer
+  predicate_kind: file_exists
+  predicate_value: &id023
+    when_type_is: str
+  severity: error
+  message_template: 'MoE load balancer config file not found: {self.moe_load_balancer}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1761
+    qualname: TorchLlmArgs.validate_moe_load_balancer
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer:
+        present: *id023
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: moe_load_balancer
+  _gt_namespace: tensorrt
+- id: tensorrt_torchLlmArgs_validate_moe_load_balancer_parse_failure
+  native_field: TorchLlmArgs.moe_load_balancer
+  predicate_kind: type_is
+  predicate_value: &id024
+    when_type_is: str
+    must_yaml_parse_into: MoeLoadBalancerConfig
+  severity: error
+  message_template: 'Failed to load MoE load balancer config file: {self.moe_load_balancer}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1770
+    qualname: TorchLlmArgs.validate_moe_load_balancer
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer:
+        type_is_not: *id024
+  _gt_coarse_bucket: type
+  _gt_leaf_field: moe_load_balancer
+  _gt_namespace: tensorrt
+- id: tensorrt_lookaheadDecodingConfig_max_window_size_positive
+  native_field: LookaheadDecodingConfig.max_window_size
+  predicate_kind: range
+  predicate_value: &id025
+    gt: 0
+  severity: error
+  message_template: Value must be positive, got {v}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 577
+    qualname: LookaheadDecodingConfig.validate_positive_values
+  kwargs_positive:
+    max_window_size: 0
+  kwargs_negative:
+    max_window_size: 1
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_window_size:
+        present: *id025
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_window_size
+  _gt_namespace: tensorrt
+- id: tensorrt_lookaheadDecodingConfig_max_ngram_size_positive
+  native_field: LookaheadDecodingConfig.max_ngram_size
+  predicate_kind: range
+  predicate_value: &id026
+    gt: 0
+  severity: error
+  message_template: Value must be positive, got {v}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 577
+    qualname: LookaheadDecodingConfig.validate_positive_values
+  kwargs_positive:
+    max_ngram_size: 0
+  kwargs_negative:
+    max_ngram_size: 1
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_ngram_size:
+        present: *id026
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_ngram_size
+  _gt_namespace: tensorrt
+- id: tensorrt_lookaheadDecodingConfig_max_verification_set_size_positive
+  native_field: LookaheadDecodingConfig.max_verification_set_size
+  predicate_kind: range
+  predicate_value: &id027
+    gt: 0
+  severity: error
+  message_template: Value must be positive, got {v}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 577
+    qualname: LookaheadDecodingConfig.validate_positive_values
+  kwargs_positive:
+    max_verification_set_size: 0
+  kwargs_negative:
+    max_verification_set_size: 1
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_verification_set_size:
+        present: *id027
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_verification_set_size
+  _gt_namespace: tensorrt
+- id: tensorrt_medusaDecodingConfig_max_draft_len_positive_when_routed
+  native_field: MedusaDecodingConfig.max_draft_len
+  predicate_kind: assert_positive
+  predicate_value: &id028
+    gt: 0
+  severity: error
+  message_template: AssertionError (no message)
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1291
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        '>': *id028
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_draft_len
+  _gt_namespace: tensorrt
+- id: tensorrt_eagleDecodingConfig_max_draft_len_positive_when_routed
+  native_field: EagleDecodingConfig.max_draft_len
+  predicate_kind: assert_positive
+  predicate_value: &id029
+    gt: 0
+  severity: error
+  message_template: AssertionError (no message)
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1298
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        '>': *id029
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_draft_len
+  _gt_namespace: tensorrt
+- id: tensorrt_ngramDecodingConfig_prompt_lookup_num_tokens_positive_when_routed
+  native_field: NGramDecodingConfig.prompt_lookup_num_tokens
+  predicate_kind: assert_positive
+  predicate_value: &id030
+    gt: 0
+  severity: error
+  message_template: AssertionError (no message)
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1323
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.prompt_lookup_num_tokens:
+        '>': *id030
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: prompt_lookup_num_tokens
+  _gt_namespace: tensorrt
+- id: tensorrt_ngramDecodingConfig_max_matching_ngram_size_positive_when_routed
+  native_field: NGramDecodingConfig.max_matching_ngram_size
+  predicate_kind: assert_positive
+  predicate_value: &id031
+    gt: 0
+  severity: error
+  message_template: AssertionError (no message)
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1323
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_matching_ngram_size:
+        '>': *id031
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_matching_ngram_size
+  _gt_namespace: tensorrt
+- id: tensorrt_ngramDecodingConfig_backend_must_be_torch_when_routed
+  native_field: BaseLlmArgs.backend
+  predicate_kind: assert_positive
+  predicate_value: &id032
+    in:
+    - pytorch
+    - _autodeploy
+  severity: error
+  message_template: AssertionError (no message)
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1322
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        '>': *id032
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: backend
+  _gt_namespace: tensorrt
+- id: tensorrt_draftTargetDecodingConfig_backend_must_be_pytorch_when_routed
+  native_field: BaseLlmArgs.backend
+  predicate_kind: assert_positive
+  predicate_value: &id033
+    eq: pytorch
+  severity: error
+  message_template: AssertionError (no message)
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1337
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        '>': *id033
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: backend
+  _gt_namespace: tensorrt
+- id: tensorrt_draftTargetDecodingConfig_max_draft_len_positive_when_routed
+  native_field: DraftTargetDecodingConfig.max_draft_len
+  predicate_kind: assert_positive
+  predicate_value: &id034
+    gt: 0
+  severity: error
+  message_template: AssertionError (no message)
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1338
+    qualname: BaseLlmArgs.validate_speculative_config
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        '>': *id034
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_draft_len
+  _gt_namespace: tensorrt
+- id: tensorrt_decodingBaseConfig_from_dict_decoding_type_dispatch
+  native_field: DecodingBaseConfig.decoding_type
+  predicate_kind: decode_dispatch
+  predicate_value: &id035
+  - MTP
+  - Medusa
+  - Eagle
+  - Lookahead
+  - NGram
+  - DraftTarget
+  severity: error
+  message_template: 'Invalid decoding type: {decoding_type}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 215
+    qualname: DecodingBaseConfig.from_dict
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.decoding_type: *id035
+  _gt_coarse_bucket: exact
+  _gt_leaf_field: decoding_type
+  _gt_namespace: tensorrt
+- id: tensorrt_batchingType_enum
+  native_field: BaseLlmArgs.batching_type
+  predicate_kind: strenum_in
+  predicate_value: &id036
+  - STATIC
+  - INFLIGHT
+  severity: error
+  message_template: Input should be 'STATIC' or 'INFLIGHT'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 411
+    qualname: BatchingType
+  enum_source:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 411
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_type:
+        not_in: *id036
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: batching_type
+  _gt_namespace: tensorrt
+- id: tensorrt_capacitySchedulerPolicy_enum
+  native_field: SchedulerConfig.capacity_scheduler_policy
+  predicate_kind: strenum_in
+  predicate_value: &id037
+  - MAX_UTILIZATION
+  - GUARANTEED_NO_EVICT
+  - STATIC_BATCH
+  severity: error
+  message_template: Input should be one of CapacitySchedulerPolicy members
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 420
+    qualname: CapacitySchedulerPolicy
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capacity_scheduler_policy:
+        not_in: *id037
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: capacity_scheduler_policy
+  _gt_namespace: tensorrt
+- id: tensorrt_contextChunkingPolicy_enum
+  native_field: SchedulerConfig.context_chunking_policy
+  predicate_kind: strenum_in
+  predicate_value: &id038
+  - FIRST_COME_FIRST_SERVED
+  - EQUAL_PROGRESS
+  severity: error
+  message_template: Input should be 'FIRST_COME_FIRST_SERVED' or 'EQUAL_PROGRESS'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 430
+    qualname: ContextChunkingPolicy
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_chunking_policy:
+        not_in: *id038
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: context_chunking_policy
+  _gt_namespace: tensorrt
+- id: tensorrt_calibConfig_device_literal
+  native_field: CalibConfig.device
+  predicate_kind: literal_in
+  predicate_value: &id039
+  - cuda
+  - cpu
+  severity: error
+  message_template: Input should be 'cuda' or 'cpu'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 148
+    qualname: CalibConfig.device
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.device:
+        not_in: *id039
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: device
+  _gt_namespace: tensorrt
+- id: tensorrt_quantConfig_quant_algo_in_QuantAlgo_enum
+  native_field: QuantConfig.quant_algo
+  predicate_kind: strenum_in
+  predicate_value: &id040
+  - W8A16
+  - W4A16
+  - W4A16_AWQ
+  - W4A8_AWQ
+  - W8A16_GPTQ
+  - W4A16_GPTQ
+  - W8A8_SQ_PER_CHANNEL
+  - W8A8_SQ_PER_TENSOR_PLUGIN
+  - W8A8_SQ_PER_CHANNEL_PER_TOKEN_PLUGIN
+  - W8A8_SQ_PER_CHANNEL_PER_TENSOR_PLUGIN
+  - W8A8_SQ_PER_TENSOR_PER_TOKEN_PLUGIN
+  - W4A8_QSERVE_PER_GROUP
+  - W4A8_QSERVE_PER_CHANNEL
+  - FP8
+  - FP8_PER_CHANNEL_PER_TOKEN
+  - FP8_BLOCK_SCALES
+  - INT8
+  - MIXED_PRECISION
+  - NVFP4
+  - W4A8_MXFP4_FP8
+  - NO_QUANT
+  severity: error
+  message_template: Input should be a member of QuantAlgo
+  citation:
+    file: tensorrt_llm/quantization/mode.py
+    line: 23
+    qualname: QuantAlgo
+  notes: 'QuantAlgo is a StrEnum with metaclass=BaseEnumMeta. The dataclass field
+    is
+
+    typed Optional[QuantAlgo]; assigning a non-member string fails at the StrEnum
+
+    coercion boundary (engine-build or to_dict path), NOT at QuantConfig
+
+    construction itself (QuantConfig is a plain dataclass with no validator).
+
+    '
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.quant_algo:
+        not_in: *id040
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: quant_algo
+  _gt_namespace: tensorrt
+- id: tensorrt_quantConfig_kv_cache_quant_algo_in_KV_CACHE_QUANT_ALGO_LIST
+  native_field: QuantConfig.kv_cache_quant_algo
+  predicate_kind: allowlist_constant
+  predicate_value: &id041
+  - FP8
+  - INT8
+  - NVFP4
+  severity: error
+  message_template: null
+  citation:
+    file: tensorrt_llm/quantization/mode.py
+    line: 48
+    qualname: KV_CACHE_QUANT_ALGO_LIST
+  notes: 'Strict subset of QuantAlgo: kv-cache quantization supports only FP8/INT8/NVFP4.
+
+    '
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_quant_algo:
+        not_in: *id041
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: kv_cache_quant_algo
+  _gt_namespace: tensorrt
+- id: tensorrt_quantConfig_modelopt_qformat_no_MIXED_PRECISION_assert
+  native_field: QuantConfig.quant_algo
+  predicate_kind: assert_positive
+  predicate_value: &id042
+    ne: MIXED_PRECISION
+  severity: error
+  message_template: We don't support mixed precision in QuantConfig
+  citation:
+    file: tensorrt_llm/models/modeling_utils.py
+    line: 208
+    qualname: QuantConfig._get_modelopt_qformat
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.quant_algo:
+        '>': *id042
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: quant_algo
+  _gt_namespace: tensorrt
+- id: tensorrt_quantConfig_modelopt_qformat_quant_algo_in_modelopt_map
+  native_field: QuantConfig.quant_algo
+  predicate_kind: allowlist_constant
+  predicate_value: &id043
+  - W8A16
+  - W4A16
+  - NVFP4
+  - FP8
+  - W4A16_AWQ
+  - W4A8_AWQ
+  - W8A8_SQ_PER_CHANNEL
+  severity: error
+  message_template: We don't use Modelopt for quantization algorithm {self.quant_algo},
+    you probably shall not call this
+  citation:
+    file: tensorrt_llm/models/modeling_utils.py
+    line: 210
+    qualname: QuantConfig._get_modelopt_qformat
+  notes: Allowlist sourced from algo_to_modelopt_map at lines 199-207.
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.quant_algo:
+        not_in: *id043
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: quant_algo
+  _gt_namespace: tensorrt
+- id: tensorrt_quantConfig_modelopt_kv_cache_dtype_kv_cache_quant_algo_in_modelopt_map
+  native_field: QuantConfig.kv_cache_quant_algo
+  predicate_kind: allowlist_constant
+  predicate_value: &id044
+  - FP8
+  - INT8
+  severity: error
+  message_template: We don't use Modelopt for quantization algorithm {self.kv_cache_quant_algo},
+    you probably shall not call this
+  citation:
+    file: tensorrt_llm/models/modeling_utils.py
+    line: 221
+    qualname: QuantConfig._get_modelopt_kv_cache_dtype
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_quant_algo:
+        not_in: *id044
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: kv_cache_quant_algo
+  _gt_namespace: tensorrt
+- id: tensorrt_layerQuantConfig_modelopt_qformat_must_be_MIXED_PRECISION
+  native_field: LayerQuantConfig.quant_algo
+  predicate_kind: assert_positive
+  predicate_value: &id045
+    eq: MIXED_PRECISION
+  severity: error
+  message_template: We only support mixed precision quantization in LayerQuantConfig
+  citation:
+    file: tensorrt_llm/models/modeling_utils.py
+    line: 343
+    qualname: LayerQuantConfig._get_modelopt_qformat
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.quant_algo:
+        '>': *id045
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: quant_algo
+  _gt_namespace: tensorrt
+- id: tensorrt_loraConfig_lora_ckpt_source_in_hf_nemo
+  native_field: LoraConfig.lora_ckpt_source
+  predicate_kind: assert_positive
+  predicate_value: &id046
+  - hf
+  - nemo
+  severity: error
+  message_template: lora_ckpt_source must be one of 'hf' or 'nemo', got {self.lora_ckpt_source}
+  citation:
+    file: tensorrt_llm/lora_manager.py
+    line: 148
+    qualname: LoraConfig.__post_init__
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_ckpt_source:
+        '>': *id046
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: lora_ckpt_source
+  _gt_namespace: tensorrt
+- id: tensorrt_buildCache_max_records_ge_1
+  native_field: BuildCacheConfig.max_records
+  predicate_kind: range
+  predicate_value: &id047
+    ge: 1
+  severity: error
+  message_template: max_records should be greater than 0
+  citation:
+    file: tensorrt_llm/llmapi/build_cache.py
+    line: 87
+    qualname: BuildCache.__init__
+  kwargs_positive:
+    max_records: 0
+  kwargs_negative:
+    max_records: 1
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_records:
+        present: *id047
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: max_records
+  _gt_namespace: tensorrt
+- id: tensorrt_pluginConfig_dtype_not_auto_or_none
+  native_field: PluginConfig.dtype
+  predicate_kind: assert_positive
+  predicate_value: &id048
+    not_in:
+    - auto
+    - null
+  severity: error
+  message_template: Plugin dtype cannot be auto or None
+  citation:
+    file: tensorrt_llm/plugin/plugin.py
+    line: 120
+    qualname: PluginConfigMeta._make_plugin_property
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        '>': *id048
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: dtype
+  _gt_namespace: tensorrt
+- id: tensorrt_pluginConfig_bool_field_must_be_bool
+  native_field: PluginConfig.<any_bool_field>
+  predicate_kind: type_is
+  predicate_value: &id049
+  - bool
+  severity: error
+  message_template: Plugin {field_name} expects {field_type}, got {type(value)}
+  citation:
+    file: tensorrt_llm/plugin/plugin.py
+    line: 112
+    qualname: PluginConfigMeta._make_plugin_property
+  notes: Applies to every PluginConfig field whose annotated type is bool.
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.<any_bool_field>:
+        type_is_not: *id049
+  _gt_coarse_bucket: type
+  _gt_leaf_field: <any_bool_field>
+  _gt_namespace: tensorrt
+- id: tensorrt_pluginConfig_str_plugin_in_DEFAULT_PLUGIN_DTYPE_OPTIONS
+  native_field: PluginConfig.<any_str_plugin>
+  predicate_kind: allowlist_constant
+  predicate_value: DEFAULT_PLUGIN_DTYPE_OPTIONS (or per-field override in PLUGIN_DTYPE_OPTIONS_MAP)
+  severity: error
+  message_template: Plugin {field_name} expects values in {plugin_dtype_options},
+    got {value}
+  citation:
+    file: tensorrt_llm/plugin/plugin.py
+    line: 117
+    qualname: PluginConfigMeta._make_plugin_property
+  notes: 'DEFAULT_PLUGIN_DTYPE_OPTIONS is defined earlier in plugin/plugin.py. Per-field
+
+    overrides live in PLUGIN_DTYPE_OPTIONS_MAP (e.g. gemm_swiglu_plugin allows only
+
+    {fp8}; identity_plugin allows broader set). The exact contents of these
+
+    allowlists are file-internal and version-pinned to 0.21.0.
+
+    '
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.<any_str_plugin>:
+        not_in: DEFAULT_PLUGIN_DTYPE_OPTIONS (or per-field override in PLUGIN_DTYPE_OPTIONS_MAP)
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: <any_str_plugin>
+  _gt_namespace: tensorrt
+- id: tensorrt_pluginConfig_validate_unsupported_on_sm100
+  native_field: PluginConfig.<gemm_swiglu_plugin_or_fp8_rowwise_or_low_latency_or_bert_fmha_fp32_acc>
+  predicate_kind: presence_conflict
+  predicate_value: &id050
+    when_sm_eq: 100
+  severity: error
+  message_template: '{plugin}={val} is not supported on SM {sm}.'
+  citation:
+    file: tensorrt_llm/plugin/plugin.py
+    line: 513
+    qualname: PluginConfig.validate
+  notes: SM 100 = Blackwell. Affects gemm_swiglu_plugin, fp8_rowwise_gemm_plugin,
+    low_latency_gemm_plugin, low_latency_gemm_swiglu_plugin, bert_context_fmha_fp32_acc.
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.<gemm_swiglu_plugin_or_fp8_rowwise_or_low_latency_or_bert_fmha_fp32_acc>:
+        present: *id050
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: <gemm_swiglu_plugin_or_fp8_rowwise_or_low_latency_or_bert_fmha_fp32_acc>
+  _gt_namespace: tensorrt
+- id: tensorrt_autoDeployLlmArgs_model_factory_literal
+  native_field: _AutoDeployLlmArgs.model_factory
+  predicate_kind: literal_in
+  predicate_value: &id051
+  - AutoModelForCausalLM
+  - AutoModelForImageTextToText
+  severity: error
+  message_template: Input should be 'AutoModelForCausalLM' or 'AutoModelForImageTextToText'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1894
+    qualname: _AutoDeployLlmArgs.model_factory
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model_factory:
+        not_in: *id051
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: model_factory
+  _gt_namespace: tensorrt
+- id: tensorrt_autoDeployLlmArgs_mla_backend_literal
+  native_field: _AutoDeployLlmArgs.mla_backend
+  predicate_kind: literal_in
+  predicate_value: &id052
+  - MultiHeadLatentAttention
+  severity: error
+  message_template: Input should be 'MultiHeadLatentAttention'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1910
+    qualname: _AutoDeployLlmArgs.mla_backend
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.mla_backend:
+        not_in: *id052
+  _gt_coarse_bucket: membership
+  _gt_leaf_field: mla_backend
+  _gt_namespace: tensorrt
+- id: tensorrt_autoDeployLlmArgs_free_mem_ratio_in_zero_one
+  native_field: _AutoDeployLlmArgs.free_mem_ratio
+  predicate_kind: range
+  predicate_value: &id053
+    ge: 0.0
+    le: 1.0
+  severity: error
+  message_template: free_mem_ratio must be between 0.0 and 1.0, got {v}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1955
+    qualname: _AutoDeployLlmArgs.validate_free_mem_ratio
+  kwargs_positive:
+    free_mem_ratio: -0.1
+  kwargs_negative:
+    free_mem_ratio: 0.8
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.free_mem_ratio:
+        present: *id053
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: free_mem_ratio
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_check_consistency_with_ExecutorConfig
+  native_field: BaseLlmArgs
+  predicate_kind: type_is
+  predicate_value: &id054
+    must_be_superset_of: tensorrt_llm.bindings.executor.ExecutorConfig attrs
+  severity: error
+  message_template: 'New options found in underlying ExecutorConfig: {llm_args_attr
+    - executor_config_attrs}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1044
+    qualname: BaseLlmArgs._check_consistency
+  notes: 'Asserted via `assert executor_config_attrs.issubset(llm_args_attr)`. This
+    is a
+
+    sanity check fired at from_kwargs() time; it guards against a future C++
+
+    ExecutorConfig field that isn''t mirrored in Python BaseLlmArgs.
+
+    '
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.BaseLlmArgs:
+        type_is_not: *id054
+  _gt_coarse_bucket: type
+  _gt_leaf_field: BaseLlmArgs
+  _gt_namespace: tensorrt
+- id: tensorrt_samplingParams_best_of_ge_n
+  native_field: SamplingParams.best_of
+  predicate_kind: range
+  predicate_value: &id055
+    ge: n
+  severity: error
+  message_template: best_of ({best_of}) cannot be less than n ({n})
+  citation:
+    file: tensorrt_llm/sampling_params.py
+    line: 289
+    qualname: SamplingParams._validate
+  kwargs_positive:
+    n: 3
+    best_of: 2
+  kwargs_negative:
+    n: 2
+    best_of: 3
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        present: *id055
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: best_of
+  _gt_namespace: tensorrt
+- id: tensorrt_samplingParams_best_of_gt_1_under_greedy_blocked
+  native_field: SamplingParams.best_of
+  predicate_kind: presence_conflict
+  predicate_value: &id056
+    gt: 1
+    when_greedy_decoding_and_not_TLLM_ALLOW_N_GREEDY_DECODING: true
+  severity: error
+  message_template: Greedy decoding in the LLM API does not allow multiple returns.
+    Please set to best_of=1, got best_of={best_of}.
+  citation:
+    file: tensorrt_llm/sampling_params.py
+    line: 297
+    qualname: SamplingParams._validate
+  notes: Bypassable via env TLLM_ALLOW_N_GREEDY_DECODING=1.
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        present: *id056
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: best_of
+  _gt_namespace: tensorrt
+- id: tensorrt_samplingParams_truncate_prompt_tokens_ge_1
+  native_field: SamplingParams.truncate_prompt_tokens
+  predicate_kind: range
+  predicate_value: &id057
+    ge: 1
+    when_not_none: true
+  severity: error
+  message_template: truncate_prompt_tokens must be >= 1, got {truncate_prompt_tokens}
+  citation:
+    file: tensorrt_llm/sampling_params.py
+    line: 306
+    qualname: SamplingParams._validate
+  kwargs_positive:
+    truncate_prompt_tokens: 0
+  kwargs_negative:
+    truncate_prompt_tokens: 1
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.truncate_prompt_tokens:
+        present: *id057
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: truncate_prompt_tokens
+  _gt_namespace: tensorrt
+- id: tensorrt_samplingParams_bad_setup_required_before_get_bad_words
+  native_field: SamplingParams.bad
+  predicate_kind: presence_conflict
+  predicate_value: &id058
+    when_bad_set_and_bad_word_ids_none: true
+  severity: error
+  message_template: '{cls}.bad ({bad}) is not processed by tokenizer, please call
+    the setup method.'
+  citation:
+    file: tensorrt_llm/sampling_params.py
+    line: 363
+    qualname: SamplingParams._get_bad_words
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.bad:
+        present: *id058
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: bad
+  _gt_namespace: tensorrt
+- id: tensorrt_samplingParams_stop_setup_required_before_get_stop_words
+  native_field: SamplingParams.stop
+  predicate_kind: presence_conflict
+  predicate_value: &id059
+    when_stop_set_and_stop_word_ids_none: true
+  severity: error
+  message_template: '{cls}.stop ({stop}) is not processed by tokenizer, please call
+    the setup method.'
+  citation:
+    file: tensorrt_llm/sampling_params.py
+    line: 378
+    qualname: SamplingParams._get_stop_words
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.stop:
+        present: *id059
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: stop
+  _gt_namespace: tensorrt
+- id: tensorrt_guidedDecodingParams_only_one_guide
+  native_field: GuidedDecodingParams.<json|regex|grammar|json_object|structural_tag>
+  predicate_kind: presence_conflict
+  predicate_value: &id060
+    at_most_one_truthy: true
+  severity: error
+  message_template: Only one guide can be used for a request, but got {num_guides}.
+  citation:
+    file: tensorrt_llm/sampling_params.py
+    line: 35
+    qualname: GuidedDecodingParams._validate
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.<json|regex|grammar|json_object|structural_tag>:
+        present: *id060
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: <json|regex|grammar|json_object|structural_tag>
+  _gt_namespace: tensorrt
+- id: tensorrt_parallelConfig_devices_len_eq_world_size
+  native_field: _ParallelConfig.devices
+  predicate_kind: range
+  predicate_value: &id061
+    len_eq: world_size
+  severity: error
+  message_template: devices {devices} should have the same length as world_size {self.world_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 89
+    qualname: _ParallelConfig.devices_setter
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.devices:
+        present: *id061
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: devices
+  _gt_namespace: tensorrt
+- id: tensorrt_parallelConfig_world_size_auto_parallel_no_tp_pp_cp
+  native_field: _ParallelConfig
+  predicate_kind: presence_conflict
+  predicate_value: &id062
+    auto_parallel_true_and_tp_or_pp_or_cp_gt_1: true
+  severity: error
+  message_template: manually TP and PP are not supported in auto parallel mode.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 99
+    qualname: _ParallelConfig.world_size
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ParallelConfig:
+        present: *id062
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: _ParallelConfig
+  _gt_namespace: tensorrt
+- id: tensorrt_parallelConfig_world_size_gt_1_only_auto_parallel
+  native_field: _ParallelConfig._world_size
+  predicate_kind: presence_conflict
+  predicate_value: &id063
+    world_size_gt_1_and_auto_parallel_false: true
+  severity: error
+  message_template: world_size > 1 is only supported in auto parallel mode.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 105
+    qualname: _ParallelConfig.world_size
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._world_size:
+        present: *id063
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: _world_size
+  _gt_namespace: tensorrt
+- id: tensorrt_parallelConfig_world_size_eq_tp_pp_cp
+  native_field: _ParallelConfig._world_size
+  predicate_kind: range
+  predicate_value: &id064
+    eq: tp_size * pp_size * cp_size
+  severity: error
+  message_template: world_size {world_size} should be equal to tp_size * pp_size {self.tp_size
+    * self.pp_size * self.cp_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 121
+    qualname: _ParallelConfig.world_size_setter
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._world_size:
+        present: *id064
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: _world_size
+  _gt_namespace: tensorrt
+- id: tensorrt_modelWrapper_model_required
+  native_field: _ModelWrapper.model
+  predicate_kind: range
+  predicate_value: &id065
+    truthy: true
+  severity: error
+  message_template: model should be provided.
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 727
+    qualname: _ModelWrapper.__post_init__
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        present: *id065
+  _gt_coarse_bucket: numeric
+  _gt_leaf_field: model
+  _gt_namespace: tensorrt
+- id: tensorrt_get_model_format_no_config_json
+  native_field: BaseLlmArgs.model
+  predicate_kind: file_exists
+  predicate_value: &id066
+    must_have_file: config.json
+  severity: error
+  message_template: Failed to infer model format because no config.json exists in
+    {model_dir}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 2043
+    qualname: get_model_format
+  notes: Only fires when backend not in {pytorch, _autodeploy} AND model is a local
+    dir.
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        present: *id066
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: model
+  _gt_namespace: tensorrt
+- id: tensorrt_get_model_format_load_failed
+  native_field: BaseLlmArgs.model
+  predicate_kind: file_exists
+  predicate_value: &id067
+    config_json_must_load: true
+  severity: error
+  message_template: 'Inferred model format {model_format}, but failed to load config.json:
+    {e}'
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 2061
+    qualname: get_model_format
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        present: *id067
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: model
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_config_from_engine_tp_size_mismatch
+  native_field: BaseLlmArgs.tensor_parallel_size
+  predicate_kind: presence_conflict
+  predicate_value: &id068
+    not_in:
+    - 1
+    - engine_mapping_tp_size
+  severity: error
+  message_template: tp_size {self.parallel_config.tp_size} is not consistent with
+    the engine's tp_size {mapping.tp_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1422
+    qualname: BaseLlmArgs._load_config_from_engine
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tensor_parallel_size:
+        present: *id068
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: tensor_parallel_size
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_config_from_engine_pp_size_mismatch
+  native_field: BaseLlmArgs.pipeline_parallel_size
+  predicate_kind: presence_conflict
+  predicate_value: &id069
+    not_in:
+    - 1
+    - engine_mapping_pp_size
+  severity: error
+  message_template: pp_size {self.parallel_config.pp_size} is not consistent with
+    the engine's pp_size {mapping.pp_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1426
+    qualname: BaseLlmArgs._load_config_from_engine
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pipeline_parallel_size:
+        present: *id069
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: pipeline_parallel_size
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_config_from_engine_cp_size_mismatch
+  native_field: BaseLlmArgs.context_parallel_size
+  predicate_kind: presence_conflict
+  predicate_value: &id070
+    not_in:
+    - 1
+    - engine_mapping_cp_size
+  severity: error
+  message_template: cp_size {self.parallel_config.cp_size} is not consistent with
+    the engine's cp_size {mapping.cp_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1430
+    qualname: BaseLlmArgs._load_config_from_engine
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_parallel_size:
+        present: *id070
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: context_parallel_size
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_config_from_ckpt_tp_size_mismatch
+  native_field: BaseLlmArgs.tensor_parallel_size
+  predicate_kind: presence_conflict
+  predicate_value: &id071
+    ne_1_and_ne_ckpt_mapping_tp_size: true
+  severity: error
+  message_template: tp_size {self.parallel_config.tp_size} is not consistent with
+    the checkpoint's tp_size {tp_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1455
+    qualname: BaseLlmArgs._load_config_from_ckpt
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tensor_parallel_size:
+        present: *id071
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: tensor_parallel_size
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_config_from_ckpt_pp_size_mismatch
+  native_field: BaseLlmArgs.pipeline_parallel_size
+  predicate_kind: presence_conflict
+  predicate_value: &id072
+    ne_1_and_ne_ckpt_mapping_pp_size: true
+  severity: error
+  message_template: pp_size {self.parallel_config.pp_size} is not consistent with
+    the checkpoint's pp_size {pp_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1459
+    qualname: BaseLlmArgs._load_config_from_ckpt
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pipeline_parallel_size:
+        present: *id072
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: pipeline_parallel_size
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_config_from_ckpt_cp_size_mismatch
+  native_field: BaseLlmArgs.context_parallel_size
+  predicate_kind: presence_conflict
+  predicate_value: &id073
+    ne_1_and_ne_ckpt_mapping_cp_size: true
+  severity: error
+  message_template: cp_size {self.parallel_config.cp_size} is not consistent with
+    the checkpoint's cp_size {cp_size}
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1463
+    qualname: BaseLlmArgs._load_config_from_ckpt
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_parallel_size:
+        present: *id073
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: context_parallel_size
+  _gt_namespace: tensorrt
+- id: tensorrt_baseLlmArgs_load_config_from_ckpt_auto_parallel_world_size_conflict
+  native_field: BaseLlmArgs._parallel_config
+  predicate_kind: presence_conflict
+  predicate_value: &id074
+    auto_parallel_true_and_world_size_ne_1_and_ckpt_world_size_ne_1: true
+  severity: error
+  message_template: auto parallel with world_size {self.parallel_config.world_size}
+    does not support checkpoint with world_size {world_size} > 1
+  citation:
+    file: tensorrt_llm/llmapi/llm_args.py
+    line: 1468
+    qualname: BaseLlmArgs._load_config_from_ckpt
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._parallel_config:
+        present: *id074
+  _gt_coarse_bucket: presence
+  _gt_leaf_field: _parallel_config
+  _gt_namespace: tensorrt

@@ -65,6 +65,7 @@ ENGINE_PIP_SPEC: dict[tuple[str, str], tuple[str, str]] = {
     ("transformers", "v4_56_2"): ("transformers", "4.56.2"),
     ("transformers", "v4_57_3"): ("transformers", "4.57.3"),
     ("transformers", "v4_57_6"): ("transformers", "4.57.6"),
+    ("transformers", "v5_6_2"): ("transformers", "5.6.2"),
     ("transformers", "v5_9_0"): ("transformers", "5.9.0"),
     # vllm (Phase 1 locked picks)
     ("vllm", "v0_6_0"): ("vllm", "0.6.0"),
