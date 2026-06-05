@@ -32,6 +32,10 @@ and the convention-drift gap are in `wave2_deviations.md`).
 - **A static-substrate matrix vs GT** (10/18 cells) + complementarity analysis.
 - **LLM-extend (W-G) + pure-b + a 7b/8b/14b model-scale sweep** on a single A100.
 - 8 synthesis deliverables (this file + 7 `wave2_*.md`).
+- **Wave 2.5 extension:** built + measured "Primitive 8" (declarative-`Field`
+  extractor, `a_improved_det_v2.py`) - it recovers ~44% of the vllm bump cliff
+  with no LLM and generalises to tensorrt. The top engineering recommendation,
+  now evidence-backed (`findings/wave2_primitive8_results.json`).
 
 ## 1. Ground truth: the surface is 3-4x larger than the baseline producers see
 
@@ -161,8 +165,12 @@ These are evidence-backed DESIGN CONSTRAINTS, not a workflow choice:
 2. **Split the two tasks:** let the cheap det floor own schema; budget the LLM
    for invariants.
 3. **Add a declarative-`Field` constraint primitive ("Primitive 8")** to the det
-   floor. This is the mechanical fix for the vllm bump cliff and the
-   imperative->declarative trend; likely the highest-ROI engineering item.
+   floor. MEASURED, not hypothesised (Wave 2.5 extension, `a_improved_det_v2.py`):
+   it recovers ~44% of the vllm v0.19.1 bump cliff (0.147 -> 0.309 tolerant inv
+   recall, ~the full floor leaf-level) with no LLM, AND generalises (lifts both
+   tensorrt cells +0.08/+0.10 with precision up). The single highest-ROI
+   engineering item; merge it into the floor and scope it to caller-touchable
+   config classes to manage the vllm-v0.19 precision dip.
 4. **Make the diff/gate convention-tolerant.** Exact-identity catalogue diffing
    reports false "lost invariant" regressions on pure naming drift (the strict vs
    tolerant 16x gap). Use leaf-field + coarse-predicate matching.

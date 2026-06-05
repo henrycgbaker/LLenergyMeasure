@@ -920,3 +920,95 @@ invariants:
         <: 0
   added_by: wave2_a_improved_det
   fired_by: p5
+- id: tensorrt_calibconfig___declarative___device_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: CalibConfig.__declarative__ flags `device` (not_in)
+  severity: error
+  native_type: tensorrt.CalibConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 144
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.device:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_schedulerconfig___declarative___capacity_scheduler_policy_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SchedulerConfig.__declarative__ flags `capacity_scheduler_policy`
+    (not_in)
+  severity: error
+  native_type: tensorrt.SchedulerConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 466
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capacity_scheduler_policy:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_schedulerconfig___declarative___context_chunking_policy_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SchedulerConfig.__declarative__ flags `context_chunking_policy`
+    (not_in)
+  severity: error
+  native_type: tensorrt.SchedulerConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 466
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_chunking_policy:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_basellmargs___declarative___tokenizer_mode_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.__declarative__ flags `tokenizer_mode` (not_in)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 761
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokenizer_mode:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_basellmargs___declarative___batching_type_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.__declarative__ flags `batching_type` (not_in)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 761
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_type:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8

@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 5.6.2
-mined_at: '2026-06-05T01:35:56.030125+00:00'
+mined_at: '2026-06-05T03:16:12.795655+00:00'
 invariants:
 - id: transformers_generationconfig_validate_early_stopping_not_in
   engine: transformers

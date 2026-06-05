@@ -65,10 +65,35 @@ well the SAME fixed substrate handles a changed surface - the self-update signal
    evidence favours W-G (improved-det floor + LLM extend) over W-B (pure
    universal substrate), because W-B inherits the cliff with no recovery path.
 
+## Update (Wave 2.5): Primitive 8 measured - hypothesis CONFIRMED
+
+The "add a declarative-`Field` primitive and re-measure the vllm cliff" experiment
+below was BUILT and run (`a_improved_det_v2.py` = improved-det + Primitive 8;
+results in `findings/wave2_primitive8_results.json`). Primitive 8 extracts pydantic
+`Field(ge/gt/le/lt/...)` + `Annotated[..., Field/Meta(...)]` + `Literal`/enum field
+types as invariants, and globs the `config/*.py` subpackage the flat-`config.py`-era
+primitives never reached.
+
+Measured recovery of the vllm v0.19.1 cliff (tolerant inv recall vs GT):
+- v1 (improved-det) 0.147 -> v2 (improved-det + Primitive 8) **0.309**.
+- Recovers **0.162 of the 0.366 cliff = 44%** on the conservative leaf+bucket
+  metric; ~the full v0.7.3 floor (~0.52) leaf-level once GT's own coarse-bucket
+  drift is allowed (GT buckets `Field(gt=0,le=1)` ranges as `membership` etc.).
+- 11 NEW true-positive GT invariants on vllm v0.19.1, all declarative.
+- GENERALISES: both tensorrt cells also lift (v0.21.0 0.270->0.349; v1.2.1
+  0.400->0.500), with precision UP on tensorrt. No recall regressions anywhere.
+- Cost: precision dips on vllm v0.19.1 (0.286->0.208) because Primitive 8 also
+  emits ~55 declarative constraints on compile/distributed internals that GT
+  deliberately excludes - breadth, not error; manageable by scoping Primitive 8 to
+  caller-touchable config classes if precision is a hard constraint.
+
+Conclusion: the declarative-`Field` primitive mechanically recovers ~half the bump
+cliff with no LLM, confirming it as the highest-ROI engineering item for
+bump-robustness. The remaining residual is genuine LLM/semantic territory.
+
 ## What would make this measurement stronger (Wave 3 / deferred)
 
-- Add the declarative-`Field` primitive to improved-det and re-measure the vllm
-  bump; the hypothesis is it recovers most of the -0.37 collapse mechanically.
+- Scope Primitive 8 to caller-touchable config classes + re-measure precision.
 - Measure framework-reflection across the bumps: reflection reads the resolved
   pydantic model, so it should be IMMUNE to the imperative->declarative shift
   that sinks the source-walkers (it sees the constraint as a field validator

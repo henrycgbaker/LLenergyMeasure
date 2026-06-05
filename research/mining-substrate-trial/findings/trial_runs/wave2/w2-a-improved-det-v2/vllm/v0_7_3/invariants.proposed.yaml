@@ -1755,3 +1755,39 @@ invariants:
         present: true
   added_by: wave2_a_improved_det
   fired_by: p3
+- id: vllm_engineargs___declarative___config_format_not_in
+  engine: vllm
+  library: vllm
+  invariant_under_test: EngineArgs.__declarative__ flags `config_format` (not_in)
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: engine/arg_utils.py
+    method: __declarative__
+    line_at_scan: 89
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.config_format:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: vllm_engineargs___declarative___scheduling_policy_not_in
+  engine: vllm
+  library: vllm
+  invariant_under_test: EngineArgs.__declarative__ flags `scheduling_policy` (not_in)
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: engine/arg_utils.py
+    method: __declarative__
+    line_at_scan: 89
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.scheduling_policy:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8

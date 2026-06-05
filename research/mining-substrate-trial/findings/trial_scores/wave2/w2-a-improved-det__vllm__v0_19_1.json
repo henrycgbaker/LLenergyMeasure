@@ -9,9 +9,9 @@
     "invariants: missing validator source: config.py"
   ],
   "wall_sec": {
-    "schema": 0.029280182003276423,
-    "invariants": 0.03419101898907684,
-    "total": 0.09014086599927396
+    "schema": 0.029259720991831273,
+    "invariants": 0.034072779992129654,
+    "total": 0.08961569701205008
   },
   "energy_wh": null,
   "extra": {

@@ -6,9 +6,9 @@
   "invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det/transformers/v5_6_2/invariants.proposed.yaml",
   "observations": [],
   "wall_sec": {
-    "schema": 0.07834245800040662,
-    "invariants": 0.05059571500169113,
-    "total": 0.18311055001686327
+    "schema": 0.07525927000096999,
+    "invariants": 0.049924754013773054,
+    "total": 0.1787110900040716
   },
   "energy_wh": null,
   "extra": {

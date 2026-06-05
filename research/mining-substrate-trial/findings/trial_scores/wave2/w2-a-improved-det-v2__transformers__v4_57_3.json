@@ -4,15 +4,15 @@
   "brittleness_patch_cost_loc": null,
   "brittleness_silent_fail_count": null,
   "bump_distance": "active",
-  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det/transformers/v4_57_3/invariants.proposed.yaml",
-  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det/transformers/v4_57_3/schema.json",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det-v2/transformers/v4_57_3/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-a-improved-det-v2/transformers/v4_57_3/schema.json",
   "energy_wh": 0.0,
   "engine": "transformers",
   "failure_modes": [
     "none",
     "silent"
   ],
-  "invariant_cell_count": 112,
+  "invariant_cell_count": 113,
   "invariant_failure_mode": "silent",
   "invariant_intersection_count": 0,
   "invariant_precision": 0.0,
@@ -28,9 +28,9 @@
   "schema_recall": 0.7232142857142857,
   "schema_reference_count": 112,
   "schema_type_accuracy": 0.5061728395061729,
-  "scored_at": "2026-06-05T03:16:10.678226+00:00",
+  "scored_at": "2026-06-05T03:16:11.234520+00:00",
   "scoring_format_version": "1.0.0",
-  "strategy": "w2-a-improved-det",
+  "strategy": "w2-a-improved-det-v2",
   "version_slug": "v4_57_3",
-  "wall_clock_sec": 0.2102588459965773
+  "wall_clock_sec": 0.20115141902351752
 }

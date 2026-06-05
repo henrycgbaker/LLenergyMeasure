@@ -99,6 +99,14 @@ WAVE2_REGISTRY: dict[str, Wave2StrategyEntry] = {
         notes="Improved-det 7-primitive walker (class-fanout + env + silent-norm + "
         "membership-gate + validator-naming + decorator + aggregator).",
     ),
+    "w2-a-improved-det-v2": Wave2StrategyEntry(
+        strategy_id="w2-a-improved-det-v2",
+        module="strategies.wave2.a_improved_det_v2",
+        engines=("transformers", "vllm", "tensorrt"),
+        tier="A",
+        notes="improved-det 7-primitive walker PLUS Primitive 8 (declarative "
+        "Field/Literal/Meta constraint extractor). Wave 2.5 bump-recall recovery test.",
+    ),
     "w2-h15-closed-loop": Wave2StrategyEntry(
         strategy_id="w2-h15-closed-loop",
         module="strategies.wave2.h15_closed_loop",

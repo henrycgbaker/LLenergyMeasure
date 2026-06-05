@@ -4167,3 +4167,19 @@ DEFERRED (for the user's return / Wave 3), all itemised in WAVE2_RESEARCH_OUTCOM
 
 INFRA NOTES for the user: host CUDA blocked -> all GPU work in containers; raw docker caps at 1 of 4 A100s (ds01.slice/MIG); `container deploy` offers up to 2 full GPUs but is tty-gated (needs a pty wrapper to drive non-interactively). Ollama left running (`trial-ollama`, port 11435, 4 small models pulled). venv_setup.py patched for transformers v5_6_2.
 
+## 2026-06-05 ~05:35 CEST - Wave 2.5 extension: Primitive 8 built + measured (post-close bonus)
+
+After closing Wave 2, spent remaining autonomous runway on the single highest-leverage GPU-free extension: BUILD the declarative-`Field` "Primitive 8" (the #1 engineering recommendation) and MEASURE whether it recovers the vllm bump cliff - converting a hypothesis into a result. Built `scripts/strategies/wave2/a_improved_det_v2.py` (improved-det + Primitive 8; v1 invariants byte-identical, v1 not mutated), registered `w2-a-improved-det-v2`. Primitive 8 extracts pydantic `Field(ge/gt/le/lt/multiple_of/min_length/max_length)`, `Annotated[..., Field/Meta(...)]`, `conint/confloat/PositiveInt`, and `Literal`/enum field types, and globs the `config/*.py` subpackage. Results: `findings/wave2_primitive8_results.json`.
+
+Measured (tolerant inv recall vs GT, v1 -> v2):
+| cell | v1 | v2 |
+|---|---|---|
+| transformers v4.57.3 | 0.404 | 0.404 |
+| transformers v5.6.2 | 0.416 | 0.416 |
+| vllm v0.7.3 | 0.513 | 0.513 |
+| **vllm v0.19.1** | **0.147** | **0.309** |
+| tensorrt v0.21.0 | 0.270 | 0.349 |
+| tensorrt v1.2.1 | 0.400 | 0.500 |
+
+VERDICT: **#1 recommendation CONFIRMED.** Primitive 8 recovers 0.162 of the 0.366 vllm cliff = 44% (conservative leaf+bucket metric; ~full v0.7.3 floor leaf-level once GT coarse-bucket drift is allowed), adds 11 new declarative true-positives on vllm v0.19.1, and GENERALISES (both tensorrt cells lift +0.08/+0.10 with precision UP). No recall regressions. Only cost: precision dip on vllm v0.19.1 (0.286->0.208) from ~55 declarative constraints on compile/distributed internals GT excludes - breadth not error; scope Primitive 8 to caller-touchable config classes to manage it. This is the mechanical (no-LLM) recovery path for the imperative->declarative trend; the remaining residual is genuine LLM/semantic territory. a_improved_det_v2 is uncommitted-as-a-variant for the user's review; promoting Primitive 8 into the canonical improved-det floor is the recommended next engineering step.
+

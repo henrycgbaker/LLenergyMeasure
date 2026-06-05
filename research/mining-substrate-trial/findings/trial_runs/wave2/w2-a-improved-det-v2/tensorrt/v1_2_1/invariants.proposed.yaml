@@ -1785,3 +1785,205 @@ invariants:
         <: 0
   added_by: wave2_a_improved_det
   fired_by: p5
+- id: tensorrt_calibconfig___declarative___device_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: CalibConfig.__declarative__ flags `device` (not_in)
+  severity: error
+  native_type: tensorrt.CalibConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 593
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.device:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_schedulerconfig___declarative___capacity_scheduler_policy_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SchedulerConfig.__declarative__ flags `capacity_scheduler_policy`
+    (not_in)
+  severity: error
+  native_type: tensorrt.SchedulerConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1466
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capacity_scheduler_policy:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_schedulerconfig___declarative___context_chunking_policy_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SchedulerConfig.__declarative__ flags `context_chunking_policy`
+    (not_in)
+  severity: error
+  native_type: tensorrt.SchedulerConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1466
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_chunking_policy:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_kvcacheconfig___declarative___mamba_ssm_cache_dtype_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: KvCacheConfig.__declarative__ flags `mamba_ssm_cache_dtype`
+    (not_in)
+  severity: error
+  native_type: tensorrt.KvCacheConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1628
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.mamba_ssm_cache_dtype:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_cachetransceiverconfig___declarative___kv_transfer_timeout_ms_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: CacheTransceiverConfig.__declarative__ flags `kv_transfer_timeout_ms`
+    (gt)
+  severity: error
+  native_type: tensorrt.CacheTransceiverConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1807
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_transfer_timeout_ms:
+        '>': 0
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_cachetransceiverconfig___declarative___kv_transfer_sender_future_timeout_ms_gt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: CacheTransceiverConfig.__declarative__ flags `kv_transfer_sender_future_timeout_ms`
+    (gt)
+  severity: error
+  native_type: tensorrt.CacheTransceiverConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1807
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_transfer_sender_future_timeout_ms:
+        '>': 0
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_basellmargs___declarative___tokenizer_mode_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.__declarative__ flags `tokenizer_mode` (not_in)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1885
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokenizer_mode:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_basellmargs___declarative___guided_decoding_backend_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.__declarative__ flags `guided_decoding_backend`
+    (not_in)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1885
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.guided_decoding_backend:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_basellmargs___declarative___orchestrator_type_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: BaseLlmArgs.__declarative__ flags `orchestrator_type` (not_in)
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 1885
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.orchestrator_type:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_trtllmargs___declarative___batching_type_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TrtLlmArgs.__declarative__ flags `batching_type` (not_in)
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 2358
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_type:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
+- id: tensorrt_torchllmargs___declarative___allreduce_strategy_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: TorchLlmArgs.__declarative__ flags `allreduce_strategy` (not_in)
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: __declarative__
+    line_at_scan: 2768
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allreduce_strategy:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8

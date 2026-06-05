@@ -1952,3 +1952,22 @@ invariants:
         <=: 0
   added_by: wave2_a_improved_det
   fired_by: p5
+- id: transformers_quantizationconfigmixin___declarative___quant_method_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: QuantizationConfigMixin.__declarative__ flags `quant_method`
+    (not_in)
+  severity: error
+  native_type: transformers.QuantizationConfigMixin
+  miner_source:
+    path: utils/quantization_config.py
+    method: __declarative__
+    line_at_scan: 98
+  match:
+    engine: transformers
+    fields:
+      transformers.quant_method:
+        present: true
+        not_in: []
+  added_by: wave2_a_improved_det_v2_p8
+  fired_by: p8
