@@ -1,0 +1,80 @@
+[
+  {
+    "engine": "transformers",
+    "version_slug": "v4_57_3",
+    "gt_inv_keys": 114,
+    "w2-a-treesitter__caught": 23,
+    "w2-a-treesitter__recall": 0.2018,
+    "w2-a-improved-det__caught": 46,
+    "w2-a-improved-det__recall": 0.4035,
+    "union_caught": 51,
+    "union_recall": 0.4474,
+    "max_single_recall": 0.4035,
+    "complementarity_gain": 0.0439,
+    "treesitter_only": 5,
+    "improveddet_only": 28,
+    "both": 18
+  },
+  {
+    "engine": "transformers",
+    "version_slug": "v5_6_2",
+    "gt_inv_keys": 101,
+    "w2-a-treesitter__caught": 21,
+    "w2-a-treesitter__recall": 0.2079,
+    "w2-a-improved-det__caught": 42,
+    "w2-a-improved-det__recall": 0.4158,
+    "union_caught": 45,
+    "union_recall": 0.4455,
+    "max_single_recall": 0.4158,
+    "complementarity_gain": 0.0297,
+    "treesitter_only": 3,
+    "improveddet_only": 24,
+    "both": 18
+  },
+  {
+    "engine": "vllm",
+    "version_slug": "v0_7_3",
+    "gt_inv_keys": 76,
+    "w2-a-treesitter__caught": 33,
+    "w2-a-treesitter__recall": 0.4342,
+    "w2-a-improved-det__caught": 39,
+    "w2-a-improved-det__recall": 0.5132,
+    "union_caught": 44,
+    "union_recall": 0.5789,
+    "max_single_recall": 0.5132,
+    "complementarity_gain": 0.0658,
+    "treesitter_only": 5,
+    "improveddet_only": 11,
+    "both": 28
+  },
+  {
+    "engine": "vllm",
+    "version_slug": "v0_19_1",
+    "gt_inv_keys": 68,
+    "w2-a-treesitter__caught": 8,
+    "w2-a-treesitter__recall": 0.1176,
+    "w2-a-improved-det__caught": 10,
+    "w2-a-improved-det__recall": 0.1471,
+    "union_caught": 10,
+    "union_recall": 0.1471,
+    "max_single_recall": 0.1471,
+    "complementarity_gain": 0.0,
+    "treesitter_only": 0,
+    "improveddet_only": 2,
+    "both": 8
+  },
+  {
+    "engine": "tensorrt",
+    "version_slug": "v0_21_0",
+    "gt_inv_keys": 63,
+    "w2-a-improved-det__caught": 17,
+    "w2-a-improved-det__recall": 0.2698
+  },
+  {
+    "engine": "tensorrt",
+    "version_slug": "v1_2_1",
+    "gt_inv_keys": 80,
+    "w2-a-improved-det__caught": 32,
+    "w2-a-improved-det__recall": 0.4
+  }
+]
