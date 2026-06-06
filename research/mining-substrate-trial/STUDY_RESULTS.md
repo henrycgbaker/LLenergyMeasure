@@ -155,11 +155,20 @@ the residual - holds, with a sharp split:
 
 ## 7. Limitations and caveats
 
-- IDENTITY under-merge: constraint grain does not merge cross-source re-encodings
-  of the same rule (divergent predicate values), so confirmed ENTRY counts run
-  ~30% over distinct RULES (~12 behind 0.21's 18). A citation-keyed canonicalisation
-  pass would tighten this; filed open. (Distinct from the original re-base, which
-  fixed the opposite OVER-collapse.)
+- IDENTITY under-merge (a COUNT-PRECISION caveat, NOT a validity threat). At
+  constraint grain the same source rule encoded by two sources with divergent
+  predicate phrasing does not merge, so confirmed ENTRY counts overstate distinct
+  RULES. This does NOT introduce any wrong invariant (every confirmed entry was
+  source-verified real) and does NOT change either headline finding: the
+  deterministic-ceiling conclusion is qualitative, and the bump gradient (53% vs
+  92-94%) is far too large a gap to be flipped by a count wobble - and it matches
+  on the tolerant key, which already re-merges most twins. The magnitude is a
+  reviewer eyeball (~12 distinct rules behind 0.21's 18), NOT a measured figure.
+  A citation-keyed canonicalisation pass is a plausible fix but is unverified
+  (it likely catches Opus-vs-Opus twins but not mech-vs-Opus, and risks
+  re-introducing the OVER-collapse the original re-base fixed); left as optional
+  polish on the denominators, deliberately not attempted without adversarial
+  re-validation of the identity layer.
 - Confirmed-level percentages are small-N (14-60 knobs); the Opus-basis gradient
   (64-81 knobs) is the robust signal.
 - ONE major boundary in the window (tensorrt 0.21->1.0); vllm and transformers
@@ -173,14 +182,16 @@ the residual - holds, with a sharp split:
 
 ## 8. Open items
 
-1. Identity-layer canonicalisation (citation-keyed) to reconcile cross-source
-   re-encodings; fix the one mis-encoded 0.21 `lora_ckpt_source` numeric predicate.
-2. Cross-engine minor-bump deltas (vllm 0.18->0.22, transformers 5.6->5.10) to test
+1. Cross-engine minor-bump deltas (vllm 0.18->0.22, transformers 5.6->5.10) to test
    whether minor-bump stability generalises across engines.
-3. Per-version producers exist for ~6 versions; the locked window needs ~9 more
+2. Per-version producers exist for ~6 versions; the locked window needs ~9 more
    (overlaps the engine-knowledge-as-data refactor).
-4. Port the trial improved-det-v2 primitives into the production per-version miners
+3. Port the trial improved-det-v2 primitives into the production per-version miners
    (deferred to milestone end).
+4. OPTIONAL POLISH (not validity-bearing, see Section 7): citation-keyed identity
+   canonicalisation to make confirmed counts equal distinct rules; would need
+   adversarial re-validation of the identity layer first. Measure the twin count
+   before deciding it is worth the risk.
 
 ## 9. Cross-references
 

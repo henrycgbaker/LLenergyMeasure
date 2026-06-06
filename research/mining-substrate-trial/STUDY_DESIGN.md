@@ -482,15 +482,19 @@ parameters that CHANGED as a result. Findings detail in
    minor-bump deltas for vllm (0.18->0.22) and transformers (5.6->5.10) to test
    whether the minor-bump stability generalises across engines (the study window
    has no non-tensorrt major boundary).
-4. Open (identity-layer): a canonicalisation pass that reconciles a rule's
-   predicate encoding across sources (keyed on citation) - the reviews found
-   constraint-grain UNDER-merges cross-source twins, inflating confirmed entry
-   counts ~30% over distinct rules. Also fix the one mis-encoded 0.21
-   `lora_ckpt_source` numeric predicate (real rule, wrong encoding).
+4. IN PROGRESS: **cross-engine minor-bump deltas** (vllm 0.18->0.22, transformers
+   5.6->5.10) to test whether minor-bump stability generalises across engines (the
+   window has no non-tensorrt major boundary).
 5. Per-version producers exist for only ~6 versions; the window needs ~9 more
    (overlaps the engine-knowledge-as-data refactor - now the same trunk).
 6. DEFERRED to milestone end: port trial improved-det-v2 primitives into the
    production per-version miners.
+7. OPTIONAL POLISH (not validity-bearing - see STUDY_RESULTS Section 7): citation-
+   keyed identity canonicalisation so confirmed counts equal distinct rules. The
+   under-merge is a count-precision caveat, not a validity threat (no wrong
+   invariant; neither headline finding is affected); the ~30% figure is a reviewer
+   eyeball, not measured; any fix needs adversarial re-validation of the identity
+   layer to avoid re-introducing over-collapse. Measure the twin count first.
 
 ### 15.5 Repo state
 
