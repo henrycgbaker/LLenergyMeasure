@@ -155,20 +155,29 @@ the residual - holds, with a sharp split:
 
 ## 7. Limitations and caveats
 
-- IDENTITY under-merge (a COUNT-PRECISION caveat, NOT a validity threat). At
-  constraint grain the same source rule encoded by two sources with divergent
-  predicate phrasing does not merge, so confirmed ENTRY counts overstate distinct
-  RULES. This does NOT introduce any wrong invariant (every confirmed entry was
-  source-verified real) and does NOT change either headline finding: the
-  deterministic-ceiling conclusion is qualitative, and the bump gradient (53% vs
-  92-94%) is far too large a gap to be flipped by a count wobble - and it matches
-  on the tolerant key, which already re-merges most twins. The magnitude is a
-  reviewer eyeball (~12 distinct rules behind 0.21's 18), NOT a measured figure.
-  A citation-keyed canonicalisation pass is a plausible fix but is unverified
-  (it likely catches Opus-vs-Opus twins but not mech-vs-Opus, and risks
-  re-introducing the OVER-collapse the original re-base fixed); left as optional
-  polish on the denominators, deliberately not attempted without adversarial
-  re-validation of the identity layer.
+- IDENTITY under-merge (a COUNT-PRECISION caveat, NOT a validity threat; MEASURED).
+  Confirmed ENTRY counts overstate distinct RULES because the same field+rule can
+  split across sources by ENCODING variance. This introduces no wrong invariant
+  (every confirmed entry was source-verified real) and changes neither headline
+  finding (the ceiling conclusion is qualitative; the 53%-vs-92% gradient is far
+  too large to flip on a count wobble, and matches on the tolerant key which
+  re-merges most variants). Measured on the four tensorrt cells (join confirmed
+  ckeys back to source citations): the genuine duplicates are ~5 behind 0.21's 18
+  (-> ~13 distinct), fewer elsewhere, and are DOMINATED by the mechanical miner's
+  LOSSY bare-value encoding (it emits `0` for `max_ngram_size > 0`, dropping the
+  operator) not matching the Opus passes' operator-ful form (`{gt=0}`); the same
+  bare value cannot be safely merged with `{gt=0}` because it could equally have
+  meant `>=0` or `==0`.
+  No safe identity-layer fix exists, and the citation-keyed merge once mooted is
+  REJECTED: distinct constraints frequently share one source function (the three
+  Lookahead fields under a single `validate_positive_values`; several SamplingParams
+  rules under one `_validate`), so keying identity on file+qualname would
+  re-introduce the OVER-collapse the original re-base fixed. The over-split is the
+  correct fail-safe. The real root cause is upstream - the mechanical miner's
+  encoding - so the right fix is PRODUCER-side (emit operator-ful canonical values),
+  folded into the deferred miner-porting item (Section 8), not an identity-layer
+  change. A precise distinct-rule count, if ever needed, is a per-cell manual
+  reconciliation.
 - Confirmed-level percentages are small-N (14-60 knobs); the Opus-basis gradient
   (64-81 knobs) is the robust signal.
 - ONE major boundary in the window (tensorrt 0.21->1.0); vllm and transformers

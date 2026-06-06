@@ -488,13 +488,21 @@ parameters that CHANGED as a result. Findings detail in
 5. Per-version producers exist for only ~6 versions; the window needs ~9 more
    (overlaps the engine-knowledge-as-data refactor - now the same trunk).
 6. DEFERRED to milestone end: port trial improved-det-v2 primitives into the
-   production per-version miners.
-7. OPTIONAL POLISH (not validity-bearing - see STUDY_RESULTS Section 7): citation-
-   keyed identity canonicalisation so confirmed counts equal distinct rules. The
-   under-merge is a count-precision caveat, not a validity threat (no wrong
-   invariant; neither headline finding is affected); the ~30% figure is a reviewer
-   eyeball, not measured; any fix needs adversarial re-validation of the identity
-   layer to avoid re-introducing over-collapse. Measure the twin count first.
+   production per-version miners. INCLUDE the identity-encoding fix here: make the
+   mechanical miner emit OPERATOR-FUL canonical values (`{gt=0}`, not the lossy
+   bare `0`) so its encodings match the Opus passes and stop spuriously splitting
+   the same constraint across sources. This is the real root cause of the
+   confirmed-count over-count (measured below) and is a PRODUCER-side fix.
+7. RESOLVED (measured, not fixed in-place): the identity UNDER-merge is a
+   count-precision caveat, not a validity threat - no wrong invariant, neither
+   headline finding affected. Measured behind 0.21's 18 confirmed: ~5 genuine
+   duplicates (-> ~13 distinct), dominated by the mech miner's lossy bare-value
+   encoding vs the Opus operator form (see item 6). A citation-keyed identity
+   merge was REJECTED: distinct constraints often share one source function (3
+   Lookahead fields under one `validate_positive_values`; several SamplingParams
+   rules under one `_validate`), so keying on file+qualname would re-introduce the
+   over-collapse the re-base fixed. The over-split is the correct fail-safe; no
+   safe identity-layer change exists. Detail: STUDY_RESULTS Section 7.
 
 ### 15.5 Repo state
 
