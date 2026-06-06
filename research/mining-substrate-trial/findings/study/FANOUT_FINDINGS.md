@@ -57,6 +57,45 @@ synthesis alone clears only the simplest single-field constraints. A clean
 bump-delta-recovery across the 0.21->1.2 boundary therefore needs Opus passes on
 0.21 (and ideally the intervening 1.0/1.1 cells) too.
 
+## Deterministic ceiling decomposition (tensorrt 1.2.1) - the core cost-frontier datapoint
+
+Ablation: mechanical-only (improved-det-v2 + gate probe-synthesis, ZERO Opus)
+vs the full gate-validated union GT (46 confirmed identities). This measurement
+is only meaningful BECAUSE GT is the Opus+runtime union, not the mechanical
+output - else mechanical recall would be 1.0 tautologically. The 12 "missed"
+identities below were surfaced ONLY by Opus; a mechanical-only GT would be blind
+to them and would falsely report 100%. So the thorough (non-tautological) GT is
+what makes the deterministic ceiling measurable at all.
+
+| split | identities | % of GT |
+|---|---|---|
+| confirmed GT (denominator) | 46 | 100% |
+| mech CONFIRMS today | 15 | 33% |
+| mech SURFACED (det-reachable if probing were perfect) | 34 | 74% |
+| mech MISSED entirely (12/12 surfaced by Opus) | 12 | 26% |
+
+The 33% is a FLOOR, not a deterministic ceiling. The gap decomposes into two
+separately-addressable, mostly-deterministic levers:
+- **Probe-synthesis gap (33% -> 74%, ~19 identities):** the miner already
+  SURFACED these; synthesis just can't probe them yet (cross-field, dispatch,
+  presence, type). Pure deterministic engineering - multi-field probes,
+  type-probes, dispatch-aware construction. No LLM.
+- **Mining-scope gap (74% -> ~100%, 12 identities):** the miner never surfaced
+  these. Inspection shows most are PluginConfig literal fields
+  (gemm_plugin, bert_attention_plugin, gemm_swiglu_plugin, low_latency_gemm_*,
+  allowed_backends, dtype, lora_ckpt_source) - i.e. a WALK-SURFACE gap (the
+  miner doesn't walk tensorrt_llm.plugin), also deterministically fixable by
+  extending the miner's module surface. Only a residual is expected to need LLM
+  mining.
+
+Implication for the production CI architecture (heavy-deterministic mine +
+cheap-LLM verify): looks ACHIEVABLE. The verify/validate half is ALREADY cheap
+and deterministic (the runtime gate). The open empirical question is the exact
+deterministic mining+probing plateau once both levers are pushed (Round 0b) -
+the residual above plateau is the irreducible per-bump LLM-mining need. Opus
+passes remain required as GT CONTRIBUTORS (denominator), even when the
+production miner is the cheap method under evaluation.
+
 ## Fan-out readiness (what the full 15-cell x 2-track matrix needs)
 
 - **Per-version producers exist for only ~6 versions** (transformers v4_57_3 /
