@@ -1,0 +1,924 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "tensorrt",
+  "engine_version": "0.21.0",
+  "image_ref": "trtllm-0.21.0",
+  "validated_at": "2026-06-06T14:28:09.186018+00:00",
+  "n_fields": 107,
+  "n_confirmed": 92,
+  "n_divergences": 15,
+  "n_probes": 2,
+  "n_probes_confirmed": 2,
+  "fields": [
+    {
+      "section": "engine_params",
+      "field": "model",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer_mode",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "skip_tokenizer_init",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "trust_remote_code",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tensor_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "dtype",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "revision",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer_revision",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "pipeline_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "context_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "gpus_per_node",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "moe_cluster_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "moe_tensor_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "moe_expert_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_attention_dp",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "cp_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "load_format",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_lora",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_lora_rank",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_loras",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_cpu_loras",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "lora_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_prompt_adapter",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_prompt_adapter_token",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "quant_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "kv_cache_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_chunked_prefill",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "guided_decoding_backend",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "batched_logits_processor",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "iter_stats_max_iterations",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "request_stats_max_iterations",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "peft_cache_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "scheduler_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "cache_transceiver_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "batching_type",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "normalize_log_probs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_batch_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_input_len",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_seq_len",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_beam_width",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_num_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "gather_generation_logits",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "num_postprocess_workers",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "postprocess_tokenizer_dir",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "reasoning_parser",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "garbage_collection_gen0_threshold",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "decoding_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "backend",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "auto_parallel",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "auto_parallel_world_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_tqdm",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "workspace",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_build_cache",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "extended_runtime_perf_knob_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "calib_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "embedding_parallel_mode",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "fast_build",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "build_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "end_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "pad_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "max_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "bad",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "bad_token_ids",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "stop",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "stop_token_ids",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "include_stop_str_in_output",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "embedding_bias",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "logits_processor",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "apply_batched_logits_processor",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "n",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "best_of",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "use_beam_search",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_k",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_p",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_p_min",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_p_reset_ids",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_p_decay",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "seed",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "temperature",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "min_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "beam_search_diversity_rate",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "repetition_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "presence_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "frequency_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "length_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "early_stopping",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "no_repeat_ngram_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "min_p",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "beam_width_array",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "logprobs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "prompt_logprobs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "return_context_logits",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "return_generation_logits",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "exclude_input_from_output",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "return_encoder_output",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "return_perf_metrics",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "additional_model_outputs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "lookahead_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "guided_decoding",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "ignore_eos",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "detokenize",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "add_special_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "truncate_prompt_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "skip_special_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "spaces_between_special_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    }
+  ],
+  "probes": [
+    {
+      "section": "engine_params",
+      "field": "tokenizer_mode",
+      "valid_value": "auto",
+      "invalid_value": "__llem_invalid_schema_probe__",
+      "valid_outcome": "accepted",
+      "invalid_outcome": "rejected:ValidationError",
+      "accept_ok": true,
+      "reject_ok": true,
+      "probe_confirmed": true
+    },
+    {
+      "section": "engine_params",
+      "field": "load_format",
+      "valid_value": "auto",
+      "invalid_value": "__llem_invalid_schema_probe__",
+      "valid_outcome": "accepted",
+      "invalid_outcome": "rejected:ValidationError",
+      "accept_ok": true,
+      "reject_ok": true,
+      "probe_confirmed": true
+    }
+  ],
+  "divergences": [
+    {
+      "section": "engine_params",
+      "field": "lora_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"LoraConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/LoraConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "quant_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"QuantConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/QuantConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "kv_cache_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "",
+      "declared_raw": "{\"type\": \"object\"}",
+      "observed_raw": "{}"
+    },
+    {
+      "section": "engine_params",
+      "field": "batched_logits_processor",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"type\": \"object\"}",
+      "observed_raw": "{\"anyOf\": [{}, {\"type\": \"null\"}], \"type\": \"Optional[tensorrt_llm.sampling_params.BatchedLogitsProcessor]\"}"
+    },
+    {
+      "section": "engine_params",
+      "field": "peft_cache_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"PeftCacheConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/PeftCacheConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "scheduler_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "",
+      "declared_raw": "{\"type\": \"object\"}",
+      "observed_raw": "{}"
+    },
+    {
+      "section": "engine_params",
+      "field": "cache_transceiver_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"CacheTransceiverConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/CacheTransceiverConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"LookaheadDecodingConfig\", \"type\": \"object\"}, {\"description\": \"MedusaDecodingConfig\", \"type\": \"object\"}, {\"description\": \"EagleDecodingConfig\", \"type\": \"object\"}, {\"description\": \"MTPDecodingConfig\", \"type\": \"object\"}, {\"description\": \"NGramDecodingConfig\", \"type\": \"object\"}, {\"description\": \"DraftTargetDecodingConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/LookaheadDecodingConfig\"}, {\"$ref\": \"#/$defs/MedusaDecodingConfig\"}, {\"$ref\": \"#/$defs/EagleDecodingConfig\"}, {\"$ref\": \"#/$defs/MTPDecodingConfig\"}, {\"$ref\": \"#/$defs/NGramDecodingConfig\"}, {\"$ref\": \"#/$defs/DraftTargetDecodingConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "batching_type",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"BatchingType\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/BatchingType\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "decoding_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"type\": \"object\"}",
+      "observed_raw": "{\"anyOf\": [{}, {\"type\": \"null\"}], \"type\": \"Optional[DecodingConfig]\"}"
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_build_cache",
+      "check": "type",
+      "declared": "dict",
+      "observed": "Union[tensorrt_llm.llmapi.build_cache.BuildCacheConfig, bool]",
+      "declared_raw": "{\"type\": \"object\"}",
+      "observed_raw": "{\"type\": \"Union[tensorrt_llm.llmapi.build_cache.BuildCacheConfig, bool]\"}"
+    },
+    {
+      "section": "engine_params",
+      "field": "extended_runtime_perf_knob_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"ExtendedRuntimePerfKnobConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/ExtendedRuntimePerfKnobConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "calib_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"CalibConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/CalibConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "build_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"type\": \"object\"}",
+      "observed_raw": "{\"anyOf\": [{}, {\"type\": \"null\"}], \"type\": \"Optional[tensorrt_llm.builder.BuildConfig]\"}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "guided_decoding",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"GuidedDecodingParams\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/GuidedDecodingParams\"}, {\"type\": \"null\"}]}"
+    }
+  ]
+}

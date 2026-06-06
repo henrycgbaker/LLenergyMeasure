@@ -1,0 +1,36 @@
+{
+  "confirmed_via_authored_kwargs": 0,
+  "confirmed_via_synthesis": 3,
+  "engine": "tensorrt",
+  "group_status_counts": {
+    "confirmed": 3,
+    "failed": 7,
+    "infra_error": 7,
+    "skipped": 31,
+    "unreachable": 41
+  },
+  "gt_growth_keys_vs_poc": 0,
+  "n_gate_confirmed_keys": 3,
+  "n_probed_candidates": 56,
+  "per_source_candidate_counts": {
+    "mech": 56,
+    "poc": 75
+  },
+  "per_source_tolerant_key_counts": {
+    "mech": 48,
+    "poc": 63
+  },
+  "per_source_unique_contribution": {
+    "mech": 26,
+    "poc": 41
+  },
+  "poc_tolerant_keys": 63,
+  "union_size_tolerant": 89,
+  "verdict_counts": {
+    "confirmed": 3,
+    "failed": 8,
+    "infra_error": 7,
+    "skipped": 38
+  },
+  "version": "0.21.0"
+}

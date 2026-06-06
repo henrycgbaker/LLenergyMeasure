@@ -44,29 +44,54 @@ import gt_scoring  # noqa: E402
 import trial_scoring as S  # noqa: E402
 import yaml  # noqa: E402
 
+_FINDINGS = _TRIAL_SCRIPTS_DIR.parent / "findings"
+
+
+def _version_str() -> str:
+    """Human version from the slug, e.g. v1_2_1 -> 1.2.1."""
+    return VERSION_SLUG.lstrip("v").replace("_", ".")
+
+
+# Cell config - set by configure() from argv (defaults to the pilot cell).
 ENGINE = "tensorrt"
 VERSION_SLUG = "v1_2_1"
-
-_FINDINGS = _TRIAL_SCRIPTS_DIR.parent / "findings"
+IMAGE_OVERRIDE: str | None = None
 _OUT_DIR = _FINDINGS / "study" / "ground_truth" / "tensorrt" / "v1_2_1" / "invariants"
-
 # source-key -> (path, is_gt_schema). GT-schema sources are canonicalised
 # through gt_adapter (gaining a synthesised match block + tolerant hints while
-# preserving native_type / kwargs); the mechanical source is already in the
-# proposed schema with a real match block.
-SOURCES: dict[str, tuple[Path, bool]] = {
-    "passA": (_OUT_DIR / "passA_entrypoint.yaml", True),
-    "passB": (_OUT_DIR / "passB_classtree.yaml", True),
-    "mech": (
-        _FINDINGS
-        / "trial_runs/wave2/w2-a-improved-det-v2/tensorrt/v1_2_1/invariants.proposed.yaml",
-        False,
-    ),
-    "poc": (
-        _FINDINGS / "ground_truth/tensorrt/v1_2_1/invariants_ground_truth.yaml",
-        True,
-    ),
-}
+# preserving native_type / kwargs); mechanical/proposed sources carry a real
+# match block already.
+SOURCES: dict[str, tuple[Path, bool]] = {}
+
+# Mechanical (proposed-schema) source, probed in preference order; first hit wins.
+_MECH_TEMPLATES = (
+    "trial_runs/wave2/w2-a-improved-det-v2/{engine}/{vslug}/invariants.proposed.yaml",
+    "trial_runs/d-ab/{engine}/{vslug}/invariants.proposed.yaml",
+    "trial_runs/b/{engine}/{vslug}/invariants.proposed.yaml",
+    "trial_runs/a/{engine}/{vslug}/invariants.proposed.yaml",
+)
+
+
+def configure(engine: str, version_slug: str, image_override: str | None = None) -> None:
+    """Point the pilot at a cell and auto-discover its available GT sources."""
+    global ENGINE, VERSION_SLUG, IMAGE_OVERRIDE, _OUT_DIR, SOURCES
+    ENGINE, VERSION_SLUG, IMAGE_OVERRIDE = engine, version_slug, image_override
+    _OUT_DIR = _FINDINGS / "study" / "ground_truth" / engine / version_slug / "invariants"
+    sources: dict[str, tuple[Path, bool]] = {}
+    # Opus passes (study GT schema), if present for this cell.
+    for pass_file in sorted((_OUT_DIR).glob("pass*.yaml")):
+        sources[pass_file.stem.split("_")[0]] = (pass_file, True)  # passA / passB
+    # Mechanical (first template that exists).
+    for tmpl in _MECH_TEMPLATES:
+        p = _FINDINGS / tmpl.format(engine=engine, vslug=version_slug)
+        if p.exists():
+            sources["mech"] = (p, False)
+            break
+    # PoC GT (GT schema), if present.
+    poc = _FINDINGS / "ground_truth" / engine / version_slug / "invariants_ground_truth.yaml"
+    if poc.exists():
+        sources["poc"] = (poc, True)
+    SOURCES = sources
 
 
 @dataclass
@@ -204,6 +229,7 @@ def gate(cands: list[Candidate], *, timeout_sec: int = 1800) -> None:
             spath,
             engine=ENGINE,
             version_slug=VERSION_SLUG,
+            image_override=IMAGE_OVERRIDE,
             timeout_sec=timeout_sec,
         )
     finally:
@@ -284,10 +310,10 @@ def write_pilot_gt(groups: dict[tuple[str, str], Group]) -> Path:
     out = {
         "schema_version": "study_pilot_gt/1.0.0",
         "engine": ENGINE,
-        "engine_version": "1.2.1",
+        "engine_version": _version_str(),
         "task": "invariants",
         "round": "R0_pilot",
-        "gate": "scripts/validate_invariants.py (in nvcr.io/nvidia/tensorrt-llm/release:1.2.1)",
+        "gate": f"scripts/validate_invariants.py (in {IMAGE_OVERRIDE or ENGINE + ' container'})",
         "identity": "tolerant: (leaf_native_field, coarse_predicate_bucket)",
         "n_confirmed": len(confirmed),
         "n_unverified": len(unverified),
@@ -341,7 +367,7 @@ def write_report(
 
     metrics = {
         "engine": ENGINE,
-        "version": "1.2.1",
+        "version": _version_str(),
         "per_source_candidate_counts": {s: len(cs) for s, cs in by_source.items()},
         "per_source_tolerant_key_counts": {s: len(k) for s, k in source_keys.items()},
         "union_size_tolerant": len(union_keys),
@@ -366,13 +392,13 @@ def write_report(
         return rows[:limit]
 
     L: list[str] = []
-    L.append("# Pilot GT report - tensorrt 1.2.1 invariants (union + gate)")
+    L.append(f"# Pilot GT report - {ENGINE} {_version_str()} invariants (union + gate)")
     L.append("")
     L.append(
-        "Round 0 pilot: union the 4 GT sources by tolerant identity "
-        "(leaf_native_field, coarse_predicate_bucket), runtime-gate every "
-        "kwargs-bearing candidate in the production validator inside "
-        "nvcr.io/nvidia/tensorrt-llm/release:1.2.1, keep gate-confirmed as GT."
+        f"Round 0: union the {len(SOURCES)} GT sources ({', '.join(sorted(SOURCES))}) by "
+        "tolerant identity (leaf_native_field, coarse_predicate_bucket), runtime-gate "
+        f"every candidate (kwargs authored or synthesised) in the production validator "
+        f"inside {IMAGE_OVERRIDE or ENGINE + ' container'}, keep gate-confirmed as GT."
     )
     L.append("")
     L.append("## Per-source candidate counts")
@@ -466,7 +492,17 @@ def _count(items: Any) -> dict[str, int]:
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Union + gate one cell's invariant GT.")
+    parser.add_argument("--engine", default="tensorrt")
+    parser.add_argument("--version-slug", default="v1_2_1")
+    parser.add_argument("--image", default=None, help="container image override for the gate")
+    args = parser.parse_args()
+    configure(args.engine, args.version_slug, args.image)
+
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"[pilot] cell {ENGINE}/{VERSION_SLUG}; sources: {sorted(SOURCES)}", flush=True)
     cands = load_candidates()
     print(f"[pilot] loaded {len(cands)} candidates across {len(SOURCES)} sources", flush=True)
     gate(cands)

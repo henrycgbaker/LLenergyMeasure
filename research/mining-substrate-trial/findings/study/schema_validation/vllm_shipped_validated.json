@@ -1,0 +1,1131 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "vllm",
+  "engine_version": "0.7.3",
+  "image_ref": "vllm-0.7.3",
+  "validated_at": "2026-06-06T14:28:00.931198+00:00",
+  "n_fields": 135,
+  "n_confirmed": 116,
+  "n_divergences": 19,
+  "n_probes": 0,
+  "n_probes_confirmed": 0,
+  "fields": [
+    {
+      "section": "engine_params",
+      "field": "model",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "served_model_name",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "task",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "skip_tokenizer_init",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer_mode",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "trust_remote_code",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "allowed_local_media_path",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "download_dir",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "load_format",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "config_format",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "dtype",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "kv_cache_dtype",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "seed",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_model_len",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "distributed_executor_backend",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "pipeline_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tensor_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_parallel_loading_workers",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "block_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_prefix_caching",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "disable_sliding_window",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "use_v2_block_manager",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "swap_space",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "cpu_offload_gb",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "gpu_memory_utilization",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_num_batched_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_num_partial_prefills",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_long_partial_prefills",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "long_prefill_token_threshold",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_num_seqs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_logprobs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "disable_log_stats",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "revision",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "code_revision",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "rope_scaling",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "rope_theta",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "hf_overrides",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer_revision",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "quantization",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enforce_eager",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_seq_len_to_capture",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "disable_custom_all_reduce",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer_pool_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer_pool_type",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tokenizer_pool_extra_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "limit_mm_per_prompt",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "mm_processor_kwargs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "disable_mm_preprocessor_cache",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_lora",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_lora_bias",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_loras",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_lora_rank",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_prompt_adapter",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_prompt_adapters",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_prompt_adapter_token",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "fully_sharded_loras",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "lora_extra_vocab_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "long_lora_scaling_factors",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "lora_dtype",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_cpu_loras",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "device",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "num_scheduler_steps",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "multi_step_stream_outputs",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "ray_workers_use_nsight",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "num_gpu_blocks_override",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "num_lookahead_slots",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "model_loader_extra_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "ignore_patterns",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "preemption_mode",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "scheduler_delay_factor",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_chunked_prefill",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "guided_decoding_backend",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "logits_processor_pattern",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_model",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_model_quantization",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_draft_tensor_parallel_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "num_speculative_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_disable_mqa_scorer",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_max_model_len",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "speculative_disable_by_batch_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "ngram_prompt_lookup_max",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "ngram_prompt_lookup_min",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "spec_decoding_acceptance_method",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "typical_acceptance_sampler_posterior_threshold",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "typical_acceptance_sampler_posterior_alpha",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "qlora_adapter_name_or_path",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "disable_logprobs_during_spec_decoding",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "otlp_traces_endpoint",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "collect_detailed_traces",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "disable_async_output_proc",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "scheduling_policy",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "scheduler_cls",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "override_neuron_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "override_pooler_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "compilation_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "worker_cls",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "kv_transfer_config",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "generation_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "override_generation_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "enable_sleep_mode",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "model_impl",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "calculate_kv_scales",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "additional_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "n",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "best_of",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "_real_n",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "presence_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "frequency_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "repetition_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "temperature",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_p",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_k",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "min_p",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "seed",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "stop",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "stop_token_ids",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "bad_words",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "ignore_eos",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "max_tokens",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "min_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "logprobs",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "prompt_logprobs",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "detokenize",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "skip_special_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "spaces_between_special_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "logits_processors",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "include_stop_str_in_output",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "truncate_prompt_tokens",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "output_kind",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "output_text_buffer_length",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "_all_stop_token_ids",
+      "exists": true,
+      "type_match": true,
+      "default_match": false
+    },
+    {
+      "section": "sampling_params",
+      "field": "guided_decoding",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "logit_bias",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "allowed_token_ids",
+      "exists": true,
+      "type_match": false,
+      "default_match": true
+    }
+  ],
+  "probes": [],
+  "divergences": [
+    {
+      "section": "engine_params",
+      "field": "config_format",
+      "check": "type",
+      "declared": "dict",
+      "observed": "Literal['auto', 'hf', 'mistral']",
+      "declared_raw": "{\"type\": \"object\"}",
+      "observed_raw": "{\"enum\": [\"auto\", \"hf\", \"mistral\"], \"type\": \"string\"}"
+    },
+    {
+      "section": "engine_params",
+      "field": "override_pooler_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"PoolerConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/PoolerConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "compilation_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"CompilationConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/CompilationConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "engine_params",
+      "field": "kv_transfer_config",
+      "check": "type",
+      "declared": "dict",
+      "observed": "None",
+      "declared_raw": "{\"anyOf\": [{\"description\": \"KVTransferConfig\", \"type\": \"object\"}, {\"type\": \"null\"}]}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/KVTransferConfig\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "best_of",
+      "check": "type",
+      "declared": "",
+      "observed": "int",
+      "declared_raw": "{}",
+      "observed_raw": "{\"type\": [\"integer\", \"null\"]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "_real_n",
+      "check": "type",
+      "declared": "",
+      "observed": "int",
+      "declared_raw": "{}",
+      "observed_raw": "{\"type\": [\"integer\", \"null\"]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "seed",
+      "check": "type",
+      "declared": "",
+      "observed": "int",
+      "declared_raw": "{}",
+      "observed_raw": "{\"type\": [\"integer\", \"null\"]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "stop",
+      "check": "type",
+      "declared": "",
+      "observed": "list | str",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{\"type\": \"string\"}, {\"items\": {\"type\": \"string\"}, \"type\": \"array\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "stop_token_ids",
+      "check": "type",
+      "declared": "",
+      "observed": "list",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{\"items\": {\"type\": \"integer\"}, \"type\": \"array\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "bad_words",
+      "check": "type",
+      "declared": "",
+      "observed": "list",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{\"items\": {\"type\": \"string\"}, \"type\": \"array\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "max_tokens",
+      "check": "type",
+      "declared": "",
+      "observed": "int",
+      "declared_raw": "{}",
+      "observed_raw": "{\"type\": [\"integer\", \"null\"]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "logprobs",
+      "check": "type",
+      "declared": "",
+      "observed": "int",
+      "declared_raw": "{}",
+      "observed_raw": "{\"type\": [\"integer\", \"null\"]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "prompt_logprobs",
+      "check": "type",
+      "declared": "",
+      "observed": "int",
+      "declared_raw": "{}",
+      "observed_raw": "{\"type\": [\"integer\", \"null\"]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "logits_processors",
+      "check": "type",
+      "declared": "",
+      "observed": "None",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "truncate_prompt_tokens",
+      "check": "type",
+      "declared": "",
+      "observed": "int",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{\"minimum\": 1, \"type\": \"integer\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "_all_stop_token_ids",
+      "check": "default",
+      "declared": [],
+      "observed": []
+    },
+    {
+      "section": "sampling_params",
+      "field": "guided_decoding",
+      "check": "type",
+      "declared": "",
+      "observed": "None",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{\"$ref\": \"#/$defs/GuidedDecodingParams\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "logit_bias",
+      "check": "type",
+      "declared": "",
+      "observed": "dict",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{\"additionalProperties\": {\"type\": \"number\"}, \"type\": \"object\"}, {\"type\": \"null\"}]}"
+    },
+    {
+      "section": "sampling_params",
+      "field": "allowed_token_ids",
+      "check": "type",
+      "declared": "",
+      "observed": "list",
+      "declared_raw": "{}",
+      "observed_raw": "{\"anyOf\": [{\"items\": {\"type\": \"integer\"}, \"type\": \"array\"}, {\"type\": \"null\"}]}"
+    }
+  ]
+}

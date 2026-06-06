@@ -1,0 +1,765 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "transformers",
+  "engine_version": "4.57.3",
+  "image_ref": "tf-4.57.3",
+  "validated_at": "2026-06-06T14:27:55.329468+00:00",
+  "n_fields": 107,
+  "n_confirmed": 107,
+  "n_divergences": 0,
+  "n_probes": 0,
+  "n_probes_confirmed": 0,
+  "fields": [
+    {
+      "section": "engine_params",
+      "field": "config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "cache_dir",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "ignore_mismatched_sizes",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "force_download",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "local_files_only",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "token",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "revision",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "use_safetensors",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "weights_only",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "pretrained_model_name_or_path",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "state_dict",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "from_tf",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "from_flax",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "proxies",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "output_loading_info",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "attn_implementation",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "dtype",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "device_map",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "max_memory",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tp_plan",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "tp_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "device_mesh",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "offload_folder",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "offload_buffers",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "quantization_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "subfolder",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "variant",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "trust_remote_code",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "code_revision",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "load_in_8bit",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "load_in_4bit",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "llm_int8_threshold",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "llm_int8_skip_modules",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "llm_int8_enable_fp32_cpu_offload",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "llm_int8_has_fp16_weight",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "bnb_4bit_compute_dtype",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "bnb_4bit_quant_type",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "bnb_4bit_use_double_quant",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "engine_params",
+      "field": "bnb_4bit_quant_storage",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "max_length",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "max_new_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "min_length",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "min_new_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "early_stopping",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "max_time",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "stop_strings",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "do_sample",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "num_beams",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "use_cache",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "cache_implementation",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "cache_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "return_legacy_cache",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "prefill_chunk_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "temperature",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_k",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "top_p",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "min_p",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "typical_p",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "epsilon_cutoff",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "eta_cutoff",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "repetition_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "encoder_repetition_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "length_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "no_repeat_ngram_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "bad_words_ids",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "renormalize_logits",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "forced_bos_token_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "forced_eos_token_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "remove_invalid_values",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "exponential_decay_length_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "suppress_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "begin_suppress_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "sequence_bias",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "token_healing",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "guidance_scale",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "watermarking_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "num_return_sequences",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "output_attentions",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "output_hidden_states",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "output_scores",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "output_logits",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "return_dict_in_generate",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "pad_token_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "bos_token_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "eos_token_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "encoder_no_repeat_ngram_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "decoder_start_token_id",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "is_assistant",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "num_assistant_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "num_assistant_tokens_schedule",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "assistant_confidence_threshold",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "prompt_lookup_num_tokens",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "max_matching_ngram_size",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "assistant_early_exit",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "assistant_lookbehind",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "target_lookbehind",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "disable_compile",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "low_memory",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "penalty_alpha",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "dola_layers",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "diversity_penalty",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "num_beam_groups",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "constraints",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "force_words_ids",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "_from_model_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "transformers_version",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    },
+    {
+      "section": "sampling_params",
+      "field": "compile_config",
+      "exists": true,
+      "type_match": true,
+      "default_match": true
+    }
+  ],
+  "probes": [],
+  "divergences": []
+}
