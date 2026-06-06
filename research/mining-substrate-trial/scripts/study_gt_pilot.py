@@ -498,8 +498,17 @@ def main() -> int:
     parser.add_argument("--engine", default="tensorrt")
     parser.add_argument("--version-slug", default="v1_2_1")
     parser.add_argument("--image", default=None, help="container image override for the gate")
+    parser.add_argument(
+        "--sources",
+        default=None,
+        help="comma-list to restrict sources (e.g. 'mech' for mechanical-only). Default: all discovered.",
+    )
     args = parser.parse_args()
+    global SOURCES
     configure(args.engine, args.version_slug, args.image)
+    if args.sources:
+        keep = {s.strip() for s in args.sources.split(",")}
+        SOURCES = {k: v for k, v in SOURCES.items() if k in keep}
 
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"[pilot] cell {ENGINE}/{VERSION_SLUG}; sources: {sorted(SOURCES)}", flush=True)
