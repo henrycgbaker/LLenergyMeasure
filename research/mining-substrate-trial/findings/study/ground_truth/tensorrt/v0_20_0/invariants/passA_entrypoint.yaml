@@ -1,0 +1,799 @@
+schema_version: ground_truth/1.0.0
+engine: tensorrt
+engine_version: "0.20.0"
+venv_src_root: /tmp/trt-llm-0.20.0/tensorrt_llm
+pass: A
+strategy: entry-point / call-graph walk
+established_at: '2026-06-07T00:00:00Z'
+established_by: opus-passA-0.20.0
+methodology_ref: research/mining-substrate-trial/findings/study/ground_truth/tensorrt/v0_20_0/invariants/passA_methodology.md
+
+scope_notes:
+- |
+  Strategy A starts from public user entry points (LLM(...) construction ->
+  LlmArgs.from_kwargs; SamplingParams(...); nested config fields) and follows the
+  call graph to every validation site reachable at config construction time.
+- |
+  An invariant = a predicate that makes a config VALID or INVALID. We emit
+  error / warning / normalisation / dormant severities. Normalisation silently
+  mutates (no raise/warn); dormant needs a GPU/SM/engine-dir/ckpt-dir/model-dir
+  or a deferred call so it cannot be replayed by plain CPU construction.
+- |
+  0.20.0 is structurally one minor BELOW 0.21 and far below the 1.2.1 PoC GT.
+  There is a SINGLE LlmArgs class (no Torch/Trt split, no _TorchLLM kwargs-reject
+  gate). LlmArgs subclasses pydantic BaseModel; the installed pydantic is v2
+  (2.12.x) so field-level Literal validators run at cls(**kwargs) and the
+  v1-style @validator import is the pydantic-v2 compatibility shim. There is no
+  @field_validator / @model_validator anywhere in llm_args.py; the only
+  @validator is on LookaheadDecodingConfig. SamplingParams / QuantConfig /
+  LoraConfig / CalibConfig-adjacent dataclasses are plain dataclasses (no top_p /
+  top_k / temperature range checks exist at 0.20). PluginConfig is a slots
+  dataclass driven by PluginConfigMeta that wraps each _field as a property whose
+  setter asserts; all fields are init=False so validation fires on attribute
+  assignment, not on the constructor. QuantConfig allowlists are lazy: the
+  asserts live in QuantMode.from_quant_algo and only fire when the .quant_mode /
+  .layer_quant_mode cached_property is accessed, never at QuantConfig(...).
+- |
+  Every entry is provenance: net_new. There is no 0.20.0 PoC ground truth to
+  fold from; the schema, predicate_kind taxonomy and field conventions are
+  matched exactly to the 1.2.1 passA_entrypoint.yaml (schema/conventions only).
+- |
+  predicate_kind taxonomy (matched to 1.2.1): literal_in, strenum_in, range,
+  type_is, file_exists, presence_conflict, allowlist_constant, assert_positive,
+  decode_dispatch.
+- |
+  kwargs_positive SHOULD trigger the rule; kwargs_negative should NOT. They are
+  runtime-replayable against the named native_type's constructor unless the entry
+  is marked dormant (host-dependent / deferred / lazy) or needs a real dir.
+- |
+  The 0.20 LlmArgs.model_post_init (llm_args.py:969) calls
+  torch.cuda.get_device_properties(0) UNCONDITIONALLY, so the whole
+  LlmArgs.from_kwargs path requires a CUDA device. The gate runs --gpus all, so
+  it exercises that path; the SM<80 bfloat16 guard is therefore reachable but
+  outcome depends on the host SM and is flagged dormant for portability.
+
+invariants:
+
+# ============================================================================
+# Entry point: tensorrt_llm.LLM(...) -> LlmArgs.from_kwargs -> LlmArgs(**kwargs)
+# (pydantic v2 field validation) -> model_post_init -> _setup
+# ============================================================================
+
+# --- LlmArgs pydantic field Literals (fire at cls(**kwargs), CPU-replayable) ---
+
+- id: tensorrt_llmArgs_tokenizer_mode_literal
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.tokenizer_mode
+  predicate_kind: literal_in
+  predicate_value: [auto, slow]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'auto' or 'slow'"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 720, qualname: LlmArgs.tokenizer_mode}
+  notes: |
+    Pydantic Literal['auto','slow']. Single LlmArgs at 0.20 (no Torch/Trt split).
+    Raises a pydantic ValidationError at field validation, before model_post_init.
+  kwargs_positive: {model: "facebook/opt-125m", tokenizer_mode: "__not_a_mode__"}
+  kwargs_negative: {model: "facebook/opt-125m", tokenizer_mode: "slow"}
+
+- id: tensorrt_llmArgs_load_format_literal
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.load_format
+  predicate_kind: literal_in
+  predicate_value: [auto, dummy]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'auto' or 'dummy'"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 788, qualname: LlmArgs.load_format}
+  notes: |
+    Pydantic Literal['auto','dummy']. At 0.20 this is a plain Literal str (no
+    LoadFormat StrEnum override; that override only appears in the later
+    TorchLlmArgs split).
+  kwargs_positive: {model: "facebook/opt-125m", load_format: "__not_a_format__"}
+  kwargs_negative: {model: "facebook/opt-125m", load_format: "dummy"}
+
+# --- LlmArgs model field / wrapper type checks ---
+
+- id: tensorrt_llmArgs_model_must_be_str_or_path
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.model
+  predicate_kind: type_is
+  predicate_value: [str, Path]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be a valid string / Invalid model: {self.model}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 709, qualname: LlmArgs.model}
+  notes: |
+    model is typed Union[str, Path]; a non-str/Path raises a pydantic
+    ValidationError at field validation. _ModelWrapper.__post_init__
+    (llm_args.py:669) and LlmArgs._setup (llm_args.py:1086) re-assert
+    isinstance(model, (str, Path)) downstream. Empty/falsy model raises
+    "model should be provided." (line 668) via _ModelWrapper.
+  kwargs_positive: {model: 42}
+  kwargs_negative: {model: "facebook/opt-125m"}
+
+# --- LlmArgs model_post_init: SM<80 bfloat16 guard (GPU-gated) ---
+
+- id: tensorrt_llmArgs_dtype_bfloat16_sm_lt_80
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.dtype
+  predicate_kind: range
+  predicate_value: {context: "torch.cuda.get_device_properties(0).major < 8 AND dtype == 'bfloat16'"}
+  severity: error
+  outcome: invalid
+  message_template: "Pre SM 80 GPUs do not support bfloat16"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 973, qualname: LlmArgs.model_post_init}
+  notes: |
+    model_post_init unconditionally calls torch.cuda.get_device_properties(0)
+    (line 969); when device major < 8 and dtype=='auto' it normalises to
+    'float16', and dtype=='bfloat16' raises RuntimeError. The gate runs
+    --gpus all so the CUDA call succeeds, but the raise only fires on a pre-SM-80
+    host; flagged dormant for SM portability.
+  dormant_reason: requires a CUDA device with compute capability major < 8
+
+# --- LlmArgs meta-invariant: ExecutorConfig subset check at from_kwargs ---
+
+- id: tensorrt_llmArgs_check_consistency_with_ExecutorConfig
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs
+  predicate_kind: type_is
+  predicate_value: {assert: "set(ExecutorConfig public callables) - {max_beam_width} is subset of LlmArgs.model_fields"}
+  severity: error
+  outcome: invalid
+  message_template: "New options found in underlying ExecutorConfig: {llm_args_attr - executor_config_attrs}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1059, qualname: LlmArgs._maybe_update_config_for_consistency}
+  notes: |
+    Meta-invariant: fires inside from_kwargs (via _maybe_update_config_for_consistency),
+    not on a user field. Asserts the C++ ExecutorConfig surface is mirrored by
+    LlmArgs fields. Always passes on a consistent install; catalogued for parity
+    with the 1.2.1 _check_consistency entry.
+
+# --- LlmArgs._setup embedding_parallel_mode dispatch ---
+
+- id: tensorrt_llmArgs_embedding_parallel_mode_dispatch
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.embedding_parallel_mode
+  predicate_kind: literal_in
+  predicate_value: [NONE, SHARDING_ALONG_VOCAB, SHARDING_ALONG_HIDDEN]
+  severity: error
+  outcome: invalid
+  message_template: "Invalid embedding_parallel_mode: {self.embedding_parallel_mode}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1357, qualname: LlmArgs._setup_embedding_parallel_mode}
+  notes: |
+    embedding_parallel_mode is a free-form str field; the allowlist is enforced
+    in _setup_embedding_parallel_mode, called from _setup (so it runs inside
+    from_kwargs after model_post_init). Reachable only via from_kwargs, which
+    needs CUDA (model_post_init).
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+# --- LlmArgs._setup enable_build_cache type check ---
+
+- id: tensorrt_llmArgs_enable_build_cache_type_check
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.enable_build_cache
+  predicate_kind: type_is
+  predicate_value: [BuildCacheConfig, bool]
+  severity: error
+  outcome: invalid
+  message_template: "Invalid build_cache_config: {self.enable_build_cache}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1095, qualname: LlmArgs._setup}
+  notes: |
+    In _setup, a truthy enable_build_cache that is neither bool nor
+    BuildCacheConfig raises ValueError. Fires inside from_kwargs (post
+    model_post_init), so the path needs CUDA.
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+# --- LlmArgs._setup speculative_config unrecognised type ---
+
+- id: tensorrt_llmArgs_speculative_config_unrecognised_type
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.speculative_config
+  predicate_kind: type_is
+  predicate_value: [Lookahead, Medusa, Eagle, MTP]
+  severity: error
+  outcome: invalid
+  message_template: "Speculative config type not recognized: {self.speculative_config}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1232, qualname: LlmArgs._setup}
+  notes: |
+    The speculative_config field is Union[Lookahead, Medusa, Eagle, MTP]
+    DecodingConfig (llm_args.py:889). _setup dispatches by isinstance and raises
+    on an unrecognised type. Also asserts max_draft_len > 0 for Medusa
+    (line 1193) and Eagle (line 1200). Path needs CUDA (from_kwargs).
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+# --- LlmArgs._setup build_config runtime-override warnings ---
+
+- id: tensorrt_llmArgs_build_config_max_batch_size_conflict_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.max_batch_size
+  predicate_kind: presence_conflict
+  predicate_value: {set_and_ne: build_config.max_batch_size}
+  severity: warning
+  outcome: valid
+  message_template: "Conflict detected in LlmArgs build_config.max_batch_size ({...}) != max_batch_size ({...}). The 'max_batch_size' specified in LlmArgs is ignored at engine build and will override at runtime."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1140, qualname: LlmArgs._setup}
+  notes: |
+    Warn when a runtime max_batch_size is given alongside a build_config whose
+    max_batch_size differs. Fires inside from_kwargs (post model_post_init).
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+- id: tensorrt_llmArgs_build_config_max_num_tokens_conflict_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.max_num_tokens
+  predicate_kind: presence_conflict
+  predicate_value: {set_and_ne: build_config.max_num_tokens}
+  severity: warning
+  outcome: valid
+  message_template: "Conflict detected in LlmArgs build_config.max_num_tokens ({...}) != max_batch_size ({...}). The 'max_num_tokens' specified in LlmArgs is ignored at engine build and will override at runtime."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1146, qualname: LlmArgs._setup}
+  notes: |
+    Warn when a runtime max_num_tokens is given alongside a build_config whose
+    max_num_tokens differs. The message reuses "max_batch_size" verbatim in 0.20
+    (upstream copy-paste). Fires inside from_kwargs.
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+- id: tensorrt_llmArgs_maybe_update_config_build_config_override_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.build_config
+  predicate_kind: presence_conflict
+  predicate_value: {backend_ne_pytorch_and_build_config_field_ne_llmargs: [max_input_len, max_seq_len, max_beam_width]}
+  severity: warning
+  outcome: valid
+  message_template: "Overriding LlmArgs.{field_name} ({llmargs_val}) with build_config.{field_name} ({build_val})."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1076, qualname: LlmArgs._maybe_update_config_for_consistency}
+  notes: |
+    In _maybe_update_config_for_consistency (runs first inside from_kwargs, before
+    cls(**kwargs)): when backend != 'pytorch' and a build_config is supplied,
+    each of max_input_len/max_seq_len/max_beam_width that differs is overridden
+    with a warning. Requires a BuildConfig object as a kwarg.
+  dormant_reason: needs a constructed BuildConfig and a non-pytorch backend kwarg
+
+# --- LlmArgs._setup TLLM_ENGINE build_config-ignored warning (engine-dir gated) ---
+
+- id: tensorrt_llmArgs_tllm_engine_build_config_ignored_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.build_config
+  predicate_kind: presence_conflict
+  predicate_value: {with_model_format_tllm_engine: true}
+  severity: warning
+  outcome: valid
+  message_template: "The build_config is ignored for model format of TLLM_ENGINE."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1112, qualname: LlmArgs._setup}
+  notes: |
+    Warn when a build_config is passed but the local model dir is a prebuilt
+    TRT-LLM engine. Reached only for a local, non-pytorch model whose format is
+    inferred as TLLM_ENGINE.
+  dormant_reason: needs a prebuilt TRT-LLM engine dir
+
+# --- LlmArgs._ensure_lora_config_consistency warnings ---
+
+- id: tensorrt_llmArgs_lora_max_lora_rank_ignored_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.max_lora_rank
+  predicate_kind: presence_conflict
+  predicate_value: {is_not_none_with_lora_config: true}
+  severity: warning
+  outcome: valid
+  message_template: "max_lora_rank is ignored when lora_config is provided."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1241, qualname: LlmArgs._ensure_lora_config_consistency}
+  notes: Fires in _ensure_lora_config_consistency, called from _setup (from_kwargs path).
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+- id: tensorrt_llmArgs_lora_empty_lora_dir_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.lora_config.lora_dir
+  predicate_kind: range
+  predicate_value: {len_eq: 0}
+  severity: warning
+  outcome: valid
+  message_template: "lora_dir is empty, so custom embedding or lm head will not be applied."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1252, qualname: LlmArgs._ensure_lora_config_consistency}
+  notes: Fires when a lora_config is provided with an empty lora_dir list. From_kwargs path.
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+- id: tensorrt_llmArgs_enable_lora_ignored_on_pytorch_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.enable_lora
+  predicate_kind: presence_conflict
+  predicate_value: {with_lora_config_and_backend_pytorch: true}
+  severity: warning
+  outcome: valid
+  message_template: "enable_lora is ignored when lora_config is provided for pytorch backend."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1257, qualname: LlmArgs._ensure_lora_config_consistency}
+  notes: |
+    0.20 only special-cases the 'pytorch' backend (the later '_autodeploy' arm
+    does not exist). From_kwargs path.
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+- id: tensorrt_llmArgs_lora_empty_target_modules_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.lora_config.lora_target_modules
+  predicate_kind: range
+  predicate_value: {len_eq: 0_and_lora_dir_len_eq_0}
+  severity: warning
+  outcome: valid
+  message_template: "Both lora_dir and lora_target_modules are empty, so all LoRA modules will be expected. This will lead to serious memory consumption."
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1264, qualname: LlmArgs._ensure_lora_config_consistency}
+  notes: |
+    Warn + normalisation: when both lora_dir and lora_target_modules are empty,
+    lora_target_modules is back-filled from the default trtllm-to-hf module map.
+    From_kwargs path.
+  dormant_reason: enforced in _setup via from_kwargs; whole path needs CUDA (model_post_init)
+
+# --- LlmArgs gpus_per_node default-fill (normalisation) ---
+
+- id: tensorrt_llmArgs_gpus_per_node_default_warns
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.gpus_per_node
+  predicate_kind: range
+  predicate_value: {default_when_none: "torch.cuda.device_count()"}
+  severity: warning
+  outcome: valid
+  message_template: "Using default gpus_per_node: {torch.cuda.device_count()}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 976, qualname: LlmArgs.model_post_init}
+  notes: |
+    Warn + normalisation in model_post_init when gpus_per_node is None; filled
+    from torch.cuda.device_count(). Needs CUDA.
+  dormant_reason: model_post_init reads torch.cuda.device_count(); needs CUDA
+
+# --- TRT engine / ckpt parallel-size mismatches (dir-gated) ---
+
+- id: tensorrt_llmArgs_load_config_from_engine_tp_size_mismatch
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.tensor_parallel_size
+  predicate_kind: range
+  predicate_value: {must_be_in: [1, engine.mapping.tp_size]}
+  severity: error
+  outcome: invalid
+  message_template: "tp_size {...} is not consistent with the engine's tp_size {...}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1288, qualname: LlmArgs._load_config_from_engine}
+  dormant_reason: needs a prebuilt TRT-LLM engine dir
+
+- id: tensorrt_llmArgs_load_config_from_engine_pp_size_mismatch
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.pipeline_parallel_size
+  predicate_kind: range
+  predicate_value: {must_be_in: [1, engine.mapping.pp_size]}
+  severity: error
+  outcome: invalid
+  message_template: "pp_size {...} is not consistent with the engine's pp_size {...}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1292, qualname: LlmArgs._load_config_from_engine}
+  dormant_reason: needs a prebuilt TRT-LLM engine dir
+
+- id: tensorrt_llmArgs_load_config_from_engine_cp_size_mismatch
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.context_parallel_size
+  predicate_kind: range
+  predicate_value: {must_be_in: [1, engine.mapping.cp_size]}
+  severity: error
+  outcome: invalid
+  message_template: "cp_size {...} is not consistent with the engine's cp_size {...}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1296, qualname: LlmArgs._load_config_from_engine}
+  dormant_reason: needs a prebuilt TRT-LLM engine dir
+
+- id: tensorrt_llmArgs_load_config_from_ckpt_tp_size_mismatch
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.tensor_parallel_size
+  predicate_kind: range
+  predicate_value: {ne: ckpt.mapping.tp_size_unless_1}
+  severity: error
+  outcome: invalid
+  message_template: "tp_size {...} is not consistent with the checkpoint's tp_size {...}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1321, qualname: LlmArgs._load_config_from_ckpt}
+  dormant_reason: needs a TRT-LLM checkpoint dir
+
+- id: tensorrt_llmArgs_load_config_from_ckpt_pp_size_mismatch
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.pipeline_parallel_size
+  predicate_kind: range
+  predicate_value: {ne: ckpt.mapping.pp_size_unless_1}
+  severity: error
+  outcome: invalid
+  message_template: "pp_size {...} is not consistent with the checkpoint's pp_size {...}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1325, qualname: LlmArgs._load_config_from_ckpt}
+  dormant_reason: needs a TRT-LLM checkpoint dir
+
+- id: tensorrt_llmArgs_load_config_from_ckpt_cp_size_mismatch
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.context_parallel_size
+  predicate_kind: range
+  predicate_value: {ne: ckpt.mapping.cp_size_unless_1}
+  severity: error
+  outcome: invalid
+  message_template: "cp_size {...} is not consistent with the checkpoint's cp_size {...}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1329, qualname: LlmArgs._load_config_from_ckpt}
+  dormant_reason: needs a TRT-LLM checkpoint dir
+
+- id: tensorrt_getModelFormat_no_config_json
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.model
+  predicate_kind: file_exists
+  predicate_value: {path: "{model_dir}/config.json"}
+  severity: error
+  outcome: invalid
+  message_template: "Failed to infer model format because no config.json exists in {model_dir}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 1435, qualname: get_model_format}
+  dormant_reason: needs a local model dir
+
+# ============================================================================
+# Nested config: CalibConfig (pydantic BaseModel)
+# ============================================================================
+
+- id: tensorrt_calibConfig_device_literal
+  provenance: net_new
+  native_type: tensorrt.CalibConfig
+  native_field: CalibConfig.device
+  predicate_kind: literal_in
+  predicate_value: [cuda, cpu]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'cuda' or 'cpu'"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 138, qualname: CalibConfig.device}
+  notes: |
+    Only validated field on CalibConfig at 0.20; all other CalibConfig fields are
+    unconstrained ints/strs. Plain pydantic Literal, CPU-constructible.
+  kwargs_positive: {device: "__not_a_device__"}
+  kwargs_negative: {device: "cpu"}
+
+# ============================================================================
+# Nested config: SchedulerConfig + batching enums (StrEnum, PybindMirror)
+# ============================================================================
+
+- id: tensorrt_capacitySchedulerPolicy_enum
+  provenance: net_new
+  native_type: tensorrt.SchedulerConfig
+  native_field: SchedulerConfig.capacity_scheduler_policy
+  predicate_kind: strenum_in
+  predicate_value: [MAX_UTILIZATION, GUARANTEED_NO_EVICT, STATIC_BATCH]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be one of CapacitySchedulerPolicy members"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 362, qualname: CapacitySchedulerPolicy}
+  notes: StrEnum field on a pydantic SchedulerConfig; CPU-constructible.
+  kwargs_positive: {capacity_scheduler_policy: "__not_a_policy__"}
+  kwargs_negative: {capacity_scheduler_policy: "GUARANTEED_NO_EVICT"}
+
+- id: tensorrt_contextChunkingPolicy_enum
+  provenance: net_new
+  native_type: tensorrt.SchedulerConfig
+  native_field: SchedulerConfig.context_chunking_policy
+  predicate_kind: strenum_in
+  predicate_value: [FIRST_COME_FIRST_SERVED, EQUAL_PROGRESS]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'FIRST_COME_FIRST_SERVED' or 'EQUAL_PROGRESS'"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 372, qualname: ContextChunkingPolicy}
+  kwargs_positive: {context_chunking_policy: "__not_a_policy__"}
+  kwargs_negative: {context_chunking_policy: "EQUAL_PROGRESS"}
+
+- id: tensorrt_batchingType_enum
+  provenance: net_new
+  native_type: tensorrt.LlmArgs
+  native_field: LlmArgs.batching_type
+  predicate_kind: strenum_in
+  predicate_value: [STATIC, INFLIGHT]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'STATIC' or 'INFLIGHT'"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 353, qualname: BatchingType}
+  notes: |
+    BatchingType StrEnum, used as the LlmArgs.batching_type field type
+    (llm_args.py:894). Reachable on the entry-point path but only validated when
+    constructed via the LlmArgs field; replay via BatchingType("...") directly.
+  replay_via: BatchingType
+
+# ============================================================================
+# Nested config: LookaheadDecodingConfig (only @validator in the file)
+# ============================================================================
+
+- id: tensorrt_lookaheadDecodingConfig_max_window_size_positive
+  provenance: net_new
+  native_type: tensorrt.LookaheadDecodingConfig
+  native_field: LookaheadDecodingConfig.max_window_size
+  predicate_kind: range
+  predicate_value: {gt: 0}
+  severity: error
+  outcome: invalid
+  message_template: "Value must be positive, got {v}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 516, qualname: LookaheadDecodingConfig.validate_positive_values}
+  notes: |
+    Single @validator (pydantic-v1 shim) covering three fields. Construction also
+    runs _check_fields() via __init__. CPU-constructible.
+  kwargs_positive: {max_window_size: 0}
+  kwargs_negative: {max_window_size: 1}
+
+- id: tensorrt_lookaheadDecodingConfig_max_ngram_size_positive
+  provenance: net_new
+  native_type: tensorrt.LookaheadDecodingConfig
+  native_field: LookaheadDecodingConfig.max_ngram_size
+  predicate_kind: range
+  predicate_value: {gt: 0}
+  severity: error
+  outcome: invalid
+  message_template: "Value must be positive, got {v}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 516, qualname: LookaheadDecodingConfig.validate_positive_values}
+  kwargs_positive: {max_ngram_size: 0}
+  kwargs_negative: {max_ngram_size: 1}
+
+- id: tensorrt_lookaheadDecodingConfig_max_verification_set_size_positive
+  provenance: net_new
+  native_type: tensorrt.LookaheadDecodingConfig
+  native_field: LookaheadDecodingConfig.max_verification_set_size
+  predicate_kind: range
+  predicate_value: {gt: 0}
+  severity: error
+  outcome: invalid
+  message_template: "Value must be positive, got {v}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 516, qualname: LookaheadDecodingConfig.validate_positive_values}
+  kwargs_positive: {max_verification_set_size: 0}
+  kwargs_negative: {max_verification_set_size: 1}
+
+# ============================================================================
+# Nested config: DecodingBaseConfig.from_dict dispatch
+# ============================================================================
+
+- id: tensorrt_decodingBaseConfig_from_dict_decoding_type_dispatch
+  provenance: net_new
+  native_type: tensorrt.DecodingBaseConfig
+  native_field: DecodingBaseConfig.decoding_type
+  predicate_kind: decode_dispatch
+  predicate_value: [MTP, Medusa, Eagle, Lookahead]
+  severity: error
+  outcome: invalid
+  message_template: "Invalid decoding type: {decoding_type}"
+  citation: {file: tensorrt_llm/llmapi/llm_args.py, line: 203, qualname: DecodingBaseConfig.from_dict}
+  notes: |
+    0.20 supports only the four decoding types MTP/Medusa/Eagle/Lookahead (no
+    NGram/DraftTarget/SaveState/UserProvided/Auto). A missing or unrecognised
+    decoding_type key raises ValueError. Replay via from_dict, not the bare ctor.
+  kwargs_positive: {decoding_type: "__not_a_type__"}
+  kwargs_negative: {decoding_type: "MTP"}
+  replay_via: DecodingBaseConfig.from_dict
+
+# ============================================================================
+# Nested config: LoraConfig (plain @dataclass, __post_init__ assert)
+# ============================================================================
+
+- id: tensorrt_loraConfig_lora_ckpt_source_assert
+  provenance: net_new
+  native_type: tensorrt.LoraConfig
+  native_field: LoraConfig.lora_ckpt_source
+  predicate_kind: literal_in
+  predicate_value: [hf, nemo]
+  severity: error
+  outcome: invalid
+  message_template: "lora_ckpt_source must be one of 'hf' or 'nemo', got {self.lora_ckpt_source}"
+  citation: {file: tensorrt_llm/lora_manager.py, line: 154, qualname: LoraConfig.__post_init__}
+  notes: |
+    LoraConfig is a plain @dataclass(DictConversion) in lora_manager.py (there is
+    no lora_helper.py at 0.20). The only construction-time check is the
+    __post_init__ assert on lora_ckpt_source. CPU-constructible.
+  kwargs_positive: {lora_ckpt_source: "__not_a_source__"}
+  kwargs_negative: {lora_ckpt_source: "hf"}
+
+# ============================================================================
+# Nested config: PluginConfig (slots dataclass + PluginConfigMeta property setters)
+# ============================================================================
+
+- id: tensorrt_pluginConfig_dtype_not_auto_or_none
+  provenance: net_new
+  native_type: tensorrt.PluginConfig
+  native_field: PluginConfig.dtype
+  predicate_kind: literal_in
+  predicate_value: {not_in: [auto, null]}
+  severity: error
+  outcome: invalid
+  message_template: "Plugin dtype cannot be auto or None"
+  citation: {file: tensorrt_llm/plugin/plugin.py, line: 120, qualname: PluginConfig._make_plugin_property}
+  notes: |
+    PluginConfigMeta wraps each _field as a property; the setter asserts. The
+    dtype setter rejects 'auto' and None. All PluginConfig fields are init=False,
+    so this fires on attribute assignment (pc.dtype = ...), NOT on the
+    constructor; replay by constructing PluginConfig() then setting .dtype.
+  replay_via: "PluginConfig().dtype = <value>"
+  dormant_reason: fields are init=False; fires on attribute-set, not on PluginConfig(...) ctor
+
+- id: tensorrt_pluginConfig_plugin_dtype_options_allowlist
+  provenance: net_new
+  native_type: tensorrt.PluginConfig
+  native_field: PluginConfig.gemm_plugin
+  predicate_kind: allowlist_constant
+  predicate_value: [auto, float16, float32, bfloat16, int32, fp8, nvfp4, null]
+  severity: error
+  outcome: invalid
+  message_template: "Plugin {field_name} expects values in {plugin_dtype_options}, got {value}"
+  citation: {file: tensorrt_llm/plugin/plugin.py, line: 117, qualname: PluginConfig._make_plugin_property}
+  notes: |
+    Each str/Optional[str] plugin field setter asserts value is in its dtype
+    allowlist (DEFAULT_PLUGIN_DTYPE_OPTIONS, or the per-field override in
+    PLUGIN_DTYPE_OPTIONS_MAP; gemm_plugin shown). Fires on attribute-set.
+  replay_via: "PluginConfig().gemm_plugin = <value>"
+  dormant_reason: fields are init=False; fires on attribute-set, not on PluginConfig(...) ctor
+
+- id: tensorrt_pluginConfig_bool_field_type_check
+  provenance: net_new
+  native_type: tensorrt.PluginConfig
+  native_field: PluginConfig.dora_plugin
+  predicate_kind: type_is
+  predicate_value: [bool]
+  severity: error
+  outcome: invalid
+  message_template: "Plugin {field_name} expects {field_type}, got {type(value)}"
+  citation: {file: tensorrt_llm/plugin/plugin.py, line: 111, qualname: PluginConfig._make_plugin_property}
+  notes: |
+    bool-typed plugin fields (e.g. dora_plugin) assert isinstance(value, bool) in
+    the setter. Fires on attribute-set.
+  replay_via: "PluginConfig().dora_plugin = <value>"
+  dormant_reason: fields are init=False; fires on attribute-set, not on PluginConfig(...) ctor
+
+- id: tensorrt_pluginConfig_validate_unsupported_on_sm100
+  provenance: net_new
+  native_type: tensorrt.PluginConfig
+  native_field: PluginConfig.validate
+  predicate_kind: range
+  predicate_value: {context: "get_sm_version() == 100 (Blackwell)"}
+  severity: error
+  outcome: invalid
+  message_template: "{plugin}={val} is not supported on SM {sm}."
+  citation: {file: tensorrt_llm/plugin/plugin.py, line: 513, qualname: PluginConfig.validate}
+  notes: |
+    validate() raises for a set of plugins when get_sm_version()==100. Deferred
+    (validate is called at build time, not construction) and SM-gated.
+  dormant_reason: deferred validate() call, gated on SM-100 (Blackwell) host
+
+# ============================================================================
+# Nested config: QuantConfig (plain @dataclass; allowlists are LAZY)
+# ============================================================================
+
+- id: tensorrt_quantConfig_quant_algo_allowlist_lazy
+  provenance: net_new
+  native_type: tensorrt.QuantConfig
+  native_field: QuantConfig.quant_algo
+  predicate_kind: allowlist_constant
+  predicate_value: "list(set(QuantAlgo) - {QuantAlgo.INT8})"
+  severity: error
+  outcome: invalid
+  message_template: AssertionError (quant_algo is None or quant_algo in QUANT_ALGO_LIST)
+  citation: {file: tensorrt_llm/quantization/mode.py, line: 319, qualname: QuantMode.from_quant_algo}
+  notes: |
+    QuantConfig is a plain @dataclass with no __post_init__; quant_algo accepts
+    any value at construction. The allowlist assert lives in
+    QuantMode.from_quant_algo and only fires when the QuantConfig.quant_mode /
+    layer_quant_mode @cached_property is accessed (lazy). QUANT_ALGO_LIST is the
+    full QuantAlgo set minus INT8.
+  dormant_reason: lazy - asserts on .quant_mode/.layer_quant_mode access, not at QuantConfig(...) ctor
+
+- id: tensorrt_quantConfig_kv_cache_quant_algo_allowlist_lazy
+  provenance: net_new
+  native_type: tensorrt.QuantConfig
+  native_field: QuantConfig.kv_cache_quant_algo
+  predicate_kind: allowlist_constant
+  predicate_value: [FP8, INT8, NVFP4]
+  severity: error
+  outcome: invalid
+  message_template: AssertionError (kv_cache_quant_algo is None or kv_cache_quant_algo in KV_CACHE_QUANT_ALGO_LIST)
+  citation: {file: tensorrt_llm/quantization/mode.py, line: 320, qualname: QuantMode.from_quant_algo}
+  notes: |
+    Same lazy mechanism as quant_algo; KV_CACHE_QUANT_ALGO_LIST = [FP8, INT8,
+    NVFP4]. Fires on .quant_mode/.layer_quant_mode access, not construction.
+  dormant_reason: lazy - asserts on .quant_mode/.layer_quant_mode access, not at QuantConfig(...) ctor
+
+# ============================================================================
+# SamplingParams (plain slots dataclass; NO top_p/top_k/temperature checks at 0.20)
+# ============================================================================
+
+- id: tensorrt_samplingParams_best_of_ge_n
+  provenance: net_new
+  native_type: tensorrt.SamplingParams
+  native_field: SamplingParams.best_of
+  predicate_kind: range
+  predicate_value: {ge: n, when: "best_of > 1"}
+  severity: error
+  outcome: invalid
+  message_template: "In beam search, best_of ({self.best_of}) must be greater than or equal to n ({self.n})."
+  citation: {file: tensorrt_llm/sampling_params.py, line: 285, qualname: SamplingParams._validate}
+  notes: |
+    Fires from __post_init__ -> _validate. Note best_of defaults to n in
+    __post_init__ (line 271), and the check only triggers when best_of > 1. The
+    0.20 message differs from later versions. CPU-constructible.
+  kwargs_positive: {n: 3, best_of: 2}
+  kwargs_negative: {n: 2, best_of: 3}
+
+- id: tensorrt_samplingParams_best_of_gt_1_greedy_requires_env
+  provenance: net_new
+  native_type: tensorrt.SamplingParams
+  native_field: SamplingParams.best_of
+  predicate_kind: presence_conflict
+  predicate_value: {best_of_gt_1_and_greedy_and_env_unset: true}
+  severity: error
+  outcome: invalid
+  message_template: "Greedy decoding in the LLM API does not allow multiple returns. Please set to best_of=1 ... or set TLLM_ALLOW_N_GREEDY_DECODING=1 ..."
+  citation: {file: tensorrt_llm/sampling_params.py, line: 291, qualname: SamplingParams._validate}
+  notes: |
+    _greedy_decoding is true when not use_beam_search and top_k in (None,1) and
+    top_p in (None,0.0). Env-sensitive: requires TLLM_ALLOW_N_GREEDY_DECODING
+    unset. CPU-constructible.
+  kwargs_positive: {best_of: 2, top_k: 1}
+  kwargs_negative: {best_of: 2, top_k: 50}
+
+- id: tensorrt_samplingParams_truncate_prompt_tokens_ge_1
+  provenance: net_new
+  native_type: tensorrt.SamplingParams
+  native_field: SamplingParams.truncate_prompt_tokens
+  predicate_kind: range
+  predicate_value: {ge: 1}
+  severity: error
+  outcome: invalid
+  message_template: "truncate_prompt_tokens must be >= 1, got {self.truncate_prompt_tokens}"
+  citation: {file: tensorrt_llm/sampling_params.py, line: 298, qualname: SamplingParams._validate}
+  notes: CPU-constructible via __post_init__ -> _validate.
+  kwargs_positive: {truncate_prompt_tokens: 0}
+  kwargs_negative: {truncate_prompt_tokens: 1}
+
+- id: tensorrt_samplingParams_get_bad_words_requires_setup
+  provenance: net_new
+  native_type: tensorrt.SamplingParams
+  native_field: SamplingParams.bad
+  predicate_kind: presence_conflict
+  predicate_value: {set_without_setup_tokenizer: true}
+  severity: error
+  outcome: invalid
+  message_template: "{cls}.bad ({self.bad}) is not processed by tokenizer, please call the setup method."
+  citation: {file: tensorrt_llm/sampling_params.py, line: 359, qualname: SamplingParams._get_bad_words}
+  dormant_reason: raised at _get_bad_words() call, not at construction
+
+- id: tensorrt_samplingParams_get_stop_words_requires_setup
+  provenance: net_new
+  native_type: tensorrt.SamplingParams
+  native_field: SamplingParams.stop
+  predicate_kind: presence_conflict
+  predicate_value: {set_without_setup_tokenizer: true}
+  severity: error
+  outcome: invalid
+  message_template: "{cls}.stop ({self.stop}) is not processed by tokenizer, please call the setup method."
+  citation: {file: tensorrt_llm/sampling_params.py, line: 373, qualname: SamplingParams._get_stop_words}
+  dormant_reason: raised at _get_stop_words() call, not at construction
+
+# ============================================================================
+# GuidedDecodingParams (slots dataclass; _validate run via SamplingParams)
+# ============================================================================
+
+- id: tensorrt_guidedDecodingParams_at_most_one_guide
+  provenance: net_new
+  native_type: tensorrt.GuidedDecodingParams
+  native_field: GuidedDecodingParams
+  predicate_kind: presence_conflict
+  predicate_value: {at_most_one_of: [json, regex, grammar, json_object, structural_tag]}
+  severity: error
+  outcome: invalid
+  message_template: "Only one guide can be used for a request, but got {num_guides}."
+  citation: {file: tensorrt_llm/sampling_params.py, line: 36, qualname: GuidedDecodingParams._validate}
+  notes: |
+    GuidedDecodingParams is a slots dataclass; its _validate is NOT auto-run on
+    construction. It fires only via SamplingParams(guided_decoding=...) ->
+    SamplingParams._validate (line 303). Replay through SamplingParams.
+  replay_via: "SamplingParams(guided_decoding=GuidedDecodingParams(...))"
