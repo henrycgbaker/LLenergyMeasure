@@ -772,3 +772,70 @@ def test_synth_operator_not_in():
 )
 def test_synth_unsynthesizable_returns_none(inv):
     assert validate_invariants.synthesize_probe_kwargs(inv) is None
+
+
+# ---------------------------------------------------------------------------
+# vLLM bootstrap-noise filters (regression guard for the canonical gate)
+#
+# _run_vllm strips torch/SWIG/ROCm import noise and vLLM startup INFO lines
+# from the captured warning/log streams before classifying an invariant. Two
+# failure modes to guard against: (a) a noise pattern is dropped, so bootstrap
+# chatter re-trips negative_confirms for every class that constructs one of
+# these; (b) a pattern is broadened until it swallows a GENUINE invariant
+# warning, silently confirming dormancy that never occurred.
+# ---------------------------------------------------------------------------
+
+_VLLM_IMPORT_NOISE_SAMPLES = [
+    "_SixMetaPathImporter object has no attribute ...",
+    "<class 'SwigPyObject'> swig metadata",
+    "swigvarlink type registered",
+    "VendorImporter shim warning",
+    "libamd_smi failed to load",
+    "amd-smi binary not found on PATH",
+    "distutils Version classes are deprecated",
+    "sysconfig scheme lookup deprecated",
+    "builtin type SwigPyPacked has no __module__ attribute",
+    "`compile_config` is set to 3 but `mode` is also set",
+]
+
+_VLLM_BOOTSTRAP_NOISE_SAMPLES = [
+    "Resolved architecture: LlamaForCausalLM",
+    "Using max model len 4096",
+    "Using cuda graph capture sizes [1, 2, 4]",
+    "Defaulting to use mp for distributed inference",
+    "The 'pplx' all2all backend is experimental",
+    "Using external launcher for distributed setup",
+    "Disabling V1 multiprocessing for this run",
+    "max_parallel_loading_workers set to 4",
+    "Setting LD_LIBRARY_PATH to include CUDA",
+    "load_general_plugins discovered 0 plugins",
+    "Initializing distributed environment with nccl",
+    "This model supports multiple tasks: generate, embed",
+]
+
+# Genuine invariant-channel warnings that MUST survive both filters. A
+# too-broad pattern matching one of these would falsely confirm dormancy.
+_GENUINE_VLLM_WARNINGS = [
+    "Casting torch.bfloat16 to torch.float16.",
+    "max_num_batched_tokens (2048) is smaller than max_num_seqs (256).",
+    "Chunked prefill is enabled with max_num_batched_tokens=512.",
+    "Possibly too large swap space.",
+    # Anchoring guard: carries a bootstrap phrase mid-string, not at line start.
+    "Invariant tripped: resolved architecture mismatch detected.",
+]
+
+
+@pytest.mark.parametrize("msg", _VLLM_IMPORT_NOISE_SAMPLES)
+def test_vllm_import_noise_is_stripped(msg):
+    assert validate_invariants._VLLM_IMPORT_NOISE.search(msg)
+
+
+@pytest.mark.parametrize("msg", _VLLM_BOOTSTRAP_NOISE_SAMPLES)
+def test_vllm_bootstrap_noise_is_stripped(msg):
+    assert validate_invariants._VLLM_BOOTSTRAP_NOISE.search(msg)
+
+
+@pytest.mark.parametrize("msg", _GENUINE_VLLM_WARNINGS)
+def test_genuine_vllm_warning_survives_both_filters(msg):
+    assert not validate_invariants._VLLM_IMPORT_NOISE.search(msg)
+    assert not validate_invariants._VLLM_BOOTSTRAP_NOISE.search(msg)
