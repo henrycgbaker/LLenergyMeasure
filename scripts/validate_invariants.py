@@ -394,6 +394,119 @@ def get_native_type_runner(engine: str):
 
 
 # ---------------------------------------------------------------------------
+# Probe synthesis - derive positive/negative kwargs from a declared predicate
+# ---------------------------------------------------------------------------
+#
+# A mined invariant describes its constraint declaratively: as a
+# ``predicate_kind`` + ``predicate_value`` pair (the GT / Opus-pass schema) or
+# as a single-field ``match.fields`` operator block (the static-miner /
+# mechanical schema). When the corpus does NOT also carry hand-authored
+# ``kwargs_positive`` / ``kwargs_negative``, the gate SYNTHESISES them: a
+# positive probe engineered to VIOLATE the constraint (must fire) and a
+# negative probe engineered to SATISFY it (must construct clean).
+#
+# Synthesis is SAFE: the gate still constructs both probes against the live
+# engine and only confirms an entry when the positive fires AND the negative
+# passes. A mis-synthesised probe therefore fails to confirm (the entry stays
+# unverified) - it can never produce a false-confirmed entry. So we synthesise
+# liberally; the runtime check is the arbiter. Predicate families that are not
+# deterministically single-field-probeable (cross-field presence/exclusion,
+# file existence, backend/decode dispatch, bare type checks) return None and
+# are left unverified rather than guessed.
+
+_PROBE_STRING_SENTINEL = "__llem_invalid_probe_value__"
+
+
+def _leaf_field(invariant: dict[str, Any]) -> str | None:
+    """Leaf field name to probe: from ``native_field`` or a single match key."""
+    nf = invariant.get("native_field")
+    if isinstance(nf, str) and nf:
+        return nf.rpartition(".")[2]
+    mf = (invariant.get("match") or {}).get("fields") or {}
+    if len(mf) == 1:
+        return next(iter(mf)).rpartition(".")[2]
+    return None
+
+
+def _is_num(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _num_step(v: Any) -> Any:
+    return 1 if isinstance(v, int) and not isinstance(v, bool) else 1.0
+
+
+def _range_bounds(pv: Any) -> tuple[Any, Any]:
+    if isinstance(pv, (list, tuple)) and len(pv) == 2:
+        return pv[0], pv[1]
+    if isinstance(pv, dict):
+        return pv.get("min", pv.get("lo")), pv.get("max", pv.get("hi"))
+    return None, None
+
+
+def synthesize_probe_kwargs(invariant: dict[str, Any]) -> tuple[dict, dict] | None:
+    """Return ``(kwargs_positive, kwargs_negative)`` synthesised from the
+    invariant's declared predicate, or ``None`` when the family isn't
+    deterministically synthesisable. positive should FIRE; negative should PASS.
+    """
+    leaf = _leaf_field(invariant)
+    if not leaf:
+        return None
+    pk = (invariant.get("predicate_kind") or "").strip()
+    pv = invariant.get("predicate_value")
+    from_pk = _synth_from_predicate_kind(leaf, pk, pv)
+    if from_pk is not None:
+        return from_pk
+    mf = (invariant.get("match") or {}).get("fields") or {}
+    if len(mf) == 1:
+        return _synth_from_operator(leaf, next(iter(mf.values())))
+    return None
+
+
+def _synth_from_predicate_kind(leaf: str, pk: str, pv: Any) -> tuple[dict, dict] | None:
+    if not pk:
+        return None
+    if pk in {"literal_in", "strenum_in", "allowlist_constant"}:
+        if isinstance(pv, list) and pv:
+            return ({leaf: _PROBE_STRING_SENTINEL}, {leaf: pv[0]})
+        return None
+    if pk in {"range", "numeric_range", "in_open_range", "in_open_range_inclusive"}:
+        lo, hi = _range_bounds(pv)
+        if _is_num(lo) and _is_num(hi) and lo == hi:
+            return None  # degenerate single-point range: no interior negative
+        if _is_num(hi):
+            neg = (lo + hi) / 2 if _is_num(lo) else hi
+            return ({leaf: hi + _num_step(hi)}, {leaf: neg})
+        if _is_num(lo):
+            return ({leaf: lo - _num_step(lo)}, {leaf: lo})
+        return None
+    if pk == "assert_positive":
+        return ({leaf: -1}, {leaf: 1})
+    return None  # type_is / file_exists / *_conflict / *_dispatch -> not synthesisable
+
+
+def _synth_from_operator(leaf: str, pred: Any) -> tuple[dict, dict] | None:
+    if not isinstance(pred, dict) or len(pred) != 1:
+        return None
+    op, val = next(iter(pred.items()))
+    if op == "not_in" and isinstance(val, list) and val:
+        return ({leaf: _PROBE_STRING_SENTINEL}, {leaf: val[0]})
+    if op == "not_equal":
+        return ({leaf: (val + 1) if _is_num(val) else _PROBE_STRING_SENTINEL}, {leaf: val})
+    if not _is_num(val):
+        return None
+    if op in {"<", "lt"}:
+        return ({leaf: val - _num_step(val)}, {leaf: val})
+    if op in {"<=", "le"}:
+        return ({leaf: val}, {leaf: val + _num_step(val)})
+    if op in {">", "gt"}:
+        return ({leaf: val + _num_step(val)}, {leaf: val})
+    if op in {">=", "ge"}:
+        return ({leaf: val}, {leaf: val - _num_step(val)})
+    return None  # present / type_is_not / scalar -> not synthesisable here
+
+
+# ---------------------------------------------------------------------------
 # Per-invariant driver
 # ---------------------------------------------------------------------------
 
@@ -451,7 +564,18 @@ def _validate_invariant_with_captures(
             None,
         )
 
-    native_type = invariant["native_type"]
+    native_type = invariant.get("native_type")
+    if not native_type:
+        return (
+            CaseResult(
+                id=invariant_id,
+                outcome="skipped_no_native_type",
+                emission_channel="none",
+                skipped_reason="no_native_type_to_construct",
+            ),
+            None,
+            None,
+        )
     runner = get_native_type_runner(engine)
     severity = str(invariant.get("severity", "")).lower()
     # Per-engine strictness routing: transformers' GenerationConfig has a
@@ -460,8 +584,30 @@ def _validate_invariant_with_captures(
     # so the validation observation matches the corpus's expected outcome shape.
     strict_validate = severity == "error"
 
-    kwargs_positive = dict(invariant["kwargs_positive"])
-    kwargs_negative = dict(invariant["kwargs_negative"])
+    # Use hand-authored probes when present; otherwise synthesise them from the
+    # declared predicate so the gate can validate predicate-only mined entries.
+    synthesized = False
+    if (
+        invariant.get("kwargs_positive") is not None
+        and invariant.get("kwargs_negative") is not None
+    ):
+        kwargs_positive = dict(invariant["kwargs_positive"])
+        kwargs_negative = dict(invariant["kwargs_negative"])
+    else:
+        synth = synthesize_probe_kwargs(invariant)
+        if synth is None:
+            return (
+                CaseResult(
+                    id=invariant_id,
+                    outcome="skipped_unsynthesizable",
+                    emission_channel="none",
+                    skipped_reason="predicate_not_deterministically_probeable",
+                ),
+                None,
+                None,
+            )
+        kwargs_positive, kwargs_negative = synth
+        synthesized = True
 
     pos = runner(native_type, kwargs_positive, strict_validate=strict_validate)
     neg = runner(native_type, kwargs_negative, strict_validate=strict_validate)
@@ -491,6 +637,19 @@ def _validate_invariant_with_captures(
             "type": pos.exception_type,
             "message": pos.exception_message or "",
         }
+
+    # Hardening for SYNTHESISED probes: only confirm when the positive firing is
+    # ATTRIBUTABLE to the field under test - the leaf field name must appear in
+    # the raised exception / captured messages. The pos/neg pair already differ
+    # only in this field, so an attributable raise is strong evidence the field
+    # itself enforces the constraint; this rejects the case where a synthesised
+    # value trips an unrelated validator and "confirms" for the wrong reason.
+    # Hand-authored probes keep the original (looser) confirmation rule.
+    if synthesized and positive_confirmed:
+        probe_leaf = _leaf_field(invariant) or ""
+        haystack = (pos.exception_message or "") + " " + " ".join(observed_messages)
+        if probe_leaf and probe_leaf not in haystack:
+            positive_confirmed = False
 
     case = CaseResult(
         id=invariant_id,

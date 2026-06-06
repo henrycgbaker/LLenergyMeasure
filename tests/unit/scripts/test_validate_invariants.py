@@ -695,3 +695,80 @@ class TestComputeGateSoundnessDivergences:
         assert d["check_failed"] == validate_invariants.CHECK_POSITIVE_RAISES
         assert d["invariant_id"] == "r8"
         assert d["field"] == "kwargs_positive"
+
+
+# ---------------------------------------------------------------------------
+# Probe synthesis (synthesize_probe_kwargs)
+# ---------------------------------------------------------------------------
+#
+# These lock the operator/predicate DIRECTION convention: a match operator (or
+# predicate_kind) describes the FIRING condition, so the positive probe must
+# SATISFY it (fire) and the negative must violate it (construct clean). This is
+# the same convention the static miner's hand-authored kwargs follow (e.g.
+# `{<=: 0}` ships positive=0, negative=1). Do not invert these.
+
+
+def test_synth_predicate_literal_in():
+    inv = {
+        "native_field": "BaseLlmArgs.tokenizer_mode",
+        "predicate_kind": "literal_in",
+        "predicate_value": ["auto", "slow"],
+    }
+    pos, neg = validate_invariants.synthesize_probe_kwargs(inv)
+    assert neg == {"tokenizer_mode": "auto"}  # allowed -> must pass
+    assert pos["tokenizer_mode"] not in ("auto", "slow")  # out-of-set -> must fire
+
+
+def test_synth_predicate_range():
+    inv = {
+        "native_field": "KvCacheConfig.free_gpu_memory_fraction",
+        "predicate_kind": "range",
+        "predicate_value": [0, 1],
+    }
+    pos, neg = validate_invariants.synthesize_probe_kwargs(inv)
+    assert pos["free_gpu_memory_fraction"] > 1  # out-of-range -> must fire
+    assert 0 <= neg["free_gpu_memory_fraction"] <= 1  # in-range -> must pass
+
+
+def test_synth_predicate_degenerate_range_is_unsynthesizable():
+    inv = {"native_field": "X.f", "predicate_kind": "range", "predicate_value": [5, 5]}
+    assert validate_invariants.synthesize_probe_kwargs(inv) is None
+
+
+def test_synth_operator_le_matches_authored_convention():
+    # `{<=: 0}` is the firing condition -> positive satisfies it (0), negative not (1).
+    inv = {"native_field": "X.max_ngram_size", "match": {"fields": {"t.max_ngram_size": {"<=": 0}}}}
+    pos, neg = validate_invariants.synthesize_probe_kwargs(inv)
+    assert pos == {"max_ngram_size": 0}
+    assert neg == {"max_ngram_size": 1}
+
+
+def test_synth_operator_gt():
+    inv = {"native_field": "X.n", "match": {"fields": {"t.n": {">": 0}}}}
+    pos, neg = validate_invariants.synthesize_probe_kwargs(inv)
+    assert pos == {"n": 1}  # > 0 -> fires
+    assert neg == {"n": 0}  # not > 0 -> passes
+
+
+def test_synth_operator_not_in():
+    inv = {
+        "native_field": "X.gemm_plugin",
+        "match": {"fields": {"t.gemm_plugin": {"not_in": ["auto", "fp16"]}}},
+    }
+    pos, neg = validate_invariants.synthesize_probe_kwargs(inv)
+    assert neg == {"gemm_plugin": "auto"}
+    assert pos["gemm_plugin"] not in ("auto", "fp16")
+
+
+@pytest.mark.parametrize(
+    "inv",
+    [
+        {"native_field": "X.f", "match": {"fields": {"t.f": {"present": True}}}},  # presence
+        {"native_field": "X.model", "predicate_kind": "type_is", "predicate_value": "str"},  # type
+        {"match": {"fields": {"a.x": {"<": 0}, "a.y": {">": 1}}}},  # multi-field
+        {"predicate_kind": "literal_in", "predicate_value": []},  # empty set
+        {"native_field": "X.f"},  # no predicate at all
+    ],
+)
+def test_synth_unsynthesizable_returns_none(inv):
+    assert validate_invariants.synthesize_probe_kwargs(inv) is None
