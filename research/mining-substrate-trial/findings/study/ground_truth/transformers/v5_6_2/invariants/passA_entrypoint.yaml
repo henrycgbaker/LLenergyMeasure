@@ -1,0 +1,1155 @@
+schema_version: ground_truth/1.0.0
+engine: transformers
+engine_version: 5.6.2
+venv_src_root: /tmp/tfvenv-5.6.2/lib/python3.12/site-packages/transformers
+pass: A
+strategy: entry-point / call-graph walk
+established_at: '2026-06-06'
+established_by: opus-passA-transformers-5.6.2
+methodology_ref: research/mining-substrate-trial/findings/study/ground_truth/transformers/v5_6_2/invariants/passA_methodology.md
+folds_from_ref: research/mining-substrate-trial/findings/ground_truth/transformers/v5_6_2/invariants_ground_truth.yaml
+
+scope_notes: |
+  Strategy A starts from the public surface a benchmark harness constructs:
+  transformers.GenerationConfig(...) (its __init__ calls self.validate() at
+  line 469, so every range/allowlist/mutual-exclusion in validate() fires at
+  construction), the transformers.*Config quantization classes (each runs
+  __init__/post_init validation at construction), and the
+  PreTrainedModel.from_pretrained / device_map / tensor-parallel pre-flight
+  gates reached on the model-loading path.
+
+  transformers validates LATER and SOFTER than tensorrt/vllm. Many
+  GenerationConfig.validate() checks accumulate into a minor_issues dict and
+  emit a single logger.warning_once at construction (outcome=warn), only being
+  promoted to a raised ValueError when validate(strict=True) runs (which
+  save_pretrained forces). The hard raises (early_stopping allowlist,
+  max_new_tokens>0, cache_implementation allowlist, compile_config type,
+  num_return_sequences cross-checks, generate-only-kwarg rejection) fire
+  unconditionally. Outcome is recorded per actual source behaviour.
+
+  Replayability for the CPU-only, no-torch gate (verified by constructing each
+  native_type in the 5.6.2 venv WITHOUT torch installed):
+    - GenerationConfig: fully replayable. Raises raise; warn-path constructs and
+      emits warning_once.
+    - Most *Config quant classes: replayable (pure ValueError/TypeError in
+      post_init, no torch import at construction).
+    - DORMANT (cannot construct CPU-no-torch): BitsAndBytesConfig (its __init__
+      sets bnb_4bit_compute_dtype = torch.float32 unconditionally when the kwarg
+      is None -> NameError before any type check), HqqConfig (requires the hqq
+      package), TorchAoConfig type-check arm (requires torchao; the bare
+      "torchao not installed" guard DOES fire and is replayable).
+    - DORMANT: WatermarkingConfig / SynthIDTextWatermarkingConfig .validate()
+      (the gate special-cases only GenerationConfig + BitsAndBytesConfig and
+      otherwise bare-constructs; it does not auto-call .validate() on a
+      watermarking instance, and the GenerationConfig path needs a real
+      BaseWatermarkingConfig object, not plain kwargs).
+    - DORMANT: every from_pretrained / device_map / tensor_parallel gate (needs
+      torch, accelerate, a model dir, or a live distributed/device context).
+    - DORMANT: GenerationConfig do_sample/num_beams greedy/beam-strip,
+      no-cache, and output-flag-without-return-dict checks are warn-at-
+      construction and constructible, but their "fire" is a logger.warning_once
+      the gate may not capture; recorded outcome=warn, flagged replay-soft.
+
+  provenance: fold = present in the PoC ground truth
+  (findings/ground_truth/transformers/v5_6_2), citation re-resolved against this
+  venv source; net_new = surfaced by this entry-point walk and absent from the
+  PoC GT.
+
+  predicate_kind taxonomy (inherited from the PoC GT, transformers idiom):
+  enum, numeric_range, type_check, cross_field, mutual_exclusion, required,
+  identity, normalisation.
+
+invariants:
+
+# ============================================================================
+# NET-NEW from the entry-point walk (absent from / restated by PoC GT)
+# ============================================================================
+
+- id: transformers_generationconfig_init_calls_validate
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.__init__
+  predicate_kind: cross_field
+  predicate_value: {effect: "__init__ calls self.validate() at construction"}
+  severity: warning
+  outcome: warn
+  message_template: "(meta) GenerationConfig.__init__ runs validate(strict=False) so every validate() rule below fires at construction time."
+  citation: {file: transformers/generation/configuration_utils.py, line: 469, qualname: GenerationConfig.__init__}
+  notes: |
+    This is the load-bearing entry-point fact for the whole GenerationConfig
+    block: construction == validation. Not an explicit predicate in the PoC GT.
+
+- id: transformers_bitsandbytesconfig_init_requires_torch
+  provenance: net_new
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.bnb_4bit_compute_dtype
+  predicate_kind: cross_field
+  predicate_value: {requires_package: torch}
+  severity: error
+  outcome: invalid
+  message_template: "(NameError) BitsAndBytesConfig.__init__ sets bnb_4bit_compute_dtype = torch.float32 unconditionally when the kwarg is None."
+  citation: {file: transformers/utils/quantization_config.py, line: 468, qualname: BitsAndBytesConfig.__init__}
+  notes: |
+    Discovered while testing replayability: ANY BitsAndBytesConfig(...) raises
+    NameError in a no-torch env because the default-fill at line 468 references
+    torch.float32 before any field validation. This makes every BitsAndBytesConfig
+    invariant DORMANT for the CPU-no-torch gate. The PoC GT listed the BnB type
+    checks as replayable; at 5.6.2 in a no-torch env they are not reachable.
+  dormant_reason: BitsAndBytesConfig cannot construct without torch installed
+
+- id: transformers_bitsandbytesconfig_mutual_exclusion_moved_to_setter
+  provenance: net_new
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.load_in_8bit
+  predicate_kind: mutual_exclusion
+  predicate_value: {forbidden_together: [load_in_4bit, load_in_8bit]}
+  severity: error
+  outcome: invalid
+  message_template: "load_in_4bit and load_in_8bit are both True, but only one can be used at the same time"
+  citation: {file: transformers/utils/quantization_config.py, line: 517, qualname: BitsAndBytesConfig.load_in_8bit}
+  notes: |
+    v5.6.2 reworks load_in_4bit/load_in_8bit into @property setters; the
+    mutual-exclusion now fires from the load_in_8bit setter (line 517) and also
+    appears at __init__ line 456. The PoC GT cited only the old __init__ site.
+    Dormant for the same torch reason as the parent class.
+  dormant_reason: BitsAndBytesConfig cannot construct without torch installed
+
+# ============================================================================
+# FOLDED from PoC GT - GenerationConfig.validate() hard raises (outcome=invalid)
+# (CPU-no-torch replayable; verified raises in the 5.6.2 venv)
+# ============================================================================
+
+- id: transformers_generationconfig_early_stopping_allowlist
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.early_stopping
+  predicate_kind: enum
+  predicate_value: {in: [null, true, false, 'never']}
+  severity: error
+  outcome: invalid
+  message_template: "`early_stopping` must be a boolean or 'never', but is {early_stopping}."
+  citation: {file: transformers/generation/configuration_utils.py, line: 606, qualname: GenerationConfig.validate}
+  kwargs_positive: {early_stopping: 1.5}
+  kwargs_negative: {early_stopping: false}
+
+- id: transformers_generationconfig_max_new_tokens_positive
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.max_new_tokens
+  predicate_kind: numeric_range
+  predicate_value: {exclusiveMinimum: 0, null_allowed: true}
+  severity: error
+  outcome: invalid
+  message_template: "`max_new_tokens` must be greater than 0, but is {max_new_tokens}."
+  citation: {file: transformers/generation/configuration_utils.py, line: 608, qualname: GenerationConfig.validate}
+  kwargs_positive: {max_new_tokens: -1}
+  kwargs_negative: {max_new_tokens: 16}
+
+- id: transformers_generationconfig_cache_implementation_allowlist
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: enum
+  predicate_value: {note: "ALL_CACHE_IMPLEMENTATIONS + ('paged',); null allowed", null_allowed: true}
+  severity: error
+  outcome: invalid
+  message_template: "Invalid `cache_implementation` ({value}). Choose one of: {valid_cache_implementations}"
+  citation: {file: transformers/generation/configuration_utils.py, line: 620, qualname: GenerationConfig.validate}
+  notes: "v5 adds 'paged' to the validate-time allowlist; 'paged' re-routes to continuous batching."
+  kwargs_positive: {cache_implementation: nonsense}
+  kwargs_negative: {cache_implementation: paged}
+
+- id: transformers_generationconfig_compile_config_type
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.compile_config
+  predicate_kind: type_check
+  predicate_value: {isinstance: CompileConfig, null_allowed: true}
+  severity: error
+  outcome: invalid
+  message_template: "You provided `compile_config` as an instance of {type}, but it must be an instance of `CompileConfig`."
+  citation: {file: transformers/generation/configuration_utils.py, line: 625, qualname: GenerationConfig.validate}
+  kwargs_positive: {compile_config: 42}
+  kwargs_negative: {compile_config: null}
+
+- id: transformers_generationconfig_greedy_num_return_sequences_gt_one
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: cross_field
+  predicate_value: {when: {do_sample: false, num_beams: 1}, requires: "num_return_sequences == 1"}
+  severity: error
+  outcome: invalid
+  message_template: "Greedy methods (do_sample != True) without beam search do not support `num_return_sequences` different than 1 (got {num_return_sequences})."
+  citation: {file: transformers/generation/configuration_utils.py, line: 688, qualname: GenerationConfig.validate}
+  kwargs_positive: {do_sample: false, num_beams: 1, num_return_sequences: 2}
+  kwargs_negative: {do_sample: false, num_beams: 1, num_return_sequences: 1}
+
+- id: transformers_generationconfig_num_return_sequences_le_num_beams
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: cross_field
+  predicate_value: {when: {num_beams: ">1"}, requires: "num_return_sequences <= num_beams"}
+  severity: error
+  outcome: invalid
+  message_template: "`num_return_sequences` ({num_return_sequences}) has to be smaller or equal to `num_beams` ({num_beams})."
+  citation: {file: transformers/generation/configuration_utils.py, line: 697, qualname: GenerationConfig.validate}
+  kwargs_positive: {num_beams: 2, num_return_sequences: 5}
+  kwargs_negative: {num_beams: 4, num_return_sequences: 2}
+
+- id: transformers_generationconfig_rejects_logits_processor
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.logits_processor
+  predicate_kind: required
+  predicate_value: {forbidden_attr: logits_processor}
+  severity: error
+  outcome: invalid
+  message_template: "Argument `logits_processor` is not a valid argument of `GenerationConfig`. It should be passed to `generate()` (or a pipeline) directly."
+  citation: {file: transformers/generation/configuration_utils.py, line: 739, qualname: GenerationConfig.validate}
+  notes: |
+    v5 reject tuple is 8 entries (logits_processor, stopping_criteria,
+    prefix_allowed_tokens_fn, synced_gpus, assistant_model, streamer,
+    negative_prompt_ids, negative_prompt_attention_mask). use_model_defaults
+    was removed from the tuple in v5. One representative entry replayed; the
+    other seven share the same line/qualname and message shape.
+  kwargs_positive: {logits_processor: []}
+  kwargs_negative: {}
+
+- id: transformers_generationconfig_rejects_stopping_criteria
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.stopping_criteria
+  predicate_kind: required
+  predicate_value: {forbidden_attr: stopping_criteria}
+  severity: error
+  outcome: invalid
+  message_template: "Argument `stopping_criteria` is not a valid argument of `GenerationConfig`. It should be passed to `generate()` (or a pipeline) directly."
+  citation: {file: transformers/generation/configuration_utils.py, line: 739, qualname: GenerationConfig.validate}
+  kwargs_positive: {stopping_criteria: []}
+  kwargs_negative: {}
+
+- id: transformers_generationconfig_rejects_assistant_model
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.assistant_model
+  predicate_kind: required
+  predicate_value: {forbidden_attr: assistant_model}
+  severity: error
+  outcome: invalid
+  message_template: "Argument `assistant_model` is not a valid argument of `GenerationConfig`. It should be passed to `generate()` (or a pipeline) directly."
+  citation: {file: transformers/generation/configuration_utils.py, line: 739, qualname: GenerationConfig.validate}
+  kwargs_positive: {assistant_model: x}
+  kwargs_negative: {}
+
+# ============================================================================
+# FOLDED - GenerationConfig.validate() soft checks (outcome=warn at construction)
+# accumulate into minor_issues -> logger.warning_once; promoted to raise only
+# under validate(strict=True). replay-soft (the fire is a warning).
+# ============================================================================
+
+- id: transformers_generationconfig_pad_token_id_non_negative
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.pad_token_id
+  predicate_kind: numeric_range
+  predicate_value: {minimum: 0, null_allowed: true}
+  severity: warning
+  outcome: warn
+  message_template: "`pad_token_id` should be positive but got {pad_token_id}. This will cause errors when batch generating, if there is padding."
+  citation: {file: transformers/generation/configuration_utils.py, line: 609, qualname: GenerationConfig.validate}
+  notes: minor_issue -> warning_once at construction; raises only under strict.
+  kwargs_positive: {pad_token_id: -1}
+  kwargs_negative: {pad_token_id: 0}
+
+- id: transformers_generationconfig_temperature_set_when_greedy
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.temperature
+  predicate_kind: cross_field
+  predicate_value: {when: {do_sample: false}, requires: "temperature == 1.0 or None"}
+  severity: warning
+  outcome: warn
+  message_template: "`do_sample` is set not to set `True`. However, `temperature` is set to `{value}` -- this flag is only used in sample-based generation modes."
+  citation: {file: transformers/generation/configuration_utils.py, line: 644, qualname: GenerationConfig.validate}
+  notes: representative of the do_sample!=True greedy-strip family (temperature, top_p, min_p, top_h, typical_p, top_k, epsilon_cutoff, eta_cutoff).
+  kwargs_positive: {do_sample: false, temperature: 0.5}
+  kwargs_negative: {do_sample: true, temperature: 0.5}
+
+- id: transformers_generationconfig_top_p_set_when_greedy
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.top_p
+  predicate_kind: cross_field
+  predicate_value: {when: {do_sample: false}, requires: "top_p == 1.0 or None"}
+  severity: warning
+  outcome: warn
+  message_template: "`do_sample` is set not to set `True`. However, `top_p` is set to `{value}` -- this flag is only used in sample-based generation modes."
+  citation: {file: transformers/generation/configuration_utils.py, line: 648, qualname: GenerationConfig.validate}
+  kwargs_positive: {do_sample: false, top_p: 0.5}
+  kwargs_negative: {do_sample: true, top_p: 0.5}
+
+- id: transformers_generationconfig_top_h_set_when_greedy
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.top_h
+  predicate_kind: cross_field
+  predicate_value: {when: {do_sample: false}, requires: "top_h is None"}
+  severity: warning
+  outcome: warn
+  message_template: "`do_sample` is set not to set `True`. However, `top_h` is set to `{value}` -- this flag is only used in sample-based generation modes."
+  citation: {file: transformers/generation/configuration_utils.py, line: 652, qualname: GenerationConfig.validate}
+  notes: top_h is a NEW v5 greedy-strip field.
+  kwargs_positive: {do_sample: false, top_h: 0.5}
+  kwargs_negative: {do_sample: true, top_h: 0.5}
+
+- id: transformers_generationconfig_top_k_set_when_greedy
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.top_k
+  predicate_kind: cross_field
+  predicate_value: {when: {do_sample: false}, requires: "top_k == 50 or None"}
+  severity: warning
+  outcome: warn
+  message_template: "`do_sample` is set not to set `True`. However, `top_k` is set to `{value}` -- this flag is only used in sample-based generation modes."
+  citation: {file: transformers/generation/configuration_utils.py, line: 658, qualname: GenerationConfig.validate}
+  kwargs_positive: {do_sample: false, top_k: 5}
+  kwargs_negative: {do_sample: true, top_k: 5}
+
+- id: transformers_generationconfig_early_stopping_set_when_single_beam
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.early_stopping
+  predicate_kind: cross_field
+  predicate_value: {when: {num_beams: 1}, requires: "early_stopping is False or None"}
+  severity: warning
+  outcome: warn
+  message_template: "`num_beams` is set to {num_beams}. However, `early_stopping` is set to `{value}` -- this flag is only used in beam-based generation modes."
+  citation: {file: transformers/generation/configuration_utils.py, line: 675, qualname: GenerationConfig.validate}
+  notes: representative of the num_beams<=1 beam-strip family (early_stopping, length_penalty).
+  kwargs_positive: {num_beams: 1, early_stopping: true}
+  kwargs_negative: {num_beams: 4, early_stopping: true}
+
+- id: transformers_generationconfig_length_penalty_set_when_single_beam
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.length_penalty
+  predicate_kind: cross_field
+  predicate_value: {when: {num_beams: 1}, requires: "length_penalty == 1.0 or None"}
+  severity: warning
+  outcome: warn
+  message_template: "`num_beams` is set to {num_beams}. However, `length_penalty` is set to `{value}` -- this flag is only used in beam-based generation modes."
+  citation: {file: transformers/generation/configuration_utils.py, line: 679, qualname: GenerationConfig.validate}
+  kwargs_positive: {num_beams: 1, length_penalty: 2.0}
+  kwargs_negative: {num_beams: 4, length_penalty: 2.0}
+
+- id: transformers_generationconfig_cache_implementation_set_when_use_cache_false
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: cross_field
+  predicate_value: {when: {use_cache: false}, requires: "cache_implementation is None"}
+  severity: warning
+  outcome: warn
+  message_template: "You have not set `use_cache` to `True`, but {cache_arg} is set to {cache_arg_value}.{cache_arg} will have no effect."
+  citation: {file: transformers/generation/configuration_utils.py, line: 711, qualname: GenerationConfig.validate}
+  notes: |
+    v5 loop iterates only ("cache_implementation", "cache_config");
+    return_legacy_cache was removed. Representative of both arms.
+  kwargs_positive: {use_cache: false, cache_implementation: static}
+  kwargs_negative: {use_cache: true, cache_implementation: static}
+
+- id: transformers_generationconfig_output_flag_without_return_dict
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.output_scores
+  predicate_kind: cross_field
+  predicate_value: {when: {return_dict_in_generate: false}, requires: "output flag is not True"}
+  severity: warning
+  outcome: warn
+  message_template: "`return_dict_in_generate` is NOT set to `True`, but `{flag}` is. When `return_dict_in_generate` is not `True`, `{flag}` is ignored."
+  citation: {file: transformers/generation/configuration_utils.py, line: 721, qualname: GenerationConfig.validate}
+  notes: extra_output_flags = (output_attentions, output_hidden_states, output_scores, output_logits); representative entry.
+  kwargs_positive: {return_dict_in_generate: false, output_scores: true}
+  kwargs_negative: {return_dict_in_generate: true, output_scores: true}
+
+# ============================================================================
+# FOLDED - GenerationConfig save_pretrained / from_model_config
+# ============================================================================
+
+- id: transformers_generationconfig_save_pretrained_runs_strict_validate
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.save_pretrained
+  predicate_kind: cross_field
+  predicate_value: {effect: "save_pretrained calls validate(strict=True); any minor_issue becomes a refusal-to-save ValueError"}
+  severity: error
+  outcome: invalid
+  message_template: "{validate_error}\n\nFix these issues to save the configuration."
+  citation: {file: transformers/generation/configuration_utils.py, line: 796, qualname: GenerationConfig.save_pretrained}
+  notes: needs a save_directory; not a bare-kwargs replay.
+  dormant_reason: requires a save_directory (filesystem side effect)
+
+- id: transformers_generationconfig_save_directory_not_file
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.save_pretrained
+  predicate_kind: type_check
+  predicate_value: {save_directory: "must not be an existing file"}
+  severity: error
+  outcome: invalid
+  message_template: "Provided path ({save_directory}) should be a directory, not a file"
+  citation: {file: transformers/generation/configuration_utils.py, line: 803, qualname: GenerationConfig.save_pretrained}
+  notes: raises AssertionError; needs save_pretrained call with a file path.
+  dormant_reason: requires a save_pretrained call against an existing file path
+
+- id: transformers_generationconfig_from_model_config_sets_return_dict
+  provenance: fold
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.return_dict_in_generate
+  predicate_kind: normalisation
+  predicate_value: {effect: "if any extra_output_flag is True and return_dict_in_generate is falsey, it is silently set to True"}
+  severity: normalisation
+  outcome: normalise
+  message_template: "(silent: generation_config.return_dict_in_generate = True)"
+  citation: {file: transformers/generation/configuration_utils.py, line: 1198, qualname: GenerationConfig.from_model_config}
+  notes: replays via the from_model_config classmethod, not bare construction.
+  dormant_reason: requires GenerationConfig.from_model_config(model_config), not plain kwargs
+
+# ============================================================================
+# FOLDED - Watermarking validate() (dormant: gate does not auto-call .validate())
+# ============================================================================
+
+- id: transformers_watermarking_seeding_scheme_allowlist
+  provenance: fold
+  native_type: transformers.WatermarkingConfig
+  native_field: WatermarkingConfig.seeding_scheme
+  predicate_kind: enum
+  predicate_value: {in: [selfhash, lefthash]}
+  severity: error
+  outcome: invalid
+  message_template: "Some of the keys in `watermarking_config` are defined incorrectly. `seeding_scheme` should be [`selfhash`, `lefthash`]` but found {found_value}"
+  citation: {file: transformers/generation/configuration_utils.py, line: 1366, qualname: WatermarkingConfig.validate}
+  dormant_reason: validate() is not auto-called on a WatermarkingConfig by the gate
+
+- id: transformers_watermarking_greenlist_ratio_in_unit_interval
+  provenance: fold
+  native_type: transformers.WatermarkingConfig
+  native_field: WatermarkingConfig.greenlist_ratio
+  predicate_kind: numeric_range
+  predicate_value: {minimum: 0.0, maximum: 1.0}
+  severity: error
+  outcome: invalid
+  message_template: "Some of the keys in `watermarking_config` are defined incorrectly. `greenlist_ratio` should be in range between 0.0 and 1.0` but found {found_value}"
+  citation: {file: transformers/generation/configuration_utils.py, line: 1374, qualname: WatermarkingConfig.validate}
+  dormant_reason: validate() is not auto-called on a WatermarkingConfig by the gate
+
+- id: transformers_watermarking_context_width_positive
+  provenance: fold
+  native_type: transformers.WatermarkingConfig
+  native_field: WatermarkingConfig.context_width
+  predicate_kind: numeric_range
+  predicate_value: {minimum: 1}
+  severity: error
+  outcome: invalid
+  message_template: "Some of the keys in `watermarking_config` are defined incorrectly. `context_width` should be a positive integer` but found {found_value}"
+  citation: {file: transformers/generation/configuration_utils.py, line: 1382, qualname: WatermarkingConfig.validate}
+  dormant_reason: validate() is not auto-called on a WatermarkingConfig by the gate
+
+- id: transformers_synthid_sampling_table_size_max
+  provenance: fold
+  native_type: transformers.SynthIDTextWatermarkingConfig
+  native_field: SynthIDTextWatermarkingConfig.sampling_table_size
+  predicate_kind: numeric_range
+  predicate_value: {maximum: 16777216}
+  severity: error
+  outcome: invalid
+  message_template: "Some of the keys in `watermarking_config` are defined incorrectly. `sampling_table_size` should be < 2**24` but found {found_value}"
+  citation: {file: transformers/generation/configuration_utils.py, line: 1471, qualname: SynthIDTextWatermarkingConfig.validate}
+  dormant_reason: validate() is not auto-called on a SynthIDTextWatermarkingConfig by the gate
+
+# ============================================================================
+# FOLDED - Quantization configs (CPU-no-torch replayable unless noted dormant)
+# ============================================================================
+
+# --- BitsAndBytesConfig (dormant: torch.float32 default in __init__) ---
+
+- id: transformers_bnb_load_in_4bit_8bit_mutual_exclusion
+  provenance: fold
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.load_in_4bit
+  predicate_kind: mutual_exclusion
+  predicate_value: {forbidden_together: [load_in_4bit, load_in_8bit]}
+  severity: error
+  outcome: invalid
+  message_template: "load_in_4bit and load_in_8bit are both True, but only one can be used at the same time"
+  citation: {file: transformers/utils/quantization_config.py, line: 456, qualname: BitsAndBytesConfig.__init__}
+  notes: see transformers_bitsandbytesconfig_mutual_exclusion_moved_to_setter for the new setter site.
+  dormant_reason: BitsAndBytesConfig cannot construct without torch installed
+
+- id: transformers_bnb_load_in_4bit_type
+  provenance: fold
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.load_in_4bit
+  predicate_kind: type_check
+  predicate_value: {isinstance: bool}
+  severity: error
+  outcome: invalid
+  message_template: "load_in_4bit must be a boolean"
+  citation: {file: transformers/utils/quantization_config.py, line: 524, qualname: BitsAndBytesConfig.post_init}
+  notes: also enforced in the load_in_4bit setter (line ~499) in v5.
+  dormant_reason: BitsAndBytesConfig cannot construct without torch installed
+
+- id: transformers_bnb_4bit_compute_dtype_type
+  provenance: fold
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.bnb_4bit_compute_dtype
+  predicate_kind: type_check
+  predicate_value: {isinstance: torch.dtype, null_allowed: true}
+  severity: error
+  outcome: invalid
+  message_template: "bnb_4bit_compute_dtype must be torch.dtype"
+  citation: {file: transformers/utils/quantization_config.py, line: 541, qualname: BitsAndBytesConfig.post_init}
+  dormant_reason: BitsAndBytesConfig cannot construct without torch installed
+
+# --- GPTQConfig ---
+
+- id: transformers_gptq_bits_allowlist
+  provenance: fold
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.bits
+  predicate_kind: enum
+  predicate_value: {in: [2, 3, 4, 8]}
+  severity: error
+  outcome: invalid
+  message_template: "Only support quantization to [2,3,4,8] bits but found {bits}"
+  citation: {file: transformers/utils/quantization_config.py, line: 741, qualname: GPTQConfig.post_init}
+  kwargs_positive: {bits: 5}
+  kwargs_negative: {bits: 4}
+
+- id: transformers_gptq_group_size_range
+  provenance: fold
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.group_size
+  predicate_kind: numeric_range
+  predicate_value: {gt: 0, or_equals: -1}
+  severity: error
+  outcome: invalid
+  message_template: "group_size must be greater than 0 or equal to -1"
+  citation: {file: transformers/utils/quantization_config.py, line: 743, qualname: GPTQConfig.post_init}
+  kwargs_positive: {bits: 4, group_size: 0}
+  kwargs_negative: {bits: 4, group_size: 128}
+
+- id: transformers_gptq_damp_percent_open_unit_interval
+  provenance: fold
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.damp_percent
+  predicate_kind: numeric_range
+  predicate_value: {exclusiveMinimum: 0, exclusiveMaximum: 1}
+  severity: error
+  outcome: invalid
+  message_template: "damp_percent must between 0 and 1."
+  citation: {file: transformers/utils/quantization_config.py, line: 745, qualname: GPTQConfig.post_init}
+  kwargs_positive: {bits: 4, damp_percent: 1.0}
+  kwargs_negative: {bits: 4, damp_percent: 0.1}
+
+- id: transformers_gptq_dataset_string_allowlist
+  provenance: fold
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.dataset
+  predicate_kind: enum
+  predicate_value: {in: [wikitext2, c4, c4-new], null_allowed: true, also_allows: list}
+  severity: error
+  outcome: invalid
+  message_template: "You have entered a string value for dataset. You can only choose between ['wikitext2','c4','c4-new'], but we found {dataset}"
+  citation: {file: transformers/utils/quantization_config.py, line: 749, qualname: GPTQConfig.post_init}
+  kwargs_positive: {bits: 4, dataset: ptb}
+  kwargs_negative: {bits: 4, dataset: c4}
+
+- id: transformers_gptq_act_group_aware_auto_disabled_when_desc_act
+  provenance: fold
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.act_group_aware
+  predicate_kind: normalisation
+  predicate_value: {when: {desc_act: true, act_group_aware: true}, effect: "act_group_aware silently forced to False"}
+  severity: normalisation
+  outcome: normalise
+  message_template: "`act_group_aware` has been auto-disabled as it is not compatible with `desc_act = True`."
+  citation: {file: transformers/utils/quantization_config.py, line: 762, qualname: GPTQConfig.post_init}
+  notes: act_group_aware is a NEW field in v5.
+  kwargs_positive: {bits: 4, desc_act: true, act_group_aware: true}
+  kwargs_negative: {bits: 4, desc_act: false, act_group_aware: true}
+
+# --- AwqConfig (GPTQConfig subclass in v5) ---
+
+- id: transformers_awq_format_allowlist
+  provenance: fold
+  native_type: transformers.AwqConfig
+  native_field: AwqConfig.format
+  predicate_kind: enum
+  predicate_value: {in: [gemm, gemv, gemv_fast, llm-awq]}
+  severity: error
+  outcome: invalid
+  message_template: "Invalid format '{format}'. Must be one of: {AwqFormat values}"
+  citation: {file: transformers/utils/quantization_config.py, line: 849, qualname: AwqConfig.post_init}
+  kwargs_positive: {version: nonsense}
+  kwargs_negative: {version: gemm}
+
+- id: transformers_awq_backend_allowlist
+  provenance: fold
+  native_type: transformers.AwqConfig
+  native_field: AwqConfig.backend
+  predicate_kind: enum
+  predicate_value: {note: "value must be in AwqBackend members"}
+  severity: error
+  outcome: invalid
+  message_template: "Invalid backend '{backend}'. Must be one of: {AwqBackend values}"
+  citation: {file: transformers/utils/quantization_config.py, line: 852, qualname: AwqConfig.post_init}
+  kwargs_positive: {backend: nonsense}
+  kwargs_negative: {backend: auto}
+
+- id: transformers_awq_llm_awq_backend_normalisation
+  provenance: fold
+  native_type: transformers.AwqConfig
+  native_field: AwqConfig.backend
+  predicate_kind: normalisation
+  predicate_value: {when: {backend: llm-awq}, effect: "format coerced to AwqFormat.LLM_AWQ, backend coerced to AwqBackend.AUTO"}
+  severity: normalisation
+  outcome: normalise
+  message_template: "(silent: format=llm-awq, backend=auto)"
+  citation: {file: transformers/utils/quantization_config.py, line: 845, qualname: AwqConfig.post_init}
+  kwargs_positive: {backend: llm-awq}
+  kwargs_negative: {backend: auto}
+
+# --- AqlmConfig ---
+
+- id: transformers_aqlm_size_fields_int_type
+  provenance: fold
+  native_type: transformers.AqlmConfig
+  native_field: AqlmConfig.in_group_size
+  predicate_kind: type_check
+  predicate_value: {isinstance: int, fields: [in_group_size, out_group_size, num_codebooks, nbits_per_codebook]}
+  severity: error
+  outcome: invalid
+  message_template: "in_group_size must be a float"
+  citation: {file: transformers/utils/quantization_config.py, line: 906, qualname: AqlmConfig.post_init}
+  notes: source message literally says "must be a float" though the check is isinstance(int).
+  kwargs_positive: {in_group_size: "8"}
+  kwargs_negative: {in_group_size: 8}
+
+- id: transformers_aqlm_linear_weights_not_to_quantize_type
+  provenance: fold
+  native_type: transformers.AqlmConfig
+  native_field: AqlmConfig.linear_weights_not_to_quantize
+  predicate_kind: type_check
+  predicate_value: {isinstance: list, null_allowed: true}
+  severity: error
+  outcome: invalid
+  message_template: "linear_weights_not_to_quantize must be a list of strings"
+  citation: {file: transformers/utils/quantization_config.py, line: 917, qualname: AqlmConfig.post_init}
+  kwargs_positive: {linear_weights_not_to_quantize: "x"}
+  kwargs_negative: {linear_weights_not_to_quantize: ["x"]}
+
+# --- VptqConfig ---
+
+- id: transformers_vptq_enable_proxy_error_must_be_false
+  provenance: fold
+  native_type: transformers.VptqConfig
+  native_field: VptqConfig.enable_proxy_error
+  predicate_kind: identity
+  predicate_value: {equals: false}
+  severity: error
+  outcome: invalid
+  message_template: "enable_proxy_error should always be False until we support training"
+  citation: {file: transformers/utils/quantization_config.py, line: 1016, qualname: VptqConfig.post_init}
+  kwargs_positive: {enable_proxy_error: true}
+  kwargs_negative: {enable_proxy_error: false}
+
+# --- QuantoConfig ---
+
+- id: transformers_quanto_weights_allowlist
+  provenance: fold
+  native_type: transformers.QuantoConfig
+  native_field: QuantoConfig.weights
+  predicate_kind: enum
+  predicate_value: {in: [float8, int8, int4, int2]}
+  severity: error
+  outcome: invalid
+  message_template: "Only support weights in {accepted_weights} but found {weights}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1048, qualname: QuantoConfig.post_init}
+  kwargs_positive: {weights: int3}
+  kwargs_negative: {weights: int8}
+
+- id: transformers_quanto_activations_allowlist
+  provenance: fold
+  native_type: transformers.QuantoConfig
+  native_field: QuantoConfig.activations
+  predicate_kind: enum
+  predicate_value: {in: [null, int8, float8]}
+  severity: error
+  outcome: invalid
+  message_template: "Only support weights in {accepted_activations} but found {activations}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1048, qualname: QuantoConfig.post_init}
+  kwargs_positive: {activations: int4}
+  kwargs_negative: {activations: int8}
+
+# --- EetqConfig ---
+
+- id: transformers_eetq_weights_must_be_int8
+  provenance: fold
+  native_type: transformers.EetqConfig
+  native_field: EetqConfig.weights
+  predicate_kind: enum
+  predicate_value: {in: [int8]}
+  severity: error
+  outcome: invalid
+  message_template: "Only support weights in {accepted_weights} but found {weights}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1085, qualname: EetqConfig.post_init}
+  kwargs_positive: {weights: int4}
+  kwargs_negative: {weights: int8}
+
+# --- HqqConfig (dormant: requires hqq package) ---
+
+- id: transformers_hqq_axis_allowlist
+  provenance: fold
+  native_type: transformers.HqqConfig
+  native_field: HqqConfig.axis
+  predicate_kind: enum
+  predicate_value: {in: [0, 1], null_allowed: true}
+  severity: error
+  outcome: invalid
+  message_template: "Invalid axis value. Only 0 and 1 are allowed."
+  citation: {file: transformers/utils/quantization_config.py, line: 319, qualname: HqqConfig.__init__}
+  dormant_reason: HqqConfig.__init__ requires a valid hqq package (>=0.2.1) installed
+
+- id: transformers_hqq_axis_none_normalisation
+  provenance: fold
+  native_type: transformers.HqqConfig
+  native_field: HqqConfig.axis
+  predicate_kind: normalisation
+  predicate_value: {when: {axis: null}, effect: "axis set to 1 with info log"}
+  severity: normalisation
+  outcome: normalise
+  message_template: "Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it."
+  citation: {file: transformers/utils/quantization_config.py, line: 315, qualname: HqqConfig.__init__}
+  dormant_reason: HqqConfig.__init__ requires a valid hqq package (>=0.2.1) installed
+
+# --- AutoRoundConfig ---
+
+- id: transformers_autoround_bits_allowlist
+  provenance: fold
+  native_type: transformers.AutoRoundConfig
+  native_field: AutoRoundConfig.bits
+  predicate_kind: enum
+  predicate_value: {in: [2, 3, 4, 8]}
+  severity: error
+  outcome: invalid
+  message_template: "Only support quantization to [2,3,4,8] bits but found {bits}"
+  citation: {file: transformers/utils/quantization_config.py, line: 240, qualname: AutoRoundConfig.post_init}
+  kwargs_positive: {bits: 5}
+  kwargs_negative: {bits: 4}
+
+- id: transformers_autoround_group_size_range
+  provenance: fold
+  native_type: transformers.AutoRoundConfig
+  native_field: AutoRoundConfig.group_size
+  predicate_kind: numeric_range
+  predicate_value: {gt: 0, or_equals: -1}
+  severity: error
+  outcome: invalid
+  message_template: "group_size must be greater than 0 or equal to -1"
+  citation: {file: transformers/utils/quantization_config.py, line: 242, qualname: AutoRoundConfig.post_init}
+  kwargs_positive: {group_size: 0}
+  kwargs_negative: {group_size: 128}
+
+# --- HiggsConfig ---
+
+- id: transformers_higgs_bits_allowlist
+  provenance: fold
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.bits
+  predicate_kind: enum
+  predicate_value: {in: [2, 3, 4]}
+  severity: error
+  outcome: invalid
+  message_template: "bits must be 2, 3, or 4"
+  citation: {file: transformers/utils/quantization_config.py, line: 1352, qualname: HiggsConfig.post_init}
+  kwargs_positive: {bits: 8}
+  kwargs_negative: {bits: 4}
+
+- id: transformers_higgs_p_allowlist
+  provenance: fold
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.p
+  predicate_kind: enum
+  predicate_value: {in: [1, 2]}
+  severity: error
+  outcome: invalid
+  message_template: "p must be 1 or 2. 2 is always better in practice"
+  citation: {file: transformers/utils/quantization_config.py, line: 1354, qualname: HiggsConfig.post_init}
+  kwargs_positive: {p: 3}
+  kwargs_negative: {p: 2}
+
+- id: transformers_higgs_group_size_allowlist
+  provenance: fold
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.group_size
+  predicate_kind: enum
+  predicate_value: {in: [64, 128, 256]}
+  severity: error
+  outcome: invalid
+  message_template: "group_size must be 64, 128, or 256"
+  citation: {file: transformers/utils/quantization_config.py, line: 1356, qualname: HiggsConfig.post_init}
+  kwargs_positive: {group_size: 32}
+  kwargs_negative: {group_size: 256}
+
+- id: transformers_higgs_hadamard_divisible_by_group_size
+  provenance: fold
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.hadamard_size
+  predicate_kind: cross_field
+  predicate_value: {requires: "hadamard_size % group_size == 0"}
+  severity: error
+  outcome: invalid
+  message_template: "hadamard_size must be divisible by group_size"
+  citation: {file: transformers/utils/quantization_config.py, line: 1358, qualname: HiggsConfig.post_init}
+  kwargs_positive: {hadamard_size: 100, group_size: 64}
+  kwargs_negative: {hadamard_size: 512, group_size: 256}
+
+# --- FPQuantConfig ---
+
+- id: transformers_fpquant_forward_dtype_allowlist
+  provenance: fold
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.forward_dtype
+  predicate_kind: enum
+  predicate_value: {in: [mxfp4, nvfp4]}
+  severity: error
+  outcome: invalid
+  message_template: "Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now."
+  citation: {file: transformers/utils/quantization_config.py, line: 1556, qualname: FPQuantConfig.post_init}
+  kwargs_positive: {forward_dtype: fp8}
+  kwargs_negative: {forward_dtype: nvfp4}
+
+- id: transformers_fpquant_backward_dtype_allowlist
+  provenance: fold
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.backward_dtype
+  predicate_kind: enum
+  predicate_value: {in: [bf16, mxfp8, mxfp4], note: "v5 widened from bf16-only"}
+  severity: error
+  outcome: invalid
+  message_template: "Only 'bf16', 'mxfp8' and 'mxfp4' are supported for backward_dtype for now."
+  citation: {file: transformers/utils/quantization_config.py, line: 1558, qualname: FPQuantConfig.post_init}
+  kwargs_positive: {backward_dtype: fp16}
+  kwargs_negative: {backward_dtype: bf16}
+
+- id: transformers_fpquant_transform_init_allowlist
+  provenance: fold
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.transform_init
+  predicate_kind: enum
+  predicate_value: {in: [hadamard, identity, gsr]}
+  severity: error
+  outcome: invalid
+  message_template: "Only 'hadamard', 'identity' and 'gsr' are supported for transform_init."
+  citation: {file: transformers/utils/quantization_config.py, line: 1564, qualname: FPQuantConfig.post_init}
+  kwargs_positive: {transform_init: random}
+  kwargs_negative: {transform_init: hadamard}
+
+# --- TorchAoConfig ---
+
+- id: transformers_torchao_requires_torchao_installed
+  provenance: fold
+  native_type: transformers.TorchAoConfig
+  native_field: TorchAoConfig
+  predicate_kind: cross_field
+  predicate_value: {requires_package: torchao}
+  severity: error
+  outcome: invalid
+  message_template: "TorchAoConfig requires torchao to be installed. Install with `pip install torchao`"
+  citation: {file: transformers/utils/quantization_config.py, line: 1508, qualname: TorchAoConfig.post_init}
+  notes: the torchao-missing guard fires CPU-only (verified raises in the no-torchao venv).
+  kwargs_positive: {quant_type: int4_weight_only}
+  kwargs_negative: {}
+
+# --- BitNetQuantConfig ---
+
+- id: transformers_bitnet_linear_class_allowlist
+  provenance: fold
+  native_type: transformers.BitNetQuantConfig
+  native_field: BitNetQuantConfig.linear_class
+  predicate_kind: enum
+  predicate_value: {in: [bitlinear, autobitlinear]}
+  severity: error
+  outcome: invalid
+  message_template: "linear_class must be either 'bitlinear' or 'autobitlinear', but got {linear_class}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1568, qualname: BitNetQuantConfig.__init__}
+  kwargs_positive: {linear_class: nonsense}
+  kwargs_negative: {linear_class: bitlinear}
+
+- id: transformers_bitnet_quantization_mode_allowlist
+  provenance: fold
+  native_type: transformers.BitNetQuantConfig
+  native_field: BitNetQuantConfig.quantization_mode
+  predicate_kind: enum
+  predicate_value: {in: [online, offline]}
+  severity: error
+  outcome: invalid
+  message_template: "quantization_mode must be either 'online' or 'offline', but got {quantization_mode}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1570, qualname: BitNetQuantConfig.__init__}
+  kwargs_positive: {quantization_mode: nonsense}
+  kwargs_negative: {quantization_mode: offline}
+
+# --- SpQRConfig ---
+
+- id: transformers_spqr_bits_must_be_three
+  provenance: fold
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.bits
+  predicate_kind: identity
+  predicate_value: {equals: 3}
+  severity: error
+  outcome: invalid
+  message_template: "SpQR currently only supports bits = 3"
+  citation: {file: transformers/utils/quantization_config.py, line: 1655, qualname: SpQRConfig.post_init}
+  kwargs_positive: {bits: 4}
+  kwargs_negative: {bits: 3}
+
+- id: transformers_spqr_beta1_must_be_sixteen
+  provenance: fold
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.beta1
+  predicate_kind: identity
+  predicate_value: {equals: 16}
+  severity: error
+  outcome: invalid
+  message_template: "SpQR currently only supports beta1 = 16"
+  citation: {file: transformers/utils/quantization_config.py, line: 1657, qualname: SpQRConfig.post_init}
+  kwargs_positive: {beta1: 8}
+  kwargs_negative: {beta1: 16}
+
+- id: transformers_spqr_shapes_must_be_dict
+  provenance: fold
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.shapes
+  predicate_kind: type_check
+  predicate_value: {isinstance: dict}
+  severity: error
+  outcome: invalid
+  message_template: "shapes must be a dict"
+  citation: {file: transformers/utils/quantization_config.py, line: 1662, qualname: SpQRConfig.post_init}
+  kwargs_positive: {shapes: []}
+  kwargs_negative: {shapes: {}}
+
+# --- FineGrainedFP8Config ---
+
+- id: transformers_finegrainedfp8_activation_scheme_allowlist
+  provenance: fold
+  native_type: transformers.FineGrainedFP8Config
+  native_field: FineGrainedFP8Config.activation_scheme
+  predicate_kind: enum
+  predicate_value: {in: [dynamic, static], note: "v5: static now accepted"}
+  severity: error
+  outcome: invalid
+  message_template: "Activation scheme {activation_scheme} not supported"
+  citation: {file: transformers/utils/quantization_config.py, line: 1704, qualname: FineGrainedFP8Config.post_init}
+  kwargs_positive: {activation_scheme: nonsense}
+  kwargs_negative: {activation_scheme: static}
+
+- id: transformers_finegrainedfp8_weight_block_size_len_two
+  provenance: fold
+  native_type: transformers.FineGrainedFP8Config
+  native_field: FineGrainedFP8Config.weight_block_size
+  predicate_kind: cross_field
+  predicate_value: {requires: "len(weight_block_size) == 2"}
+  severity: error
+  outcome: invalid
+  message_template: "weight_block_size must be a tuple of two integers"
+  citation: {file: transformers/utils/quantization_config.py, line: 1714, qualname: FineGrainedFP8Config.post_init}
+  kwargs_positive: {weight_block_size: [128]}
+  kwargs_negative: {weight_block_size: [128, 128]}
+
+- id: transformers_finegrainedfp8_weight_block_size_positive
+  provenance: fold
+  native_type: transformers.FineGrainedFP8Config
+  native_field: FineGrainedFP8Config.weight_block_size
+  predicate_kind: numeric_range
+  predicate_value: {requires: "both entries > 0"}
+  severity: error
+  outcome: invalid
+  message_template: "weight_block_size must be a tuple of two positive integers"
+  citation: {file: transformers/utils/quantization_config.py, line: 1716, qualname: FineGrainedFP8Config.post_init}
+  kwargs_positive: {weight_block_size: [0, 128]}
+  kwargs_negative: {weight_block_size: [128, 128]}
+
+# --- MetalConfig (NEW in v5) ---
+
+- id: transformers_metal_bits_allowlist
+  provenance: fold
+  native_type: transformers.MetalConfig
+  native_field: MetalConfig.bits
+  predicate_kind: enum
+  predicate_value: {in: [2, 4, 8]}
+  severity: error
+  outcome: invalid
+  message_template: "Metal quantization only supports bits in {2, 4, 8}, got {bits}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1825, qualname: MetalConfig.post_init}
+  kwargs_positive: {bits: 3}
+  kwargs_negative: {bits: 4}
+
+- id: transformers_metal_group_size_positive
+  provenance: fold
+  native_type: transformers.MetalConfig
+  native_field: MetalConfig.group_size
+  predicate_kind: numeric_range
+  predicate_value: {exclusiveMinimum: 0}
+  severity: error
+  outcome: invalid
+  message_template: "group_size must be positive, got {group_size}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1827, qualname: MetalConfig.post_init}
+  kwargs_positive: {group_size: 0}
+  kwargs_negative: {group_size: 64}
+
+# --- SinqConfig (NEW in v5) ---
+
+- id: transformers_sinq_method_allowlist
+  provenance: fold
+  native_type: transformers.SinqConfig
+  native_field: SinqConfig.method
+  predicate_kind: enum
+  predicate_value: {in: [sinq, asinq]}
+  severity: error
+  outcome: invalid
+  message_template: "`method` must be either 'sinq' or 'asinq', got {method}"
+  citation: {file: transformers/utils/quantization_config.py, line: 1998, qualname: SinqConfig.post_init}
+  kwargs_positive: {method: nonsense}
+  kwargs_negative: {method: sinq}
+
+- id: transformers_sinq_nbits_int_coercible
+  provenance: fold
+  native_type: transformers.SinqConfig
+  native_field: SinqConfig.nbits
+  predicate_kind: type_check
+  predicate_value: {coercible_to: int}
+  severity: error
+  outcome: invalid
+  message_template: "`nbits` must be convertible to an int"
+  citation: {file: transformers/utils/quantization_config.py, line: 1992, qualname: SinqConfig.post_init}
+  kwargs_positive: {nbits: "abc"}
+  kwargs_negative: {nbits: 4}
+
+- id: transformers_sinq_group_size_multiple_of_eight
+  provenance: fold
+  native_type: transformers.SinqConfig
+  native_field: SinqConfig.group_size
+  predicate_kind: numeric_range
+  predicate_value: {requires: "group_size % 8 == 0"}
+  severity: warning
+  outcome: warn
+  message_template: "SINQ: group_size={group_size} is not a multiple of 8; this may be rejected by the backend."
+  citation: {file: transformers/utils/quantization_config.py, line: 2001, qualname: SinqConfig.post_init}
+  kwargs_positive: {group_size: 60}
+  kwargs_negative: {group_size: 64}
+
+# ============================================================================
+# FOLDED - PreTrainedModel.from_pretrained / device_map / tensor-parallel gates
+# (all DORMANT: need torch, accelerate, a model dir, or a live device context)
+# ============================================================================
+
+- id: transformers_from_pretrained_state_dict_vs_model_name_mutual_exclusion
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.from_pretrained.state_dict
+  predicate_kind: mutual_exclusion
+  predicate_value: {forbidden_together: [state_dict, "pretrained_model_name_or_path|gguf_file"]}
+  severity: error
+  outcome: invalid
+  message_template: "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
+  citation: {file: transformers/modeling_utils.py, line: 4031, qualname: PreTrainedModel.from_pretrained}
+  dormant_reason: from_pretrained requires torch + a model identifier
+
+- id: transformers_from_pretrained_quantization_vs_gguf_mutual_exclusion
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.from_pretrained.gguf_file
+  predicate_kind: mutual_exclusion
+  predicate_value: {forbidden_together: [gguf_file, quantization_config]}
+  severity: error
+  outcome: invalid
+  message_template: "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
+  citation: {file: transformers/modeling_utils.py, line: 4101, qualname: PreTrainedModel.from_pretrained}
+  dormant_reason: from_pretrained requires torch + a model identifier
+
+- id: transformers_from_pretrained_gguf_requires_accelerate
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.from_pretrained.gguf_file
+  predicate_kind: cross_field
+  predicate_value: {requires_package: accelerate}
+  severity: error
+  outcome: invalid
+  message_template: "accelerate is required when loading a GGUF file `pip install accelerate`."
+  citation: {file: transformers/modeling_utils.py, line: 4048, qualname: PreTrainedModel.from_pretrained}
+  dormant_reason: from_pretrained requires torch + a model identifier
+
+- id: transformers_from_pretrained_dtype_none_resolves_to_auto
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.from_pretrained.dtype
+  predicate_kind: normalisation
+  predicate_value: {when: {dtype: null}, effect: "dtype = 'auto' (v5 behavioural change)"}
+  severity: normalisation
+  outcome: normalise
+  message_template: "(silent: dtype None -> 'auto')"
+  citation: {file: transformers/modeling_utils.py, line: 4014, qualname: PreTrainedModel.from_pretrained}
+  dormant_reason: from_pretrained requires torch + a model identifier
+
+- id: transformers_from_pretrained_device_map_string_allowlist
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.device_map
+  predicate_kind: enum
+  predicate_value: {in: [auto, balanced, balanced_low_0, sequential], also_allows: "a torch device name"}
+  severity: error
+  outcome: invalid
+  message_template: "When passing device_map as a string, the value needs to be a device name (e.g. cpu, cuda:0) or 'auto', 'balanced', 'balanced_low_0', 'sequential' but found {device_map}."
+  citation: {file: transformers/integrations/accelerate.py, line: 110, qualname: check_and_set_device_map}
+  dormant_reason: check_and_set_device_map needs torch + accelerate
+
+- id: transformers_from_pretrained_device_map_negative_int
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.device_map
+  predicate_kind: numeric_range
+  predicate_value: {minimum: 0}
+  severity: error
+  outcome: invalid
+  message_template: "You can't pass device_map as a negative int. If you want to put the model on the cpu, pass device_map = 'cpu' "
+  citation: {file: transformers/integrations/accelerate.py, line: 123, qualname: check_and_set_device_map}
+  dormant_reason: check_and_set_device_map needs torch + accelerate
+
+- id: transformers_from_pretrained_tp_size_requires_tp_plan
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.tp_size
+  predicate_kind: cross_field
+  predicate_value: {requires: "tp_plan is not None when tp_size is set"}
+  severity: error
+  outcome: invalid
+  message_template: "tp_plan has to be set when tp_size is passed."
+  citation: {file: transformers/integrations/tensor_parallel.py, line: 47, qualname: initialize_tensor_parallelism}
+  dormant_reason: initialize_tensor_parallelism needs torch + a distributed context
+
+- id: transformers_from_pretrained_tp_plan_vs_device_map_mutual_exclusion
+  provenance: fold
+  native_type: transformers.PreTrainedModel
+  native_field: PreTrainedModel.tp_plan
+  predicate_kind: mutual_exclusion
+  predicate_value: {forbidden_together: [tp_plan, device_map]}
+  severity: error
+  outcome: invalid
+  message_template: "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
+  citation: {file: transformers/integrations/tensor_parallel.py, line: 49, qualname: initialize_tensor_parallelism}
+  dormant_reason: initialize_tensor_parallelism needs torch + a distributed context
