@@ -137,6 +137,38 @@ schema outright and for the majority of invariants; a minority of invariants
 will need LLM mining. The exact plateau needs Round 0b pushed across cells;
 1.2.1 says it is meaningfully below 1.0 for invariants.
 
+## Round 0b lever 1 BUILT + measured (tensorrt 1.2.1): miner walk-surface widening
+
+Implemented the highest-yield deterministic lever in the production static miner
+(`engine_versions/tensorrt/v1_2_1/producers/static_invariant_miner.py`):
+- walk `plugin/plugin.py::PluginConfig` (previously unwalked);
+- `_literal_args` now unwraps `Optional[Literal[...]]` and resolves module-level
+  `Literal` aliases (`DefaultPluginDtype = Literal[...]`);
+- literal/strenum rules emit `{not_in: ...}` (firing condition) so they bucket as
+  `membership`, matching the GT/gt_adapter convention (was misbucketing `presence`).
+
+Measured (combined deterministic mech = improved-det-v2 + widened production miner,
+gated vs the 46-identity union GT):
+
+| metric | before | after lever 1 |
+|---|---|---|
+| production miner candidates | 23 | 44 (19 PluginConfig literals) |
+| deterministic confirmed identities | 15 | **42** |
+| of the 12 GT-missed, recovered | 0 | **6** (gemm/plugin family) |
+| GT-growth (new runtime-confirmed) | - | ~20 plugin literals the union missed |
+
+So the deterministic baseline rose sharply, AND the widened miner GREW the GT by
+~20 runtime-confirmed plugin literals (the non-tautology mechanism working: a new
+method surfaces gate-confirmed invariants the union lacked - so the GT itself
+should grow and be re-gated). The remaining 6 GT-missed are on still-unwalked
+configs (Nvfp4GemmConfig.allowed_backends, TorchCompileConfig.capture_num_tokens,
+LoraConfig.lora_ckpt_source, *DecodingConfig.max_draft_len, ...) - the next
+walk-surface targets. Two caveats surfaced: (a) the production per-version miner
+was much weaker than the trial improved-det-v2 (23 vs 110) - it has not absorbed
+the trial R&D primitives; (b) tolerant-identity encoding must stay consistent
+across sources (the `in`/`not_in` misbucket is the kind of convention drift the
+study's identity layer must police).
+
 ## Fan-out readiness (what the full 15-cell x 2-track matrix needs)
 
 - **Per-version producers exist for only ~6 versions** (transformers v4_57_3 /
