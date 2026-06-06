@@ -278,6 +278,12 @@ def _gt_entry(c: Candidate, runtime_label: str) -> dict[str, Any]:
         "severity": inv.get("severity"),
         "runtime": runtime_label,
     }
+    # Persist the match block so a mechanically-sourced entry (whose probe is
+    # SYNTHESISED from match.fields, not predicate_kind) is independently
+    # re-gateable from the GT file alone - else re-validation can't reconstruct
+    # its probe. (Found via GT re-gate: 2 mech entries were unreprobeable.)
+    if inv.get("match") is not None:
+        entry["match"] = inv.get("match")
     if inv.get("kwargs_positive") is not None:
         entry["kwargs_positive"] = inv.get("kwargs_positive")
         entry["kwargs_negative"] = inv.get("kwargs_negative")
