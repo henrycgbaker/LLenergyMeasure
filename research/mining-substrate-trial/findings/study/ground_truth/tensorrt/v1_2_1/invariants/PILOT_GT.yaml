@@ -5,9 +5,43 @@ task: invariants
 round: R0_pilot
 gate: scripts/validate_invariants.py (in nvcr.io/nvidia/tensorrt-llm/release:1.2.1)
 identity: 'tolerant: (leaf_native_field, coarse_predicate_bucket)'
-n_confirmed: 40
-n_unverified: 104
+n_confirmed: 46
+n_unverified: 98
 confirmed:
+- id: tensorrt_decodingbaseconfig__validate_acceptance_length_threshold_acceptance_length_threshold_lt
+  source: mech
+  tolerant_key:
+  - acceptance_length_threshold
+  - numeric
+  native_type: tensorrt.DecodingBaseConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  - passA
+  - passB
+  - poc
+- id: tensorrt_decodingbaseconfig__validate_acceptance_window_acceptance_window_lt
+  source: mech
+  tolerant_key:
+  - acceptance_window
+  - numeric
+  native_type: tensorrt.DecodingBaseConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  - passA
+  - passB
+  - poc
 - id: tensorrt_nvfp4GemmConfig_allowed_backends_subset
   source: passA
   tolerant_key:
@@ -158,6 +192,25 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_batchingType_enum
+  source: passA
+  tolerant_key:
+  - batching_type
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: TrtLlmArgs.batching_type
+  predicate_kind: strenum_in
+  predicate_value:
+  - STATIC
+  - INFLIGHT
+  severity: error
+  runtime: confirmed
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  - passA
+  - passB
+  - poc
 - id: tensorrt_pluginConfig_bert_attention_plugin_default_dtype_literal
   source: passB
   tolerant_key:
@@ -206,6 +259,26 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_capacitySchedulerPolicy_enum
+  source: passA
+  tolerant_key:
+  - capacity_scheduler_policy
+  - membership
+  native_type: tensorrt.SchedulerConfig
+  native_field: SchedulerConfig.capacity_scheduler_policy
+  predicate_kind: strenum_in
+  predicate_value:
+  - MAX_UTILIZATION
+  - GUARANTEED_NO_EVICT
+  - STATIC_BATCH
+  severity: error
+  runtime: confirmed
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  - passA
+  - passB
+  - poc
 - id: tensorrt_torchCompileConfig_capture_num_tokens_positive
   source: passA
   tolerant_key:
@@ -227,6 +300,25 @@ confirmed:
     - 128
   observed_outcome: error
   contributing_sources:
+  - passA
+  - passB
+  - poc
+- id: tensorrt_contextChunkingPolicy_enum
+  source: passA
+  tolerant_key:
+  - context_chunking_policy
+  - membership
+  native_type: tensorrt.SchedulerConfig
+  native_field: SchedulerConfig.context_chunking_policy
+  predicate_kind: strenum_in
+  predicate_value:
+  - FIRST_COME_FIRST_SERVED
+  - EQUAL_PROGRESS
+  severity: error
+  runtime: confirmed
+  observed_outcome: error
+  contributing_sources:
+  - mech
   - passA
   - passB
   - poc
@@ -319,11 +411,11 @@ confirmed:
   contributing_sources:
   - passB
 - id: tensorrt_pluginConfig_gemm_plugin_literal
-  source: passB
+  source: passA
   tolerant_key:
   - gemm_plugin
   - membership
-  native_type: PluginConfig
+  native_type: tensorrt.PluginConfig
   native_field: PluginConfig.gemm_plugin
   predicate_kind: literal_in
   predicate_value:
@@ -337,10 +429,6 @@ confirmed:
   - null
   severity: error
   runtime: confirmed
-  kwargs_positive:
-    gemm_plugin: __bad__
-  kwargs_negative:
-    gemm_plugin: fp8
   observed_outcome: error
   contributing_sources:
   - passA
@@ -429,6 +517,25 @@ confirmed:
   contributing_sources:
   - mech
   - passB
+- id: tensorrt_baseLlmArgs_load_format_literal
+  source: passA
+  tolerant_key:
+  - load_format
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: BaseLlmArgs.load_format
+  predicate_kind: literal_in
+  predicate_value:
+  - auto
+  - dummy
+  severity: error
+  runtime: confirmed
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  - passA
+  - passB
+  - poc
 - id: tensorrt_loraConfig_lora_ckpt_source_literal
   source: passA
   tolerant_key:
@@ -935,11 +1042,12 @@ unverified:
     - prototype
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseLlmArgs_check_consistency_with_ExecutorConfig
   source: passA
   tolerant_key:
@@ -952,17 +1060,18 @@ unverified:
     assert: set(ExecutorConfig public attrs) - {max_beam_width} is subset of BaseLlmArgs.model_fields
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_guidedDecodingParams_at_most_one_guide
-  source: passB
+  source: passA
   tolerant_key:
   - GuidedDecodingParams
   - presence
-  native_type: GuidedDecodingParams
+  native_type: tensorrt.GuidedDecodingParams
   native_field: GuidedDecodingParams
   predicate_kind: presence_conflict
   predicate_value:
@@ -974,12 +1083,7 @@ unverified:
     - structural_tag
   severity: error
   runtime: failed
-  kwargs_positive:
-    json: '{}'
-    regex: .*
-  kwargs_negative:
-    json: '{}'
-  observed_outcome: no_op
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
@@ -996,9 +1100,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_savehiddenstatesdecodingconfig_model_post_init__last_hidden_in_save_present
   source: mech
   tolerant_key:
@@ -1010,45 +1115,10 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
-- id: tensorrt_decodingBaseConfig_acceptance_length_threshold_non_negative
-  source: passA
-  tolerant_key:
-  - acceptance_length_threshold
-  - numeric
-  native_type: tensorrt.DecodingBaseConfig
-  native_field: DecodingBaseConfig.acceptance_length_threshold
-  predicate_kind: range
-  predicate_value:
-    ge: 0
-  severity: error
-  runtime: unverified
-  contributing_sources:
-  - mech
-  - passA
-  - passB
-  - poc
-  gate_status: unreachable
-- id: tensorrt_decodingBaseConfig_acceptance_window_non_negative
-  source: passA
-  tolerant_key:
-  - acceptance_window
-  - numeric
-  native_type: tensorrt.DecodingBaseConfig
-  native_field: DecodingBaseConfig.acceptance_window
-  predicate_kind: range
-  predicate_value:
-    ge: 0
-  severity: error
-  runtime: unverified
-  contributing_sources:
-  - mech
-  - passA
-  - passB
-  - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseSparseAttentionConfig_from_dict_algorithm_dispatch
   source: passA
   tolerant_key:
@@ -1103,9 +1173,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_saveHiddenStatesDecodingConfig_backend_must_be_pytorch_when_routed
   source: passA
   tolerant_key:
@@ -1118,12 +1189,13 @@ unverified:
     in:
     - pytorch
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_samplingParams_get_bad_words_requires_setup
   source: passA
   tolerant_key:
@@ -1136,11 +1208,12 @@ unverified:
     set_without_setup_tokenizer: true
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_cuda_graph_config_dual_specification
   source: passA
   tolerant_key:
@@ -1153,30 +1226,12 @@ unverified:
     with_max_batch_size_ne_0_and_list_ne_generated: true
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
-- id: tensorrt_batchingType_enum
-  source: passA
-  tolerant_key:
-  - batching_type
-  - membership
-  native_type: tensorrt.TrtLlmArgs
-  native_field: TrtLlmArgs.batching_type
-  predicate_kind: strenum_in
-  predicate_value:
-  - STATIC
-  - INFLIGHT
-  severity: error
-  runtime: unverified
-  contributing_sources:
-  - mech
-  - passA
-  - passB
-  - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_attention_dp_config_batching_wait_iters_non_negative
   source: passA
   tolerant_key:
@@ -1190,11 +1245,12 @@ unverified:
     when: enable_balance
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_samplingParams_best_of_ge_n
   source: passA
   tolerant_key:
@@ -1232,12 +1288,13 @@ unverified:
     with_model_format_tllm_engine: true
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_build_config_type_is_not
   source: mech
   tolerant_key:
@@ -1249,29 +1306,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
-- id: tensorrt_capacitySchedulerPolicy_enum
-  source: passA
-  tolerant_key:
-  - capacity_scheduler_policy
-  - membership
-  native_type: tensorrt.SchedulerConfig
-  native_field: SchedulerConfig.capacity_scheduler_policy
-  predicate_kind: strenum_in
-  predicate_value:
-  - MAX_UTILIZATION
-  - GUARANTEED_NO_EVICT
-  - STATIC_BATCH
-  severity: error
-  runtime: unverified
-  contributing_sources:
-  - mech
-  - passA
-  - passB
-  - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchcompileconfig_validate_capture_num_tokens_capture_num_tokens_present
   source: mech
   tolerant_key:
@@ -1283,9 +1321,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_checkpoint_format_dual_spec_warns
   source: passA
   tolerant_key:
@@ -1298,10 +1337,11 @@ unverified:
     checkpoint_format_and_checkpoint_loader_both_set: true
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchllmargs_validate_cuda_graph_config_config_not_equal
   source: mech
   tolerant_key:
@@ -1312,10 +1352,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_torchllmargs_validate_attention_dp_config_config_lt
   source: mech
   tolerant_key:
@@ -1326,10 +1367,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_torchllmargs_validate_cuda_graph_config_config_present
   source: mech
   tolerant_key:
@@ -1341,28 +1383,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
-- id: tensorrt_contextChunkingPolicy_enum
-  source: passA
-  tolerant_key:
-  - context_chunking_policy
-  - membership
-  native_type: tensorrt.SchedulerConfig
-  native_field: SchedulerConfig.context_chunking_policy
-  predicate_kind: strenum_in
-  predicate_value:
-  - FIRST_COME_FIRST_SERVED
-  - EQUAL_PROGRESS
-  severity: error
-  runtime: unverified
-  contributing_sources:
-  - mech
-  - passA
-  - passB
-  - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtLlmArgs_load_config_from_engine_cp_size_mismatch
   source: passA
   tolerant_key:
@@ -1377,11 +1401,12 @@ unverified:
     - engine.mapping.cp_size
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchllmargs_validate_helix_tokens_per_block_cp_tokens_per_block_exact
   source: mech
   tolerant_key:
@@ -1393,9 +1418,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_and_init_tokenizer_custom_tokenizer_conflict
   source: passA
   tolerant_key:
@@ -1408,9 +1434,10 @@ unverified:
     custom_tokenizer_set_while_tokenizer_is_tokenizer_object: true
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_decodingBaseConfig_from_dict_decoding_type_dispatch
   source: passA
   tolerant_key:
@@ -1431,11 +1458,12 @@ unverified:
   - AUTO
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_not_in
   source: mech
   tolerant_key:
@@ -1446,10 +1474,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_lt
   source: mech
   tolerant_key:
@@ -1460,10 +1489,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_decodingBaseConfig_draft_len_schedule_must_include_batch_1
   source: passA
   tolerant_key:
@@ -1478,12 +1508,13 @@ unverified:
     and2: all draft_len <= max_draft_len
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_dtype_dtype_exact
   source: mech
   tolerant_key:
@@ -1495,9 +1526,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_dtype_bfloat16_sm_lt_80
   source: passA
   tolerant_key:
@@ -1509,13 +1541,14 @@ unverified:
   predicate_value:
     context: device_capability.major < 8 AND dtype == 'bfloat16'
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_torchLlmArgs_sync_quant_config_with_kv_cache_dtype_warns
   source: passA
   tolerant_key:
@@ -1530,9 +1563,10 @@ unverified:
     - fp8
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_eagleDecodingConfig_dynamic_tree_max_topK_positive
   source: passA
   tolerant_key:
@@ -1546,11 +1580,12 @@ unverified:
     when: use_dynamic_tree
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_eagledecodingconfig_validate_eagle_config_eagle3_layers_to_capture_present
   source: mech
   tolerant_key:
@@ -1562,9 +1597,10 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_eagledecodingconfig_validate_eagle_choices_eagle_choices_present
   source: mech
   tolerant_key:
@@ -1576,9 +1612,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_eagledecodingconfig_validate_eagle_choices_eagle_choices_type_is_not
   source: mech
   tolerant_key:
@@ -1590,9 +1627,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtLlmArgs_validate_enable_build_cache_type_check
   source: passA
   tolerant_key:
@@ -1605,12 +1643,13 @@ unverified:
   - BuildCacheConfig
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_lora_config_consistency_enable_lora_exact
   source: mech
   tolerant_key:
@@ -1622,9 +1661,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_enable_lora_ignored_on_pytorch_warns
   source: passA
   tolerant_key:
@@ -1639,11 +1679,12 @@ unverified:
     - _autodeploy
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_gpus_per_node_gpus_per_node_present
   source: mech
   tolerant_key:
@@ -1655,9 +1696,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_has_pgs_not_equal
   source: mech
   tolerant_key:
@@ -1668,10 +1710,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_rayplacementconfig_validate_ray_placement_has_pgs_present
   source: mech
   tolerant_key:
@@ -1683,9 +1726,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_nvfp4gemmconfig_validate_allowed_backends_invalid_present
   source: mech
   tolerant_key:
@@ -1697,9 +1741,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_kv_cache_dtype_kv_cache_config_exact
   source: mech
   tolerant_key:
@@ -1711,9 +1756,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_quantConfig_kv_cache_quant_algo_in_allowlist
   source: passA
   tolerant_key:
@@ -1727,12 +1773,13 @@ unverified:
   - INT8
   - NVFP4
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: no_op
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_LLM_pytorch_rejects_trt_specific_kwargs
   source: passA
   tolerant_key:
@@ -1767,11 +1814,12 @@ unverified:
     when_type_is: str
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_moe_load_balancer_parse_failure
   source: passA
   tolerant_key:
@@ -1785,36 +1833,12 @@ unverified:
     must_parse_into: MoeLoadBalancerConfig
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
-- id: tensorrt_torchLlmArgs_load_format_enum
-  source: passB
-  tolerant_key:
-  - load_format
-  - membership
-  native_type: TorchLlmArgs
-  native_field: TorchLlmArgs.load_format
-  predicate_kind: strenum_in
-  predicate_value:
-  - AUTO
-  - DUMMY
-  - VISION_ONLY
-  severity: error
-  runtime: failed
-  kwargs_positive:
-    load_format: __not_a_format__
-  kwargs_negative:
-    load_format: dummy
-  observed_outcome: error
-  contributing_sources:
-  - mech
-  - passA
-  - passB
-  - poc
-  gate_status: failed
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_lora_config_consistency_lora_config_exact
   source: mech
   tolerant_key:
@@ -1826,9 +1850,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_lora_config_consistency_lora_config_present
   source: mech
   tolerant_key:
@@ -1840,9 +1865,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_empty_lora_dir_warns
   source: passA
   tolerant_key:
@@ -1855,11 +1881,12 @@ unverified:
     len_eq: 0
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_peft_cache_config_lora_prefetch_dir_unsupported
   source: passA
   tolerant_key:
@@ -1872,11 +1899,12 @@ unverified:
     is_not_none: true
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_empty_target_modules_warns
   source: passA
   tolerant_key:
@@ -1889,11 +1917,12 @@ unverified:
     len_eq: 0_and_lora_dir_len_eq_0
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_kvcacheconfig_validate_max_attention_window_max_attention_window_type_is_not
   source: mech
   tolerant_key:
@@ -1905,9 +1934,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_runtime_args_max_batch_size_present
   source: mech
   tolerant_key:
@@ -1919,9 +1949,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_beam_width_not_equal
   source: mech
   tolerant_key:
@@ -1932,10 +1963,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: warning
-  runtime: unverified
+  runtime: failed
+  observed_outcome: no_op
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_torchLlmArgs_validate_misc_defaults_normalisation
   source: passA
   tolerant_key:
@@ -1950,11 +1982,12 @@ unverified:
       max_batch_size: 2048
   severity: normalisation
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_beam_width_present
   source: mech
   tolerant_key:
@@ -1966,9 +1999,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_eagledecodingconfig_validate_eagle_config_max_draft_len_present
   source: mech
   tolerant_key:
@@ -1980,9 +2014,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_input_len_not_equal
   source: mech
   tolerant_key:
@@ -1993,10 +2028,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: warning
-  runtime: unverified
+  runtime: failed
+  observed_outcome: no_op
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_input_len_override_warns
   source: passA
   tolerant_key:
@@ -2009,11 +2045,12 @@ unverified:
     ne: build_config.max_input_len
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_set_default_max_input_len_max_input_len_present
   source: mech
   tolerant_key:
@@ -2025,9 +2062,10 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_num_tokens_override_warns
   source: passA
   tolerant_key:
@@ -2039,13 +2077,14 @@ unverified:
   predicate_value:
     gt: build_config.max_num_tokens
   severity: warning
-  runtime: unverified
+  runtime: failed
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_num_tokens_present
   source: mech
   tolerant_key:
@@ -2057,9 +2096,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_not_equal
   source: mech
   tolerant_key:
@@ -2070,10 +2110,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: warning
-  runtime: unverified
+  runtime: failed
+  observed_outcome: no_op
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_seq_len_override_warns
   source: passA
   tolerant_key:
@@ -2086,11 +2127,12 @@ unverified:
     ne: build_config.max_seq_len
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_present
   source: mech
   tolerant_key:
@@ -2102,9 +2144,10 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_getModelFormat_no_config_json
   source: passA
   tolerant_key:
@@ -2117,11 +2160,12 @@ unverified:
     path: '{model_dir}/config.json'
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_parallel_config_moe_cluster_parallel_size_present
   source: mech
   tolerant_key:
@@ -2133,9 +2177,10 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchllmargs_validate_load_balancer_moe_config_present
   source: mech
   tolerant_key:
@@ -2147,9 +2192,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchllmargs_validate_load_balancer_moe_config_type_is_not
   source: mech
   tolerant_key:
@@ -2161,9 +2207,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_parallel_config_moe_expert_parallel_size_present
   source: mech
   tolerant_key:
@@ -2175,9 +2222,10 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_parallel_config_moe_tensor_parallel_size_present
   source: mech
   tolerant_key:
@@ -2189,9 +2237,10 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_guideddecodingparams__validate_num_guides_gt
   source: mech
   tolerant_key:
@@ -2202,10 +2251,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_mtpDecodingConfig_num_nextn_predict_layers_positive_when_routed
   source: passA
   tolerant_key:
@@ -2217,12 +2267,13 @@ unverified:
   predicate_value:
     gt: 0
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_moeLoadBalancerConfig_num_slots_divisible_by_ep_size
   source: passA
   tolerant_key:
@@ -2235,11 +2286,12 @@ unverified:
     divisible_by: ep_size
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_savehiddenstatesdecodingconfig_validate_output_directory_present
   source: mech
   tolerant_key:
@@ -2251,9 +2303,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_samplingparams___post_init___pad_id_present
   source: mech
   tolerant_key:
@@ -2265,9 +2318,10 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_peft_cache_config_peft_cache_config_present
   source: mech
   tolerant_key:
@@ -2279,9 +2333,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_per_worker_gpu_share_present
   source: mech
   tolerant_key:
@@ -2293,9 +2348,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_pg_type_is_not
   source: mech
   tolerant_key:
@@ -2307,9 +2363,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtLlmArgs_load_config_from_engine_pp_size_mismatch
   source: passA
   tolerant_key:
@@ -2324,11 +2381,12 @@ unverified:
     - engine.mapping.pp_size
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_placement_groups_not_equal
   source: mech
   tolerant_key:
@@ -2339,10 +2397,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_quantConfig_quant_algo_in_QuantAlgo_enum
   source: passA
   tolerant_key:
@@ -2378,12 +2437,13 @@ unverified:
   - NVFP4_AWQ
   - NO_QUANT
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: no_op
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_torchllmargs_sync_quant_config_with_kv_cache_config_dtype_quant_config_present
   source: mech
   tolerant_key:
@@ -2395,9 +2455,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchllmargs_validate_ray_placement_config_ray_placement_config_not_equal
   source: mech
   tolerant_key:
@@ -2408,10 +2469,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_torchLlmArgs_validate_ray_placement_config_requires_ray
   source: passA
   tolerant_key:
@@ -2424,11 +2486,12 @@ unverified:
     is_not_none_and_orchestrator_type_ne_ray: true
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchllmargs_validate_ray_worker_extension_cls_ray_worker_extension_cls_not_equal
   source: mech
   tolerant_key:
@@ -2439,10 +2502,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_basellmargs_validate_and_init_tokenizer_skip_tokenizer_init_present_custom_tokenizer
   source: mech
   tolerant_key:
@@ -2454,9 +2518,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_gt
   source: mech
   tolerant_key:
@@ -2467,10 +2532,11 @@ unverified:
   predicate_kind: null
   predicate_value: null
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_speculative_config_supports_backend
   source: passA
   tolerant_key:
@@ -2483,12 +2549,13 @@ unverified:
     must: speculative_config.supports_backend(backend)
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_speculative_config_unrecognised_type
   source: passA
   tolerant_key:
@@ -2509,12 +2576,13 @@ unverified:
   - Auto
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_eagleDecodingConfig_speculative_model_required_when_routed
   source: passA
   tolerant_key:
@@ -2526,12 +2594,13 @@ unverified:
   predicate_value:
     is_not_none: true
   severity: error
-  runtime: unverified
+  runtime: failed
+  observed_outcome: error
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: failed
 - id: tensorrt_eagledecodingconfig_validate_speculative_model_present
   source: mech
   tolerant_key:
@@ -2543,9 +2612,10 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_samplingParams_get_stop_words_requires_setup
   source: passA
   tolerant_key:
@@ -2558,11 +2628,12 @@ unverified:
     set_without_setup_tokenizer: true
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_trtLlmArgs_load_config_from_engine_tp_size_mismatch
   source: passA
   tolerant_key:
@@ -2577,11 +2648,12 @@ unverified:
     - engine.mapping.tp_size
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_attention_dp_config_timeout_iters_non_negative
   source: passA
   tolerant_key:
@@ -2595,11 +2667,12 @@ unverified:
     when: enable_balance
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_helix_tokens_per_block_match
   source: passA
   tolerant_key:
@@ -2613,11 +2686,12 @@ unverified:
     when: cp_type == HELIX
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_eagleDecodingConfig_dynamic_tree_excludes_eagle_choices
   source: passA
   tolerant_key:
@@ -2630,12 +2704,13 @@ unverified:
     with_eagle_choices_set: true
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped
 - id: tensorrt_pluginConfig_validate_unsupported_on_sm100
   source: passA
   tolerant_key:
@@ -2648,8 +2723,9 @@ unverified:
     context: get_sm_version() == 100 (Blackwell)
   severity: error
   runtime: unverified
+  observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
-  gate_status: unreachable
+  gate_status: skipped

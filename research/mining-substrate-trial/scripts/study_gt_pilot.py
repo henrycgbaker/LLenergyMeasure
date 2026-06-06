@@ -125,10 +125,16 @@ def _tolerant_key(inv: dict[str, Any]) -> tuple[str, str]:
 
 
 def _gateable(inv: dict[str, Any]) -> bool:
-    return (
-        bool(inv.get("native_type"))
-        and isinstance(inv.get("kwargs_positive"), dict)
-        and isinstance(inv.get("kwargs_negative"), dict)
+    """Stageable to the gate: needs a native_type to construct. The gate
+    synthesises kwargs from the declared predicate when the entry carries no
+    hand-authored kwargs_positive/negative, so kwargs are no longer required
+    here - only a constructible type is."""
+    return bool(inv.get("native_type"))
+
+
+def _has_authored_kwargs(inv: dict[str, Any]) -> bool:
+    return isinstance(inv.get("kwargs_positive"), dict) and isinstance(
+        inv.get("kwargs_negative"), dict
     )
 
 
@@ -320,11 +326,15 @@ def write_report(
                 others |= keys
         unique_by_source[src] = len(source_keys.get(src, set()) - others)
 
-    # Gate rejections: kwargs-bearing candidates that RAN and were not confirmed.
+    # Gate rejections: probed candidates that RAN and were not confirmed.
     rejected = [c for c in cands if c.verdict == "failed"]
     infra = [c for c in cands if c.verdict == "infra_error"]
     skipped = [c for c in cands if c.verdict == "skipped"]
     confirmed_cands = [c for c in cands if c.verdict == "confirmed"]
+    # Split confirmations by probe provenance: synthesised by the gate vs
+    # hand-authored kwargs in the source.
+    synth_confirmed = [c for c in confirmed_cands if not _has_authored_kwargs(c.inv)]
+    authored_confirmed = [c for c in confirmed_cands if _has_authored_kwargs(c.inv)]
 
     # The warn_on_unstable_feature_usage flag (passB flagged as possibly-invalid).
     warn_cands = [c for c in cands if "warn_on_unstable_feature_usage" in c.orig_id]
@@ -336,7 +346,9 @@ def write_report(
         "per_source_tolerant_key_counts": {s: len(k) for s, k in source_keys.items()},
         "union_size_tolerant": len(union_keys),
         "n_gate_confirmed_keys": len(confirmed_keys),
-        "n_gateable_candidates": sum(1 for c in cands if c.gateable),
+        "n_probed_candidates": sum(1 for c in cands if c.gateable),
+        "confirmed_via_synthesis": len(synth_confirmed),
+        "confirmed_via_authored_kwargs": len(authored_confirmed),
         "verdict_counts": {
             "confirmed": len(confirmed_cands),
             "failed": len(rejected),
@@ -379,10 +391,15 @@ def write_report(
     L.append(f"- Union size (distinct tolerant identities across 4 sources): **{len(union_keys)}**")
     L.append(f"- Gate-confirmed tolerant identities: **{len(confirmed_keys)}**")
     L.append(
-        f"- Gateable candidates (native_type + kwargs): "
-        f"**{metrics['n_gateable_candidates']}** "
+        f"- Probed candidates (native_type present, kwargs authored or synthesised): "
+        f"**{metrics['n_probed_candidates']}** "
         f"(confirmed={len(confirmed_cands)}, failed={len(rejected)}, "
-        f"skipped/hardware={len(skipped)}, infra_error={len(infra)})"
+        f"skipped={len(skipped)}, infra_error={len(infra)})"
+    )
+    L.append(
+        f"- Confirmations by probe provenance: "
+        f"**{len(synth_confirmed)} synthesised** by the gate, "
+        f"{len(authored_confirmed)} from hand-authored kwargs"
     )
     L.append("")
     L.append("Group status breakdown (per tolerant identity):")
