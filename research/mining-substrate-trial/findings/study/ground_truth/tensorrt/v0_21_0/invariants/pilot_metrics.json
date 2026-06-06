@@ -1,4 +1,5 @@
 {
+  "collapsed_tolerant_keys": 34,
   "confirmed_via_authored_kwargs": 0,
   "confirmed_via_synthesis": 3,
   "engine": "tensorrt",
@@ -6,25 +7,27 @@
     "confirmed": 3,
     "failed": 7,
     "infra_error": 7,
-    "skipped": 31,
-    "unreachable": 41
+    "skipped": 38,
+    "unreachable": 73
   },
-  "gt_growth_keys_vs_poc": 0,
-  "n_gate_confirmed_keys": 3,
+  "gt_growth_constraints_vs_poc": 3,
+  "identity_grain": "constraint = (leaf, coarse_bucket, canonical_predicate_value)",
+  "n_gate_confirmed_constraints": 3,
   "n_probed_candidates": 56,
   "per_source_candidate_counts": {
     "mech": 56,
     "poc": 75
   },
-  "per_source_tolerant_key_counts": {
-    "mech": 48,
-    "poc": 63
+  "per_source_constraint_counts": {
+    "mech": 55,
+    "poc": 73
   },
   "per_source_unique_contribution": {
-    "mech": 26,
-    "poc": 41
+    "mech": 55,
+    "poc": 73
   },
-  "poc_tolerant_keys": 63,
+  "poc_constraints": 73,
+  "union_size_constraints": 128,
   "union_size_tolerant": 89,
   "verdict_counts": {
     "confirmed": 3,

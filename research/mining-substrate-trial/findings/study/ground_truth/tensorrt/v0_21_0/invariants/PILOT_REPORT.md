@@ -1,33 +1,37 @@
 # Pilot GT report - tensorrt 0.21.0 invariants (union + gate)
 
-Round 0: union the 2 GT sources (mech, poc) by tolerant identity (leaf_native_field, coarse_predicate_bucket), runtime-gate every candidate (kwargs authored or synthesised) in the production validator inside nvcr.io/nvidia/tensorrt-llm/release:0.21.0, keep gate-confirmed as GT.
+Round 0: union the 2 GT sources (mech, poc) at the CONSTRAINT grain (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value), runtime-gate every candidate (kwargs authored or synthesised) in the production validator inside nvcr.io/nvidia/tensorrt-llm/release:0.21.0, keep gate-confirmed per constraint as GT.
 
 ## Per-source candidate counts
 
-| source | raw candidates | tolerant keys | gateable | unique tolerant keys |
+| source | raw candidates | constraints | gateable | unique constraints |
 |---|---|---|---|---|
-| mech | 56 | 48 | 56 | 26 |
-| poc | 75 | 63 | 0 | 41 |
+| mech | 56 | 55 | 56 | 55 |
+| poc | 75 | 73 | 0 | 73 |
 
 ## Union + gate
 
-- Union size (distinct tolerant identities across 4 sources): **89**
-- Gate-confirmed tolerant identities: **3**
+- Union size (distinct CONSTRAINTS across sources): **128**
+- Tolerant keys (coarser, leaf+bucket): 89; of which **34** held >1 distinct constraint (would have over-collapsed under the old leaf+bucket identity).
+- Gate-confirmed constraints: **3**
 - Probed candidates (native_type present, kwargs authored or synthesised): **56** (confirmed=3, failed=8, skipped=38, infra_error=7)
 - Confirmations by probe provenance: **3 synthesised** by the gate, 0 from hand-authored kwargs
 
-Group status breakdown (per tolerant identity):
+Group status breakdown (per constraint):
 
 - confirmed: 3
 - failed: 7
 - infra_error: 7
-- skipped: 31
-- unreachable: 41
+- skipped: 38
+- unreachable: 73
 
 ## GT-growth vs PoC N=1 GT
 
-PoC GT contributed **63** tolerant identities. The gate-confirmed union grows GT by **0** confirmed identities the PoC GT lacked:
+PoC GT contributed **73** constraints. The gate-confirmed union grows GT by **3** confirmed constraints the PoC GT lacked:
 
+- max_ngram_size [numeric] = 0
+- max_verification_set_size [numeric] = 0
+- max_window_size [numeric] = 0
 
 ## Gate REJECTIONS (kwargs-bearing candidates that ran and were not confirmed)
 
