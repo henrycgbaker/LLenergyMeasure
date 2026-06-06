@@ -46,8 +46,12 @@ reflection-diff is engine-agnostic, construct-probe currently tensorrt-only).
 transformers is clean. The vllm/tensorrt divergences are GENUINE but are
 staleness of the 3-week-old shipped schemas vs the refactored introspectors,
 NOT engine drift: nested configs the old introspector flattened to `dict`
-(`lora_config`, `quant_config`, `kv_cache_config`) now resolve as proper nested
-types, and enums the old one missed (`config_format` -> `Literal[...]`,
+(`lora_config`, `quant_config`, `kv_cache_config`) now reflect as a typed
+reference (`$ref` to the nested model); the gate compares that reference by
+target identity (`ref:LoraConfig`), so flatten-vs-nested drift is flagged rather
+than silently swallowed - though the gate checks ref identity, not the
+dereferenced nested fields (those reflect as their own sections). Enums the old
+one missed (`config_format` -> `Literal[...]`,
 `tokenizer_mode` -> `Literal[...]`) are now extracted. Semantic type
 normalisation (added this wave) already absorbed the pure-representation cases
 (enum vs Literal, string vs anyOf[string, path]); what remains is real

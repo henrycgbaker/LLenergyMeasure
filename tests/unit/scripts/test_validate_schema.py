@@ -92,3 +92,31 @@ def test_diff_section_ignores_representation_skew():
     }
     _results, divergences = validate_schema._diff_section("engine_params", stored, live)
     assert divergences == []  # representation differs, semantic type identical
+
+
+def test_semantic_type_resolves_ref_to_target_name():
+    # A nested-config field ($ref) must canonicalise to its target type, not "".
+    assert validate_schema._semantic_type({"$ref": "#/$defs/CompileConfig"}) == "ref:CompileConfig"
+    # Distinct nested types must differ (the latent bug: both used to be "").
+    assert validate_schema._semantic_type(
+        {"$ref": "#/$defs/LoraConfig"}
+    ) != validate_schema._semantic_type({"$ref": "#/$defs/QuantConfig"})
+    # Optional[Nested] (anyOf[$ref, null]) drops null and keeps the ref target.
+    assert (
+        validate_schema._semantic_type(
+            {"anyOf": [{"$ref": "#/$defs/LoraConfig"}, {"type": "null"}]}
+        )
+        == "ref:LoraConfig"
+    )
+
+
+def test_diff_section_flags_ref_vs_flattened_object():
+    # The flatten-vs-nested drift the schema gate must catch: stored flattened a
+    # nested config to a bare object; live now points at the proper nested type.
+    stored = {"lora_config": {"type": "object", "default": None}}
+    live = {"lora_config": {"$ref": "#/$defs/LoraConfig", "default": None}}
+    _results, divergences = validate_schema._diff_section("engine_params", stored, live)
+    type_divs = [d for d in divergences if d["check"] == "type"]
+    assert len(type_divs) == 1
+    assert type_divs[0]["declared"] == "dict"
+    assert type_divs[0]["observed"] == "ref:LoraConfig"

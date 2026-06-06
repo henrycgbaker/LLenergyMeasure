@@ -145,11 +145,23 @@ def _canonicalise_type(type_repr: Any) -> str:
     return _JSON_TO_PYTHON_TYPE.get(type_str, type_str)
 
 
+def _ref_target(ref: Any) -> str:
+    """Last path segment of a JSON-Schema ``$ref`` ("#/$defs/CompileConfig" ->
+    "CompileConfig"), so a nested-config field canonicalises to the type it
+    points AT rather than vanishing to "". We compare ref IDENTITY (does the
+    field still point at the same nested type?), not the dereferenced internals
+    - those nested fields are reflected as their own sections."""
+    return str(ref).rstrip("/").rsplit("/", 1)[-1] or str(ref)
+
+
 def _semantic_type(spec: Any) -> str:
     """Canonical semantic type of a field spec (enum -> Literal, anyOf unwound,
-    JSON-Schema primitives -> Python, null/optional dropped)."""
+    $ref -> target type name, JSON-Schema primitives -> Python, null/optional
+    dropped)."""
     if not isinstance(spec, dict):
         return ""
+    if "$ref" in spec:
+        return f"ref:{_ref_target(spec['$ref'])}"
     if "enum" in spec:
         return f"Literal[{', '.join(repr(str(v)) for v in sorted(str(v) for v in spec['enum']))}]"
     if "anyOf" in spec:
