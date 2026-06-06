@@ -1,0 +1,38 @@
+{
+  "engine": "tensorrt",
+  "group_status_counts": {
+    "confirmed": 40,
+    "failed": 6,
+    "unreachable": 98
+  },
+  "gt_growth_keys_vs_poc": 8,
+  "n_gate_confirmed_keys": 40,
+  "n_gateable_candidates": 78,
+  "per_source_candidate_counts": {
+    "mech": 110,
+    "passA": 99,
+    "passB": 100,
+    "poc": 92
+  },
+  "per_source_tolerant_key_counts": {
+    "mech": 95,
+    "passA": 86,
+    "passB": 88,
+    "poc": 80
+  },
+  "per_source_unique_contribution": {
+    "mech": 51,
+    "passA": 4,
+    "passB": 5,
+    "poc": 0
+  },
+  "poc_tolerant_keys": 80,
+  "union_size_tolerant": 144,
+  "verdict_counts": {
+    "confirmed": 68,
+    "failed": 10,
+    "infra_error": 0,
+    "skipped": 0
+  },
+  "version": "1.2.1"
+}
