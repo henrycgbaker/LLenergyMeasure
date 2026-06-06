@@ -305,6 +305,67 @@ mostly needs to MINE-NEW on minors (cheap deterministic walk-surface widening fo
 the mechanical tail; LLM mining for the structural residual) and additionally
 RE-MINE the dropped/rebounded surface on a major.
 
+## Cross-engine generalisation: vllm 0.18.1 -> 0.19.1
+
+Carried the methodology to a SECOND engine (vllm) to test whether the bump
+findings are tensorrt-specific. The study window has no non-tensorrt MAJOR
+boundary, so this tests minor-bump behaviour. Two cells, each 2 Opus passes
+(entry-point + class-hierarchy), runtime-gated in the vllm container (CPU-only
+dispatch), then full adversarial source-review.
+
+### Per-cell GT
+
+| cell | union | confirmed | sources | adversarial review |
+|---|---|---|---|---|
+| vllm 0.18.1 | 145 | 94 | passA 76, passB 69 (no mech, no PoC) | 91/94 REAL, 0 false-confirm, 0 fab, 3 mis-stated predicate_value |
+| vllm 0.19.1 | 249 | 90 | passA 82, passB 64, mech 105, poc 79 | 90/90 REAL, 0 false-confirm, 0 fab |
+
+The gate generalises cleanly to a different engine: vllm config objects construct
+CPU-only, so the CPU-only vllm dispatch confirms many invariants (94 / 90, the
+deepest cells in the study). The 0.19.1 reviewer additionally RE-RAN 50+ entries
+end-to-end in-container to verify each fires for the right reason. Cross-engine GT
+integrity: **243/247 confirmed entries verified REAL** across all six cells
+(tensorrt 62/63 + vllm 181/184). (0.19.1 had 63 infra_errors = configs needing a
+real model dir like ModelConfig; a recall ceiling, not a confirmed-correctness
+issue. 0.18.1 has no PoC/mech, so all 94 confirmed are Opus-only.)
+
+### vllm minor-bump delta (Opus basis, tolerant-key match)
+
+| basis | persist | added | dropped | rebounded (of persist) |
+|---|---|---|---|---|
+| OPUS (passA+passB) | 87/111 = **78%** | 24 | 24 | 31/87 = **36%** |
+| confirmed | 57/75 = 76% | 9 | 18 | 19/57 |
+
+Reading (with the load-bearing caveat):
+- **vllm 0.18->0.19 churns MORE than a tensorrt 1.x minor (92-94% persist) but
+  LESS than the tensorrt major (53%).** The caveat is decisive: vllm uses 0.x
+  versioning, where the MINOR digit is the breaking-change position - a vllm
+  0.18->0.19 bump is effectively a feature release, NOT semantically a "minor"
+  like tensorrt 1.0->1.1. So vllm's minor sitting between tensorrt's minor and
+  major is exactly what the versioning conventions predict; it is NOT evidence
+  that vllm churns more "for the same kind of bump."
+- **The survivor RE-BOUND rate generalises and is the robust cross-engine
+  signal:** 36% of vllm knobs that persist 0.18->0.19 changed their bound/
+  allowlist - close to the tensorrt MAJOR's 42% and well above tensorrt minors'
+  14-20%. Silent re-bounding of surviving knobs is an engine-independent hazard,
+  reinforcing that the runtime gate (re-validate each carried-over constraint
+  against the live engine) is necessary across engines, not a tensorrt quirk.
+
+### Systemic finding: what "gate-confirmed" does and does not guarantee
+
+The 0.18.1 review surfaced a real bound on the gate's guarantee (3 mis-stated
+entries): the gate verifies BINARY fire/pass BEHAVIOUR (a bad value fires, a good
+value passes) but does NOT cross-check the recorded `predicate_value` against the
+cited source. So an entry can gate-confirm correctly while its recorded allowlist/
+bound is slightly off, whenever the synthesised/authored positive+negative kwargs
+happen to straddle the TRUE boundary (e.g. a 6-value allowlist recorded for an
+8-value Literal still confirms, because the probed out-of-set value fires and the
+in-set value passes). Implication: gate-confirmation establishes the constraint
+EXISTS and is roughly located, not that its recorded boundary is exact. For the
+product this is acceptable (existence + rough location is the high-value signal),
+but a precise-boundary guarantee would need the gate to additionally probe AT the
+recorded boundary edges. Filed as a known gate-scope limitation.
+
 ## Fan-out readiness (what the full 15-cell x 2-track matrix needs)
 
 - **Per-version producers exist for only ~6 versions** (transformers v4_57_3 /

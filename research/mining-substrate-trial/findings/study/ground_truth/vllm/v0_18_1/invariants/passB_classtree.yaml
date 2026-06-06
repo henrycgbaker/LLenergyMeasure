@@ -1,0 +1,1270 @@
+schema_version: ground_truth/1.0.0
+engine: vllm
+engine_version: 0.18.1
+venv_src_root: /tmp/vllm-0.18.1/vllm
+pass: B
+strategy: class-hierarchy / type-tree walk
+established_at: '2026-06-06'
+established_by: opus-passB-vllm-0.18.1
+methodology_ref: research/mining-substrate-trial/findings/study/ground_truth/vllm/v0_18_1/invariants/passB_methodology.md
+scope_notes: |
+  Strategy B (class-hierarchy / type-tree walk) of vLLM 0.18.1. Every config
+  dataclass in the modular vllm/config/*.py package (attention, cache,
+  compilation, device, ec_transfer, kv_events, kv_transfer, lora, multimodal,
+  observability, offload, parallel, profiler, scheduler, speculative,
+  structured_outputs, weight_transfer) plus vllm/sampling_params.py and
+  vllm/pooling_params.py was walked by TYPE. For each class every field-level
+  Literal membership, every Field(ge/gt/le/lt) constraint, every
+  field_validator / model_validator body, every __post_init__ / _verify_args
+  check, and any raise / assert / logger.warning reachable at construction was
+  extracted and read in context against the 0.18.1 source.
+  An invariant = a rule that makes a config / params object VALID or INVALID at
+  construction. native_type is a dotted importable path so the gate can
+  construct the type directly. kwargs_positive SHOULD fire (invalid);
+  kwargs_negative should PASS (valid). Pairs are only emitted where they are
+  safe to replay CPU-only (no model download, no CUDA query, no distributed
+  setup); rules entangled with a GPU / model-dir / distributed __post_init__
+  carry dormant_reason and no kwargs rather than a fabricated pair.
+  Strategy-B gain over an entry-point walk: the declarative Literal / enum
+  membership field constraints (cache_dtype, prefix_caching_hash_algo,
+  max_lora_rank, scheduler policy, data_parallel_backend, attention backend
+  enum, etc.) that pydantic enforces by typing and that never appear as an
+  explicit coded raise on any call path; plus the dead-raise observations
+  (EPLBConfig.policy single-member Literal makes the async-policy raise
+  unreachable; ECTransferConfig ec_role Literal makes its get_args raise
+  unreachable).
+  0.18.1 vs 0.19.1: structurally the same modular config package, one minor
+  below. The only field-set delta found in the walked surface is
+  SpeculativeConfig.rejection_sample_method, which is Literal['strict',
+  'probabilistic'] at 0.18.1 (two members) and gained 'synthetic' at 0.19.1.
+  SpeculativeMethod and the MTPModelTypes / EagleModelTypes unions are identical
+  across the two minors. All cited line numbers are re-derived from 0.18.1
+  source and differ from 0.19.1.
+invariants:
+
+# ============================================================================
+# CacheConfig - declarative Literal membership + Field ranges
+# ============================================================================
+
+- id: vllm_cacheconfig_cache_dtype_literal
+  provenance: net_new
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.cache_dtype
+  predicate_kind: literal_in
+  predicate_value: [auto, float16, bfloat16, fp8, fp8_e4m3, fp8_e5m2, fp8_inc, fp8_ds_mla]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'auto', 'float16', 'bfloat16', 'fp8', 'fp8_e4m3', 'fp8_e5m2', 'fp8_inc' or 'fp8_ds_mla'"
+  citation:
+    file: vllm/config/cache.py
+    line: 49
+    qualname: CacheConfig.cache_dtype
+  notes: "CacheDType Literal (cache.py:14). The after-validator _validate_cache_dtype (line 208) only logger.info's on fp8, it does not reject - membership is the type-tree-only invariant."
+  kwargs_positive: {cache_dtype: __not_a_dtype__}
+  kwargs_negative: {cache_dtype: fp8_e4m3}
+
+- id: vllm_cacheconfig_prefix_caching_hash_algo_literal
+  provenance: net_new
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.prefix_caching_hash_algo
+  predicate_kind: literal_in
+  predicate_value: [sha256, sha256_cbor, xxhash, xxhash_cbor]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'sha256', 'sha256_cbor', 'xxhash' or 'xxhash_cbor'"
+  citation:
+    file: vllm/config/cache.py
+    line: 68
+    qualname: CacheConfig.prefix_caching_hash_algo
+  notes: "PrefixCachingHashAlgo Literal (cache.py:26). The xxhash variants need the optional xxhash package at RUNTIME use, not at construction, so the Literal fires/passes CPU-only."
+  kwargs_positive: {prefix_caching_hash_algo: md5}
+  kwargs_negative: {prefix_caching_hash_algo: sha256}
+
+- id: vllm_cacheconfig_mamba_cache_dtype_literal
+  provenance: net_new
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.mamba_cache_dtype
+  predicate_kind: literal_in
+  predicate_value: [auto, float32, float16]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'auto', 'float32' or 'float16'"
+  citation:
+    file: vllm/config/cache.py
+    line: 98
+    qualname: CacheConfig.mamba_cache_dtype
+  notes: "MambaDType Literal (cache.py:24). Same alias gates mamba_ssm_cache_dtype (line 102)."
+  kwargs_positive: {mamba_cache_dtype: bfloat16}
+  kwargs_negative: {mamba_cache_dtype: float32}
+
+- id: vllm_cacheconfig_mamba_cache_mode_literal
+  provenance: net_new
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.mamba_cache_mode
+  predicate_kind: literal_in
+  predicate_value: [all, align, none]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'all', 'align' or 'none'"
+  citation:
+    file: vllm/config/cache.py
+    line: 106
+    qualname: CacheConfig.mamba_cache_mode
+  notes: "MambaCacheMode Literal (cache.py:25)."
+  kwargs_positive: {mamba_cache_mode: partial}
+  kwargs_negative: {mamba_cache_mode: align}
+
+- id: vllm_cacheconfig_kv_offloading_backend_literal
+  provenance: net_new
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.kv_offloading_backend
+  predicate_kind: literal_in
+  predicate_value: [native, lmcache]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'native' or 'lmcache'"
+  citation:
+    file: vllm/config/cache.py
+    line: 147
+    qualname: CacheConfig.kv_offloading_backend
+  notes: "KVOffloadingBackend Literal (cache.py:27)."
+  kwargs_positive: {kv_offloading_backend: redis}
+  kwargs_negative: {kv_offloading_backend: native}
+
+- id: vllm_cacheconfig_gpu_memory_utilization_range
+  provenance: net_new
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.gpu_memory_utilization
+  predicate_kind: range
+  predicate_value: {gt: 0, le: 1}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than 0 / less than or equal to 1"
+  citation:
+    file: vllm/config/cache.py
+    line: 41
+    qualname: CacheConfig.gpu_memory_utilization
+  notes: "Field(default=0.9, gt=0, le=1)."
+  kwargs_positive: {gpu_memory_utilization: 1.5}
+  kwargs_negative: {gpu_memory_utilization: 0.9}
+
+- id: vllm_cacheconfig_mamba_block_size_gt_0
+  provenance: net_new
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.mamba_block_size
+  predicate_kind: range
+  predicate_value: {gt: 0, allow_none: true}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than 0"
+  citation:
+    file: vllm/config/cache.py
+    line: 94
+    qualname: CacheConfig.mamba_block_size
+  notes: "Field(default=None, gt=0); None passes (optional)."
+  kwargs_positive: {mamba_block_size: 0}
+  kwargs_negative: {mamba_block_size: 8}
+
+# ============================================================================
+# LoRAConfig
+# ============================================================================
+
+- id: vllm_loraconfig_max_lora_rank_literal
+  provenance: net_new
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.max_lora_rank
+  predicate_kind: literal_in
+  predicate_value: [1, 8, 16, 32, 64, 128, 256, 320, 512]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 1, 8, 16, 32, 64, 128, 256, 320 or 512"
+  citation:
+    file: vllm/config/lora.py
+    line: 32
+    qualname: LoRAConfig.max_lora_rank
+  notes: "MaxLoRARanks integer Literal (lora.py:24). Canonical Strategy-B catch: a value-set rule enforced by pydantic typing, raising ValidationError on the type, never via a coded raise."
+  kwargs_positive: {max_lora_rank: 17}
+  kwargs_negative: {max_lora_rank: 16}
+
+- id: vllm_loraconfig_max_loras_ge_1
+  provenance: net_new
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.max_loras
+  predicate_kind: range
+  predicate_value: {ge: 1}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than or equal to 1"
+  citation:
+    file: vllm/config/lora.py
+    line: 34
+    qualname: LoRAConfig.max_loras
+  notes: "Field(default=1, ge=1)."
+  kwargs_positive: {max_loras: 0}
+  kwargs_negative: {max_loras: 1}
+
+- id: vllm_loraconfig_max_cpu_loras_ge_max_loras
+  provenance: net_new
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.max_cpu_loras
+  predicate_kind: presence_conflict
+  predicate_value: {require: "max_cpu_loras is None or max_cpu_loras >= max_loras"}
+  severity: error
+  outcome: invalid
+  message_template: "max_cpu_loras ({max_cpu_loras}) must be >= max_loras ({max_loras})."
+  citation:
+    file: vllm/config/lora.py
+    line: 95
+    qualname: LoRAConfig._validate_lora_config
+  notes: "model_validator(mode=after); None is normalised to max_loras (line 94)."
+  kwargs_positive: {max_loras: 4, max_cpu_loras: 2}
+  kwargs_negative: {max_loras: 4, max_cpu_loras: 8}
+
+- id: vllm_loraconfig_lora_dtype_literal
+  provenance: net_new
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.lora_dtype
+  predicate_kind: literal_in
+  predicate_value: [auto, float16, bfloat16]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'auto', 'float16' or 'bfloat16' (or a torch.dtype)"
+  citation:
+    file: vllm/config/lora.py
+    line: 44
+    qualname: LoRAConfig.lora_dtype
+  dormant_reason: "Field type is torch.dtype | LoRADType with ConfigDict(arbitrary_types_allowed=True); the torch.dtype union member lets an arbitrary object pass type validation, so the LoRADType Literal is not cleanly enforced for non-string inputs. Membership recorded but not a clean replay pair."
+
+# ============================================================================
+# SchedulerConfig - InitVars max_model_len / is_encoder_decoder must be supplied
+# ============================================================================
+
+- id: vllm_schedulerconfig_policy_literal
+  provenance: net_new
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.policy
+  predicate_kind: literal_in
+  predicate_value: [fcfs, priority]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'fcfs' or 'priority'"
+  citation:
+    file: vllm/config/scheduler.py
+    line: 108
+    qualname: SchedulerConfig.policy
+  notes: "SchedulerPolicy Literal (scheduler.py:22). max_model_len and is_encoder_decoder are InitVars consumed by __post_init__ and must be supplied at construction."
+  kwargs_positive: {max_model_len: 2048, is_encoder_decoder: false, policy: lifo}
+  kwargs_negative: {max_model_len: 2048, is_encoder_decoder: false, policy: priority}
+
+- id: vllm_schedulerconfig_runner_type_literal
+  provenance: net_new
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.runner_type
+  predicate_kind: literal_in
+  predicate_value: [generate, pooling, draft]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'generate', 'pooling' or 'draft'"
+  citation:
+    file: vllm/config/scheduler.py
+    line: 45
+    qualname: SchedulerConfig.runner_type
+  notes: "RunnerType Literal (scheduler.py:21)."
+  kwargs_positive: {max_model_len: 2048, is_encoder_decoder: false, runner_type: embed}
+  kwargs_negative: {max_model_len: 2048, is_encoder_decoder: false, runner_type: pooling}
+
+- id: vllm_schedulerconfig_batched_tokens_ge_max_num_seqs
+  provenance: net_new
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.max_num_batched_tokens
+  predicate_kind: presence_conflict
+  predicate_value: {require: "max_num_batched_tokens >= max_num_seqs"}
+  severity: error
+  outcome: invalid
+  message_template: "max_num_batched_tokens ({max_num_batched_tokens}) must be greater than or equal to max_num_seqs ({max_num_seqs})."
+  citation:
+    file: vllm/config/scheduler.py
+    line: 265
+    qualname: SchedulerConfig.verify_max_model_len
+  notes: "Called from __post_init__ (line 249) with the max_model_len InitVar. CPU-replayable when the InitVars are supplied."
+  kwargs_positive: {max_model_len: 2048, is_encoder_decoder: false, max_num_batched_tokens: 16, max_num_seqs: 32}
+  kwargs_negative: {max_model_len: 2048, is_encoder_decoder: false, max_num_batched_tokens: 64, max_num_seqs: 32}
+
+- id: vllm_schedulerconfig_max_long_le_max_partial_prefills
+  provenance: net_new
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.max_long_partial_prefills
+  predicate_kind: presence_conflict
+  predicate_value: {require: "max_long_partial_prefills <= max_num_partial_prefills"}
+  severity: error
+  outcome: invalid
+  message_template: "self.max_long_partial_prefills= must be less than or equal to self.max_num_partial_prefills=."
+  citation:
+    file: vllm/config/scheduler.py
+    line: 294
+    qualname: SchedulerConfig.verify_max_model_len
+  notes: "Ungated final check in verify_max_model_len (not behind enable_chunked_prefill). Both Field(ge=1) so the pair uses partial-prefill > num-partial-prefills."
+  kwargs_positive: {max_model_len: 2048, is_encoder_decoder: false, max_num_partial_prefills: 2, max_long_partial_prefills: 4}
+  kwargs_negative: {max_model_len: 2048, is_encoder_decoder: false, max_num_partial_prefills: 4, max_long_partial_prefills: 2}
+
+- id: vllm_schedulerconfig_partial_prefills_require_chunked
+  provenance: net_new
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.max_num_partial_prefills
+  predicate_kind: presence_conflict
+  predicate_value: {when: "max_num_partial_prefills > 1", require: "enable_chunked_prefill"}
+  severity: error
+  outcome: invalid
+  message_template: "Chunked prefill must be enabled to set max_num_partial_prefills > 1."
+  citation:
+    file: vllm/config/scheduler.py
+    line: 282
+    qualname: SchedulerConfig.verify_max_model_len
+  notes: "Reachable via __post_init__ -> verify_max_model_len. CPU-replayable with InitVars supplied and chunked prefill explicitly disabled."
+  kwargs_positive: {max_model_len: 2048, is_encoder_decoder: false, enable_chunked_prefill: false, max_num_partial_prefills: 2}
+  kwargs_negative: {max_model_len: 2048, is_encoder_decoder: false, enable_chunked_prefill: true, max_num_partial_prefills: 2}
+
+# ============================================================================
+# StructuredOutputsConfig
+# ============================================================================
+
+- id: vllm_structuredoutputsconfig_backend_literal
+  provenance: net_new
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: StructuredOutputsConfig.backend
+  predicate_kind: literal_in
+  predicate_value: [auto, xgrammar, guidance, outlines, lm-format-enforcer]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'auto', 'xgrammar', 'guidance', 'outlines' or 'lm-format-enforcer'"
+  citation:
+    file: vllm/config/structured_outputs.py
+    line: 21
+    qualname: StructuredOutputsConfig.backend
+  notes: "StructuredOutputsBackend Literal (structured_outputs.py:12)."
+  kwargs_positive: {backend: jsonschema}
+  kwargs_negative: {backend: xgrammar}
+
+- id: vllm_structuredoutputsconfig_disable_whitespace_backend
+  provenance: net_new
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: StructuredOutputsConfig.disable_any_whitespace
+  predicate_kind: presence_conflict
+  predicate_value: {when: disable_any_whitespace, require: "backend in {xgrammar, guidance}"}
+  severity: error
+  outcome: invalid
+  message_template: "disable_any_whitespace is only supported for xgrammar and guidance backends."
+  citation:
+    file: vllm/config/structured_outputs.py
+    line: 64
+    qualname: StructuredOutputsConfig._validate_structured_output_config
+  kwargs_positive: {disable_any_whitespace: true, backend: outlines}
+  kwargs_negative: {disable_any_whitespace: true, backend: xgrammar}
+
+- id: vllm_structuredoutputsconfig_disable_additional_props_backend
+  provenance: net_new
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: StructuredOutputsConfig.disable_additional_properties
+  predicate_kind: presence_conflict
+  predicate_value: {when: disable_additional_properties, require: "backend == guidance"}
+  severity: error
+  outcome: invalid
+  message_template: "disable_additional_properties is only supported for the guidance backend."
+  citation:
+    file: vllm/config/structured_outputs.py
+    line: 69
+    qualname: StructuredOutputsConfig._validate_structured_output_config
+  kwargs_positive: {disable_additional_properties: true, backend: xgrammar}
+  kwargs_negative: {disable_additional_properties: true, backend: guidance}
+
+# ============================================================================
+# KVTransferConfig / KVEventsConfig / WeightTransferConfig / ECTransferConfig
+# ============================================================================
+
+- id: vllm_kvtransferconfig_kv_load_failure_policy_literal
+  provenance: net_new
+  native_type: vllm.config.KVTransferConfig
+  native_field: KVTransferConfig.kv_load_failure_policy
+  predicate_kind: literal_in
+  predicate_value: [recompute, fail]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'recompute' or 'fail'"
+  citation:
+    file: vllm/config/kv_transfer.py
+    line: 70
+    qualname: KVTransferConfig.kv_load_failure_policy
+  notes: "Inline Literal field (default 'fail')."
+  kwargs_positive: {kv_load_failure_policy: skip}
+  kwargs_negative: {kv_load_failure_policy: recompute}
+
+- id: vllm_kvtransferconfig_connector_requires_role
+  provenance: net_new
+  native_type: vllm.config.KVTransferConfig
+  native_field: KVTransferConfig.kv_role
+  predicate_kind: presence_conflict
+  predicate_value: {when: "kv_connector is not None", require: "kv_role is not None"}
+  severity: error
+  outcome: invalid
+  message_template: "Please specify kv_role when kv_connector is set, supported roles are {roles}"
+  citation:
+    file: vllm/config/kv_transfer.py
+    line: 103
+    qualname: KVTransferConfig.__post_init__
+  notes: "kv_role IS Literal-typed (KVRole, kv_transfer.py:13), so the in-post_init get_args membership raise (line 97) is DEAD via direct construction (the Literal rejects an out-of-set role first). The connector-without-role conflict (line 103) is the cleanly replayable half. Type-tree dead-raise observation."
+  kwargs_positive: {kv_connector: P2pNcclConnector}
+  kwargs_negative: {kv_connector: P2pNcclConnector, kv_role: kv_producer}
+
+- id: vllm_kveventsconfig_publisher_literal
+  provenance: net_new
+  native_type: vllm.config.KVEventsConfig
+  native_field: KVEventsConfig.publisher
+  predicate_kind: literal_in
+  predicate_value: [null, zmq]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'null' or 'zmq'"
+  citation:
+    file: vllm/config/kv_events.py
+    line: 21
+    qualname: KVEventsConfig.publisher
+  notes: "publisher field is Literal['null','zmq'] with default None; __post_init__ (line 52) resolves None to 'zmq'/'null'. A non-member string is rejected by Literal validation before post_init runs."
+  kwargs_positive: {publisher: kafka}
+  kwargs_negative: {publisher: zmq}
+
+- id: vllm_weighttransferconfig_backend_literal
+  provenance: net_new
+  native_type: vllm.config.WeightTransferConfig
+  native_field: WeightTransferConfig.backend
+  predicate_kind: literal_in
+  predicate_value: [nccl, ipc]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'nccl' or 'ipc'"
+  citation:
+    file: vllm/config/weight_transfer.py
+    line: 12
+    qualname: WeightTransferConfig.backend
+  notes: "weight_transfer.py has ZERO raise/assert/warning in the body; the backend Literal is its ONLY construction-time invariant - invisible to an explicit-raise walk."
+  kwargs_positive: {backend: gloo}
+  kwargs_negative: {backend: ipc}
+
+- id: vllm_ectransferconfig_connector_requires_role
+  provenance: net_new
+  native_type: vllm.config.ECTransferConfig
+  native_field: ECTransferConfig.ec_role
+  predicate_kind: presence_conflict
+  predicate_value: {when: "ec_connector is not None", require: "ec_role is not None"}
+  severity: error
+  outcome: invalid
+  message_template: "Please specify ec_role when ec_connector is set, supported roles are {roles}"
+  citation:
+    file: vllm/config/ec_transfer.py
+    line: 88
+    qualname: ECTransferConfig.__post_init__
+  notes: "ec_role IS Literal-typed (ECRole, ec_transfer.py:12), so the not-in-get_args raise at line 82 is DEAD via direct construction (Literal rejects first). Only the connector-without-role conflict (line 88) is reachable. Type-tree dead-raise observation."
+  kwargs_positive: {ec_connector: SomeConnector}
+  kwargs_negative: {ec_connector: SomeConnector, ec_role: ec_producer}
+
+# ============================================================================
+# AttentionConfig
+# ============================================================================
+
+- id: vllm_attentionconfig_flash_attn_version_literal
+  provenance: net_new
+  native_type: vllm.config.AttentionConfig
+  native_field: AttentionConfig.flash_attn_version
+  predicate_kind: literal_in
+  predicate_value: [2, 3, 4]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 2, 3 or 4"
+  citation:
+    file: vllm/config/attention.py
+    line: 19
+    qualname: AttentionConfig.flash_attn_version
+  notes: "Literal[2,3,4] | None. No str escape in the union, so the integer Literal is genuinely enforced."
+  kwargs_positive: {flash_attn_version: 1}
+  kwargs_negative: {flash_attn_version: 3}
+
+- id: vllm_attentionconfig_backend_enum_membership
+  provenance: net_new
+  native_type: vllm.config.AttentionConfig
+  native_field: AttentionConfig.backend
+  predicate_kind: strenum_in
+  predicate_value: "@AttentionBackendEnum (vllm.v1.attention.backends.registry); 'auto' aliases to None"
+  severity: error
+  outcome: invalid
+  message_template: "KeyError from AttentionBackendEnum[value.upper()]"
+  citation:
+    file: vllm/config/attention.py
+    line: 63
+    qualname: AttentionConfig.validate_backend_before
+  notes: "before-validator does AttentionBackendEnum[value.upper()] - an unknown backend string raises KeyError (not a coded ValueError). Type-driven membership: the canonical Strategy-B catch. 'auto' is normalised to None."
+  kwargs_positive: {backend: __not_a_backend__}
+  kwargs_negative: {backend: auto}
+
+# ============================================================================
+# CompilationConfig
+# ============================================================================
+
+- id: vllm_compilationconfig_mode_enum_membership
+  provenance: net_new
+  native_type: vllm.config.CompilationConfig
+  native_field: CompilationConfig.mode
+  predicate_kind: strenum_in
+  predicate_value: "@CompilationMode members (NONE, STOCK_TORCH_COMPILE, DYNAMO_TRACE_ONCE, VLLM_COMPILE) or their int values 0-3"
+  severity: error
+  outcome: invalid
+  message_template: "Invalid compilation mode: {value}. Valid modes are: {members}"
+  citation:
+    file: vllm/config/compilation.py
+    line: 770
+    qualname: CompilationConfig.validate_mode_before
+  notes: "before-validator coded raise on an unknown string mode name; runs ahead of __post_init__ (line 232)."
+  dormant_reason: "CompilationConfig.__post_init__ (compilation.py:232) runs many asserts/derivations as part of dataclass __init__; bare CompilationConfig(mode=...) may exercise post_init paths not guaranteed CPU-safe in isolation. Membership documented; replay deferred to a richer VllmConfig fixture."
+
+- id: vllm_compilationconfig_compile_cache_save_format_literal
+  provenance: net_new
+  native_type: vllm.config.CompilationConfig
+  native_field: CompilationConfig.compile_cache_save_format
+  predicate_kind: literal_in
+  predicate_value: [binary, unpacked]
+  severity: error
+  outcome: invalid
+  message_template: "compile_cache_save_format must be 'binary' or 'unpacked', got: {value}"
+  citation:
+    file: vllm/config/compilation.py
+    line: 797
+    qualname: CompilationConfig.validate_compile_cache_save_format
+  notes: "Doubly-guarded: field is Literal['binary','unpacked'] (line 427) AND a redundant after-validator coded raise (line 797). Either rejects an out-of-set value."
+  dormant_reason: "Same as mode: CompilationConfig.__post_init__ side effects make standalone construction risky; membership recorded, replay deferred."
+
+# ============================================================================
+# MultiModalConfig
+# ============================================================================
+
+- id: vllm_multimodalconfig_mm_processor_cache_type_literal
+  provenance: net_new
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_processor_cache_type
+  predicate_kind: literal_in
+  predicate_value: [shm, lru]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'shm' or 'lru'"
+  citation:
+    file: vllm/config/multimodal.py
+    line: 130
+    qualname: MultiModalConfig.mm_processor_cache_type
+  notes: "MMCacheType Literal (multimodal.py:61)."
+  kwargs_positive: {mm_processor_cache_type: disk}
+  kwargs_negative: {mm_processor_cache_type: lru}
+
+- id: vllm_multimodalconfig_mm_encoder_tp_mode_literal
+  provenance: net_new
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_encoder_tp_mode
+  predicate_kind: literal_in
+  predicate_value: [weights, data]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'weights' or 'data'"
+  citation:
+    file: vllm/config/multimodal.py
+    line: 143
+    qualname: MultiModalConfig.mm_encoder_tp_mode
+  notes: "MMEncoderTPMode Literal (multimodal.py:60)."
+  kwargs_positive: {mm_encoder_tp_mode: both}
+  kwargs_negative: {mm_encoder_tp_mode: data}
+
+- id: vllm_multimodalconfig_video_pruning_rate_range
+  provenance: net_new
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.video_pruning_rate
+  predicate_kind: range
+  predicate_value: {ge: 0.0, lt: 1.0}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than or equal to 0 / less than 1"
+  citation:
+    file: vllm/config/multimodal.py
+    line: 170
+    qualname: MultiModalConfig.video_pruning_rate
+  notes: "Field(default=None, ge=0.0, lt=1.0) - half-open; None is allowed (optional)."
+  kwargs_positive: {video_pruning_rate: 1.0}
+  kwargs_negative: {video_pruning_rate: 0.5}
+
+- id: vllm_multimodalconfig_mm_processor_cache_gb_ge_0
+  provenance: net_new
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_processor_cache_gb
+  predicate_kind: range
+  predicate_value: {ge: 0}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than or equal to 0"
+  citation:
+    file: vllm/config/multimodal.py
+    line: 121
+    qualname: MultiModalConfig.mm_processor_cache_gb
+  notes: "Field(default=4, ge=0)."
+  kwargs_positive: {mm_processor_cache_gb: -1}
+  kwargs_negative: {mm_processor_cache_gb: 4}
+
+- id: vllm_multimodalconfig_mm_encoder_attn_backend_xformers_removed
+  provenance: net_new
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_encoder_attn_backend
+  predicate_kind: backend_dispatch
+  predicate_value: {reject: XFORMERS, else: "AttentionBackendEnum[value.upper()]"}
+  severity: error
+  outcome: invalid
+  message_template: "Attention backend 'XFORMERS' has been removed (See PR #29262 for details). Please select a supported attention backend."
+  citation:
+    file: vllm/config/multimodal.py
+    line: 207
+    qualname: MultiModalConfig._validate_mm_encoder_attn_backend
+  notes: "before-validator: explicit raise for the removed XFORMERS backend, then AttentionBackendEnum[value.upper()] KeyError for any other unknown backend (type-driven membership)."
+  kwargs_positive: {mm_encoder_attn_backend: XFORMERS}
+  kwargs_negative: {mm_encoder_attn_backend: null}
+
+- id: vllm_multimodalconfig_shm_cache_size_only_for_shm
+  provenance: net_new
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_shm_cache_max_object_size_mb
+  predicate_kind: presence_conflict
+  predicate_value: {when: "mm_shm_cache_max_object_size_mb != default(128)", require: "mm_processor_cache_type == 'shm'"}
+  severity: error
+  outcome: invalid
+  message_template: "'mm_shm_cache_max_object_size_mb' should only be set when 'mm_processor_cache_type' is 'shm'."
+  citation:
+    file: vllm/config/multimodal.py
+    line: 226
+    qualname: MultiModalConfig._validate_multimodal_config
+  notes: "model_validator(mode=after). Default cache_type is 'lru', so setting the shm-cache size without switching cache_type to 'shm' raises. CPU-replayable standalone."
+  kwargs_positive: {mm_shm_cache_max_object_size_mb: 64}
+  kwargs_negative: {mm_processor_cache_type: shm, mm_shm_cache_max_object_size_mb: 64}
+
+# ============================================================================
+# OffloadConfig + sub-configs (Field ranges + reachable validator)
+# ============================================================================
+
+- id: vllm_offloadconfig_offload_backend_literal
+  provenance: net_new
+  native_type: vllm.config.OffloadConfig
+  native_field: OffloadConfig.offload_backend
+  predicate_kind: literal_in
+  predicate_value: [auto, uva, prefetch]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'auto', 'uva' or 'prefetch'"
+  citation:
+    file: vllm/config/offload.py
+    line: 83
+    qualname: OffloadConfig.offload_backend
+  notes: "OffloadBackend Literal (offload.py:12)."
+  kwargs_positive: {offload_backend: disk}
+  kwargs_negative: {offload_backend: uva}
+
+- id: vllm_prefetchoffloadconfig_offload_num_in_group_ge_1
+  provenance: net_new
+  native_type: vllm.config.PrefetchOffloadConfig
+  native_field: PrefetchOffloadConfig.offload_num_in_group
+  predicate_kind: range
+  predicate_value: {ge: 1}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than or equal to 1"
+  citation:
+    file: vllm/config/offload.py
+    line: 62
+    qualname: PrefetchOffloadConfig.offload_num_in_group
+  notes: "Field(default=1, ge=1) on a nested sub-config the entry-point walk does not construct directly."
+  kwargs_positive: {offload_num_in_group: 0}
+  kwargs_negative: {offload_num_in_group: 1}
+
+# ============================================================================
+# ParallelConfig + EPLBConfig (nested sub-config)
+# ============================================================================
+
+- id: vllm_parallelconfig_data_parallel_backend_literal
+  provenance: net_new
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.data_parallel_backend
+  predicate_kind: literal_in
+  predicate_value: [ray, mp]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'ray' or 'mp'"
+  citation:
+    file: vllm/config/parallel.py
+    line: 123
+    qualname: ParallelConfig.data_parallel_backend
+  notes: "DataParallelBackend Literal (parallel.py:37). Contrast distributed_executor_backend (parallel.py:216) whose type includes a bare str union member, so it is NOT a membership invariant. data_parallel_backend has no str escape. ParallelConfig() default construction is CPU-only (DP=1 falls into the env-var branch with defaults)."
+  kwargs_positive: {data_parallel_backend: torchrun}
+  kwargs_negative: {data_parallel_backend: mp}
+
+- id: vllm_parallelconfig_expert_placement_strategy_literal
+  provenance: net_new
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.expert_placement_strategy
+  predicate_kind: literal_in
+  predicate_value: [linear, round_robin]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'linear' or 'round_robin'"
+  citation:
+    file: vllm/config/parallel.py
+    line: 152
+    qualname: ParallelConfig.expert_placement_strategy
+  notes: "ExpertPlacementStrategy Literal (parallel.py:35)."
+  kwargs_positive: {expert_placement_strategy: random}
+  kwargs_negative: {expert_placement_strategy: round_robin}
+
+- id: vllm_parallelconfig_dcp_comm_backend_literal
+  provenance: net_new
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.dcp_comm_backend
+  predicate_kind: literal_in
+  predicate_value: [ag_rs, a2a]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'ag_rs' or 'a2a'"
+  citation:
+    file: vllm/config/parallel.py
+    line: 309
+    qualname: ParallelConfig.dcp_comm_backend
+  notes: "DCPCommBackend Literal (parallel.py:39)."
+  kwargs_positive: {dcp_comm_backend: p2p}
+  kwargs_negative: {dcp_comm_backend: ag_rs}
+
+- id: vllm_eplbconfig_policy_literal
+  provenance: net_new
+  native_type: vllm.config.EPLBConfig
+  native_field: EPLBConfig.policy
+  predicate_kind: literal_in
+  predicate_value: [default]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'default'"
+  citation:
+    file: vllm/config/parallel.py
+    line: 85
+    qualname: EPLBConfig.policy
+  notes: "EPLBPolicyOption single-member Literal['default'] (parallel.py:38). Consequence the type-tree walk surfaces: the _validate_eplb_config raise 'Async EPLB is only supported with the default policy' (parallel.py:91) is DEAD via direct construction, because policy can never be != 'default'."
+  kwargs_positive: {policy: round_robin}
+  kwargs_negative: {policy: default}
+
+- id: vllm_eplbconfig_log_balancedness_interval_gt_0
+  provenance: net_new
+  native_type: vllm.config.EPLBConfig
+  native_field: EPLBConfig.log_balancedness_interval
+  predicate_kind: presence_conflict
+  predicate_value: {when: log_balancedness, require: "log_balancedness_interval > 0"}
+  severity: error
+  outcome: invalid
+  message_template: "log_balancedness_interval must be greater than 0."
+  citation:
+    file: vllm/config/parallel.py
+    line: 92
+    qualname: EPLBConfig._validate_eplb_config
+  notes: "The only reachable raise in EPLBConfig (the policy raise above it is dead, see vllm_eplbconfig_policy_literal). EPLBConfig is standalone-CPU-constructable."
+  kwargs_positive: {log_balancedness: true, log_balancedness_interval: 0}
+  kwargs_negative: {log_balancedness: true, log_balancedness_interval: 1}
+
+- id: vllm_eplbconfig_num_redundant_experts_ge_0
+  provenance: net_new
+  native_type: vllm.config.EPLBConfig
+  native_field: EPLBConfig.num_redundant_experts
+  predicate_kind: range
+  predicate_value: {ge: 0}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than or equal to 0"
+  citation:
+    file: vllm/config/parallel.py
+    line: 68
+    qualname: EPLBConfig.num_redundant_experts
+  notes: "Field(default=0, ge=0)."
+  kwargs_positive: {num_redundant_experts: -1}
+  kwargs_negative: {num_redundant_experts: 0}
+
+- id: vllm_parallelconfig_dcp_a2a_requires_dcp_gt_1
+  provenance: net_new
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.dcp_comm_backend
+  predicate_kind: presence_conflict
+  predicate_value: {when: "dcp_comm_backend == 'a2a'", require: "decode_context_parallel_size > 1"}
+  severity: error
+  outcome: invalid
+  message_template: "dcp_comm_backend='a2a' requires decode_context_parallel_size > 1."
+  citation:
+    file: vllm/config/parallel.py
+    line: 422
+    qualname: ParallelConfig._validate_parallel_config
+  dormant_reason: "ParallelConfig.__post_init__ (parallel.py:687) runs distributed/env-var setup (get_open_ports_list, RANK lookups) as part of __init__; while DP=1 default construction is CPU-safe, exercising the dcp/a2a + decode_context_parallel_size combination is entangled with the post_init distributed path. Deferred to a distributed-aware fixture."
+
+# ============================================================================
+# ObservabilityConfig
+# ============================================================================
+
+- id: vllm_observabilityconfig_show_hidden_metrics_version_parse
+  provenance: net_new
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.show_hidden_metrics_for_version
+  predicate_kind: type_is
+  predicate_value: {must_parse_as: packaging.version.parse}
+  severity: error
+  outcome: invalid
+  message_template: "Raised by packaging.version.parse on an invalid version string."
+  citation:
+    file: vllm/config/observability.py
+    line: 113
+    qualname: ObservabilityConfig._validate_show_hidden_metrics_for_version
+  notes: "field_validator parses the string with packaging.version.parse and lets the parse exception propagate - a validity rule with no coded raise in the body."
+  kwargs_positive: {show_hidden_metrics_for_version: not-a-version}
+  kwargs_negative: {show_hidden_metrics_for_version: '0.18'}
+
+- id: vllm_observabilityconfig_detailed_traces_requires_endpoint
+  provenance: net_new
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.collect_detailed_traces
+  predicate_kind: presence_conflict
+  predicate_value: {when: collect_detailed_traces, require: "otlp_traces_endpoint is set"}
+  severity: error
+  outcome: invalid
+  message_template: "collect_detailed_traces requires `--otlp-traces-endpoint` to be set."
+  citation:
+    file: vllm/config/observability.py
+    line: 146
+    qualname: ObservabilityConfig._validate_tracing_config
+  kwargs_positive: {collect_detailed_traces: [all]}
+  kwargs_negative: {collect_detailed_traces: [all], otlp_traces_endpoint: 'http://localhost:4317'}
+
+- id: vllm_observabilityconfig_kv_cache_metrics_sample_range
+  provenance: net_new
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.kv_cache_metrics_sample
+  predicate_kind: range
+  predicate_value: {gt: 0, le: 1}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than 0 / less than or equal to 1"
+  citation:
+    file: vllm/config/observability.py
+    line: 53
+    qualname: ObservabilityConfig.kv_cache_metrics_sample
+  notes: "Field(default=0.01, gt=0, le=1)."
+  kwargs_positive: {kv_cache_metrics_sample: 1.5}
+  kwargs_negative: {kv_cache_metrics_sample: 0.01}
+
+- id: vllm_observabilityconfig_otlp_requires_opentelemetry
+  provenance: net_new
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.otlp_traces_endpoint
+  predicate_kind: presence_conflict
+  predicate_value: {when: "otlp_traces_endpoint set", require: "opentelemetry installed"}
+  severity: error
+  outcome: invalid
+  message_template: "OpenTelemetry is not available. Unable to configure 'otlp_traces_endpoint'."
+  citation:
+    file: vllm/config/observability.py
+    line: 121
+    qualname: ObservabilityConfig._validate_otlp_traces_endpoint
+  dormant_reason: "Outcome depends on whether the optional opentelemetry packages are installed in the gate container; firing is environment-dependent, not a pure value rule. No fixed CPU replay pair."
+
+# ============================================================================
+# ProfilerConfig
+# ============================================================================
+
+- id: vllm_profilerconfig_kind_literal
+  provenance: net_new
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.profiler
+  predicate_kind: literal_in
+  predicate_value: [torch, cuda]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'torch' or 'cuda'"
+  citation:
+    file: vllm/config/profiler.py
+    line: 37
+    qualname: ProfilerConfig.profiler
+  notes: "ProfilerKind Literal (profiler.py:16) | None. None is the default."
+  kwargs_positive: {profiler: nsys}
+  kwargs_negative: {profiler: cuda}
+
+- id: vllm_profilerconfig_torch_dir_requires_torch_profiler
+  provenance: net_new
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.torch_profiler_dir
+  predicate_kind: presence_conflict
+  predicate_value: {when: "torch_profiler_dir set", require: "profiler == 'torch'"}
+  severity: error
+  outcome: invalid
+  message_template: "torch_profiler_dir is only applicable when profiler is set to 'torch'"
+  citation:
+    file: vllm/config/profiler.py
+    line: 135
+    qualname: ProfilerConfig._validate_profiler_config
+  notes: "profiler defaults to None, so by default neither this nor the inverse fires. ProfilerConfig is standalone-CPU-constructable."
+  kwargs_positive: {torch_profiler_dir: /tmp/prof}
+  kwargs_negative: {profiler: torch, torch_profiler_dir: /tmp/prof}
+
+- id: vllm_profilerconfig_torch_requires_dir
+  provenance: net_new
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.profiler
+  predicate_kind: presence_conflict
+  predicate_value: {when: "profiler == 'torch'", require: "torch_profiler_dir set"}
+  severity: error
+  outcome: invalid
+  message_template: "torch_profiler_dir must be set when profiler is 'torch'"
+  citation:
+    file: vllm/config/profiler.py
+    line: 139
+    qualname: ProfilerConfig._validate_profiler_config
+  kwargs_positive: {profiler: torch}
+  kwargs_negative: {profiler: torch, torch_profiler_dir: /tmp/prof}
+
+- id: vllm_profilerconfig_active_iterations_ge_1
+  provenance: net_new
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.active_iterations
+  predicate_kind: range
+  predicate_value: {ge: 1}
+  severity: error
+  outcome: invalid
+  message_template: "Input should be greater than or equal to 1"
+  citation:
+    file: vllm/config/profiler.py
+    line: 94
+    qualname: ProfilerConfig.active_iterations
+  notes: "Field(default=5, ge=1) - the only ge=1 in the profiler-schedule integer fields (delay/max/warmup/wait are ge=0)."
+  kwargs_positive: {active_iterations: 0}
+  kwargs_negative: {active_iterations: 5}
+
+# ============================================================================
+# SpeculativeConfig - declarative Literals (dormant: __post_init__ resolves a draft model)
+# ============================================================================
+
+- id: vllm_speculativeconfig_rejection_sample_method_literal
+  provenance: net_new
+  native_type: vllm.config.SpeculativeConfig
+  native_field: SpeculativeConfig.rejection_sample_method
+  predicate_kind: literal_in
+  predicate_value: [strict, probabilistic]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be 'strict' or 'probabilistic'"
+  citation:
+    file: vllm/config/speculative.py
+    line: 175
+    qualname: SpeculativeConfig.rejection_sample_method
+  notes: "RejectionSampleMethod Literal (speculative.py:60). 0.18.1 has TWO members ('strict','probabilistic'); 0.19.1 added 'synthetic'. This is the one field-set delta found between the two minors in the walked surface."
+  dormant_reason: "SpeculativeConfig.__post_init__ (speculative.py:338) resolves the draft model / method and requires a real target_model_config; it runs as part of dataclass __init__ before field-level membership can be replayed standalone. The Literal is real but not CPU-replayable in isolation."
+
+- id: vllm_speculativeconfig_method_literal
+  provenance: net_new
+  native_type: vllm.config.SpeculativeConfig
+  native_field: SpeculativeConfig.method
+  predicate_kind: literal_in
+  predicate_value: [ngram, medusa, mlp_speculator, draft_model, suffix, eagle, eagle3, extract_hidden_states, ngram_gpu, deepseek_mtp, mimo_mtp, glm4_moe_mtp, glm4_moe_lite_mtp, glm_ocr_mtp, ernie_mtp, nemotron_h_mtp, exaone_moe_mtp, qwen3_next_mtp, qwen3_5_mtp, longcat_flash_mtp, mtp, pangu_ultra_moe_mtp, step3p5_mtp]
+  severity: error
+  outcome: invalid
+  message_template: "Input should be a member of the SpeculativeMethod Literal union."
+  citation:
+    file: vllm/config/speculative.py
+    line: 76
+    qualname: SpeculativeConfig.method
+  notes: "SpeculativeMethod Literal (speculative.py:51, composed of EagleModelTypes+NgramGPUTypes, with MTPModelTypes nested under EagleModelTypes). The member set is identical to 0.19.1."
+  dormant_reason: "Same as rejection_sample_method: SpeculativeConfig.__post_init__ resolves a draft model first and is not standalone-CPU-replayable."
+
+# ============================================================================
+# SamplingParams._verify_args (folded from PoC GT, re-derived at 0.18.1 lines)
+# ============================================================================
+
+- id: vllm_samplingparams_n_lt_1
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.n
+  predicate_kind: range
+  predicate_value: {ge: 1}
+  severity: error
+  outcome: invalid
+  message_template: "n must be at least 1, got {n}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 423
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_n_lt_1
+  kwargs_positive: {n: 0}
+  kwargs_negative: {n: 1}
+
+- id: vllm_samplingparams_presence_penalty_range
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.presence_penalty
+  predicate_kind: range
+  predicate_value: {ge: -2.0, le: 2.0}
+  severity: error
+  outcome: invalid
+  message_template: "presence_penalty must be in [-2, 2], got {presence_penalty}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 424
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_presence_penalty_out_of_range
+  kwargs_positive: {presence_penalty: 2.5}
+  kwargs_negative: {presence_penalty: 0.0}
+
+- id: vllm_samplingparams_frequency_penalty_range
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.frequency_penalty
+  predicate_kind: range
+  predicate_value: {ge: -2.0, le: 2.0}
+  severity: error
+  outcome: invalid
+  message_template: "frequency_penalty must be in [-2, 2], got {frequency_penalty}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 428
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_frequency_penalty_out_of_range
+  kwargs_positive: {frequency_penalty: -3.0}
+  kwargs_negative: {frequency_penalty: 0.0}
+
+- id: vllm_samplingparams_repetition_penalty_gt_0
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.repetition_penalty
+  predicate_kind: range
+  predicate_value: {gt: 0.0}
+  severity: error
+  outcome: invalid
+  message_template: "repetition_penalty must be greater than zero, got {repetition_penalty}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 432
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_repetition_penalty_le_0
+  kwargs_positive: {repetition_penalty: 0.0}
+  kwargs_negative: {repetition_penalty: 1.0}
+
+- id: vllm_samplingparams_temperature_non_negative
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.temperature
+  predicate_kind: range
+  predicate_value: {ge: 0.0}
+  severity: error
+  outcome: invalid
+  message_template: "temperature must be non-negative, got {temperature}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 437
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_temperature_lt_0
+  kwargs_positive: {temperature: -0.5}
+  kwargs_negative: {temperature: 1.0}
+
+- id: vllm_samplingparams_top_p_range
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.top_p
+  predicate_kind: range
+  predicate_value: {gt: 0.0, le: 1.0}
+  severity: error
+  outcome: invalid
+  message_template: "top_p must be in (0, 1], got {top_p}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 443
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_top_p_out_of_range
+  kwargs_positive: {top_p: 1.5}
+  kwargs_negative: {top_p: 0.9}
+
+- id: vllm_samplingparams_top_k_ge_neg1
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.top_k
+  predicate_kind: range
+  predicate_value: {ge: -1}
+  severity: error
+  outcome: invalid
+  message_template: "top_k must be 0 (disable), or at least 1, got {top_k}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 450
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_top_k_lt_neg1
+  kwargs_positive: {top_k: -2}
+  kwargs_negative: {top_k: 0}
+
+- id: vllm_samplingparams_min_p_range
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.min_p
+  predicate_kind: range
+  predicate_value: {ge: 0.0, le: 1.0}
+  severity: error
+  outcome: invalid
+  message_template: "min_p must be in [0, 1], got {min_p}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 458
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_min_p_out_of_range
+  kwargs_positive: {min_p: 1.5}
+  kwargs_negative: {min_p: 0.0}
+
+- id: vllm_samplingparams_max_tokens_ge_1
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.max_tokens
+  predicate_kind: range
+  predicate_value: {ge: 1, allow_none: true}
+  severity: error
+  outcome: invalid
+  message_template: "max_tokens must be at least 1, got {max_tokens}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 460
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_max_tokens_lt_1
+  kwargs_positive: {max_tokens: 0}
+  kwargs_negative: {max_tokens: 16}
+
+- id: vllm_samplingparams_min_tokens_ge_0
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.min_tokens
+  predicate_kind: range
+  predicate_value: {ge: 0}
+  severity: error
+  outcome: invalid
+  message_template: "min_tokens must be greater than or equal to 0, got {min_tokens}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 466
+    qualname: SamplingParams._verify_args
+  fold_origin: vllm_samplingparams_raises_min_tokens_lt_0
+  kwargs_positive: {min_tokens: -1}
+  kwargs_negative: {min_tokens: 0}
+
+- id: vllm_samplingparams_greedy_requires_n_eq_1
+  provenance: fold
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.n
+  predicate_kind: presence_conflict
+  predicate_value: {when: "temperature < _SAMPLING_EPS (greedy)", require: "n == 1"}
+  severity: error
+  outcome: invalid
+  message_template: "n must be 1 when using greedy sampling, got {n}."
+  citation:
+    file: vllm/sampling_params.py
+    line: 508
+    qualname: SamplingParams._verify_greedy_sampling
+  notes: "Cross-field: only reached when temperature drops below _SAMPLING_EPS (greedy) in __post_init__ (line 403-408)."
+  fold_origin: vllm_samplingparams_raises_greedy_requires_n_eq_1
+  kwargs_positive: {temperature: 0.0, n: 2}
+  kwargs_negative: {temperature: 0.0, n: 1}
+
+# ============================================================================
+# Nested params dataclasses (folded)
+# ============================================================================
+
+- id: vllm_structuredoutputsparams_exactly_one_constraint
+  provenance: fold
+  native_type: vllm.sampling_params.StructuredOutputsParams
+  native_field: StructuredOutputsParams.__post_init__
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: {exactly_one_of: [json, regex, choice, grammar, json_object, structural_tag]}
+  severity: error
+  outcome: invalid
+  message_template: "You can only use one kind of structured outputs constraint but multiple are specified / none are specified"
+  citation:
+    file: vllm/sampling_params.py
+    line: 54
+    qualname: StructuredOutputsParams.__post_init__
+  notes: "Two raises in one post_init: count>1 (line 66) and count<1 (line 71). Plain @dataclass; constructs CPU-only and standalone."
+  fold_origin: vllm_structuredoutputsparams_raises_multiple_modes_set
+  kwargs_positive: {json: '{}', regex: a+}
+  kwargs_negative: {regex: a+}
+
+- id: vllm_repetitiondetectionparams_pattern_sizes_valid
+  provenance: fold
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  native_field: RepetitionDetectionParams.__post_init__
+  predicate_kind: presence_conflict
+  predicate_value: {require: "max_pattern_size >= 0 and min_pattern_size >= 0 and min_pattern_size <= max_pattern_size"}
+  severity: error
+  outcome: invalid
+  message_template: "max_pattern_size, min_pattern_size must be >=0, with min_pattern_size <= max_pattern_size."
+  citation:
+    file: vllm/sampling_params.py
+    line: 127
+    qualname: RepetitionDetectionParams.__post_init__
+  fold_origin: vllm_repetitiondetectionparams_raises_pattern_sizes_invalid
+  kwargs_positive: {max_pattern_size: 2, min_pattern_size: 5}
+  kwargs_negative: {max_pattern_size: 5, min_pattern_size: 2, min_count: 2}
+
+- id: vllm_repetitiondetectionparams_min_count_ge_2
+  provenance: fold
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  native_field: RepetitionDetectionParams.min_count
+  predicate_kind: presence_conflict
+  predicate_value: {when: "max_pattern_size > 0", require: "min_count >= 2"}
+  severity: error
+  outcome: invalid
+  message_template: "min_count must be >= 2 to detect repetitive patterns in engine output."
+  citation:
+    file: vllm/sampling_params.py
+    line: 138
+    qualname: RepetitionDetectionParams.__post_init__
+  fold_origin: vllm_repetitiondetectionparams_raises_min_count_lt_2
+  kwargs_positive: {max_pattern_size: 3, min_pattern_size: 1, min_count: 1}
+  kwargs_negative: {max_pattern_size: 3, min_pattern_size: 1, min_count: 2}
+
+# ============================================================================
+# PoolingParams
+# ============================================================================
+
+- id: vllm_poolingparams_output_kind_final_only
+  provenance: net_new
+  native_type: vllm.PoolingParams
+  native_field: PoolingParams.output_kind
+  predicate_kind: allowlist_constant
+  predicate_value: {must_equal: RequestOutputKind.FINAL_ONLY}
+  severity: error
+  outcome: invalid
+  message_template: "For pooling output_kind has to be FINAL_ONLY"
+  citation:
+    file: vllm/pooling_params.py
+    line: 222
+    qualname: PoolingParams.__post_init__
+  notes: "The ONLY construction-time check on PoolingParams; the verify()/_set_default_parameters raises are all model_config-gated (dormant). RequestOutputKind enum import: vllm.sampling_params.RequestOutputKind."
+  kwargs_positive: {output_kind: '@vllm.sampling_params.RequestOutputKind.DELTA'}
+  kwargs_negative: {output_kind: '@vllm.sampling_params.RequestOutputKind.FINAL_ONLY'}
+
+# ============================================================================
+# DeviceConfig - declarative Device Literal is NOT enforced (SkipValidation)
+# ============================================================================
+
+- id: vllm_deviceconfig_device_literal_skipvalidation
+  provenance: net_new
+  native_type: vllm.config.DeviceConfig
+  native_field: DeviceConfig.device
+  predicate_kind: literal_in
+  predicate_value: [auto, cuda, cpu, tpu, xpu]
+  severity: error
+  outcome: invalid
+  message_template: "(no enforcement - SkipValidation)"
+  citation:
+    file: vllm/config/device.py
+    line: 20
+    qualname: DeviceConfig.device
+  dormant_reason: "Device Literal (device.py:13) is wrapped in SkipValidation[Device | torch.device | None], so pydantic does NOT enforce membership; __post_init__ derives device_type from the platform and only raises a RuntimeError when device=='auto' and platform inference fails (GPU/platform-gated). Recorded as a dead-Literal type-tree observation; no CPU replay pair."

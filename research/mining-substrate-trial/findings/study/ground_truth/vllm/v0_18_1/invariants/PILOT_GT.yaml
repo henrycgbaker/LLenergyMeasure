@@ -1,0 +1,4231 @@
+schema_version: study_pilot_gt/2.0.0
+engine: vllm
+engine_version: 0.18.1
+task: invariants
+round: R0_pilot
+gate: scripts/validate_invariants.py (in vllm/vllm-openai:v0.18.1)
+identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
+  tolerant_key = first two, for cross-source recall
+n_confirmed: 94
+n_unverified: 51
+confirmed:
+- id: vllm_parallelconfig_raises_api_process_rank_out_of_range
+  source: passA
+  constraint_key:
+  - _api_process_rank
+  - presence
+  - '@_api_process_count'
+  tolerant_key:
+  - _api_process_rank
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: _api_process_rank
+  predicate_kind: cross_field_ge
+  predicate_value: '@_api_process_count'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._api_process_rank:
+        present: '@_api_process_count'
+  kwargs_positive:
+    _api_process_rank: 5
+    _api_process_count: 1
+  kwargs_negative:
+    _api_process_rank: 0
+    _api_process_count: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_profilerconfig_active_iterations_ge_1
+  source: passB
+  constraint_key:
+  - active_iterations
+  - numeric
+  - '{ge=1}'
+  tolerant_key:
+  - active_iterations
+  - numeric
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.active_iterations
+  predicate_kind: range
+  predicate_value: &id001
+    ge: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.active_iterations:
+        present: *id001
+  kwargs_positive:
+    active_iterations: 0
+  kwargs_negative:
+    active_iterations: 5
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_structuredoutputsconfig_backend_literal
+  source: passB
+  constraint_key:
+  - backend
+  - membership
+  - '[auto,guidance,lm-format-enforcer,outlines,xgrammar]'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: StructuredOutputsConfig.backend
+  predicate_kind: literal_in
+  predicate_value: &id002
+  - auto
+  - xgrammar
+  - guidance
+  - outlines
+  - lm-format-enforcer
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.backend:
+        not_in: *id002
+  kwargs_positive:
+    backend: jsonschema
+  kwargs_negative:
+    backend: xgrammar
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_weighttransferconfig_backend_literal
+  source: passB
+  constraint_key:
+  - backend
+  - membership
+  - '[ipc,nccl]'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: vllm.config.WeightTransferConfig
+  native_field: WeightTransferConfig.backend
+  predicate_kind: literal_in
+  predicate_value: &id003
+  - nccl
+  - ipc
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.backend:
+        not_in: *id003
+  kwargs_positive:
+    backend: gloo
+  kwargs_negative:
+    backend: ipc
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_field_constraint_cache_dtype_literal
+  source: passA
+  constraint_key:
+  - cache_dtype
+  - membership
+  - '[auto, fp8, fp8_e4m3, fp8_e5m2, fp8_inc, fp8_ds_mla]'
+  tolerant_key:
+  - cache_dtype
+  - membership
+  native_type: vllm.config.CacheConfig
+  native_field: cache_dtype
+  predicate_kind: literal_in
+  predicate_value: '[auto, fp8, fp8_e4m3, fp8_e5m2, fp8_inc, fp8_ds_mla]'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_dtype:
+        not_in: '[auto, fp8, fp8_e4m3, fp8_e5m2, fp8_inc, fp8_ds_mla]'
+  kwargs_positive:
+    cache_dtype: __not_a_dtype__
+  kwargs_negative:
+    cache_dtype: auto
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_observabilityconfig_raises_detailed_traces_without_endpoint
+  source: passA
+  constraint_key:
+  - collect_detailed_traces
+  - presence
+  - collect_detailed_traces set AND not otlp_traces_endpoint
+  tolerant_key:
+  - collect_detailed_traces
+  - presence
+  native_type: vllm.config.ObservabilityConfig
+  native_field: collect_detailed_traces
+  predicate_kind: cross_field_combo
+  predicate_value: collect_detailed_traces set AND not otlp_traces_endpoint
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.collect_detailed_traces:
+        present: collect_detailed_traces set AND not otlp_traces_endpoint
+  kwargs_positive:
+    collect_detailed_traces:
+    - model
+  kwargs_negative:
+    collect_detailed_traces: null
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_observabilityconfig_detailed_traces_requires_endpoint
+  source: passB
+  constraint_key:
+  - collect_detailed_traces
+  - presence
+  - '{require=otlp_traces_endpoint is set,when=collect_detailed_traces}'
+  tolerant_key:
+  - collect_detailed_traces
+  - presence
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.collect_detailed_traces
+  predicate_kind: presence_conflict
+  predicate_value: &id004
+    when: collect_detailed_traces
+    require: otlp_traces_endpoint is set
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.collect_detailed_traces:
+        present: *id004
+  kwargs_positive:
+    collect_detailed_traces:
+    - all
+  kwargs_negative:
+    collect_detailed_traces:
+    - all
+    otlp_traces_endpoint: http://localhost:4317
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_compilationconfig_raises_invalid_compile_cache_save_format
+  source: passA
+  constraint_key:
+  - compile_cache_save_format
+  - membership
+  - '[binary, unpacked]'
+  tolerant_key:
+  - compile_cache_save_format
+  - membership
+  native_type: vllm.config.CompilationConfig
+  native_field: compile_cache_save_format
+  predicate_kind: literal_in
+  predicate_value: '[binary, unpacked]'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compile_cache_save_format:
+        not_in: '[binary, unpacked]'
+  kwargs_positive:
+    compile_cache_save_format: __not_a_format__
+  kwargs_negative:
+    compile_cache_save_format: binary
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_compilationconfig_compile_cache_save_format_literal
+  source: passB
+  constraint_key:
+  - compile_cache_save_format
+  - membership
+  - '[binary,unpacked]'
+  tolerant_key:
+  - compile_cache_save_format
+  - membership
+  native_type: vllm.config.CompilationConfig
+  native_field: CompilationConfig.compile_cache_save_format
+  predicate_kind: literal_in
+  predicate_value: &id005
+  - binary
+  - unpacked
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compile_cache_save_format:
+        not_in: *id005
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_compilationconfig_assertion_custom_ops_none_and_all
+  source: passA
+  constraint_key:
+  - custom_ops
+  - presence
+  - custom_ops.count("none") + custom_ops.count("all") <= 1
+  tolerant_key:
+  - custom_ops
+  - presence
+  native_type: vllm.config.CompilationConfig
+  native_field: custom_ops
+  predicate_kind: assert
+  predicate_value: custom_ops.count("none") + custom_ops.count("all") <= 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.custom_ops:
+        present: custom_ops.count("none") + custom_ops.count("all") <= 1
+  kwargs_positive:
+    custom_ops:
+    - none
+    - all
+  kwargs_negative:
+    custom_ops:
+    - none
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_parallelconfig_data_parallel_backend_literal
+  source: passB
+  constraint_key:
+  - data_parallel_backend
+  - membership
+  - '[mp,ray]'
+  tolerant_key:
+  - data_parallel_backend
+  - membership
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.data_parallel_backend
+  predicate_kind: literal_in
+  predicate_value: &id006
+  - ray
+  - mp
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_backend:
+        not_in: *id006
+  kwargs_positive:
+    data_parallel_backend: torchrun
+  kwargs_negative:
+    data_parallel_backend: mp
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_parallelconfig_raises_external_lb_requires_dp_gt_1
+  source: passA
+  constraint_key:
+  - data_parallel_external_lb
+  - presence
+  - data_parallel_size <= 1 AND data_parallel_external_lb is True
+  tolerant_key:
+  - data_parallel_external_lb
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: data_parallel_external_lb
+  predicate_kind: cross_field_combo
+  predicate_value: data_parallel_size <= 1 AND data_parallel_external_lb is True
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_external_lb:
+        present: data_parallel_size <= 1 AND data_parallel_external_lb is True
+  kwargs_positive:
+    data_parallel_external_lb: true
+    data_parallel_size: 1
+  kwargs_negative:
+    data_parallel_external_lb: true
+    data_parallel_size: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_parallelconfig_raises_data_parallel_size_local_gt_size
+  source: passA
+  constraint_key:
+  - data_parallel_size_local
+  - numeric
+  - '@data_parallel_size'
+  tolerant_key:
+  - data_parallel_size_local
+  - numeric
+  native_type: vllm.config.ParallelConfig
+  native_field: data_parallel_size_local
+  predicate_kind: cross_field_gt
+  predicate_value: '@data_parallel_size'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_size_local:
+        '>': '@data_parallel_size'
+  kwargs_positive:
+    data_parallel_size_local: 4
+    data_parallel_size: 2
+  kwargs_negative:
+    data_parallel_size_local: 1
+    data_parallel_size: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_parallelconfig_dcp_comm_backend_literal
+  source: passB
+  constraint_key:
+  - dcp_comm_backend
+  - membership
+  - '[a2a,ag_rs]'
+  tolerant_key:
+  - dcp_comm_backend
+  - membership
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.dcp_comm_backend
+  predicate_kind: literal_in
+  predicate_value: &id007
+  - ag_rs
+  - a2a
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.dcp_comm_backend:
+        not_in: *id007
+  kwargs_positive:
+    dcp_comm_backend: p2p
+  kwargs_negative:
+    dcp_comm_backend: ag_rs
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_structuredoutputsconfig_raises_disable_additional_props_unsupported_backend
+  source: passA
+  constraint_key:
+  - disable_additional_properties
+  - presence
+  - disable_additional_properties AND backend != guidance
+  tolerant_key:
+  - disable_additional_properties
+  - presence
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: disable_additional_properties
+  predicate_kind: cross_field_combo
+  predicate_value: disable_additional_properties AND backend != guidance
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_additional_properties:
+        present: disable_additional_properties AND backend != guidance
+  kwargs_positive:
+    disable_additional_properties: true
+    backend: xgrammar
+  kwargs_negative:
+    disable_additional_properties: true
+    backend: guidance
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_structuredoutputsconfig_disable_additional_props_backend
+  source: passB
+  constraint_key:
+  - disable_additional_properties
+  - presence
+  - '{require=backend == guidance,when=disable_additional_properties}'
+  tolerant_key:
+  - disable_additional_properties
+  - presence
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: StructuredOutputsConfig.disable_additional_properties
+  predicate_kind: presence_conflict
+  predicate_value: &id008
+    when: disable_additional_properties
+    require: backend == guidance
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_additional_properties:
+        present: *id008
+  kwargs_positive:
+    disable_additional_properties: true
+    backend: xgrammar
+  kwargs_negative:
+    disable_additional_properties: true
+    backend: guidance
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_structuredoutputsconfig_raises_disable_whitespace_unsupported_backend
+  source: passA
+  constraint_key:
+  - disable_any_whitespace
+  - presence
+  - disable_any_whitespace AND backend not in (xgrammar, guidance)
+  tolerant_key:
+  - disable_any_whitespace
+  - presence
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: disable_any_whitespace
+  predicate_kind: cross_field_combo
+  predicate_value: disable_any_whitespace AND backend not in (xgrammar, guidance)
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_any_whitespace:
+        present: disable_any_whitespace AND backend not in (xgrammar, guidance)
+  kwargs_positive:
+    disable_any_whitespace: true
+    backend: outlines
+  kwargs_negative:
+    disable_any_whitespace: true
+    backend: xgrammar
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_structuredoutputsconfig_disable_whitespace_backend
+  source: passB
+  constraint_key:
+  - disable_any_whitespace
+  - presence
+  - '{require=backend in {xgrammar, guidance},when=disable_any_whitespace}'
+  tolerant_key:
+  - disable_any_whitespace
+  - presence
+  native_type: vllm.config.StructuredOutputsConfig
+  native_field: StructuredOutputsConfig.disable_any_whitespace
+  predicate_kind: presence_conflict
+  predicate_value: &id009
+    when: disable_any_whitespace
+    require: backend in {xgrammar, guidance}
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_any_whitespace:
+        present: *id009
+  kwargs_positive:
+    disable_any_whitespace: true
+    backend: outlines
+  kwargs_negative:
+    disable_any_whitespace: true
+    backend: xgrammar
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_ectransferconfig_raises_connector_without_role
+  source: passA
+  constraint_key:
+  - ec_connector
+  - presence
+  - ec_connector set AND ec_role is None
+  tolerant_key:
+  - ec_connector
+  - presence
+  native_type: vllm.config.ECTransferConfig
+  native_field: ec_connector
+  predicate_kind: cross_field_combo
+  predicate_value: ec_connector set AND ec_role is None
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ec_connector:
+        present: ec_connector set AND ec_role is None
+  kwargs_positive:
+    ec_connector: SomeConnector
+  kwargs_negative:
+    ec_connector: SomeConnector
+    ec_role: ec_producer
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_ectransferconfig_raises_unknown_ec_role
+  source: passA
+  constraint_key:
+  - ec_role
+  - membership
+  - get_args(ECRole)
+  tolerant_key:
+  - ec_role
+  - membership
+  native_type: vllm.config.ECTransferConfig
+  native_field: ec_role
+  predicate_kind: literal_in
+  predicate_value: get_args(ECRole)
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ec_role:
+        not_in: get_args(ECRole)
+  kwargs_positive:
+    ec_role: __not_a_role__
+  kwargs_negative:
+    ec_role: ec_producer
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_ectransferconfig_connector_requires_role
+  source: passB
+  constraint_key:
+  - ec_role
+  - presence
+  - '{require=ec_role is not None,when=ec_connector is not None}'
+  tolerant_key:
+  - ec_role
+  - presence
+  native_type: vllm.config.ECTransferConfig
+  native_field: ECTransferConfig.ec_role
+  predicate_kind: presence_conflict
+  predicate_value: &id010
+    when: ec_connector is not None
+    require: ec_role is not None
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ec_role:
+        present: *id010
+  kwargs_positive:
+    ec_connector: SomeConnector
+  kwargs_negative:
+    ec_connector: SomeConnector
+    ec_role: ec_producer
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_parallelconfig_expert_placement_strategy_literal
+  source: passB
+  constraint_key:
+  - expert_placement_strategy
+  - membership
+  - '[linear,round_robin]'
+  tolerant_key:
+  - expert_placement_strategy
+  - membership
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.expert_placement_strategy
+  predicate_kind: literal_in
+  predicate_value: &id011
+  - linear
+  - round_robin
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.expert_placement_strategy:
+        not_in: *id011
+  kwargs_positive:
+    expert_placement_strategy: random
+  kwargs_negative:
+    expert_placement_strategy: round_robin
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_attentionconfig_flash_attn_version_literal
+  source: passB
+  constraint_key:
+  - flash_attn_version
+  - membership
+  - '[2,3,4]'
+  tolerant_key:
+  - flash_attn_version
+  - membership
+  native_type: vllm.config.AttentionConfig
+  native_field: AttentionConfig.flash_attn_version
+  predicate_kind: literal_in
+  predicate_value: &id012
+  - 2
+  - 3
+  - 4
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.flash_attn_version:
+        not_in: *id012
+  kwargs_positive:
+    flash_attn_version: 1
+  kwargs_negative:
+    flash_attn_version: 3
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_frequency_penalty_out_of_range
+  source: passA
+  constraint_key:
+  - frequency_penalty
+  - numeric
+  - '[-2.0, 2.0]'
+  tolerant_key:
+  - frequency_penalty
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: frequency_penalty
+  predicate_kind: range
+  predicate_value: '[-2.0, 2.0]'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.frequency_penalty:
+        present: '[-2.0, 2.0]'
+  kwargs_positive:
+    frequency_penalty: -3.0
+  kwargs_negative:
+    frequency_penalty: 0.0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_frequency_penalty_range
+  source: passB
+  constraint_key:
+  - frequency_penalty
+  - numeric
+  - '{ge=-2,le=2}'
+  tolerant_key:
+  - frequency_penalty
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.frequency_penalty
+  predicate_kind: range
+  predicate_value: &id013
+    ge: -2.0
+    le: 2.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.frequency_penalty:
+        present: *id013
+  kwargs_positive:
+    frequency_penalty: -3.0
+  kwargs_negative:
+    frequency_penalty: 0.0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_gpu_memory_utilization_range
+  source: passB
+  constraint_key:
+  - gpu_memory_utilization
+  - numeric
+  - '{gt=0,le=1}'
+  tolerant_key:
+  - gpu_memory_utilization
+  - numeric
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.gpu_memory_utilization
+  predicate_kind: range
+  predicate_value: &id014
+    gt: 0
+    le: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.gpu_memory_utilization:
+        present: *id014
+  kwargs_positive:
+    gpu_memory_utilization: 1.5
+  kwargs_negative:
+    gpu_memory_utilization: 0.9
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_field_constraint_gpu_memory_utilization_range
+  source: passA
+  constraint_key:
+  - gpu_memory_utilization
+  - presence
+  - gt 0, le 1
+  tolerant_key:
+  - gpu_memory_utilization
+  - presence
+  native_type: vllm.config.CacheConfig
+  native_field: gpu_memory_utilization
+  predicate_kind: field_range
+  predicate_value: gt 0, le 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.gpu_memory_utilization:
+        present: gt 0, le 1
+  kwargs_positive:
+    gpu_memory_utilization: 1.5
+  kwargs_negative:
+    gpu_memory_utilization: 0.9
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_observabilityconfig_kv_cache_metrics_sample_range
+  source: passB
+  constraint_key:
+  - kv_cache_metrics_sample
+  - numeric
+  - '{gt=0,le=1}'
+  tolerant_key:
+  - kv_cache_metrics_sample
+  - numeric
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.kv_cache_metrics_sample
+  predicate_kind: range
+  predicate_value: &id015
+    gt: 0
+    le: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_cache_metrics_sample:
+        present: *id015
+  kwargs_positive:
+    kv_cache_metrics_sample: 1.5
+  kwargs_negative:
+    kv_cache_metrics_sample: 0.01
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_kvtransferconfig_raises_connector_without_role
+  source: passA
+  constraint_key:
+  - kv_connector
+  - presence
+  - kv_connector set AND kv_role is None
+  tolerant_key:
+  - kv_connector
+  - presence
+  native_type: vllm.config.KVTransferConfig
+  native_field: kv_connector
+  predicate_kind: cross_field_combo
+  predicate_value: kv_connector set AND kv_role is None
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_connector:
+        present: kv_connector set AND kv_role is None
+  kwargs_positive:
+    kv_connector: SharedStorageConnector
+  kwargs_negative:
+    kv_connector: SharedStorageConnector
+    kv_role: kv_producer
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_kvtransferconfig_kv_load_failure_policy_literal
+  source: passB
+  constraint_key:
+  - kv_load_failure_policy
+  - membership
+  - '[fail,recompute]'
+  tolerant_key:
+  - kv_load_failure_policy
+  - membership
+  native_type: vllm.config.KVTransferConfig
+  native_field: KVTransferConfig.kv_load_failure_policy
+  predicate_kind: literal_in
+  predicate_value: &id016
+  - recompute
+  - fail
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_load_failure_policy:
+        not_in: *id016
+  kwargs_positive:
+    kv_load_failure_policy: skip
+  kwargs_negative:
+    kv_load_failure_policy: recompute
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_kv_offloading_backend_literal
+  source: passB
+  constraint_key:
+  - kv_offloading_backend
+  - membership
+  - '[lmcache,native]'
+  tolerant_key:
+  - kv_offloading_backend
+  - membership
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.kv_offloading_backend
+  predicate_kind: literal_in
+  predicate_value: &id017
+  - native
+  - lmcache
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_offloading_backend:
+        not_in: *id017
+  kwargs_positive:
+    kv_offloading_backend: redis
+  kwargs_negative:
+    kv_offloading_backend: native
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_kvtransferconfig_raises_unknown_kv_role
+  source: passA
+  constraint_key:
+  - kv_role
+  - membership
+  - get_args(KVRole)
+  tolerant_key:
+  - kv_role
+  - membership
+  native_type: vllm.config.KVTransferConfig
+  native_field: kv_role
+  predicate_kind: literal_in
+  predicate_value: get_args(KVRole)
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_role:
+        not_in: get_args(KVRole)
+  kwargs_positive:
+    kv_role: __not_a_role__
+  kwargs_negative:
+    kv_role: kv_producer
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_kvtransferconfig_connector_requires_role
+  source: passB
+  constraint_key:
+  - kv_role
+  - presence
+  - '{require=kv_role is not None,when=kv_connector is not None}'
+  tolerant_key:
+  - kv_role
+  - presence
+  native_type: vllm.config.KVTransferConfig
+  native_field: KVTransferConfig.kv_role
+  predicate_kind: presence_conflict
+  predicate_value: &id018
+    when: kv_connector is not None
+    require: kv_role is not None
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_role:
+        present: *id018
+  kwargs_positive:
+    kv_connector: P2pNcclConnector
+  kwargs_negative:
+    kv_connector: P2pNcclConnector
+    kv_role: kv_producer
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_eplbconfig_raises_log_balancedness_interval_le_0
+  source: passA
+  constraint_key:
+  - log_balancedness_interval
+  - presence
+  - log_balancedness is True AND log_balancedness_interval <= 0
+  tolerant_key:
+  - log_balancedness_interval
+  - presence
+  native_type: vllm.config.EPLBConfig
+  native_field: log_balancedness_interval
+  predicate_kind: cross_field_combo
+  predicate_value: log_balancedness is True AND log_balancedness_interval <= 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.log_balancedness_interval:
+        present: log_balancedness is True AND log_balancedness_interval <= 0
+  kwargs_positive:
+    log_balancedness: true
+    log_balancedness_interval: 0
+  kwargs_negative:
+    log_balancedness: true
+    log_balancedness_interval: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_eplbconfig_log_balancedness_interval_gt_0
+  source: passB
+  constraint_key:
+  - log_balancedness_interval
+  - presence
+  - '{require=log_balancedness_interval > 0,when=log_balancedness}'
+  tolerant_key:
+  - log_balancedness_interval
+  - presence
+  native_type: vllm.config.EPLBConfig
+  native_field: EPLBConfig.log_balancedness_interval
+  predicate_kind: presence_conflict
+  predicate_value: &id019
+    when: log_balancedness
+    require: log_balancedness_interval > 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.log_balancedness_interval:
+        present: *id019
+  kwargs_positive:
+    log_balancedness: true
+    log_balancedness_interval: 0
+  kwargs_negative:
+    log_balancedness: true
+    log_balancedness_interval: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_logprobs_lt_0
+  source: passA
+  constraint_key:
+  - logprobs
+  - numeric
+  - '0'
+  tolerant_key:
+  - logprobs
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: logprobs
+  predicate_kind: lt
+  predicate_value: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs:
+        <: 0
+  kwargs_positive:
+    logprobs: -2
+  kwargs_negative:
+    logprobs: 5
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_loraconfig_lora_dtype_literal
+  source: passB
+  constraint_key:
+  - lora_dtype
+  - membership
+  - '[auto,bfloat16,float16]'
+  tolerant_key:
+  - lora_dtype
+  - membership
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.lora_dtype
+  predicate_kind: literal_in
+  predicate_value: &id020
+  - auto
+  - float16
+  - bfloat16
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.lora_dtype:
+        not_in: *id020
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_mamba_block_size_gt_0
+  source: passB
+  constraint_key:
+  - mamba_block_size
+  - numeric
+  - '{allow_none=True,gt=0}'
+  tolerant_key:
+  - mamba_block_size
+  - numeric
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.mamba_block_size
+  predicate_kind: range
+  predicate_value: &id021
+    gt: 0
+    allow_none: true
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_block_size:
+        present: *id021
+  kwargs_positive:
+    mamba_block_size: 0
+  kwargs_negative:
+    mamba_block_size: 8
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_field_constraint_mamba_block_size_gt_0
+  source: passA
+  constraint_key:
+  - mamba_block_size
+  - presence
+  - '0'
+  tolerant_key:
+  - mamba_block_size
+  - presence
+  native_type: vllm.config.CacheConfig
+  native_field: mamba_block_size
+  predicate_kind: field_gt
+  predicate_value: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_block_size:
+        present: 0
+  kwargs_positive:
+    mamba_block_size: 0
+  kwargs_negative:
+    mamba_block_size: 16
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_cacheconfig_mamba_cache_dtype_literal
+  source: passB
+  constraint_key:
+  - mamba_cache_dtype
+  - membership
+  - '[auto,float16,float32]'
+  tolerant_key:
+  - mamba_cache_dtype
+  - membership
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.mamba_cache_dtype
+  predicate_kind: literal_in
+  predicate_value: &id022
+  - auto
+  - float32
+  - float16
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_cache_dtype:
+        not_in: *id022
+  kwargs_positive:
+    mamba_cache_dtype: bfloat16
+  kwargs_negative:
+    mamba_cache_dtype: float32
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_mamba_cache_mode_literal
+  source: passB
+  constraint_key:
+  - mamba_cache_mode
+  - membership
+  - '[align,all,none]'
+  tolerant_key:
+  - mamba_cache_mode
+  - membership
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.mamba_cache_mode
+  predicate_kind: literal_in
+  predicate_value: &id023
+  - all
+  - align
+  - none
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_cache_mode:
+        not_in: *id023
+  kwargs_positive:
+    mamba_cache_mode: partial
+  kwargs_negative:
+    mamba_cache_mode: align
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+  source: passA
+  constraint_key:
+  - max_cpu_loras
+  - numeric
+  - '@max_loras'
+  tolerant_key:
+  - max_cpu_loras
+  - numeric
+  native_type: vllm.config.LoRAConfig
+  native_field: max_cpu_loras
+  predicate_kind: cross_field_lt
+  predicate_value: '@max_loras'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_cpu_loras:
+        <: '@max_loras'
+  kwargs_positive:
+    max_cpu_loras: 1
+    max_loras: 8
+  kwargs_negative:
+    max_cpu_loras: 8
+    max_loras: 8
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_loraconfig_max_cpu_loras_ge_max_loras
+  source: passB
+  constraint_key:
+  - max_cpu_loras
+  - presence
+  - '{require=max_cpu_loras is None or max_cpu_loras >= max_loras}'
+  tolerant_key:
+  - max_cpu_loras
+  - presence
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.max_cpu_loras
+  predicate_kind: presence_conflict
+  predicate_value: &id024
+    require: max_cpu_loras is None or max_cpu_loras >= max_loras
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_cpu_loras:
+        present: *id024
+  kwargs_positive:
+    max_loras: 4
+    max_cpu_loras: 2
+  kwargs_negative:
+    max_loras: 4
+    max_cpu_loras: 8
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_loraconfig_max_lora_rank_literal
+  source: passB
+  constraint_key:
+  - max_lora_rank
+  - membership
+  - '[1,128,16,256,32,320,512,64,8]'
+  tolerant_key:
+  - max_lora_rank
+  - membership
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.max_lora_rank
+  predicate_kind: literal_in
+  predicate_value: &id025
+  - 1
+  - 8
+  - 16
+  - 32
+  - 64
+  - 128
+  - 256
+  - 320
+  - 512
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_lora_rank:
+        not_in: *id025
+  kwargs_positive:
+    max_lora_rank: 17
+  kwargs_negative:
+    max_lora_rank: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_loraconfig_max_loras_ge_1
+  source: passB
+  constraint_key:
+  - max_loras
+  - numeric
+  - '{ge=1}'
+  tolerant_key:
+  - max_loras
+  - numeric
+  native_type: vllm.config.LoRAConfig
+  native_field: LoRAConfig.max_loras
+  predicate_kind: range
+  predicate_value: &id026
+    ge: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_loras:
+        present: *id026
+  kwargs_positive:
+    max_loras: 0
+  kwargs_negative:
+    max_loras: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_loraconfig_field_constraint_max_loras_ge_1
+  source: passA
+  constraint_key:
+  - max_loras
+  - presence
+  - '1'
+  tolerant_key:
+  - max_loras
+  - presence
+  native_type: vllm.config.LoRAConfig
+  native_field: max_loras
+  predicate_kind: field_ge
+  predicate_value: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_loras:
+        present: 1
+  kwargs_positive:
+    max_loras: 0
+  kwargs_negative:
+    max_loras: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  source: passA
+  constraint_key:
+  - max_num_batched_tokens
+  - presence
+  - max_num_batched_tokens < max_model_len AND not enable_chunked_prefill
+  tolerant_key:
+  - max_num_batched_tokens
+  - presence
+  native_type: vllm.config.SchedulerConfig
+  native_field: max_num_batched_tokens
+  predicate_kind: cross_field_combo
+  predicate_value: max_num_batched_tokens < max_model_len AND not enable_chunked_prefill
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_batched_tokens:
+        present: max_num_batched_tokens < max_model_len AND not enable_chunked_prefill
+  kwargs_positive:
+    max_num_batched_tokens: 100
+    max_model_len: 200
+    enable_chunked_prefill: false
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_num_batched_tokens: 200
+    max_model_len: 200
+    enable_chunked_prefill: false
+    is_encoder_decoder: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_raises_max_tokens_lt_1
+  source: passA
+  constraint_key:
+  - max_tokens
+  - numeric
+  - '1'
+  tolerant_key:
+  - max_tokens
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: max_tokens
+  predicate_kind: lt
+  predicate_value: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        <: 1
+  kwargs_positive:
+    max_tokens: 0
+  kwargs_negative:
+    max_tokens: 16
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_max_tokens_ge_1
+  source: passB
+  constraint_key:
+  - max_tokens
+  - numeric
+  - '{allow_none=True,ge=1}'
+  tolerant_key:
+  - max_tokens
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.max_tokens
+  predicate_kind: range
+  predicate_value: &id027
+    ge: 1
+    allow_none: true
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        present: *id027
+  kwargs_positive:
+    max_tokens: 0
+  kwargs_negative:
+    max_tokens: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_repetitiondetectionparams_raises_min_count_lt_2
+  source: passA
+  constraint_key:
+  - min_count
+  - presence
+  - max_pattern_size > 0 AND min_count < 2
+  tolerant_key:
+  - min_count
+  - presence
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  native_field: min_count
+  predicate_kind: cross_field_combo
+  predicate_value: max_pattern_size > 0 AND min_count < 2
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.min_count:
+        present: max_pattern_size > 0 AND min_count < 2
+  kwargs_positive:
+    max_pattern_size: 4
+    min_count: 1
+  kwargs_negative:
+    max_pattern_size: 4
+    min_count: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_repetitiondetectionparams_min_count_ge_2
+  source: passB
+  constraint_key:
+  - min_count
+  - presence
+  - '{require=min_count >= 2,when=max_pattern_size > 0}'
+  tolerant_key:
+  - min_count
+  - presence
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  native_field: RepetitionDetectionParams.min_count
+  predicate_kind: presence_conflict
+  predicate_value: &id028
+    when: max_pattern_size > 0
+    require: min_count >= 2
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.min_count:
+        present: *id028
+  kwargs_positive:
+    max_pattern_size: 3
+    min_pattern_size: 1
+    min_count: 1
+  kwargs_negative:
+    max_pattern_size: 3
+    min_pattern_size: 1
+    min_count: 2
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_min_p_out_of_range
+  source: passA
+  constraint_key:
+  - min_p
+  - numeric
+  - '[0.0, 1.0]'
+  tolerant_key:
+  - min_p
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: min_p
+  predicate_kind: range
+  predicate_value: '[0.0, 1.0]'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_p:
+        present: '[0.0, 1.0]'
+  kwargs_positive:
+    min_p: 1.5
+  kwargs_negative:
+    min_p: 0.0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_min_p_range
+  source: passB
+  constraint_key:
+  - min_p
+  - numeric
+  - '{ge=0,le=1}'
+  tolerant_key:
+  - min_p
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.min_p
+  predicate_kind: range
+  predicate_value: &id029
+    ge: 0.0
+    le: 1.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_p:
+        present: *id029
+  kwargs_positive:
+    min_p: 1.5
+  kwargs_negative:
+    min_p: 0.0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  source: passA
+  constraint_key:
+  - min_tokens
+  - numeric
+  - '0'
+  tolerant_key:
+  - min_tokens
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: min_tokens
+  predicate_kind: lt
+  predicate_value: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  kwargs_positive:
+    min_tokens: -1
+  kwargs_negative:
+    min_tokens: 0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  source: passA
+  constraint_key:
+  - min_tokens
+  - numeric
+  - '@max_tokens'
+  tolerant_key:
+  - min_tokens
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: min_tokens
+  predicate_kind: cross_field_gt
+  predicate_value: '@max_tokens'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        '>': '@max_tokens'
+  kwargs_positive:
+    min_tokens: 20
+    max_tokens: 10
+  kwargs_negative:
+    min_tokens: 5
+    max_tokens: 10
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_min_tokens_ge_0
+  source: passB
+  constraint_key:
+  - min_tokens
+  - numeric
+  - '{ge=0}'
+  tolerant_key:
+  - min_tokens
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.min_tokens
+  predicate_kind: range
+  predicate_value: &id030
+    ge: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        present: *id030
+  kwargs_positive:
+    min_tokens: -1
+  kwargs_negative:
+    min_tokens: 0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_multimodalconfig_mm_encoder_attn_backend_xformers_removed
+  source: passB
+  constraint_key:
+  - mm_encoder_attn_backend
+  - presence
+  - '{else=AttentionBackendEnum[value.upper()],reject=XFORMERS}'
+  tolerant_key:
+  - mm_encoder_attn_backend
+  - presence
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_encoder_attn_backend
+  predicate_kind: backend_dispatch
+  predicate_value: &id031
+    reject: XFORMERS
+    else: AttentionBackendEnum[value.upper()]
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_encoder_attn_backend:
+        present: *id031
+  kwargs_positive:
+    mm_encoder_attn_backend: XFORMERS
+  kwargs_negative:
+    mm_encoder_attn_backend: null
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_multimodalconfig_mm_encoder_tp_mode_literal
+  source: passB
+  constraint_key:
+  - mm_encoder_tp_mode
+  - membership
+  - '[data,weights]'
+  tolerant_key:
+  - mm_encoder_tp_mode
+  - membership
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_encoder_tp_mode
+  predicate_kind: literal_in
+  predicate_value: &id032
+  - weights
+  - data
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_encoder_tp_mode:
+        not_in: *id032
+  kwargs_positive:
+    mm_encoder_tp_mode: both
+  kwargs_negative:
+    mm_encoder_tp_mode: data
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_multimodalconfig_mm_processor_cache_gb_ge_0
+  source: passB
+  constraint_key:
+  - mm_processor_cache_gb
+  - numeric
+  - '{ge=0}'
+  tolerant_key:
+  - mm_processor_cache_gb
+  - numeric
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_processor_cache_gb
+  predicate_kind: range
+  predicate_value: &id033
+    ge: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_processor_cache_gb:
+        present: *id033
+  kwargs_positive:
+    mm_processor_cache_gb: -1
+  kwargs_negative:
+    mm_processor_cache_gb: 4
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_multimodalconfig_mm_processor_cache_type_literal
+  source: passB
+  constraint_key:
+  - mm_processor_cache_type
+  - membership
+  - '[lru,shm]'
+  tolerant_key:
+  - mm_processor_cache_type
+  - membership
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_processor_cache_type
+  predicate_kind: literal_in
+  predicate_value: &id034
+  - shm
+  - lru
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_processor_cache_type:
+        not_in: *id034
+  kwargs_positive:
+    mm_processor_cache_type: disk
+  kwargs_negative:
+    mm_processor_cache_type: lru
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_multimodalconfig_shm_cache_size_only_for_shm
+  source: passB
+  constraint_key:
+  - mm_shm_cache_max_object_size_mb
+  - presence
+  - '{require=mm_processor_cache_type == ''shm'',when=mm_shm_cache_max_object_size_mb
+    != default(128)}'
+  tolerant_key:
+  - mm_shm_cache_max_object_size_mb
+  - presence
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.mm_shm_cache_max_object_size_mb
+  predicate_kind: presence_conflict
+  predicate_value: &id035
+    when: mm_shm_cache_max_object_size_mb != default(128)
+    require: mm_processor_cache_type == 'shm'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_shm_cache_max_object_size_mb:
+        present: *id035
+  kwargs_positive:
+    mm_shm_cache_max_object_size_mb: 64
+  kwargs_negative:
+    mm_processor_cache_type: shm
+    mm_shm_cache_max_object_size_mb: 64
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_n_lt_1
+  source: passA
+  constraint_key:
+  - n
+  - numeric
+  - '1'
+  tolerant_key:
+  - n
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: n
+  predicate_kind: lt
+  predicate_value: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        <: 1
+  kwargs_positive:
+    n: 0
+  kwargs_negative:
+    n: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_n_lt_1
+  source: passB
+  constraint_key:
+  - n
+  - numeric
+  - '{ge=1}'
+  tolerant_key:
+  - n
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.n
+  predicate_kind: range
+  predicate_value: &id036
+    ge: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        present: *id036
+  kwargs_positive:
+    n: 0
+  kwargs_negative:
+    n: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_greedy_requires_n_eq_1
+  source: passA
+  constraint_key:
+  - n
+  - presence
+  - temperature < 1e-5 (greedy) AND n > 1
+  tolerant_key:
+  - n
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: n
+  predicate_kind: cross_field_combo
+  predicate_value: temperature < 1e-5 (greedy) AND n > 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        present: temperature < 1e-5 (greedy) AND n > 1
+  kwargs_positive:
+    temperature: 0.0
+    n: 2
+  kwargs_negative:
+    temperature: 0.0
+    n: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_greedy_requires_n_eq_1
+  source: passB
+  constraint_key:
+  - n
+  - presence
+  - '{require=n == 1,when=temperature < _SAMPLING_EPS (greedy)}'
+  tolerant_key:
+  - n
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.n
+  predicate_kind: presence_conflict
+  predicate_value: &id037
+    when: temperature < _SAMPLING_EPS (greedy)
+    require: n == 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        present: *id037
+  kwargs_positive:
+    temperature: 0.0
+    n: 2
+  kwargs_negative:
+    temperature: 0.0
+    n: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_n_not_type_int
+  source: passA
+  constraint_key:
+  - n
+  - type
+  - int
+  tolerant_key:
+  - n
+  - type
+  native_type: vllm.SamplingParams
+  native_field: n
+  predicate_kind: type_check
+  predicate_value: int
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        type_is_not: int
+  kwargs_positive:
+    n: '1'
+  kwargs_negative:
+    n: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_eplbconfig_num_redundant_experts_ge_0
+  source: passB
+  constraint_key:
+  - num_redundant_experts
+  - numeric
+  - '{ge=0}'
+  tolerant_key:
+  - num_redundant_experts
+  - numeric
+  native_type: vllm.config.EPLBConfig
+  native_field: EPLBConfig.num_redundant_experts
+  predicate_kind: range
+  predicate_value: &id038
+    ge: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.num_redundant_experts:
+        present: *id038
+  kwargs_positive:
+    num_redundant_experts: -1
+  kwargs_negative:
+    num_redundant_experts: 0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_parallelconfig_raises_num_redundant_experts_without_eplb
+  source: passA
+  constraint_key:
+  - num_redundant_experts
+  - presence
+  - enable_eplb is False AND eplb_config.num_redundant_experts != 0
+  tolerant_key:
+  - num_redundant_experts
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: eplb_config.num_redundant_experts
+  predicate_kind: cross_field_combo
+  predicate_value: enable_eplb is False AND eplb_config.num_redundant_experts != 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.num_redundant_experts:
+        present: enable_eplb is False AND eplb_config.num_redundant_experts != 0
+  kwargs_positive:
+    enable_eplb: false
+    eplb_config:
+      num_redundant_experts: 4
+  kwargs_negative:
+    enable_eplb: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_offloadconfig_offload_backend_literal
+  source: passB
+  constraint_key:
+  - offload_backend
+  - membership
+  - '[auto,prefetch,uva]'
+  tolerant_key:
+  - offload_backend
+  - membership
+  native_type: vllm.config.OffloadConfig
+  native_field: OffloadConfig.offload_backend
+  predicate_kind: literal_in
+  predicate_value: &id039
+  - auto
+  - uva
+  - prefetch
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.offload_backend:
+        not_in: *id039
+  kwargs_positive:
+    offload_backend: disk
+  kwargs_negative:
+    offload_backend: uva
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_prefetchoffloadconfig_offload_num_in_group_ge_1
+  source: passB
+  constraint_key:
+  - offload_num_in_group
+  - numeric
+  - '{ge=1}'
+  tolerant_key:
+  - offload_num_in_group
+  - numeric
+  native_type: vllm.config.PrefetchOffloadConfig
+  native_field: PrefetchOffloadConfig.offload_num_in_group
+  predicate_kind: range
+  predicate_value: &id040
+    ge: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.offload_num_in_group:
+        present: *id040
+  kwargs_positive:
+    offload_num_in_group: 0
+  kwargs_negative:
+    offload_num_in_group: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_eplbconfig_policy_literal
+  source: passB
+  constraint_key:
+  - policy
+  - membership
+  - '[default]'
+  tolerant_key:
+  - policy
+  - membership
+  native_type: vllm.config.EPLBConfig
+  native_field: EPLBConfig.policy
+  predicate_kind: literal_in
+  predicate_value: &id041
+  - default
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.policy:
+        not_in: *id041
+  kwargs_positive:
+    policy: round_robin
+  kwargs_negative:
+    policy: default
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_cacheconfig_prefix_caching_hash_algo_literal
+  source: passB
+  constraint_key:
+  - prefix_caching_hash_algo
+  - membership
+  - '[sha256,sha256_cbor,xxhash,xxhash_cbor]'
+  tolerant_key:
+  - prefix_caching_hash_algo
+  - membership
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.prefix_caching_hash_algo
+  predicate_kind: literal_in
+  predicate_value: &id042
+  - sha256
+  - sha256_cbor
+  - xxhash
+  - xxhash_cbor
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prefix_caching_hash_algo:
+        not_in: *id042
+  kwargs_positive:
+    prefix_caching_hash_algo: md5
+  kwargs_negative:
+    prefix_caching_hash_algo: sha256
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_presence_penalty_out_of_range
+  source: passA
+  constraint_key:
+  - presence_penalty
+  - numeric
+  - '[-2.0, 2.0]'
+  tolerant_key:
+  - presence_penalty
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: presence_penalty
+  predicate_kind: range
+  predicate_value: '[-2.0, 2.0]'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.presence_penalty:
+        present: '[-2.0, 2.0]'
+  kwargs_positive:
+    presence_penalty: 3.0
+  kwargs_negative:
+    presence_penalty: 0.0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_presence_penalty_range
+  source: passB
+  constraint_key:
+  - presence_penalty
+  - numeric
+  - '{ge=-2,le=2}'
+  tolerant_key:
+  - presence_penalty
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.presence_penalty
+  predicate_kind: range
+  predicate_value: &id043
+    ge: -2.0
+    le: 2.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.presence_penalty:
+        present: *id043
+  kwargs_positive:
+    presence_penalty: 2.5
+  kwargs_negative:
+    presence_penalty: 0.0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_profilerconfig_kind_literal
+  source: passB
+  constraint_key:
+  - profiler
+  - membership
+  - '[cuda,torch]'
+  tolerant_key:
+  - profiler
+  - membership
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.profiler
+  predicate_kind: literal_in
+  predicate_value: &id044
+  - torch
+  - cuda
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.profiler:
+        not_in: *id044
+  kwargs_positive:
+    profiler: nsys
+  kwargs_negative:
+    profiler: cuda
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_profilerconfig_torch_requires_dir
+  source: passB
+  constraint_key:
+  - profiler
+  - presence
+  - '{require=torch_profiler_dir set,when=profiler == ''torch''}'
+  tolerant_key:
+  - profiler
+  - presence
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.profiler
+  predicate_kind: presence_conflict
+  predicate_value: &id045
+    when: profiler == 'torch'
+    require: torch_profiler_dir set
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.profiler:
+        present: *id045
+  kwargs_positive:
+    profiler: torch
+  kwargs_negative:
+    profiler: torch
+    torch_profiler_dir: /tmp/prof
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_prompt_logprobs_lt_0
+  source: passA
+  constraint_key:
+  - prompt_logprobs
+  - numeric
+  - '0'
+  tolerant_key:
+  - prompt_logprobs
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: prompt_logprobs
+  predicate_kind: lt
+  predicate_value: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs:
+        <: 0
+  kwargs_positive:
+    prompt_logprobs: -2
+  kwargs_negative:
+    prompt_logprobs: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_kveventsconfig_publisher_literal
+  source: passB
+  constraint_key:
+  - publisher
+  - membership
+  - '[,zmq]'
+  tolerant_key:
+  - publisher
+  - membership
+  native_type: vllm.config.KVEventsConfig
+  native_field: KVEventsConfig.publisher
+  predicate_kind: literal_in
+  predicate_value: &id046
+  - null
+  - zmq
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.publisher:
+        not_in: *id046
+  kwargs_positive:
+    publisher: kafka
+  kwargs_negative:
+    publisher: zmq
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_repetition_penalty_le_0
+  source: passA
+  constraint_key:
+  - repetition_penalty
+  - numeric
+  - '0'
+  tolerant_key:
+  - repetition_penalty
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: repetition_penalty
+  predicate_kind: le
+  predicate_value: 0.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <=: 0.0
+  kwargs_positive:
+    repetition_penalty: 0.0
+  kwargs_negative:
+    repetition_penalty: 1.0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_repetition_penalty_gt_0
+  source: passB
+  constraint_key:
+  - repetition_penalty
+  - numeric
+  - '{gt=0}'
+  tolerant_key:
+  - repetition_penalty
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.repetition_penalty
+  predicate_kind: range
+  predicate_value: &id047
+    gt: 0.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        present: *id047
+  kwargs_positive:
+    repetition_penalty: 0.0
+  kwargs_negative:
+    repetition_penalty: 1.0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_observabilityconfig_show_hidden_metrics_version_parse
+  source: passB
+  constraint_key:
+  - show_hidden_metrics_for_version
+  - type
+  - '{must_parse_as=packaging.version.parse}'
+  tolerant_key:
+  - show_hidden_metrics_for_version
+  - type
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.show_hidden_metrics_for_version
+  predicate_kind: type_is
+  predicate_value: &id048
+    must_parse_as: packaging.version.parse
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.show_hidden_metrics_for_version:
+        type_is_not: *id048
+  kwargs_positive:
+    show_hidden_metrics_for_version: not-a-version
+  kwargs_negative:
+    show_hidden_metrics_for_version: '0.18'
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_stop_contains_empty_string
+  source: passA
+  constraint_key:
+  - stop
+  - presence
+  - empty string in stop list
+  tolerant_key:
+  - stop
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: stop
+  predicate_kind: no_empty_element
+  predicate_value: empty string in stop list
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: empty string in stop list
+  kwargs_positive:
+    stop:
+    - ''
+  kwargs_negative:
+    stop:
+    - STOP
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_raises_stop_requires_detokenize
+  source: passA
+  constraint_key:
+  - stop
+  - presence
+  - stop is non-empty AND detokenize is False
+  tolerant_key:
+  - stop
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: stop
+  predicate_kind: cross_field_combo
+  predicate_value: stop is non-empty AND detokenize is False
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: stop is non-empty AND detokenize is False
+  kwargs_positive:
+    stop:
+    - STOP
+    detokenize: false
+  kwargs_negative:
+    stop:
+    - STOP
+    detokenize: true
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_raises_stop_token_ids_not_all_int
+  source: passA
+  constraint_key:
+  - stop_token_ids
+  - presence
+  - int
+  tolerant_key:
+  - stop_token_ids
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: stop_token_ids
+  predicate_kind: element_type_check
+  predicate_value: int
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop_token_ids:
+        present: int
+  kwargs_positive:
+    stop_token_ids:
+    - a
+  kwargs_negative:
+    stop_token_ids:
+    - 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_raises_temperature_lt_0
+  source: passA
+  constraint_key:
+  - temperature
+  - numeric
+  - '0'
+  tolerant_key:
+  - temperature
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: temperature
+  predicate_kind: lt
+  predicate_value: 0.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        <: 0.0
+  kwargs_positive:
+    temperature: -1.0
+  kwargs_negative:
+    temperature: 1.0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_temperature_non_negative
+  source: passB
+  constraint_key:
+  - temperature
+  - numeric
+  - '{ge=0}'
+  tolerant_key:
+  - temperature
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.temperature
+  predicate_kind: range
+  predicate_value: &id049
+    ge: 0.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        present: *id049
+  kwargs_positive:
+    temperature: -0.5
+  kwargs_negative:
+    temperature: 1.0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_warning_temperature_clamped_to_min
+  source: passA
+  constraint_key:
+  - temperature
+  - presence
+  - 0 < temperature < 1e-2
+  tolerant_key:
+  - temperature
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: temperature
+  predicate_kind: range_open
+  predicate_value: 0 < temperature < 1e-2
+  severity: warning
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        present: 0 < temperature < 1e-2
+  kwargs_positive:
+    temperature: 0.001
+  kwargs_negative:
+    temperature: 1.0
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_raises_top_k_lt_neg1
+  source: passA
+  constraint_key:
+  - top_k
+  - numeric
+  - '-1'
+  tolerant_key:
+  - top_k
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: top_k
+  predicate_kind: lt
+  predicate_value: -1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        <: -1
+  kwargs_positive:
+    top_k: -2
+  kwargs_negative:
+    top_k: 0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_top_k_ge_neg1
+  source: passB
+  constraint_key:
+  - top_k
+  - numeric
+  - '{ge=-1}'
+  tolerant_key:
+  - top_k
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.top_k
+  predicate_kind: range
+  predicate_value: &id050
+    ge: -1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        present: *id050
+  kwargs_positive:
+    top_k: -2
+  kwargs_negative:
+    top_k: 0
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_top_k_not_type_int
+  source: passA
+  constraint_key:
+  - top_k
+  - type
+  - int
+  tolerant_key:
+  - top_k
+  - type
+  native_type: vllm.SamplingParams
+  native_field: top_k
+  predicate_kind: type_check
+  predicate_value: int
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        type_is_not: int
+  kwargs_positive:
+    top_k: 1.5
+  kwargs_negative:
+    top_k: 5
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_samplingparams_top_p_range
+  source: passB
+  constraint_key:
+  - top_p
+  - numeric
+  - '{gt=0,le=1}'
+  tolerant_key:
+  - top_p
+  - numeric
+  native_type: vllm.SamplingParams
+  native_field: SamplingParams.top_p
+  predicate_kind: range
+  predicate_value: &id051
+    gt: 0.0
+    le: 1.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_p:
+        present: *id051
+  kwargs_positive:
+    top_p: 1.5
+  kwargs_negative:
+    top_p: 0.9
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_samplingparams_raises_top_p_out_of_range
+  source: passA
+  constraint_key:
+  - top_p
+  - presence
+  - (0.0, 1.0]
+  tolerant_key:
+  - top_p
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: top_p
+  predicate_kind: range_half_open
+  predicate_value: (0.0, 1.0]
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_p:
+        present: (0.0, 1.0]
+  kwargs_positive:
+    top_p: 1.5
+  kwargs_negative:
+    top_p: 0.9
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: vllm_profilerconfig_torch_dir_requires_torch_profiler
+  source: passB
+  constraint_key:
+  - torch_profiler_dir
+  - presence
+  - '{require=profiler == ''torch'',when=torch_profiler_dir set}'
+  tolerant_key:
+  - torch_profiler_dir
+  - presence
+  native_type: vllm.config.ProfilerConfig
+  native_field: ProfilerConfig.torch_profiler_dir
+  predicate_kind: presence_conflict
+  predicate_value: &id052
+    when: torch_profiler_dir set
+    require: profiler == 'torch'
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.torch_profiler_dir:
+        present: *id052
+  kwargs_positive:
+    torch_profiler_dir: /tmp/prof
+  kwargs_negative:
+    profiler: torch
+    torch_profiler_dir: /tmp/prof
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: vllm_multimodalconfig_video_pruning_rate_range
+  source: passB
+  constraint_key:
+  - video_pruning_rate
+  - numeric
+  - '{ge=0,lt=1}'
+  tolerant_key:
+  - video_pruning_rate
+  - numeric
+  native_type: vllm.config.MultiModalConfig
+  native_field: MultiModalConfig.video_pruning_rate
+  predicate_kind: range
+  predicate_value: &id053
+    ge: 0.0
+    lt: 1.0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.video_pruning_rate:
+        present: *id053
+  kwargs_positive:
+    video_pruning_rate: 1.0
+  kwargs_negative:
+    video_pruning_rate: 0.5
+  observed_outcome: error
+  contributing_sources:
+  - passB
+unverified:
+- id: vllm_structuredoutputsparams_raises_no_mode_set
+  source: passA
+  constraint_key:
+  - '[json, regex, choice, grammar, json_object, structural_tag]'
+  - presence
+  - count of set constraint fields < 1
+  tolerant_key:
+  - '[json, regex, choice, grammar, json_object, structural_tag]'
+  - presence
+  native_type: vllm.sampling_params.StructuredOutputsParams
+  native_field: '[json, regex, choice, grammar, json_object, structural_tag]'
+  predicate_kind: presence_required
+  predicate_value: count of set constraint fields < 1
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.[json, regex, choice, grammar, json_object, structural_tag]:
+        present: count of set constraint fields < 1
+  kwargs_positive: {}
+  kwargs_negative:
+    regex: '[0-9]+'
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_structuredoutputsparams_raises_multiple_modes_set
+  source: passA
+  constraint_key:
+  - '[json, regex, choice, grammar, json_object, structural_tag]'
+  - presence
+  - count of set constraint fields > 1
+  tolerant_key:
+  - '[json, regex, choice, grammar, json_object, structural_tag]'
+  - presence
+  native_type: vllm.sampling_params.StructuredOutputsParams
+  native_field: '[json, regex, choice, grammar, json_object, structural_tag]'
+  predicate_kind: mutually_exclusive
+  predicate_value: count of set constraint fields > 1
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.[json, regex, choice, grammar, json_object, structural_tag]:
+        present: count of set constraint fields > 1
+  kwargs_positive:
+    regex: '[0-9]+'
+    choice:
+    - a
+    - b
+  kwargs_negative:
+    regex: '[0-9]+'
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_schedulerconfig_field_constraints_ge_1
+  source: passA
+  constraint_key:
+  - '[max_num_batched_tokens, max_num_seqs, max_num_partial_prefills, max_long_partial_prefills,
+    stream_interval]'
+  - presence
+  - '1'
+  tolerant_key:
+  - '[max_num_batched_tokens, max_num_seqs, max_num_partial_prefills, max_long_partial_prefills,
+    stream_interval]'
+  - presence
+  native_type: vllm.config.SchedulerConfig
+  native_field: '[max_num_batched_tokens, max_num_seqs, max_num_partial_prefills,
+    max_long_partial_prefills, stream_interval]'
+  predicate_kind: field_ge
+  predicate_value: 1
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.[max_num_batched_tokens, max_num_seqs, max_num_partial_prefills, max_long_partial_prefills, stream_interval]:
+        present: 1
+  kwargs_positive:
+    max_num_seqs: 0
+    max_model_len: 2048
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_num_seqs: 128
+    max_model_len: 2048
+    is_encoder_decoder: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_repetitiondetectionparams_raises_pattern_sizes_invalid
+  source: passA
+  constraint_key:
+  - '[max_pattern_size, min_pattern_size]'
+  - presence
+  - max_pattern_size < 0 OR min_pattern_size < 0 OR min_pattern_size > max_pattern_size
+  tolerant_key:
+  - '[max_pattern_size, min_pattern_size]'
+  - presence
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  native_field: '[max_pattern_size, min_pattern_size]'
+  predicate_kind: cross_field_combo
+  predicate_value: max_pattern_size < 0 OR min_pattern_size < 0 OR min_pattern_size
+    > max_pattern_size
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.[max_pattern_size, min_pattern_size]:
+        present: max_pattern_size < 0 OR min_pattern_size < 0 OR min_pattern_size
+          > max_pattern_size
+  kwargs_positive:
+    max_pattern_size: 2
+    min_pattern_size: 5
+  kwargs_negative:
+    max_pattern_size: 5
+    min_pattern_size: 2
+    min_count: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_poolerconfig_raises_both_pooling_type_and_seq_pooling_type
+  source: passA
+  constraint_key:
+  - '[pooling_type, seq_pooling_type]'
+  - presence
+  - pooling_type set AND seq_pooling_type set
+  tolerant_key:
+  - '[pooling_type, seq_pooling_type]'
+  - presence
+  native_type: vllm.config.PoolerConfig
+  native_field: '[pooling_type, seq_pooling_type]'
+  predicate_kind: mutually_exclusive
+  predicate_value: pooling_type set AND seq_pooling_type set
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.[pooling_type, seq_pooling_type]:
+        present: pooling_type set AND seq_pooling_type set
+  kwargs_positive:
+    pooling_type: MEAN
+    seq_pooling_type: MEAN
+  kwargs_negative:
+    pooling_type: MEAN
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_poolerconfig_raises_both_pooling_type_and_tok_pooling_type
+  source: passA
+  constraint_key:
+  - '[pooling_type, tok_pooling_type]'
+  - presence
+  - pooling_type set AND tok_pooling_type set
+  tolerant_key:
+  - '[pooling_type, tok_pooling_type]'
+  - presence
+  native_type: vllm.config.PoolerConfig
+  native_field: '[pooling_type, tok_pooling_type]'
+  predicate_kind: mutually_exclusive
+  predicate_value: pooling_type set AND tok_pooling_type set
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.[pooling_type, tok_pooling_type]:
+        present: pooling_type set AND tok_pooling_type set
+  kwargs_positive:
+    pooling_type: MEAN
+    tok_pooling_type: MEAN
+  kwargs_negative:
+    pooling_type: MEAN
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_speculativeconfig_raises_unequal_vocab_size_draft_model
+  source: passA
+  constraint_key:
+  - '[target_model_config, draft_model_config]'
+  - presence
+  - method == draft_model AND target vocab_size != draft vocab_size
+  tolerant_key:
+  - '[target_model_config, draft_model_config]'
+  - presence
+  native_type: vllm.config.SpeculativeConfig
+  native_field: '[target_model_config, draft_model_config]'
+  predicate_kind: cross_field_combo
+  predicate_value: method == draft_model AND target vocab_size != draft vocab_size
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.[target_model_config, draft_model_config]:
+        present: method == draft_model AND target vocab_size != draft vocab_size
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_structuredoutputsparams_exactly_one_constraint
+  source: passB
+  constraint_key:
+  - __post_init__
+  - presence
+  - '{exactly_one_of=[choice,grammar,json,json_object,regex,structural_tag]}'
+  tolerant_key:
+  - __post_init__
+  - presence
+  native_type: vllm.sampling_params.StructuredOutputsParams
+  native_field: StructuredOutputsParams.__post_init__
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: &id054
+    exactly_one_of:
+    - json
+    - regex
+    - choice
+    - grammar
+    - json_object
+    - structural_tag
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.__post_init__:
+        present: *id054
+  kwargs_positive:
+    json: '{}'
+    regex: a+
+  kwargs_negative:
+    regex: a+
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: infra_error
+- id: vllm_repetitiondetectionparams_pattern_sizes_valid
+  source: passB
+  constraint_key:
+  - __post_init__
+  - presence
+  - '{require=max_pattern_size >= 0 and min_pattern_size >= 0 and min_pattern_size
+    <= max_pattern_size}'
+  tolerant_key:
+  - __post_init__
+  - presence
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  native_field: RepetitionDetectionParams.__post_init__
+  predicate_kind: presence_conflict
+  predicate_value: &id055
+    require: max_pattern_size >= 0 and min_pattern_size >= 0 and min_pattern_size
+      <= max_pattern_size
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.__post_init__:
+        present: *id055
+  kwargs_positive:
+    max_pattern_size: 2
+    min_pattern_size: 5
+  kwargs_negative:
+    max_pattern_size: 5
+    min_pattern_size: 2
+    min_count: 2
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: infra_error
+- id: vllm_parallelconfig_normalise_pplx_backend_removed
+  source: passA
+  constraint_key:
+  - all2all_backend
+  - presence
+  - pplx
+  tolerant_key:
+  - all2all_backend
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: all2all_backend
+  predicate_kind: equals
+  predicate_value: pplx
+  severity: warning
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.all2all_backend:
+        present: pplx
+  kwargs_positive:
+    all2all_backend: pplx
+  kwargs_negative:
+    all2all_backend: allgather_reducescatter
+  observed_outcome: dormant_silent
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_attentionconfig_backend_enum_membership
+  source: passB
+  constraint_key:
+  - backend
+  - membership
+  - '@AttentionBackendEnum (vllm.v1.attention.backends.registry); ''auto'' aliases
+    to None'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: vllm.config.AttentionConfig
+  native_field: AttentionConfig.backend
+  predicate_kind: strenum_in
+  predicate_value: '@AttentionBackendEnum (vllm.v1.attention.backends.registry); ''auto''
+    aliases to None'
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.backend:
+        not_in: '@AttentionBackendEnum (vllm.v1.attention.backends.registry); ''auto''
+          aliases to None'
+  kwargs_positive:
+    backend: __not_a_backend__
+  kwargs_negative:
+    backend: auto
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_cacheconfig_cache_dtype_literal
+  source: passB
+  constraint_key:
+  - cache_dtype
+  - membership
+  - '[auto,bfloat16,float16,fp8,fp8_ds_mla,fp8_e4m3,fp8_e5m2,fp8_inc]'
+  tolerant_key:
+  - cache_dtype
+  - membership
+  native_type: vllm.config.CacheConfig
+  native_field: CacheConfig.cache_dtype
+  predicate_kind: literal_in
+  predicate_value: &id056
+  - auto
+  - float16
+  - bfloat16
+  - fp8
+  - fp8_e4m3
+  - fp8_e5m2
+  - fp8_inc
+  - fp8_ds_mla
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_dtype:
+        not_in: *id056
+  kwargs_positive:
+    cache_dtype: __not_a_dtype__
+  kwargs_negative:
+    cache_dtype: fp8_e4m3
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_compilationconfig_raises_invalid_custom_op_syntax
+  source: passA
+  constraint_key:
+  - custom_ops
+  - presence
+  - each op must be 'all', 'none', '+op' or '-op'
+  tolerant_key:
+  - custom_ops
+  - presence
+  native_type: vllm.config.CompilationConfig
+  native_field: custom_ops
+  predicate_kind: element_syntax
+  predicate_value: each op must be 'all', 'none', '+op' or '-op'
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.custom_ops:
+        present: each op must be 'all', 'none', '+op' or '-op'
+  kwargs_positive:
+    custom_ops:
+    - rotary_embedding
+  kwargs_negative:
+    custom_ops:
+    - +rotary_embedding
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_parallelconfig_raises_dcp_a2a_requires_dcp_gt_1
+  source: passA
+  constraint_key:
+  - dcp_comm_backend
+  - presence
+  - dcp_comm_backend == "a2a" AND decode_context_parallel_size <= 1
+  tolerant_key:
+  - dcp_comm_backend
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: dcp_comm_backend
+  predicate_kind: cross_field_combo
+  predicate_value: dcp_comm_backend == "a2a" AND decode_context_parallel_size <= 1
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.dcp_comm_backend:
+        present: dcp_comm_backend == "a2a" AND decode_context_parallel_size <= 1
+  kwargs_positive:
+    dcp_comm_backend: a2a
+    decode_context_parallel_size: 1
+  kwargs_negative:
+    dcp_comm_backend: a2a
+    decode_context_parallel_size: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_parallelconfig_dcp_a2a_requires_dcp_gt_1
+  source: passB
+  constraint_key:
+  - dcp_comm_backend
+  - presence
+  - '{require=decode_context_parallel_size > 1,when=dcp_comm_backend == ''a2a''}'
+  tolerant_key:
+  - dcp_comm_backend
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: ParallelConfig.dcp_comm_backend
+  predicate_kind: presence_conflict
+  predicate_value: &id057
+    when: dcp_comm_backend == 'a2a'
+    require: decode_context_parallel_size > 1
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.dcp_comm_backend:
+        present: *id057
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: vllm_deviceconfig_device_literal_skipvalidation
+  source: passB
+  constraint_key:
+  - device
+  - membership
+  - '[auto,cpu,cuda,tpu,xpu]'
+  tolerant_key:
+  - device
+  - membership
+  native_type: vllm.config.DeviceConfig
+  native_field: DeviceConfig.device
+  predicate_kind: literal_in
+  predicate_value: &id058
+  - auto
+  - cuda
+  - cpu
+  - tpu
+  - xpu
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.device:
+        not_in: *id058
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_speculativeconfig_raises_draft_tp_not_1_or_target
+  source: passA
+  constraint_key:
+  - draft_tensor_parallel_size
+  - presence
+  - must be 1 or target tensor_parallel_size
+  tolerant_key:
+  - draft_tensor_parallel_size
+  - presence
+  native_type: vllm.config.SpeculativeConfig
+  native_field: draft_tensor_parallel_size
+  predicate_kind: allowlist
+  predicate_value: must be 1 or target tensor_parallel_size
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.draft_tensor_parallel_size:
+        present: must be 1 or target tensor_parallel_size
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_modelconfig_raises_unknown_dtype
+  source: passA
+  constraint_key:
+  - dtype
+  - presence
+  - must be a known torch dtype string or torch.dtype
+  tolerant_key:
+  - dtype
+  - presence
+  native_type: vllm.config.ModelConfig
+  native_field: dtype
+  predicate_kind: allowlist
+  predicate_value: must be a known torch dtype string or torch.dtype
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.dtype:
+        present: must be a known torch dtype string or torch.dtype
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_parallelconfig_raises_elastic_ep_without_eplb
+  source: passA
+  constraint_key:
+  - enable_elastic_ep
+  - presence
+  - enable_elastic_ep AND not enable_eplb
+  tolerant_key:
+  - enable_elastic_ep
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: enable_elastic_ep
+  predicate_kind: cross_field_combo
+  predicate_value: enable_elastic_ep AND not enable_eplb
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_elastic_ep:
+        present: enable_elastic_ep AND not enable_eplb
+  kwargs_positive:
+    enable_elastic_ep: true
+    enable_eplb: false
+  kwargs_negative:
+    enable_elastic_ep: true
+    enable_eplb: true
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_modelconfig_raises_sleep_mode_unsupported_platform
+  source: passA
+  constraint_key:
+  - enable_sleep_mode
+  - presence
+  - enable_sleep_mode AND not current_platform.is_sleep_mode_available()
+  tolerant_key:
+  - enable_sleep_mode
+  - presence
+  native_type: vllm.config.ModelConfig
+  native_field: enable_sleep_mode
+  predicate_kind: platform_combo
+  predicate_value: enable_sleep_mode AND not current_platform.is_sleep_mode_available()
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_sleep_mode:
+        present: enable_sleep_mode AND not current_platform.is_sleep_mode_available()
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_vllmconfig_warning_sequence_parallelism_requires_tp_gt_1
+  source: passA
+  constraint_key:
+  - enable_sp
+  - presence
+  - pass_config.enable_sp AND tensor_parallel_size == 1
+  tolerant_key:
+  - enable_sp
+  - presence
+  native_type: vllm.config.VllmConfig
+  native_field: compilation_config.pass_config.enable_sp
+  predicate_kind: cross_field_combo
+  predicate_value: pass_config.enable_sp AND tensor_parallel_size == 1
+  severity: warning
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_sp:
+        present: pass_config.enable_sp AND tensor_parallel_size == 1
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_schedulerconfig_raises_long_prefill_token_threshold_gt_ref_max_model_len
+  source: passA
+  constraint_key:
+  - long_prefill_token_threshold
+  - numeric
+  - '@max_model_len (only when max_num_partial_prefills > 1)'
+  tolerant_key:
+  - long_prefill_token_threshold
+  - numeric
+  native_type: vllm.config.SchedulerConfig
+  native_field: long_prefill_token_threshold
+  predicate_kind: cross_field_gt
+  predicate_value: '@max_model_len (only when max_num_partial_prefills > 1)'
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.long_prefill_token_threshold:
+        '>': '@max_model_len (only when max_num_partial_prefills > 1)'
+  kwargs_positive:
+    max_num_partial_prefills: 2
+    long_prefill_token_threshold: 99999
+    max_model_len: 1024
+    enable_chunked_prefill: true
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_num_partial_prefills: 2
+    long_prefill_token_threshold: 100
+    max_model_len: 1024
+    enable_chunked_prefill: true
+    is_encoder_decoder: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_loraconfig_normalise_max_cpu_loras_unset
+  source: passA
+  constraint_key:
+  - max_cpu_loras
+  - presence
+  - None
+  tolerant_key:
+  - max_cpu_loras
+  - presence
+  native_type: vllm.config.LoRAConfig
+  native_field: max_cpu_loras
+  predicate_kind: equals
+  predicate_value: None
+  severity: info
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_cpu_loras:
+        present: None
+  kwargs_positive:
+    max_cpu_loras: null
+  kwargs_negative:
+    max_cpu_loras: 4
+  observed_outcome: dormant_silent
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_schedulerconfig_raises_max_long_partial_prefills_gt_max_num_partial_prefills
+  source: passA
+  constraint_key:
+  - max_long_partial_prefills
+  - numeric
+  - '@max_num_partial_prefills'
+  tolerant_key:
+  - max_long_partial_prefills
+  - numeric
+  native_type: vllm.config.SchedulerConfig
+  native_field: max_long_partial_prefills
+  predicate_kind: cross_field_gt
+  predicate_value: '@max_num_partial_prefills'
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_long_partial_prefills:
+        '>': '@max_num_partial_prefills'
+  kwargs_positive:
+    max_long_partial_prefills: 4
+    max_num_partial_prefills: 2
+    enable_chunked_prefill: true
+    max_model_len: 2048
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_long_partial_prefills: 2
+    max_num_partial_prefills: 2
+    enable_chunked_prefill: true
+    max_model_len: 2048
+    is_encoder_decoder: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_schedulerconfig_max_long_le_max_partial_prefills
+  source: passB
+  constraint_key:
+  - max_long_partial_prefills
+  - presence
+  - '{require=max_long_partial_prefills <= max_num_partial_prefills}'
+  tolerant_key:
+  - max_long_partial_prefills
+  - presence
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.max_long_partial_prefills
+  predicate_kind: presence_conflict
+  predicate_value: &id059
+    require: max_long_partial_prefills <= max_num_partial_prefills
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_long_partial_prefills:
+        present: *id059
+  kwargs_positive:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    max_num_partial_prefills: 2
+    max_long_partial_prefills: 4
+  kwargs_negative:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    max_num_partial_prefills: 4
+    max_long_partial_prefills: 2
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_speculativeconfig_raises_draft_max_model_len_override
+  source: passA
+  constraint_key:
+  - max_model_len
+  - numeric
+  - speculative_max_model_len > draft_max_model_len OR > target_max_model_len
+  tolerant_key:
+  - max_model_len
+  - numeric
+  native_type: vllm.config.SpeculativeConfig
+  native_field: max_model_len
+  predicate_kind: cross_field_gt
+  predicate_value: speculative_max_model_len > draft_max_model_len OR > target_max_model_len
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_model_len:
+        '>': speculative_max_model_len > draft_max_model_len OR > target_max_model_len
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_modelconfig_raises_max_model_len_not_int
+  source: passA
+  constraint_key:
+  - max_model_len
+  - type
+  - int
+  tolerant_key:
+  - max_model_len
+  - type
+  native_type: vllm.config.ModelConfig
+  native_field: max_model_len
+  predicate_kind: type_check
+  predicate_value: int
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_model_len:
+        type_is_not: int
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_schedulerconfig_warning_batched_tokens_exceeds_seqs_times_model_len
+  source: passA
+  constraint_key:
+  - max_num_batched_tokens
+  - numeric
+  - '@(max_num_seqs * max_model_len)'
+  tolerant_key:
+  - max_num_batched_tokens
+  - numeric
+  native_type: vllm.config.SchedulerConfig
+  native_field: max_num_batched_tokens
+  predicate_kind: cross_field_gt
+  predicate_value: '@(max_num_seqs * max_model_len)'
+  severity: warning
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_batched_tokens:
+        '>': '@(max_num_seqs * max_model_len)'
+  kwargs_positive:
+    max_num_batched_tokens: 999999
+    max_num_seqs: 1
+    max_model_len: 10
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_num_batched_tokens: 10
+    max_num_seqs: 1
+    max_model_len: 10
+    is_encoder_decoder: false
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+  source: passA
+  constraint_key:
+  - max_num_batched_tokens
+  - numeric
+  - '@max_num_seqs'
+  tolerant_key:
+  - max_num_batched_tokens
+  - numeric
+  native_type: vllm.config.SchedulerConfig
+  native_field: max_num_batched_tokens
+  predicate_kind: cross_field_lt
+  predicate_value: '@max_num_seqs'
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_batched_tokens:
+        <: '@max_num_seqs'
+  kwargs_positive:
+    max_num_batched_tokens: 1
+    max_num_seqs: 2
+    max_model_len: 1
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_num_batched_tokens: 2
+    max_num_seqs: 2
+    max_model_len: 2
+    is_encoder_decoder: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_schedulerconfig_batched_tokens_ge_max_num_seqs
+  source: passB
+  constraint_key:
+  - max_num_batched_tokens
+  - presence
+  - '{require=max_num_batched_tokens >= max_num_seqs}'
+  tolerant_key:
+  - max_num_batched_tokens
+  - presence
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.max_num_batched_tokens
+  predicate_kind: presence_conflict
+  predicate_value: &id060
+    require: max_num_batched_tokens >= max_num_seqs
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_batched_tokens:
+        present: *id060
+  kwargs_positive:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    max_num_batched_tokens: 16
+    max_num_seqs: 32
+  kwargs_negative:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    max_num_batched_tokens: 64
+    max_num_seqs: 32
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_schedulerconfig_raises_partial_prefills_requires_chunked_prefill
+  source: passA
+  constraint_key:
+  - max_num_partial_prefills
+  - presence
+  - max_num_partial_prefills > 1 AND not enable_chunked_prefill
+  tolerant_key:
+  - max_num_partial_prefills
+  - presence
+  native_type: vllm.config.SchedulerConfig
+  native_field: max_num_partial_prefills
+  predicate_kind: cross_field_combo
+  predicate_value: max_num_partial_prefills > 1 AND not enable_chunked_prefill
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_partial_prefills:
+        present: max_num_partial_prefills > 1 AND not enable_chunked_prefill
+  kwargs_positive:
+    max_num_partial_prefills: 2
+    enable_chunked_prefill: false
+    max_model_len: 2048
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_num_partial_prefills: 2
+    enable_chunked_prefill: true
+    max_model_len: 2048
+    is_encoder_decoder: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_schedulerconfig_partial_prefills_require_chunked
+  source: passB
+  constraint_key:
+  - max_num_partial_prefills
+  - presence
+  - '{require=enable_chunked_prefill,when=max_num_partial_prefills > 1}'
+  tolerant_key:
+  - max_num_partial_prefills
+  - presence
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.max_num_partial_prefills
+  predicate_kind: presence_conflict
+  predicate_value: &id061
+    when: max_num_partial_prefills > 1
+    require: enable_chunked_prefill
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_partial_prefills:
+        present: *id061
+  kwargs_positive:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    enable_chunked_prefill: false
+    max_num_partial_prefills: 2
+  kwargs_negative:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    enable_chunked_prefill: true
+    max_num_partial_prefills: 2
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_speculativeconfig_method_literal
+  source: passB
+  constraint_key:
+  - method
+  - membership
+  - '[deepseek_mtp,draft_model,eagle,eagle3,ernie_mtp,exaone_moe_mtp,extract_hidden_states,glm4_moe_lite_mtp,glm4_moe_mtp,glm_ocr_mtp,longcat_flash_mtp,medusa,mimo_mtp,mlp_speculator,mtp,nemotron_h_mtp,ngram,ngram_gpu,pangu_ultra_moe_mtp,qwen3_5_mtp,qwen3_next_mtp,step3p5_mtp,suffix]'
+  tolerant_key:
+  - method
+  - membership
+  native_type: vllm.config.SpeculativeConfig
+  native_field: SpeculativeConfig.method
+  predicate_kind: literal_in
+  predicate_value: &id062
+  - ngram
+  - medusa
+  - mlp_speculator
+  - draft_model
+  - suffix
+  - eagle
+  - eagle3
+  - extract_hidden_states
+  - ngram_gpu
+  - deepseek_mtp
+  - mimo_mtp
+  - glm4_moe_mtp
+  - glm4_moe_lite_mtp
+  - glm_ocr_mtp
+  - ernie_mtp
+  - nemotron_h_mtp
+  - exaone_moe_mtp
+  - qwen3_next_mtp
+  - qwen3_5_mtp
+  - longcat_flash_mtp
+  - mtp
+  - pangu_ultra_moe_mtp
+  - step3p5_mtp
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.method:
+        not_in: *id062
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_compilationconfig_mode_enum_membership
+  source: passB
+  constraint_key:
+  - mode
+  - membership
+  - '@CompilationMode members (NONE, STOCK_TORCH_COMPILE, DYNAMO_TRACE_ONCE, VLLM_COMPILE)
+    or their int values 0-3'
+  tolerant_key:
+  - mode
+  - membership
+  native_type: vllm.config.CompilationConfig
+  native_field: CompilationConfig.mode
+  predicate_kind: strenum_in
+  predicate_value: '@CompilationMode members (NONE, STOCK_TORCH_COMPILE, DYNAMO_TRACE_ONCE,
+    VLLM_COMPILE) or their int values 0-3'
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mode:
+        not_in: '@CompilationMode members (NONE, STOCK_TORCH_COMPILE, DYNAMO_TRACE_ONCE,
+          VLLM_COMPILE) or their int values 0-3'
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: vllm_compilationconfig_raises_invalid_mode
+  source: passA
+  constraint_key:
+  - mode
+  - membership
+  - CompilationMode.__members__ (NONE, STOCK_TORCH_COMPILE, DYNAMO_TRACE_ONCE, VLLM_COMPILE)
+  tolerant_key:
+  - mode
+  - membership
+  native_type: vllm.config.CompilationConfig
+  native_field: mode
+  predicate_kind: literal_in
+  predicate_value: CompilationMode.__members__ (NONE, STOCK_TORCH_COMPILE, DYNAMO_TRACE_ONCE,
+    VLLM_COMPILE)
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mode:
+        not_in: CompilationMode.__members__ (NONE, STOCK_TORCH_COMPILE, DYNAMO_TRACE_ONCE,
+          VLLM_COMPILE)
+  kwargs_positive:
+    mode: __not_a_mode__
+  kwargs_negative:
+    mode: NONE
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_speculativeconfig_raises_num_speculative_tokens_le_0
+  source: passA
+  constraint_key:
+  - num_speculative_tokens
+  - numeric
+  - '0'
+  tolerant_key:
+  - num_speculative_tokens
+  - numeric
+  native_type: vllm.config.SpeculativeConfig
+  native_field: num_speculative_tokens
+  predicate_kind: le
+  predicate_value: 0
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.num_speculative_tokens:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_speculativeconfig_raises_missing_num_speculative_tokens
+  source: passA
+  constraint_key:
+  - num_speculative_tokens
+  - presence
+  - num_speculative_tokens is None
+  tolerant_key:
+  - num_speculative_tokens
+  - presence
+  native_type: vllm.config.SpeculativeConfig
+  native_field: num_speculative_tokens
+  predicate_kind: presence_required
+  predicate_value: num_speculative_tokens is None
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.num_speculative_tokens:
+        present: num_speculative_tokens is None
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_offloadconfig_raises_num_in_group_gt_group_size
+  source: passA
+  constraint_key:
+  - offload_num_in_group
+  - numeric
+  - '@prefetch.offload_group_size'
+  tolerant_key:
+  - offload_num_in_group
+  - numeric
+  native_type: vllm.config.OffloadConfig
+  native_field: prefetch.offload_num_in_group
+  predicate_kind: cross_field_gt
+  predicate_value: '@prefetch.offload_group_size'
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.offload_num_in_group:
+        '>': '@prefetch.offload_group_size'
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_observabilityconfig_raises_otlp_without_opentelemetry
+  source: passA
+  constraint_key:
+  - otlp_traces_endpoint
+  - presence
+  - otlp_traces_endpoint set AND OpenTelemetry not installed
+  tolerant_key:
+  - otlp_traces_endpoint
+  - presence
+  native_type: vllm.config.ObservabilityConfig
+  native_field: otlp_traces_endpoint
+  predicate_kind: import_guard
+  predicate_value: otlp_traces_endpoint set AND OpenTelemetry not installed
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.otlp_traces_endpoint:
+        present: otlp_traces_endpoint set AND OpenTelemetry not installed
+  kwargs_positive:
+    otlp_traces_endpoint: http://localhost:4317
+  kwargs_negative:
+    otlp_traces_endpoint: null
+  observed_outcome: no_op
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_observabilityconfig_otlp_requires_opentelemetry
+  source: passB
+  constraint_key:
+  - otlp_traces_endpoint
+  - presence
+  - '{require=opentelemetry installed,when=otlp_traces_endpoint set}'
+  tolerant_key:
+  - otlp_traces_endpoint
+  - presence
+  native_type: vllm.config.ObservabilityConfig
+  native_field: ObservabilityConfig.otlp_traces_endpoint
+  predicate_kind: presence_conflict
+  predicate_value: &id063
+    when: otlp_traces_endpoint set
+    require: opentelemetry installed
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.otlp_traces_endpoint:
+        present: *id063
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: vllm_poolingparams_output_kind_final_only
+  source: passB
+  constraint_key:
+  - output_kind
+  - membership
+  - '{must_equal=RequestOutputKind.FINAL_ONLY}'
+  tolerant_key:
+  - output_kind
+  - membership
+  native_type: vllm.PoolingParams
+  native_field: PoolingParams.output_kind
+  predicate_kind: allowlist_constant
+  predicate_value: &id064
+    must_equal: RequestOutputKind.FINAL_ONLY
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.output_kind:
+        not_in: *id064
+  kwargs_positive:
+    output_kind: '@vllm.sampling_params.RequestOutputKind.DELTA'
+  kwargs_negative:
+    output_kind: '@vllm.sampling_params.RequestOutputKind.FINAL_ONLY'
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_schedulerconfig_policy_literal
+  source: passB
+  constraint_key:
+  - policy
+  - membership
+  - '[fcfs,priority]'
+  tolerant_key:
+  - policy
+  - membership
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.policy
+  predicate_kind: literal_in
+  predicate_value: &id065
+  - fcfs
+  - priority
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.policy:
+        not_in: *id065
+  kwargs_positive:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    policy: lifo
+  kwargs_negative:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    policy: priority
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_modelconfig_raises_unknown_quantization_method
+  source: passA
+  constraint_key:
+  - quantization
+  - presence
+  - must be a registered quantization method
+  tolerant_key:
+  - quantization
+  - presence
+  native_type: vllm.config.ModelConfig
+  native_field: quantization
+  predicate_kind: allowlist
+  predicate_value: must be a registered quantization method
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.quantization:
+        present: must be a registered quantization method
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_parallelconfig_raises_nsight_without_ray
+  source: passA
+  constraint_key:
+  - ray_workers_use_nsight
+  - presence
+  - ray_workers_use_nsight AND not use_ray
+  tolerant_key:
+  - ray_workers_use_nsight
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: ray_workers_use_nsight
+  predicate_kind: cross_field_combo
+  predicate_value: ray_workers_use_nsight AND not use_ray
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ray_workers_use_nsight:
+        present: ray_workers_use_nsight AND not use_ray
+  kwargs_positive:
+    ray_workers_use_nsight: true
+    distributed_executor_backend: mp
+  kwargs_negative:
+    ray_workers_use_nsight: true
+    distributed_executor_backend: ray
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_speculativeconfig_rejection_sample_method_literal
+  source: passB
+  constraint_key:
+  - rejection_sample_method
+  - membership
+  - '[probabilistic,strict]'
+  tolerant_key:
+  - rejection_sample_method
+  - membership
+  native_type: vllm.config.SpeculativeConfig
+  native_field: SpeculativeConfig.rejection_sample_method
+  predicate_kind: literal_in
+  predicate_value: &id066
+  - strict
+  - probabilistic
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.rejection_sample_method:
+        not_in: *id066
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_schedulerconfig_runner_type_literal
+  source: passB
+  constraint_key:
+  - runner_type
+  - membership
+  - '[draft,generate,pooling]'
+  tolerant_key:
+  - runner_type
+  - membership
+  native_type: vllm.config.SchedulerConfig
+  native_field: SchedulerConfig.runner_type
+  predicate_kind: literal_in
+  predicate_value: &id067
+  - generate
+  - pooling
+  - draft
+  severity: error
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.runner_type:
+        not_in: *id067
+  kwargs_positive:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    runner_type: embed
+  kwargs_negative:
+    max_model_len: 2048
+    is_encoder_decoder: false
+    runner_type: pooling
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: vllm_samplingparams_normalise_seed_eq_neg1
+  source: passA
+  constraint_key:
+  - seed
+  - presence
+  - '-1'
+  tolerant_key:
+  - seed
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: seed
+  predicate_kind: equals
+  predicate_value: -1
+  severity: info
+  runtime: failed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.seed:
+        present: -1
+  kwargs_positive:
+    seed: -1
+  kwargs_negative:
+    seed: 42
+  observed_outcome: dormant_silent
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: vllm_parallelconfig_raises_tp_not_divisible_by_dcp
+  source: passA
+  constraint_key:
+  - tensor_parallel_size
+  - presence
+  - tensor_parallel_size % decode_context_parallel_size != 0
+  tolerant_key:
+  - tensor_parallel_size
+  - presence
+  native_type: vllm.config.ParallelConfig
+  native_field: tensor_parallel_size
+  predicate_kind: cross_field_divisibility
+  predicate_value: tensor_parallel_size % decode_context_parallel_size != 0
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tensor_parallel_size:
+        present: tensor_parallel_size % decode_context_parallel_size != 0
+  kwargs_positive:
+    tensor_parallel_size: 2
+    decode_context_parallel_size: 3
+  kwargs_negative:
+    tensor_parallel_size: 2
+    decode_context_parallel_size: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: vllm_speculativeconfig_raises_tensor_parallel_size_set
+  source: passA
+  constraint_key:
+  - tensor_parallel_size
+  - presence
+  - tensor_parallel_size is not None
+  tolerant_key:
+  - tensor_parallel_size
+  - presence
+  native_type: vllm.config.SpeculativeConfig
+  native_field: tensor_parallel_size
+  predicate_kind: presence_conflict
+  predicate_value: tensor_parallel_size is not None
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tensor_parallel_size:
+        present: tensor_parallel_size is not None
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_modelconfig_raises_tokenizer_not_str
+  source: passA
+  constraint_key:
+  - tokenizer
+  - type
+  - str
+  tolerant_key:
+  - tokenizer
+  - type
+  native_type: vllm.config.ModelConfig
+  native_field: tokenizer
+  predicate_kind: type_check
+  predicate_value: str
+  severity: error
+  runtime: unverified
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer:
+        type_is_not: str
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: vllm_eplbconfig_raises_async_requires_default_policy
+  source: passA
+  constraint_key:
+  - use_async
+  - presence
+  - use_async is True AND policy != "default"
+  tolerant_key:
+  - use_async
+  - presence
+  native_type: vllm.config.EPLBConfig
+  native_field: use_async
+  predicate_kind: cross_field_combo
+  predicate_value: use_async is True AND policy != "default"
+  severity: error
+  runtime: infra_error
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.use_async:
+        present: use_async is True AND policy != "default"
+  kwargs_positive:
+    use_async: true
+    policy: __not_default__
+  kwargs_negative:
+    use_async: true
+    policy: default
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error

@@ -445,10 +445,17 @@ parameters that CHANGED as a result. Findings detail in
   minors. 1.1 sits with 1.0 (pre-pydantic PluginConfig, no SamplingParams ranges,
   validate_build_config raises); the 1.2.x feature additions land after 1.1. The
   raw UNION basis is source-confounded across cells (1.1 has no mech) - use the
-  OPUS basis. Detail in FANOUT_FINDINGS; raw /tmp/cross_major_delta.json. Identity
-  caveat: confirmed entry counts double-count cross-source re-encodings (~30%).
-  GT integrity across the three new cells: **62/63 confirmed entries REAL** on
-  full source-review.
+  OPUS basis. Detail in FANOUT_FINDINGS; raw /tmp/cross_major_delta.json.
+- **Cross-engine (vllm 0.18.1->0.19.1):** 145/94 and 249/90 confirmed; Opus-basis
+  persistence **78%** with **36% survivor re-bound**. Sits between tensorrt's minor
+  (92-94%) and major (53%) - but vllm 0.x minors are semver-BREAKING (feature
+  releases), so not directly comparable to tensorrt 1.x minors. The robust
+  cross-engine signal is survivor RE-BOUNDING (36%, near the tensorrt major's 42%):
+  silent re-bounding is engine-independent, so the runtime gate's necessity
+  generalises. Gate-scope finding: confirmation verifies fire/pass BEHAVIOUR, not
+  exact recorded predicate_value (3 vllm 0.18.1 entries had imprecise allowlists yet
+  confirmed). GT integrity across all six cells: **243/247 confirmed entries REAL**
+  on source-review (tensorrt 62/63 + vllm 181/184), zero false-confirms/fabrications.
 - **Cross-engine schema gate** (shipped schemas vs live): transformers 4.57.3
   107/107 clean; vllm 0.7.3 116/135; tensorrt 0.21.0 92/107 (divergences are
   shipped-schema staleness vs refactored introspectors, not engine drift).
@@ -482,9 +489,8 @@ parameters that CHANGED as a result. Findings detail in
    minor-bump deltas for vllm (0.18->0.22) and transformers (5.6->5.10) to test
    whether the minor-bump stability generalises across engines (the study window
    has no non-tensorrt major boundary).
-4. IN PROGRESS: **cross-engine minor-bump deltas** (vllm 0.18->0.22, transformers
-   5.6->5.10) to test whether minor-bump stability generalises across engines (the
-   window has no non-tensorrt major boundary).
+4. cross-engine minor-bump deltas: **vllm 0.18->0.19 DONE** (see 15.3); remaining
+   transformers 5.6->5.10. (The window has no non-tensorrt major boundary.)
 5. Per-version producers exist for only ~6 versions; the window needs ~9 more
    (overlaps the engine-knowledge-as-data refactor - now the same trunk).
 6. DEFERRED to milestone end: port trial improved-det-v2 primitives into the
@@ -511,6 +517,7 @@ All study + refactor work is unified on ONE trunk: `study/5version-window`
 retired). Worktree: `~/workspace/llenergymeasure-trial`. tensorrt source on disk:
 1.2.1 at `/tmp/trial_tensorrt_v1_2_1_venv/src/tensorrt_llm`, 0.21.0 at
 `/tmp/trt-llm-0.21.0/tensorrt_llm`, 1.0.0 at `/tmp/trt-llm-1.0.0/tensorrt_llm`,
-1.1.0 at `/tmp/trt-llm-1.1.0/tensorrt_llm` (extracted from the release
-containers). Containers present: tensorrt 0.21.0 + 1.0.0 + 1.1.0 + 1.2.1, vllm
-0.7.3 + 0.19.1, transformers 4.57.3.
+1.1.0 at `/tmp/trt-llm-1.1.0/tensorrt_llm`; vllm source at `/tmp/vllm-0.18.1/vllm`
+and `/tmp/vllm-0.19.1/vllm` (all extracted from the release containers).
+Containers present: tensorrt 0.21.0 + 1.0.0 + 1.1.0 + 1.2.1, vllm 0.7.3 + 0.18.1 +
+0.19.1, transformers 4.57.3.

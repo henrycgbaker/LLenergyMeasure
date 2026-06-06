@@ -123,13 +123,31 @@ distorts the raw union):
   feature additions land after 1.1, so 1.1 -> 1.2.1 is addition-dominated on a
   stable base.
 
+CROSS-ENGINE (vllm 0.18.1 -> 0.19.1; the window has no non-tensorrt major
+boundary, so this probes minor-bump behaviour on a second engine). Two cells, 2
+Opus passes each, runtime-gated CPU-only, fully source-reviewed (vllm 0.18.1 =
+145 union / 94 confirmed; 0.19.1 = 249 / 90). Opus-basis persistence is 78%
+(31/87 = 36% of survivors re-bounded). Two reads:
+- The 78% does NOT mean vllm churns more "for the same kind of bump": vllm uses
+  0.x versioning where the minor digit is the BREAKING-change position, so
+  0.18->0.19 is effectively a feature release, not a tensorrt-style 1.x minor.
+  vllm's minor landing between tensorrt's minor (92-94%) and major (53%) is what
+  the versioning conventions predict.
+- The robust ENGINE-INDEPENDENT signal is survivor RE-BOUNDING: 36% of persisting
+  vllm knobs changed bound/allowlist, close to the tensorrt MAJOR's 42% and far
+  above tensorrt minors'. Silent re-bounding is not a tensorrt quirk, so the
+  runtime gate's necessity generalises across engines.
+
 ## 5. Methodology validation
 
-- GT INTEGRITY: every confirmed entry in the three new cells was opened at its
-  cited source line by an independent adversarial reviewer instructed to refute.
-  Result: 62/63 REAL (0.21 17/18, 1.0 21/21, 1.1 24/24), zero false-confirms, zero
-  fabrications; the one non-real entry is a redundant mis-encoding of a rule its
-  twin captures correctly. (1.2.1 separately: 100% real on a ~22-entry sample.)
+- GT INTEGRITY: every confirmed entry across six cells was opened at its cited
+  source line by an independent adversarial reviewer instructed to refute. Result:
+  **243/247 REAL** - tensorrt 62/63 (0.21 17/18, 1.0 21/21, 1.1 24/24) + vllm
+  181/184 (0.18.1 91/94, 0.19.1 90/90), zero false-confirms, zero fabrications
+  anywhere. The 4 non-real are a redundant mis-encoding (0.21) and 3 imprecise
+  recorded predicate_values (vllm 0.18.1) - all REAL rules, none wrong invariants.
+  (1.2.1 separately: 100% real on a ~22-entry sample; the vllm 0.19.1 reviewer
+  re-ran 50+ entries end-to-end in-container to verify fire-for-the-right-reason.)
 - GATE SOUNDNESS: reviewers independently confirmed the attribution-hardening
   closes the "CUDA-incidental-error" hole (args-model construction touches CUDA
   unconditionally via `validate_dtype`, but the gate only confirms when the raised
@@ -178,11 +196,22 @@ the residual - holds, with a sharp split:
   folded into the deferred miner-porting item (Section 8), not an identity-layer
   change. A precise distinct-rule count, if ever needed, is a per-cell manual
   reconciliation.
+- GATE SCOPE (what "confirmed" guarantees): the runtime gate verifies binary
+  fire/pass BEHAVIOUR (a bad value fires, a good value passes) but does NOT
+  cross-check the recorded `predicate_value` against source. So an entry can
+  confirm correctly while its recorded allowlist/bound is slightly off, whenever
+  the probe kwargs straddle the true boundary (the 3 vllm 0.18.1 mis-stated entries
+  were exactly this: e.g. a 6-value allowlist recorded for an 8-value Literal still
+  confirms). Confirmation establishes the constraint EXISTS and is roughly located,
+  not that its boundary is exact; a precise-boundary guarantee would need the gate
+  to probe AT the recorded edges.
 - Confirmed-level percentages are small-N (14-60 knobs); the Opus-basis gradient
-  (64-81 knobs) is the robust signal.
+  (64-111 knobs) is the robust signal.
 - ONE major boundary in the window (tensorrt 0.21->1.0); vllm and transformers
-  have no major boundary in the locked window, so cross-engine generalisation is
-  tested only for minor-bump stability (not yet run).
+  have no major boundary in the locked window. Cross-engine generalisation is
+  therefore tested for MINOR-bump behaviour only - done for vllm (0.18->0.19),
+  with the caveat that vllm 0.x minors are semver-breaking (feature releases), not
+  comparable to tensorrt 1.x minors.
 - The deterministic ceiling used different mechanical miners per cell; the headline
   25%/47% is the 1.2.1 figure (improved-det-v2 + production widening).
 - Replayability gating: GPU/model-dir/engine-dir-gated invariants are real but
@@ -191,8 +220,9 @@ the residual - holds, with a sharp split:
 
 ## 8. Open items
 
-1. Cross-engine minor-bump deltas (vllm 0.18->0.22, transformers 5.6->5.10) to test
-   whether minor-bump stability generalises across engines.
+1. Cross-engine: vllm 0.18->0.19 DONE (Section 4). Remaining: transformers
+   5.6->5.10 minor-bump delta; and, if a non-tensorrt MAJOR is ever wanted, it
+   must come from outside the locked window.
 2. Per-version producers exist for ~6 versions; the locked window needs ~9 more
    (overlaps the engine-knowledge-as-data refactor).
 3. Port the trial improved-det-v2 primitives into the production per-version miners
