@@ -1,15 +1,20 @@
-schema_version: study_pilot_gt/1.0.0
+schema_version: study_pilot_gt/2.0.0
 engine: tensorrt
 engine_version: 1.2.1
 task: invariants
 round: R0_pilot
 gate: scripts/validate_invariants.py (in nvcr.io/nvidia/tensorrt-llm/release:1.2.1)
-identity: 'tolerant: (leaf_native_field, coarse_predicate_bucket)'
-n_confirmed: 46
-n_unverified: 98
+identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
+  tolerant_key = first two, for cross-source recall
+n_confirmed: 60
+n_unverified: 152
 confirmed:
 - id: tensorrt_decodingbaseconfig__validate_acceptance_length_threshold_acceptance_length_threshold_lt
   source: mech
+  constraint_key:
+  - acceptance_length_threshold
+  - numeric
+  - '0'
   tolerant_key:
   - acceptance_length_threshold
   - numeric
@@ -19,14 +24,20 @@ confirmed:
   predicate_value: null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.acceptance_length_threshold:
+        <: 0
   observed_outcome: error
   contributing_sources:
   - mech
-  - passA
-  - passB
-  - poc
 - id: tensorrt_decodingbaseconfig__validate_acceptance_window_acceptance_window_lt
   source: mech
+  constraint_key:
+  - acceptance_window
+  - numeric
+  - '0'
   tolerant_key:
   - acceptance_window
   - numeric
@@ -36,27 +47,38 @@ confirmed:
   predicate_value: null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.acceptance_window:
+        <: 0
   observed_outcome: error
   contributing_sources:
   - mech
-  - passA
-  - passB
-  - poc
 - id: tensorrt_nvfp4GemmConfig_allowed_backends_subset
   source: passA
+  constraint_key:
+  - allowed_backends
+  - membership
+  - '[cublaslt,cuda_core,cutedsl,cutlass]'
   tolerant_key:
   - allowed_backends
   - membership
   native_type: tensorrt.Nvfp4GemmConfig
   native_field: Nvfp4GemmConfig.allowed_backends
   predicate_kind: allowlist_constant
-  predicate_value:
+  predicate_value: &id001
   - cutlass
   - cublaslt
   - cutedsl
   - cuda_core
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends:
+        not_in: *id001
   kwargs_positive:
     allowed_backends:
     - __not_a_backend__
@@ -70,13 +92,17 @@ confirmed:
   - poc
 - id: tensorrt_torchLlmArgs_allreduce_strategy_literal
   source: passA
+  constraint_key:
+  - allreduce_strategy
+  - membership
+  - '[AUTO,LOWPRECISION,MINLATENCY,MNNVL,NCCL,NCCL_SYMMETRIC,ONESHOT,TWOSHOT,UB]'
   tolerant_key:
   - allreduce_strategy
   - membership
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.allreduce_strategy
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id002
   - AUTO
   - NCCL
   - UB
@@ -88,24 +114,32 @@ confirmed:
   - NCCL_SYMMETRIC
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allreduce_strategy:
+        not_in: *id002
   kwargs_positive:
     allreduce_strategy: __not_a_strategy__
   kwargs_negative:
     allreduce_strategy: AUTO
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
 - id: tensorrt_moeConfig_backend_literal
   source: passA
+  constraint_key:
+  - backend
+  - membership
+  - '[CUTEDSL,CUTLASS,DEEPGEMM,TRITON,TRTLLM,VANILLA,WIDEEP]'
   tolerant_key:
   - backend
   - membership
   native_type: tensorrt.MoeConfig
   native_field: MoeConfig.backend
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id003
   - CUTLASS
   - CUTEDSL
   - WIDEEP
@@ -115,111 +149,250 @@ confirmed:
   - TRITON
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        not_in: *id003
   kwargs_positive:
     backend: __not_a_backend__
   kwargs_negative:
     backend: CUTLASS
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_cacheTransceiverConfig_backend_literal
+  source: passA
+  constraint_key:
+  - backend
+  - membership
+  - '[DEFAULT,MOONCAKE,MPI,NIXL,UCX]'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: tensorrt.CacheTransceiverConfig
+  native_field: CacheTransceiverConfig.backend
+  predicate_kind: literal_in
+  predicate_value: &id004
+  - DEFAULT
+  - UCX
+  - NIXL
+  - MOONCAKE
+  - MPI
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        not_in: *id004
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+- id: tensorrt_torchllmargs_validate_batch_wait_max_tokens_ratio_batch_wait_max_tokens_ratio_lt
+  source: mech
+  constraint_key:
+  - batch_wait_max_tokens_ratio
+  - numeric
+  - '0'
+  tolerant_key:
+  - batch_wait_max_tokens_ratio
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_max_tokens_ratio:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_torchLlmArgs_validate_batch_wait_max_tokens_ratio_in_range
   source: passA
+  constraint_key:
+  - batch_wait_max_tokens_ratio
+  - numeric
+  - '{ge=0,le=1}'
   tolerant_key:
   - batch_wait_max_tokens_ratio
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.batch_wait_max_tokens_ratio
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id005
     ge: 0
     le: 1
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_max_tokens_ratio:
+        present: *id005
   kwargs_positive:
     batch_wait_max_tokens_ratio: 1.5
   kwargs_negative:
     batch_wait_max_tokens_ratio: 0.5
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_torchllmargs_validate_batch_wait_timeout_iters_batch_wait_timeout_iters_lt
+  source: mech
+  constraint_key:
+  - batch_wait_timeout_iters
+  - numeric
+  - '0'
+  tolerant_key:
+  - batch_wait_timeout_iters
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_iters:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_torchLlmArgs_validate_batch_wait_timeout_iters_non_negative
   source: passA
+  constraint_key:
+  - batch_wait_timeout_iters
+  - numeric
+  - '{ge=0}'
   tolerant_key:
   - batch_wait_timeout_iters
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.batch_wait_timeout_iters
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id006
     ge: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_iters:
+        present: *id006
   kwargs_positive:
     batch_wait_timeout_iters: -1
   kwargs_negative:
     batch_wait_timeout_iters: 0
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_torchllmargs_validate_batch_wait_timeout_ms_batch_wait_timeout_ms_lt
+  source: mech
+  constraint_key:
+  - batch_wait_timeout_ms
+  - numeric
+  - '0'
+  tolerant_key:
+  - batch_wait_timeout_ms
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_ms:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_torchLlmArgs_validate_batch_wait_timeout_ms_non_negative
   source: passA
+  constraint_key:
+  - batch_wait_timeout_ms
+  - numeric
+  - '{ge=0}'
   tolerant_key:
   - batch_wait_timeout_ms
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.batch_wait_timeout_ms
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id007
     ge: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_ms:
+        present: *id007
   kwargs_positive:
     batch_wait_timeout_ms: -1
   kwargs_negative:
     batch_wait_timeout_ms: 0
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_batchingType_enum
   source: passA
+  constraint_key:
+  - batching_type
+  - membership
+  - '[INFLIGHT,STATIC]'
   tolerant_key:
   - batching_type
   - membership
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.batching_type
   predicate_kind: strenum_in
-  predicate_value:
+  predicate_value: &id008
   - STATIC
   - INFLIGHT
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_type:
+        not_in: *id008
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_pluginConfig_bert_attention_plugin_default_dtype_literal
   source: passB
+  constraint_key:
+  - bert_attention_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
   tolerant_key:
   - bert_attention_plugin
   - membership
   native_type: PluginConfig
   native_field: PluginConfig.bert_attention_plugin
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id009
   - auto
   - float16
   - float32
@@ -228,6 +401,11 @@ confirmed:
   - null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.bert_attention_plugin:
+        not_in: *id009
   kwargs_positive:
     bert_attention_plugin: __bad__
   kwargs_negative:
@@ -237,16 +415,25 @@ confirmed:
   - passB
 - id: tensorrt_samplingParams_best_of_gt_1_greedy_requires_env
   source: passA
+  constraint_key:
+  - best_of
+  - presence
+  - '{best_of_gt_1_and_greedy_and_env_unset=True}'
   tolerant_key:
   - best_of
   - presence
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.best_of
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id010
     best_of_gt_1_and_greedy_and_env_unset: true
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        present: *id010
   kwargs_positive:
     best_of: 2
     temperature: 0
@@ -255,43 +442,59 @@ confirmed:
     temperature: 1.0
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_capacitySchedulerPolicy_enum
   source: passA
+  constraint_key:
+  - capacity_scheduler_policy
+  - membership
+  - '[GUARANTEED_NO_EVICT,MAX_UTILIZATION,STATIC_BATCH]'
   tolerant_key:
   - capacity_scheduler_policy
   - membership
   native_type: tensorrt.SchedulerConfig
   native_field: SchedulerConfig.capacity_scheduler_policy
   predicate_kind: strenum_in
-  predicate_value:
+  predicate_value: &id011
   - MAX_UTILIZATION
   - GUARANTEED_NO_EVICT
   - STATIC_BATCH
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capacity_scheduler_policy:
+        not_in: *id011
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_torchCompileConfig_capture_num_tokens_positive
   source: passA
+  constraint_key:
+  - capture_num_tokens
+  - numeric
+  - '{applies_to=each_element,gt=0}'
   tolerant_key:
   - capture_num_tokens
   - numeric
   native_type: tensorrt.TorchCompileConfig
   native_field: TorchCompileConfig.capture_num_tokens
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id012
     gt: 0
     applies_to: each_element
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capture_num_tokens:
+        present: *id012
   kwargs_positive:
     capture_num_tokens:
     - 0
@@ -305,58 +508,83 @@ confirmed:
   - poc
 - id: tensorrt_contextChunkingPolicy_enum
   source: passA
+  constraint_key:
+  - context_chunking_policy
+  - membership
+  - '[EQUAL_PROGRESS,FIRST_COME_FIRST_SERVED]'
   tolerant_key:
   - context_chunking_policy
   - membership
   native_type: tensorrt.SchedulerConfig
   native_field: SchedulerConfig.context_chunking_policy
   predicate_kind: strenum_in
-  predicate_value:
+  predicate_value: &id013
   - FIRST_COME_FIRST_SERVED
   - EQUAL_PROGRESS
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_chunking_policy:
+        not_in: *id013
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_calibConfig_device_literal
   source: passA
+  constraint_key:
+  - device
+  - membership
+  - '[cpu,cuda]'
   tolerant_key:
   - device
   - membership
   native_type: tensorrt.CalibConfig
   native_field: CalibConfig.device
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id014
   - cuda
   - cpu
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.device:
+        not_in: *id014
   kwargs_positive:
     device: __not_a_device__
   kwargs_negative:
     device: cpu
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_pluginConfig_dtype_not_auto
   source: passB
+  constraint_key:
+  - dtype
+  - membership
+  - '{not=auto}'
   tolerant_key:
   - dtype
   - membership
   native_type: PluginConfig
   native_field: PluginConfig.dtype
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id015
     not: auto
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        not_in: *id015
   kwargs_positive:
     dtype: auto
   kwargs_negative:
@@ -368,41 +596,58 @@ confirmed:
   - poc
 - id: tensorrt_kvCacheConfig_free_gpu_memory_fraction_range
   source: passA
+  constraint_key:
+  - free_gpu_memory_fraction
+  - numeric
+  - '{ge=0,le=1}'
   tolerant_key:
   - free_gpu_memory_fraction
   - numeric
   native_type: tensorrt.KvCacheConfig
   native_field: KvCacheConfig.free_gpu_memory_fraction
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id016
     ge: 0
     le: 1
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.free_gpu_memory_fraction:
+        present: *id016
   kwargs_positive:
     free_gpu_memory_fraction: 1.5
   kwargs_negative:
     free_gpu_memory_fraction: 0.5
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_pluginConfig_gemm_allreduce_plugin_literal
   source: passB
+  constraint_key:
+  - gemm_allreduce_plugin
+  - membership
+  - '[,bfloat16,float16]'
   tolerant_key:
   - gemm_allreduce_plugin
   - membership
   native_type: PluginConfig
   native_field: PluginConfig.gemm_allreduce_plugin
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id017
   - float16
   - bfloat16
   - null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gemm_allreduce_plugin:
+        not_in: *id017
   kwargs_positive:
     gemm_allreduce_plugin: fp8
   kwargs_negative:
@@ -412,13 +657,17 @@ confirmed:
   - passB
 - id: tensorrt_pluginConfig_gemm_plugin_literal
   source: passA
+  constraint_key:
+  - gemm_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,fp8,int32,nvfp4]'
   tolerant_key:
   - gemm_plugin
   - membership
   native_type: tensorrt.PluginConfig
   native_field: PluginConfig.gemm_plugin
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id018
   - auto
   - float16
   - float32
@@ -429,6 +678,11 @@ confirmed:
   - null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gemm_plugin:
+        not_in: *id018
   observed_outcome: error
   contributing_sources:
   - passA
@@ -436,17 +690,26 @@ confirmed:
   - poc
 - id: tensorrt_pluginConfig_gemm_swiglu_plugin_literal
   source: passB
+  constraint_key:
+  - gemm_swiglu_plugin
+  - membership
+  - '[,fp8]'
   tolerant_key:
   - gemm_swiglu_plugin
   - membership
   native_type: PluginConfig
   native_field: PluginConfig.gemm_swiglu_plugin
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id019
   - fp8
   - null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gemm_swiglu_plugin:
+        not_in: *id019
   kwargs_positive:
     gemm_swiglu_plugin: float16
   kwargs_negative:
@@ -456,99 +719,140 @@ confirmed:
   - passB
 - id: tensorrt_baseLlmArgs_guided_decoding_backend_literal
   source: passA
+  constraint_key:
+  - guided_decoding_backend
+  - membership
+  - '[llguidance,xgrammar]'
   tolerant_key:
   - guided_decoding_backend
   - membership
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.guided_decoding_backend
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id020
   - xgrammar
   - llguidance
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.guided_decoding_backend:
+        not_in: *id020
   kwargs_positive:
     guided_decoding_backend: __invalid__
   kwargs_negative:
     guided_decoding_backend: xgrammar
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_cacheTransceiverConfig_kv_transfer_sender_future_timeout_ms_gt_0
   source: passB
+  constraint_key:
+  - kv_transfer_sender_future_timeout_ms
+  - numeric
+  - '{gt=0}'
   tolerant_key:
   - kv_transfer_sender_future_timeout_ms
   - numeric
   native_type: CacheTransceiverConfig
   native_field: CacheTransceiverConfig.kv_transfer_sender_future_timeout_ms
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id021
     gt: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_transfer_sender_future_timeout_ms:
+        present: *id021
   kwargs_positive:
     kv_transfer_sender_future_timeout_ms: 0
   kwargs_negative:
     kv_transfer_sender_future_timeout_ms: 1000
   observed_outcome: error
   contributing_sources:
-  - mech
   - passB
 - id: tensorrt_cacheTransceiverConfig_kv_transfer_timeout_ms_gt_0
   source: passB
+  constraint_key:
+  - kv_transfer_timeout_ms
+  - numeric
+  - '{gt=0}'
   tolerant_key:
   - kv_transfer_timeout_ms
   - numeric
   native_type: CacheTransceiverConfig
   native_field: CacheTransceiverConfig.kv_transfer_timeout_ms
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id022
     gt: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_transfer_timeout_ms:
+        present: *id022
   kwargs_positive:
     kv_transfer_timeout_ms: 0
   kwargs_negative:
     kv_transfer_timeout_ms: 1000
   observed_outcome: error
   contributing_sources:
-  - mech
   - passB
 - id: tensorrt_baseLlmArgs_load_format_literal
   source: passA
+  constraint_key:
+  - load_format
+  - membership
+  - '[auto,dummy]'
   tolerant_key:
   - load_format
   - membership
   native_type: tensorrt.TrtLlmArgs
   native_field: BaseLlmArgs.load_format
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id023
   - auto
   - dummy
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        not_in: *id023
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_loraConfig_lora_ckpt_source_literal
   source: passA
+  constraint_key:
+  - lora_ckpt_source
+  - membership
+  - '[hf,nemo]'
   tolerant_key:
   - lora_ckpt_source
   - membership
   native_type: tensorrt.LoraConfig
   native_field: LoraConfig.lora_ckpt_source
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id024
   - hf
   - nemo
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_ckpt_source:
+        not_in: *id024
   kwargs_positive:
     lora_ckpt_source: __not_a_source__
   kwargs_negative:
@@ -560,17 +864,26 @@ confirmed:
   - poc
 - id: tensorrt_pluginConfig_low_latency_gemm_plugin_literal
   source: passB
+  constraint_key:
+  - low_latency_gemm_plugin
+  - membership
+  - '[,fp8]'
   tolerant_key:
   - low_latency_gemm_plugin
   - membership
   native_type: PluginConfig
   native_field: PluginConfig.low_latency_gemm_plugin
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id025
   - fp8
   - null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.low_latency_gemm_plugin:
+        not_in: *id025
   kwargs_positive:
     low_latency_gemm_plugin: float16
   kwargs_negative:
@@ -580,17 +893,26 @@ confirmed:
   - passB
 - id: tensorrt_pluginConfig_low_latency_gemm_swiglu_plugin_literal
   source: passB
+  constraint_key:
+  - low_latency_gemm_swiglu_plugin
+  - membership
+  - '[,fp8]'
   tolerant_key:
   - low_latency_gemm_swiglu_plugin
   - membership
   native_type: PluginConfig
   native_field: PluginConfig.low_latency_gemm_swiglu_plugin
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id026
   - fp8
   - null
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.low_latency_gemm_swiglu_plugin:
+        not_in: *id026
   kwargs_positive:
     low_latency_gemm_swiglu_plugin: float16
   kwargs_negative:
@@ -600,43 +922,60 @@ confirmed:
   - passB
 - id: tensorrt_kvCacheConfig_mamba_ssm_cache_dtype_literal
   source: passA
+  constraint_key:
+  - mamba_ssm_cache_dtype
+  - membership
+  - '[auto,bfloat16,float16,float32]'
   tolerant_key:
   - mamba_ssm_cache_dtype
   - membership
   native_type: tensorrt.KvCacheConfig
   native_field: KvCacheConfig.mamba_ssm_cache_dtype
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id027
   - auto
   - float16
   - bfloat16
   - float32
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.mamba_ssm_cache_dtype:
+        not_in: *id027
   kwargs_positive:
     mamba_ssm_cache_dtype: __not_a_dtype__
   kwargs_negative:
     mamba_ssm_cache_dtype: auto
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_kvCacheConfig_max_attention_window_positive_ints
   source: passA
+  constraint_key:
+  - max_attention_window
+  - numeric
+  - '{applies_to=each_element,gt=0,must_be_nonempty=True}'
   tolerant_key:
   - max_attention_window
   - numeric
   native_type: tensorrt.KvCacheConfig
   native_field: KvCacheConfig.max_attention_window
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id028
     gt: 0
     applies_to: each_element
     must_be_nonempty: true
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_attention_window:
+        present: *id028
   kwargs_positive:
     max_attention_window:
     - 0
@@ -645,44 +984,83 @@ confirmed:
     - 1024
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_cudagraphconfig_validate_cuda_graph_max_batch_size_max_batch_size_lt
+  source: mech
+  constraint_key:
+  - max_batch_size
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_batch_size
+  - numeric
+  native_type: tensorrt.CudaGraphConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_cudaGraphConfig_max_batch_size_non_negative
   source: passA
+  constraint_key:
+  - max_batch_size
+  - numeric
+  - '{ge=0}'
   tolerant_key:
   - max_batch_size
   - numeric
   native_type: tensorrt.CudaGraphConfig
   native_field: CudaGraphConfig.max_batch_size
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id029
     ge: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: *id029
   kwargs_positive:
     max_batch_size: -1
   kwargs_negative:
     max_batch_size: 0
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_eagleDecodingConfig_validate_eagle_config_max_draft_len_required
   source: passA
+  constraint_key:
+  - max_draft_len
+  - numeric
+  - '{is_not_none=True}'
   tolerant_key:
   - max_draft_len
   - numeric
   native_type: tensorrt.EagleDecodingConfig
   native_field: EagleDecodingConfig.max_draft_len
   predicate_kind: assert_positive
-  predicate_value:
+  predicate_value: &id030
     is_not_none: true
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        '>': *id030
   kwargs_positive: {}
   kwargs_negative:
     max_draft_len: 4
@@ -692,197 +1070,385 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_kvcacheconfig_validate_max_gpu_total_bytes_max_gpu_total_bytes_lt
+  source: mech
+  constraint_key:
+  - max_gpu_total_bytes
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_gpu_total_bytes
+  - numeric
+  native_type: tensorrt.KvCacheConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_gpu_total_bytes:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_kvCacheConfig_max_gpu_total_bytes_non_negative
   source: passA
+  constraint_key:
+  - max_gpu_total_bytes
+  - numeric
+  - '{ge=0}'
   tolerant_key:
   - max_gpu_total_bytes
   - numeric
   native_type: tensorrt.KvCacheConfig
   native_field: KvCacheConfig.max_gpu_total_bytes
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id031
     ge: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_gpu_total_bytes:
+        present: *id031
   kwargs_positive:
     max_gpu_total_bytes: -1
   kwargs_negative:
     max_gpu_total_bytes: 0
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_lookaheaddecodingconfig_validate_positive_values_max_ngram_size_le
+  source: mech
+  constraint_key:
+  - max_ngram_size
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_ngram_size
+  - numeric
+  native_type: tensorrt.LookaheadDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_ngram_size:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_lookaheadDecodingConfig_max_ngram_size_positive
   source: passA
+  constraint_key:
+  - max_ngram_size
+  - numeric
+  - '{gt=0}'
   tolerant_key:
   - max_ngram_size
   - numeric
   native_type: tensorrt.LookaheadDecodingConfig
   native_field: LookaheadDecodingConfig.max_ngram_size
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id032
     gt: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_ngram_size:
+        present: *id032
   kwargs_positive:
     max_ngram_size: 0
   kwargs_negative:
     max_ngram_size: 1
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_torchCompileConfig_max_num_streams_ge_1
   source: passA
+  constraint_key:
+  - max_num_streams
+  - numeric
+  - '{ge=1}'
   tolerant_key:
   - max_num_streams
   - numeric
   native_type: tensorrt.TorchCompileConfig
   native_field: TorchCompileConfig.max_num_streams
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id033
     ge: 1
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_streams:
+        present: *id033
   kwargs_positive:
     max_num_streams: 0
   kwargs_negative:
     max_num_streams: 1
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_lookaheaddecodingconfig_validate_positive_values_max_verification_set_size_le
+  source: mech
+  constraint_key:
+  - max_verification_set_size
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_verification_set_size
+  - numeric
+  native_type: tensorrt.LookaheadDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_verification_set_size:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_lookaheadDecodingConfig_max_verification_set_size_positive
   source: passA
+  constraint_key:
+  - max_verification_set_size
+  - numeric
+  - '{gt=0}'
   tolerant_key:
   - max_verification_set_size
   - numeric
   native_type: tensorrt.LookaheadDecodingConfig
   native_field: LookaheadDecodingConfig.max_verification_set_size
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id034
     gt: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_verification_set_size:
+        present: *id034
   kwargs_positive:
     max_verification_set_size: 0
   kwargs_negative:
     max_verification_set_size: 1
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_lookaheaddecodingconfig_validate_positive_values_max_window_size_le
+  source: mech
+  constraint_key:
+  - max_window_size
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_window_size
+  - numeric
+  native_type: tensorrt.LookaheadDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_window_size:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_lookaheadDecodingConfig_max_window_size_positive
   source: passA
+  constraint_key:
+  - max_window_size
+  - numeric
+  - '{gt=0}'
   tolerant_key:
   - max_window_size
   - numeric
   native_type: tensorrt.LookaheadDecodingConfig
   native_field: LookaheadDecodingConfig.max_window_size
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id035
     gt: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_window_size:
+        present: *id035
   kwargs_positive:
     max_window_size: 0
   kwargs_negative:
     max_window_size: 1
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_baseLlmArgs_validate_model_type_must_be_str_or_path
   source: passA
+  constraint_key:
+  - model
+  - type
+  - '[Path,str]'
   tolerant_key:
   - model
   - type
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.model
   predicate_kind: type_is
-  predicate_value:
+  predicate_value: &id036
   - str
   - Path
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        type_is_not: *id036
   kwargs_positive:
     model: 42
   kwargs_negative:
     model: facebook/opt-125m
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_baseLlmArgs_orchestrator_type_literal
   source: passA
+  constraint_key:
+  - orchestrator_type
+  - membership
+  - '[ray,rpc]'
   tolerant_key:
   - orchestrator_type
   - membership
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.orchestrator_type
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id037
   - rpc
   - ray
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.orchestrator_type:
+        not_in: *id037
   kwargs_positive:
     orchestrator_type: __invalid__
   kwargs_negative:
     orchestrator_type: rpc
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_rayplacementconfig_validate_ray_placement_per_worker_gpu_share_le
+  source: mech
+  constraint_key:
+  - per_worker_gpu_share
+  - numeric
+  - '0'
+  tolerant_key:
+  - per_worker_gpu_share
+  - numeric
+  native_type: tensorrt.RayPlacementConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.per_worker_gpu_share:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_rayPlacementConfig_per_worker_gpu_share_range
   source: passA
+  constraint_key:
+  - per_worker_gpu_share
+  - numeric
+  - '{gt=0,le=1}'
   tolerant_key:
   - per_worker_gpu_share
   - numeric
   native_type: tensorrt.RayPlacementConfig
   native_field: RayPlacementConfig.per_worker_gpu_share
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id038
     gt: 0
     le: 1.0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.per_worker_gpu_share:
+        present: *id038
   kwargs_positive:
     per_worker_gpu_share: 1.5
   kwargs_negative:
     per_worker_gpu_share: 0.5
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_torchLlmArgs_validate_ray_worker_extension_cls_requires_ray
   source: passA
+  constraint_key:
+  - ray_worker_extension_cls
+  - presence
+  - '{is_not_none_and_orchestrator_type_ne_ray=True}'
   tolerant_key:
   - ray_worker_extension_cls
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.ray_worker_extension_cls
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id039
     is_not_none_and_orchestrator_type_ne_ray: true
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_worker_extension_cls:
+        present: *id039
   kwargs_positive:
     ray_worker_extension_cls: some.module.Cls
   kwargs_negative:
@@ -893,155 +1459,304 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_torchllmargs_validate_stream_interval_stream_interval_le
+  source: mech
+  constraint_key:
+  - stream_interval
+  - numeric
+  - '0'
+  tolerant_key:
+  - stream_interval
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.stream_interval:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_torchLlmArgs_validate_stream_interval_positive
   source: passA
+  constraint_key:
+  - stream_interval
+  - numeric
+  - '{gt=0}'
   tolerant_key:
   - stream_interval
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.stream_interval
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id040
     gt: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.stream_interval:
+        present: *id040
   kwargs_positive:
     stream_interval: 0
   kwargs_negative:
     stream_interval: 1
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_samplingparams__validate_temperature_lt
+  source: mech
+  constraint_key:
+  - temperature
+  - numeric
+  - '0'
+  tolerant_key:
+  - temperature
+  - numeric
+  native_type: tensorrt.SamplingParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.temperature:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_samplingParams_temperature_non_negative
   source: passA
+  constraint_key:
+  - temperature
+  - numeric
+  - '{ge=0}'
   tolerant_key:
   - temperature
   - numeric
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.temperature
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id041
     ge: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.temperature:
+        present: *id041
   kwargs_positive:
     temperature: -0.5
   kwargs_negative:
     temperature: 1.0
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_baseLlmArgs_tokenizer_mode_literal
   source: passA
+  constraint_key:
+  - tokenizer_mode
+  - membership
+  - '[auto,slow]'
   tolerant_key:
   - tokenizer_mode
   - membership
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.tokenizer_mode
   predicate_kind: literal_in
-  predicate_value:
+  predicate_value: &id042
   - auto
   - slow
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokenizer_mode:
+        not_in: *id042
   kwargs_positive:
     tokenizer_mode: __not_a_mode__
   kwargs_negative:
     tokenizer_mode: slow
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_samplingparams__validate_top_k_lt
+  source: mech
+  constraint_key:
+  - top_k
+  - numeric
+  - '0'
+  tolerant_key:
+  - top_k
+  - numeric
+  native_type: tensorrt.SamplingParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.top_k:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_samplingParams_top_k_non_negative
   source: passA
+  constraint_key:
+  - top_k
+  - numeric
+  - '{ge=0}'
   tolerant_key:
   - top_k
   - numeric
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.top_k
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id043
     ge: 0
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.top_k:
+        present: *id043
   kwargs_positive:
     top_k: -1
   kwargs_negative:
     top_k: 50
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
+- id: tensorrt_samplingparams__validate_top_p_lt
+  source: mech
+  constraint_key:
+  - top_p
+  - numeric
+  - '0'
+  tolerant_key:
+  - top_p
+  - numeric
+  native_type: tensorrt.SamplingParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.top_p:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_samplingParams_top_p_range
   source: passA
+  constraint_key:
+  - top_p
+  - numeric
+  - '{ge=0,le=1}'
   tolerant_key:
   - top_p
   - numeric
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.top_p
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id044
     ge: 0
     le: 1
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.top_p:
+        present: *id044
   kwargs_positive:
     top_p: 1.5
   kwargs_negative:
     top_p: 0.9
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 - id: tensorrt_samplingParams_truncate_prompt_tokens_ge_1
   source: passA
+  constraint_key:
+  - truncate_prompt_tokens
+  - numeric
+  - '{ge=1}'
   tolerant_key:
   - truncate_prompt_tokens
   - numeric
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.truncate_prompt_tokens
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id045
     ge: 1
   severity: error
   runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.truncate_prompt_tokens:
+        present: *id045
   kwargs_positive:
     truncate_prompt_tokens: 0
   kwargs_negative:
     truncate_prompt_tokens: 1
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
 unverified:
 - id: tensorrt_torchLlmArgs_warn_on_unstable_feature_usage
   source: passA
+  constraint_key:
+  - <any beta/prototype field>
+  - presence
+  - '{status_in=[beta,prototype]}'
   tolerant_key:
   - <any beta/prototype field>
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.<any beta/prototype field>
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id046
     status_in:
     - beta
     - prototype
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.<any beta/prototype field>:
+        present: *id046
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1050,16 +1765,25 @@ unverified:
   gate_status: skipped
 - id: tensorrt_baseLlmArgs_check_consistency_with_ExecutorConfig
   source: passA
+  constraint_key:
+  - BaseLlmArgs
+  - type
+  - '{assert=set(ExecutorConfig public attrs) - {max_beam_width} is subset of BaseLlmArgs.model_fields}'
   tolerant_key:
   - BaseLlmArgs
   - type
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs
   predicate_kind: type_is
-  predicate_value:
+  predicate_value: &id047
     assert: set(ExecutorConfig public attrs) - {max_beam_width} is subset of BaseLlmArgs.model_fields
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.BaseLlmArgs:
+        type_is_not: *id047
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1068,13 +1792,17 @@ unverified:
   gate_status: skipped
 - id: tensorrt_guidedDecodingParams_at_most_one_guide
   source: passA
+  constraint_key:
+  - GuidedDecodingParams
+  - presence
+  - '{at_most_one_of=[grammar,json,json_object,regex,structural_tag]}'
   tolerant_key:
   - GuidedDecodingParams
   - presence
   native_type: tensorrt.GuidedDecodingParams
   native_field: GuidedDecodingParams
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id048
     at_most_one_of:
     - json
     - regex
@@ -1083,6 +1811,11 @@ unverified:
     - structural_tag
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.GuidedDecodingParams:
+        present: *id048
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1091,6 +1824,10 @@ unverified:
   gate_status: failed
 - id: tensorrt_rayplacementconfig_validate_ray_placement_placementgroup_present
   source: mech
+  constraint_key:
+  - PlacementGroup
+  - presence
+  - 'True'
   tolerant_key:
   - PlacementGroup
   - presence
@@ -1100,12 +1837,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.PlacementGroup:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_savehiddenstatesdecodingconfig_model_post_init__last_hidden_in_save_present
   source: mech
+  constraint_key:
+  - _last_hidden_in_save
+  - presence
+  - 'True'
   tolerant_key:
   - _last_hidden_in_save
   - presence
@@ -1115,24 +1861,91 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._last_hidden_in_save:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_decodingBaseConfig_acceptance_length_threshold_non_negative
+  source: passA
+  constraint_key:
+  - acceptance_length_threshold
+  - numeric
+  - '{ge=0}'
+  tolerant_key:
+  - acceptance_length_threshold
+  - numeric
+  native_type: tensorrt.DecodingBaseConfig
+  native_field: DecodingBaseConfig.acceptance_length_threshold
+  predicate_kind: range
+  predicate_value: &id049
+    ge: 0
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.acceptance_length_threshold:
+        present: *id049
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: skipped
+- id: tensorrt_decodingBaseConfig_acceptance_window_non_negative
+  source: passA
+  constraint_key:
+  - acceptance_window
+  - numeric
+  - '{ge=0}'
+  tolerant_key:
+  - acceptance_window
+  - numeric
+  native_type: tensorrt.DecodingBaseConfig
+  native_field: DecodingBaseConfig.acceptance_window
+  predicate_kind: range
+  predicate_value: &id050
+    ge: 0
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.acceptance_window:
+        present: *id050
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: skipped
 - id: tensorrt_baseSparseAttentionConfig_from_dict_algorithm_dispatch
   source: passA
+  constraint_key:
+  - algorithm
+  - exact
+  - '[dsa,rocket,skip_softmax]'
   tolerant_key:
   - algorithm
   - exact
   native_type: tensorrt.BaseSparseAttentionConfig
   native_field: BaseSparseAttentionConfig.algorithm
   predicate_kind: decode_dispatch
-  predicate_value:
+  predicate_value: &id051
   - rocket
   - dsa
   - skip_softmax
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.algorithm: *id051
   kwargs_positive:
     algorithm: __not_an_algo__
   kwargs_negative:
@@ -1145,16 +1958,25 @@ unverified:
   gate_status: failed
 - id: tensorrt_baseSparseAttentionConfig_from_dict_algorithm_required
   source: passA
+  constraint_key:
+  - algorithm
+  - presence
+  - '{must_be_present=algorithm}'
   tolerant_key:
   - algorithm
   - presence
   native_type: tensorrt.BaseSparseAttentionConfig
   native_field: BaseSparseAttentionConfig.algorithm
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id052
     must_be_present: algorithm
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.algorithm:
+        present: *id052
   kwargs_positive: {}
   kwargs_negative:
     algorithm: dsa
@@ -1164,6 +1986,10 @@ unverified:
   gate_status: failed
 - id: tensorrt_nvfp4gemmconfig_validate_allowed_backends_allowed_backends_present
   source: mech
+  constraint_key:
+  - allowed_backends
+  - presence
+  - 'True'
   tolerant_key:
   - allowed_backends
   - presence
@@ -1173,23 +1999,171 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_torchllmargs___declarative___allreduce_strategy_not_in
+  source: mech
+  constraint_key:
+  - allreduce_strategy
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - allreduce_strategy
+  - membership
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allreduce_strategy:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in_tllm_engine
+  source: mech
+  constraint_key:
+  - backend
+  - membership
+  - '[TLLM_ENGINE,backend]'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
+      tensorrt.TLLM_ENGINE:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in_build_config
+  source: mech
+  constraint_key:
+  - backend
+  - membership
+  - '[backend,build_config]'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
+      tensorrt.build_config:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in_model_format
+  source: mech
+  constraint_key:
+  - backend
+  - membership
+  - '[backend,model_format]'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
+      tensorrt.model_format:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in
+  source: mech
+  constraint_key:
+  - backend
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        present: true
+        not_in: []
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_saveHiddenStatesDecodingConfig_backend_must_be_pytorch_when_routed
   source: passA
+  constraint_key:
+  - backend
+  - numeric
+  - '{in=[pytorch]}'
   tolerant_key:
   - backend
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.backend
   predicate_kind: assert_positive
-  predicate_value:
+  predicate_value: &id053
     in:
     - pytorch
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        '>': *id053
   observed_outcome: error
   contributing_sources:
   - passA
@@ -1198,16 +2172,25 @@ unverified:
   gate_status: failed
 - id: tensorrt_samplingParams_get_bad_words_requires_setup
   source: passA
+  constraint_key:
+  - bad
+  - presence
+  - '{set_without_setup_tokenizer=True}'
   tolerant_key:
   - bad
   - presence
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.bad
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id054
     set_without_setup_tokenizer: true
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.bad:
+        present: *id054
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1216,53 +2199,129 @@ unverified:
   gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_cuda_graph_config_dual_specification
   source: passA
+  constraint_key:
+  - batch_sizes
+  - presence
+  - '{with_max_batch_size_ne_0_and_list_ne_generated=True}'
   tolerant_key:
   - batch_sizes
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.cuda_graph_config.batch_sizes
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id055
     with_max_batch_size_ne_0_and_list_ne_generated: true
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_sizes:
+        present: *id055
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_trtllmargs___declarative___batching_type_not_in
+  source: mech
+  constraint_key:
+  - batching_type
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - batching_type
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_type:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_attention_dp_config_batching_wait_iters_non_negative
   source: passA
+  constraint_key:
+  - batching_wait_iters
+  - numeric
+  - '{ge=0,when=enable_balance}'
   tolerant_key:
   - batching_wait_iters
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.attention_dp_config.batching_wait_iters
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id056
     ge: 0
     when: enable_balance
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_wait_iters:
+        present: *id056
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_samplingparams__validate_best_of_lt
+  source: mech
+  constraint_key:
+  - best_of
+  - numeric
+  - '0'
+  tolerant_key:
+  - best_of
+  - numeric
+  native_type: tensorrt.SamplingParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
 - id: tensorrt_samplingParams_best_of_ge_n
   source: passA
+  constraint_key:
+  - best_of
+  - numeric
+  - '{ge=n}'
   tolerant_key:
   - best_of
   - numeric
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.best_of
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id057
     ge: n
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        present: *id057
   kwargs_positive:
     n: 3
     best_of: 2
@@ -1271,32 +2330,91 @@ unverified:
     best_of: 3
   observed_outcome: error
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
   gate_status: failed
+- id: tensorrt_samplingparams___post_init___best_of_present
+  source: mech
+  constraint_key:
+  - best_of
+  - presence
+  - 'True'
+  tolerant_key:
+  - best_of
+  - presence
+  native_type: tensorrt.SamplingParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.best_of:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_trtllmargs_init_build_config_build_config_present
+  source: mech
+  constraint_key:
+  - build_config
+  - presence
+  - 'True'
+  tolerant_key:
+  - build_config
+  - presence
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.build_config:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_trtLlmArgs_validate_model_format_misc_build_config_ignored_for_engine_warns
   source: passA
+  constraint_key:
+  - build_config
+  - presence
+  - '{with_model_format_tllm_engine=True}'
   tolerant_key:
   - build_config
   - presence
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.build_config
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id058
     with_model_format_tllm_engine: true
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.build_config:
+        present: *id058
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_build_config_type_is_not
   source: mech
+  constraint_key:
+  - build_config
+  - type
+  - ''
   tolerant_key:
   - build_config
   - type
@@ -1306,12 +2424,46 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.build_config:
+        type_is_not: ''
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_schedulerconfig___declarative___capacity_scheduler_policy_not_in
+  source: mech
+  constraint_key:
+  - capacity_scheduler_policy
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - capacity_scheduler_policy
+  - membership
+  native_type: tensorrt.SchedulerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capacity_scheduler_policy:
+        present: true
+        not_in: []
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_torchcompileconfig_validate_capture_num_tokens_capture_num_tokens_present
   source: mech
+  constraint_key:
+  - capture_num_tokens
+  - presence
+  - 'True'
   tolerant_key:
   - capture_num_tokens
   - presence
@@ -1321,29 +2473,70 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capture_num_tokens:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_torchllmargs_validate_checkpoint_format_checkpoint_format_present
+  source: mech
+  constraint_key:
+  - checkpoint_format
+  - presence
+  - 'True'
+  tolerant_key:
+  - checkpoint_format
+  - presence
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.checkpoint_format:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_checkpoint_format_dual_spec_warns
   source: passA
+  constraint_key:
+  - checkpoint_format
+  - presence
+  - '{checkpoint_format_and_checkpoint_loader_both_set=True}'
   tolerant_key:
   - checkpoint_format
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.checkpoint_format
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id059
     checkpoint_format_and_checkpoint_loader_both_set: true
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.checkpoint_format:
+        present: *id059
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   gate_status: skipped
 - id: tensorrt_torchllmargs_validate_cuda_graph_config_config_not_equal
   source: mech
+  constraint_key:
+  - config
+  - membership
+  - '0'
   tolerant_key:
   - config
   - membership
@@ -1353,12 +2546,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.config:
+        not_equal: 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_torchllmargs_validate_attention_dp_config_config_lt
   source: mech
+  constraint_key:
+  - config
+  - numeric
+  - '0'
   tolerant_key:
   - config
   - numeric
@@ -1368,12 +2570,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.config:
+        <: 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_torchllmargs_validate_cuda_graph_config_config_present
   source: mech
+  constraint_key:
+  - config
+  - presence
+  - 'True'
   tolerant_key:
   - config
   - presence
@@ -1383,24 +2594,90 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.config:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_schedulerconfig___declarative___context_chunking_policy_not_in
+  source: mech
+  constraint_key:
+  - context_chunking_policy
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - context_chunking_policy
+  - membership
+  native_type: tensorrt.SchedulerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_chunking_policy:
+        present: true
+        not_in: []
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtLlmArgs_load_config_from_engine_cp_size_mismatch
   source: passA
+  constraint_key:
+  - context_parallel_size
+  - numeric
+  - '{must_be_in=[1,engine.mapping.cp_size]}'
   tolerant_key:
   - context_parallel_size
   - numeric
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.context_parallel_size
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id060
     must_be_in:
     - 1
     - engine.mapping.cp_size
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_parallel_size:
+        present: *id060
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: skipped
+- id: tensorrt_trtLlmArgs_load_config_from_ckpt_cp_size_mismatch
+  source: passA
+  constraint_key:
+  - context_parallel_size
+  - numeric
+  - '{ne=ckpt.mapping.cp_size_unless_1}'
+  tolerant_key:
+  - context_parallel_size
+  - numeric
+  native_type: tensorrt.TrtLlmArgs
+  native_field: TrtLlmArgs.context_parallel_size
+  predicate_kind: range
+  predicate_value: &id061
+    ne: ckpt.mapping.cp_size_unless_1
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_parallel_size:
+        present: *id061
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1409,6 +2686,10 @@ unverified:
   gate_status: skipped
 - id: tensorrt_torchllmargs_validate_helix_tokens_per_block_cp_tokens_per_block_exact
   source: mech
+  constraint_key:
+  - cp_tokens_per_block
+  - exact
+  - '0'
   tolerant_key:
   - cp_tokens_per_block
   - exact
@@ -1418,35 +2699,52 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.cp_tokens_per_block: 0
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_and_init_tokenizer_custom_tokenizer_conflict
   source: passA
+  constraint_key:
+  - custom_tokenizer
+  - presence
+  - '{custom_tokenizer_set_while_tokenizer_is_tokenizer_object=True}'
   tolerant_key:
   - custom_tokenizer
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.custom_tokenizer
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id062
     custom_tokenizer_set_while_tokenizer_is_tokenizer_object: true
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.custom_tokenizer:
+        present: *id062
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   gate_status: skipped
 - id: tensorrt_decodingBaseConfig_from_dict_decoding_type_dispatch
   source: passA
+  constraint_key:
+  - decoding_type
+  - exact
+  - '[AUTO,DraftTarget,Eagle,Lookahead,MTP,Medusa,NGram,SaveState,UserProvided]'
   tolerant_key:
   - decoding_type
   - exact
   native_type: tensorrt.DecodingBaseConfig
   native_field: DecodingBaseConfig.decoding_type
   predicate_kind: decode_dispatch
-  predicate_value:
+  predicate_value: &id063
   - MTP
   - Medusa
   - Eagle
@@ -1458,14 +2756,47 @@ unverified:
   - AUTO
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.decoding_type: *id063
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
-- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_not_in
+- id: tensorrt_calibconfig___declarative___device_not_in
   source: mech
+  constraint_key:
+  - device
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - device
+  - membership
+  native_type: tensorrt.CalibConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.device:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_not_equal
+  source: mech
+  constraint_key:
+  - draft_len_schedule
+  - membership
+  - '0'
   tolerant_key:
   - draft_len_schedule
   - membership
@@ -1475,12 +2806,46 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
-  observed_outcome: skipped_unsynthesizable
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        not_equal: 0
+  observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_not_in
+  source: mech
+  constraint_key:
+  - draft_len_schedule
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - draft_len_schedule
+  - membership
+  native_type: tensorrt.DecodingBaseConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_lt
   source: mech
+  constraint_key:
+  - draft_len_schedule
+  - numeric
+  - '0'
   tolerant_key:
   - draft_len_schedule
   - numeric
@@ -1490,33 +2855,74 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        <: 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
+- id: tensorrt_decodingbaseconfig_validate_draft_len_schedule_and_sort_draft_len_schedule_present
+  source: mech
+  constraint_key:
+  - draft_len_schedule
+  - presence
+  - 'True'
+  tolerant_key:
+  - draft_len_schedule
+  - presence
+  native_type: tensorrt.DecodingBaseConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_decodingBaseConfig_draft_len_schedule_must_include_batch_1
   source: passA
+  constraint_key:
+  - draft_len_schedule
+  - presence
+  - '{and=schedule[1] == max_draft_len,and2=all draft_len <= max_draft_len,must_contain_key=1}'
   tolerant_key:
   - draft_len_schedule
   - presence
   native_type: tensorrt.DecodingBaseConfig
   native_field: DecodingBaseConfig.draft_len_schedule
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id064
     must_contain_key: 1
     and: schedule[1] == max_draft_len
     and2: all draft_len <= max_draft_len
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.draft_len_schedule:
+        present: *id064
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
   gate_status: skipped
 - id: tensorrt_basellmargs_validate_dtype_dtype_exact
   source: mech
+  constraint_key:
+  - dtype
+  - exact
+  - '0'
   tolerant_key:
   - dtype
   - exact
@@ -1526,60 +2932,165 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype: 0
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_trtLlmArgs_validate_kv_cache_dtype_must_be_auto
+  source: passA
+  constraint_key:
+  - dtype
+  - membership
+  - '[auto]'
+  tolerant_key:
+  - dtype
+  - membership
+  native_type: tensorrt.TrtLlmArgs
+  native_field: TrtLlmArgs.kv_cache_config.dtype
+  predicate_kind: literal_in
+  predicate_value: &id065
+  - auto
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        not_in: *id065
+  observed_outcome: no_op
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: failed
+- id: tensorrt_basellmargs_validate_dtype_dtype_lt
+  source: mech
+  constraint_key:
+  - dtype
+  - numeric
+  - '0'
+  tolerant_key:
+  - dtype
+  - numeric
+  native_type: tensorrt.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
 - id: tensorrt_baseLlmArgs_validate_dtype_bfloat16_sm_lt_80
   source: passA
+  constraint_key:
+  - dtype
+  - numeric
+  - '{context=device_capability.major < 8 AND dtype == ''bfloat16''}'
   tolerant_key:
   - dtype
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.dtype
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id066
     context: device_capability.major < 8 AND dtype == 'bfloat16'
   severity: error
-  runtime: failed
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        present: *id066
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
+  gate_status: skipped
+- id: tensorrt_baseLlmArgs_validate_dtype_bfloat16_sm_lt_80
+  source: passB
+  constraint_key:
+  - dtype
+  - numeric
+  - '{context=torch.cuda.get_device_properties(0).major < 8 AND dtype == ''bfloat16''}'
+  tolerant_key:
+  - dtype
+  - numeric
+  native_type: BaseLlmArgs
+  native_field: BaseLlmArgs.dtype
+  predicate_kind: range
+  predicate_value: &id067
+    context: torch.cuda.get_device_properties(0).major < 8 AND dtype == 'bfloat16'
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        present: *id067
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
   - passB
   - poc
-  gate_status: failed
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_sync_quant_config_with_kv_cache_dtype_warns
   source: passA
+  constraint_key:
+  - dtype
+  - presence
+  - '{dtype_not_in=[auto,fp8]}'
   tolerant_key:
   - dtype
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.kv_cache_config.dtype
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id068
     dtype_not_in:
     - auto
     - fp8
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        present: *id068
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   gate_status: skipped
 - id: tensorrt_eagleDecodingConfig_dynamic_tree_max_topK_positive
   source: passA
+  constraint_key:
+  - dynamic_tree_max_topK
+  - numeric
+  - '{gt=0,when=use_dynamic_tree}'
   tolerant_key:
   - dynamic_tree_max_topK
   - numeric
   native_type: tensorrt.EagleDecodingConfig
   native_field: EagleDecodingConfig.dynamic_tree_max_topK
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id069
     gt: 0
     when: use_dynamic_tree
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dynamic_tree_max_topK:
+        present: *id069
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1588,6 +3099,10 @@ unverified:
   gate_status: skipped
 - id: tensorrt_eagledecodingconfig_validate_eagle_config_eagle3_layers_to_capture_present
   source: mech
+  constraint_key:
+  - eagle3_layers_to_capture
+  - presence
+  - 'True'
   tolerant_key:
   - eagle3_layers_to_capture
   - presence
@@ -1597,12 +3112,21 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle3_layers_to_capture:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_eagledecodingconfig_validate_eagle_choices_eagle_choices_present
   source: mech
+  constraint_key:
+  - eagle_choices
+  - presence
+  - 'True'
   tolerant_key:
   - eagle_choices
   - presence
@@ -1612,12 +3136,73 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_eagle_choices_present_num_eagle_layers
+  source: mech
+  constraint_key:
+  - eagle_choices
+  - presence
+  - '[eagle_choices,num_eagle_layers]'
+  tolerant_key:
+  - eagle_choices
+  - presence
+  native_type: tensorrt.EagleDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        present: true
+      tensorrt.num_eagle_layers:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_eagle_choices_present_use_dynamic_tree
+  source: mech
+  constraint_key:
+  - eagle_choices
+  - presence
+  - '[eagle_choices,use_dynamic_tree]'
+  tolerant_key:
+  - eagle_choices
+  - presence
+  native_type: tensorrt.EagleDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        present: true
+      tensorrt.use_dynamic_tree:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_eagledecodingconfig_validate_eagle_choices_eagle_choices_type_is_not
   source: mech
+  constraint_key:
+  - eagle_choices
+  - type
+  - ''
   tolerant_key:
   - eagle_choices
   - type
@@ -1627,31 +3212,72 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.eagle_choices:
+        type_is_not: ''
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_trtllmargs_validate_enable_build_cache_enable_build_cache_type_is_not
+  source: mech
+  constraint_key:
+  - enable_build_cache
+  - type
+  - ''
+  tolerant_key:
+  - enable_build_cache
+  - type
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_build_cache:
+        type_is_not: ''
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtLlmArgs_validate_enable_build_cache_type_check
   source: passA
+  constraint_key:
+  - enable_build_cache
+  - type
+  - '[BuildCacheConfig]'
   tolerant_key:
   - enable_build_cache
   - type
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.enable_build_cache
   predicate_kind: type_is
-  predicate_value:
+  predicate_value: &id070
   - BuildCacheConfig
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_build_cache:
+        type_is_not: *id070
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
   gate_status: skipped
 - id: tensorrt_basellmargs_validate_lora_config_consistency_enable_lora_exact
   source: mech
+  constraint_key:
+  - enable_lora
+  - exact
+  - '0'
   tolerant_key:
   - enable_lora
   - exact
@@ -1661,32 +3287,73 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora: 0
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_enable_lora_ignored_on_pytorch_warns
   source: passA
+  constraint_key:
+  - enable_lora
+  - presence
+  - '{with_lora_config_and_backend_in=[_autodeploy,pytorch]}'
   tolerant_key:
   - enable_lora
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.enable_lora
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id071
     with_lora_config_and_backend_in:
     - pytorch
     - _autodeploy
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora:
+        present: *id071
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_kvcacheconfig_validate_free_gpu_memory_fraction_free_gpu_memory_fraction_le
+  source: mech
+  constraint_key:
+  - free_gpu_memory_fraction
+  - numeric
+  - '0'
+  tolerant_key:
+  - free_gpu_memory_fraction
+  - numeric
+  native_type: tensorrt.KvCacheConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.free_gpu_memory_fraction:
+        <=: 0
+  observed_outcome: no_op
+  contributing_sources:
+  - mech
+  gate_status: failed
 - id: tensorrt_basellmargs_validate_gpus_per_node_gpus_per_node_present
   source: mech
+  constraint_key:
+  - gpus_per_node
+  - presence
+  - 'True'
   tolerant_key:
   - gpus_per_node
   - presence
@@ -1696,12 +3363,46 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gpus_per_node:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_basellmargs___declarative___guided_decoding_backend_not_in
+  source: mech
+  constraint_key:
+  - guided_decoding_backend
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - guided_decoding_backend
+  - membership
+  native_type: tensorrt.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.guided_decoding_backend:
+        present: true
+        not_in: []
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_has_pgs_not_equal
   source: mech
+  constraint_key:
+  - has_pgs
+  - membership
+  - '0'
   tolerant_key:
   - has_pgs
   - membership
@@ -1711,12 +3412,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.has_pgs:
+        not_equal: 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_rayplacementconfig_validate_ray_placement_has_pgs_present
   source: mech
+  constraint_key:
+  - has_pgs
+  - presence
+  - 'True'
   tolerant_key:
   - has_pgs
   - presence
@@ -1726,12 +3436,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.has_pgs:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_nvfp4gemmconfig_validate_allowed_backends_invalid_present
   source: mech
+  constraint_key:
+  - invalid
+  - presence
+  - 'True'
   tolerant_key:
   - invalid
   - presence
@@ -1741,12 +3460,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.invalid:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_kv_cache_dtype_kv_cache_config_exact
   source: mech
+  constraint_key:
+  - kv_cache_config
+  - exact
+  - '0'
   tolerant_key:
   - kv_cache_config
   - exact
@@ -1756,42 +3484,112 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_config: 0
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_quantConfig_kv_cache_quant_algo_in_allowlist
   source: passA
+  constraint_key:
+  - kv_cache_quant_algo
+  - membership
+  - '[FP8,INT8,NVFP4]'
   tolerant_key:
   - kv_cache_quant_algo
   - membership
   native_type: tensorrt.QuantConfig
   native_field: QuantConfig.kv_cache_quant_algo
   predicate_kind: allowlist_constant
-  predicate_value:
+  predicate_value: &id072
   - FP8
   - INT8
   - NVFP4
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_quant_algo:
+        not_in: *id072
   observed_outcome: no_op
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: failed
+- id: tensorrt_cachetransceiverconfig___declarative___kv_transfer_sender_future_timeout_ms_gt
+  source: mech
+  constraint_key:
+  - kv_transfer_sender_future_timeout_ms
+  - numeric
+  - '0'
+  tolerant_key:
+  - kv_transfer_sender_future_timeout_ms
+  - numeric
+  native_type: tensorrt.CacheTransceiverConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_transfer_sender_future_timeout_ms:
+        '>': 0
+  observed_outcome: no_op
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: tensorrt_cachetransceiverconfig___declarative___kv_transfer_timeout_ms_gt
+  source: mech
+  constraint_key:
+  - kv_transfer_timeout_ms
+  - numeric
+  - '0'
+  tolerant_key:
+  - kv_transfer_timeout_ms
+  - numeric
+  native_type: tensorrt.CacheTransceiverConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_transfer_timeout_ms:
+        '>': 0
+  observed_outcome: no_op
+  contributing_sources:
+  - mech
+  gate_status: failed
 - id: tensorrt_LLM_pytorch_rejects_trt_specific_kwargs
   source: passA
+  constraint_key:
+  - kwargs
+  - presence
+  - '{reject_keys_in=set(TrtLlmArgs.model_fields) - set(TorchLlmArgs.model_fields)}'
   tolerant_key:
   - kwargs
   - presence
   native_type: tensorrt.LLM
   native_field: LLM.__init__.kwargs
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id073
     reject_keys_in: set(TrtLlmArgs.model_fields) - set(TorchLlmArgs.model_fields)
   severity: error
-  runtime: failed
+  runtime: infra_error
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kwargs:
+        present: *id073
   kwargs_positive:
     model: facebook/opt-125m
     enable_build_cache: true
@@ -1801,19 +3599,28 @@ unverified:
   observed_outcome: error
   contributing_sources:
   - passA
-  gate_status: failed
+  gate_status: infra_error
 - id: tensorrt_torchLlmArgs_validate_moe_load_balancer_file_must_exist
   source: passA
+  constraint_key:
+  - load_balancer
+  - presence
+  - '{when_type_is=str}'
   tolerant_key:
   - load_balancer
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.moe_config.load_balancer
   predicate_kind: file_exists
-  predicate_value:
+  predicate_value: &id074
     when_type_is: str
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_balancer:
+        present: *id074
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1822,25 +3629,92 @@ unverified:
   gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_moe_load_balancer_parse_failure
   source: passA
+  constraint_key:
+  - load_balancer
+  - type
+  - '{must_parse_into=MoeLoadBalancerConfig,when_type_is=str|dict}'
   tolerant_key:
   - load_balancer
   - type
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.moe_config.load_balancer
   predicate_kind: type_is
-  predicate_value:
+  predicate_value: &id075
     when_type_is: str|dict
     must_parse_into: MoeLoadBalancerConfig
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_balancer:
+        type_is_not: *id075
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_torchLlmArgs_load_format_enum
+  source: passA
+  constraint_key:
+  - load_format
+  - membership
+  - '[AUTO,DUMMY,VISION_ONLY]'
+  tolerant_key:
+  - load_format
+  - membership
+  native_type: tensorrt.TorchLlmArgs
+  native_field: TorchLlmArgs.load_format
+  predicate_kind: strenum_in
+  predicate_value: &id076
+  - AUTO
+  - DUMMY
+  - VISION_ONLY
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        not_in: *id076
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: failed
+- id: tensorrt_torchllmargs_convert_load_format_load_format_not_in
+  source: mech
+  constraint_key:
+  - load_format
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - load_format
+  - membership
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_lora_config_consistency_lora_config_exact
   source: mech
+  constraint_key:
+  - lora_config
+  - exact
+  - '0'
   tolerant_key:
   - lora_config
   - exact
@@ -1850,12 +3724,20 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config: 0
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_basellmargs_validate_lora_config_consistency_lora_config_present
   source: mech
+  constraint_key:
+  - lora_config
+  - presence
+  - 'True'
   tolerant_key:
   - lora_config
   - presence
@@ -1865,22 +3747,36 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_empty_lora_dir_warns
   source: passA
+  constraint_key:
+  - lora_dir
+  - numeric
+  - '{len_eq=0}'
   tolerant_key:
   - lora_dir
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.lora_config.lora_dir
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id077
     len_eq: 0
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_dir:
+        present: *id077
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1889,16 +3785,25 @@ unverified:
   gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_peft_cache_config_lora_prefetch_dir_unsupported
   source: passA
+  constraint_key:
+  - lora_prefetch_dir
+  - presence
+  - '{is_not_none=True}'
   tolerant_key:
   - lora_prefetch_dir
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.peft_cache_config.lora_prefetch_dir
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id078
     is_not_none: true
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_prefetch_dir:
+        present: *id078
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1907,24 +3812,86 @@ unverified:
   gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_empty_target_modules_warns
   source: passA
+  constraint_key:
+  - lora_target_modules
+  - numeric
+  - '{len_eq=0_and_lora_dir_len_eq_0}'
   tolerant_key:
   - lora_target_modules
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.lora_config.lora_target_modules
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id079
     len_eq: 0_and_lora_dir_len_eq_0
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_target_modules:
+        present: *id079
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_kvcacheconfig___declarative___mamba_ssm_cache_dtype_not_in
+  source: mech
+  constraint_key:
+  - mamba_ssm_cache_dtype
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - mamba_ssm_cache_dtype
+  - membership
+  native_type: tensorrt.KvCacheConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.mamba_ssm_cache_dtype:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_kvcacheconfig_validate_max_attention_window_max_attention_window_le
+  source: mech
+  constraint_key:
+  - max_attention_window
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_attention_window
+  - numeric
+  native_type: tensorrt.KvCacheConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_attention_window:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
 - id: tensorrt_kvcacheconfig_validate_max_attention_window_max_attention_window_type_is_not
   source: mech
+  constraint_key:
+  - max_attention_window
+  - type
+  - ''
   tolerant_key:
   - max_attention_window
   - type
@@ -1934,12 +3901,75 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_attention_window:
+        type_is_not: ''
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_batch_size_override_warns
+  source: passA
+  constraint_key:
+  - max_batch_size
+  - numeric
+  - '{gt=build_config.max_batch_size}'
+  tolerant_key:
+  - max_batch_size
+  - numeric
+  native_type: tensorrt.TrtLlmArgs
+  native_field: TrtLlmArgs.max_batch_size
+  predicate_kind: range
+  predicate_value: &id080
+    gt: build_config.max_batch_size
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: *id080
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: skipped
+- id: tensorrt_baseLlmArgs_max_batch_size_gt_max_num_tokens_warns
+  source: passA
+  constraint_key:
+  - max_batch_size
+  - numeric
+  - '{gt=max_num_tokens}'
+  tolerant_key:
+  - max_batch_size
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: BaseLlmArgs.max_batch_size
+  predicate_kind: range
+  predicate_value: &id081
+    gt: max_num_tokens
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: *id081
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_runtime_args_max_batch_size_present
   source: mech
+  constraint_key:
+  - max_batch_size
+  - presence
+  - 'True'
   tolerant_key:
   - max_batch_size
   - presence
@@ -1949,12 +3979,21 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_beam_width_not_equal
   source: mech
+  constraint_key:
+  - max_beam_width
+  - membership
+  - '0'
   tolerant_key:
   - max_beam_width
   - membership
@@ -1964,24 +4003,63 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        not_equal: 0
   observed_outcome: no_op
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_torchLlmArgs_validate_misc_defaults_normalisation
   source: passA
+  constraint_key:
+  - max_beam_width
+  - numeric
+  - '{default_when_none={max_batch_size=2048,max_beam_width=1}}'
   tolerant_key:
   - max_beam_width
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.max_beam_width
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id082
     default_when_none:
       max_beam_width: 1
       max_batch_size: 2048
   severity: normalisation
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: *id082
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_beam_width_override_warns
+  source: passA
+  constraint_key:
+  - max_beam_width
+  - numeric
+  - '{ne=build_config.max_beam_width}'
+  tolerant_key:
+  - max_beam_width
+  - numeric
+  native_type: tensorrt.TrtLlmArgs
+  native_field: TrtLlmArgs.max_beam_width
+  predicate_kind: range
+  predicate_value: &id083
+    ne: build_config.max_beam_width
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: *id083
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -1990,6 +4068,10 @@ unverified:
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_beam_width_present
   source: mech
+  constraint_key:
+  - max_beam_width
+  - presence
+  - 'True'
   tolerant_key:
   - max_beam_width
   - presence
@@ -1999,12 +4081,76 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_ngramDecodingConfig_max_draft_len_and_matching_positive_when_routed
+  source: passA
+  constraint_key:
+  - max_draft_len
+  - numeric
+  - '{and=max_matching_ngram_size > 0,gt=0}'
+  tolerant_key:
+  - max_draft_len
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: NGramDecodingConfig.max_draft_len
+  predicate_kind: assert_positive
+  predicate_value: &id084
+    gt: 0
+    and: max_matching_ngram_size > 0
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        '>': *id084
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: failed
+- id: tensorrt_eagleDecodingConfig_max_draft_len_positive_when_routed
+  source: passA
+  constraint_key:
+  - max_draft_len
+  - numeric
+  - '{gt=0}'
+  tolerant_key:
+  - max_draft_len
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: EagleDecodingConfig.max_draft_len
+  predicate_kind: assert_positive
+  predicate_value: &id085
+    gt: 0
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        '>': *id085
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: failed
 - id: tensorrt_eagledecodingconfig_validate_eagle_config_max_draft_len_present
   source: mech
+  constraint_key:
+  - max_draft_len
+  - presence
+  - 'True'
   tolerant_key:
   - max_draft_len
   - presence
@@ -2014,12 +4160,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_input_len_not_equal
   source: mech
+  constraint_key:
+  - max_input_len
+  - membership
+  - '0'
   tolerant_key:
   - max_input_len
   - membership
@@ -2029,22 +4184,36 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        not_equal: 0
   observed_outcome: no_op
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_input_len_override_warns
   source: passA
+  constraint_key:
+  - max_input_len
+  - numeric
+  - '{ne=build_config.max_input_len}'
   tolerant_key:
   - max_input_len
   - numeric
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.max_input_len
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id086
     ne: build_config.max_input_len
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        present: *id086
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -2053,6 +4222,10 @@ unverified:
   gate_status: skipped
 - id: tensorrt_basellmargs_set_default_max_input_len_max_input_len_present
   source: mech
+  constraint_key:
+  - max_input_len
+  - presence
+  - 'True'
   tolerant_key:
   - max_input_len
   - presence
@@ -2062,31 +4235,96 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_torchcompileconfig_validate_torch_compile_max_num_streams_max_num_streams_lt
+  source: mech
+  constraint_key:
+  - max_num_streams
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_num_streams
+  - numeric
+  native_type: tensorrt.TorchCompileConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_streams:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_num_tokens_gt
+  source: mech
+  constraint_key:
+  - max_num_tokens
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_num_tokens
+  - numeric
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        '>': 0
+  observed_outcome: no_op
+  contributing_sources:
+  - mech
+  gate_status: failed
 - id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_num_tokens_override_warns
   source: passA
+  constraint_key:
+  - max_num_tokens
+  - numeric
+  - '{gt=build_config.max_num_tokens}'
   tolerant_key:
   - max_num_tokens
   - numeric
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.max_num_tokens
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id087
     gt: build_config.max_num_tokens
   severity: warning
-  runtime: failed
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        present: *id087
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
-  gate_status: failed
+  gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_num_tokens_present
   source: mech
+  constraint_key:
+  - max_num_tokens
+  - presence
+  - 'True'
   tolerant_key:
   - max_num_tokens
   - presence
@@ -2096,12 +4334,21 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_not_equal
   source: mech
+  constraint_key:
+  - max_seq_len
+  - membership
+  - '0'
   tolerant_key:
   - max_seq_len
   - membership
@@ -2111,22 +4358,36 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        not_equal: 0
   observed_outcome: no_op
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_trtLlmArgs_validate_build_config_with_runtime_params_max_seq_len_override_warns
   source: passA
+  constraint_key:
+  - max_seq_len
+  - numeric
+  - '{ne=build_config.max_seq_len}'
   tolerant_key:
   - max_seq_len
   - numeric
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.max_seq_len
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id088
     ne: build_config.max_seq_len
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        present: *id088
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -2135,6 +4396,10 @@ unverified:
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_present
   source: mech
+  constraint_key:
+  - max_seq_len
+  - presence
+  - 'True'
   tolerant_key:
   - max_seq_len
   - presence
@@ -2144,30 +4409,72 @@ unverified:
   predicate_value: null
   severity: warning
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_getModelFormat_no_config_json
   source: passA
+  constraint_key:
+  - model
+  - presence
+  - '{path={model_dir}/config.json}'
   tolerant_key:
   - model
   - presence
   native_type: tensorrt.TrtLlmArgs
   native_field: BaseLlmArgs.model
   predicate_kind: file_exists
-  predicate_value:
+  predicate_value: &id089
     path: '{model_dir}/config.json'
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        present: *id089
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_basellmargs_validate_model_model_type_is_not
+  source: mech
+  constraint_key:
+  - model
+  - type
+  - ''
+  tolerant_key:
+  - model
+  - type
+  native_type: tensorrt.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        type_is_not: ''
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_basellmargs_validate_parallel_config_moe_cluster_parallel_size_present
   source: mech
+  constraint_key:
+  - moe_cluster_parallel_size
+  - presence
+  - 'True'
   tolerant_key:
   - moe_cluster_parallel_size
   - presence
@@ -2177,12 +4484,21 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_cluster_parallel_size:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_torchllmargs_validate_load_balancer_moe_config_present
   source: mech
+  constraint_key:
+  - moe_config
+  - presence
+  - 'True'
   tolerant_key:
   - moe_config
   - presence
@@ -2192,12 +4508,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_config:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_torchllmargs_validate_load_balancer_moe_config_type_is_not
   source: mech
+  constraint_key:
+  - moe_config
+  - type
+  - ''
   tolerant_key:
   - moe_config
   - type
@@ -2207,12 +4532,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_config:
+        type_is_not: ''
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_basellmargs_validate_parallel_config_moe_expert_parallel_size_present
   source: mech
+  constraint_key:
+  - moe_expert_parallel_size
+  - presence
+  - 'True'
   tolerant_key:
   - moe_expert_parallel_size
   - presence
@@ -2222,12 +4556,21 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_expert_parallel_size:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_basellmargs_validate_parallel_config_moe_tensor_parallel_size_present
   source: mech
+  constraint_key:
+  - moe_tensor_parallel_size
+  - presence
+  - 'True'
   tolerant_key:
   - moe_tensor_parallel_size
   - presence
@@ -2237,12 +4580,21 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_tensor_parallel_size:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_guideddecodingparams__validate_num_guides_gt
   source: mech
+  constraint_key:
+  - num_guides
+  - numeric
+  - '0'
   tolerant_key:
   - num_guides
   - numeric
@@ -2252,22 +4604,36 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.num_guides:
+        '>': 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_mtpDecodingConfig_num_nextn_predict_layers_positive_when_routed
   source: passA
+  constraint_key:
+  - num_nextn_predict_layers
+  - numeric
+  - '{gt=0}'
   tolerant_key:
   - num_nextn_predict_layers
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: MTPDecodingConfig.num_nextn_predict_layers
   predicate_kind: assert_positive
-  predicate_value:
+  predicate_value: &id090
     gt: 0
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.num_nextn_predict_layers:
+        '>': *id090
   observed_outcome: error
   contributing_sources:
   - passA
@@ -2276,24 +4642,62 @@ unverified:
   gate_status: failed
 - id: tensorrt_moeLoadBalancerConfig_num_slots_divisible_by_ep_size
   source: passA
+  constraint_key:
+  - num_slots
+  - numeric
+  - '{divisible_by=ep_size}'
   tolerant_key:
   - num_slots
   - numeric
   native_type: tensorrt.MoeLoadBalancerConfig
   native_field: MoeLoadBalancerConfig.num_slots
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id091
     divisible_by: ep_size
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.num_slots:
+        present: *id091
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_basellmargs___declarative___orchestrator_type_not_in
+  source: mech
+  constraint_key:
+  - orchestrator_type
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - orchestrator_type
+  - membership
+  native_type: tensorrt.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.orchestrator_type:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_savehiddenstatesdecodingconfig_validate_output_directory_present
   source: mech
+  constraint_key:
+  - output_directory
+  - presence
+  - 'True'
   tolerant_key:
   - output_directory
   - presence
@@ -2303,12 +4707,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.output_directory:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_samplingparams___post_init___pad_id_present
   source: mech
+  constraint_key:
+  - pad_id
+  - presence
+  - 'True'
   tolerant_key:
   - pad_id
   - presence
@@ -2318,12 +4731,21 @@ unverified:
   predicate_value: null
   severity: dormant
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pad_id:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_basellmargs_validate_peft_cache_config_peft_cache_config_present
   source: mech
+  constraint_key:
+  - peft_cache_config
+  - presence
+  - 'True'
   tolerant_key:
   - peft_cache_config
   - presence
@@ -2333,12 +4755,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.peft_cache_config:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_per_worker_gpu_share_present
   source: mech
+  constraint_key:
+  - per_worker_gpu_share
+  - presence
+  - 'True'
   tolerant_key:
   - per_worker_gpu_share
   - presence
@@ -2348,12 +4779,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.per_worker_gpu_share:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_pg_type_is_not
   source: mech
+  constraint_key:
+  - pg
+  - type
+  - ''
   tolerant_key:
   - pg
   - type
@@ -2363,24 +4803,65 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pg:
+        type_is_not: ''
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtLlmArgs_load_config_from_engine_pp_size_mismatch
   source: passA
+  constraint_key:
+  - pipeline_parallel_size
+  - numeric
+  - '{must_be_in=[1,engine.mapping.pp_size]}'
   tolerant_key:
   - pipeline_parallel_size
   - numeric
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.pipeline_parallel_size
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id092
     must_be_in:
     - 1
     - engine.mapping.pp_size
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pipeline_parallel_size:
+        present: *id092
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: skipped
+- id: tensorrt_trtLlmArgs_load_config_from_ckpt_pp_size_mismatch
+  source: passA
+  constraint_key:
+  - pipeline_parallel_size
+  - numeric
+  - '{ne=ckpt.mapping.pp_size_unless_1}'
+  tolerant_key:
+  - pipeline_parallel_size
+  - numeric
+  native_type: tensorrt.TrtLlmArgs
+  native_field: TrtLlmArgs.pipeline_parallel_size
+  predicate_kind: range
+  predicate_value: &id093
+    ne: ckpt.mapping.pp_size_unless_1
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.pipeline_parallel_size:
+        present: *id093
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -2389,6 +4870,10 @@ unverified:
   gate_status: skipped
 - id: tensorrt_rayplacementconfig_validate_ray_placement_placement_groups_not_equal
   source: mech
+  constraint_key:
+  - placement_groups
+  - membership
+  - '0'
   tolerant_key:
   - placement_groups
   - membership
@@ -2398,19 +4883,28 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.placement_groups:
+        not_equal: 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_quantConfig_quant_algo_in_QuantAlgo_enum
   source: passA
+  constraint_key:
+  - quant_algo
+  - membership
+  - '[FP8,FP8_BLOCK_SCALES,FP8_PER_CHANNEL_PER_TOKEN,INT8,MIXED_PRECISION,NO_QUANT,NVFP4,NVFP4_AWQ,W4A16,W4A16_AWQ,W4A16_GPTQ,W4A16_MXFP4,W4A8_AWQ,W4A8_MXFP4_FP8,W4A8_MXFP4_MXFP8,W4A8_NVFP4_FP8,W4A8_QSERVE_PER_CHANNEL,W4A8_QSERVE_PER_GROUP,W8A16,W8A16_GPTQ,W8A8_SQ_PER_CHANNEL,W8A8_SQ_PER_CHANNEL_PER_TENSOR_PLUGIN,W8A8_SQ_PER_CHANNEL_PER_TOKEN_PLUGIN,W8A8_SQ_PER_TENSOR_PER_TOKEN_PLUGIN,W8A8_SQ_PER_TENSOR_PLUGIN]'
   tolerant_key:
   - quant_algo
   - membership
   native_type: tensorrt.QuantConfig
   native_field: QuantConfig.quant_algo
   predicate_kind: strenum_in
-  predicate_value:
+  predicate_value: &id094
   - W8A16
   - W4A16
   - W4A16_AWQ
@@ -2438,6 +4932,11 @@ unverified:
   - NO_QUANT
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.quant_algo:
+        not_in: *id094
   observed_outcome: no_op
   contributing_sources:
   - passA
@@ -2446,6 +4945,10 @@ unverified:
   gate_status: failed
 - id: tensorrt_torchllmargs_sync_quant_config_with_kv_cache_config_dtype_quant_config_present
   source: mech
+  constraint_key:
+  - quant_config
+  - presence
+  - 'True'
   tolerant_key:
   - quant_config
   - presence
@@ -2455,12 +4958,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.quant_config:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_torchllmargs_validate_ray_placement_config_ray_placement_config_not_equal
   source: mech
+  constraint_key:
+  - ray_placement_config
+  - membership
+  - '0'
   tolerant_key:
   - ray_placement_config
   - membership
@@ -2470,22 +4982,36 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_placement_config:
+        not_equal: 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_torchLlmArgs_validate_ray_placement_config_requires_ray
   source: passA
+  constraint_key:
+  - ray_placement_config
+  - presence
+  - '{is_not_none_and_orchestrator_type_ne_ray=True}'
   tolerant_key:
   - ray_placement_config
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.ray_placement_config
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id095
     is_not_none_and_orchestrator_type_ne_ray: true
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_placement_config:
+        present: *id095
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -2494,6 +5020,10 @@ unverified:
   gate_status: skipped
 - id: tensorrt_torchllmargs_validate_ray_worker_extension_cls_ray_worker_extension_cls_not_equal
   source: mech
+  constraint_key:
+  - ray_worker_extension_cls
+  - membership
+  - '0'
   tolerant_key:
   - ray_worker_extension_cls
   - membership
@@ -2503,12 +5033,21 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_worker_extension_cls:
+        not_equal: 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
 - id: tensorrt_basellmargs_validate_and_init_tokenizer_skip_tokenizer_init_present_custom_tokenizer
   source: mech
+  constraint_key:
+  - skip_tokenizer_init
+  - presence
+  - '[custom_tokenizer,skip_tokenizer_init]'
   tolerant_key:
   - skip_tokenizer_init
   - presence
@@ -2518,12 +5057,49 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.skip_tokenizer_init:
+        present: true
+      tensorrt.custom_tokenizer:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_basellmargs_validate_and_init_tokenizer_skip_tokenizer_init_present_tokenizer
+  source: mech
+  constraint_key:
+  - skip_tokenizer_init
+  - presence
+  - '[skip_tokenizer_init,tokenizer]'
+  tolerant_key:
+  - skip_tokenizer_init
+  - presence
+  native_type: tensorrt.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.skip_tokenizer_init:
+        present: true
+      tensorrt.tokenizer:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_gt
   source: mech
+  constraint_key:
+  - speculative_config
+  - numeric
+  - '0'
   tolerant_key:
   - speculative_config
   - numeric
@@ -2533,38 +5109,155 @@ unverified:
   predicate_value: null
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        '>': 0
   observed_outcome: error
   contributing_sources:
   - mech
   gate_status: failed
+- id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_present
+  source: mech
+  constraint_key:
+  - speculative_config
+  - presence
+  - 'True'
+  tolerant_key:
+  - speculative_config
+  - presence
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_torchllmargs_validate_speculative_config_speculative_config_present_backend
+  source: mech
+  constraint_key:
+  - speculative_config
+  - presence
+  - '[backend,speculative_config]'
+  tolerant_key:
+  - speculative_config
+  - presence
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+      tensorrt.backend:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_present_max_draft_len
+  source: mech
+  constraint_key:
+  - speculative_config
+  - presence
+  - '[max_draft_len,speculative_config]'
+  tolerant_key:
+  - speculative_config
+  - presence
+  native_type: tensorrt.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+      tensorrt.max_draft_len:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_speculative_config_supports_backend
   source: passA
+  constraint_key:
+  - speculative_config
+  - presence
+  - '{must=speculative_config.supports_backend(backend)}'
   tolerant_key:
   - speculative_config
   - presence
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.speculative_config
   predicate_kind: backend_dispatch
-  predicate_value:
+  predicate_value: &id096
     must: speculative_config.supports_backend(backend)
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: *id096
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_torchllmargs_validate_speculative_config_speculative_config_type_is_not
+  source: mech
+  constraint_key:
+  - speculative_config
+  - type
+  - ''
+  tolerant_key:
+  - speculative_config
+  - type
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warning
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        type_is_not: ''
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_speculative_config_unrecognised_type
   source: passA
+  constraint_key:
+  - speculative_config
+  - type
+  - '[Auto,DraftTarget,Eagle,Lookahead,MTP,Medusa,NGram,SaveHiddenStates,UserProvided]'
   tolerant_key:
   - speculative_config
   - type
   native_type: tensorrt.TorchLlmArgs
   native_field: BaseLlmArgs.speculative_config
   predicate_kind: type_is
-  predicate_value:
+  predicate_value: &id097
   - DraftTarget
   - Eagle
   - Lookahead
@@ -2576,25 +5269,38 @@ unverified:
   - Auto
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        type_is_not: *id097
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
   gate_status: skipped
 - id: tensorrt_eagleDecodingConfig_speculative_model_required_when_routed
   source: passA
+  constraint_key:
+  - speculative_model
+  - numeric
+  - '{is_not_none=True}'
   tolerant_key:
   - speculative_model
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: EagleDecodingConfig.speculative_model
   predicate_kind: assert_positive
-  predicate_value:
+  predicate_value: &id098
     is_not_none: true
   severity: error
   runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_model:
+        '>': *id098
   observed_outcome: error
   contributing_sources:
   - passA
@@ -2603,6 +5309,10 @@ unverified:
   gate_status: failed
 - id: tensorrt_eagledecodingconfig_validate_speculative_model_present
   source: mech
+  constraint_key:
+  - speculative_model
+  - presence
+  - 'True'
   tolerant_key:
   - speculative_model
   - presence
@@ -2612,22 +5322,36 @@ unverified:
   predicate_value: null
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_model:
+        present: true
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
   gate_status: skipped
 - id: tensorrt_samplingParams_get_stop_words_requires_setup
   source: passA
+  constraint_key:
+  - stop
+  - presence
+  - '{set_without_setup_tokenizer=True}'
   tolerant_key:
   - stop
   - presence
   native_type: tensorrt.SamplingParams
   native_field: SamplingParams.stop
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id099
     set_without_setup_tokenizer: true
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.stop:
+        present: *id099
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -2636,18 +5360,54 @@ unverified:
   gate_status: skipped
 - id: tensorrt_trtLlmArgs_load_config_from_engine_tp_size_mismatch
   source: passA
+  constraint_key:
+  - tensor_parallel_size
+  - numeric
+  - '{must_be_in=[1,engine.mapping.tp_size]}'
   tolerant_key:
   - tensor_parallel_size
   - numeric
   native_type: tensorrt.TrtLlmArgs
   native_field: TrtLlmArgs.tensor_parallel_size
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id100
     must_be_in:
     - 1
     - engine.mapping.tp_size
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tensor_parallel_size:
+        present: *id100
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  - passB
+  - poc
+  gate_status: skipped
+- id: tensorrt_trtLlmArgs_load_config_from_ckpt_tp_size_mismatch
+  source: passA
+  constraint_key:
+  - tensor_parallel_size
+  - numeric
+  - '{ne=ckpt.mapping.tp_size_unless_1}'
+  tolerant_key:
+  - tensor_parallel_size
+  - numeric
+  native_type: tensorrt.TrtLlmArgs
+  native_field: TrtLlmArgs.tensor_parallel_size
+  predicate_kind: range
+  predicate_value: &id101
+    ne: ckpt.mapping.tp_size_unless_1
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tensor_parallel_size:
+        present: *id101
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
@@ -2656,73 +5416,259 @@ unverified:
   gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_attention_dp_config_timeout_iters_non_negative
   source: passA
+  constraint_key:
+  - timeout_iters
+  - numeric
+  - '{ge=0,when=enable_balance}'
   tolerant_key:
   - timeout_iters
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.attention_dp_config.timeout_iters
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id102
     ge: 0
     when: enable_balance
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.timeout_iters:
+        present: *id102
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_basellmargs___declarative___tokenizer_mode_not_in
+  source: mech
+  constraint_key:
+  - tokenizer_mode
+  - membership
+  - '{not_in=[],present=True}'
+  tolerant_key:
+  - tokenizer_mode
+  - membership
+  native_type: tensorrt.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokenizer_mode:
+        present: true
+        not_in: []
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_torchLlmArgs_validate_helix_tokens_per_block_match
   source: passA
+  constraint_key:
+  - tokens_per_block
+  - numeric
+  - '{eq=kv_cache_config.tokens_per_block,when=cp_type == HELIX}'
   tolerant_key:
   - tokens_per_block
   - numeric
   native_type: tensorrt.TorchLlmArgs
   native_field: TorchLlmArgs.cp_config.tokens_per_block
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id103
     eq: kv_cache_config.tokens_per_block
     when: cp_type == HELIX
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokens_per_block:
+        present: *id103
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA
   - passB
   - poc
   gate_status: skipped
+- id: tensorrt_samplingparams__validate_truncate_prompt_tokens_lt
+  source: mech
+  constraint_key:
+  - truncate_prompt_tokens
+  - numeric
+  - '0'
+  tolerant_key:
+  - truncate_prompt_tokens
+  - numeric
+  native_type: tensorrt.SamplingParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.truncate_prompt_tokens:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present
+  source: mech
+  constraint_key:
+  - use_dynamic_tree
+  - presence
+  - 'True'
+  tolerant_key:
+  - use_dynamic_tree
+  - presence
+  native_type: tensorrt.EagleDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present_dynamic_tree_max_topk
+  source: mech
+  constraint_key:
+  - use_dynamic_tree
+  - presence
+  - '[dynamic_tree_max_topK,use_dynamic_tree]'
+  tolerant_key:
+  - use_dynamic_tree
+  - presence
+  native_type: tensorrt.EagleDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+      tensorrt.dynamic_tree_max_topK:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present_max_draft_len
+  source: mech
+  constraint_key:
+  - use_dynamic_tree
+  - presence
+  - '[max_draft_len,use_dynamic_tree]'
+  tolerant_key:
+  - use_dynamic_tree
+  - presence
+  native_type: tensorrt.EagleDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+      tensorrt.max_draft_len:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
+- id: tensorrt_eagledecodingconfig_validate_eagle_config_use_dynamic_tree_present_max_total_draft_tokens
+  source: mech
+  constraint_key:
+  - use_dynamic_tree
+  - presence
+  - '[max_total_draft_tokens,use_dynamic_tree]'
+  tolerant_key:
+  - use_dynamic_tree
+  - presence
+  native_type: tensorrt.EagleDecodingConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: true
+      tensorrt.max_total_draft_tokens:
+        present: true
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - mech
+  gate_status: skipped
 - id: tensorrt_eagleDecodingConfig_dynamic_tree_excludes_eagle_choices
   source: passA
+  constraint_key:
+  - use_dynamic_tree
+  - presence
+  - '{with_eagle_choices_set=True}'
   tolerant_key:
   - use_dynamic_tree
   - presence
   native_type: tensorrt.EagleDecodingConfig
   native_field: EagleDecodingConfig.use_dynamic_tree
   predicate_kind: presence_conflict
-  predicate_value:
+  predicate_value: &id104
     with_eagle_choices_set: true
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.use_dynamic_tree:
+        present: *id104
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
-  - mech
   - passA
   - passB
   - poc
   gate_status: skipped
 - id: tensorrt_pluginConfig_validate_unsupported_on_sm100
   source: passA
+  constraint_key:
+  - validate
+  - numeric
+  - '{context=get_sm_version() == 100 (Blackwell)}'
   tolerant_key:
   - validate
   - numeric
   native_type: tensorrt.PluginConfig
   native_field: PluginConfig.validate
   predicate_kind: range
-  predicate_value:
+  predicate_value: &id105
     context: get_sm_version() == 100 (Blackwell)
   severity: error
   runtime: unverified
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.validate:
+        present: *id105
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passA

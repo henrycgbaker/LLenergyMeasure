@@ -1,14 +1,17 @@
 {
+  "collapsed_tolerant_keys": 53,
   "confirmed_via_authored_kwargs": 68,
   "confirmed_via_synthesis": 25,
   "engine": "tensorrt",
   "group_status_counts": {
-    "confirmed": 46,
-    "failed": 25,
-    "skipped": 73
+    "confirmed": 60,
+    "failed": 35,
+    "infra_error": 1,
+    "skipped": 116
   },
-  "gt_growth_keys_vs_poc": 8,
-  "n_gate_confirmed_keys": 46,
+  "gt_growth_constraints_vs_poc": 23,
+  "identity_grain": "constraint = (leaf, coarse_bucket, canonical_predicate_value)",
+  "n_gate_confirmed_constraints": 60,
   "n_probed_candidates": 309,
   "per_source_candidate_counts": {
     "mech": 110,
@@ -16,24 +19,25 @@
     "passB": 100,
     "poc": 92
   },
-  "per_source_tolerant_key_counts": {
-    "mech": 95,
-    "passA": 86,
-    "passB": 88,
-    "poc": 80
+  "per_source_constraint_counts": {
+    "mech": 107,
+    "passA": 97,
+    "passB": 98,
+    "poc": 90
   },
   "per_source_unique_contribution": {
-    "mech": 51,
-    "passA": 4,
-    "passB": 5,
+    "mech": 107,
+    "passA": 7,
+    "passB": 7,
     "poc": 0
   },
-  "poc_tolerant_keys": 80,
+  "poc_constraints": 90,
+  "union_size_constraints": 212,
   "union_size_tolerant": 144,
   "verdict_counts": {
     "confirmed": 93,
-    "failed": 56,
-    "infra_error": 0,
+    "failed": 55,
+    "infra_error": 1,
     "skipped": 160
   },
   "version": "1.2.1"

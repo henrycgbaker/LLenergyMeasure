@@ -1,5 +1,23 @@
 # Fan-out wave 1 findings - cross-engine schema + second invariant cell
 
+> **RE-BASE NOTE (post-review, constraint-grain identity).** Two adversarial
+> reviews + a focused identity review found the original headline numbers were
+> computed on an over-collapsed identity `(leaf, coarse_bucket)` that merged
+> genuinely-distinct per-class/per-bound constraints and let one member's pass
+> "confirm" a whole group. Identity is now `(leaf, coarse_bucket,
+> canonical_predicate_value)` (count + confirm at the CONSTRAINT grain;
+> tolerant key retained only for cross-source recall), and the field-attribution
+> guard now covers all leniently-confirmed entries. Corrected tensorrt-1.2.1
+> headline: **union 212 constraints** (was 144 tolerant; 53/144 tolerant keys
+> held >1 constraint), **60 confirmed** (was an inflated 46), **GT-growth +23 vs
+> PoC** (was 8). Substantive domain review separately verified the confirmed
+> entries are 100% real/correctly-captured (~22-entry sample), and the
+> attribution tightening dropped 0 confirmations. **All percentage/ceiling
+> numbers BELOW this note (33% / 74% / 15->42) predate the re-base and are
+> computed at the old tolerant grain - they are SUPERSEDED and need recompute at
+> the constraint grain.**
+
+
 Builds on the tensorrt-1.2.1 invariant pilot (see
 `ground_truth/tensorrt/v1_2_1/invariants/PILOT_REPORT.md`). This wave proves both
 gates GENERALISE, using only already-available infra (no new container builds,

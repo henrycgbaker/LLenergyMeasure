@@ -1,41 +1,58 @@
 # Pilot GT report - tensorrt 1.2.1 invariants (union + gate)
 
-Round 0 pilot: union the 4 GT sources by tolerant identity (leaf_native_field, coarse_predicate_bucket), runtime-gate every kwargs-bearing candidate in the production validator inside nvcr.io/nvidia/tensorrt-llm/release:1.2.1, keep gate-confirmed as GT.
+Round 0: union the 4 GT sources (mech, passA, passB, poc) at the CONSTRAINT grain (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value), runtime-gate every candidate (kwargs authored or synthesised) in the production validator inside nvcr.io/nvidia/tensorrt-llm/release:1.2.1, keep gate-confirmed per constraint as GT.
 
 ## Per-source candidate counts
 
-| source | raw candidates | tolerant keys | gateable | unique tolerant keys |
+| source | raw candidates | constraints | gateable | unique constraints |
 |---|---|---|---|---|
-| passA | 99 | 86 | 99 | 4 |
-| passB | 100 | 88 | 100 | 5 |
-| mech | 110 | 95 | 110 | 51 |
-| poc | 92 | 80 | 0 | 0 |
+| passA | 99 | 97 | 99 | 7 |
+| passB | 100 | 98 | 100 | 7 |
+| mech | 110 | 107 | 110 | 107 |
+| poc | 92 | 90 | 0 | 0 |
 
 ## Union + gate
 
-- Union size (distinct tolerant identities across 4 sources): **144**
-- Gate-confirmed tolerant identities: **46**
-- Probed candidates (native_type present, kwargs authored or synthesised): **309** (confirmed=93, failed=56, skipped=160, infra_error=0)
+- Union size (distinct CONSTRAINTS across sources): **212**
+- Tolerant keys (coarser, leaf+bucket): 144; of which **53** held >1 distinct constraint (would have over-collapsed under the old leaf+bucket identity).
+- Gate-confirmed constraints: **60**
+- Probed candidates (native_type present, kwargs authored or synthesised): **309** (confirmed=93, failed=55, skipped=160, infra_error=1)
 - Confirmations by probe provenance: **25 synthesised** by the gate, 68 from hand-authored kwargs
 
-Group status breakdown (per tolerant identity):
+Group status breakdown (per constraint):
 
-- confirmed: 46
-- failed: 25
-- skipped: 73
+- confirmed: 60
+- failed: 35
+- infra_error: 1
+- skipped: 116
 
 ## GT-growth vs PoC N=1 GT
 
-PoC GT contributed **80** tolerant identities. The gate-confirmed union grows GT by **8** confirmed identities the PoC GT lacked:
+PoC GT contributed **90** constraints. The gate-confirmed union grows GT by **23** confirmed constraints the PoC GT lacked:
 
-- allreduce_strategy [membership]
-- bert_attention_plugin [membership]
-- gemm_allreduce_plugin [membership]
-- gemm_swiglu_plugin [membership]
-- kv_transfer_sender_future_timeout_ms [numeric]
-- kv_transfer_timeout_ms [numeric]
-- low_latency_gemm_plugin [membership]
-- low_latency_gemm_swiglu_plugin [membership]
+- acceptance_length_threshold [numeric] = 0
+- acceptance_window [numeric] = 0
+- allreduce_strategy [membership] = [AUTO,LOWPRECISION,MINLATENCY,MNNVL,NCCL,NCCL_SYMMETRIC,ONESHOT,TWOSHOT,UB]
+- batch_wait_max_tokens_ratio [numeric] = 0
+- batch_wait_timeout_iters [numeric] = 0
+- batch_wait_timeout_ms [numeric] = 0
+- bert_attention_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- gemm_allreduce_plugin [membership] = [,bfloat16,float16]
+- gemm_swiglu_plugin [membership] = [,fp8]
+- kv_transfer_sender_future_timeout_ms [numeric] = {gt=0}
+- kv_transfer_timeout_ms [numeric] = {gt=0}
+- low_latency_gemm_plugin [membership] = [,fp8]
+- low_latency_gemm_swiglu_plugin [membership] = [,fp8]
+- max_batch_size [numeric] = 0
+- max_gpu_total_bytes [numeric] = 0
+- max_ngram_size [numeric] = 0
+- max_verification_set_size [numeric] = 0
+- max_window_size [numeric] = 0
+- per_worker_gpu_share [numeric] = 0
+- stream_interval [numeric] = 0
+- temperature [numeric] = 0
+- top_k [numeric] = 0
+- top_p [numeric] = 0
 
 ## Gate REJECTIONS (kwargs-bearing candidates that ran and were not confirmed)
 
@@ -66,7 +83,6 @@ PoC GT contributed **80** tolerant identities. The gate-confirmed union grows GT
 | tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_num_tokens_gt | mech | tensorrt.TrtLlmArgs | no_op |
 | tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_not_equal | mech | tensorrt.TrtLlmArgs | no_op |
 | tensorrt_trtllmargs_validate_speculative_config_speculative_config_gt | mech | tensorrt.TrtLlmArgs | error |
-| tensorrt_LLM_pytorch_rejects_trt_specific_kwargs | passA | tensorrt.LLM | error |
 | tensorrt_baseSparseAttentionConfig_from_dict_algorithm_dispatch | passA | tensorrt.BaseSparseAttentionConfig | error |
 | tensorrt_baseSparseAttentionConfig_from_dict_algorithm_required | passA | tensorrt.BaseSparseAttentionConfig | no_op |
 | tensorrt_draftTargetDecodingConfig_max_draft_len_positive_when_routed | passA | tensorrt.TorchLlmArgs | error |
@@ -103,3 +119,8 @@ PoC GT contributed **80** tolerant identities. The gate-confirmed union grows GT
 - `tensorrt_torchLlmArgs_warn_on_unstable_feature_usage` (source=passA, gateable=True, verdict=skipped, observed=skipped_unsynthesizable)
 - `tensorrt_torchLlmArgs_warn_on_unstable_feature_usage` (source=passB, gateable=True, verdict=skipped, observed=skipped_unsynthesizable)
 - `tensorrt_torchLlmArgs_warn_on_unstable_feature_usage` (source=poc, gateable=False, verdict=ungated, observed=n/a)
+
+## Infra errors (could not run in container)
+
+- `tensorrt_LLM_pytorch_rejects_trt_specific_kwargs` (passA): The following arguments are specific to TensorRT backend and cannot be used with PyTorch backend: ['enable_build_cache'].
+Please use 'from tensorrt_llm._tensorr
