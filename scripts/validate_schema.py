@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -68,6 +69,15 @@ class SchemaValidationError(Exception):
     """Hard error (engine not importable, discovered schema malformed)."""
 
 
+def _json_safe(obj: Any) -> Any:
+    """Fallback serialiser: some engine introspectors emit sets (e.g. enum
+    value collections) which json can't encode. Render sets as sorted lists,
+    everything else by repr, so the validated envelope always writes."""
+    if isinstance(obj, (set, frozenset)):
+        return sorted(obj, key=repr)
+    return repr(obj)
+
+
 # ---------------------------------------------------------------------------
 # Live reflection: re-run the engine's own introspector
 # ---------------------------------------------------------------------------
@@ -93,16 +103,64 @@ def _reflect_live_schema(engine: str, image_ref: str | None) -> dict[str, Any]:
 
 
 def _type_signature(spec: Any) -> str | None:
-    """Stable signature of a field spec's TYPE shape (type/enum/anyOf/items).
-
-    Stored and live specs come from the same canonical producer, so an exact
-    signature match is the type-equality test. Description / deprecated /
-    default are compared separately (or ignored).
-    """
+    """Raw signature of a field spec's TYPE shape (type/enum/anyOf/items), kept
+    for the divergence record so a human can see exactly what differs."""
     if not isinstance(spec, dict):
         return None
     relevant = {k: spec[k] for k in ("type", "enum", "anyOf", "items") if k in spec}
-    return json.dumps(relevant, sort_keys=True)
+    return json.dumps(relevant, sort_keys=True, default=_json_safe)
+
+
+# Semantic type canonicalisation (mirrors check_pydantic_matches_discovered.py):
+# the SAME engine field can be rendered differently as the introspector evolves
+# (e.g. ``"string"`` -> ``anyOf[string, string+format:path]``; ``{enum, "string"}``
+# -> ``"Literal[...]"``). For a link-1->2 engine-TRUTH check we compare on the
+# canonical semantic type, not the literal representation, so introspector-version
+# skew doesn't masquerade as engine drift. (The raw signatures are still recorded.)
+_JSON_TO_PYTHON_TYPE = {
+    "integer": "int",
+    "number": "float",
+    "boolean": "bool",
+    "string": "str",
+    "array": "list",
+    "object": "dict",
+}
+
+
+def _canonicalise_type(type_repr: Any) -> str:
+    if isinstance(type_repr, list):
+        parts = sorted(
+            _JSON_TO_PYTHON_TYPE.get(str(t), str(t)) for t in type_repr if str(t) != "null"
+        )
+        return " | ".join(parts) if parts else "None"
+    type_str = str(type_repr).strip() if type_repr is not None else ""
+    type_str = re.sub(r"\s*\|\s*None\s*$", "", type_str)
+    literal_match = re.match(r"Literal\[(.+)\]", type_str)
+    if literal_match:
+        values = sorted(v.strip().strip("'\"") for v in literal_match.group(1).split(","))
+        return f"Literal[{', '.join(repr(v) for v in values)}]"
+    if "|" in type_str:
+        parts = sorted(_JSON_TO_PYTHON_TYPE.get(p.strip(), p.strip()) for p in type_str.split("|"))
+        return " | ".join(parts)
+    return _JSON_TO_PYTHON_TYPE.get(type_str, type_str)
+
+
+def _semantic_type(spec: Any) -> str:
+    """Canonical semantic type of a field spec (enum -> Literal, anyOf unwound,
+    JSON-Schema primitives -> Python, null/optional dropped)."""
+    if not isinstance(spec, dict):
+        return ""
+    if "enum" in spec:
+        return f"Literal[{', '.join(repr(str(v)) for v in sorted(str(v) for v in spec['enum']))}]"
+    if "anyOf" in spec:
+        parts: list[str] = []
+        for branch in spec["anyOf"]:
+            if not isinstance(branch, dict) or branch.get("type") == "null":
+                continue
+            parts.append(_semantic_type(branch))
+        deduped = sorted({p for p in parts if p})
+        return " | ".join(deduped) if deduped else "None"
+    return _canonicalise_type(spec.get("type"))
 
 
 def _diff_section(
@@ -121,7 +179,7 @@ def _diff_section(
     for name, stored_spec in stored.items():
         live_spec = live.get(name)
         exists = live_spec is not None
-        type_match = exists and _type_signature(stored_spec) == _type_signature(live_spec)
+        type_match = exists and _semantic_type(stored_spec) == _semantic_type(live_spec)
         default_match = exists and (
             (stored_spec or {}).get("default") == (live_spec or {}).get("default")
         )
@@ -145,8 +203,10 @@ def _diff_section(
                     "section": section,
                     "field": name,
                     "check": "type",
-                    "declared": _type_signature(stored_spec),
-                    "observed": _type_signature(live_spec),
+                    "declared": _semantic_type(stored_spec),
+                    "observed": _semantic_type(live_spec),
+                    "declared_raw": _type_signature(stored_spec),
+                    "observed_raw": _type_signature(live_spec),
                 }
             )
         if not default_match:
@@ -302,7 +362,7 @@ def validate_schema(
         "divergences": all_divergences,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(envelope, indent=2, sort_keys=False))
+    out_path.write_text(json.dumps(envelope, indent=2, sort_keys=False, default=_json_safe))
     return envelope, all_divergences
 
 

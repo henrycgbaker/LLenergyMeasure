@@ -63,3 +63,32 @@ def test_enum_probe_values_numeric():
 def test_enum_probe_values_none_for_non_enum():
     assert validate_schema._enum_probe_values({"type": "string"}) is None
     assert validate_schema._enum_probe_values({"enum": []}) is None
+
+
+def test_semantic_type_normalizes_representation_skew():
+    # Same engine truth, different introspector renderings must compare equal:
+    # enum+string vs Literal, and string vs anyOf[string, string+path].
+    assert validate_schema._semantic_type(
+        {"enum": ["auto", "slow"], "type": "string"}
+    ) == validate_schema._semantic_type(
+        {"enum": ["auto", "slow"], "type": "Literal['auto', 'slow']"}
+    )
+    assert validate_schema._semantic_type({"type": "string"}) == validate_schema._semantic_type(
+        {"anyOf": [{"type": "string"}, {"format": "path", "type": "string"}]}
+    )
+    # Genuine type drift must still differ.
+    assert validate_schema._semantic_type({"type": "string"}) != validate_schema._semantic_type(
+        {"type": "integer"}
+    )
+
+
+def test_diff_section_ignores_representation_skew():
+    stored = {"model": {"type": "string", "default": None}}
+    live = {
+        "model": {
+            "anyOf": [{"type": "string"}, {"format": "path", "type": "string"}],
+            "default": None,
+        }
+    }
+    _results, divergences = validate_schema._diff_section("engine_params", stored, live)
+    assert divergences == []  # representation differs, semantic type identical
