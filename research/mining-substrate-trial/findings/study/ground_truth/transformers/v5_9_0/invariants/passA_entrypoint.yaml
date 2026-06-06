@@ -1,0 +1,603 @@
+schema_version: ground_truth/1.0.0
+engine: transformers
+engine_version: 5.9.0
+venv_src_root: /tmp/tfvenv-5.9.0/lib/python3.12/site-packages/transformers
+pass: A
+strategy: entry-point / call-graph walk
+established_at: '2026-06-07'
+established_by: opus-passA-transformers-5.9.0
+methodology_ref: research/mining-substrate-trial/findings/study/ground_truth/transformers/v5_9_0/invariants/passA_methodology.md
+
+scope_notes: |
+  Strategy A starts from the public generation/load entry points a benchmark
+  harness actually constructs and follows the call graph to every
+  construction-time validation site:
+    1. transformers.GenerationConfig(...) -> __init__ (generation/
+       configuration_utils.py:369) which snapshots user_set_attributes, pops
+       every generation knob, sets unknown keys via setattr, converts a dict
+       watermarking_config into a WatermarkingConfig (line 419-420), then at
+       line 491 calls self.validate(user_set_attributes=...). So plain
+       construction already runs validation; the gate's construct-then-validate
+       path is consistent. validate() (line 612) holds every range / allowlist /
+       mutual-exclusion / sampling-vs-greedy / beam-only check plus the
+       watermarking_config.validate() dispatch (line 659).
+    2. transformers.BitsAndBytesConfig(...) -> __init__ (utils/
+       quantization_config.py:439) + post_init() (line 520) + load_in_4bit /
+       load_in_8bit property setters.
+    3. transformers.PreTrainedConfig(...) (alias PretrainedConfig). At 5.9.0 it
+       is a huggingface_hub @strict dataclass (decorator at configuration_utils.py
+       :121, accept_kwargs=True): __init__ runs every validate_* method
+       automatically. The reachable validators are validate_output_attentions
+       (line 436), validate_architecture (line 443), validate_token_ids
+       (line 456), validate_layer_type (line 472). __post_init__ (line 243)
+       carries additional raises (problem_type/num_labels, line 271) and warns
+       (num_labels vs id2label, line 263).
+  Idiom note: transformers validates LATER and SOFTER than tensorrt/vllm. Many
+  GenerationConfig checks WARN (collected into the minor_issues bucket, emitted
+  once via logger.warning_once at line 824) rather than raise. The true outcome
+  is recorded per source line: invalid (raise) | warn (logger.warning) |
+  normalise (silent mutation). Sampling-/beam-only-flag conflicts are WARN, not
+  raise.
+  Replay model: the gate calls GenerationConfig.validate() after construction;
+  for GenerationConfig the validation also runs inside __init__, so plain
+  construction already fires the rule. PreTrainedConfig validate_* raises are
+  WRAPPED by huggingface_hub: validate_layer_type / validate_architecture raise
+  StrictDataclassClassValidationError whose __cause__ is the quoted ValueError;
+  the problem_type Literal type check raises StrictDataclassFieldValidationError
+  whose __cause__ is a TypeError. The gate must treat the wrapped raise as the
+  FIRE. The problem_type+num_labels raise from __post_init__ is a bare
+  ValueError. GenerationConfig and WatermarkingConfig raises are bare ValueErrors.
+  BitsAndBytesConfig: this venv has NO torch; quantization_config.py imports
+  torch in __init__ and assigns torch.float32 / torch.uint8 at lines 467-487.
+  Only the load_in_4bit/load_in_8bit conflict (line 456) raises BEFORE any torch
+  use and is reachable; its kwargs_negative still needs torch, so that entry is
+  dormant for the no-torch source host. Every other bnb check is unreachable
+  without torch and is recorded dormant.
+  provenance: net_new = surfaced by this walk. No PoC GT folded for this version
+  (task specified all entries net_new). All GenerationConfig.validate() and
+  WatermarkingConfig.validate() source is byte-identical to 5.8.1; PreTrainedConfig
+  validators and BitsAndBytesConfig checks are logic-identical with re-resolved
+  5.9.0 line numbers.
+
+invariants:
+
+# ============================================================================
+# transformers.GenerationConfig.validate() - hard raises (outcome: invalid)
+# ============================================================================
+
+- id: transformers_generationConfig_early_stopping_bool_or_never
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.early_stopping
+  predicate_kind: literal_in
+  predicate_value: [true, false, never, null]
+  severity: error
+  outcome: invalid
+  message_template: "`early_stopping` must be a boolean or 'never', but is {self.early_stopping}."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 633
+    qualname: GenerationConfig.validate
+  notes: "early_stopping must be in {None, True, False, 'never'}; any other value raises ValueError. Confirmed replayable (no torch)."
+  kwargs_positive: {early_stopping: 1.5}
+  kwargs_negative: {early_stopping: false}
+
+- id: transformers_generationConfig_max_new_tokens_positive
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.max_new_tokens
+  predicate_kind: range
+  predicate_value: {gt: 0, when: is_not_none}
+  severity: error
+  outcome: invalid
+  message_template: "`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 635
+    qualname: GenerationConfig.validate
+  notes: Fires only when max_new_tokens is not None and <= 0. Confirmed replayable.
+  kwargs_positive: {max_new_tokens: 0}
+  kwargs_negative: {max_new_tokens: 16}
+
+- id: transformers_generationConfig_cache_implementation_allowlist
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: allowlist_constant
+  predicate_value: {must_be_in: "ALL_CACHE_IMPLEMENTATIONS + ('paged',)"}
+  severity: error
+  outcome: invalid
+  message_template: "Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: {valid_cache_implementations}"
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 646
+    qualname: GenerationConfig.validate
+  notes: "Allowed set is the ALL_CACHE_IMPLEMENTATIONS tuple plus 'paged'. Any other non-None string raises. Confirmed replayable."
+  kwargs_positive: {cache_implementation: "__not_a_cache__"}
+  kwargs_negative: {cache_implementation: "static"}
+
+- id: transformers_generationConfig_compile_config_type
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.compile_config
+  predicate_kind: type_is
+  predicate_value: [CompileConfig]
+  severity: error
+  outcome: invalid
+  message_template: "You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 652
+    qualname: GenerationConfig.validate
+  notes: "Fires when compile_config is not None and not a CompileConfig instance. A plain dict/str triggers it. Confirmed replayable."
+  kwargs_positive: {compile_config: "__not_a_compile_config__"}
+  kwargs_negative: {compile_config: null}
+
+- id: transformers_generationConfig_num_return_sequences_greedy_no_beam
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: mutual_exclusion
+  predicate_value: {gt_1_requires: "num_beams>1 or do_sample"}
+  severity: error
+  outcome: invalid
+  message_template: "Greedy methods (do_sample != True) without beam search do not support `num_return_sequences` different than 1 (got {self.num_return_sequences})."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 747
+    qualname: GenerationConfig.validate
+  notes: "num_return_sequences>1 with num_beams<=1 and do_sample falsy raises. Confirmed replayable."
+  kwargs_positive: {num_return_sequences: 2, do_sample: false}
+  kwargs_negative: {num_return_sequences: 1, do_sample: false}
+
+- id: transformers_generationConfig_num_return_sequences_le_num_beams
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: range
+  predicate_value: {le: num_beams, when: "num_beams>1"}
+  severity: error
+  outcome: invalid
+  message_template: "`num_return_sequences` ({self.num_return_sequences}) has to be smaller or equal to `num_beams` ({self.num_beams})."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 756
+    qualname: GenerationConfig.validate
+  notes: "When num_beams>1, num_return_sequences must be <= num_beams. Confirmed replayable."
+  kwargs_positive: {num_return_sequences: 5, num_beams: 2}
+  kwargs_negative: {num_return_sequences: 2, num_beams: 4}
+
+- id: transformers_generationConfig_no_generate_only_arguments
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.<generate-only kwargs>
+  predicate_kind: presence_conflict
+  predicate_value: {reject_keys: [logits_processor, stopping_criteria, prefix_allowed_tokens_fn, synced_gpus, assistant_model, streamer, negative_prompt_ids, negative_prompt_attention_mask]}
+  severity: error
+  outcome: invalid
+  message_template: "Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to `generate()` (or a pipeline) directly."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 798
+    qualname: GenerationConfig.validate
+  notes: "These kwargs get set via setattr in __init__ then validate() raises because hasattr(self, arg). Confirmed replayable with logits_processor."
+  kwargs_positive: {logits_processor: []}
+  kwargs_negative: {temperature: 1.0}
+
+- id: transformers_generationConfig_strict_minor_issue_raises
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.<any minor-issue flag>
+  predicate_kind: presence_conflict
+  predicate_value: {strict_true_promotes_warn_to_raise: true}
+  severity: error
+  outcome: invalid
+  message_template: "GenerationConfig is invalid: \n{info_message}"
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 816
+    qualname: GenerationConfig.validate
+  notes: |
+    The minor_issues bucket (sampling-/beam-only-flag conflicts, pad_token_id<0,
+    use_cache=False conflicts, return_dict_in_generate conflicts) WARNS by
+    default but RAISES when validate(strict=True). save_pretrained() calls
+    validate(strict=True). The default gate path (validate() with default
+    strict=False) does NOT raise these; recorded as a distinct strict-mode
+    invariant. Not replayable via plain construction (needs strict=True).
+  dormant_reason: requires validate(strict=True) which the construct-then-validate gate path does not invoke
+
+# ============================================================================
+# transformers.GenerationConfig.validate() - warnings (outcome: warn)
+# ============================================================================
+
+- id: transformers_generationConfig_pad_token_id_negative_warns
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.pad_token_id
+  predicate_kind: range
+  predicate_value: {ge: 0, when: is_not_none}
+  severity: warning
+  outcome: warn
+  message_template: "`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch generating, if there is padding."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 637
+    qualname: GenerationConfig.validate
+  notes: "Added to minor_issues -> logger.warning_once (not a raise) under default strict=False. Confirmed warn observable."
+  kwargs_positive: {pad_token_id: -1}
+  kwargs_negative: {pad_token_id: 0}
+
+- id: transformers_generationConfig_sampling_flag_in_greedy_warns
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.temperature
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: {sampling_only_flag_set_while_do_sample_not_true: [temperature, top_p, min_p, top_h, typical_p, top_k, epsilon_cutoff, eta_cutoff]}
+  severity: warning
+  outcome: warn
+  message_template: "`do_sample` is not set to `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 667
+    qualname: GenerationConfig.validate
+  notes: |
+    When do_sample is not True, a sampling-only flag set to a non-default value
+    is collected into minor_issues and emitted as a logger.warning_once. Gated
+    by _should_warn(user_set_attributes). Confirmed warn observable for
+    temperature=0.7. Per-flag default sentinels: temperature/top_p/typical_p !=
+    1.0, top_k != 50, epsilon_cutoff/eta_cutoff != 0.0, min_p/top_h any non-None.
+  kwargs_positive: {do_sample: false, temperature: 0.7}
+  kwargs_negative: {do_sample: true, temperature: 0.7}
+
+- id: transformers_generationConfig_beam_flag_in_single_beam_warns
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.length_penalty
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: {beam_only_flag_set_while_num_beams_le_1: [early_stopping, length_penalty]}
+  severity: warning
+  outcome: warn
+  message_template: "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 721
+    qualname: GenerationConfig.validate
+  notes: |
+    When num_beams is None or 1, a beam-only flag (early_stopping not False,
+    length_penalty != 1.0) collected into minor_issues -> logger.warning_once.
+    Gated by _should_warn. warn, not raise.
+  kwargs_positive: {num_beams: 1, length_penalty: 2.0}
+  kwargs_negative: {num_beams: 4, length_penalty: 2.0}
+
+- id: transformers_generationConfig_use_cache_false_conflict_warns
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: {cache_arg_set_while_use_cache_false: [cache_implementation, cache_config]}
+  severity: warning
+  outcome: warn
+  message_template: "You have not set `use_cache` to `True`, but {cache_arg} is set to {cache_arg_value}.{cache_arg} will have no effect."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 766
+    qualname: GenerationConfig.validate
+  notes: "use_cache=False with cache_implementation/cache_config set -> minor_issues warn (not raise)."
+  kwargs_positive: {use_cache: false, cache_implementation: "static"}
+  kwargs_negative: {use_cache: true, cache_implementation: "static"}
+
+- id: transformers_generationConfig_return_dict_in_generate_conflict_warns
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.output_scores
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: {extra_output_flag_true_while_return_dict_in_generate_not_true: true}
+  severity: warning
+  outcome: warn
+  message_template: "`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When `return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored."
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 780
+    qualname: GenerationConfig.validate
+  notes: "Any extra_output_flag (output_attentions/output_hidden_states/output_scores/output_logits) True while return_dict_in_generate not True -> minor_issues warn. extra_output_flags tuple defined at line 358."
+  kwargs_positive: {output_scores: true, return_dict_in_generate: false}
+  kwargs_negative: {output_scores: true, return_dict_in_generate: true}
+
+# ============================================================================
+# WatermarkingConfig.validate() - dispatched from GenerationConfig.validate
+# (replayable through GenerationConfig(watermarking_config={...}))
+# ============================================================================
+
+- id: transformers_watermarkingConfig_seeding_scheme_allowlist
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: WatermarkingConfig.seeding_scheme
+  predicate_kind: literal_in
+  predicate_value: [selfhash, lefthash]
+  severity: error
+  outcome: invalid
+  message_template: "Some of the keys in `watermarking_config` are defined incorrectly. `seeding_scheme` should be [`selfhash`, `lefthash`]` but found {found_value}"
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 1426
+    qualname: WatermarkingConfig.validate
+  notes: "GenerationConfig.__init__ converts a dict watermarking_config to WatermarkingConfig (line 419-420), and validate() (line 659) calls watermarking_config.validate(). Confirmed replayable via dict kwarg."
+  kwargs_positive: {watermarking_config: {seeding_scheme: "__bad__"}}
+  kwargs_negative: {watermarking_config: {seeding_scheme: "lefthash"}}
+
+- id: transformers_watermarkingConfig_greenlist_ratio_range
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: WatermarkingConfig.greenlist_ratio
+  predicate_kind: range
+  predicate_value: {ge: 0.0, le: 1.0}
+  severity: error
+  outcome: invalid
+  message_template: "Some of the keys in `watermarking_config` are defined incorrectly. `greenlist_ratio` should be in range between 0.0 and 1.0` but found {found_value}"
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 1434
+    qualname: WatermarkingConfig.validate
+  notes: "greenlist_ratio outside [0.0, 1.0] raises. Replayable via watermarking_config dict (seeding_scheme must be valid to reach this check)."
+  kwargs_positive: {watermarking_config: {seeding_scheme: "lefthash", greenlist_ratio: 1.5}}
+  kwargs_negative: {watermarking_config: {seeding_scheme: "lefthash", greenlist_ratio: 0.25}}
+
+- id: transformers_watermarkingConfig_context_width_ge_1
+  provenance: net_new
+  native_type: transformers.GenerationConfig
+  native_field: WatermarkingConfig.context_width
+  predicate_kind: range
+  predicate_value: {ge: 1}
+  severity: error
+  outcome: invalid
+  message_template: "Some of the keys in `watermarking_config` are defined incorrectly. `context_width` should be a positive integer` but found {found_value}"
+  citation:
+    file: transformers/generation/configuration_utils.py
+    line: 1442
+    qualname: WatermarkingConfig.validate
+  notes: "context_width < 1 raises. Replayable via watermarking_config dict."
+  kwargs_positive: {watermarking_config: {seeding_scheme: "lefthash", context_width: 0}}
+  kwargs_negative: {watermarking_config: {seeding_scheme: "lefthash", context_width: 1}}
+
+# ============================================================================
+# transformers.PreTrainedConfig - @strict dataclass validators + __post_init__
+# (validate_* raises are wrapped in StrictDataclassClassValidationError; the
+#  problem_type Literal type check raises StrictDataclassFieldValidationError;
+#  the __post_init__ raise is a bare ValueError)
+# ============================================================================
+
+- id: transformers_pretrainedConfig_problem_type_single_label_requires_num_labels_gt_1
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.problem_type
+  predicate_kind: presence_conflict
+  predicate_value: {problem_type_eq_single_label_classification_and_num_labels_eq_1: true}
+  severity: error
+  outcome: invalid
+  message_template: '`problem_type="single_label_classification"` requires `num_labels > 1`. For binary classification use `num_labels=2`, or use `problem_type="regression"` for a single-output regression head.'
+  citation:
+    file: transformers/configuration_utils.py
+    line: 271
+    qualname: PreTrainedConfig.__post_init__
+  notes: "Fires in __post_init__ when problem_type is single_label_classification and num_labels resolves to 1. Replayable; raise is a bare ValueError from __post_init__ (not wrapped)."
+  kwargs_positive: {problem_type: "single_label_classification", num_labels: 1}
+  kwargs_negative: {problem_type: "single_label_classification", num_labels: 2}
+
+- id: transformers_pretrainedConfig_problem_type_literal
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.problem_type
+  predicate_kind: literal_in
+  predicate_value: [regression, single_label_classification, multi_label_classification, null]
+  severity: error
+  outcome: invalid
+  message_template: "@strict field type check on Literal['regression','single_label_classification','multi_label_classification'] | None (raises StrictDataclassFieldValidationError, __cause__ TypeError)"
+  citation:
+    file: transformers/configuration_utils.py
+    line: 241
+    qualname: PreTrainedConfig.problem_type
+  notes: |
+    problem_type is annotated as a Literal; the huggingface_hub @strict dataclass
+    enforces the annotation at construction, raising StrictDataclassFieldValidationError
+    (whose __cause__ is a TypeError) for an out-of-set value. Distinct from the
+    single_label/num_labels semantic raise. Confirmed replayable: an out-of-set
+    string raises at construction.
+  kwargs_positive: {problem_type: "__not_a_problem_type__"}
+  kwargs_negative: {problem_type: "regression"}
+
+- id: transformers_pretrainedConfig_layer_types_allowlist
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.layer_types
+  predicate_kind: allowlist_constant
+  predicate_value: {must_all_be_in: ALLOWED_LAYER_TYPES}
+  severity: error
+  outcome: invalid
+  message_template: "The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {self.layer_types}"
+  citation:
+    file: transformers/configuration_utils.py
+    line: 477
+    qualname: PreTrainedConfig.validate_layer_type
+  notes: |
+    @strict runs validate_layer_type at construction. Only active when layer_types
+    is not None and num_hidden_layers attr exists. Raise is wrapped in
+    StrictDataclassClassValidationError (__cause__ = the ValueError). Confirmed
+    replayable. ALLOWED_LAYER_TYPES is a module constant (full_attention,
+    sliding_attention, ... moe).
+  kwargs_positive: {layer_types: ["__bad_layer__"], num_hidden_layers: 1}
+  kwargs_negative: {layer_types: ["full_attention"], num_hidden_layers: 1}
+
+- id: transformers_pretrainedConfig_layer_types_count_matches_num_hidden_layers
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.num_hidden_layers
+  predicate_kind: range
+  predicate_value: {eq: "len(layer_types)"}
+  severity: error
+  outcome: invalid
+  message_template: "`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of layer types ({len(self.layer_types)})"
+  citation:
+    file: transformers/configuration_utils.py
+    line: 479
+    qualname: PreTrainedConfig.validate_layer_type
+  notes: "When layer_types are all valid but num_hidden_layers != len(layer_types), raises (wrapped in StrictDataclassClassValidationError). Confirmed replayable."
+  kwargs_positive: {layer_types: ["full_attention", "full_attention"], num_hidden_layers: 3}
+  kwargs_negative: {layer_types: ["full_attention", "full_attention"], num_hidden_layers: 2}
+
+- id: transformers_pretrainedConfig_validate_architecture_head_dim
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.head_dim
+  predicate_kind: range
+  predicate_value: {eq: "embed_dim / num_heads", when: "head_dim and num_heads and embed_dim all set"}
+  severity: error
+  outcome: invalid
+  message_template: "The embed_dim ({self.embed_dim}) is not a multiple of the number of attention heads ({self.num_heads})."
+  citation:
+    file: transformers/configuration_utils.py
+    line: 451
+    qualname: PreTrainedConfig.validate_architecture
+  notes: |
+    @strict validator; only fires when head_dim, num_heads and embed_dim are all
+    present as attributes and head_dim*num_heads != embed_dim. These are not base
+    PreTrainedConfig fields (set via extra kwargs through __post_init__ setattr),
+    so the guard hasattr(...) gates it. Recorded; replay needs all three set as
+    extra attributes.
+  dormant_reason: requires head_dim/num_heads/embed_dim attrs that are not base PreTrainedConfig fields (model-subclass specific)
+
+- id: transformers_pretrainedConfig_output_attentions_requires_eager
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.output_attentions
+  predicate_kind: presence_conflict
+  predicate_value: {output_attentions_true_and_attn_implementation_not_eager: true}
+  severity: error
+  outcome: invalid
+  message_template: "The `output_attentions` attribute is not supported when using the `attn_implementation` set to {self._attn_implementation}. Please set it to 'eager' instead."
+  citation:
+    file: transformers/configuration_utils.py
+    line: 361
+    qualname: PreTrainedConfig.output_attentions
+  notes: |
+    Two enforcement sites with identical intent: the output_attentions setter
+    (line 361) and validate_output_attentions (line 438). The setter only raises
+    when attn_implementation is already non-eager/non-None at set time;
+    validate_output_attentions re-checks at construction. With attn_implementation
+    set to a non-eager value and output_attentions=True the config raises.
+  dormant_reason: ordering-sensitive between attn_implementation and output_attentions; needs attn_implementation set non-eager before output_attentions
+
+- id: transformers_pretrainedConfig_validate_token_ids_out_of_vocab_warns
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.<*_token_id>
+  predicate_kind: range
+  predicate_value: {ge: 0, lt: vocab_size}
+  severity: warning
+  outcome: warn
+  message_template: "Model config: {name} must be `None` or an integer within the vocabulary (between 0 and {vocab_size - 1}), got {value}. This may result in unexpected behavior."
+  citation:
+    file: transformers/configuration_utils.py
+    line: 467
+    qualname: PreTrainedConfig.validate_token_ids
+  notes: |
+    @strict validator; warns (logger.warning_once, NOT raise - kept soft because
+    Hub configs store invalid special tokens) when a *_token_id is outside
+    [0, vocab_size). Needs a text_config with vocab_size set; on a bare
+    PreTrainedConfig vocab_size is None so the loop is skipped.
+  dormant_reason: needs a text_config carrying vocab_size; bare PreTrainedConfig has vocab_size None and skips the check
+
+- id: transformers_pretrainedConfig_num_labels_id2label_mismatch_warns
+  provenance: net_new
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.num_labels
+  predicate_kind: presence_conflict
+  predicate_value: {num_labels_ne_len_id2label: true}
+  severity: warning
+  outcome: warn
+  message_template: "You passed `num_labels={kwargs.get('num_labels')}` which is incompatible to the `id2label` map of length `{len(self.id2label)}`."
+  citation:
+    file: transformers/configuration_utils.py
+    line: 263
+    qualname: PreTrainedConfig.__post_init__
+  notes: "When both id2label and num_labels are passed and disagree on length, __post_init__ warns (logger.warning, not raise). Replay needs id2label dict + num_labels. Confirmed warn observable."
+  kwargs_positive: {id2label: {0: "A", 1: "B"}, num_labels: 3}
+  kwargs_negative: {id2label: {0: "A", 1: "B"}, num_labels: 2}
+
+# ============================================================================
+# transformers.BitsAndBytesConfig - mostly torch-gated (this venv has no torch)
+# ============================================================================
+
+- id: transformers_bitsAndBytesConfig_4bit_8bit_mutually_exclusive
+  provenance: net_new
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.load_in_4bit
+  predicate_kind: mutual_exclusion
+  predicate_value: {not_both_true: [load_in_4bit, load_in_8bit]}
+  severity: error
+  outcome: invalid
+  message_template: "load_in_4bit and load_in_8bit are both True, but only one can be used at the same time"
+  citation:
+    file: transformers/utils/quantization_config.py
+    line: 456
+    qualname: BitsAndBytesConfig.__init__
+  notes: |
+    This raise (line 456) executes BEFORE the first torch use (line 467
+    torch.float32). Confirmed it raises ValueError even in a no-torch venv. The
+    negative case load_in_4bit=True alone reaches the torch.float32 assignment
+    and NameErrors without torch, so kwargs_negative is torch-gated - the gate
+    must have torch importable to confirm the negative. Marked dormant for the
+    no-torch source host but the positive raise is real and reachable.
+  kwargs_positive: {load_in_4bit: true, load_in_8bit: true}
+  kwargs_negative: {load_in_4bit: true}
+  dormant_reason: kwargs_negative needs torch (torch.float32 default assignment at line 467); positive raise fires pre-torch
+
+- id: transformers_bitsAndBytesConfig_quant_storage_allowlist
+  provenance: net_new
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.bnb_4bit_quant_storage
+  predicate_kind: allowlist_constant
+  predicate_value: [float16, float32, int8, uint8, float64, bfloat16]
+  severity: error
+  outcome: invalid
+  message_template: "`bnb_4bit_quant_storage` must be a valid string (one of 'float16', 'float32', 'int8', 'uint8', 'float64', 'bfloat16') "
+  citation:
+    file: transformers/utils/quantization_config.py
+    line: 480
+    qualname: BitsAndBytesConfig.__init__
+  notes: |
+    Check at line 480 is preceded by the bnb_4bit_compute_dtype assignment at
+    line 467-468 (torch.float32) which NameErrors without torch. Unreachable on
+    this no-torch host. Dormant.
+  dormant_reason: torch required (bnb_4bit_compute_dtype default torch.float32 at line 467 runs before this check)
+
+- id: transformers_bitsAndBytesConfig_compute_dtype_type
+  provenance: net_new
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.bnb_4bit_compute_dtype
+  predicate_kind: type_is
+  predicate_value: [str, "torch.dtype"]
+  severity: error
+  outcome: invalid
+  message_template: "bnb_4bit_compute_dtype must be a string or a torch.dtype"
+  citation:
+    file: transformers/utils/quantization_config.py
+    line: 474
+    qualname: BitsAndBytesConfig.__init__
+  notes: "Raises when bnb_4bit_compute_dtype is neither None, str, nor torch.dtype. torch module required for the surrounding branch. Dormant on no-torch host."
+  dormant_reason: torch required for BitsAndBytesConfig construction on this host
+
+- id: transformers_bitsAndBytesConfig_post_init_type_checks
+  provenance: net_new
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.<typed fields>
+  predicate_kind: type_is
+  predicate_value: {bool: [load_in_4bit, load_in_8bit, llm_int8_enable_fp32_cpu_offload, llm_int8_has_fp16_weight, bnb_4bit_use_double_quant], float: [llm_int8_threshold], str: [bnb_4bit_quant_type], list_or_none: [llm_int8_skip_modules]}
+  severity: error
+  outcome: invalid
+  message_template: "post_init type checks: e.g. 'llm_int8_threshold must be a float', 'bnb_4bit_quant_type must be a string', 'load_in_4bit must be a boolean'"
+  citation:
+    file: transformers/utils/quantization_config.py
+    line: 524
+    qualname: BitsAndBytesConfig.post_init
+  notes: "post_init (called at end of __init__, def at line 520) enforces per-field types via TypeError. Reached only after the torch-dependent dtype assignments, so unreachable without torch on this host."
+  dormant_reason: post_init runs after torch.float32/torch.uint8 assignments; torch required on this host

@@ -1,0 +1,38 @@
+{
+  "collapsed_tolerant_keys": 23,
+  "confirmed_via_authored_kwargs": 87,
+  "confirmed_via_synthesis": 0,
+  "engine": "transformers",
+  "group_status_counts": {
+    "confirmed": 85,
+    "failed": 9,
+    "infra_error": 6,
+    "skipped": 20
+  },
+  "gt_growth_constraints_vs_poc": 85,
+  "identity_grain": "constraint = (leaf, coarse_bucket, canonical_predicate_value)",
+  "n_gate_confirmed_constraints": 85,
+  "n_probed_candidates": 123,
+  "per_source_candidate_counts": {
+    "passA": 28,
+    "passB": 95
+  },
+  "per_source_constraint_counts": {
+    "passA": 28,
+    "passB": 92
+  },
+  "per_source_unique_contribution": {
+    "passA": 28,
+    "passB": 92
+  },
+  "poc_constraints": 0,
+  "union_size_constraints": 120,
+  "union_size_tolerant": 93,
+  "verdict_counts": {
+    "confirmed": 87,
+    "failed": 9,
+    "infra_error": 6,
+    "skipped": 21
+  },
+  "version": "5.10.2"
+}

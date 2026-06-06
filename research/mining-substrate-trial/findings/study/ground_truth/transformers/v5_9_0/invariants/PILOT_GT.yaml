@@ -1,0 +1,4883 @@
+schema_version: study_pilot_gt/2.0.0
+engine: transformers
+engine_version: 5.9.0
+task: invariants
+round: R0_pilot
+gate: scripts/validate_invariants.py (in transformers container)
+identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
+  tolerant_key = first two, for cross-source recall
+n_confirmed: 116
+n_unverified: 44
+confirmed:
+- id: transformers_gptqConfig_act_group_aware_auto_disabled_when_desc_act
+  source: passB
+  constraint_key:
+  - act_group_aware
+  - presence
+  - '{effect=act_group_aware silently forced False,when={act_group_aware=True,desc_act=True}}'
+  tolerant_key:
+  - act_group_aware
+  - presence
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.act_group_aware
+  predicate_kind: normalisation
+  predicate_value: &id001
+    when:
+      desc_act: true
+      act_group_aware: true
+    effect: act_group_aware silently forced False
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GPTQConfig.act_group_aware:
+        present: *id001
+  kwargs_positive:
+    bits: 4
+    desc_act: true
+    act_group_aware: true
+  kwargs_negative:
+    bits: 4
+    desc_act: false
+    act_group_aware: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_rejects_assistant_model
+  source: passB
+  constraint_key:
+  - assistant_model
+  - presence
+  - '{forbidden_attr=assistant_model}'
+  tolerant_key:
+  - assistant_model
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.assistant_model
+  predicate_kind: required
+  predicate_value: &id002
+    forbidden_attr: assistant_model
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.assistant_model:
+        present: *id002
+  kwargs_positive:
+    assistant_model: x
+  kwargs_negative: {}
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_awqConfig_backend_allowlist
+  source: passB
+  constraint_key:
+  - backend
+  - membership
+  - '{in=[auto,auto_trainable,autoawq,exllama_v1,exllama_v2,gemm,gemm_triton,gemv,gemv_fast,machete,marlin,torch_awq,torch_fused_awq]}'
+  tolerant_key:
+  - backend
+  - membership
+  native_type: transformers.AwqConfig
+  native_field: AwqConfig.backend
+  predicate_kind: enum
+  predicate_value: &id003
+    in:
+    - autoawq
+    - auto
+    - auto_trainable
+    - machete
+    - marlin
+    - exllama_v2
+    - exllama_v1
+    - gemm
+    - gemm_triton
+    - gemv
+    - gemv_fast
+    - torch_awq
+    - torch_fused_awq
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      AwqConfig.backend:
+        not_in: *id003
+  kwargs_positive:
+    backend: __nonsense__
+  kwargs_negative:
+    backend: auto
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_fpquantConfig_backward_dtype_allowlist
+  source: passB
+  constraint_key:
+  - backward_dtype
+  - membership
+  - '{in=[bf16,mxfp4,mxfp8]}'
+  tolerant_key:
+  - backward_dtype
+  - membership
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.backward_dtype
+  predicate_kind: enum
+  predicate_value: &id004
+    in:
+    - bf16
+    - mxfp8
+    - mxfp4
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.backward_dtype:
+        not_in: *id004
+  kwargs_positive:
+    backward_dtype: fp16
+  kwargs_negative:
+    backward_dtype: bf16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_spqrConfig_beta1_must_be_sixteen
+  source: passB
+  constraint_key:
+  - beta1
+  - exact
+  - '{equals=16}'
+  tolerant_key:
+  - beta1
+  - exact
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.beta1
+  predicate_kind: identity
+  predicate_value: &id005
+    equals: 16
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SpQRConfig.beta1:
+        present: *id005
+  kwargs_positive:
+    beta1: 8
+  kwargs_negative:
+    beta1: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_spqrConfig_beta1_type
+  source: passB
+  constraint_key:
+  - beta1
+  - type
+  - '{isinstance=int}'
+  tolerant_key:
+  - beta1
+  - type
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.beta1
+  predicate_kind: type_check
+  predicate_value: &id006
+    isinstance: int
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SpQRConfig.beta1:
+        type_is_not: *id006
+  kwargs_positive:
+    beta1: '16'
+  kwargs_negative:
+    beta1: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_spqrConfig_beta2_must_be_sixteen
+  source: passB
+  constraint_key:
+  - beta2
+  - exact
+  - '{equals=16}'
+  tolerant_key:
+  - beta2
+  - exact
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.beta2
+  predicate_kind: identity
+  predicate_value: &id007
+    equals: 16
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SpQRConfig.beta2:
+        present: *id007
+  kwargs_positive:
+    beta2: 8
+  kwargs_negative:
+    beta2: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_spqrConfig_beta2_type
+  source: passB
+  constraint_key:
+  - beta2
+  - type
+  - '{isinstance=int}'
+  tolerant_key:
+  - beta2
+  - type
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.beta2
+  predicate_kind: type_check
+  predicate_value: &id008
+    isinstance: int
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SpQRConfig.beta2:
+        type_is_not: *id008
+  kwargs_positive:
+    beta2: '16'
+  kwargs_negative:
+    beta2: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_spqrConfig_bits_must_be_three
+  source: passB
+  constraint_key:
+  - bits
+  - exact
+  - '{equals=3}'
+  tolerant_key:
+  - bits
+  - exact
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.bits
+  predicate_kind: identity
+  predicate_value: &id009
+    equals: 3
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SpQRConfig.bits:
+        present: *id009
+  kwargs_positive:
+    bits: 4
+  kwargs_negative:
+    bits: 3
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_gptqConfig_bits_allowlist
+  source: passB
+  constraint_key:
+  - bits
+  - membership
+  - '{in=[2,3,4,8]}'
+  tolerant_key:
+  - bits
+  - membership
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.bits
+  predicate_kind: enum
+  predicate_value: &id010
+    in:
+    - 2
+    - 3
+    - 4
+    - 8
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GPTQConfig.bits:
+        not_in: *id010
+  kwargs_positive:
+    bits: 5
+  kwargs_negative:
+    bits: 4
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_higgsConfig_bits_allowlist
+  source: passB
+  constraint_key:
+  - bits
+  - membership
+  - '{in=[2,3,4]}'
+  tolerant_key:
+  - bits
+  - membership
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.bits
+  predicate_kind: enum
+  predicate_value: &id011
+    in:
+    - 2
+    - 3
+    - 4
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      HiggsConfig.bits:
+        not_in: *id011
+  kwargs_positive:
+    bits: 8
+  kwargs_negative:
+    bits: 4
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_metalConfig_bits_allowlist
+  source: passB
+  constraint_key:
+  - bits
+  - membership
+  - '{in=[2,4,8]}'
+  tolerant_key:
+  - bits
+  - membership
+  native_type: transformers.MetalConfig
+  native_field: MetalConfig.bits
+  predicate_kind: enum
+  predicate_value: &id012
+    in:
+    - 2
+    - 4
+    - 8
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      MetalConfig.bits:
+        not_in: *id012
+  kwargs_positive:
+    bits: 3
+  kwargs_negative:
+    bits: 4
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_spqrConfig_bits_type
+  source: passB
+  constraint_key:
+  - bits
+  - type
+  - '{isinstance=int}'
+  tolerant_key:
+  - bits
+  - type
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.bits
+  predicate_kind: type_check
+  predicate_value: &id013
+    isinstance: int
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SpQRConfig.bits:
+        type_is_not: *id013
+  kwargs_positive:
+    bits: '3'
+  kwargs_negative:
+    bits: 3
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_cache_config_set_when_use_cache_false_warns
+  source: passB
+  constraint_key:
+  - cache_config
+  - presence
+  - '{requires=cache_config is None,when={use_cache=False}}'
+  tolerant_key:
+  - cache_config
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_config
+  predicate_kind: cross_field
+  predicate_value: &id014
+    when:
+      use_cache: false
+    requires: cache_config is None
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.cache_config:
+        present: *id014
+  kwargs_positive:
+    use_cache: false
+    cache_config: {}
+  kwargs_negative:
+    use_cache: true
+    cache_config: {}
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_cache_implementation_allowlist
+  source: passB
+  constraint_key:
+  - cache_implementation
+  - membership
+  - '{in=[dynamic,dynamic_full,hybrid,hybrid_chunked,offloaded,offloaded_hybrid,offloaded_hybrid_chunked,offloaded_static,paged,quantized,sliding_window,static],null_allowed=True}'
+  tolerant_key:
+  - cache_implementation
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: enum
+  predicate_value: &id015
+    in:
+    - static
+    - offloaded_static
+    - sliding_window
+    - hybrid
+    - hybrid_chunked
+    - offloaded_hybrid
+    - offloaded_hybrid_chunked
+    - dynamic
+    - dynamic_full
+    - offloaded
+    - quantized
+    - paged
+    null_allowed: true
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.cache_implementation:
+        not_in: *id015
+  kwargs_positive:
+    cache_implementation: __nonsense__
+  kwargs_negative:
+    cache_implementation: paged
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_cache_implementation_allowlist
+  source: passA
+  constraint_key:
+  - cache_implementation
+  - membership
+  - '{must_be_in=ALL_CACHE_IMPLEMENTATIONS + (''paged'',)}'
+  tolerant_key:
+  - cache_implementation
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: allowlist_constant
+  predicate_value: &id016
+    must_be_in: ALL_CACHE_IMPLEMENTATIONS + ('paged',)
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.cache_implementation:
+        not_in: *id016
+  kwargs_positive:
+    cache_implementation: __not_a_cache__
+  kwargs_negative:
+    cache_implementation: static
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_cache_choice_cache_implementation_not_in_allowlist
+  source: mech
+  constraint_key:
+  - cache_implementation
+  - membership
+  - '{not_in=[dynamic,static],present=True}'
+  tolerant_key:
+  - cache_implementation
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_implementation:
+        present: true
+        not_in:
+        - dynamic
+        - static
+  kwargs_positive:
+    cache_implementation: nonsense
+    use_cache: true
+  kwargs_negative:
+    cache_implementation: null
+    use_cache: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_use_cache_false_conflict_warns
+  source: passA
+  constraint_key:
+  - cache_implementation
+  - presence
+  - '{cache_arg_set_while_use_cache_false=[cache_config,cache_implementation]}'
+  tolerant_key:
+  - cache_implementation
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: &id017
+    cache_arg_set_while_use_cache_false:
+    - cache_implementation
+    - cache_config
+  severity: warning
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.cache_implementation:
+        present: *id017
+  kwargs_positive:
+    use_cache: false
+    cache_implementation: static
+  kwargs_negative:
+    use_cache: true
+    cache_implementation: static
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_cache_implementation_set_when_use_cache_false_warns
+  source: passB
+  constraint_key:
+  - cache_implementation
+  - presence
+  - '{requires=cache_implementation is None,when={use_cache=False}}'
+  tolerant_key:
+  - cache_implementation
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.cache_implementation
+  predicate_kind: cross_field
+  predicate_value: &id018
+    when:
+      use_cache: false
+    requires: cache_implementation is None
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.cache_implementation:
+        present: *id018
+  kwargs_positive:
+    use_cache: false
+    cache_implementation: static
+  kwargs_negative:
+    use_cache: true
+    cache_implementation: static
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_compile_config_type_compile_config_exceeds_zero
+  source: mech
+  constraint_key:
+  - compile_config
+  - numeric
+  - '0'
+  tolerant_key:
+  - compile_config
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.compile_config:
+        '>': 0
+  kwargs_positive:
+    compile_config: 42
+  kwargs_negative:
+    compile_config: null
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_compile_config_type
+  source: passA
+  constraint_key:
+  - compile_config
+  - type
+  - '[CompileConfig]'
+  tolerant_key:
+  - compile_config
+  - type
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.compile_config
+  predicate_kind: type_is
+  predicate_value: &id019
+  - CompileConfig
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.compile_config:
+        type_is_not: *id019
+  kwargs_positive:
+    compile_config: __not_a_compile_config__
+  kwargs_negative:
+    compile_config: null
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_compile_config_type
+  source: passB
+  constraint_key:
+  - compile_config
+  - type
+  - '{isinstance=CompileConfig,null_allowed=True}'
+  tolerant_key:
+  - compile_config
+  - type
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.compile_config
+  predicate_kind: type_check
+  predicate_value: &id020
+    isinstance: CompileConfig
+    null_allowed: true
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.compile_config:
+        type_is_not: *id020
+  kwargs_positive:
+    compile_config: 42
+  kwargs_negative:
+    compile_config: null
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_raises_compile_config_not_type_compileconfig
+  source: mech
+  constraint_key:
+  - compile_config
+  - type
+  - '{present=True,type_is_not=CompileConfig}'
+  tolerant_key:
+  - compile_config
+  - type
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.compile_config:
+        type_is_not: CompileConfig
+        present: true
+  kwargs_positive:
+    compile_config: true
+  kwargs_negative:
+    compile_config: null
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_compile_config_type_compile_config_type_not_in_CompileConfig
+  source: mech
+  constraint_key:
+  - compile_config
+  - type
+  - '{present=True,type_is_not=[CompileConfig]}'
+  tolerant_key:
+  - compile_config
+  - type
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.compile_config:
+        present: true
+        type_is_not:
+        - CompileConfig
+  kwargs_positive:
+    compile_config: oops
+  kwargs_negative:
+    compile_config: null
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_gptqConfig_damp_percent_open_unit_interval
+  source: passB
+  constraint_key:
+  - damp_percent
+  - numeric
+  - '{exclusiveMaximum=1,exclusiveMinimum=0}'
+  tolerant_key:
+  - damp_percent
+  - numeric
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.damp_percent
+  predicate_kind: numeric_range
+  predicate_value: &id021
+    exclusiveMinimum: 0
+    exclusiveMaximum: 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GPTQConfig.damp_percent:
+        present: *id021
+  kwargs_positive:
+    bits: 4
+    damp_percent: 1.0
+  kwargs_negative:
+    bits: 4
+    damp_percent: 0.1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_gptqConfig_dataset_string_allowlist
+  source: passB
+  constraint_key:
+  - dataset
+  - membership
+  - '{also_allows=list,in=[c4,c4-new,wikitext2],null_allowed=True}'
+  tolerant_key:
+  - dataset
+  - membership
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.dataset
+  predicate_kind: enum
+  predicate_value: &id022
+    in:
+    - wikitext2
+    - c4
+    - c4-new
+    null_allowed: true
+    also_allows: list
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GPTQConfig.dataset:
+        not_in: *id022
+  kwargs_positive:
+    bits: 4
+    dataset: ptb
+  kwargs_negative:
+    bits: 4
+    dataset: c4
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_greedy_strips_epsilon_cutoff
+  source: mech
+  constraint_key:
+  - do_sample
+  - exact
+  - '[do_sample,epsilon_cutoff]'
+  tolerant_key:
+  - do_sample
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+      transformers.sampling.epsilon_cutoff:
+        present: true
+        not_equal: 0.0
+  kwargs_positive:
+    do_sample: false
+    epsilon_cutoff: 0.5
+  kwargs_negative:
+    do_sample: true
+    epsilon_cutoff: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_greedy_strips_eta_cutoff
+  source: mech
+  constraint_key:
+  - do_sample
+  - exact
+  - '[do_sample,eta_cutoff]'
+  tolerant_key:
+  - do_sample
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+      transformers.sampling.eta_cutoff:
+        present: true
+        not_equal: 0.0
+  kwargs_positive:
+    do_sample: false
+    eta_cutoff: 0.5
+  kwargs_negative:
+    do_sample: true
+    eta_cutoff: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_greedy_strips_min_p
+  source: mech
+  constraint_key:
+  - do_sample
+  - exact
+  - '[do_sample,min_p]'
+  tolerant_key:
+  - do_sample
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+      transformers.sampling.min_p:
+        present: true
+  kwargs_positive:
+    do_sample: false
+    min_p: 0.5
+  kwargs_negative:
+    do_sample: true
+    min_p: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_greedy_strips_temperature
+  source: mech
+  constraint_key:
+  - do_sample
+  - exact
+  - '[do_sample,temperature]'
+  tolerant_key:
+  - do_sample
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+      transformers.sampling.temperature:
+        present: true
+        not_equal: 1.0
+  kwargs_positive:
+    do_sample: false
+    temperature: 0.5
+  kwargs_negative:
+    do_sample: true
+    temperature: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_greedy_strips_top_k
+  source: mech
+  constraint_key:
+  - do_sample
+  - exact
+  - '[do_sample,top_k]'
+  tolerant_key:
+  - do_sample
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+      transformers.sampling.top_k:
+        present: true
+        not_equal: 50
+  kwargs_positive:
+    do_sample: false
+    top_k: 51
+  kwargs_negative:
+    do_sample: true
+    top_k: 51
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_greedy_strips_top_p
+  source: mech
+  constraint_key:
+  - do_sample
+  - exact
+  - '[do_sample,top_p]'
+  tolerant_key:
+  - do_sample
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+      transformers.sampling.top_p:
+        present: true
+        not_equal: 1.0
+  kwargs_positive:
+    do_sample: false
+    top_p: 0.5
+  kwargs_negative:
+    do_sample: true
+    top_p: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_greedy_strips_typical_p
+  source: mech
+  constraint_key:
+  - do_sample
+  - exact
+  - '[do_sample,typical_p]'
+  tolerant_key:
+  - do_sample
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+      transformers.sampling.typical_p:
+        present: true
+        not_equal: 1.0
+  kwargs_positive:
+    do_sample: false
+    typical_p: 0.5
+  kwargs_negative:
+    do_sample: true
+    typical_p: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_early_stopping_bool_or_never
+  source: passA
+  constraint_key:
+  - early_stopping
+  - membership
+  - '[,False,True,never]'
+  tolerant_key:
+  - early_stopping
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.early_stopping
+  predicate_kind: literal_in
+  predicate_value: &id023
+  - true
+  - false
+  - never
+  - null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.early_stopping:
+        not_in: *id023
+  kwargs_positive:
+    early_stopping: 1.5
+  kwargs_negative:
+    early_stopping: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_early_stopping_allowlist
+  source: passB
+  constraint_key:
+  - early_stopping
+  - membership
+  - '{in=[,False,True,never]}'
+  tolerant_key:
+  - early_stopping
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.early_stopping
+  predicate_kind: enum
+  predicate_value: &id024
+    in:
+    - null
+    - true
+    - false
+    - never
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.early_stopping:
+        not_in: *id024
+  kwargs_positive:
+    early_stopping: 1.5
+  kwargs_negative:
+    early_stopping: false
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_early_stopping_type_early_stopping_not_in_allowlist
+  source: mech
+  constraint_key:
+  - early_stopping
+  - membership
+  - '{not_in=[False,True,never],present=True}'
+  tolerant_key:
+  - early_stopping
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        present: true
+        not_in:
+        - false
+        - true
+        - never
+  kwargs_positive:
+    early_stopping: sometimes
+    num_beams: 1
+  kwargs_negative:
+    early_stopping: false
+    num_beams: 1
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_early_stopping_type_early_stopping_exceeds_zero
+  source: mech
+  constraint_key:
+  - early_stopping
+  - numeric
+  - '0'
+  tolerant_key:
+  - early_stopping
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        '>': 0
+  kwargs_positive:
+    early_stopping: 1.5
+    num_beams: 1
+  kwargs_negative:
+    early_stopping: false
+    num_beams: 1
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_early_stopping_set_when_single_beam_warns
+  source: passB
+  constraint_key:
+  - early_stopping
+  - presence
+  - '{requires=early_stopping is False (or None),when={num_beams=1}}'
+  tolerant_key:
+  - early_stopping
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.early_stopping
+  predicate_kind: cross_field
+  predicate_value: &id025
+    when:
+      num_beams: 1
+    requires: early_stopping is False (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.early_stopping:
+        present: *id025
+  kwargs_positive:
+    num_beams: 1
+    early_stopping: true
+  kwargs_negative:
+    num_beams: 4
+    early_stopping: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
+  source: mech
+  constraint_key:
+  - early_stopping
+  - type
+  - '{present=True,type_is_not=[bool,int,str]}'
+  tolerant_key:
+  - early_stopping
+  - type
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        present: true
+        type_is_not:
+        - bool
+        - int
+        - str
+  kwargs_positive:
+    early_stopping: 1.5
+    num_beams: 1
+  kwargs_negative:
+    early_stopping: false
+    num_beams: 1
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_pretrainedConfig_validate_architecture_embed_dim_divisible
+  source: passB
+  constraint_key:
+  - embed_dim
+  - presence
+  - '{requires=head_dim * num_heads == embed_dim,when=head_dim and num_heads and embed_dim
+    all present}'
+  tolerant_key:
+  - embed_dim
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.embed_dim
+  predicate_kind: cross_field
+  predicate_value: &id026
+    requires: head_dim * num_heads == embed_dim
+    when: head_dim and num_heads and embed_dim all present
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.embed_dim:
+        present: *id026
+  kwargs_positive:
+    head_dim: 4
+    num_heads: 3
+    embed_dim: 16
+  kwargs_negative:
+    head_dim: 4
+    num_heads: 4
+    embed_dim: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_vptqConfig_enable_proxy_error_must_be_false
+  source: passB
+  constraint_key:
+  - enable_proxy_error
+  - exact
+  - '{equals=False}'
+  tolerant_key:
+  - enable_proxy_error
+  - exact
+  native_type: transformers.VptqConfig
+  native_field: VptqConfig.enable_proxy_error
+  predicate_kind: identity
+  predicate_value: &id027
+    equals: false
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      VptqConfig.enable_proxy_error:
+        present: *id027
+  kwargs_positive:
+    enable_proxy_error: true
+  kwargs_negative:
+    enable_proxy_error: false
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_dormant_epsilon_cutoff_ne_0_0
+  source: mech
+  constraint_key:
+  - epsilon_cutoff
+  - presence
+  - '{!==0,present=True}'
+  tolerant_key:
+  - epsilon_cutoff
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.epsilon_cutoff:
+        '!=': 0.0
+        present: true
+  kwargs_positive:
+    epsilon_cutoff: true
+  kwargs_negative:
+    epsilon_cutoff: false
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_epsilon_cutoff_nonzero_when_greedy_warns
+  source: passB
+  constraint_key:
+  - epsilon_cutoff
+  - presence
+  - '{requires=epsilon_cutoff == 0.0 (or None),when={do_sample=False}}'
+  tolerant_key:
+  - epsilon_cutoff
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.epsilon_cutoff
+  predicate_kind: cross_field
+  predicate_value: &id028
+    when:
+      do_sample: false
+    requires: epsilon_cutoff == 0.0 (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.epsilon_cutoff:
+        present: *id028
+  kwargs_positive:
+    do_sample: false
+    epsilon_cutoff: 0.1
+  kwargs_negative:
+    do_sample: true
+    epsilon_cutoff: 0.1
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_dormant_eta_cutoff_ne_0_0
+  source: mech
+  constraint_key:
+  - eta_cutoff
+  - presence
+  - '{!==0,present=True}'
+  tolerant_key:
+  - eta_cutoff
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.eta_cutoff:
+        '!=': 0.0
+        present: true
+  kwargs_positive:
+    eta_cutoff: true
+  kwargs_negative:
+    eta_cutoff: false
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_eta_cutoff_nonzero_when_greedy_warns
+  source: passB
+  constraint_key:
+  - eta_cutoff
+  - presence
+  - '{requires=eta_cutoff == 0.0 (or None),when={do_sample=False}}'
+  tolerant_key:
+  - eta_cutoff
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.eta_cutoff
+  predicate_kind: cross_field
+  predicate_value: &id029
+    when:
+      do_sample: false
+    requires: eta_cutoff == 0.0 (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.eta_cutoff:
+        present: *id029
+  kwargs_positive:
+    do_sample: false
+    eta_cutoff: 0.1
+  kwargs_negative:
+    do_sample: true
+    eta_cutoff: 0.1
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_awqConfig_format_allowlist
+  source: passB
+  constraint_key:
+  - format
+  - membership
+  - '{in=[gemm,gemv,gemv_fast,llm-awq]}'
+  tolerant_key:
+  - format
+  - membership
+  native_type: transformers.AwqConfig
+  native_field: AwqConfig.format
+  predicate_kind: enum
+  predicate_value: &id030
+    in:
+    - gemm
+    - gemv
+    - gemv_fast
+    - llm-awq
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      AwqConfig.format:
+        not_in: *id030
+  kwargs_positive:
+    version: __nonsense__
+  kwargs_negative:
+    version: gemm
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_fpquantConfig_forward_dtype_allowlist
+  source: passB
+  constraint_key:
+  - forward_dtype
+  - membership
+  - '{in=[mxfp4,nvfp4]}'
+  tolerant_key:
+  - forward_dtype
+  - membership
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.forward_dtype
+  predicate_kind: enum
+  predicate_value: &id031
+    in:
+    - mxfp4
+    - nvfp4
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.forward_dtype:
+        not_in: *id031
+  kwargs_positive:
+    forward_dtype: fp8
+  kwargs_negative:
+    forward_dtype: nvfp4
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_fpquantConfig_mxfp4_forward_method_allowlist
+  source: passB
+  constraint_key:
+  - forward_method
+  - membership
+  - '{in=[abs_max,quest],when={forward_dtype=mxfp4}}'
+  tolerant_key:
+  - forward_method
+  - membership
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.forward_method
+  predicate_kind: enum
+  predicate_value: &id032
+    when:
+      forward_dtype: mxfp4
+    in:
+    - abs_max
+    - quest
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.forward_method:
+        not_in: *id032
+  kwargs_positive:
+    forward_dtype: mxfp4
+    forward_method: __nonsense__
+  kwargs_negative:
+    forward_dtype: mxfp4
+    forward_method: quest
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_fpquantConfig_nvfp4_forward_method_abs_max_only
+  source: passB
+  constraint_key:
+  - forward_method
+  - membership
+  - '{in=[abs_max],when={forward_dtype=nvfp4}}'
+  tolerant_key:
+  - forward_method
+  - membership
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.forward_method
+  predicate_kind: enum
+  predicate_value: &id033
+    when:
+      forward_dtype: nvfp4
+    in:
+    - abs_max
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.forward_method:
+        not_in: *id033
+  kwargs_positive:
+    forward_dtype: nvfp4
+    forward_method: quest
+  kwargs_negative:
+    forward_dtype: nvfp4
+    forward_method: abs_max
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_higgsConfig_group_size_allowlist
+  source: passB
+  constraint_key:
+  - group_size
+  - membership
+  - '{in=[128,256,64]}'
+  tolerant_key:
+  - group_size
+  - membership
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.group_size
+  predicate_kind: enum
+  predicate_value: &id034
+    in:
+    - 64
+    - 128
+    - 256
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      HiggsConfig.group_size:
+        not_in: *id034
+  kwargs_positive:
+    group_size: 32
+  kwargs_negative:
+    group_size: 256
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_metalConfig_group_size_positive
+  source: passB
+  constraint_key:
+  - group_size
+  - numeric
+  - '{exclusiveMinimum=0}'
+  tolerant_key:
+  - group_size
+  - numeric
+  native_type: transformers.MetalConfig
+  native_field: MetalConfig.group_size
+  predicate_kind: numeric_range
+  predicate_value: &id035
+    exclusiveMinimum: 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      MetalConfig.group_size:
+        present: *id035
+  kwargs_positive:
+    group_size: 0
+  kwargs_negative:
+    group_size: 64
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_gptqConfig_group_size_range
+  source: passB
+  constraint_key:
+  - group_size
+  - numeric
+  - '{gt=0,or_equals=-1}'
+  tolerant_key:
+  - group_size
+  - numeric
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.group_size
+  predicate_kind: numeric_range
+  predicate_value: &id036
+    gt: 0
+    or_equals: -1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GPTQConfig.group_size:
+        present: *id036
+  kwargs_positive:
+    bits: 4
+    group_size: 0
+  kwargs_negative:
+    bits: 4
+    group_size: 128
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_sinqConfig_group_size_multiple_of_eight_warns
+  source: passB
+  constraint_key:
+  - group_size
+  - numeric
+  - '{requires=group_size % 8 == 0}'
+  tolerant_key:
+  - group_size
+  - numeric
+  native_type: transformers.SinqConfig
+  native_field: SinqConfig.group_size
+  predicate_kind: numeric_range
+  predicate_value: &id037
+    requires: group_size % 8 == 0
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SinqConfig.group_size:
+        present: *id037
+  kwargs_positive:
+    group_size: 60
+  kwargs_negative:
+    group_size: 64
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_fpquantConfig_nvfp4_hadamard_group_size_allowlist
+  source: passB
+  constraint_key:
+  - hadamard_group_size
+  - membership
+  - '{in=[128,16,32,64],when={forward_dtype=nvfp4}}'
+  tolerant_key:
+  - hadamard_group_size
+  - membership
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.hadamard_group_size
+  predicate_kind: enum
+  predicate_value: &id038
+    when:
+      forward_dtype: nvfp4
+    in:
+    - 16
+    - 32
+    - 64
+    - 128
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.hadamard_group_size:
+        not_in: *id038
+  kwargs_positive:
+    forward_dtype: nvfp4
+    hadamard_group_size: 8
+  kwargs_negative:
+    forward_dtype: nvfp4
+    hadamard_group_size: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_fpquantConfig_mxfp4_hadamard_group_size_allowlist
+  source: passB
+  constraint_key:
+  - hadamard_group_size
+  - membership
+  - '{in=[128,32,64],when={forward_dtype=mxfp4}}'
+  tolerant_key:
+  - hadamard_group_size
+  - membership
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.hadamard_group_size
+  predicate_kind: enum
+  predicate_value: &id039
+    when:
+      forward_dtype: mxfp4
+    in:
+    - 32
+    - 64
+    - 128
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.hadamard_group_size:
+        not_in: *id039
+  kwargs_positive:
+    forward_dtype: mxfp4
+    hadamard_group_size: 16
+  kwargs_negative:
+    forward_dtype: mxfp4
+    hadamard_group_size: 64
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_higgsConfig_hadamard_divisible_by_group_size
+  source: passB
+  constraint_key:
+  - hadamard_size
+  - presence
+  - '{requires=hadamard_size % group_size == 0}'
+  tolerant_key:
+  - hadamard_size
+  - presence
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.hadamard_size
+  predicate_kind: cross_field
+  predicate_value: &id040
+    requires: hadamard_size % group_size == 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      HiggsConfig.hadamard_size:
+        present: *id040
+  kwargs_positive:
+    hadamard_size: 100
+    group_size: 64
+  kwargs_negative:
+    hadamard_size: 512
+    group_size: 256
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_aqlmConfig_size_fields_int_type
+  source: passB
+  constraint_key:
+  - in_group_size
+  - type
+  - '{fields=[in_group_size,nbits_per_codebook,num_codebooks,out_group_size],isinstance=int}'
+  tolerant_key:
+  - in_group_size
+  - type
+  native_type: transformers.AqlmConfig
+  native_field: AqlmConfig.in_group_size
+  predicate_kind: type_check
+  predicate_value: &id041
+    isinstance: int
+    fields:
+    - in_group_size
+    - out_group_size
+    - num_codebooks
+    - nbits_per_codebook
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      AqlmConfig.in_group_size:
+        type_is_not: *id041
+  kwargs_positive:
+    in_group_size: '8'
+  kwargs_negative:
+    in_group_size: 8
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_pretrainedConfig_validate_layer_type_allowlist
+  source: passB
+  constraint_key:
+  - layer_types
+  - membership
+  - '{applies_to=each_element,in=[attention,chunked_attention,compressed_sparse_attention,conv,dense,full_attention,heavily_compressed_attention,hybrid,linear_attention,mamba,moe,sliding_attention,sparse]}'
+  tolerant_key:
+  - layer_types
+  - membership
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.layer_types
+  predicate_kind: enum
+  predicate_value: &id042
+    in:
+    - full_attention
+    - sliding_attention
+    - chunked_attention
+    - compressed_sparse_attention
+    - heavily_compressed_attention
+    - linear_attention
+    - conv
+    - mamba
+    - attention
+    - sparse
+    - dense
+    - hybrid
+    - moe
+    applies_to: each_element
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.layer_types:
+        not_in: *id042
+  kwargs_positive:
+    layer_types:
+    - __not_a_layer__
+    num_hidden_layers: 1
+  kwargs_negative:
+    layer_types:
+    - full_attention
+    num_hidden_layers: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_pretrainedConfig_layer_types_allowlist
+  source: passA
+  constraint_key:
+  - layer_types
+  - membership
+  - '{must_all_be_in=ALLOWED_LAYER_TYPES}'
+  tolerant_key:
+  - layer_types
+  - membership
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.layer_types
+  predicate_kind: allowlist_constant
+  predicate_value: &id043
+    must_all_be_in: ALLOWED_LAYER_TYPES
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.layer_types:
+        not_in: *id043
+  kwargs_positive:
+    layer_types:
+    - __bad_layer__
+    num_hidden_layers: 1
+  kwargs_negative:
+    layer_types:
+    - full_attention
+    num_hidden_layers: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_beam_flag_in_single_beam_warns
+  source: passA
+  constraint_key:
+  - length_penalty
+  - presence
+  - '{beam_only_flag_set_while_num_beams_le_1=[early_stopping,length_penalty]}'
+  tolerant_key:
+  - length_penalty
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.length_penalty
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: &id044
+    beam_only_flag_set_while_num_beams_le_1:
+    - early_stopping
+    - length_penalty
+  severity: warning
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.length_penalty:
+        present: *id044
+  kwargs_positive:
+    num_beams: 1
+    length_penalty: 2.0
+  kwargs_negative:
+    num_beams: 4
+    length_penalty: 2.0
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_length_penalty_not_one_when_single_beam_warns
+  source: passB
+  constraint_key:
+  - length_penalty
+  - presence
+  - '{requires=length_penalty == 1.0 (or None),when={num_beams=1}}'
+  tolerant_key:
+  - length_penalty
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.length_penalty
+  predicate_kind: cross_field
+  predicate_value: &id045
+    when:
+      num_beams: 1
+    requires: length_penalty == 1.0 (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.length_penalty:
+        present: *id045
+  kwargs_positive:
+    num_beams: 1
+    length_penalty: 2.0
+  kwargs_negative:
+    num_beams: 4
+    length_penalty: 2.0
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_bitnetQuantConfig_linear_class_allowlist
+  source: passB
+  constraint_key:
+  - linear_class
+  - membership
+  - '{in=[autobitlinear,bitlinear]}'
+  tolerant_key:
+  - linear_class
+  - membership
+  native_type: transformers.BitNetQuantConfig
+  native_field: BitNetQuantConfig.linear_class
+  predicate_kind: enum
+  predicate_value: &id046
+    in:
+    - bitlinear
+    - autobitlinear
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      BitNetQuantConfig.linear_class:
+        not_in: *id046
+  kwargs_positive:
+    linear_class: __nonsense__
+  kwargs_negative:
+    linear_class: bitlinear
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_aqlmConfig_linear_weights_not_to_quantize_type
+  source: passB
+  constraint_key:
+  - linear_weights_not_to_quantize
+  - type
+  - '{isinstance=list,null_allowed=True}'
+  tolerant_key:
+  - linear_weights_not_to_quantize
+  - type
+  native_type: transformers.AqlmConfig
+  native_field: AqlmConfig.linear_weights_not_to_quantize
+  predicate_kind: type_check
+  predicate_value: &id047
+    isinstance: list
+    null_allowed: true
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      AqlmConfig.linear_weights_not_to_quantize:
+        type_is_not: *id047
+  kwargs_positive:
+    linear_weights_not_to_quantize: x
+  kwargs_negative:
+    linear_weights_not_to_quantize:
+    - x
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_rejects_logits_processor
+  source: passB
+  constraint_key:
+  - logits_processor
+  - presence
+  - '{forbidden_attr=logits_processor}'
+  tolerant_key:
+  - logits_processor
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.logits_processor
+  predicate_kind: required
+  predicate_value: &id048
+    forbidden_attr: logits_processor
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.logits_processor:
+        present: *id048
+  kwargs_positive:
+    logits_processor: []
+  kwargs_negative: {}
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
+  source: mech
+  constraint_key:
+  - max_new_tokens
+  - membership
+  - '{not_in=[1,16],present=True}'
+  tolerant_key:
+  - max_new_tokens
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_new_tokens:
+        present: true
+        not_in:
+        - 1
+        - 16
+  kwargs_positive:
+    max_new_tokens: -1
+    min_new_tokens: -1
+    pad_token_id: -1
+  kwargs_negative:
+    max_new_tokens: 1
+    min_new_tokens: -1
+    pad_token_id: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_output_token_ids_max_new_tokens_le_zero
+  source: mech
+  constraint_key:
+  - max_new_tokens
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_new_tokens
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_new_tokens:
+        <=: 0
+  kwargs_positive:
+    max_new_tokens: -1
+    min_new_tokens: -1
+    pad_token_id: -1
+  kwargs_negative:
+    max_new_tokens: 1
+    min_new_tokens: -1
+    pad_token_id: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_max_new_tokens_positive
+  source: passB
+  constraint_key:
+  - max_new_tokens
+  - numeric
+  - '{exclusiveMinimum=0,null_allowed=True}'
+  tolerant_key:
+  - max_new_tokens
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.max_new_tokens
+  predicate_kind: numeric_range
+  predicate_value: &id049
+    exclusiveMinimum: 0
+    null_allowed: true
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.max_new_tokens:
+        present: *id049
+  kwargs_positive:
+    max_new_tokens: -1
+  kwargs_negative:
+    max_new_tokens: 16
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_max_new_tokens_positive
+  source: passA
+  constraint_key:
+  - max_new_tokens
+  - numeric
+  - '{gt=0,when=is_not_none}'
+  tolerant_key:
+  - max_new_tokens
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.max_new_tokens
+  predicate_kind: range
+  predicate_value: &id050
+    gt: 0
+    when: is_not_none
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.max_new_tokens:
+        present: *id050
+  kwargs_positive:
+    max_new_tokens: 0
+  kwargs_negative:
+    max_new_tokens: 16
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_sinqConfig_method_allowlist
+  source: passB
+  constraint_key:
+  - method
+  - membership
+  - '{in=[asinq,sinq]}'
+  tolerant_key:
+  - method
+  - membership
+  native_type: transformers.SinqConfig
+  native_field: SinqConfig.method
+  predicate_kind: enum
+  predicate_value: &id051
+    in:
+    - sinq
+    - asinq
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SinqConfig.method:
+        not_in: *id051
+  kwargs_positive:
+    method: __nonsense__
+  kwargs_negative:
+    method: sinq
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_min_p_set_when_greedy_warns
+  source: passB
+  constraint_key:
+  - min_p
+  - presence
+  - '{requires=min_p is None,when={do_sample=False}}'
+  tolerant_key:
+  - min_p
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.min_p
+  predicate_kind: cross_field
+  predicate_value: &id052
+    when:
+      do_sample: false
+    requires: min_p is None
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.min_p:
+        present: *id052
+  kwargs_positive:
+    do_sample: false
+    min_p: 0.1
+  kwargs_negative:
+    do_sample: true
+    min_p: 0.1
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_beam_search_num_beams_eq_1
+  source: mech
+  constraint_key:
+  - num_beams
+  - exact
+  - '1'
+  tolerant_key:
+  - num_beams
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+  kwargs_positive:
+    num_beams: 1
+    num_beam_groups: 1
+    diversity_penalty: 0.0
+    early_stopping: true
+  kwargs_negative:
+    num_beams: 1
+    num_beam_groups: 1
+    diversity_penalty: 0.0
+    early_stopping: false
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
+  source: mech
+  constraint_key:
+  - num_beams
+  - exact
+  - '[do_sample,num_beams,num_return_sequences]'
+  tolerant_key:
+  - num_beams
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.num_return_sequences:
+        '>': 1
+      transformers.sampling.do_sample: false
+  kwargs_positive:
+    num_beams: 1
+    num_return_sequences: 2
+    do_sample: false
+  kwargs_negative:
+    num_beams: 1
+    num_return_sequences: 1
+    do_sample: false
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_dormant_early_stopping_set_true
+  source: mech
+  constraint_key:
+  - num_beams
+  - exact
+  - '[early_stopping,num_beams]'
+  tolerant_key:
+  - num_beams
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.early_stopping:
+        present: true
+  kwargs_positive:
+    num_beams: 1
+    early_stopping: true
+  kwargs_negative:
+    num_beams: 1
+    early_stopping: false
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_single_beam_strips_length_penalty
+  source: mech
+  constraint_key:
+  - num_beams
+  - exact
+  - '[length_penalty,num_beams]'
+  tolerant_key:
+  - num_beams
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.length_penalty:
+        present: true
+        not_equal: 1.0
+  kwargs_positive:
+    num_beams: 1
+    length_penalty: 0.5
+  kwargs_negative:
+    num_beams: 4
+    length_penalty: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
+  source: mech
+  constraint_key:
+  - num_beams
+  - numeric
+  - '@num_return_sequences'
+  tolerant_key:
+  - num_beams
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        <: '@num_return_sequences'
+  kwargs_positive:
+    num_beams: 2
+    num_return_sequences: 4
+    do_sample: false
+  kwargs_negative:
+    num_beams: 1
+    num_return_sequences: 4
+    do_sample: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
+  source: mech
+  constraint_key:
+  - num_beams
+  - presence
+  - '@num_return_sequences'
+  tolerant_key:
+  - num_beams
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        not_divisible_by: '@num_return_sequences'
+  kwargs_positive:
+    num_beams: 2
+    num_return_sequences: 4
+    do_sample: false
+  kwargs_negative:
+    num_beams: 1
+    num_return_sequences: 4
+    do_sample: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_pretrainedConfig_layer_types_count_matches_num_hidden_layers
+  source: passA
+  constraint_key:
+  - num_hidden_layers
+  - numeric
+  - '{eq=len(layer_types)}'
+  tolerant_key:
+  - num_hidden_layers
+  - numeric
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.num_hidden_layers
+  predicate_kind: range
+  predicate_value: &id053
+    eq: len(layer_types)
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.num_hidden_layers:
+        present: *id053
+  kwargs_positive:
+    layer_types:
+    - full_attention
+    - full_attention
+    num_hidden_layers: 3
+  kwargs_negative:
+    layer_types:
+    - full_attention
+    - full_attention
+    num_hidden_layers: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_pretrainedConfig_validate_layer_type_count_matches_layers
+  source: passB
+  constraint_key:
+  - num_hidden_layers
+  - presence
+  - '{requires=num_hidden_layers == len(layer_types),when=layer_types set}'
+  tolerant_key:
+  - num_hidden_layers
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.num_hidden_layers
+  predicate_kind: cross_field
+  predicate_value: &id054
+    requires: num_hidden_layers == len(layer_types)
+    when: layer_types set
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.num_hidden_layers:
+        present: *id054
+  kwargs_positive:
+    layer_types:
+    - full_attention
+    num_hidden_layers: 2
+  kwargs_negative:
+    layer_types:
+    - full_attention
+    num_hidden_layers: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_pretrainedConfig_num_labels_id2label_mismatch_warns
+  source: passA
+  constraint_key:
+  - num_labels
+  - presence
+  - '{num_labels_ne_len_id2label=True}'
+  tolerant_key:
+  - num_labels
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.num_labels
+  predicate_kind: presence_conflict
+  predicate_value: &id055
+    num_labels_ne_len_id2label: true
+  severity: warning
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.num_labels:
+        present: *id055
+  kwargs_positive:
+    id2label:
+      0: A
+      1: B
+    num_labels: 3
+  kwargs_negative:
+    id2label:
+      0: A
+      1: B
+    num_labels: 2
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_num_return_sequences_le_num_beams
+  source: passA
+  constraint_key:
+  - num_return_sequences
+  - numeric
+  - '{le=num_beams,when=num_beams>1}'
+  tolerant_key:
+  - num_return_sequences
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: range
+  predicate_value: &id056
+    le: num_beams
+    when: num_beams>1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.num_return_sequences:
+        present: *id056
+  kwargs_positive:
+    num_return_sequences: 5
+    num_beams: 2
+  kwargs_negative:
+    num_return_sequences: 2
+    num_beams: 4
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_raises_num_beams_eq_1
+  source: mech
+  constraint_key:
+  - num_return_sequences
+  - presence
+  - '[num_beams,num_return_sequences]'
+  tolerant_key:
+  - num_return_sequences
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        '!=': 1
+      transformers.sampling.num_beams: 1
+  kwargs_positive:
+    num_return_sequences: 2
+    num_beams: 1
+  kwargs_negative:
+    num_return_sequences: 2
+    num_beams: 2
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_num_return_sequences_greedy_no_beam
+  source: passA
+  constraint_key:
+  - num_return_sequences
+  - presence
+  - '{gt_1_requires=num_beams>1 or do_sample}'
+  tolerant_key:
+  - num_return_sequences
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: mutual_exclusion
+  predicate_value: &id057
+    gt_1_requires: num_beams>1 or do_sample
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.num_return_sequences:
+        present: *id057
+  kwargs_positive:
+    num_return_sequences: 2
+    do_sample: false
+  kwargs_negative:
+    num_return_sequences: 1
+    do_sample: false
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_num_return_sequences_le_num_beams
+  source: passB
+  constraint_key:
+  - num_return_sequences
+  - presence
+  - '{requires=num_return_sequences <= num_beams,when={num_beams=>1}}'
+  tolerant_key:
+  - num_return_sequences
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: cross_field
+  predicate_value: &id058
+    when:
+      num_beams: '>1'
+    requires: num_return_sequences <= num_beams
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.num_return_sequences:
+        present: *id058
+  kwargs_positive:
+    num_beams: 2
+    num_return_sequences: 5
+  kwargs_negative:
+    num_beams: 4
+    num_return_sequences: 2
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_greedy_num_return_sequences_gt_one
+  source: passB
+  constraint_key:
+  - num_return_sequences
+  - presence
+  - '{requires=num_return_sequences == 1,when={do_sample=False,num_beams=1}}'
+  tolerant_key:
+  - num_return_sequences
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.num_return_sequences
+  predicate_kind: cross_field
+  predicate_value: &id059
+    when:
+      do_sample: false
+      num_beams: 1
+    requires: num_return_sequences == 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.num_return_sequences:
+        present: *id059
+  kwargs_positive:
+    do_sample: false
+    num_beams: 1
+    num_return_sequences: 2
+  kwargs_negative:
+    do_sample: false
+    num_beams: 1
+    num_return_sequences: 1
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_pretrainedConfig_validate_output_attentions_requires_eager
+  source: passB
+  constraint_key:
+  - output_attentions
+  - presence
+  - '{requires=_attn_implementation in [eager, None],when=output_attentions is truthy}'
+  tolerant_key:
+  - output_attentions
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.output_attentions
+  predicate_kind: cross_field
+  predicate_value: &id060
+    when: output_attentions is truthy
+    requires: _attn_implementation in [eager, None]
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.output_attentions:
+        present: *id060
+  kwargs_positive:
+    output_attentions: true
+    attn_implementation: sdpa
+  kwargs_negative:
+    output_attentions: true
+    attn_implementation: eager
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_output_attentions_without_return_dict_warns
+  source: passB
+  constraint_key:
+  - output_attentions
+  - presence
+  - '{requires=output_attentions is not True,when={return_dict_in_generate=False}}'
+  tolerant_key:
+  - output_attentions
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.output_attentions
+  predicate_kind: cross_field
+  predicate_value: &id061
+    when:
+      return_dict_in_generate: false
+    requires: output_attentions is not True
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.output_attentions:
+        present: *id061
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_attentions: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_attentions: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_output_hidden_states_without_return_dict_warns
+  source: passB
+  constraint_key:
+  - output_hidden_states
+  - presence
+  - '{requires=output_hidden_states is not True,when={return_dict_in_generate=False}}'
+  tolerant_key:
+  - output_hidden_states
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.output_hidden_states
+  predicate_kind: cross_field
+  predicate_value: &id062
+    when:
+      return_dict_in_generate: false
+    requires: output_hidden_states is not True
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.output_hidden_states:
+        present: *id062
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_hidden_states: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_hidden_states: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_output_logits_without_return_dict_warns
+  source: passB
+  constraint_key:
+  - output_logits
+  - presence
+  - '{requires=output_logits is not True,when={return_dict_in_generate=False}}'
+  tolerant_key:
+  - output_logits
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.output_logits
+  predicate_kind: cross_field
+  predicate_value: &id063
+    when:
+      return_dict_in_generate: false
+    requires: output_logits is not True
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.output_logits:
+        present: *id063
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_logits: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_logits: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_return_dict_in_generate_conflict_warns
+  source: passA
+  constraint_key:
+  - output_scores
+  - presence
+  - '{extra_output_flag_true_while_return_dict_in_generate_not_true=True}'
+  tolerant_key:
+  - output_scores
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.output_scores
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: &id064
+    extra_output_flag_true_while_return_dict_in_generate_not_true: true
+  severity: warning
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.output_scores:
+        present: *id064
+  kwargs_positive:
+    output_scores: true
+    return_dict_in_generate: false
+  kwargs_negative:
+    output_scores: true
+    return_dict_in_generate: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_output_scores_without_return_dict_warns
+  source: passB
+  constraint_key:
+  - output_scores
+  - presence
+  - '{requires=output_scores is not True,when={return_dict_in_generate=False}}'
+  tolerant_key:
+  - output_scores
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.output_scores
+  predicate_kind: cross_field
+  predicate_value: &id065
+    when:
+      return_dict_in_generate: false
+    requires: output_scores is not True
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.output_scores:
+        present: *id065
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_scores: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_scores: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_higgsConfig_p_allowlist
+  source: passB
+  constraint_key:
+  - p
+  - membership
+  - '{in=[1,2]}'
+  tolerant_key:
+  - p
+  - membership
+  native_type: transformers.HiggsConfig
+  native_field: HiggsConfig.p
+  predicate_kind: enum
+  predicate_value: &id066
+    in:
+    - 1
+    - 2
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      HiggsConfig.p:
+        not_in: *id066
+  kwargs_positive:
+    p: 3
+  kwargs_negative:
+    p: 2
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_output_token_ids_pad_token_id_not_in_allowlist
+  source: mech
+  constraint_key:
+  - pad_token_id
+  - membership
+  - '{not_in=[0,50256],present=True}'
+  tolerant_key:
+  - pad_token_id
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.pad_token_id:
+        present: true
+        not_in:
+        - 0
+        - 50256
+  kwargs_positive:
+    max_new_tokens: 1
+    min_new_tokens: -1
+    pad_token_id: -1
+  kwargs_negative:
+    max_new_tokens: 1
+    min_new_tokens: -1
+    pad_token_id: 0
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_negative_pad_token_id
+  source: mech
+  constraint_key:
+  - pad_token_id
+  - numeric
+  - '0'
+  tolerant_key:
+  - pad_token_id
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.pad_token_id:
+        <: 0
+  kwargs_positive:
+    pad_token_id: -1
+  kwargs_negative:
+    pad_token_id: 0
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_generationConfig_pad_token_id_negative_warns
+  source: passA
+  constraint_key:
+  - pad_token_id
+  - numeric
+  - '{ge=0,when=is_not_none}'
+  tolerant_key:
+  - pad_token_id
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.pad_token_id
+  predicate_kind: range
+  predicate_value: &id067
+    ge: 0
+    when: is_not_none
+  severity: warning
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.pad_token_id:
+        present: *id067
+  kwargs_positive:
+    pad_token_id: -1
+  kwargs_negative:
+    pad_token_id: 0
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_pad_token_id_non_negative_warns
+  source: passB
+  constraint_key:
+  - pad_token_id
+  - numeric
+  - '{minimum=0,null_allowed=True}'
+  tolerant_key:
+  - pad_token_id
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.pad_token_id
+  predicate_kind: numeric_range
+  predicate_value: &id068
+    minimum: 0
+    null_allowed: true
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.pad_token_id:
+        present: *id068
+  kwargs_positive:
+    pad_token_id: -1
+  kwargs_negative:
+    pad_token_id: 0
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_pretrainedConfig_problem_type_literal
+  source: passA
+  constraint_key:
+  - problem_type
+  - membership
+  - '[,multi_label_classification,regression,single_label_classification]'
+  tolerant_key:
+  - problem_type
+  - membership
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.problem_type
+  predicate_kind: literal_in
+  predicate_value: &id069
+  - regression
+  - single_label_classification
+  - multi_label_classification
+  - null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.problem_type:
+        not_in: *id069
+  kwargs_positive:
+    problem_type: __not_a_problem_type__
+  kwargs_negative:
+    problem_type: regression
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_pretrainedConfig_problem_type_single_label_requires_num_labels_gt_1
+  source: passA
+  constraint_key:
+  - problem_type
+  - presence
+  - '{problem_type_eq_single_label_classification_and_num_labels_eq_1=True}'
+  tolerant_key:
+  - problem_type
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.problem_type
+  predicate_kind: presence_conflict
+  predicate_value: &id070
+    problem_type_eq_single_label_classification_and_num_labels_eq_1: true
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.problem_type:
+        present: *id070
+  kwargs_positive:
+    problem_type: single_label_classification
+    num_labels: 1
+  kwargs_negative:
+    problem_type: single_label_classification
+    num_labels: 2
+  observed_outcome: error
+  contributing_sources:
+  - passA
+- id: transformers_pretrainedConfig_problem_type_single_label_requires_multi_class
+  source: passB
+  constraint_key:
+  - problem_type
+  - presence
+  - '{requires=num_labels > 1,when=problem_type == single_label_classification}'
+  tolerant_key:
+  - problem_type
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.problem_type
+  predicate_kind: cross_field
+  predicate_value: &id071
+    when: problem_type == single_label_classification
+    requires: num_labels > 1
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.problem_type:
+        present: *id071
+  kwargs_positive:
+    problem_type: single_label_classification
+    num_labels: 1
+  kwargs_negative:
+    problem_type: single_label_classification
+    num_labels: 2
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_bitnetQuantConfig_quantization_mode_allowlist
+  source: passB
+  constraint_key:
+  - quantization_mode
+  - membership
+  - '{in=[offline,online]}'
+  tolerant_key:
+  - quantization_mode
+  - membership
+  native_type: transformers.BitNetQuantConfig
+  native_field: BitNetQuantConfig.quantization_mode
+  predicate_kind: enum
+  predicate_value: &id072
+    in:
+    - online
+    - offline
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      BitNetQuantConfig.quantization_mode:
+        not_in: *id072
+  kwargs_positive:
+    quantization_mode: __nonsense__
+  kwargs_negative:
+    quantization_mode: offline
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_no_return_dict_strips_output_attentions
+  source: mech
+  constraint_key:
+  - return_dict_in_generate
+  - exact
+  - '[output_attentions,return_dict_in_generate]'
+  tolerant_key:
+  - return_dict_in_generate
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate: false
+      transformers.sampling.output_attentions:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_attentions: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_attentions: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_no_return_dict_strips_output_hidden_states
+  source: mech
+  constraint_key:
+  - return_dict_in_generate
+  - exact
+  - '[output_hidden_states,return_dict_in_generate]'
+  tolerant_key:
+  - return_dict_in_generate
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate: false
+      transformers.sampling.output_hidden_states:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_hidden_states: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_hidden_states: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_no_return_dict_strips_output_scores
+  source: mech
+  constraint_key:
+  - return_dict_in_generate
+  - exact
+  - '[output_scores,return_dict_in_generate]'
+  tolerant_key:
+  - return_dict_in_generate
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate: false
+      transformers.sampling.output_scores:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_scores: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_scores: true
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_spqrConfig_shapes_must_be_dict
+  source: passB
+  constraint_key:
+  - shapes
+  - type
+  - '{isinstance=dict}'
+  tolerant_key:
+  - shapes
+  - type
+  native_type: transformers.SpQRConfig
+  native_field: SpQRConfig.shapes
+  predicate_kind: type_check
+  predicate_value: &id073
+    isinstance: dict
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      SpQRConfig.shapes:
+        type_is_not: *id073
+  kwargs_positive:
+    shapes: []
+  kwargs_negative:
+    shapes: {}
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_temperature_not_one_when_greedy_warns
+  source: passB
+  constraint_key:
+  - temperature
+  - presence
+  - '{requires=temperature == 1.0 (or None),when={do_sample=False}}'
+  tolerant_key:
+  - temperature
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.temperature
+  predicate_kind: cross_field
+  predicate_value: &id074
+    when:
+      do_sample: false
+    requires: temperature == 1.0 (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.temperature:
+        present: *id074
+  kwargs_positive:
+    do_sample: false
+    temperature: 0.5
+  kwargs_negative:
+    do_sample: true
+    temperature: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_sampling_flag_in_greedy_warns
+  source: passA
+  constraint_key:
+  - temperature
+  - presence
+  - '{sampling_only_flag_set_while_do_sample_not_true=[epsilon_cutoff,eta_cutoff,min_p,temperature,top_h,top_k,top_p,typical_p]}'
+  tolerant_key:
+  - temperature
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.temperature
+  predicate_kind: mutual_exclusion_soft
+  predicate_value: &id075
+    sampling_only_flag_set_while_do_sample_not_true:
+    - temperature
+    - top_p
+    - min_p
+    - top_h
+    - typical_p
+    - top_k
+    - epsilon_cutoff
+    - eta_cutoff
+  severity: warning
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.temperature:
+        present: *id075
+  kwargs_positive:
+    do_sample: false
+    temperature: 0.7
+  kwargs_negative:
+    do_sample: true
+    temperature: 0.7
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passA
+- id: transformers_generationConfig_top_h_set_when_greedy_warns
+  source: passB
+  constraint_key:
+  - top_h
+  - presence
+  - '{requires=top_h is None,when={do_sample=False}}'
+  tolerant_key:
+  - top_h
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.top_h
+  predicate_kind: cross_field
+  predicate_value: &id076
+    when:
+      do_sample: false
+    requires: top_h is None
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.top_h:
+        present: *id076
+  kwargs_positive:
+    do_sample: false
+    top_h: 0.5
+  kwargs_negative:
+    do_sample: true
+    top_h: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_top_k_not_fifty_when_greedy_warns
+  source: passB
+  constraint_key:
+  - top_k
+  - presence
+  - '{requires=top_k == 50 (or None),when={do_sample=False}}'
+  tolerant_key:
+  - top_k
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.top_k
+  predicate_kind: cross_field
+  predicate_value: &id077
+    when:
+      do_sample: false
+    requires: top_k == 50 (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.top_k:
+        present: *id077
+  kwargs_positive:
+    do_sample: false
+    top_k: 5
+  kwargs_negative:
+    do_sample: true
+    top_k: 5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_top_p_not_one_when_greedy_warns
+  source: passB
+  constraint_key:
+  - top_p
+  - presence
+  - '{requires=top_p == 1.0 (or None),when={do_sample=False}}'
+  tolerant_key:
+  - top_p
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.top_p
+  predicate_kind: cross_field
+  predicate_value: &id078
+    when:
+      do_sample: false
+    requires: top_p == 1.0 (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.top_p:
+        present: *id078
+  kwargs_positive:
+    do_sample: false
+    top_p: 0.5
+  kwargs_negative:
+    do_sample: true
+    top_p: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_fpquantConfig_transform_init_allowlist
+  source: passB
+  constraint_key:
+  - transform_init
+  - membership
+  - '{in=[gsr,hadamard,identity]}'
+  tolerant_key:
+  - transform_init
+  - membership
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.transform_init
+  predicate_kind: enum
+  predicate_value: &id079
+    in:
+    - hadamard
+    - identity
+    - gsr
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.transform_init:
+        not_in: *id079
+  kwargs_positive:
+    transform_init: __nonsense__
+  kwargs_negative:
+    transform_init: hadamard
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_generationConfig_typical_p_not_one_when_greedy_warns
+  source: passB
+  constraint_key:
+  - typical_p
+  - presence
+  - '{requires=typical_p == 1.0 (or None),when={do_sample=False}}'
+  tolerant_key:
+  - typical_p
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.typical_p
+  predicate_kind: cross_field
+  predicate_value: &id080
+    when:
+      do_sample: false
+    requires: typical_p == 1.0 (or None)
+  severity: warn
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.typical_p:
+        present: *id080
+  kwargs_positive:
+    do_sample: false
+    typical_p: 0.5
+  kwargs_negative:
+    do_sample: true
+    typical_p: 0.5
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+- id: transformers_cache_choice_use_cache_eq_false
+  source: mech
+  constraint_key:
+  - use_cache
+  - exact
+  - 'False'
+  tolerant_key:
+  - use_cache
+  - exact
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: dormant
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.use_cache: false
+  kwargs_positive:
+    cache_implementation: static
+    use_cache: false
+  kwargs_negative:
+    cache_implementation: null
+    use_cache: false
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - mech
+- id: transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig
+  source: mech
+  constraint_key:
+  - watermarking_config
+  - type
+  - '{present=True,type_is_not=[WatermarkingConfig]}'
+  tolerant_key:
+  - watermarking_config
+  - type
+  native_type: transformers.GenerationConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config:
+        present: true
+        type_is_not:
+        - WatermarkingConfig
+  kwargs_positive:
+    watermarking_config: 42
+  kwargs_negative:
+    watermarking_config: null
+  observed_outcome: error
+  contributing_sources:
+  - mech
+- id: transformers_fineGrainedFP8Config_weight_block_size_positive
+  source: passB
+  constraint_key:
+  - weight_block_size
+  - numeric
+  - '{requires=both entries > 0}'
+  tolerant_key:
+  - weight_block_size
+  - numeric
+  native_type: transformers.FineGrainedFP8Config
+  native_field: FineGrainedFP8Config.weight_block_size
+  predicate_kind: numeric_range
+  predicate_value: &id081
+    requires: both entries > 0
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FineGrainedFP8Config.weight_block_size:
+        present: *id081
+  kwargs_positive:
+    weight_block_size:
+    - 0
+    - 128
+  kwargs_negative:
+    weight_block_size:
+    - 128
+    - 128
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_fineGrainedFP8Config_weight_block_size_len_two
+  source: passB
+  constraint_key:
+  - weight_block_size
+  - presence
+  - '{requires=len(weight_block_size) == 2}'
+  tolerant_key:
+  - weight_block_size
+  - presence
+  native_type: transformers.FineGrainedFP8Config
+  native_field: FineGrainedFP8Config.weight_block_size
+  predicate_kind: cross_field
+  predicate_value: &id082
+    requires: len(weight_block_size) == 2
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      FineGrainedFP8Config.weight_block_size:
+        present: *id082
+  kwargs_positive:
+    weight_block_size:
+    - 128
+  kwargs_negative:
+    weight_block_size:
+    - 128
+    - 128
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_quantoConfig_weights_allowlist
+  source: passB
+  constraint_key:
+  - weights
+  - membership
+  - '{in=[float8,int2,int4,int8]}'
+  tolerant_key:
+  - weights
+  - membership
+  native_type: transformers.QuantoConfig
+  native_field: QuantoConfig.weights
+  predicate_kind: enum
+  predicate_value: &id083
+    in:
+    - float8
+    - int8
+    - int4
+    - int2
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      QuantoConfig.weights:
+        not_in: *id083
+  kwargs_positive:
+    weights: int3
+  kwargs_negative:
+    weights: int8
+  observed_outcome: error
+  contributing_sources:
+  - passB
+- id: transformers_eetqConfig_weights_must_be_int8
+  source: passB
+  constraint_key:
+  - weights
+  - membership
+  - '{in=[int8]}'
+  tolerant_key:
+  - weights
+  - membership
+  native_type: transformers.EetqConfig
+  native_field: EetqConfig.weights
+  predicate_kind: enum
+  predicate_value: &id084
+    in:
+    - int8
+  severity: error
+  runtime: confirmed
+  match:
+    engine: transformers
+    fields:
+      EetqConfig.weights:
+        not_in: *id084
+  kwargs_positive:
+    weights: int4
+  kwargs_negative:
+    weights: int8
+  observed_outcome: error
+  contributing_sources:
+  - passB
+unverified:
+- id: transformers_pretrainedConfig_validate_token_ids_out_of_vocab_warns
+  source: passA
+  constraint_key:
+  - <*_token_id>
+  - numeric
+  - '{ge=0,lt=vocab_size}'
+  tolerant_key:
+  - <*_token_id>
+  - numeric
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.<*_token_id>
+  predicate_kind: range
+  predicate_value: &id085
+    ge: 0
+    lt: vocab_size
+  severity: warning
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.<*_token_id>:
+        present: *id085
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: transformers_pretrainedConfig_validate_token_ids_in_vocab
+  source: passB
+  constraint_key:
+  - <any *_token_id>
+  - numeric
+  - '{applies_to=fields ending in _token_id,exclusiveMaximum=vocab_size,minimum=0}'
+  tolerant_key:
+  - <any *_token_id>
+  - numeric
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.<any *_token_id>
+  predicate_kind: numeric_range
+  predicate_value: &id086
+    minimum: 0
+    exclusiveMaximum: vocab_size
+    applies_to: fields ending in _token_id
+  severity: warn
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.<any *_token_id>:
+        present: *id086
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_generationConfig_strict_minor_issue_raises
+  source: passA
+  constraint_key:
+  - <any minor-issue flag>
+  - presence
+  - '{strict_true_promotes_warn_to_raise=True}'
+  tolerant_key:
+  - <any minor-issue flag>
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.<any minor-issue flag>
+  predicate_kind: presence_conflict
+  predicate_value: &id087
+    strict_true_promotes_warn_to_raise: true
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.<any minor-issue flag>:
+        present: *id087
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: transformers_generationConfig_no_generate_only_arguments
+  source: passA
+  constraint_key:
+  - <generate-only kwargs>
+  - presence
+  - '{reject_keys=[assistant_model,logits_processor,negative_prompt_attention_mask,negative_prompt_ids,prefix_allowed_tokens_fn,stopping_criteria,streamer,synced_gpus]}'
+  tolerant_key:
+  - <generate-only kwargs>
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.<generate-only kwargs>
+  predicate_kind: presence_conflict
+  predicate_value: &id088
+    reject_keys:
+    - logits_processor
+    - stopping_criteria
+    - prefix_allowed_tokens_fn
+    - synced_gpus
+    - assistant_model
+    - streamer
+    - negative_prompt_ids
+    - negative_prompt_attention_mask
+  severity: error
+  runtime: infra_error
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.<generate-only kwargs>:
+        present: *id088
+  kwargs_positive:
+    logits_processor: []
+  kwargs_negative:
+    temperature: 1.0
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: transformers_bitsAndBytesConfig_post_init_type_checks
+  source: passA
+  constraint_key:
+  - <typed fields>
+  - type
+  - '{bool=[bnb_4bit_use_double_quant,llm_int8_enable_fp32_cpu_offload,llm_int8_has_fp16_weight,load_in_4bit,load_in_8bit],float=[llm_int8_threshold],list_or_none=[llm_int8_skip_modules],str=[bnb_4bit_quant_type]}'
+  tolerant_key:
+  - <typed fields>
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.<typed fields>
+  predicate_kind: type_is
+  predicate_value: &id089
+    bool:
+    - load_in_4bit
+    - load_in_8bit
+    - llm_int8_enable_fp32_cpu_offload
+    - llm_int8_has_fp16_weight
+    - bnb_4bit_use_double_quant
+    float:
+    - llm_int8_threshold
+    str:
+    - bnb_4bit_quant_type
+    list_or_none:
+    - llm_int8_skip_modules
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      BitsAndBytesConfig.<typed fields>:
+        type_is_not: *id089
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: transformers_bnb_load_in_4bit_8bit_mutual_exclusion
+  source: passB
+  constraint_key:
+  - BitsAndBytesConfig
+  - presence
+  - '{forbidden_together=[load_in_4bit,load_in_8bit]}'
+  tolerant_key:
+  - BitsAndBytesConfig
+  - presence
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig
+  predicate_kind: mutual_exclusion
+  predicate_value: &id090
+    forbidden_together:
+    - load_in_4bit
+    - load_in_8bit
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      transformers.BitsAndBytesConfig:
+        present: *id090
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_torchAoConfig_requires_torchao_installed
+  source: passB
+  constraint_key:
+  - TorchAoConfig
+  - presence
+  - '{requires_package=torchao}'
+  tolerant_key:
+  - TorchAoConfig
+  - presence
+  native_type: transformers.TorchAoConfig
+  native_field: TorchAoConfig
+  predicate_kind: cross_field
+  predicate_value: &id091
+    requires_package: torchao
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      transformers.TorchAoConfig:
+        present: *id091
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_generationConfig_strict_mode_promotes_minor_issues
+  source: passB
+  constraint_key:
+  - _strict
+  - presence
+  - '{effect=any minor issue (warn) is raised as a ValueError,when={strict=True}}'
+  tolerant_key:
+  - _strict
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig._strict
+  predicate_kind: cross_field
+  predicate_value: &id092
+    when:
+      strict: true
+    effect: any minor issue (warn) is raised as a ValueError
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig._strict:
+        present: *id092
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_fineGrainedFP8Config_activation_scheme_allowlist
+  source: passB
+  constraint_key:
+  - activation_scheme
+  - membership
+  - '{in=[dynamic,static]}'
+  tolerant_key:
+  - activation_scheme
+  - membership
+  native_type: transformers.FineGrainedFP8Config
+  native_field: FineGrainedFP8Config.activation_scheme
+  predicate_kind: enum
+  predicate_value: &id093
+    in:
+    - dynamic
+    - static
+  severity: error
+  runtime: infra_error
+  match:
+    engine: transformers
+    fields:
+      FineGrainedFP8Config.activation_scheme:
+        not_in: *id093
+  kwargs_positive:
+    activation_scheme: __nonsense__
+  kwargs_negative:
+    activation_scheme: static
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: infra_error
+- id: transformers_quantoConfig_activations_allowlist
+  source: passB
+  constraint_key:
+  - activations
+  - membership
+  - '{in=[,float8,int8]}'
+  tolerant_key:
+  - activations
+  - membership
+  native_type: transformers.QuantoConfig
+  native_field: QuantoConfig.activations
+  predicate_kind: enum
+  predicate_value: &id094
+    in:
+    - null
+    - int8
+    - float8
+  severity: error
+  runtime: infra_error
+  match:
+    engine: transformers
+    fields:
+      QuantoConfig.activations:
+        not_in: *id094
+  kwargs_positive:
+    activations: int4
+  kwargs_negative:
+    activations: int8
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: infra_error
+- id: transformers_hqqConfig_axis_allowlist
+  source: passB
+  constraint_key:
+  - axis
+  - membership
+  - '{in=[0,1],null_allowed=True}'
+  tolerant_key:
+  - axis
+  - membership
+  native_type: transformers.HqqConfig
+  native_field: HqqConfig.axis
+  predicate_kind: enum
+  predicate_value: &id095
+    in:
+    - 0
+    - 1
+    null_allowed: true
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      HqqConfig.axis:
+        not_in: *id095
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_awqConfig_llm_awq_backend_normalisation
+  source: passB
+  constraint_key:
+  - backend
+  - presence
+  - '{effect=format -> AwqFormat.LLM_AWQ, backend -> AwqBackend.AUTO,when={backend=llm-awq}}'
+  tolerant_key:
+  - backend
+  - presence
+  native_type: transformers.AwqConfig
+  native_field: AwqConfig.backend
+  predicate_kind: normalisation
+  predicate_value: &id096
+    when:
+      backend: llm-awq
+    effect: format -> AwqFormat.LLM_AWQ, backend -> AwqBackend.AUTO
+  severity: normalisation
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      AwqConfig.backend:
+        present: *id096
+  kwargs_positive:
+    backend: llm-awq
+  kwargs_negative:
+    backend: auto
+  observed_outcome: no_op
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: transformers_fpquantConfig_nonbf16_backward_requires_mxfp4_forward
+  source: passB
+  constraint_key:
+  - backward_dtype
+  - presence
+  - '{requires=backward_dtype == bf16 OR forward_dtype == mxfp4}'
+  tolerant_key:
+  - backward_dtype
+  - presence
+  native_type: transformers.FPQuantConfig
+  native_field: FPQuantConfig.backward_dtype
+  predicate_kind: cross_field
+  predicate_value: &id097
+    requires: backward_dtype == bf16 OR forward_dtype == mxfp4
+  severity: error
+  runtime: infra_error
+  match:
+    engine: transformers
+    fields:
+      FPQuantConfig.backward_dtype:
+        present: *id097
+  kwargs_positive:
+    forward_dtype: nvfp4
+    backward_dtype: mxfp8
+  kwargs_negative:
+    forward_dtype: mxfp4
+    backward_dtype: mxfp8
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: infra_error
+- id: transformers_bitsAndBytesConfig_compute_dtype_type
+  source: passA
+  constraint_key:
+  - bnb_4bit_compute_dtype
+  - type
+  - '[str,torch.dtype]'
+  tolerant_key:
+  - bnb_4bit_compute_dtype
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.bnb_4bit_compute_dtype
+  predicate_kind: type_is
+  predicate_value: &id098
+  - str
+  - torch.dtype
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      BitsAndBytesConfig.bnb_4bit_compute_dtype:
+        type_is_not: *id098
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: transformers_bitsAndBytesConfig_quant_storage_allowlist
+  source: passA
+  constraint_key:
+  - bnb_4bit_quant_storage
+  - membership
+  - '[bfloat16,float16,float32,float64,int8,uint8]'
+  tolerant_key:
+  - bnb_4bit_quant_storage
+  - membership
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.bnb_4bit_quant_storage
+  predicate_kind: allowlist_constant
+  predicate_value: &id099
+  - float16
+  - float32
+  - int8
+  - uint8
+  - float64
+  - bfloat16
+  severity: error
+  runtime: infra_error
+  match:
+    engine: transformers
+    fields:
+      BitsAndBytesConfig.bnb_4bit_quant_storage:
+        not_in: *id099
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: infra_error
+- id: transformers_raises_bnb_4bit_quant_type_not_type_str
+  source: mech
+  constraint_key:
+  - bnb_4bit_quant_type
+  - type
+  - str
+  tolerant_key:
+  - bnb_4bit_quant_type
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_quant_type:
+        type_is_not: str
+  kwargs_positive:
+    bnb_4bit_quant_type: 1
+  kwargs_negative:
+    bnb_4bit_quant_type: x
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_raises_bnb_4bit_use_double_quant_not_type_bool
+  source: mech
+  constraint_key:
+  - bnb_4bit_use_double_quant
+  - type
+  - bool
+  tolerant_key:
+  - bnb_4bit_use_double_quant
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_use_double_quant:
+        type_is_not: bool
+  kwargs_positive:
+    bnb_4bit_use_double_quant: 1
+  kwargs_negative:
+    bnb_4bit_use_double_quant: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_watermarkingConfig_context_width_ge_1
+  source: passA
+  constraint_key:
+  - context_width
+  - numeric
+  - '{ge=1}'
+  tolerant_key:
+  - context_width
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: WatermarkingConfig.context_width
+  predicate_kind: range
+  predicate_value: &id100
+    ge: 1
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      WatermarkingConfig.context_width:
+        present: *id100
+  kwargs_positive:
+    watermarking_config:
+      seeding_scheme: lefthash
+      context_width: 0
+  kwargs_negative:
+    watermarking_config:
+      seeding_scheme: lefthash
+      context_width: 1
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: transformers_watermarkingConfig_context_width_positive
+  source: passB
+  constraint_key:
+  - context_width
+  - numeric
+  - '{minimum=1}'
+  tolerant_key:
+  - context_width
+  - numeric
+  native_type: transformers.WatermarkingConfig
+  native_field: WatermarkingConfig.context_width
+  predicate_kind: numeric_range
+  predicate_value: &id101
+    minimum: 1
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      WatermarkingConfig.context_width:
+        present: *id101
+  kwargs_positive:
+    context_width: 0
+  kwargs_negative:
+    context_width: 1
+  observed_outcome: no_op
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: transformers_watermarkingConfig_greenlist_ratio_range
+  source: passA
+  constraint_key:
+  - greenlist_ratio
+  - numeric
+  - '{ge=0,le=1}'
+  tolerant_key:
+  - greenlist_ratio
+  - numeric
+  native_type: transformers.GenerationConfig
+  native_field: WatermarkingConfig.greenlist_ratio
+  predicate_kind: range
+  predicate_value: &id102
+    ge: 0.0
+    le: 1.0
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      WatermarkingConfig.greenlist_ratio:
+        present: *id102
+  kwargs_positive:
+    watermarking_config:
+      seeding_scheme: lefthash
+      greenlist_ratio: 1.5
+  kwargs_negative:
+    watermarking_config:
+      seeding_scheme: lefthash
+      greenlist_ratio: 0.25
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: transformers_watermarkingConfig_greenlist_ratio_in_unit_interval
+  source: passB
+  constraint_key:
+  - greenlist_ratio
+  - numeric
+  - '{maximum=1,minimum=0}'
+  tolerant_key:
+  - greenlist_ratio
+  - numeric
+  native_type: transformers.WatermarkingConfig
+  native_field: WatermarkingConfig.greenlist_ratio
+  predicate_kind: numeric_range
+  predicate_value: &id103
+    minimum: 0.0
+    maximum: 1.0
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      WatermarkingConfig.greenlist_ratio:
+        present: *id103
+  kwargs_positive:
+    greenlist_ratio: 1.5
+  kwargs_negative:
+    greenlist_ratio: 0.25
+  observed_outcome: no_op
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: transformers_pretrainedConfig_validate_architecture_head_dim
+  source: passA
+  constraint_key:
+  - head_dim
+  - numeric
+  - '{eq=embed_dim / num_heads,when=head_dim and num_heads and embed_dim all set}'
+  tolerant_key:
+  - head_dim
+  - numeric
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.head_dim
+  predicate_kind: range
+  predicate_value: &id104
+    eq: embed_dim / num_heads
+    when: head_dim and num_heads and embed_dim all set
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.head_dim:
+        present: *id104
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: transformers_vptqLayerConfig_is_indice_packed_must_be_true
+  source: passB
+  constraint_key:
+  - is_indice_packed
+  - exact
+  - '{equals=True}'
+  tolerant_key:
+  - is_indice_packed
+  - exact
+  native_type: transformers.VptqConfig
+  native_field: VptqLayerConfig.is_indice_packed
+  predicate_kind: identity
+  predicate_value: &id105
+    equals: true
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      VptqLayerConfig.is_indice_packed:
+        present: *id105
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool
+  source: mech
+  constraint_key:
+  - llm_int8_enable_fp32_cpu_offload
+  - type
+  - bool
+  tolerant_key:
+  - llm_int8_enable_fp32_cpu_offload
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_enable_fp32_cpu_offload:
+        type_is_not: bool
+  kwargs_positive:
+    llm_int8_enable_fp32_cpu_offload: 1
+  kwargs_negative:
+    llm_int8_enable_fp32_cpu_offload: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_raises_llm_int8_has_fp16_weight_not_type_bool
+  source: mech
+  constraint_key:
+  - llm_int8_has_fp16_weight
+  - type
+  - bool
+  tolerant_key:
+  - llm_int8_has_fp16_weight
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_has_fp16_weight:
+        type_is_not: bool
+  kwargs_positive:
+    llm_int8_has_fp16_weight: 1
+  kwargs_negative:
+    llm_int8_has_fp16_weight: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_raises_llm_int8_skip_modules_not_type_list
+  source: mech
+  constraint_key:
+  - llm_int8_skip_modules
+  - type
+  - '{present=True,type_is_not=list}'
+  tolerant_key:
+  - llm_int8_skip_modules
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_skip_modules:
+        type_is_not: list
+        present: true
+  kwargs_positive:
+    llm_int8_skip_modules: true
+  kwargs_negative:
+    llm_int8_skip_modules: []
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_raises_llm_int8_threshold_not_type_float
+  source: mech
+  constraint_key:
+  - llm_int8_threshold
+  - type
+  - float
+  tolerant_key:
+  - llm_int8_threshold
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_threshold:
+        type_is_not: float
+  kwargs_positive:
+    llm_int8_threshold: x
+  kwargs_negative:
+    llm_int8_threshold: 1.0
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_bitsAndBytesConfig_4bit_8bit_mutually_exclusive
+  source: passA
+  constraint_key:
+  - load_in_4bit
+  - presence
+  - '{not_both_true=[load_in_4bit,load_in_8bit]}'
+  tolerant_key:
+  - load_in_4bit
+  - presence
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.load_in_4bit
+  predicate_kind: mutual_exclusion
+  predicate_value: &id106
+    not_both_true:
+    - load_in_4bit
+    - load_in_8bit
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      BitsAndBytesConfig.load_in_4bit:
+        present: *id106
+  kwargs_positive:
+    load_in_4bit: true
+    load_in_8bit: true
+  kwargs_negative:
+    load_in_4bit: true
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: transformers_raises_load_in_4bit_not_type_bool
+  source: mech
+  constraint_key:
+  - load_in_4bit
+  - type
+  - bool
+  tolerant_key:
+  - load_in_4bit
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        type_is_not: bool
+  kwargs_positive:
+    load_in_4bit: 1
+  kwargs_negative:
+    load_in_4bit: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_raises_load_in_8bit_not_type_bool
+  source: mech
+  constraint_key:
+  - load_in_8bit
+  - type
+  - bool
+  tolerant_key:
+  - load_in_8bit
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_8bit:
+        type_is_not: bool
+  kwargs_positive:
+    load_in_8bit: 1
+  kwargs_negative:
+    load_in_8bit: true
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  gate_status: failed
+- id: transformers_gptqConfig_modules_in_block_requires_optimum_115
+  source: passB
+  constraint_key:
+  - modules_in_block_to_quantize
+  - presence
+  - '{requires_package=optimum >= 1.15.0}'
+  tolerant_key:
+  - modules_in_block_to_quantize
+  - presence
+  native_type: transformers.GPTQConfig
+  native_field: GPTQConfig.modules_in_block_to_quantize
+  predicate_kind: cross_field
+  predicate_value: &id107
+    requires_package: optimum >= 1.15.0
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      GPTQConfig.modules_in_block_to_quantize:
+        present: *id107
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_sinqConfig_nbits_int_coercible
+  source: passB
+  constraint_key:
+  - nbits
+  - type
+  - '{coercible_to=int}'
+  tolerant_key:
+  - nbits
+  - type
+  native_type: transformers.SinqConfig
+  native_field: SinqConfig.nbits
+  predicate_kind: type_check
+  predicate_value: &id108
+    coercible_to: int
+  severity: error
+  runtime: infra_error
+  match:
+    engine: transformers
+    fields:
+      SinqConfig.nbits:
+        type_is_not: *id108
+  kwargs_positive:
+    nbits: abc
+  kwargs_negative:
+    nbits: 4
+  observed_outcome: error
+  contributing_sources:
+  - passB
+  gate_status: infra_error
+- id: transformers_pretrainedConfig_num_labels_id2label_length_mismatch_warns
+  source: passB
+  constraint_key:
+  - num_labels
+  - presence
+  - '{requires=len(id2label) == num_labels,when=id2label set and num_labels set}'
+  tolerant_key:
+  - num_labels
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.num_labels
+  predicate_kind: cross_field
+  predicate_value: &id109
+    when: id2label set and num_labels set
+    requires: len(id2label) == num_labels
+  severity: warn
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.num_labels:
+        present: *id109
+  kwargs_positive:
+    id2label:
+      '0': a
+      '1': b
+    num_labels: 3
+  kwargs_negative:
+    id2label:
+      '0': a
+      '1': b
+    num_labels: 2
+  observed_outcome: dormant_announced
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: transformers_pretrainedConfig_output_attentions_requires_eager
+  source: passA
+  constraint_key:
+  - output_attentions
+  - presence
+  - '{output_attentions_true_and_attn_implementation_not_eager=True}'
+  tolerant_key:
+  - output_attentions
+  - presence
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.output_attentions
+  predicate_kind: presence_conflict
+  predicate_value: &id110
+    output_attentions_true_and_attn_implementation_not_eager: true
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.output_attentions:
+        present: *id110
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passA
+  gate_status: skipped
+- id: transformers_bnb_post_init_type_checks_torch_gated
+  source: passB
+  constraint_key:
+  - post_init
+  - type
+  - '{isinstance_checks=[bnb_4bit_compute_dtype,bnb_4bit_quant_type,bnb_4bit_use_double_quant,llm_int8_enable_fp32_cpu_offload,llm_int8_has_fp16_weight,llm_int8_skip_modules,llm_int8_threshold,load_in_4bit,load_in_8bit]}'
+  tolerant_key:
+  - post_init
+  - type
+  native_type: transformers.BitsAndBytesConfig
+  native_field: BitsAndBytesConfig.post_init
+  predicate_kind: type_check
+  predicate_value: &id111
+    isinstance_checks:
+    - load_in_4bit
+    - load_in_8bit
+    - llm_int8_threshold
+    - llm_int8_skip_modules
+    - llm_int8_enable_fp32_cpu_offload
+    - llm_int8_has_fp16_weight
+    - bnb_4bit_compute_dtype
+    - bnb_4bit_quant_type
+    - bnb_4bit_use_double_quant
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      BitsAndBytesConfig.post_init:
+        type_is_not: *id111
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_generationConfig_from_model_config_sets_return_dict_when_output_flags
+  source: passB
+  constraint_key:
+  - return_dict_in_generate
+  - presence
+  - '{effect=if any extra_output_flag is True and return_dict_in_generate is falsey,
+    it is silently set True}'
+  tolerant_key:
+  - return_dict_in_generate
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.return_dict_in_generate
+  predicate_kind: normalisation
+  predicate_value: &id112
+    effect: if any extra_output_flag is True and return_dict_in_generate is falsey,
+      it is silently set True
+  severity: normalisation
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.return_dict_in_generate:
+        present: *id112
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_synthidTextWatermarkingConfig_sampling_table_size_max
+  source: passB
+  constraint_key:
+  - sampling_table_size
+  - numeric
+  - '{maximum=16777216}'
+  tolerant_key:
+  - sampling_table_size
+  - numeric
+  native_type: transformers.SynthIDTextWatermarkingConfig
+  native_field: SynthIDTextWatermarkingConfig.sampling_table_size
+  predicate_kind: numeric_range
+  predicate_value: &id113
+    maximum: 16777216
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      SynthIDTextWatermarkingConfig.sampling_table_size:
+        present: *id113
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_generationConfig_save_pretrained_runs_strict_validate
+  source: passB
+  constraint_key:
+  - save_pretrained
+  - presence
+  - '{effect=save_pretrained calls validate(strict=True); any minor issue becomes
+    a refusal-to-save raise}'
+  tolerant_key:
+  - save_pretrained
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.save_pretrained
+  predicate_kind: cross_field
+  predicate_value: &id114
+    effect: save_pretrained calls validate(strict=True); any minor issue becomes a
+      refusal-to-save raise
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.save_pretrained:
+        present: *id114
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_pretrainedConfig_save_pretrained_directory_not_file
+  source: passB
+  constraint_key:
+  - save_pretrained
+  - type
+  - '{save_directory=must not be an existing file}'
+  tolerant_key:
+  - save_pretrained
+  - type
+  native_type: transformers.PreTrainedConfig
+  native_field: PreTrainedConfig.save_pretrained
+  predicate_kind: type_check
+  predicate_value: &id115
+    save_directory: must not be an existing file
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      PreTrainedConfig.save_pretrained:
+        type_is_not: *id115
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
+- id: transformers_watermarkingConfig_seeding_scheme_allowlist
+  source: passA
+  constraint_key:
+  - seeding_scheme
+  - membership
+  - '[lefthash,selfhash]'
+  tolerant_key:
+  - seeding_scheme
+  - membership
+  native_type: transformers.GenerationConfig
+  native_field: WatermarkingConfig.seeding_scheme
+  predicate_kind: literal_in
+  predicate_value: &id116
+  - selfhash
+  - lefthash
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      WatermarkingConfig.seeding_scheme:
+        not_in: *id116
+  kwargs_positive:
+    watermarking_config:
+      seeding_scheme: __bad__
+  kwargs_negative:
+    watermarking_config:
+      seeding_scheme: lefthash
+  observed_outcome: error
+  contributing_sources:
+  - passA
+  gate_status: failed
+- id: transformers_watermarkingConfig_seeding_scheme_allowlist
+  source: passB
+  constraint_key:
+  - seeding_scheme
+  - membership
+  - '{in=[lefthash,selfhash]}'
+  tolerant_key:
+  - seeding_scheme
+  - membership
+  native_type: transformers.WatermarkingConfig
+  native_field: WatermarkingConfig.seeding_scheme
+  predicate_kind: enum
+  predicate_value: &id117
+    in:
+    - selfhash
+    - lefthash
+  severity: error
+  runtime: failed
+  match:
+    engine: transformers
+    fields:
+      WatermarkingConfig.seeding_scheme:
+        not_in: *id117
+  kwargs_positive:
+    seeding_scheme: __nonsense__
+  kwargs_negative:
+    seeding_scheme: lefthash
+  observed_outcome: no_op
+  contributing_sources:
+  - passB
+  gate_status: failed
+- id: transformers_compile_config_type_compile_config_exceeds_zero
+  source: mech
+  constraint_key:
+  - transformers_compile_config_type_compile_config_exceeds_zero
+  - presence
+  - ''
+  tolerant_key:
+  - transformers_compile_config_type_compile_config_exceeds_zero
+  - presence
+  native_type: null
+  native_field: null
+  predicate_kind: exceeds_zero
+  predicate_value: null
+  severity: null
+  runtime: unverified
+  contributing_sources:
+  - mech
+  gate_status: unreachable
+- id: transformers_watermarking_config_validate_called
+  source: mech
+  constraint_key:
+  - transformers_watermarking_config_validate_called
+  - presence
+  - ''
+  tolerant_key:
+  - transformers_watermarking_config_validate_called
+  - presence
+  native_type: null
+  native_field: null
+  predicate_kind: validate_called
+  predicate_value: null
+  severity: null
+  runtime: unverified
+  contributing_sources:
+  - mech
+  gate_status: unreachable
+- id: transformers_generationConfig_watermarking_config_validate_delegated
+  source: passB
+  constraint_key:
+  - watermarking_config
+  - presence
+  - '{delegate=self.watermarking_config.validate()}'
+  tolerant_key:
+  - watermarking_config
+  - presence
+  native_type: transformers.GenerationConfig
+  native_field: GenerationConfig.watermarking_config
+  predicate_kind: cross_field
+  predicate_value: &id118
+    delegate: self.watermarking_config.validate()
+  severity: error
+  runtime: unverified
+  match:
+    engine: transformers
+    fields:
+      GenerationConfig.watermarking_config:
+        present: *id118
+  observed_outcome: skipped_unsynthesizable
+  contributing_sources:
+  - passB
+  gate_status: skipped
