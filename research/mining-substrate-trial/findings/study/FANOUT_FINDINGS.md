@@ -96,6 +96,47 @@ the residual above plateau is the irreducible per-bump LLM-mining need. Opus
 passes remain required as GT CONTRIBUTORS (denominator), even when the
 production miner is the cheap method under evaluation.
 
+## Round 0b probe (tensorrt 1.2.1): what the 33%->74% gap actually is
+
+Diagnosed the 19 surfaced-but-mech-unconfirmed identities by predicate + reason:
+
+| predicate | reason | count | nature |
+|---|---|---|---|
+| `present` | skipped | 12 | validators on list/cross-field surfaces (allowed_backends, eagle_choices, draft_len_schedule) |
+| `<` / `<=` / `>` | failed | 6 | NOT a synthesis bug: list-typed fields (draft_len_schedule) scalar-probe type-error; abstract/context configs (DecodingBaseConfig, RayPlacementConfig per_worker_gpu_share) don't construct standalone |
+| `multifield:2` | skipped | 3 | genuine cross-field (two co-fields) |
+| `type_is_not` | skipped | 1 | clean type probe (cheap win, but tiny) |
+
+So the surfaced-but-unconfirmed gap is dominated by STRUCTURALLY HARD cases
+(list-typed values, abstract/context-dependent configs, cross-field), not
+low-hanging probe-synthesis fruit. The clean single-scalar constraints are
+already confirmed (the 15). This tempers the earlier "74% if probing were
+perfect" read: not all of the surfaced 74% is CHEAPLY reachable.
+
+Deterministic levers ranked by yield/effort/safety (1.2.1):
+1. **Miner walk-surface widening (+12, the mining-scope gap, 33%->~59%):** the
+   12 mech-MISSED are mostly PluginConfig literal_in fields the miner doesn't
+   walk (tensorrt_llm.plugin). These are CLEAN membership constraints synthesis
+   already handles - they just need surfacing. Highest-yield, cleanest win, but
+   lives in the static_invariant_miner producer (refactor-overlapping).
+2. **Schema-typed / live-reflected probe values (partial, +some of 6+12):** use
+   the field's real type (list/int/...) for probe values instead of scalar
+   sentinels - fixes list-typed cases. In-gate, principled (Track I over Track
+   S types), but does not help abstract-config / cross-field cases.
+3. **Multi-field synthesis (+3 and some present):** hold co-fields valid, vary
+   one. Needs valid co-field values; harder, partial.
+4. **Residual (abstract configs, context-dependent, semantic cross-field):**
+   likely the irreducible LLM-mining tail.
+
+**Answer to "can deterministic reach ~1.0 for invariants?":** plausibly to
+~60-70% cheaply (miner-widening + typed probes), with a STRUCTURAL tail
+(abstract/context/cross-field) that resists cheap determinism. Contrast schema,
+which IS ~1.0 deterministic (reflection is engine truth). So the product
+architecture (heavy-deterministic mine + cheap runtime-gate verify) holds for
+schema outright and for the majority of invariants; a minority of invariants
+will need LLM mining. The exact plateau needs Round 0b pushed across cells;
+1.2.1 says it is meaningfully below 1.0 for invariants.
+
 ## Fan-out readiness (what the full 15-cell x 2-track matrix needs)
 
 - **Per-version producers exist for only ~6 versions** (transformers v4_57_3 /
