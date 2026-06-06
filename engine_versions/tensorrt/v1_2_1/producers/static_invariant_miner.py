@@ -89,6 +89,7 @@ _DEFAULT_SOURCE_ROOT = Path("/tmp/trt-llm-1.2.1/tensorrt_llm")
 # Files we AST-walk.
 LLM_ARGS_REL = Path("llmapi/llm_args.py")
 BUILDER_REL = Path("builder.py")
+PLUGIN_REL = Path("plugin/plugin.py")
 
 # Probe LANDMARKS: dotted attribute paths the probe resolves under
 # ``import tensorrt_llm``. Mirrors the validator surface this miner
@@ -131,6 +132,7 @@ _CLASS_TARGETS: tuple[tuple[str, Path], ...] = (
     ("BatchingType", LLM_ARGS_REL),
     ("CapacitySchedulerPolicy", LLM_ARGS_REL),
     ("ContextChunkingPolicy", LLM_ARGS_REL),
+    ("PluginConfig", PLUGIN_REL),
 )
 
 # Method-level landmarks: ``(class_name, method_name)``. The 1.x reshuffle
@@ -459,10 +461,7 @@ def _flatten_if_chain(if_node: ast.If) -> list[tuple[ast.expr | None, list[ast.s
 def _walk_if_block(if_node: ast.If, frame: _Frame, emit: _Emitter) -> None:
     """Walk an ``if/elif/else`` chain; emit one invariant per detected body stmt."""
     for cond, body in _flatten_if_chain(if_node):
-        if cond is not None:
-            preds = _extract_predicates(cond)
-        else:
-            preds = []
+        preds = _extract_predicates(cond) if cond is not None else []
         local_frame = _Frame(predicates=[*frame.predicates, *preds])
         for stmt in body:
             detected = _detect_body(stmt)
@@ -951,18 +950,23 @@ def _extract_v_predicates(condition: ast.expr, target: str) -> list[_Predicate]:
                 }.get(op_name)
                 if flipped:
                     return [_Predicate(field=target, op=flipped, rhs=rhs)]
-    if isinstance(condition, ast.UnaryOp) and isinstance(condition.op, ast.Not):
-        if isinstance(condition.operand, ast.Call):
-            path = call_func_path(condition.operand)
-            if path and path[-1] == "isinstance" and len(condition.operand.args) == 2:
-                if (
-                    isinstance(condition.operand.args[0], ast.Name)
-                    and condition.operand.args[0].id == "v"
-                ):
-                    names = _isinstance_type_names(condition.operand.args[1])
-                    if names:
-                        rhs = names[0] if len(names) == 1 else names
-                        return [_Predicate(field=target, op="type_is_not", rhs=rhs)]
+    if (
+        isinstance(condition, ast.UnaryOp)
+        and isinstance(condition.op, ast.Not)
+        and isinstance(condition.operand, ast.Call)
+    ):
+        path = call_func_path(condition.operand)
+        if (
+            path
+            and path[-1] == "isinstance"
+            and len(condition.operand.args) == 2
+            and isinstance(condition.operand.args[0], ast.Name)
+            and condition.operand.args[0].id == "v"
+        ):
+            names = _isinstance_type_names(condition.operand.args[1])
+            if names:
+                rhs = names[0] if len(names) == 1 else names
+                return [_Predicate(field=target, op="type_is_not", rhs=rhs)]
     return []
 
 
@@ -977,12 +981,14 @@ def _walk_literal_fields(
     native_type: str,
     rel_source_path: str,
     today: str,
+    aliases: dict[str, list[Any]] | None = None,
 ) -> list[InvariantCandidate]:
     """Emit one allowlist invariant per ``Literal[...]``-typed Pydantic field.
 
     Equivalent to ``_pydantic_lift._from_literal`` but reads the AST instead
     of importing the live class - needed because TRT-LLM isn't importable
-    on the host (the design's "source-driven" contract).
+    on the host (the design's "source-driven" contract). ``aliases`` resolves
+    module-level ``Literal`` type aliases (e.g. ``DefaultPluginDtype``).
     """
     out: list[InvariantCandidate] = []
     for stmt in cls_node.body:
@@ -992,7 +998,7 @@ def _walk_literal_fields(
             continue
         field_name = stmt.target.id
         annotation = stmt.annotation
-        values = _literal_args(annotation)
+        values = _literal_args(annotation, aliases)
         if values is None:
             continue
         out.append(
@@ -1008,34 +1014,68 @@ def _walk_literal_fields(
     return out
 
 
-def _literal_args(annotation: ast.expr) -> list[Any] | None:
+def _collect_literal_aliases(module: ast.Module) -> dict[str, list[Any]]:
+    """Map module-level ``Name = Literal[...]`` aliases to their values.
+
+    TRT-LLM's plugin config defines ``DefaultPluginDtype = Literal[...]`` and
+    types many fields as ``Optional[DefaultPluginDtype]``; resolving the alias
+    lets the literal-lift recover those membership allowlists.
+    """
+    aliases: dict[str, list[Any]] = {}
+    for stmt in module.body:
+        target_name: str | None = None
+        value: ast.expr | None = None
+        if (
+            isinstance(stmt, ast.Assign)
+            and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], ast.Name)
+        ):
+            target_name, value = stmt.targets[0].id, stmt.value
+        elif (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.value is not None
+        ):
+            target_name, value = stmt.target.id, stmt.value
+        if target_name and value is not None:
+            vals = _literal_args(value)
+            if vals is not None:
+                aliases[target_name] = vals
+    return aliases
+
+
+def _literal_args(
+    annotation: ast.expr, aliases: dict[str, list[Any]] | None = None
+) -> list[Any] | None:
     """Return the literal values from an ``ast`` annotation, or None.
 
-    Handles bare ``Literal['a', 'b']`` and the common ``Optional[Literal[...]]``
-    / ``Literal[...] | None`` shapes.
+    Handles bare ``Literal['a', 'b']``, ``Optional[Literal[...]]``,
+    ``Literal[...] | None``, and module-level ``Literal`` aliases (resolved via
+    ``aliases``, e.g. ``Optional[DefaultPluginDtype]``).
     """
-    if (
-        isinstance(annotation, ast.Subscript)
-        and isinstance(annotation.value, ast.Name)
-        and annotation.value.id == "Literal"
-    ):
-        slice_node = annotation.slice
-        elts: list[ast.expr]
-        if isinstance(slice_node, ast.Tuple):
-            elts = list(slice_node.elts)
-        else:
-            elts = [slice_node]
-        out: list[Any] = []
-        for elt in elts:
-            ok, v = _literal_value(elt)
-            if not ok:
-                return None
-            out.append(v)
-        return out
+    aliases = aliases or {}
+    # Bare alias name: ``DefaultPluginDtype``.
+    if isinstance(annotation, ast.Name) and annotation.id in aliases:
+        return list(aliases[annotation.id])
+    if isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name):
+        head = annotation.value.id
+        if head == "Literal":
+            slice_node = annotation.slice
+            elts = list(slice_node.elts) if isinstance(slice_node, ast.Tuple) else [slice_node]
+            out: list[Any] = []
+            for elt in elts:
+                ok, v = _literal_value(elt)
+                if not ok:
+                    return None
+                out.append(v)
+            return out
+        if head == "Optional":
+            # ``Optional[Literal[...]]`` / ``Optional[DefaultPluginDtype]``.
+            return _literal_args(annotation.slice, aliases)
     if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
         # ``Literal[...] | None`` - pull the Literal side.
         for side in (annotation.left, annotation.right):
-            inner = _literal_args(side)
+            inner = _literal_args(side, aliases)
             if inner is not None:
                 return inner
     return None
@@ -1066,7 +1106,9 @@ def _make_literal_rule(
             method="<literal_field>",
             line_at_scan=line,
         ),
-        match_fields={f"{NAMESPACE}.{field_name}": {"in": list(values)}},
+        match_fields={
+            f"{NAMESPACE}.{field_name}": {"not_in": list(values)}
+        },  # firing cond: value NOT in allowlist -> membership bucket
         kwargs_positive={field_name: sample_invalid},
         kwargs_negative={field_name: sample_valid},
         expected_outcome={
@@ -1101,9 +1143,12 @@ def _walk_strenum(
     for item in cls_node.body:
         if isinstance(item, ast.Assign) and len(item.targets) == 1:
             target = item.targets[0]
-            if isinstance(target, ast.Name) and isinstance(item.value, ast.Constant):
-                if isinstance(item.value.value, str):
-                    values.append(item.value.value)
+            if (
+                isinstance(target, ast.Name)
+                and isinstance(item.value, ast.Constant)
+                and isinstance(item.value.value, str)
+            ):
+                values.append(item.value.value)
     if not values:
         return None
     cls_short = cls_node.name
@@ -1123,7 +1168,9 @@ def _walk_strenum(
             method="<strenum>",
             line_at_scan=cls_node.lineno,
         ),
-        match_fields={f"{NAMESPACE}.{field_name}": {"in": list(values)}},
+        match_fields={
+            f"{NAMESPACE}.{field_name}": {"not_in": list(values)}
+        },  # firing cond: value NOT in allowlist -> membership bucket
         kwargs_positive={field_name: "<invalid_static_miner_probe>"},
         kwargs_negative={field_name: values[0]},
         expected_outcome={
@@ -1151,8 +1198,10 @@ class _SourceTree:
 
     llm_args: ast.Module
     builder: ast.Module
+    plugin: ast.Module
     llm_args_rel: str
     builder_rel: str
+    plugin_rel: str
 
 
 def _read_module(path: Path) -> ast.Module:
@@ -1168,21 +1217,23 @@ def _load_source(source_root: Path) -> _SourceTree:
         )
     llm_args_path = source_root / LLM_ARGS_REL
     builder_path = source_root / BUILDER_REL
-    if not llm_args_path.is_file():
-        raise MinerLandmarkMissingError(
-            "tensorrt_llm/llmapi/llm_args.py",
-            detail=f"missing at {llm_args_path}",
-        )
-    if not builder_path.is_file():
-        raise MinerLandmarkMissingError(
-            "tensorrt_llm/builder.py", detail=f"missing at {builder_path}"
-        )
+    plugin_path = source_root / PLUGIN_REL
+    for label, path in (
+        ("tensorrt_llm/llmapi/llm_args.py", llm_args_path),
+        ("tensorrt_llm/builder.py", builder_path),
+        ("tensorrt_llm/plugin/plugin.py", plugin_path),
+    ):
+        if not path.is_file():
+            raise MinerLandmarkMissingError(label, detail=f"missing at {path}")
     llm_args = _read_module(llm_args_path)
     builder = _read_module(builder_path)
+    plugin = _read_module(plugin_path)
+
+    modules_by_rel = {LLM_ARGS_REL: llm_args, BUILDER_REL: builder, PLUGIN_REL: plugin}
 
     # Class landmarks - fail-loud if any are missing.
     for cls_name, rel in _CLASS_TARGETS:
-        module = llm_args if rel == LLM_ARGS_REL else builder
+        module = modules_by_rel.get(rel, llm_args)
         if find_class(module, cls_name) is None:
             raise MinerLandmarkMissingError(
                 f"{rel}::{cls_name}",
@@ -1192,8 +1243,10 @@ def _load_source(source_root: Path) -> _SourceTree:
     return _SourceTree(
         llm_args=llm_args,
         builder=builder,
+        plugin=plugin,
         llm_args_rel=str(LLM_ARGS_REL),
         builder_rel=str(BUILDER_REL),
+        plugin_rel=str(PLUGIN_REL),
     )
 
 
@@ -1244,6 +1297,7 @@ def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandid
         )
 
     # 2) Source-driven Literal-field lift on Pydantic configs.
+    llm_args_aliases = _collect_literal_aliases(tree.llm_args)
     for cls_name in _LITERAL_LIFT_CLASSES:
         cls = find_class(tree.llm_args, cls_name)
         assert cls is not None
@@ -1253,6 +1307,22 @@ def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandid
                 native_type=f"{LIBRARY}.{cls_name}",
                 rel_source_path=tree.llm_args_rel,
                 today=today,
+                aliases=llm_args_aliases,
+            )
+        )
+
+    # 2b) Literal-field lift on PluginConfig (lives in plugin/plugin.py, not
+    # llm_args.py). gemm_plugin / *_plugin fields are Optional[Literal[...]]
+    # allowlists - a whole membership surface the llm_args-only walk missed.
+    plugin_cls = find_class(tree.plugin, "PluginConfig")
+    if plugin_cls is not None:
+        candidates.extend(
+            _walk_literal_fields(
+                plugin_cls,
+                native_type=f"{LIBRARY}.PluginConfig",
+                rel_source_path=tree.plugin_rel,
+                today=today,
+                aliases=_collect_literal_aliases(tree.plugin),
             )
         )
 
