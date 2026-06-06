@@ -412,10 +412,16 @@ parameters that CHANGED as a result. Findings detail in
 
 ### 15.3 Findings to date (tensorrt only)
 
-- **tensorrt 1.2.1 invariant GT (constraint grain):** union **212 constraints**,
-  **60 gate-confirmed**, GT-growth **+23 vs PoC**. (Old tolerant-grain numbers -
-  46 confirmed / 144 union - were inflated; superseded.) Two adversarial reviews
-  + a domain review: GT content **100% substantively correct** on a ~22-entry
+- **tensorrt 1.2.1 invariant GT (constraint grain):** RE-GATED to union **228
+  constraints**, **74 gate-confirmed**, GT-growth **+37 vs PoC** - after folding
+  the widened production miner in as a committed union source
+  (`prod_static_miner.yaml`); the +14 vs the prior 60 = 13 plugin-literal
+  constraints confirmed outside the old union + 1 promoted tail. (Pre-re-gate:
+  212 / 60; old tolerant-grain 144 / 46 - both superseded.) Circularity caveat:
+  only 45 of the 74 confirmed have an independent Opus/PoC contributor, so the
+  deterministic-ceiling measurement deliberately keeps the frozen 60/212
+  denominator (see FANOUT_FINDINGS GT-re-gate note). Two adversarial reviews + a
+  domain review: GT content **100% substantively correct** on a ~22-entry
   sample; pipeline + anti-tautology design sound; attribution tightening dropped
   0 confirmations.
 - **tensorrt 0.21.0:** 128 union / 3 confirmed (mech d-ab + PoC only, NO Opus
@@ -442,10 +448,9 @@ parameters that CHANGED as a result. Findings detail in
 1. DONE - **deterministic ceiling recomputed at constraint grain** (mech-only 25%;
    lever-1 46.7% recall + GT-growth +13; see 15.3 and FANOUT_FINDINGS.md).
 2. DONE - **lever 1 re-measured on the frozen denominator** (surfacing / recall /
-   GT-growth reported separately). Remaining reviewer should-fixes: re-gate the GT
-   to fold in the +13 grown constraints (-> 73 confirmed / 225 union); teach the
-   schema gate to resolve `$ref` (or soften the "resolves to nested types"
-   wording); add a vLLM noise-filter regression test.
+   GT-growth reported separately); **GT re-gated to 74 confirmed / 228 union**
+   (prod folded in); schema gate now **resolves `$ref`** to target type; **vLLM
+   noise-filter regression test** added.
 3. Carry the validated methodology to more cells (tensorrt 0.21->1.0 major
    boundary = headline bump-robustness pair; needs 1.0 container + Opus passes).
    Per-version producers exist for only ~6 versions; the window needs ~9 more

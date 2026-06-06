@@ -6,8 +6,8 @@ round: R0_pilot
 gate: scripts/validate_invariants.py (in nvcr.io/nvidia/tensorrt-llm/release:1.2.1)
 identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
   tolerant_key = first two, for cross-source recall
-n_confirmed: 60
-n_unverified: 152
+n_confirmed: 74
+n_unverified: 154
 confirmed:
 - id: tensorrt_decodingbaseconfig__validate_acceptance_length_threshold_acceptance_length_threshold_lt
   source: mech
@@ -380,6 +380,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_pluginConfig_bert_attention_plugin_default_dtype_literal
   source: passB
   constraint_key:
@@ -413,6 +414,7 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+  - prod
 - id: tensorrt_samplingParams_best_of_gt_1_greedy_requires_env
   source: passA
   constraint_key:
@@ -473,6 +475,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_torchCompileConfig_capture_num_tokens_positive
   source: passA
   constraint_key:
@@ -533,6 +536,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_calibConfig_device_literal
   source: passA
   constraint_key:
@@ -564,6 +568,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_pluginConfig_dtype_not_auto
   source: passB
   constraint_key:
@@ -594,6 +599,39 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_pluginconfig_fp8_rowwise_gemm_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - fp8_rowwise_gemm_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - fp8_rowwise_gemm_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.fp8_rowwise_gemm_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    fp8_rowwise_gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    fp8_rowwise_gemm_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_kvCacheConfig_free_gpu_memory_fraction_range
   source: passA
   constraint_key:
@@ -655,6 +693,7 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+  - prod
 - id: tensorrt_pluginConfig_gemm_plugin_literal
   source: passA
   constraint_key:
@@ -688,6 +727,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_pluginConfig_gemm_swiglu_plugin_literal
   source: passB
   constraint_key:
@@ -717,6 +757,40 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+  - prod
+- id: tensorrt_pluginconfig_gpt_attention_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - gpt_attention_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - gpt_attention_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gpt_attention_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    gpt_attention_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    gpt_attention_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_baseLlmArgs_guided_decoding_backend_literal
   source: passA
   constraint_key:
@@ -748,6 +822,40 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
+- id: tensorrt_pluginconfig_identity_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - identity_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - identity_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.identity_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    identity_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    identity_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_cacheTransceiverConfig_kv_transfer_sender_future_timeout_ms_gt_0
   source: passB
   constraint_key:
@@ -804,6 +912,39 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: tensorrt_pluginconfig_layernorm_quantization_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - layernorm_quantization_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - layernorm_quantization_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.layernorm_quantization_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    layernorm_quantization_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    layernorm_quantization_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_baseLlmArgs_load_format_literal
   source: passA
   constraint_key:
@@ -831,6 +972,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_loraConfig_lora_ckpt_source_literal
   source: passA
   constraint_key:
@@ -862,6 +1004,39 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_pluginconfig_lora_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - lora_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - lora_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    lora_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    lora_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_pluginConfig_low_latency_gemm_plugin_literal
   source: passB
   constraint_key:
@@ -891,6 +1066,7 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+  - prod
 - id: tensorrt_pluginConfig_low_latency_gemm_swiglu_plugin_literal
   source: passB
   constraint_key:
@@ -920,6 +1096,40 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+  - prod
+- id: tensorrt_pluginconfig_mamba_conv1d_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - mamba_conv1d_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - mamba_conv1d_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.mamba_conv1d_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    mamba_conv1d_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    mamba_conv1d_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_kvCacheConfig_mamba_ssm_cache_dtype_literal
   source: passA
   constraint_key:
@@ -1146,6 +1356,7 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - mech
+  - prod
 - id: tensorrt_lookaheadDecodingConfig_max_ngram_size_positive
   source: passA
   constraint_key:
@@ -1229,6 +1440,7 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - mech
+  - prod
 - id: tensorrt_lookaheadDecodingConfig_max_verification_set_size_positive
   source: passA
   constraint_key:
@@ -1282,6 +1494,7 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - mech
+  - prod
 - id: tensorrt_lookaheadDecodingConfig_max_window_size_positive
   source: passA
   constraint_key:
@@ -1343,6 +1556,73 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
+- id: tensorrt_pluginconfig_moe_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - moe_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - moe_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    moe_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    moe_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
+- id: tensorrt_pluginconfig_nccl_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - nccl_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - nccl_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.nccl_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    nccl_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    nccl_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_baseLlmArgs_orchestrator_type_literal
   source: passA
   constraint_key:
@@ -1374,6 +1654,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_rayplacementconfig_validate_ray_placement_per_worker_gpu_share_le
   source: mech
   constraint_key:
@@ -1428,6 +1709,39 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_pluginconfig_qserve_gemm_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - qserve_gemm_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - qserve_gemm_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.qserve_gemm_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    qserve_gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    qserve_gemm_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 - id: tensorrt_torchLlmArgs_validate_ray_worker_extension_cls_requires_ray
   source: passA
   constraint_key:
@@ -1459,6 +1773,100 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_pluginconfig_rmsnorm_quantization_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - rmsnorm_quantization_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - rmsnorm_quantization_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.rmsnorm_quantization_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    rmsnorm_quantization_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    rmsnorm_quantization_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
+- id: tensorrt_pluginconfig_smooth_quant_gemm_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - smooth_quant_gemm_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - smooth_quant_gemm_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.smooth_quant_gemm_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    smooth_quant_gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    smooth_quant_gemm_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
+- id: tensorrt_raises_speculative_config_set_True_speculative_config
+  source: prod
+  constraint_key:
+  - speculative_config
+  - presence
+  - 'True'
+  tolerant_key:
+  - speculative_config
+  - presence
+  native_type: tensorrt_llm.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+  kwargs_positive:
+    speculative_config: x
+  kwargs_negative:
+    speculative_config: null
+  observed_outcome: error
+  contributing_sources:
+  - mech
+  - prod
 - id: tensorrt_torchllmargs_validate_stream_interval_stream_interval_le
   source: mech
   constraint_key:
@@ -1596,6 +2004,7 @@ confirmed:
   - passA
   - passB
   - poc
+  - prod
 - id: tensorrt_samplingparams__validate_top_k_lt
   source: mech
   constraint_key:
@@ -1733,6 +2142,72 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_pluginconfig_weight_only_groupwise_quant_matmul_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - weight_only_groupwise_quant_matmul_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - weight_only_groupwise_quant_matmul_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.weight_only_groupwise_quant_matmul_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    weight_only_groupwise_quant_matmul_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    weight_only_groupwise_quant_matmul_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
+- id: tensorrt_pluginconfig_weight_only_quant_matmul_plugin_in_6_values
+  source: prod
+  constraint_key:
+  - weight_only_quant_matmul_plugin
+  - membership
+  - '[,auto,bfloat16,float16,float32,int32]'
+  tolerant_key:
+  - weight_only_quant_matmul_plugin
+  - membership
+  native_type: tensorrt_llm.PluginConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.weight_only_quant_matmul_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    weight_only_quant_matmul_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    weight_only_quant_matmul_plugin: auto
+  observed_outcome: error
+  contributing_sources:
+  - prod
 unverified:
 - id: tensorrt_torchLlmArgs_warn_on_unstable_feature_usage
   source: passA
@@ -2088,6 +2563,7 @@ unverified:
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
+  - prod
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_model_format_misc_backend_not_in_model_format
   source: mech
@@ -2940,6 +3416,33 @@ unverified:
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_raises_dtype_eq_bfloat16_dtype
+  source: prod
+  constraint_key:
+  - dtype
+  - exact
+  - bfloat16
+  tolerant_key:
+  - dtype
+  - exact
+  native_type: tensorrt_llm.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype: bfloat16
+  kwargs_positive:
+    dtype: bfloat16
+  kwargs_negative:
+    dtype: bfloat16_x
+  observed_outcome: no_op
+  contributing_sources:
+  - prod
+  gate_status: failed
 - id: tensorrt_trtLlmArgs_validate_kv_cache_dtype_must_be_auto
   source: passA
   constraint_key:
@@ -3245,6 +3748,34 @@ unverified:
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache
+  source: prod
+  constraint_key:
+  - enable_build_cache
+  - type
+  - BuildCacheConfig
+  tolerant_key:
+  - enable_build_cache
+  - type
+  native_type: tensorrt_llm.TrtLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: failed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_build_cache:
+        type_is_not: BuildCacheConfig
+  kwargs_positive:
+    enable_build_cache: x
+  kwargs_negative:
+    enable_build_cache: x_neg
+  observed_outcome: error
+  contributing_sources:
+  - prod
+  gate_status: failed
 - id: tensorrt_trtLlmArgs_validate_enable_build_cache_type_check
   source: passA
   constraint_key:
@@ -3295,6 +3826,44 @@ unverified:
   contributing_sources:
   - mech
   gate_status: skipped
+- id: tensorrt_warns_backend_in_lora_config_consistency
+  source: prod
+  constraint_key:
+  - enable_lora
+  - presence
+  - '[backend,enable_lora,lora_config]'
+  tolerant_key:
+  - enable_lora
+  - presence
+  native_type: tensorrt_llm.BaseLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: warn
+  runtime: infra_error
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora:
+        present: true
+      tensorrt.lora_config:
+        present: true
+      tensorrt.backend:
+        in:
+        - pytorch
+        - _autodeploy
+  kwargs_positive:
+    enable_lora: x
+    lora_config: x
+    backend: pytorch
+  kwargs_negative:
+    enable_lora: x
+    lora_config: x
+    backend: __static_miner_synth__
+  observed_outcome: error
+  contributing_sources:
+  - prod
+  gate_status: infra_error
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_enable_lora_ignored_on_pytorch_warns
   source: passA
   constraint_key:
@@ -3755,6 +4324,7 @@ unverified:
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
+  - prod
   gate_status: skipped
 - id: tensorrt_baseLlmArgs_validate_lora_config_consistency_empty_lora_dir_warns
   source: passA
@@ -3987,6 +4557,7 @@ unverified:
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
+  - prod
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_beam_width_not_equal
   source: mech
@@ -4089,6 +4660,7 @@ unverified:
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
+  - prod
   gate_status: skipped
 - id: tensorrt_ngramDecodingConfig_max_draft_len_and_matching_positive_when_routed
   source: passA
@@ -4243,6 +4815,7 @@ unverified:
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
+  - prod
   gate_status: skipped
 - id: tensorrt_torchcompileconfig_validate_torch_compile_max_num_streams_max_num_streams_lt
   source: mech
@@ -4342,6 +4915,7 @@ unverified:
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
+  - prod
   gate_status: skipped
 - id: tensorrt_trtllmargs_validate_build_config_with_runtime_params_max_seq_len_not_equal
   source: mech
@@ -4417,6 +4991,7 @@ unverified:
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - mech
+  - prod
   gate_status: skipped
 - id: tensorrt_getModelFormat_no_config_json
   source: passA
@@ -5118,30 +5693,6 @@ unverified:
   contributing_sources:
   - mech
   gate_status: failed
-- id: tensorrt_trtllmargs_validate_speculative_config_speculative_config_present
-  source: mech
-  constraint_key:
-  - speculative_config
-  - presence
-  - 'True'
-  tolerant_key:
-  - speculative_config
-  - presence
-  native_type: tensorrt.TrtLlmArgs
-  native_field: null
-  predicate_kind: null
-  predicate_value: null
-  severity: error
-  runtime: unverified
-  match:
-    engine: tensorrt
-    fields:
-      tensorrt.speculative_config:
-        present: true
-  observed_outcome: skipped_unsynthesizable
-  contributing_sources:
-  - mech
-  gate_status: skipped
 - id: tensorrt_torchllmargs_validate_speculative_config_speculative_config_present_backend
   source: mech
   constraint_key:

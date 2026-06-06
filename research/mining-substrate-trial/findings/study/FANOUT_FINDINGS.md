@@ -188,6 +188,30 @@ the walk lever until multi-field construction lands; (b) the production per-vers
 miner is still much weaker than trial improved-det-v2 (44 vs 110 candidates) - it
 has not absorbed the trial R&D primitives (deferred to milestone end).
 
+## GT re-gate: folding the lever-1 growth back in (tensorrt 1.2.1)
+
+The production widened miner is now a committed per-cell union source
+(`prod_static_miner.yaml`, discovered by `study_gt_pilot.configure`), and the
+1.2.1 GT has been RE-GATED with it included. New denominator: **74 confirmed /
+228 union** (was 60 / 212) - the +14 confirmed = the 13 plugin-literal
+constraints confirmed outside the old union + 1 promoted from the unverified
+tail. GT-growth vs the PoC N=1 GT rose 23 -> 37.
+
+Circularity caveat (the reason the deterministic-ceiling section above keeps the
+pre-re-gate FROZEN 60/212 denominator and its dedicated per-method gate runs,
+rather than reading recall off this re-gated GT): with `prod` and `mech` both in
+the union, **only 45 of the 74 confirmed constraints have an independent
+(Opus/PoC) contributor** - the other 29 rest on deterministic sources alone.
+Measuring "deterministic recall" against a denominator that now includes the
+methods under evaluation would be circular. So the re-gated 74/228 is the
+best-knowledge GT for downstream use (e.g. cross-version comparison), while the
+ceiling numbers stay anchored to the method-independent frozen denominator. The
+GT-level source tally is also noisy as a recall proxy: at constraint grain a
+deterministic method's predicate-value variant of a real constraint lands in a
+SEPARATE ckey from the Opus-confirmed one, so contributing-source counts
+understate true agreement (another reason the dedicated mech-only / combined-det
+gate runs are the correct ceiling instrument).
+
 ## Fan-out readiness (what the full 15-cell x 2-track matrix needs)
 
 - **Per-version producers exist for only ~6 versions** (transformers v4_57_3 /

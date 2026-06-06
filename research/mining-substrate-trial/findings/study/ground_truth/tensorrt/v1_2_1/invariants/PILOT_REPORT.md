@@ -1,34 +1,35 @@
 # Pilot GT report - tensorrt 1.2.1 invariants (union + gate)
 
-Round 0: union the 4 GT sources (mech, passA, passB, poc) at the CONSTRAINT grain (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value), runtime-gate every candidate (kwargs authored or synthesised) in the production validator inside nvcr.io/nvidia/tensorrt-llm/release:1.2.1, keep gate-confirmed per constraint as GT.
+Round 0: union the 5 GT sources (mech, passA, passB, poc, prod) at the CONSTRAINT grain (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value), runtime-gate every candidate (kwargs authored or synthesised) in the production validator inside nvcr.io/nvidia/tensorrt-llm/release:1.2.1, keep gate-confirmed per constraint as GT.
 
 ## Per-source candidate counts
 
 | source | raw candidates | constraints | gateable | unique constraints |
 |---|---|---|---|---|
 | passA | 99 | 97 | 99 | 7 |
-| passB | 100 | 98 | 100 | 7 |
-| mech | 110 | 107 | 110 | 107 |
+| passB | 100 | 98 | 100 | 2 |
+| mech | 110 | 107 | 110 | 96 |
 | poc | 92 | 90 | 0 | 0 |
+| prod | 44 | 42 | 44 | 16 |
 
 ## Union + gate
 
-- Union size (distinct CONSTRAINTS across sources): **212**
-- Tolerant keys (coarser, leaf+bucket): 144; of which **53** held >1 distinct constraint (would have over-collapsed under the old leaf+bucket identity).
-- Gate-confirmed constraints: **60**
-- Probed candidates (native_type present, kwargs authored or synthesised): **309** (confirmed=93, failed=55, skipped=160, infra_error=1)
-- Confirmations by probe provenance: **25 synthesised** by the gate, 68 from hand-authored kwargs
+- Union size (distinct CONSTRAINTS across sources): **228**
+- Tolerant keys (coarser, leaf+bucket): 157; of which **55** held >1 distinct constraint (would have over-collapsed under the old leaf+bucket identity).
+- Gate-confirmed constraints: **74**
+- Probed candidates (native_type present, kwargs authored or synthesised): **353** (confirmed=124, failed=59, skipped=160, infra_error=10)
+- Confirmations by probe provenance: **25 synthesised** by the gate, 99 from hand-authored kwargs
 
 Group status breakdown (per constraint):
 
-- confirmed: 60
-- failed: 35
-- infra_error: 1
-- skipped: 116
+- confirmed: 74
+- failed: 37
+- infra_error: 2
+- skipped: 115
 
 ## GT-growth vs PoC N=1 GT
 
-PoC GT contributed **90** constraints. The gate-confirmed union grows GT by **23** confirmed constraints the PoC GT lacked:
+PoC GT contributed **90** constraints. The gate-confirmed union grows GT by **37** confirmed constraints the PoC GT lacked:
 
 - acceptance_length_threshold [numeric] = 0
 - acceptance_window [numeric] = 0
@@ -37,22 +38,36 @@ PoC GT contributed **90** constraints. The gate-confirmed union grows GT by **23
 - batch_wait_timeout_iters [numeric] = 0
 - batch_wait_timeout_ms [numeric] = 0
 - bert_attention_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- fp8_rowwise_gemm_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
 - gemm_allreduce_plugin [membership] = [,bfloat16,float16]
 - gemm_swiglu_plugin [membership] = [,fp8]
+- gpt_attention_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- identity_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
 - kv_transfer_sender_future_timeout_ms [numeric] = {gt=0}
 - kv_transfer_timeout_ms [numeric] = {gt=0}
+- layernorm_quantization_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- lora_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
 - low_latency_gemm_plugin [membership] = [,fp8]
 - low_latency_gemm_swiglu_plugin [membership] = [,fp8]
+- mamba_conv1d_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
 - max_batch_size [numeric] = 0
 - max_gpu_total_bytes [numeric] = 0
 - max_ngram_size [numeric] = 0
 - max_verification_set_size [numeric] = 0
 - max_window_size [numeric] = 0
+- moe_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- nccl_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
 - per_worker_gpu_share [numeric] = 0
+- qserve_gemm_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- rmsnorm_quantization_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- smooth_quant_gemm_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- speculative_config [presence] = True
 - stream_interval [numeric] = 0
 - temperature [numeric] = 0
 - top_k [numeric] = 0
 - top_p [numeric] = 0
+- weight_only_groupwise_quant_matmul_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
+- weight_only_quant_matmul_plugin [membership] = [,auto,bfloat16,float16,float32,int32]
 
 ## Gate REJECTIONS (kwargs-bearing candidates that ran and were not confirmed)
 
@@ -113,6 +128,10 @@ PoC GT contributed **90** constraints. The gate-confirmed union grows GT by **23
 | tensorrt_saveHiddenStatesDecodingConfig_backend_must_be_pytorch_when_routed | passB | TorchLlmArgs | error |
 | tensorrt_torchLlmArgs_load_format_enum | passB | TorchLlmArgs | error |
 | tensorrt_trtLlmArgs_validate_kv_cache_dtype_must_be_auto | passB | TrtLlmArgs | no_op |
+| tensorrt_capacity_scheduler_policy_in_3_values | prod | tensorrt_llm.TrtLlmArgs | error |
+| tensorrt_context_chunking_policy_in_2_values | prod | tensorrt_llm.TrtLlmArgs | error |
+| tensorrt_raises_dtype_eq_bfloat16_dtype | prod | tensorrt_llm.BaseLlmArgs | no_op |
+| tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache | prod | tensorrt_llm.TrtLlmArgs | error |
 
 ### warn_on_unstable_feature_usage flag (passB flagged as possibly-invalid)
 
@@ -124,3 +143,30 @@ PoC GT contributed **90** constraints. The gate-confirmed union grows GT by **23
 
 - `tensorrt_LLM_pytorch_rejects_trt_specific_kwargs` (passA): The following arguments are specific to TensorRT backend and cannot be used with PyTorch backend: ['enable_build_cache'].
 Please use 'from tensorrt_llm._tensorr
+- `tensorrt_warns_backend_in_lora_config_consistency` (prod): 2 validation errors for BaseLlmArgs
+enable_lora
+  Input should be a valid boolean, unable to interpret input [type=bool_parsing, input_value='x', input_type=str
+- `tensorrt_warns_build_config_set_True_model_format_misc` (prod): 1 validation error for TrtLlmArgs
+build_config
+  Input should be a valid dictionary or instance of BuildConfig [type=model_type, input_value='x', input_type=str
+- `tensorrt_warns_lora_config_set_True_lora_config_consistency` (prod): 1 validation error for BaseLlmArgs
+lora_config
+  Input should be a valid dictionary or instance of LoraConfig [type=model_type, input_value='x', input_type=str]
+- `tensorrt_warns_lora_config_set_True_lora_config_consistency__2` (prod): 1 validation error for BaseLlmArgs
+lora_config
+  Input should be a valid dictionary or instance of LoraConfig [type=model_type, input_value='x', input_type=str]
+- `tensorrt_warns_max_batch_size_set_True_build_config_with_runtime_params` (prod): 1 validation error for TrtLlmArgs
+max_batch_size
+  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', inp
+- `tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params` (prod): 1 validation error for TrtLlmArgs
+max_beam_width
+  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', inp
+- `tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params` (prod): 1 validation error for TrtLlmArgs
+max_input_len
+  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', inpu
+- `tensorrt_warns_max_num_tokens_set_True_build_config_with_runtime_params` (prod): 1 validation error for TrtLlmArgs
+max_num_tokens
+  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', inp
+- `tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params` (prod): 1 validation error for TrtLlmArgs
+max_seq_len
+  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_

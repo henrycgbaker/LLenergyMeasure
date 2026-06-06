@@ -1,0 +1,1431 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 1.2.1
+mined_at: '2026-06-06T16:11:54Z'
+invariants:
+- id: tensorrt_basellmargs_guided_decoding_backend_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.guided_decoding_backend must be one of ['xgrammar', 'llguidance']
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 2009
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.guided_decoding_backend:
+        not_in:
+        - xgrammar
+        - llguidance
+  kwargs_positive:
+    guided_decoding_backend: <invalid_static_miner_probe>
+  kwargs_negative:
+    guided_decoding_backend: xgrammar
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`guided_decoding_backend` must be one of [''xgrammar'', ''llguidance'']'
+  references:
+  - llmapi/llm_args.py:2009 (tensorrt_llm.BaseLlmArgs.guided_decoding_backend Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_basellmargs_load_format_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.load_format must be one of ['auto', 'dummy']
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 1985
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        not_in:
+        - auto
+        - dummy
+  kwargs_positive:
+    load_format: <invalid_static_miner_probe>
+  kwargs_negative:
+    load_format: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`load_format` must be one of [''auto'', ''dummy'']'
+  references:
+  - llmapi/llm_args.py:1985 (tensorrt_llm.BaseLlmArgs.load_format Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_basellmargs_orchestrator_type_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.orchestrator_type must be one of ['rpc', 'ray']
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 2129
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.orchestrator_type:
+        not_in:
+        - rpc
+        - ray
+  kwargs_positive:
+    orchestrator_type: <invalid_static_miner_probe>
+  kwargs_negative:
+    orchestrator_type: rpc
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`orchestrator_type` must be one of [''rpc'', ''ray'']'
+  references:
+  - llmapi/llm_args.py:2129 (tensorrt_llm.BaseLlmArgs.orchestrator_type Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_basellmargs_tokenizer_mode_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.tokenizer_mode must be one of ['auto', 'slow']
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 1906
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokenizer_mode:
+        not_in:
+        - auto
+        - slow
+  kwargs_positive:
+    tokenizer_mode: <invalid_static_miner_probe>
+  kwargs_negative:
+    tokenizer_mode: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`tokenizer_mode` must be one of [''auto'', ''slow'']'
+  references:
+  - llmapi/llm_args.py:1906 (tensorrt_llm.BaseLlmArgs.tokenizer_mode Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_calibconfig_device_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: CalibConfig.device must be one of ['cuda', 'cpu']
+  severity: error
+  native_type: tensorrt_llm.CalibConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 597
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.device:
+        not_in:
+        - cuda
+        - cpu
+  kwargs_positive:
+    device: <invalid_static_miner_probe>
+  kwargs_negative:
+    device: cuda
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`device` must be one of [''cuda'', ''cpu'']'
+  references:
+  - llmapi/llm_args.py:597 (tensorrt_llm.CalibConfig.device Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_bert_attention_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.bert_attention_plugin must be one of ['auto', 'float16', 'float32',
+    'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 106
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.bert_attention_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    bert_attention_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    bert_attention_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`bert_attention_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'',
+    ''int32'', None]'
+  references:
+  - plugin/plugin.py:106 (tensorrt_llm.PluginConfig.bert_attention_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_fp8_rowwise_gemm_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.fp8_rowwise_gemm_plugin must be one of ['auto', 'float16', 'float32',
+    'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 131
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.fp8_rowwise_gemm_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    fp8_rowwise_gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    fp8_rowwise_gemm_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`fp8_rowwise_gemm_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'',
+    ''int32'', None]'
+  references:
+  - plugin/plugin.py:131 (tensorrt_llm.PluginConfig.fp8_rowwise_gemm_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_gemm_allreduce_plugin_in_3_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.gemm_allreduce_plugin must be one of ['float16', 'bfloat16', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 202
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gemm_allreduce_plugin:
+        not_in:
+        - float16
+        - bfloat16
+        - null
+  kwargs_positive:
+    gemm_allreduce_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    gemm_allreduce_plugin: float16
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`gemm_allreduce_plugin` must be one of [''float16'', ''bfloat16'', None]'
+  references:
+  - plugin/plugin.py:202 (tensorrt_llm.PluginConfig.gemm_allreduce_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_gemm_plugin_in_8_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.gemm_plugin must be one of ['auto', 'float16', 'float32', 'bfloat16',
+    'int32', 'fp8', 'nvfp4', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 116
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gemm_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - fp8
+        - nvfp4
+        - null
+  kwargs_positive:
+    gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    gemm_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`gemm_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'', ''int32'',
+    ''fp8'', ''nvfp4'', None]'
+  references:
+  - plugin/plugin.py:116 (tensorrt_llm.PluginConfig.gemm_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_gemm_swiglu_plugin_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.gemm_swiglu_plugin must be one of ['fp8', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 125
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gemm_swiglu_plugin:
+        not_in:
+        - fp8
+        - null
+  kwargs_positive:
+    gemm_swiglu_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    gemm_swiglu_plugin: fp8
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`gemm_swiglu_plugin` must be one of [''fp8'', None]'
+  references:
+  - plugin/plugin.py:125 (tensorrt_llm.PluginConfig.gemm_swiglu_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_gpt_attention_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.gpt_attention_plugin must be one of ['auto', 'float16', 'float32',
+    'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 111
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gpt_attention_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    gpt_attention_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    gpt_attention_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`gpt_attention_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'',
+    ''int32'', None]'
+  references:
+  - plugin/plugin.py:111 (tensorrt_llm.PluginConfig.gpt_attention_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_identity_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.identity_plugin must be one of ['auto', 'float16', 'float32', 'bfloat16',
+    'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 143
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.identity_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    identity_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    identity_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`identity_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'',
+    ''int32'', None]'
+  references:
+  - plugin/plugin.py:143 (tensorrt_llm.PluginConfig.identity_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_layernorm_quantization_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.layernorm_quantization_plugin must be one of ['auto', 'float16',
+    'float32', 'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 171
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.layernorm_quantization_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    layernorm_quantization_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    layernorm_quantization_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`layernorm_quantization_plugin` must be one of [''auto'', ''float16'', ''float32'',
+    ''bfloat16'', ''int32'', None]'
+  references:
+  - plugin/plugin.py:171 (tensorrt_llm.PluginConfig.layernorm_quantization_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_lora_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.lora_plugin must be one of ['auto', 'float16', 'float32', 'bfloat16',
+    'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 153
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    lora_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    lora_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`lora_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'', ''int32'',
+    None]'
+  references:
+  - plugin/plugin.py:153 (tensorrt_llm.PluginConfig.lora_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_low_latency_gemm_plugin_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.low_latency_gemm_plugin must be one of ['fp8', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 193
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.low_latency_gemm_plugin:
+        not_in:
+        - fp8
+        - null
+  kwargs_positive:
+    low_latency_gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    low_latency_gemm_plugin: fp8
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`low_latency_gemm_plugin` must be one of [''fp8'', None]'
+  references:
+  - plugin/plugin.py:193 (tensorrt_llm.PluginConfig.low_latency_gemm_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_low_latency_gemm_swiglu_plugin_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.low_latency_gemm_swiglu_plugin must be one of ['fp8', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 197
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.low_latency_gemm_swiglu_plugin:
+        not_in:
+        - fp8
+        - null
+  kwargs_positive:
+    low_latency_gemm_swiglu_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    low_latency_gemm_swiglu_plugin: fp8
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`low_latency_gemm_swiglu_plugin` must be one of [''fp8'', None]'
+  references:
+  - plugin/plugin.py:197 (tensorrt_llm.PluginConfig.low_latency_gemm_swiglu_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_mamba_conv1d_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.mamba_conv1d_plugin must be one of ['auto', 'float16', 'float32',
+    'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 189
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.mamba_conv1d_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    mamba_conv1d_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    mamba_conv1d_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`mamba_conv1d_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'',
+    ''int32'', None]'
+  references:
+  - plugin/plugin.py:189 (tensorrt_llm.PluginConfig.mamba_conv1d_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_moe_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.moe_plugin must be one of ['auto', 'float16', 'float32', 'bfloat16',
+    'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 184
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    moe_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    moe_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`moe_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'', ''int32'',
+    None]'
+  references:
+  - plugin/plugin.py:184 (tensorrt_llm.PluginConfig.moe_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_nccl_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.nccl_plugin must be one of ['auto', 'float16', 'float32', 'bfloat16',
+    'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 148
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.nccl_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    nccl_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    nccl_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`nccl_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'', ''int32'',
+    None]'
+  references:
+  - plugin/plugin.py:148 (tensorrt_llm.PluginConfig.nccl_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_qserve_gemm_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.qserve_gemm_plugin must be one of ['auto', 'float16', 'float32',
+    'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 137
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.qserve_gemm_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    qserve_gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    qserve_gemm_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`qserve_gemm_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'',
+    ''int32'', None]'
+  references:
+  - plugin/plugin.py:137 (tensorrt_llm.PluginConfig.qserve_gemm_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_rmsnorm_quantization_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.rmsnorm_quantization_plugin must be one of ['auto', 'float16', 'float32',
+    'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 175
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.rmsnorm_quantization_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    rmsnorm_quantization_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    rmsnorm_quantization_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`rmsnorm_quantization_plugin` must be one of [''auto'', ''float16'', ''float32'',
+    ''bfloat16'', ''int32'', None]'
+  references:
+  - plugin/plugin.py:175 (tensorrt_llm.PluginConfig.rmsnorm_quantization_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_smooth_quant_gemm_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.smooth_quant_gemm_plugin must be one of ['auto', 'float16', 'float32',
+    'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 167
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.smooth_quant_gemm_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    smooth_quant_gemm_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    smooth_quant_gemm_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`smooth_quant_gemm_plugin` must be one of [''auto'', ''float16'', ''float32'', ''bfloat16'',
+    ''int32'', None]'
+  references:
+  - plugin/plugin.py:167 (tensorrt_llm.PluginConfig.smooth_quant_gemm_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_weight_only_groupwise_quant_matmul_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.weight_only_groupwise_quant_matmul_plugin must be one of ['auto',
+    'float16', 'float32', 'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 156
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.weight_only_groupwise_quant_matmul_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    weight_only_groupwise_quant_matmul_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    weight_only_groupwise_quant_matmul_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`weight_only_groupwise_quant_matmul_plugin` must be one of [''auto'', ''float16'',
+    ''float32'', ''bfloat16'', ''int32'', None]'
+  references:
+  - plugin/plugin.py:156 (tensorrt_llm.PluginConfig.weight_only_groupwise_quant_matmul_plugin Literal
+    annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_pluginconfig_weight_only_quant_matmul_plugin_in_6_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: PluginConfig.weight_only_quant_matmul_plugin must be one of ['auto', 'float16',
+    'float32', 'bfloat16', 'int32', None]
+  severity: error
+  native_type: tensorrt_llm.PluginConfig
+  miner_source:
+    path: plugin/plugin.py
+    method: <literal_field>
+    line_at_scan: 161
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.weight_only_quant_matmul_plugin:
+        not_in:
+        - auto
+        - float16
+        - float32
+        - bfloat16
+        - int32
+        - null
+  kwargs_positive:
+    weight_only_quant_matmul_plugin: <invalid_static_miner_probe>
+  kwargs_negative:
+    weight_only_quant_matmul_plugin: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`weight_only_quant_matmul_plugin` must be one of [''auto'', ''float16'', ''float32'',
+    ''bfloat16'', ''int32'', None]'
+  references:
+  - plugin/plugin.py:161 (tensorrt_llm.PluginConfig.weight_only_quant_matmul_plugin Literal annotation)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_batching_type_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.batching_type must be one of BatchingType members ['STATIC', 'INFLIGHT']
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <strenum>
+    line_at_scan: 1411
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_type:
+        not_in:
+        - STATIC
+        - INFLIGHT
+  kwargs_positive:
+    batching_type: <invalid_static_miner_probe>
+  kwargs_negative:
+    batching_type: STATIC
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`batching_type` must be one of BatchingType members: [''STATIC'', ''INFLIGHT'']'
+  references:
+  - llmapi/llm_args.py:1411 (BatchingType StrEnum)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_capacity_scheduler_policy_in_3_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.capacity_scheduler_policy must be one of CapacitySchedulerPolicy members
+    ['MAX_UTILIZATION', 'GUARANTEED_NO_EVICT', 'STATIC_BATCH']
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <strenum>
+    line_at_scan: 1420
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capacity_scheduler_policy:
+        not_in:
+        - MAX_UTILIZATION
+        - GUARANTEED_NO_EVICT
+        - STATIC_BATCH
+  kwargs_positive:
+    capacity_scheduler_policy: <invalid_static_miner_probe>
+  kwargs_negative:
+    capacity_scheduler_policy: MAX_UTILIZATION
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`capacity_scheduler_policy` must be one of CapacitySchedulerPolicy members: [''MAX_UTILIZATION'',
+    ''GUARANTEED_NO_EVICT'', ''STATIC_BATCH'']'
+  references:
+  - llmapi/llm_args.py:1420 (CapacitySchedulerPolicy StrEnum)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_context_chunking_policy_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.context_chunking_policy must be one of ContextChunkingPolicy members
+    ['FIRST_COME_FIRST_SERVED', 'EQUAL_PROGRESS']
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <strenum>
+    line_at_scan: 1430
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_chunking_policy:
+        not_in:
+        - FIRST_COME_FIRST_SERVED
+        - EQUAL_PROGRESS
+  kwargs_positive:
+    context_chunking_policy: <invalid_static_miner_probe>
+  kwargs_negative:
+    context_chunking_policy: FIRST_COME_FIRST_SERVED
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`context_chunking_policy` must be one of ContextChunkingPolicy members: [''FIRST_COME_FIRST_SERVED'',
+    ''EQUAL_PROGRESS'']'
+  references:
+  - llmapi/llm_args.py:1430 (ContextChunkingPolicy StrEnum)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_max_batch_size_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params warns when max_batch_size
+    present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2446
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: true
+  kwargs_positive:
+    max_batch_size: x
+  kwargs_negative:
+    max_batch_size: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_batch_size [{max_batch_size}] is overridden by build_config.max_batch_size [{self.build_config.max_batch_size}]
+    in build_config
+  references:
+  - llmapi/llm_args.py:2446 (tensorrt_llm.TrtLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params warns when max_beam_width
+    present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2462
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: true
+  kwargs_positive:
+    max_beam_width: x
+  kwargs_negative:
+    max_beam_width: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_beam_width [{max_beam_width}] is overridden by build_config.max_beam_width [{self.build_config.max_beam_width}]
+    in build_config
+  references:
+  - llmapi/llm_args.py:2462 (tensorrt_llm.TrtLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params warns when max_input_len
+    present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2467
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        present: true
+  kwargs_positive:
+    max_input_len: x
+  kwargs_negative:
+    max_input_len: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_input_len [{max_input_len}] is overridden by build_config.max_input_len [{self.build_config.max_input_len}]
+    in build_config
+  references:
+  - llmapi/llm_args.py:2467 (tensorrt_llm.TrtLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_max_num_tokens_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params warns when max_num_tokens
+    present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2452
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        present: true
+  kwargs_positive:
+    max_num_tokens: x
+  kwargs_negative:
+    max_num_tokens: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_num_tokens [{max_num_tokens}] is overridden by build_config.max_num_tokens [{self.build_config.max_num_tokens}]
+    in build_config
+  references:
+  - llmapi/llm_args.py:2452 (tensorrt_llm.TrtLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_build_config_with_runtime_params warns when max_seq_len present
+    True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 2457
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        present: true
+  kwargs_positive:
+    max_seq_len: x
+  kwargs_negative:
+    max_seq_len: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_seq_len [{max_seq_len}] is overridden by build_config.max_seq_len [{self.build_config.max_seq_len}]
+    in build_config
+  references:
+  - llmapi/llm_args.py:2457 (tensorrt_llm.TrtLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_dtype_eq_bfloat16_dtype
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.validate_dtype raises when dtype == bfloat16 (via raise RuntimeError)
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_dtype
+    line_at_scan: 2204
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype: bfloat16
+  kwargs_positive:
+    dtype: bfloat16
+  kwargs_negative:
+    dtype: bfloat16_x
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Pre SM 80 GPUs do not support bfloat16
+  references:
+  - llmapi/llm_args.py:2204 (tensorrt_llm.BaseLlmArgs.validate_dtype)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_enable_build_cache raises when enable_build_cache type_is_not
+    BuildCacheConfig (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_enable_build_cache
+    line_at_scan: 2689
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_build_cache:
+        type_is_not: BuildCacheConfig
+  kwargs_positive:
+    enable_build_cache: x
+  kwargs_negative:
+    enable_build_cache: x_neg
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Invalid build_cache_config: {enable_build_cache}'
+  references:
+  - llmapi/llm_args.py:2689 (tensorrt_llm.TrtLlmArgs.validate_enable_build_cache)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_backend_in_lora_config_consistency
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.validate_lora_config_consistency warns when enable_lora present True
+    AND lora_config present True AND backend in ['pytorch', '_autodeploy'] (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 2324
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora:
+        present: true
+      tensorrt.lora_config:
+        present: true
+      tensorrt.backend:
+        in:
+        - pytorch
+        - _autodeploy
+  kwargs_positive:
+    enable_lora: x
+    lora_config: x
+    backend: pytorch
+  kwargs_negative:
+    enable_lora: x
+    lora_config: x
+    backend: __static_miner_synth__
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: enable_lora is ignored when lora_config is provided for {backend} backend.
+  references:
+  - llmapi/llm_args.py:2324 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_lora_config_set_True_lora_config_consistency
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.validate_lora_config_consistency warns when lora_config present True
+    (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 2317
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config:
+        present: true
+  kwargs_positive:
+    lora_config: x
+  kwargs_negative:
+    lora_config: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: lora_dir is empty, so custom embedding or lm head will not be applied.
+  references:
+  - llmapi/llm_args.py:2317 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_lora_config_set_True_lora_config_consistency__2
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.validate_lora_config_consistency warns when lora_config present True
+    (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 2331
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config:
+        present: true
+  kwargs_positive:
+    lora_config: x
+  kwargs_negative:
+    lora_config: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: Both lora_dir and lora_target_modules are empty, so all LoRA modules will be expected.
+    This will lead to serious memory consumption. Please provide either lora_dir or lora_target_modules
+    if this behavior is not what you expect.
+  references:
+  - llmapi/llm_args.py:2331 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_model_not_type_model
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: BaseLlmArgs.validate_model raises when model type_is_not ['str', 'Path'] (via
+    raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model
+    line_at_scan: 2222
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        type_is_not:
+        - str
+        - Path
+  kwargs_positive:
+    model: 1
+  kwargs_negative:
+    model: x
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Invalid model: {v}'
+  references:
+  - llmapi/llm_args.py:2222 (tensorrt_llm.BaseLlmArgs.validate_model)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_warns_build_config_set_True_model_format_misc
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_model_format_misc warns when backend not_in ['pytorch', '_autodeploy']
+    AND build_config present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model_format_misc
+    line_at_scan: 2635
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        not_in:
+        - pytorch
+        - _autodeploy
+      tensorrt.build_config:
+        present: true
+  kwargs_positive:
+    backend: __static_miner_synth__
+    build_config: x
+  kwargs_negative:
+    backend: __static_miner_synth__
+    build_config: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: The build_config is ignored for model format of TLLM_ENGINE.
+  references:
+  - llmapi/llm_args.py:2635 (tensorrt_llm.TrtLlmArgs.validate_model_format_misc)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_max_ngram_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_ngram_size <=
+    0 (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 1580
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_ngram_size:
+        <=: 0
+  kwargs_positive:
+    max_ngram_size: 0
+  kwargs_negative:
+    max_ngram_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Value must be positive, got {v}
+  references:
+  - llmapi/llm_args.py:1580 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_max_verification_set_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_verification_set_size
+    <= 0 (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 1580
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_verification_set_size:
+        <=: 0
+  kwargs_positive:
+    max_verification_set_size: 0
+  kwargs_negative:
+    max_verification_set_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Value must be positive, got {v}
+  references:
+  - llmapi/llm_args.py:1580 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_max_window_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_window_size <=
+    0 (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 1580
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_window_size:
+        <=: 0
+  kwargs_positive:
+    max_window_size: 0
+  kwargs_negative:
+    max_window_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Value must be positive, got {v}
+  references:
+  - llmapi/llm_args.py:1580 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_speculative_config_set_True_speculative_config
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_speculative_config raises when speculative_config present
+    True (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 2506
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+  kwargs_positive:
+    speculative_config: x
+  kwargs_negative:
+    speculative_config: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Speculation type {self.speculative_config.decoding_type} does not support backend
+    {backend}
+  references:
+  - llmapi/llm_args.py:2506 (tensorrt_llm.TrtLlmArgs.validate_speculative_config)
+  added_by: static_miner
+  added_at: '2026-06-06'
+- id: tensorrt_raises_speculative_config_set_True_speculative_config__2
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TrtLlmArgs.validate_speculative_config raises when speculative_config present
+    True (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 2547
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+  kwargs_positive:
+    speculative_config: x
+  kwargs_negative:
+    speculative_config: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Unrecognized speculative config type {type(self.speculative_config)}
+  references:
+  - llmapi/llm_args.py:2547 (tensorrt_llm.TrtLlmArgs.validate_speculative_config)
+  added_by: static_miner
+  added_at: '2026-06-06'

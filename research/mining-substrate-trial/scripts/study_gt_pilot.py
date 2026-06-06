@@ -91,6 +91,16 @@ def configure(engine: str, version_slug: str, image_override: str | None = None)
     poc = _FINDINGS / "ground_truth" / engine / version_slug / "invariants_ground_truth.yaml"
     if poc.exists():
         sources["poc"] = (poc, True)
+    # Production static miner (proposed-schema), if a per-cell snapshot is
+    # present. This is the cheap method under evaluation; included as a union
+    # source so its gate-confirmed constraints GROW the GT (the non-tautology
+    # mechanism). NOTE for the deterministic-ceiling read: with prod in the
+    # union, two deterministic methods (this + improved-det-v2 mech) contribute
+    # to the denominator, so "deterministic recall vs GT" is partly circular and
+    # must be caveated. Per-cell, optional (only 1.2.1 carries it today).
+    prod = _OUT_DIR / "prod_static_miner.yaml"
+    if prod.exists():
+        sources["prod"] = (prod, False)
     SOURCES = sources
 
 
