@@ -30,6 +30,7 @@ human-readable format).
 from __future__ import annotations
 
 import argparse
+import importlib
 import os
 import re
 import sys
@@ -187,31 +188,35 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
 # bindings on import), so this codepath is only exercised in CI by the
 # ``validate-tensorrt`` job in ``.github/workflows/engine-invariants.yml``.
 #
-# The static miner emits short-form ``native_type`` values (``tensorrt_llm.X``)
-# matching the AST symbol it walked. Map those to the deep import paths inside
-# the library, and substitute ``BaseLlmArgs`` -> ``TrtLlmArgs`` because
-# ``BaseLlmArgs`` is the abstract parent and invariants tagged on it apply to
-# inherited fields on the concrete subclass.
-
-_TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {
-    "tensorrt_llm.BaseLlmArgs": "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
-    "tensorrt_llm.TrtLlmArgs": "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
-    "tensorrt_llm.LookaheadDecodingConfig": (
-        "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig"
-    ),
-    "tensorrt_llm.CalibConfig": "tensorrt_llm.llmapi.llm_args.CalibConfig",
-}
-
-# ``BaseLlmArgs`` / ``TrtLlmArgs`` declare ``model`` as a required field. The
-# corpus's ``kwargs_positive`` / ``kwargs_negative`` only carry the field under
-# test, so without an injected default Pydantic raises a "model: field
-# required" error before any invariant-relevant validator runs. The placeholder is
-# never resolved to a real checkpoint - construction stops at validator-pass
-# time on either the invariant's positive raise (intended) or the negative success
-# (intended), both before the loader would try to read from disk.
-_TRTLLM_LLMARGS_TYPES: frozenset[str] = frozenset(
-    {"tensorrt_llm.BaseLlmArgs", "tensorrt_llm.TrtLlmArgs"}
+# A native_type tag can arrive in three shapes: a deep import path
+# (``tensorrt_llm.llmapi.llm_args.X``), the LLEM engine namespace
+# (``tensorrt.X``), or a bare class name (``X``). All three reduce to the bare
+# class name, which we resolve by probing the canonical TRT-LLM export modules
+# below in order (first hit wins). TRT-LLM re-exports most config + args
+# classes at the top-level package and under ``llmapi``; a handful live only in
+# their own subpackage (``PluginConfig`` under ``tensorrt_llm.plugin``). An
+# explicit deep-path override in :data:`_TRTLLM_NATIVE_TYPE_MAP` still wins.
+_TRTLLM_RESOLVE_MODULES: tuple[str, ...] = (
+    "tensorrt_llm",
+    "tensorrt_llm.llmapi",
+    "tensorrt_llm.llmapi.llm_args",
+    "tensorrt_llm.plugin",
 )
+
+# Explicit deep-path overrides, keyed by bare class name, for cases where the
+# module-probe order would resolve to the wrong (e.g. abstract) symbol. Empty
+# today: in the current window the probe order resolves every observed class to
+# a constructible concrete type (``BaseLlmArgs`` is itself constructible in
+# 1.x). Kept as the escape hatch for future version drift.
+_TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {}
+
+# The ``*LlmArgs`` family declares ``model`` as a required field. The corpus's
+# ``kwargs_positive`` / ``kwargs_negative`` only carry the field under test, so
+# without an injected default Pydantic raises a "model: field required" error
+# before any invariant-relevant validator runs. The placeholder is never
+# resolved to a real checkpoint - construction stops at validator-pass time on
+# either the invariant's positive raise (intended) or the negative success
+# (intended), both before the loader would try to read from disk.
 _TRTLLM_MODEL_PLACEHOLDER = "/tmp/llem-validation-gate-model-placeholder"
 
 
@@ -238,18 +243,37 @@ def _run_tensorrt(
 
 
 def _construct_trtllm(native_type: str, kwargs: dict[str, Any]) -> Any:
-    """Construct a TRT-LLM type by short native_type name.
+    """Construct a TRT-LLM type from its native_type tag.
 
-    Maps short names to deep import paths via :data:`_TRTLLM_NATIVE_TYPE_MAP`
-    and injects the required ``model`` placeholder for ``*LlmArgs`` types
-    when the corpus kwargs don't set it.
+    Reduces the tag to a bare class name (stripping any ``tensorrt`` /
+    ``tensorrt_llm`` / deep-path namespace) and resolves it by probing the
+    canonical TRT-LLM export modules in :data:`_TRTLLM_RESOLVE_MODULES`. An
+    explicit deep-path override in :data:`_TRTLLM_NATIVE_TYPE_MAP` (keyed by
+    bare name) wins when present. Injects the required ``model`` placeholder
+    for any ``*LlmArgs`` class when the corpus kwargs don't set it.
     """
-    actual = _TRTLLM_NATIVE_TYPE_MAP.get(native_type, native_type)
-    module_path, _, class_name = actual.rpartition(".")
-    module = __import__(module_path, fromlist=[class_name])
-    cls = getattr(module, class_name)
+    class_name = native_type.rpartition(".")[2]
+    override = _TRTLLM_NATIVE_TYPE_MAP.get(class_name)
+    if override is not None:
+        module_path, _, class_name = override.rpartition(".")
+        cls = getattr(importlib.import_module(module_path), class_name)
+    else:
+        cls = None
+        for mod_path in _TRTLLM_RESOLVE_MODULES:
+            try:
+                module = importlib.import_module(mod_path)
+            except ImportError:
+                continue
+            cls = getattr(module, class_name, None)
+            if cls is not None:
+                break
+        if cls is None:
+            raise AttributeError(
+                f"TRT-LLM native_type {native_type!r} (class {class_name!r}) not "
+                f"resolvable in any of {_TRTLLM_RESOLVE_MODULES}"
+            )
     use_kwargs = dict(kwargs)
-    if native_type in _TRTLLM_LLMARGS_TYPES and "model" not in use_kwargs:
+    if class_name.endswith("LlmArgs") and "model" not in use_kwargs:
         use_kwargs["model"] = _TRTLLM_MODEL_PLACEHOLDER
     return cls(**use_kwargs)
 
