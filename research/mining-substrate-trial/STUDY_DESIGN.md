@@ -354,3 +354,99 @@ narrow narrative is itself a deliverable.
   `findings/phase3_audit_llem_fields.md`; LLEM `src/.../infra/docker_runner.py`,
   `src/.../utils/env_config.py`.
 - This study's review: `STUDY_DESIGN_REVIEW.md`.
+
+---
+
+## 15. Execution log + design revisions (post-rev-5, 2026-06-06)
+
+What has actually been built and run since rev 5 was locked, plus the design
+parameters that CHANGED as a result. Findings detail in
+`findings/study/FANOUT_FINDINGS.md`; per-cell GT in
+`findings/study/ground_truth/<engine>/<v>/invariants/`.
+
+### 15.1 Built
+
+- **Invariant gate is now dynamic.** `scripts/validate_invariants.py` (the
+  CANONICAL product gate) gained: (a) TRT-LLM `native_type` resolution across the
+  engine's export modules + model-placeholder injection for any `*LlmArgs`;
+  (b) **probe synthesis** - `synthesize_probe_kwargs` derives positive/negative
+  kwargs from a declared predicate (`predicate_kind`+`predicate_value` or a
+  single-field `match.fields` operator) so predicate-only mined entries are
+  gateable WITHOUT hand-authored kwargs. Safe by construction (mis-synthesis ->
+  unverified, never false-confirm) + field-attribution guard.
+- **Schema gate built (Track S, link 1->2).** `scripts/validate_schema.py`
+  re-runs the engine's own introspector in-container and diffs the discovered
+  schema vs live for {exists, type, default} (semantic type comparison) +
+  construct-probes enum fields. Distinct from
+  `check_pydantic_matches_discovered.py` (link 2->3, discovered-vs-packaged).
+- **Union+gate driver.** `research/mining-substrate-trial/scripts/study_gt_pilot.py`
+  - cell-parameterised (`--engine/--version-slug/--image/--sources`),
+  auto-discovers GT sources (Opus passes / mechanical / PoC), runtime-gates,
+  writes `PILOT_GT.yaml` + `PILOT_REPORT.md` + `pilot_metrics.json`.
+- **Production miner widened (lever 1, tensorrt 1.2.1 only).** PluginConfig walk
+  + `Optional[Literal]` unwrap + module-level `Literal` alias resolution +
+  `not_in` membership encoding. NOTE: full porting of the trial improved-det-v2
+  primitives into the production per-version miners is DEFERRED to milestone end;
+  only this targeted widening was done as a research probe.
+
+### 15.2 Design revisions (supersede the locked rev-5 parameters)
+
+- **Identity (CHANGED).** The rev-5 tolerant key `(leaf_native_field,
+  coarse_predicate_bucket)` OVER-COLLAPSES distinct per-class / per-bound
+  constraints (e.g. `max_draft_len` across Eagle/NGram/DraftTarget/TorchLlmArgs),
+  and the "group confirmed if ANY member confirms" rule then false-confirmed
+  them. A defining-class/MRO fix was considered and REJECTED (the headline case
+  is one inherited field with per-subclass constraints, which MRO would merge
+  wrongly; `native_type` is inconsistent across sources -> drift). **New scheme:**
+  count + confirm at a CONSTRAINT identity
+  `(leaf, coarse_bucket, canonical_predicate_value)` - keyed on what the
+  invariant ASSERTS (drift-stable), not where it is declared. The tolerant
+  `(leaf, coarse_bucket)` key is RETAINED only as the cross-source recall-match
+  axis. `gt_adapter.canonical_predicate_value` is the new helper.
+- **Confirmation (CHANGED).** Now PER CONSTRAINT (a tolerant group can hold
+  several constraints; an easy sibling no longer confirms a hard one). The
+  field-attribution guard applies to ALL leniently-confirmed entries (no
+  `expected_outcome`), not just synthesised ones.
+- **GT entries** persist the `match` block so every entry is independently
+  re-gateable.
+
+### 15.3 Findings to date (tensorrt only)
+
+- **tensorrt 1.2.1 invariant GT (constraint grain):** union **212 constraints**,
+  **60 gate-confirmed**, GT-growth **+23 vs PoC**. (Old tolerant-grain numbers -
+  46 confirmed / 144 union - were inflated; superseded.) Two adversarial reviews
+  + a domain review: GT content **100% substantively correct** on a ~22-entry
+  sample; pipeline + anti-tautology design sound; attribution tightening dropped
+  0 confirmations.
+- **tensorrt 0.21.0:** 128 union / 3 confirmed (mech d-ab + PoC only, NO Opus
+  passes -> thin; quantifies that Opus passes are load-bearing for GT depth).
+- **Cross-engine schema gate** (shipped schemas vs live): transformers 4.57.3
+  107/107 clean; vllm 0.7.3 116/135; tensorrt 0.21.0 92/107 (divergences are
+  shipped-schema staleness vs refactored introspectors, not engine drift).
+- **Deterministic ceiling (SUPERSEDED, needs recompute at constraint grain):**
+  old tolerant-grain figures (mech-only 15/46=33%; surfaced 74%; lever-1 15->42)
+  are stale. Qualitative finding stands: schema ~1.0 deterministic; invariants
+  have a structural tail (cross-field / dispatch / abstract-config / list-typed)
+  that resists cheap determinism.
+
+### 15.4 Open items (next)
+
+1. **Recompute the deterministic ceiling at the constraint grain** (mech-only vs
+   the 212-constraint GT) - the headline cost-frontier number.
+2. Reviewer should-fixes: re-measure lever 1 on a frozen denominator; teach the
+   schema gate to resolve `$ref` (or soften the "resolves to nested types"
+   wording); add a vLLM noise-filter regression test.
+3. Carry the validated methodology to more cells (tensorrt 0.21->1.0 major
+   boundary = headline bump-robustness pair; needs 1.0 container + Opus passes).
+   Per-version producers exist for only ~6 versions; the window needs ~9 more
+   (overlaps the engine-knowledge-as-data refactor - now the same trunk).
+4. DEFERRED to milestone end: port trial improved-det-v2 primitives into the
+   production per-version miners.
+
+### 15.5 Repo state
+
+All study + refactor work is unified on ONE trunk: `study/5version-window`
+== `spike/engine-knowledge-as-data` (fast-forwarded; stale producer branches
+retired). Worktree: `~/workspace/llenergymeasure-trial`. tensorrt 1.2.1 source
+on disk at `/tmp/trial_tensorrt_v1_2_1_venv/src/tensorrt_llm`; containers present:
+tensorrt 0.21.0 + 1.2.1, vllm 0.7.3 + 0.19.1, transformers 4.57.3.
