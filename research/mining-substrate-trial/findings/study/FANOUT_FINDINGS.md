@@ -212,6 +212,97 @@ SEPARATE ckey from the Opus-confirmed one, so contributing-source counts
 understate true agreement (another reason the dedicated mech-only / combined-det
 gate runs are the correct ceiling instrument).
 
+## tensorrt 0.21.0 -> 1.0.0 -> 1.2.1: the major-boundary bump-robustness pair
+
+Established GT for two more cells (0.21.0, 1.0.0) via the same union+gate
+pipeline, each with 2 Opus passes (entry-point call-graph + class-hierarchy/MRO
+walk) as GT contributors, then ran an INDEPENDENT adversarial source-review of
+every confirmed entry per cell (each reviewer opens the cited source line and
+tries to refute the predicate / catch a gate false-confirm / find fabrication).
+
+### Per-cell GT (Opus passes + mech + PoC where present, runtime-gated)
+
+| cell | union | confirmed | GT contributors (constraints) | adversarial review |
+|---|---|---|---|---|
+| 0.21.0 | 164 | 18 | passA 74, passB 62, mech(d-ab) 55, poc 73 | 17/18 REAL, 0 false-confirm, 0 fabrication, 1 mis-stated (redundant) |
+| 1.0.0 | 123 | 21 | passA 75, passB 63, mech 43 (no PoC) | 21/21 REAL, 0 false-confirm, 0 fabrication |
+| 1.2.1 | 228 | 74 | re-gated (mech 107, passA 97, passB 98, poc 90, prod 42) | prior: 100% on ~22-entry sample |
+
+0.21.0 was previously thin (128 / 3, NO Opus passes); the 2 Opus passes lift it
+to 164 / 18, re-confirming Opus passes are load-bearing for GT depth. 1.0.0 has
+no PoC GT, so all its pass entries are net-new and got extra review scrutiny.
+
+Both new-cell reviews independently confirmed the gate's ANTI-FALSE-CONFIRM
+machinery works: the attribution-hardening (the gate forces
+`positive_confirmed=False` unless the raised message names the leaf field)
+closes the "CUDA-incidental-error" hole that the unconditional
+`torch.cuda.get_device_properties(0)` probe in `validate_dtype` would otherwise
+open - so args-model Literals confirm for the RIGHT reason even though
+construction touches CUDA (gate runs `--gpus all`). Zero fabrications, zero
+false-confirms across 39 reviewed confirmed entries (17/18 + 21/21).
+
+Two caveats both reviews surfaced (about the IDENTITY layer, NOT correctness):
+- **The denominator double-counts cross-source re-encodings.** At constraint
+  grain, the same source rule encoded by two sources with divergent predicate
+  values does NOT merge: 0.21's 18 confirmed entries are ~12 distinct rules,
+  1.0's 21 are ~17-19. The identity layer correctly avoids OVER-collapsing
+  genuinely-distinct constraints (the original re-base fix) but UNDER-merges
+  these cross-source twins; honest distinct-rule counts run ~30% below entry
+  counts. A canonicalisation pass that reconciles a rule's predicate encoding
+  across sources (keyed on citation) would tighten this.
+- **One mis-stated predicate encoding** (0.21 `lora_ckpt_source` labelled numeric
+  `>` over a string set); the underlying rule is real and separately captured
+  correctly by its passB twin (`literal_in [hf, nemo]`). It gate-confirmed only
+  via hand-authored kwargs that bypassed the bad synthesised probe - i.e. a
+  redundant, mis-encoded duplicate, not a wrong invariant.
+
+### Cross-major delta (matched by tolerant key = leaf field + coarse bucket)
+
+CONFIRMED (runtime-verified) knowledge:
+
+| bump | persist | added | dropped | rebounded |
+|---|---|---|---|---|
+| 0.21->1.0 (MAJOR) | 10/14 = 71% | 7 | 4 | 2 |
+| 1.0->1.2.1 (minor) | 16/17 = 94% | 44 | 1 | 3 |
+
+UNION (comprehensive mined) knowledge:
+
+| bump | persist | added | dropped | rebounded |
+|---|---|---|---|---|
+| 0.21->1.0 (MAJOR) | 59/109 = 54% | 34 | 50 | 39 |
+| 1.0->1.2.1 (minor) | 67/93 = 72% | 90 | 26 | 36 |
+
+Reading:
+- The MAJOR boundary (0.21->1.0) churns substantially more than the within-1.x
+  minor bump. At the comprehensive UNION level only 54% of mined knobs persist
+  across 0.21->1.0 (50 dropped, 39 RE-BOUNDED) vs 72% across 1.0->1.2.1.
+- The **RE-BOUNDED knobs (same field+bucket, CHANGED valid-set/bound) are the
+  silent-staleness cases**: a knob still present but with a different constraint,
+  where stale mined knowledge would be WRONG, not merely incomplete. 39 of them
+  across the major bump (~36% of carried-over union knobs). These are exactly
+  what the runtime gate catches by re-validating each carried-over constraint
+  against the live engine - the core empirical support for "observe, don't
+  re-encode".
+- The 1.0->1.2.1 delta is dominated by ADDITIONS (90 union / 44 confirmed new
+  knobs): the PluginConfig pydantic-isation, SamplingParams range checks,
+  CacheTransceiver timeout Fields, Nvfp4/Ray/sparse-attn families - all absent at
+  1.0, all added across 1.2.x. Existing knowledge is stable (94% confirmed-
+  persist); the work a bump-tracker does here is mostly MINE-NEW.
+
+Caveats: confirmed-level percentages are small-N (14 / 17 / 60 distinct knobs)
+and gated by replayability, so the UNION-level delta is the more robust
+knowledge-churn signal; field renames (e.g. `speculative_model` ->
+`speculative_model_dir`) show as drop+add, not rebound. Raw:
+/tmp/cross_major_delta.json.
+
+Implication for the north star: a major bump reorganises the config-validation
+surface enough that stale knowledge is materially WRONG (not just incomplete) for
+~a third of carried-over knobs, so a cheap runtime GATE that re-validates each
+carried-over constraint against the live engine is necessary to catch the
+dangerous (rebounded) cases - and it is already cheap. The mining half must
+separately surface the large ADDITIVE delta (deterministic walk-surface widening
+for the mechanical tail, LLM mining for the structural residual).
+
 ## Fan-out readiness (what the full 15-cell x 2-track matrix needs)
 
 - **Per-version producers exist for only ~6 versions** (transformers v4_57_3 /
