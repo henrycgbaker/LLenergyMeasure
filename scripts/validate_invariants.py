@@ -586,7 +586,6 @@ def _validate_invariant_with_captures(
 
     # Use hand-authored probes when present; otherwise synthesise them from the
     # declared predicate so the gate can validate predicate-only mined entries.
-    synthesized = False
     if (
         invariant.get("kwargs_positive") is not None
         and invariant.get("kwargs_negative") is not None
@@ -607,7 +606,6 @@ def _validate_invariant_with_captures(
                 None,
             )
         kwargs_positive, kwargs_negative = synth
-        synthesized = True
 
     pos = runner(native_type, kwargs_positive, strict_validate=strict_validate)
     neg = runner(native_type, kwargs_negative, strict_validate=strict_validate)
@@ -638,14 +636,18 @@ def _validate_invariant_with_captures(
             "message": pos.exception_message or "",
         }
 
-    # Hardening for SYNTHESISED probes: only confirm when the positive firing is
-    # ATTRIBUTABLE to the field under test - the leaf field name must appear in
-    # the raised exception / captured messages. The pos/neg pair already differ
-    # only in this field, so an attributable raise is strong evidence the field
-    # itself enforces the constraint; this rejects the case where a synthesised
-    # value trips an unrelated validator and "confirms" for the wrong reason.
-    # Hand-authored probes keep the original (looser) confirmation rule.
-    if synthesized and positive_confirmed:
+    # Attribution hardening for LENIENTLY-confirmed probes: when the corpus
+    # declares no exact ``expected_outcome``, ``_positive_confirms`` accepts any
+    # non-no_op firing - so a positive that trips an UNRELATED validator (or a
+    # wrong-type error) would "confirm" for the wrong reason. Require the firing
+    # to be ATTRIBUTABLE to the field under test (leaf name present in the raised
+    # message). The pos/neg pair differ only in this field, so an attributable
+    # raise is strong evidence the field itself enforces the constraint. This
+    # covers both synthesised probes AND hand-authored probes that lack an
+    # expected_outcome (e.g. the study's Opus/mechanical sources). Entries with a
+    # declared expected_outcome went through the STRICT branch and are left as-is.
+    expected_strict = expected.get("outcome") in _FIRING_OUTCOMES
+    if positive_confirmed and not expected_strict:
         probe_leaf = _leaf_field(invariant) or ""
         haystack = (pos.exception_message or "") + " " + " ".join(observed_messages)
         if probe_leaf and probe_leaf not in haystack:

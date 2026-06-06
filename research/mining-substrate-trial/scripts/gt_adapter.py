@@ -492,6 +492,55 @@ def coarse_predicate_bucket(predicate_kind: str | None) -> str:
     return "presence"
 
 
+def _canon_value(v: Any) -> str:
+    """Drift-stable canonical string for a predicate value/bound."""
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return str(v)
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str):
+        return " ".join(v.split())  # normalise whitespace in cross-field exprs
+    if isinstance(v, (list, tuple)):
+        return "[" + ",".join(sorted(_canon_value(x) for x in v)) + "]"
+    if isinstance(v, dict):
+        return (
+            "{"
+            + ",".join(f"{_canon_value(k)}={_canon_value(v[k])}" for k in sorted(v, key=str))
+            + "}"
+        )
+    return str(v)
+
+
+def canonical_predicate_value(invariant: dict[str, Any]) -> str:
+    """Canonical, drift-stable string of the VALUE/bound an invariant asserts.
+
+    Used (with leaf field + coarse bucket) as the STRICT constraint identity so
+    genuinely-different constraints on the same field (e.g. per-subclass bounds
+    on an inherited ``max_draft_len``) stay distinct, while pure cross-source
+    relabels of the SAME constraint (identical value) stay merged. Keys on what
+    the invariant ASSERTS (the bound/allowlist) - drift-stable - rather than on
+    where it is declared (drift-fragile). Reads the GT-schema
+    ``predicate_value`` when present, else the single-field ``match.fields``
+    operator's right-hand side (the bound/list), else (cross-field) the sorted
+    secondary leaf names so multi-field constraints stay distinct. Fails SAFE:
+    if two sources genuinely encode the same constraint differently it
+    over-splits (visible/auditable), never silently merges distinct constraints.
+    """
+    pv = invariant.get("predicate_value")
+    if pv is None:
+        mf = (invariant.get("match") or {}).get("fields") or {}
+        if len(mf) == 1:
+            val = next(iter(mf.values()))
+            pv = next(iter(val.values())) if isinstance(val, dict) and len(val) == 1 else val
+        elif len(mf) > 1:
+            pv = sorted(k.rpartition(".")[2] for k in mf)
+    return _canon_value(pv)
+
+
 # ---------------------------------------------------------------------------
 # Invariant canonicalisation
 # ---------------------------------------------------------------------------

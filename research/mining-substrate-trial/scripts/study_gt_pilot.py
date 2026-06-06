@@ -99,7 +99,8 @@ class Candidate:
     source: str
     orig_id: str
     inv: dict[str, Any]
-    tkey: tuple[str, str]
+    tkey: tuple[str, str]  # tolerant match axis: (leaf, coarse_bucket)
+    ckey: tuple[str, str, str]  # constraint axis: (leaf, coarse_bucket, canonical_predicate_value)
     gateable: bool
     # filled in after gating
     verdict: str = "ungated"  # confirmed | failed | skipped | infra_error | ungated
@@ -109,9 +110,19 @@ class Candidate:
 
 @dataclass
 class Group:
-    tkey: tuple[str, str]
+    """A distinct CONSTRAINT (constraint key), pooled across sources. Per the
+    identity review: count + confirm at this constraint grain, NOT the coarser
+    tolerant (leaf, bucket) grain which over-collapses per-class/per-bound
+    constraints. ``tkey`` (= ckey[:2]) is retained for tolerant cross-source
+    recall reporting."""
+
+    ckey: tuple[str, str, str]
     sources: set[str] = field(default_factory=set)
     members: list[Candidate] = field(default_factory=list)
+
+    @property
+    def tkey(self) -> tuple[str, str]:
+        return (self.ckey[0], self.ckey[1])
 
     @property
     def gateable_members(self) -> list[Candidate]:
@@ -149,6 +160,18 @@ def _tolerant_key(inv: dict[str, Any]) -> tuple[str, str]:
     return (str(leaf), str(bucket))
 
 
+def _constraint_key(inv: dict[str, Any], tkey: tuple[str, str]) -> tuple[str, str, str]:
+    """Strict CONSTRAINT identity: tolerant key + canonical predicate VALUE.
+
+    Distinguishes genuinely-different constraints on the same field (per-class /
+    per-bound) while merging pure cross-source relabels of the same constraint.
+    Keys on what the invariant asserts, not where it is declared (see the
+    identity review). The predicate VALUE - not the field's defining class - is
+    the safe discriminator: a subclass that tightens an inherited field's bound
+    differs in VALUE even though the field-owner is identical."""
+    return (tkey[0], tkey[1], gt_adapter.canonical_predicate_value(inv))
+
+
 def _gateable(inv: dict[str, Any]) -> bool:
     """Stageable to the gate: needs a native_type to construct. The gate
     synthesises kwargs from the declared predicate when the entry carries no
@@ -177,12 +200,14 @@ def load_candidates() -> list[Candidate]:
         for inv in invs:
             if not isinstance(inv, dict):
                 continue
+            tkey = _tolerant_key(inv)
             cands.append(
                 Candidate(
                     source=source,
                     orig_id=str(inv.get("id", "")),
                     inv=inv,
-                    tkey=_tolerant_key(inv),
+                    tkey=tkey,
+                    ckey=_constraint_key(inv, tkey),
                     gateable=_gateable(inv),
                 )
             )
@@ -256,10 +281,14 @@ def gate(cands: list[Candidate], *, timeout_sec: int = 1800) -> None:
             c.verdict = "failed"
 
 
-def build_groups(cands: list[Candidate]) -> dict[tuple[str, str], Group]:
-    groups: dict[tuple[str, str], Group] = {}
+def build_groups(cands: list[Candidate]) -> dict[tuple[str, str, str], Group]:
+    """Group candidates by CONSTRAINT key (one group = one distinct constraint,
+    pooled across sources). Confirmation is then per-constraint, so an easy
+    sibling constraint on the same field can no longer mark a hard one
+    confirmed."""
+    groups: dict[tuple[str, str, str], Group] = {}
     for c in cands:
-        g = groups.setdefault(c.tkey, Group(tkey=c.tkey))
+        g = groups.setdefault(c.ckey, Group(ckey=c.ckey))
         g.sources.add(c.source)
         g.members.append(c)
     return groups
@@ -270,6 +299,7 @@ def _gt_entry(c: Candidate, runtime_label: str) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "id": c.orig_id,
         "source": c.source,
+        "constraint_key": list(c.ckey),
         "tolerant_key": list(c.tkey),
         "native_type": inv.get("native_type"),
         "native_field": inv.get("native_field"),
@@ -292,7 +322,7 @@ def _gt_entry(c: Candidate, runtime_label: str) -> dict[str, Any]:
     return entry
 
 
-def write_pilot_gt(groups: dict[tuple[str, str], Group]) -> Path:
+def write_pilot_gt(groups: dict[tuple[str, str, str], Group]) -> Path:
     confirmed: list[dict[str, Any]] = []
     unverified: list[dict[str, Any]] = []
     for g in groups.values():
@@ -310,17 +340,20 @@ def write_pilot_gt(groups: dict[tuple[str, str], Group]) -> Path:
             entry["gate_status"] = g.status
             unverified.append(entry)
 
-    confirmed.sort(key=lambda e: tuple(e["tolerant_key"]))
-    unverified.sort(key=lambda e: tuple(e["tolerant_key"]))
+    confirmed.sort(key=lambda e: tuple(e["constraint_key"]))
+    unverified.sort(key=lambda e: tuple(e["constraint_key"]))
 
     out = {
-        "schema_version": "study_pilot_gt/1.0.0",
+        "schema_version": "study_pilot_gt/2.0.0",
         "engine": ENGINE,
         "engine_version": _version_str(),
         "task": "invariants",
         "round": "R0_pilot",
         "gate": f"scripts/validate_invariants.py (in {IMAGE_OVERRIDE or ENGINE + ' container'})",
-        "identity": "tolerant: (leaf_native_field, coarse_predicate_bucket)",
+        "identity": (
+            "constraint = (leaf_native_field, coarse_predicate_bucket, "
+            "canonical_predicate_value); tolerant_key = first two, for cross-source recall"
+        ),
         "n_confirmed": len(confirmed),
         "n_unverified": len(unverified),
         "confirmed": confirmed,
@@ -333,30 +366,35 @@ def write_pilot_gt(groups: dict[tuple[str, str], Group]) -> Path:
 
 def write_report(
     cands: list[Candidate],
-    groups: dict[tuple[str, str], Group],
+    groups: dict[tuple[str, str, str], Group],
 ) -> tuple[Path, dict[str, Any]]:
     by_source: dict[str, list[Candidate]] = defaultdict(list)
     for c in cands:
         by_source[c.source].append(c)
 
-    source_keys: dict[str, set[tuple[str, str]]] = {
-        src: {c.tkey for c in cs} for src, cs in by_source.items()
+    # Count at the CONSTRAINT grain (ckey), per the identity review.
+    source_keys: dict[str, set[tuple[str, str, str]]] = {
+        src: {c.ckey for c in cs} for src, cs in by_source.items()
     }
     union_keys = set(groups.keys())
     confirmed_keys = {k for k, g in groups.items() if g.status == "confirmed"}
     poc_keys = source_keys.get("poc", set())
 
-    # GT-growth: gate-confirmed tolerant identities absent from the PoC GT.
+    # GT-growth: gate-confirmed constraints absent from the PoC GT.
     growth_keys = confirmed_keys - poc_keys
 
-    # Per-source unique contribution: tolerant identities only this source has.
+    # Per-source unique contribution: constraints only this source has.
     unique_by_source: dict[str, int] = {}
     for src in SOURCES:
-        others: set[tuple[str, str]] = set()
+        others: set[tuple[str, str, str]] = set()
         for other_src, keys in source_keys.items():
             if other_src != src:
                 others |= keys
         unique_by_source[src] = len(source_keys.get(src, set()) - others)
+
+    # Collapse factor: how much the coarse tolerant key would have over-merged.
+    distinct_tkeys = {c.tkey for c in cands}
+    collapsed_tkeys = {t for t in distinct_tkeys if len({k for k in union_keys if k[:2] == t}) > 1}
 
     # Gate rejections: probed candidates that RAN and were not confirmed.
     rejected = [c for c in cands if c.verdict == "failed"]
@@ -374,10 +412,13 @@ def write_report(
     metrics = {
         "engine": ENGINE,
         "version": _version_str(),
+        "identity_grain": "constraint = (leaf, coarse_bucket, canonical_predicate_value)",
         "per_source_candidate_counts": {s: len(cs) for s, cs in by_source.items()},
-        "per_source_tolerant_key_counts": {s: len(k) for s, k in source_keys.items()},
-        "union_size_tolerant": len(union_keys),
-        "n_gate_confirmed_keys": len(confirmed_keys),
+        "per_source_constraint_counts": {s: len(k) for s, k in source_keys.items()},
+        "union_size_constraints": len(union_keys),
+        "union_size_tolerant": len(distinct_tkeys),
+        "collapsed_tolerant_keys": len(collapsed_tkeys),
+        "n_gate_confirmed_constraints": len(confirmed_keys),
         "n_probed_candidates": sum(1 for c in cands if c.gateable),
         "confirmed_via_synthesis": len(synth_confirmed),
         "confirmed_via_authored_kwargs": len(authored_confirmed),
@@ -387,29 +428,30 @@ def write_report(
             "skipped": len(skipped),
             "infra_error": len(infra),
         },
-        "gt_growth_keys_vs_poc": len(growth_keys),
-        "poc_tolerant_keys": len(poc_keys),
+        "gt_growth_constraints_vs_poc": len(growth_keys),
+        "poc_constraints": len(poc_keys),
         "per_source_unique_contribution": unique_by_source,
         "group_status_counts": _count(g.status for g in groups.values()),
     }
 
-    def fmt_keys(keys: set[tuple[str, str]], limit: int = 40) -> list[str]:
-        rows = sorted(f"{leaf} [{bucket}]" for leaf, bucket in keys)
+    def fmt_keys(keys: set[tuple[str, str, str]], limit: int = 40) -> list[str]:
+        rows = sorted(f"{leaf} [{bucket}] = {pv}" for leaf, bucket, pv in keys)
         return rows[:limit]
 
     L: list[str] = []
     L.append(f"# Pilot GT report - {ENGINE} {_version_str()} invariants (union + gate)")
     L.append("")
     L.append(
-        f"Round 0: union the {len(SOURCES)} GT sources ({', '.join(sorted(SOURCES))}) by "
-        "tolerant identity (leaf_native_field, coarse_predicate_bucket), runtime-gate "
-        f"every candidate (kwargs authored or synthesised) in the production validator "
-        f"inside {IMAGE_OVERRIDE or ENGINE + ' container'}, keep gate-confirmed as GT."
+        f"Round 0: union the {len(SOURCES)} GT sources ({', '.join(sorted(SOURCES))}) at the "
+        "CONSTRAINT grain (leaf_native_field, coarse_predicate_bucket, "
+        "canonical_predicate_value), runtime-gate every candidate (kwargs authored or "
+        f"synthesised) in the production validator inside "
+        f"{IMAGE_OVERRIDE or ENGINE + ' container'}, keep gate-confirmed per constraint as GT."
     )
     L.append("")
     L.append("## Per-source candidate counts")
     L.append("")
-    L.append("| source | raw candidates | tolerant keys | gateable | unique tolerant keys |")
+    L.append("| source | raw candidates | constraints | gateable | unique constraints |")
     L.append("|---|---|---|---|---|")
     for src in SOURCES:
         cs = by_source.get(src, [])
@@ -420,8 +462,13 @@ def write_report(
     L.append("")
     L.append("## Union + gate")
     L.append("")
-    L.append(f"- Union size (distinct tolerant identities across 4 sources): **{len(union_keys)}**")
-    L.append(f"- Gate-confirmed tolerant identities: **{len(confirmed_keys)}**")
+    L.append(f"- Union size (distinct CONSTRAINTS across sources): **{len(union_keys)}**")
+    L.append(
+        f"- Tolerant keys (coarser, leaf+bucket): {len(distinct_tkeys)}; of which "
+        f"**{len(collapsed_tkeys)}** held >1 distinct constraint (would have over-collapsed "
+        "under the old leaf+bucket identity)."
+    )
+    L.append(f"- Gate-confirmed constraints: **{len(confirmed_keys)}**")
     L.append(
         f"- Probed candidates (native_type present, kwargs authored or synthesised): "
         f"**{metrics['n_probed_candidates']}** "
@@ -434,7 +481,7 @@ def write_report(
         f"{len(authored_confirmed)} from hand-authored kwargs"
     )
     L.append("")
-    L.append("Group status breakdown (per tolerant identity):")
+    L.append("Group status breakdown (per constraint):")
     L.append("")
     for status, n in sorted(metrics["group_status_counts"].items()):
         L.append(f"- {status}: {n}")
@@ -442,9 +489,9 @@ def write_report(
     L.append("## GT-growth vs PoC N=1 GT")
     L.append("")
     L.append(
-        f"PoC GT contributed **{len(poc_keys)}** tolerant identities. The "
+        f"PoC GT contributed **{len(poc_keys)}** constraints. The "
         f"gate-confirmed union grows GT by **{len(growth_keys)}** confirmed "
-        f"identities the PoC GT lacked:"
+        f"constraints the PoC GT lacked:"
     )
     L.append("")
     for row in fmt_keys(growth_keys):
