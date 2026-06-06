@@ -12,10 +12,14 @@
 > held >1 constraint), **60 confirmed** (was an inflated 46), **GT-growth +23 vs
 > PoC** (was 8). Substantive domain review separately verified the confirmed
 > entries are 100% real/correctly-captured (~22-entry sample), and the
-> attribution tightening dropped 0 confirmations. **All percentage/ceiling
-> numbers BELOW this note (33% / 74% / 15->42) predate the re-base and are
-> computed at the old tolerant grain - they are SUPERSEDED and need recompute at
-> the constraint grain.**
+> attribution tightening dropped 0 confirmations. **The deterministic-ceiling and
+> lever-1 sections below have now been RECOMPUTED at the constraint grain
+> (denominator 212 union / 60 confirmed). Headline change: the old tolerant-grain
+> "33% confirm / 74% surfaced" collapses to 25% confirm / 25% surfaced - the
+> apparent probe-synthesis gap was an identity-collapse artefact (the old 74%
+> reproduces as the tolerant-key reach, 34/46); the entire deterministic deficit
+> is mining-scope. Lever 1 (PluginConfig walk) lifts recall 25% -> 46.7% AND grows
+> the GT by +13 constraints outside the frozen union.**
 
 
 Builds on the tensorrt-1.2.1 invariant pilot (see
@@ -77,83 +81,63 @@ bump-delta-recovery across the 0.21->1.2 boundary therefore needs Opus passes on
 
 ## Deterministic ceiling decomposition (tensorrt 1.2.1) - the core cost-frontier datapoint
 
-Ablation: mechanical-only (improved-det-v2 + gate probe-synthesis, ZERO Opus)
-vs the full gate-validated union GT (46 confirmed identities). This measurement
-is only meaningful BECAUSE GT is the Opus+runtime union, not the mechanical
-output - else mechanical recall would be 1.0 tautologically. The 12 "missed"
-identities below were surfaced ONLY by Opus; a mechanical-only GT would be blind
-to them and would falsely report 100%. So the thorough (non-tautological) GT is
-what makes the deterministic ceiling measurable at all.
+CONSTRAINT-GRAIN recompute (supersedes the tolerant-grain 33%/74% this section
+previously carried). Ablation: mechanical-only (improved-det-v2 + gate
+probe-synthesis, ZERO Opus) vs the FROZEN gate-validated union GT (**212 union
+constraints, 60 gate-confirmed**). The 60 gate-confirmed constraints are the
+denominator - a constraint counts as "real" only once the runtime gate confirms
+it. Non-tautological BECAUSE GT is the Opus+runtime union, not the mechanical
+output: the 45 missed below were surfaced ONLY by the Opus passes / PoC; a
+mech-only GT would be blind to them and falsely report ~100%.
 
-| split | identities | % of GT |
+| split | constraints | % of confirmed-60 |
 |---|---|---|
-| confirmed GT (denominator) | 46 | 100% |
-| mech CONFIRMS today | 15 | 33% |
-| mech SURFACED (det-reachable if probing were perfect) | 34 | 74% |
-| mech MISSED entirely (12/12 surfaced by Opus) | 12 | 26% |
+| confirmed GT (denominator) | 60 | 100% |
+| mech CONFIRMS today | 15 | 25.0% |
+| mech SURFACED (strict constraint ckey) | 15 | 25.0% |
+| mech MISSED entirely | 45 | 75.0% |
+| surfaced-but-unconfirmed gap | **0** | 0% |
 
-The 33% is a FLOOR, not a deterministic ceiling. The gap decomposes into two
-separately-addressable, mostly-deterministic levers:
-- **Probe-synthesis gap (33% -> 74%, ~19 identities):** the miner already
-  SURFACED these; synthesis just can't probe them yet (cross-field, dispatch,
-  presence, type). Pure deterministic engineering - multi-field probes,
-  type-probes, dispatch-aware construction. No LLM.
-- **Mining-scope gap (74% -> ~100%, 12 identities):** the miner never surfaced
-  these. Inspection shows most are PluginConfig literal fields
-  (gemm_plugin, bert_attention_plugin, gemm_swiglu_plugin, low_latency_gemm_*,
-  allowed_backends, dtype, lora_ckpt_source) - i.e. a WALK-SURFACE gap (the
-  miner doesn't walk tensorrt_llm.plugin), also deterministically fixable by
-  extending the miner's module surface. Only a residual is expected to need LLM
-  mining.
+**Headline correction: at constraint grain the probe-synthesis gap VANISHES.**
+Everything mech surfaces (15) it also confirms (15) - synthesis is reliable on
+what the miner reaches. The old "33% confirm / 74% surfaced" were TOLERANT-grain
+(leaf, coarse_bucket), and that 74% reproduces EXACTLY as mech's tolerant-key
+reach here (34/46 = 73.9%): the tolerant key counted mech as "surfacing" a
+confirmed constraint whenever it touched the same field+bucket, even when mech
+asserted a DIFFERENT predicate value. So the old 33->74 "probe-synthesis gap" was
+an ARTEFACT of identity over-collapse, not a real deterministic-engineering
+opportunity. The entire deterministic deficit is a MINING-SCOPE gap: mech reaches
+25% of the real constraints; the other 75% it never surfaces.
 
-Implication for the production CI architecture (heavy-deterministic mine +
-cheap-LLM verify): looks ACHIEVABLE. The verify/validate half is ALREADY cheap
-and deterministic (the runtime gate). The open empirical question is the exact
-deterministic mining+probing plateau once both levers are pushed (Round 0b) -
-the residual above plateau is the irreducible per-bump LLM-mining need. Opus
-passes remain required as GT CONTRIBUTORS (denominator), even when the
-production miner is the cheap method under evaluation.
+The 45 missed leaf fields are dominated by (a) PluginConfig literal fields
+(gemm_plugin, bert_attention_plugin, gemm_swiglu_plugin, low_latency_gemm_*,
+dtype, ...) the miner does not walk; (b) sampling/serving params (temperature,
+top_k, top_p, best_of, max_batch_size, max_draft_len, free_gpu_memory_fraction,
+...); and (c) cross-field / abstract-config constraints (allowed_backends,
+per_worker_gpu_share, capacity_scheduler_policy) surfaced only by Opus. (a) is the
+cheap mining-scope lever (lever 1 below, already built); (c) is the structural LLM
+tail.
 
-## Round 0b probe (tensorrt 1.2.1): what the 33%->74% gap actually is
+Deterministic levers, re-ranked at constraint grain:
+1. **Miner walk-surface widening (BUILT, lever 1 below):** the highest-yield and
+   ONLY mech lever still live - the probe-synthesis lever is retired (0 gap).
+   Surfaces the (a) PluginConfig family. Measured below.
+2. **Further walk-surface targets:** sampling/serving config classes (b) the
+   miner still does not walk. Same mechanism as lever 1, next batch.
+3. **Residual (cross-field / abstract / context-dependent configs (c)):** the
+   irreducible LLM-mining tail - not cheaply surfaceable by static walk.
 
-Diagnosed the 19 surfaced-but-mech-unconfirmed identities by predicate + reason:
-
-| predicate | reason | count | nature |
-|---|---|---|---|
-| `present` | skipped | 12 | validators on list/cross-field surfaces (allowed_backends, eagle_choices, draft_len_schedule) |
-| `<` / `<=` / `>` | failed | 6 | NOT a synthesis bug: list-typed fields (draft_len_schedule) scalar-probe type-error; abstract/context configs (DecodingBaseConfig, RayPlacementConfig per_worker_gpu_share) don't construct standalone |
-| `multifield:2` | skipped | 3 | genuine cross-field (two co-fields) |
-| `type_is_not` | skipped | 1 | clean type probe (cheap win, but tiny) |
-
-So the surfaced-but-unconfirmed gap is dominated by STRUCTURALLY HARD cases
-(list-typed values, abstract/context-dependent configs, cross-field), not
-low-hanging probe-synthesis fruit. The clean single-scalar constraints are
-already confirmed (the 15). This tempers the earlier "74% if probing were
-perfect" read: not all of the surfaced 74% is CHEAPLY reachable.
-
-Deterministic levers ranked by yield/effort/safety (1.2.1):
-1. **Miner walk-surface widening (+12, the mining-scope gap, 33%->~59%):** the
-   12 mech-MISSED are mostly PluginConfig literal_in fields the miner doesn't
-   walk (tensorrt_llm.plugin). These are CLEAN membership constraints synthesis
-   already handles - they just need surfacing. Highest-yield, cleanest win, but
-   lives in the static_invariant_miner producer (refactor-overlapping).
-2. **Schema-typed / live-reflected probe values (partial, +some of 6+12):** use
-   the field's real type (list/int/...) for probe values instead of scalar
-   sentinels - fixes list-typed cases. In-gate, principled (Track I over Track
-   S types), but does not help abstract-config / cross-field cases.
-3. **Multi-field synthesis (+3 and some present):** hold co-fields valid, vary
-   one. Needs valid co-field values; harder, partial.
-4. **Residual (abstract configs, context-dependent, semantic cross-field):**
-   likely the irreducible LLM-mining tail.
-
-**Answer to "can deterministic reach ~1.0 for invariants?":** plausibly to
-~60-70% cheaply (miner-widening + typed probes), with a STRUCTURAL tail
-(abstract/context/cross-field) that resists cheap determinism. Contrast schema,
-which IS ~1.0 deterministic (reflection is engine truth). So the product
-architecture (heavy-deterministic mine + cheap runtime-gate verify) holds for
-schema outright and for the majority of invariants; a minority of invariants
-will need LLM mining. The exact plateau needs Round 0b pushed across cells;
-1.2.1 says it is meaningfully below 1.0 for invariants.
+**Answer to "can deterministic reach ~1.0 for invariants?":** NO - and the
+constraint-grain number is lower and more honest than the old tolerant read.
+Bare mechanical reaches 25%; one cheap walk-surface lever lifts confirmed recall
+to ~47% (below), with a structural tail (cross-field / abstract / context) that
+resists cheap determinism. Contrast schema, which IS ~1.0 deterministic
+(reflection is engine truth). So the product architecture (heavy-deterministic
+mine + cheap runtime-gate verify) holds for schema outright; for invariants the
+cheap-deterministic plateau sits well below 1.0 and a meaningful minority needs
+LLM mining. Crucially the VERIFY half is cheap, deterministic, AND reliable (0
+probe gap - the gate confirms what the miner surfaces); the open question is
+purely how far deterministic MINING SCOPE can push surfacing.
 
 ## Round 0b lever 1 BUILT + measured (tensorrt 1.2.1): miner walk-surface widening
 
@@ -165,27 +149,40 @@ Implemented the highest-yield deterministic lever in the production static miner
 - literal/strenum rules emit `{not_in: ...}` (firing condition) so they bucket as
   `membership`, matching the GT/gt_adapter convention (was misbucketing `presence`).
 
-Measured (combined deterministic mech = improved-det-v2 + widened production miner,
-gated vs the 46-identity union GT):
+Re-measured at CONSTRAINT grain on the FROZEN denominator (212 union / 60
+confirmed), separating the THREE effects the old "15->42" conflated. Combined
+deterministic set = improved-det-v2 (mech, 110 candidates) + widened production
+miner (prod, 44 candidates), gated together:
 
-| metric | before | after lever 1 |
+| effect (vs frozen 60-confirmed) | mech-only | + prod widening |
 |---|---|---|
-| production miner candidates | 23 | 44 (19 PluginConfig literals) |
-| deterministic confirmed identities | 15 | **42** |
-| of the 12 GT-missed, recovered | 0 | **6** (gemm/plugin family) |
-| GT-growth (new runtime-confirmed) | - | ~20 plugin literals the union missed |
+| SURFACES (strict ckey, of 60) | 15 (25%) | **30 (50%)** |
+| CONFIRMS (recall of frozen GT, of 60) | 15 (25%) | **28 (46.7%)** |
+| GT-GROWTH (confirmed OUTSIDE the 212 union) | 0 | **+13** |
+| promoted union tail (unverified -> confirmed) | 0 | +1 |
 
-So the deterministic baseline rose sharply, AND the widened miner GREW the GT by
-~20 runtime-confirmed plugin literals (the non-tautology mechanism working: a new
-method surfaces gate-confirmed invariants the union lacked - so the GT itself
-should grow and be re-gated). The remaining 6 GT-missed are on still-unwalked
-configs (Nvfp4GemmConfig.allowed_backends, TorchCompileConfig.capture_num_tokens,
-LoraConfig.lora_ckpt_source, *DecodingConfig.max_draft_len, ...) - the next
-walk-surface targets. Two caveats surfaced: (a) the production per-version miner
-was much weaker than the trial improved-det-v2 (23 vs 110) - it has not absorbed
-the trial R&D primitives; (b) tolerant-identity encoding must stay consistent
-across sources (the `in`/`not_in` misbucket is the kind of convention drift the
-study's identity layer must police).
+Read separately (NOT summed into one recall number, which is the error the old
+"42" made):
+- **Recall of the frozen GT rises 25% -> 46.7%** (+13 newly-confirmed constraints
+  the prod widening added on top of mech). Surfacing of the frozen GT doubles
+  25% -> 50%. The combined det leaves a small 2-constraint surfaced-but-unconfirmed
+  residual (30 surfaced, 28 confirmed) - prod's structural cases.
+- **GT-GROWTH is separate and additive: +13 plugin-literal constraints
+  gate-confirmed that the ENTIRE frozen 212-union lacked** (all from the prod
+  walk; 19 PluginConfig literals surfaced, 13 confirmed outside the union, +1
+  promoted from the unverified tail). This is the non-tautology mechanism working:
+  a new method surfaces gate-confirmed invariants the union missed, so the GT
+  itself should grow and be re-gated to 73 confirmed / 225 union in the next
+  refresh. It is NOT counted as recall of the frozen denominator (doing so would
+  re-introduce the tautology the re-base removed).
+
+So the honest decomposition of the old "15 -> 42 confirmed": 28 recall of the
+frozen GT + 13 GT-growth + 1 promoted tail = 42 total gate-confirmed deterministic
+constraints, but only 28/60 = 46.7% is RECALL. Caveats: (a) prod hit 9
+infra_errors (PluginConfig fields that don't construct standalone) - a ceiling on
+the walk lever until multi-field construction lands; (b) the production per-version
+miner is still much weaker than trial improved-det-v2 (44 vs 110 candidates) - it
+has not absorbed the trial R&D primitives (deferred to milestone end).
 
 ## Fan-out readiness (what the full 15-cell x 2-track matrix needs)
 

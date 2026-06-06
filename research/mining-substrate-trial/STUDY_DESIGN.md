@@ -423,17 +423,27 @@ parameters that CHANGED as a result. Findings detail in
 - **Cross-engine schema gate** (shipped schemas vs live): transformers 4.57.3
   107/107 clean; vllm 0.7.3 116/135; tensorrt 0.21.0 92/107 (divergences are
   shipped-schema staleness vs refactored introspectors, not engine drift).
-- **Deterministic ceiling (SUPERSEDED, needs recompute at constraint grain):**
-  old tolerant-grain figures (mech-only 15/46=33%; surfaced 74%; lever-1 15->42)
-  are stale. Qualitative finding stands: schema ~1.0 deterministic; invariants
-  have a structural tail (cross-field / dispatch / abstract-config / list-typed)
-  that resists cheap determinism.
+- **Deterministic ceiling (RECOMPUTED at constraint grain, denominator 60
+  confirmed / 212 union):** bare mech-only (improved-det-v2) confirms **15/60 =
+  25%** and surfaces exactly the same 15 - the **surfaced-but-unconfirmed gap is
+  0**: at constraint grain the probe-synthesis gap VANISHES (the old "74% surfaced"
+  was a tolerant-collapse artefact, reproduced here as the tolerant-key reach
+  34/46 = 73.9%). The entire deficit is mining-scope. Lever 1 (production
+  PluginConfig walk) lifts recall to **28/60 = 46.7%** (surfacing 30/60 = 50%) AND
+  grows the GT by **+13 plugin-literal constraints outside the frozen union** (the
+  old "15->42" conflated these three effects). Schema remains ~1.0 deterministic;
+  invariants plateau well below 1.0 with a structural tail (cross-field /
+  abstract-config / context-dependent) needing LLM mining. Detail in
+  FANOUT_FINDINGS.md; raw recompute in /tmp/ceiling_recompute.json +
+  /tmp/lever1_recompute.json.
 
 ### 15.4 Open items (next)
 
-1. **Recompute the deterministic ceiling at the constraint grain** (mech-only vs
-   the 212-constraint GT) - the headline cost-frontier number.
-2. Reviewer should-fixes: re-measure lever 1 on a frozen denominator; teach the
+1. DONE - **deterministic ceiling recomputed at constraint grain** (mech-only 25%;
+   lever-1 46.7% recall + GT-growth +13; see 15.3 and FANOUT_FINDINGS.md).
+2. DONE - **lever 1 re-measured on the frozen denominator** (surfacing / recall /
+   GT-growth reported separately). Remaining reviewer should-fixes: re-gate the GT
+   to fold in the +13 grown constraints (-> 73 confirmed / 225 union); teach the
    schema gate to resolve `$ref` (or soften the "resolves to nested types"
    wording); add a vLLM noise-filter regression test.
 3. Carry the validated methodology to more cells (tensorrt 0.21->1.0 major
