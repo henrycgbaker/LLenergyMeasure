@@ -1,8 +1,11 @@
 # Engine-Config Mining: Optimization Study (5-version window)
 
-**Status: DESIGN FOR APPROVAL (2026-06-06, rev 5). Review folded in
-(`STUDY_DESIGN_REVIEW.md`); all Section-13 parameters LOCKED. Awaiting greenlight to
-execute Round 0 (container builds + GT establishment). Not yet executing.**
+**Status: EXECUTING (rev 5 locked; revisions in Section 15.2). Round 0 GT
+established and runtime-gated across the full tensorrt window
+(0.21->1.0->1.1->1.2.1); both headline findings in hand (deterministic ceiling +
+bump-robustness gradient). RESULTS SYNTHESIS: see `STUDY_RESULTS.md`. Execution
+log + design revisions: Section 15. Chronological detail:
+`findings/study/FANOUT_FINDINGS.md`.**
 
 A rigorous, systematised re-run of the engine-config mining problem, constrained to
 a tight recent-version window, informed by the Wave 1/2/2.5 proof-of-concept (now
