@@ -428,17 +428,24 @@ parameters that CHANGED as a result. Findings detail in
   (was 128 / 3 without Opus passes; the lift re-confirms Opus passes are
   load-bearing). Adversarial source-review: 17/18 REAL, 0 false-confirm, 0
   fabrication, 1 mis-stated redundant encoding.
-- **tensorrt 1.0.0 (NEW cell, major boundary):** **123 union / 21 confirmed**, 2
-  Opus passes + mech, no PoC (all net-new). Adversarial source-review: 21/21
-  REAL, 0 false-confirm, 0 fabrication.
-- **Cross-major delta (0.21->1.0->1.2.1):** the MAJOR bump churns far more than
-  the minor one - union-level persistence 54% (0.21->1.0) vs 72% (1.0->1.2.1),
-  with 39 RE-BOUNDED knobs across the major boundary (same field, changed
-  bound/allowlist = silent-staleness cases the runtime gate catches). 1.0->1.2.1
-  is addition-dominated (90 union / 44 confirmed new knobs). Detail in
-  FANOUT_FINDINGS; raw /tmp/cross_major_delta.json. Identity caveat: confirmed
-  entry counts double-count cross-source re-encodings (~12 distinct rules behind
-  0.21's 18; ~17-19 behind 1.0's 21).
+- **tensorrt 1.0.0 (NEW, major boundary):** **123 union / 21 confirmed**, 2 Opus
+  passes + mech, no PoC. Adversarial source-review: 21/21 REAL, 0 false-confirm,
+  0 fabrication.
+- **tensorrt 1.1.0 (NEW):** **84 union / 24 confirmed**, 2 Opus passes only (no
+  mech/PoC). Adversarial source-review: 24/24 REAL, 0 false-confirm, 0
+  fabrication.
+- **Bump-robustness gradient (0.21->1.0->1.1->1.2.1):** on the apples-to-apples
+  OPUS basis (passA+passB, present every cell), the MAJOR bump churns ~8x a minor
+  one: persistence **53% (0.21->1.0 major)** vs **94% (1.0->1.1)** and **92%
+  (1.1->1.2.1)**. Among surviving knobs the major bump RE-BOUNDS 42% (changed
+  bound/allowlist = silent-staleness the runtime gate catches) vs 14-20% on
+  minors. 1.1 sits with 1.0 (pre-pydantic PluginConfig, no SamplingParams ranges,
+  validate_build_config raises); the 1.2.x feature additions land after 1.1. The
+  raw UNION basis is source-confounded across cells (1.1 has no mech) - use the
+  OPUS basis. Detail in FANOUT_FINDINGS; raw /tmp/cross_major_delta.json. Identity
+  caveat: confirmed entry counts double-count cross-source re-encodings (~30%).
+  GT integrity across the three new cells: **62/63 confirmed entries REAL** on
+  full source-review.
 - **Cross-engine schema gate** (shipped schemas vs live): transformers 4.57.3
   107/107 clean; vllm 0.7.3 116/135; tensorrt 0.21.0 92/107 (divergences are
   shipped-schema staleness vs refactored introspectors, not engine drift).
@@ -464,10 +471,14 @@ parameters that CHANGED as a result. Findings detail in
    GT-growth reported separately); **GT re-gated to 74 confirmed / 228 union**
    (prod folded in); schema gate now **resolves `$ref`** to target type; **vLLM
    noise-filter regression test** added.
-3. DONE - **tensorrt 0.21->1.0->1.2.1 major-boundary pair established + reviewed**
-   (1.0 container pulled, both Opus passes per cell, union+gated, adversarial
-   source-review, cross-major delta computed; see 15.3 and FANOUT_FINDINGS). Next
-   carry-targets: the intervening 1.1 cell, and the other-engine major boundaries.
+3. DONE - **full tensorrt window 0.21->1.0->1.1->1.2.1 established + reviewed**
+   (1.0 + 1.1 containers pulled, both Opus passes per cell, union+gated,
+   adversarial source-review per cell, 4-point bump-robustness gradient on the
+   Opus basis; see 15.3 and FANOUT_FINDINGS). The gradient isolates the major
+   boundary (53% persist) from the two minor bumps (92-94%). Next carry-targets:
+   minor-bump deltas for vllm (0.18->0.22) and transformers (5.6->5.10) to test
+   whether the minor-bump stability generalises across engines (the study window
+   has no non-tensorrt major boundary).
 4. Open (identity-layer): a canonicalisation pass that reconciles a rule's
    predicate encoding across sources (keyed on citation) - the reviews found
    constraint-grain UNDER-merges cross-source twins, inflating confirmed entry
@@ -484,6 +495,7 @@ All study + refactor work is unified on ONE trunk: `study/5version-window`
 == `spike/engine-knowledge-as-data` (fast-forwarded; stale producer branches
 retired). Worktree: `~/workspace/llenergymeasure-trial`. tensorrt source on disk:
 1.2.1 at `/tmp/trial_tensorrt_v1_2_1_venv/src/tensorrt_llm`, 0.21.0 at
-`/tmp/trt-llm-0.21.0/tensorrt_llm`, 1.0.0 at `/tmp/trt-llm-1.0.0/tensorrt_llm`
-(extracted from the release containers). Containers present: tensorrt 0.21.0 +
-1.0.0 + 1.2.1, vllm 0.7.3 + 0.19.1, transformers 4.57.3.
+`/tmp/trt-llm-0.21.0/tensorrt_llm`, 1.0.0 at `/tmp/trt-llm-1.0.0/tensorrt_llm`,
+1.1.0 at `/tmp/trt-llm-1.1.0/tensorrt_llm` (extracted from the release
+containers). Containers present: tensorrt 0.21.0 + 1.0.0 + 1.1.0 + 1.2.1, vllm
+0.7.3 + 0.19.1, transformers 4.57.3.
