@@ -542,19 +542,35 @@ basis powering the gradient carried zero non-real entries, so the bump-robustnes
 signal is unaffected. Per-cell verdicts in `<cell>/invariants/ADVERSARIAL_REVIEW.md`;
 integrity table in FULL_MATRIX Section 4. This closes the Round-0 study.
 
-### 15.7 Round 0b complete (2026-06-08)
+### 15.7 Round 0b - surfacing baseline locked; value-grain + self-confirm pending (2026-06-08)
 
-Deterministic baseline established and locked - see
-`findings/study/ROUND0B_BASELINE.md`. Built on improved-det-v2 (no restart):
-added the generalised-subpackage-glob, plugin-literal fold (with Literal-value
-capture), and per-platform check_and_update_config walker; the validator-body
-predicate primitive was found already covered by p5/p6 (skipped) and
-default-indirection deferred (schema-side). Results: deterministic
-surfacing-recall tensorrt 81% / vllm 71% / transformers 42% (mean); pre/post lift
-vllm +15 (glob), tensorrt +6 (plugin), transformers +0 (no applicable primitive
-- its ~58% gap is the LLM tail); bump-delta-recovery 61% mean over 12 bumps
-(self-updating across bumps with no landmark edits). Lever-1 self-confirm
-re-validated in-container (tensorrt 1.2.1 mech 15->40, plugin 19/19). Drivers:
-`scripts/round0b/{recall,bump_delta,gate}.py`. Carried forward: gate vllm
-subpackage native_type resolution; p5 range-collapse + p6 false-positive;
-producer-porting (item 6). Next rung: Phase 1 (LLM wide net).
+Deterministic FIELD-COVERAGE baseline established and locked, then SCOPED HONESTLY
+after adversarial review - see `findings/study/ROUND0B_BASELINE.md` (full
+dual-grain detail + corrections). Built on improved-det-v2 (no restart): added the
+generalised-subpackage-glob, plugin-literal fold (with Literal-value capture), and
+per-platform check_and_update_config walker; validator-body predicate found
+already covered by p5/p6 (skipped); default-indirection deferred (schema-side).
+
+Results, two grains (the headline is FIELD coverage, not exact-constraint capture):
+- TOLERANT (leaf+bucket) surfacing-recall: tensorrt 81 / vllm 71 / transformers 42.
+- STRICT (leaf+bucket+value) recall: tensorrt 33 / vllm 25 / transformers 3 - the
+  cheap method finds WHICH fields are constrained but largely not the exact
+  value/bound/allowlist (those need the gate or LLM; strict is also a lower bound
+  due to mech-vs-Opus encoding variance).
+- Pre/post lift: vllm +15 broad+sound (glob); tensorrt "+6" is ONE cell (1.2.1
+  plugin), 4/5 cells +0; transformers +0.
+- Bump-delta-recovery 61% at FIELD grain only (value-grain reintroduces the
+  RETRACTED survivor-rebound encoding-churn confound, so not claimed; several
+  pairs small-N).
+- Self-confirm validated on 1/15 cells (tensorrt 1.2.1 mech 15->40, plugin 19/19);
+  vllm self-confirm BLOCKED by the gate's subpackage native_type gap (4 confirmed
+  / 100 infra_errors); P10 0/16 (GT-growth bucket, dormant).
+
+So this is NOT yet the full Section-7 "deterministic baseline locked" (value-aware
++ self-confirm across cells). Directionally the conclusions hold (cheap mining is
+strong at field coverage for trt/vllm; the subpackage glob is the real win;
+transformers is the LLM-tail engine). Drivers: `scripts/round0b/{recall,
+bump_delta,gate}.py`. Carried forward to finish: fix p5 range-collapse + p6
+false-positive (value-grain); extend gate vllm subpackage native_type resolution
+-> unblock vllm + full self-confirm fan-out; producer-porting (item 6). Next rung:
+Phase 1 (LLM wide net).

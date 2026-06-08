@@ -52,16 +52,26 @@ restart. Authoritative GT denominator: each cell's committed
 | transformers 5.9.0  | 75 | 74 | 32 | 42.7 | 43.2 |
 | transformers 5.10.2 | 64 | 75 | 30 | 46.9 | 40.0 |
 
-**Mean surfacing-recall: tensorrt 81.3%, vllm 70.8%, transformers 42.5%.**
+**Mean surfacing-recall (TOLERANT, leaf+bucket): tensorrt 81.3%, vllm 70.8%,
+transformers 42.5%.** This measures FIELD COVERAGE - does the cheap method point
+at the right field, in the right coarse bucket?
 
-Reading: tensorrt and vllm now recover ~70-90% of the gate-confirmed surface
-deterministically (cheaply), driven by the glob (vllm subpackage) and the
-plugin-literal value-capture (tensorrt). transformers sits at ~42% - it received
-NO new primitive (the glob/plugin/platform surfaces are tensorrt/vllm-specific;
-transformers membership is enum-class-typed, not inline Literal), so its ~58%
-gap is the structural tail that needs LLM mining (the study's core thesis).
-Precision is 19-47% (mech surfaces 2-5x the GT-confirmed count); the
-recall-cost/precision frontier is the next axis.
+**Value-aware companion (STRICT, leaf+bucket+canonical predicate value):
+tensorrt 33.2%, vllm 24.8%, transformers 2.9%** (per cell: trt 1.2.1 55.4, 0.20
+28.6, 0.21 27.8, 1.0 33.3, 1.1 20.8; vllm 21-29; tf 0-9.5). This measures whether
+the EXACT constraint (field + value/bound/allowlist) is captured.
+
+Reading (corrected after adversarial review): the headline is **field coverage,
+not exact-constraint capture**. The cheap deterministic method is strong at
+finding WHICH fields are constrained (tolerant 70-90% for trt/vllm) but weak at
+WHAT the constraint is (strict 25-33%) - it captures the surface, the exact
+values/bounds/allowlists largely need the gate (to confirm) or LLM (to encode).
+The strict number is a lower bound (also penalised by mech-vs-Opus predicate
+ENCODING variance - the same under-merge caveat as FULL_MATRIX Section 3; do not
+read it as pure miss). transformers is low on BOTH grains (tolerant 42, strict 3)
+- its miss surface is presence-dominated + semantically conditional + absent from
+the mechanical source, i.e. the genuine LLM tail. Precision is 19-47% (mech
+surfaces 2-5x the GT count); the recall-cost/precision frontier is Phase 1.
 
 ## Pre/post lift (surfacing-recall vs the pre-Round-0b strategy at 0d679c22)
 
@@ -71,13 +81,14 @@ recall-cost/precision frontier is the next axis.
 | vllm | 55.7% | 70.8% | +15.1 (config-subpackage glob) |
 | transformers | 42.5% | 42.5% | +0.0 (no applicable primitive) |
 
-The lift lands exactly where the primitives apply: vllm +15 from the generalised
-glob reaching the `config/*.py` subpackage; tensorrt +6 from the plugin-literal
-fold. transformers is flat (its membership is enum-class-typed, with no
-glob/plugin/platform surface) - confirming the ~58% transformers gap is the
-LLM-needed structural tail, not a deterministic-miner shortfall. Note tensorrt
-surfacing was already high (75%) pre-round; the plugin win shows up more strongly
-in self-confirm (below).
+Corrected reading (adversarial review): **vllm +15 is broad and SOUND** - every
+vllm cell gains +13 to +16 from the generalised glob reaching the `config/*.py`
+subpackage. **tensorrt "+6" is a single-cell effect, not an engine figure**: 4 of
+5 tensorrt cells are +0; the entire lift is 1.2.1 (+31.7), the only cell with a
+substantial plugin-literal surface. transformers is flat on both grains (no
+applicable primitive). So the durable Round 0b primitive win is the vllm
+subpackage glob; the plugin fold helps one tensorrt cell (and shows up more in
+its self-confirm, below).
 
 ## Bump-delta-recovery (deliverable B)
 
@@ -100,11 +111,21 @@ Tolerant grain.
 | transformers 5.8->5.9 | 12 | 3 | 25.0 |
 | transformers 5.9->5.10 | 1 | 1 | 100.0 |
 
-**Mean bump-delta-recovery: 61.1% over 12 bumps** (tensorrt/vllm minors 67-89%;
-low pairs are small-N or the transformers tail). The miner tracks
-newly-appearing constraints across bumps with NO human edit to its landmark list
-- the self-updating property the generalised-glob primitive provides. Driver:
+**Mean bump-delta-recovery (TOLERANT / FIELD grain): 61.1% over 12 bumps**
+(tensorrt/vllm minors 67-89%). This is FIELD-level tracking: does the unchanged
+miner surface the newly-appearing FIELDS across a bump, with no landmark edit -
+the self-updating property the generalised glob provides. Driver:
 `scripts/round0b/bump_delta.py`.
+
+CAVEATS (adversarial review): (1) read this as field-tracking only - the
+value-aware version drops to ~19% AND reintroduces the same-leaf-new-bucket
+ENCODING-CHURN confound that got the "survivor re-bound" metric RETRACTED
+(FULL_MATRIX Section 3), so value-grain bump-delta is deliberately NOT claimed.
+(2) several pairs are small-N (N<=4, N=1), so the per-pair percentages are noisy
+and the mean is unweighted; the tolerant-key denominator also deflates the true
+added count (e.g. vllm 0.18->0.19 collapses 27 real new constraints to 9). Treat
+61% as "field-level tracking is good on minors," not a precise value-recovery
+rate.
 
 ## Self-confirm recall (gated) - validated on tensorrt 1.2.1
 
@@ -131,22 +152,38 @@ newly-appearing constraints across bumps with NO human edit to its landmark list
   confirmed (they RECOVER existing GT cheaply - the cost-frontier win - rather
   than grow it).
 
-## Status: Round 0b COMPLETE (2026-06-08)
+## Status (2026-06-08): SURFACING baseline locked; self-confirm + value-grain pending
 
-Deterministic baseline (surfacing-recall) + bump-delta-recovery curve locked;
-pre/post lift quantified; lever-1 self-confirm validated in-container. The
-deterministic frontier point: ~70-90% of the gate-confirmed surface is
-recoverable cheaply for tensorrt/vllm; the transformers ~42% floor marks the LLM
-tail that Phase 1 must close.
+Scoped honestly after adversarial review (verdict: the directional conclusions
+hold - deterministic mining is cheap and strong at FIELD coverage for trt/vllm,
+the subpackage glob is the real win, transformers is the LLM-tail engine - but
+the value-blind headlines were inflated; corrected above).
 
-Carried forward (NOT blocking Round 0b; Phase-1 prereqs / refinements):
-- Extend the gate's vllm subpackage `native_type` resolution to unblock vllm
-  SELF-confirm gating (recall is unaffected; this only sharpens the stricter
-  self-confirm metric for vllm).
-- Deferred pre-existing fixes: p5 two-sided-range collapse (`0<=top_p<=1` loses
-  the upper bound, strict-score only); p6 `validate_dtype` GPU-gate false-positive.
-- Producer-porting of these primitives into the production per-version miners
-  (STUDY_DESIGN 15.4 item 6, milestone-end).
+DONE: field-coverage (tolerant) surfacing-recall baseline + bump-delta field
+curve + pre/post lift (all 15 cells, offline), and lever-1 self-confirm validated
+on one cell (tensorrt 1.2.1).
+
+NOT yet done (so this is NOT the full "deterministic baseline locked" of
+STUDY_DESIGN Section 7):
+- VALUE-AWARE (strict) metrics are the weaker, truer picture (recall 33/25/3) and
+  rest on value-grain capture the miner is poor at; the p5 two-sided-range
+  collapse (`0<=top_p<=1` keeps only one bound) is a direct cause and is NOT
+  cosmetic - it is exactly the value-grain the baseline's strict number needs.
+- SELF-confirm exists for only 1 of 15 cells. vllm self-confirm is BLOCKED: the
+  gate cannot construct vllm subpackage `native_type`s (gate JSON: 4 confirmed /
+  100 infra_errors); P10 platform candidates are 0/16 confirmed (dormant, not
+  cheaply gateable - the GT-growth bucket); tensorrt mech also shows 25 gate
+  FAILS worth a look. Full self-confirm fan-out is blocked on the gate fix.
+
+Carried forward (to finish the baseline / Phase-1 prereqs):
+- Fix p5 two-sided-range collapse + p6 `validate_dtype` GPU-gate false-positive
+  (value-grain correctness).
+- Extend the gate's vllm subpackage `native_type` resolution -> unblock vllm +
+  full self-confirm fan-out across the 15 cells.
+- Investigate the 25 tensorrt gate-fails + the 19 plugin self-confirms' value
+  fidelity.
+- Producer-porting into the production per-version miners (STUDY_DESIGN 15.4
+  item 6, milestone-end).
 
 ## Reproduce
 
