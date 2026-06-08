@@ -541,3 +541,20 @@ rule). Every non-real entry is mech-source or a cross-grain restatement; the OPU
 basis powering the gradient carried zero non-real entries, so the bump-robustness
 signal is unaffected. Per-cell verdicts in `<cell>/invariants/ADVERSARIAL_REVIEW.md`;
 integrity table in FULL_MATRIX Section 4. This closes the Round-0 study.
+
+### 15.7 Round 0b complete (2026-06-08)
+
+Deterministic baseline established and locked - see
+`findings/study/ROUND0B_BASELINE.md`. Built on improved-det-v2 (no restart):
+added the generalised-subpackage-glob, plugin-literal fold (with Literal-value
+capture), and per-platform check_and_update_config walker; the validator-body
+predicate primitive was found already covered by p5/p6 (skipped) and
+default-indirection deferred (schema-side). Results: deterministic
+surfacing-recall tensorrt 81% / vllm 71% / transformers 42% (mean); pre/post lift
+vllm +15 (glob), tensorrt +6 (plugin), transformers +0 (no applicable primitive
+- its ~58% gap is the LLM tail); bump-delta-recovery 61% mean over 12 bumps
+(self-updating across bumps with no landmark edits). Lever-1 self-confirm
+re-validated in-container (tensorrt 1.2.1 mech 15->40, plugin 19/19). Drivers:
+`scripts/round0b/{recall,bump_delta,gate}.py`. Carried forward: gate vllm
+subpackage native_type resolution; p5 range-collapse + p6 false-positive;
+producer-porting (item 6). Next rung: Phase 1 (LLM wide net).

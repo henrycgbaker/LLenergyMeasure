@@ -63,6 +63,49 @@ gap is the structural tail that needs LLM mining (the study's core thesis).
 Precision is 19-47% (mech surfaces 2-5x the GT-confirmed count); the
 recall-cost/precision frontier is the next axis.
 
+## Pre/post lift (surfacing-recall vs the pre-Round-0b strategy at 0d679c22)
+
+| engine | OLD recall | NEW recall | lift |
+|---|---|---|---|
+| tensorrt | 75.0% | 81.3% | +6.3 (plugin-literal fold) |
+| vllm | 55.7% | 70.8% | +15.1 (config-subpackage glob) |
+| transformers | 42.5% | 42.5% | +0.0 (no applicable primitive) |
+
+The lift lands exactly where the primitives apply: vllm +15 from the generalised
+glob reaching the `config/*.py` subpackage; tensorrt +6 from the plugin-literal
+fold. transformers is flat (its membership is enum-class-typed, with no
+glob/plugin/platform surface) - confirming the ~58% transformers gap is the
+LLM-needed structural tail, not a deterministic-miner shortfall. Note tensorrt
+surfacing was already high (75%) pre-round; the plugin win shows up more strongly
+in self-confirm (below).
+
+## Bump-delta-recovery (deliverable B)
+
+Of the constraints NEW in B's gate-confirmed GT vs A's, the fraction the
+UNCHANGED miner recovers when run on B - no edit to its code or landmark list.
+Tolerant grain.
+
+| bump | added | recovered | recovery % |
+|---|---|---|---|
+| tensorrt 0.20->0.21 | 4 | 1 | 25.0 |
+| tensorrt 0.21->1.0 | 7 | 6 | 85.7 |
+| tensorrt 1.0->1.1 | 8 | 7 | 87.5 |
+| tensorrt 1.1->1.2.1 | 37 | 33 | 89.2 |
+| vllm 0.18->0.19 | 9 | 3 | 33.3 |
+| vllm 0.19->0.20 | 28 | 20 | 71.4 |
+| vllm 0.20->0.21 | 12 | 8 | 66.7 |
+| vllm 0.21->0.22 | 9 | 7 | 77.8 |
+| transformers 5.6->5.7 | 9 | 1 | 11.1 |
+| transformers 5.7->5.8 | 15 | 9 | 60.0 |
+| transformers 5.8->5.9 | 12 | 3 | 25.0 |
+| transformers 5.9->5.10 | 1 | 1 | 100.0 |
+
+**Mean bump-delta-recovery: 61.1% over 12 bumps** (tensorrt/vllm minors 67-89%;
+low pairs are small-N or the transformers tail). The miner tracks
+newly-appearing constraints across bumps with NO human edit to its landmark list
+- the self-updating property the generalised-glob primitive provides. Driver:
+`scripts/round0b/bump_delta.py`.
+
 ## Self-confirm recall (gated) - validated on tensorrt 1.2.1
 
 - mech-only self-confirm: **15 -> 40** of 60 (the value-capture fold). All 19
@@ -88,15 +131,22 @@ recall-cost/precision frontier is the next axis.
   confirmed (they RECOVER existing GT cheaply - the cost-frontier win - rather
   than grow it).
 
-## Open items
+## Status: Round 0b COMPLETE (2026-06-08)
 
-- Rigorous pre/post surfacing-recall lift (run the pre-Round-0b strategy for the
-  delta; documented old tensorrt-1.2.1 self-confirm ceiling was 25%).
-- Bump-delta-recovery curve (deliverable B): run the frozen baseline across each
-  bump-pair, score recovered-vs-changed.
-- Extend the gate's vllm native_type resolution to un-block vllm self-confirm.
-- Deferred pre-existing fixes: p5 two-sided range collapse (`0<=top_p<=1` loses
+Deterministic baseline (surfacing-recall) + bump-delta-recovery curve locked;
+pre/post lift quantified; lever-1 self-confirm validated in-container. The
+deterministic frontier point: ~70-90% of the gate-confirmed surface is
+recoverable cheaply for tensorrt/vllm; the transformers ~42% floor marks the LLM
+tail that Phase 1 must close.
+
+Carried forward (NOT blocking Round 0b; Phase-1 prereqs / refinements):
+- Extend the gate's vllm subpackage `native_type` resolution to unblock vllm
+  SELF-confirm gating (recall is unaffected; this only sharpens the stricter
+  self-confirm metric for vllm).
+- Deferred pre-existing fixes: p5 two-sided-range collapse (`0<=top_p<=1` loses
   the upper bound, strict-score only); p6 `validate_dtype` GPU-gate false-positive.
+- Producer-porting of these primitives into the production per-version miners
+  (STUDY_DESIGN 15.4 item 6, milestone-end).
 
 ## Reproduce
 
