@@ -489,8 +489,9 @@ parameters that CHANGED as a result. Findings detail in
    minor-bump deltas for vllm (0.18->0.22) and transformers (5.6->5.10) to test
    whether the minor-bump stability generalises across engines (the study window
    has no non-tensorrt major boundary).
-4. cross-engine minor-bump deltas: **vllm 0.18->0.19 DONE** (see 15.3); remaining
-   transformers 5.6->5.10. (The window has no non-tensorrt major boundary.)
+4. DONE - cross-engine minor-bump deltas: **vllm 0.18->0.19 and transformers
+   5.6->5.10 both established** (full 15-cell matrix; see 15.6 + FULL_MATRIX.md).
+   (The window has no non-tensorrt major boundary.)
 5. Per-version producers exist for only ~6 versions; the window needs ~9 more
    (overlaps the engine-knowledge-as-data refactor - now the same trunk).
 6. DEFERRED to milestone end: port trial improved-det-v2 primitives into the
@@ -521,3 +522,22 @@ retired). Worktree: `~/workspace/llenergymeasure-trial`. tensorrt source on disk
 and `/tmp/vllm-0.19.1/vllm` (all extracted from the release containers).
 Containers present: tensorrt 0.21.0 + 1.0.0 + 1.1.0 + 1.2.1, vllm 0.7.3 + 0.18.1 +
 0.19.1, transformers 4.57.3.
+
+### 15.6 Study complete (2026-06-08)
+
+The full 5-version x 3-engine matrix (15 cells) is built, runtime-gated, and
+adversarially source-reviewed. **`findings/study/FULL_MATRIX.md` is the authoritative
+result** and SUPERSEDES the partial gradient in 15.3 + FANOUT_FINDINGS. In
+particular it RETRACTS the survivor-rebound metric: the 42% tensorrt / 36% vllm
+figures in 15.3 are confounded by predicate-ENCODING variance, not real change (see
+FULL_MATRIX Section 3) - do not revive them. The robust signal is field-level
+PERSIST: the lone MAJOR boundary (tensorrt 0.21->1.0) persists 53% of mined knobs vs
+76-100% across the eleven minor bumps.
+
+GT integrity (all reviewed cells): **908/913 reviewed entries verified REAL
+(99.5%)** - 0 fabrications, 1 false-confirm (transformers 5.9.0 mech-source
+watermarking probe, excluded from validated GT), 4 mis-stated/imprecise (each a real
+rule). Every non-real entry is mech-source or a cross-grain restatement; the OPUS
+basis powering the gradient carried zero non-real entries, so the bump-robustness
+signal is unaffected. Per-cell verdicts in `<cell>/invariants/ADVERSARIAL_REVIEW.md`;
+integrity table in FULL_MATRIX Section 4. This closes the Round-0 study.

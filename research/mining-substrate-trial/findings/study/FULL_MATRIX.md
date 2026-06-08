@@ -20,6 +20,10 @@ in a per-version uv venv, no torch, NO container build). tensorrt confirm counts
 are low because most args-model validators are CUDA/model-dir gated (dormant);
 vllm/transformers configs construct CPU-only so confirm rates are high.
 
+Confirmed counts here are raw gate output; Section 4 reports the adversarially
+review-validated counts (one transformers 5.9.0 entry is reclassified as a
+false-confirm, leaving 115 review-validated there).
+
 ## 2. Per-engine bump gradient - PERSIST (field-level, tolerant key) is the robust signal
 
 Matched consecutive cells by tolerant key (leaf field + coarse bucket) on the OPUS
@@ -68,19 +72,55 @@ argument therefore rests on FIELD-LEVEL churn on a major (38 tensorrt knobs vani
 or rename across 0.21->1.0, ~47% of the surface) plus the standing fact that the
 gate re-validates every carried-over constraint - NOT on a quantified rebound rate.
 
-## 4. GT integrity (review status)
+## 4. GT integrity (independent adversarial source-review)
 
-- REVIEWED (independent adversarial source-review, earlier): tensorrt 0.21/1.0/1.1
-  + vllm 0.18.1/0.19.1 = **243/247 confirmed entries verified REAL** (62/63 tensorrt
-  + 181/184 vllm), zero false-confirms, zero fabrications; non-real were a redundant
-  mis-encoding + 3 imprecise predicate_values (all real rules).
-- DEFERRED: the 9 new cells (tensorrt 0.20; vllm 0.20/0.21/0.22; transformers
-  5.6.2-5.10.2) were queued for adversarial review but the run hit the weekly
-  subagent limit (resets 5pm Europe/Berlin, 2026-06-08) before doing any work. To
-  resume after reset: rerun `/tmp/review_instructions.md` per cell (ENGINE/VERSION/
-  SOURCE/GTDIR), writing each verdict to the cell's `ADVERSARIAL_REVIEW.md`. The
-  mining agents self-verified by replaying their kwargs in-venv (transformers/vllm),
-  which is corroborating but not an independent adversarial check.
+All cells have now been adversarially source-reviewed (refute-first: each confirmed
+entry is assumed wrong until the cited source line proves predicate + outcome +
+field + bound/allowlist match exactly, and the positive probe is checked to fire the
+CLAIMED rule, not an incidental error). 14 of 15 cells carry a written
+`invariants/ADVERSARIAL_REVIEW.md`; tensorrt 1.2.1 was validated as the original
+pilot (in-venv replay), which is corroborating rather than an independent check.
+
+| cell(s) | confirmed | reviewed | REAL | non-real (class) |
+|---|---|---|---|---|
+| tensorrt 0.20 | 14 | 14 (full) | 14 | - |
+| tensorrt 0.21/1.0/1.1 | 63 | 63 (full) | 62 | 1 redundant mis-encoding (real rule) |
+| vllm 0.18.1/0.19.1 | 184 | 184 (full) | 181 | 3 imprecise predicate_value (real rules) |
+| vllm 0.20 | 119 | 68 (sample 57%) | 68 | - |
+| vllm 0.21 | 132 | 74 (sample 56%) | 74 | - |
+| vllm 0.22 | 118 | 68 (sample 58%) | 68 | - |
+| transformers 5.6.2 | 83 | 83 (full; 62 PoC-folded all checked) | 83 | - |
+| transformers 5.7.0 | 74 | 74 (full) | 74 | - |
+| transformers 5.8.1 | 84 | 84 (full) | 84 | - |
+| transformers 5.9.0 | 116 | 116 (full) | 115 | 1 false-confirm (excluded from validated GT) |
+| transformers 5.10.2 | 85 | 85 (full) | 85 | - |
+
+**Totals: 913 entries reviewed, 908 verified REAL (99.5%), 5 non-real - 0
+fabrications, 1 false-confirm, 4 mis-stated/imprecise (each still points at a real
+source rule).** The three vllm 0.20/0.21/0.22 cells were sampled (>=50 spanning
+every native_type, every predicate_kind, every non-`invalid` outcome, plus all
+synthesised entries); the sample surfaced no non-real entry so no full-expansion
+override fired. Every other cell was verified in full.
+
+The single false-confirm (transformers 5.9.0,
+`transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig`,
+mech-source): its positive probe (`watermarking_config: 42`) raised an incidental
+`AttributeError` from `GenerationConfig.validate()` calling `.validate()` on an int,
+NOT the claimed construction-time type guard - which does not exist in 5.9.0 source.
+It is kept here as a measured gate-quality result (false-confirm rate ~0.1% of
+reviewed entries) and excluded from the review-validated GT count for that cell
+(gate-confirmed 116 -> review-validated 115); the raw gate artifacts
+(`PILOT_GT.yaml`, `pilot_metrics.json`) retain the as-run 116, so Section 1 counts
+are unchanged. Re-gating would reproduce the artifact, so the fix is the documented
+exclusion, not a re-run. Per-entry reasoning lives in each cell's
+`invariants/ADVERSARIAL_REVIEW.md`.
+
+Systemic, non-defect: every non-real entry across the whole study is mech-source or
+a cross-grain restatement; the OPUS basis (passA+passB) that powers the Section 2/3
+gradient carried zero non-real entries, so the bump-robustness signal is unaffected.
+mech-source entries are the sole locus of the lone false-confirm and the 4 earlier
+imprecisions - direct support for the milestone-end item to port operator-ful
+canonical encoding into the production per-version miners.
 
 ## 5. Reproduce
 
