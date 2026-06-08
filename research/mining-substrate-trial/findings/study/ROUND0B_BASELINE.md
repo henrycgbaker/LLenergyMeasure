@@ -176,8 +176,16 @@ STUDY_DESIGN Section 7):
   FAILS worth a look. Full self-confirm fan-out is blocked on the gate fix.
 
 Carried forward (to finish the baseline / Phase-1 prereqs):
-- Fix p5 two-sided-range collapse + p6 `validate_dtype` GPU-gate false-positive
-  (value-grain correctness).
+- VALUE-GRAIN ALIGNMENT (the real blocker, attempted + reverted 2026-06-08):
+  lifting strict recall is NOT a quick p5 fix. mech records the FIRING op; the
+  GT records the VALID constraint, AND `gt_adapter.canonical_predicate_value`
+  renders mech's `{'>=':0,'<=':1}` as the malformed `{<==1,>==0}` (matches
+  neither the Opus `{ge=0,le=1}` nor the bare `0`). Single bounds already match
+  only via the GT's lossy bare-value duplicate. Properly fixing this = the
+  deferred "mechanical miner emits operator-ful canonical values" producer item
+  (STUDY_DESIGN 15.4 item 6): align mech's predicate encoding to the Opus/GT
+  canonical form. A naive firing->valid inversion regressed tensorrt 55->53 and
+  was reverted. Also p6 `validate_dtype` GPU-gate false-positive.
 - Extend the gate's vllm subpackage `native_type` resolution -> unblock vllm +
   full self-confirm fan-out across the 15 cells.
 - Investigate the 25 tensorrt gate-fails + the 19 plugin self-confirms' value
