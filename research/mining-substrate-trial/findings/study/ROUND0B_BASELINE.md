@@ -127,20 +127,51 @@ added count (e.g. vllm 0.18->0.19 collapses 27 real new constraints to 9). Treat
 61% as "field-level tracking is good on minors," not a precise value-recovery
 rate.
 
-## Self-confirm recall (gated) - validated on tensorrt 1.2.1
+## Self-confirm recall (gated) - validated on tensorrt 1.2.1 + vllm 0.19.1
 
-- mech-only self-confirm: **15 -> 40** of 60 (the value-capture fold). All 19
-  plugin candidates now confirm (was 0/19, skipped on empty allowlist).
-- `new_confirmed_vs_Round0 = 0`: every mech self-confirm is already inside the
-  adversarially-reviewed Round-0 GT (trustworthy recovery, not unvetted new
-  confirms). The research strategy now recovers the plugin-literal surface
-  standalone, no separate production miner needed (the lever-1 goal).
-- GATE LIMITATION (vllm): self-confirm gating of vllm 0.19.1 mech produced 100
-  infra_errors + only 4 self-confirm, because the gate cannot construct
-  subpackage `native_type`s (e.g. `vllm.LoadConfig` really lives at
-  `vllm.config.*`). These candidates still SURFACE GT constraints (recall
-  unaffected); they just cannot self-gate. Self-confirm fan-out is blocked on
-  extending the gate's vllm native_type resolution; recall (above) is not.
+- tensorrt 1.2.1 mech-only self-confirm: **15 -> 40** of 60 (the value-capture
+  fold). All 19 plugin candidates now confirm (was 0/19, skipped on empty
+  allowlist).
+- `new_confirmed_vs_Round0 = 0` (tensorrt 1.2.1): every mech self-confirm is
+  already inside the adversarially-reviewed Round-0 GT (trustworthy recovery,
+  not unvetted new confirms). The research strategy now recovers the
+  plugin-literal surface standalone, no separate production miner needed (the
+  lever-1 goal).
+- GATE FIX (vllm), RESOLVED: the gate previously could not construct vllm
+  subpackage `native_type`s - the miner tags every class `vllm.<Class>` but
+  after the 0.19.1 config-subpackage split they live at `vllm.config.*`, so the
+  naive `getattr(vllm, X)` infra-errored. Fixed with a `_construct_vllm`
+  module-probe resolver (mirrors `_construct_trtllm`; commit on
+  `spike/engine-knowledge-as-data`). On vllm 0.19.1 mech (315 candidates):
+  **infra_error 100 -> 4, confirmed 4 -> 32**. The residual 4 are classes
+  needing semantically entangled required args (SchedulerConfig,
+  SpeculativeConfig, StructuredOutputsParams) deliberately NOT fabricated.
+- vllm 0.19.1 GT-growth (adversarially verified, honest wording): of the 11
+  net-new gate-confirmed constraint-keys vs Round-0 GT, **8 are real pydantic
+  `Literal[...]` allowlists** verified against source and reproduced
+  in-container (cache_dtype, mamba_ssm_cache_dtype, moe_backend,
+  seq_pooling_type, tok_pooling_type, logprobs_mode, mm_tensor_ipc, plus
+  publisher which is a value-encoding variant of an existing GT entry);
+  `max_pattern_size < 0` is a real numeric bound. Two of the eleven are
+  bucket-mislabels of bool fields (cudagraph_mm_encoder tagged numeric,
+  disable_additional_properties tagged membership) that confirm via pydantic
+  bool-type rejection rather than the labelled constraint, and one sibling
+  invariant (`max_pattern_size > 0`) is a spurious confirm that slips past
+  attribution on an unrelated min_count error message. **The net-new ckey count
+  is not inflated** (the spurious sibling collapses to the real `<0` key), but
+  per-invariant verdicts include two type-vs-predicate mislabels and one
+  misattributed confirm. Do NOT claim "~10 net-new validated constraints"
+  unqualified - that is a mild overclaim.
+- DEFECTS EXPOSED by unblocking the vllm gate (pre-existing, were hidden while
+  every vllm candidate infra-errored; carried forward, NOT fixed here):
+  1. ATTRIBUTION too weak - `validate_invariants.py` positive-confirm
+     attribution is a bare substring test (`probe_leaf in haystack`), so a raise
+     whose message merely mentions the field name for an unrelated reason passes
+     (the `max_pattern_size > 0` spurious confirm). Affects confirm
+     trustworthiness across ALL engines, not just vllm.
+  2. MINER bucket-mislabel - bare `bool` fields get numeric/membership buckets
+     (cudagraph_mm_encoder, disable_additional_properties); they should be
+     `type` constraints so their confirms aren't mislabelled.
 
 ## Methodology decisions
 
@@ -160,8 +191,9 @@ the subpackage glob is the real win, transformers is the LLM-tail engine - but
 the value-blind headlines were inflated; corrected above).
 
 DONE: field-coverage (tolerant) surfacing-recall baseline + bump-delta field
-curve + pre/post lift (all 15 cells, offline), and lever-1 self-confirm validated
-on one cell (tensorrt 1.2.1).
+curve + pre/post lift (all 15 cells, offline), lever-1 self-confirm validated on
+tensorrt 1.2.1, and the vllm subpackage-resolver gate fix validated on vllm
+0.19.1 (infra_error 100 -> 4, self-confirm 4 -> 32; adversarially reviewed).
 
 NOT yet done (so this is NOT the full "deterministic baseline locked" of
 STUDY_DESIGN Section 7):
@@ -169,11 +201,13 @@ STUDY_DESIGN Section 7):
   rest on value-grain capture the miner is poor at; the p5 two-sided-range
   collapse (`0<=top_p<=1` keeps only one bound) is a direct cause and is NOT
   cosmetic - it is exactly the value-grain the baseline's strict number needs.
-- SELF-confirm exists for only 1 of 15 cells. vllm self-confirm is BLOCKED: the
-  gate cannot construct vllm subpackage `native_type`s (gate JSON: 4 confirmed /
-  100 infra_errors); P10 platform candidates are 0/16 confirmed (dormant, not
-  cheaply gateable - the GT-growth bucket); tensorrt mech also shows 25 gate
-  FAILS worth a look. Full self-confirm fan-out is blocked on the gate fix.
+- SELF-confirm exists for 2 of 15 cells (tensorrt 1.2.1 + vllm 0.19.1). The vllm
+  gate is now UNBLOCKED (resolver fix above), so fan-out across the remaining 13
+  cells is mechanically possible; P10 platform candidates are 0/16 confirmed
+  (dormant, not cheaply gateable - the GT-growth bucket); tensorrt mech also
+  shows 25 gate FAILS worth a look. Fan-out is gated on whether to first harden
+  the attribution check (see DEFECTS above) for trustworthy per-invariant
+  confirms.
 
 Carried forward (to finish the baseline / Phase-1 prereqs):
 - VALUE-GRAIN ALIGNMENT (the real blocker, attempted + reverted 2026-06-08):
@@ -186,8 +220,16 @@ Carried forward (to finish the baseline / Phase-1 prereqs):
   (STUDY_DESIGN 15.4 item 6): align mech's predicate encoding to the Opus/GT
   canonical form. A naive firing->valid inversion regressed tensorrt 55->53 and
   was reverted. Also p6 `validate_dtype` GPU-gate false-positive.
-- Extend the gate's vllm subpackage `native_type` resolution -> unblock vllm +
-  full self-confirm fan-out across the 15 cells.
+- Extend the gate's vllm subpackage `native_type` resolution: DONE (the
+  `_construct_vllm` module-probe resolver). Remaining: full self-confirm fan-out
+  across the other 13 cells.
+- HARDEN the gate attribution check (bare-substring -> structured: require the
+  raise to name the probed field as the constraint subject, e.g. pydantic
+  `loc`/`input_value`). Pre-existing; surfaced by the vllm unblock. Affects
+  confirm trustworthiness across all engines.
+- FIX miner bucket assignment for bare `bool` fields (numeric/membership ->
+  type), so confirms are not mislabelled (cudagraph_mm_encoder,
+  disable_additional_properties).
 - Investigate the 25 tensorrt gate-fails + the 19 plugin self-confirms' value
   fidelity.
 - Producer-porting into the production per-version miners (STUDY_DESIGN 15.4
