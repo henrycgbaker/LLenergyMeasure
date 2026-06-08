@@ -86,6 +86,125 @@ def _primitive8_files(engine: str, source_root: Path) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
+# Primitive 10: per-platform check_and_update_config walker (vllm). Platform
+# classes silently override / hard-constrain VllmConfig sub-config fields inside
+# check_and_update_config(); these are NOT ``if x: raise`` validator bodies, so
+# Primitives 1-7 never see them - a whole missed mining surface (the residual-
+# miss the PoC named). We glob the platform package (never pin) and walk each
+# check_and_update_config body.
+# ---------------------------------------------------------------------------
+
+
+_PLATFORM_GLOBS: dict[str, list[str]] = {
+    "vllm": ["platforms/*.py"],
+}
+
+
+def _config_attr_fields(node: Any, source: bytes) -> list[str]:
+    """Leaf names from ``<x>_config.<field>`` attribute accesses within a node.
+
+    The platform walker keys on sub-config fields (cache_config.block_size),
+    not self.<x>, so the base self-field collectors do not apply.
+    """
+    out: list[str] = []
+    for n in base._walk(node):
+        if n.type != "attribute":
+            continue
+        obj = n.child_by_field_name("object")
+        attr = n.child_by_field_name("attribute")
+        if obj is None or attr is None:
+            continue
+        if base._node_text(source, obj).endswith("_config"):
+            leaf = base._node_text(source, attr)
+            if leaf and not leaf.startswith("_") and leaf not in out:
+                out.append(leaf)
+    return out
+
+
+def _platform_override_invariants(
+    *,
+    engine: str,
+    cfg: base._EngineCfg,
+    source: bytes,
+    rel_path: str,
+    parser: Any,
+) -> list[dict[str, Any]]:
+    """Primitive 10: emit one invariant per VllmConfig sub-config field that a
+    platform's check_and_update_config silently overrides (kind present, the
+    silent-normalisation shape) or names in a conditional raise (the comparison
+    kind)."""
+    root = parser.parse(source).root_node
+    namespace = base._resolve_namespace("VllmConfig", cfg)
+    invs: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for cls in base._class_nodes(root):
+        cname = base._class_name(source, cls)
+        for mname, fn, _decs in base._methods_of(source, cls):
+            if mname != "check_and_update_config":
+                continue
+            body = fn.child_by_field_name("body")
+            if body is None:
+                continue
+            for n in base._walk(body):
+                if n.type == "assignment":
+                    left = n.child_by_field_name("left")
+                    if left is None or left.type != "attribute":
+                        continue
+                    obj = left.child_by_field_name("object")
+                    attr = left.child_by_field_name("attribute")
+                    if obj is None or attr is None:
+                        continue
+                    obj_text = base._node_text(source, obj)
+                    if obj_text == "vllm_config" or not obj_text.endswith("_config"):
+                        continue
+                    field = base._node_text(source, attr)
+                    if not field or field.startswith("_") or (field, "present") in seen:
+                        continue
+                    seen.add((field, "present"))
+                    invs.append(
+                        base._make_invariant(
+                            engine=engine,
+                            class_name=cname or "Platform",
+                            method_name=mname,
+                            namespace=namespace,
+                            primary_field=field,
+                            kind="present",
+                            secondary_field="",
+                            rel_path=rel_path,
+                            line=n.start_point[0] + 1,
+                            severity="dormant",
+                            fired_by="p10",
+                        )
+                    )
+                elif n.type in {"if_statement", "elif_clause"}:
+                    cond = n.child_by_field_name("condition")
+                    cons = n.child_by_field_name("consequence")
+                    if cond is None or cons is None or not base._consequence_has_raise(cons):
+                        continue
+                    kind = base._classify_kind(cond, source)
+                    for field in _config_attr_fields(cond, source):
+                        if (field, kind) in seen:
+                            continue
+                        seen.add((field, kind))
+                        invs.append(
+                            base._make_invariant(
+                                engine=engine,
+                                class_name=cname or "Platform",
+                                method_name=mname,
+                                namespace=namespace,
+                                primary_field=field,
+                                kind=kind,
+                                secondary_field="",
+                                rel_path=rel_path,
+                                line=n.start_point[0] + 1,
+                                severity="error",
+                                fired_by="p10",
+                            )
+                        )
+    return invs
+
+
+# ---------------------------------------------------------------------------
 # Declarative-constraint parsing (tree-sitter class-body annotated assignments).
 # ---------------------------------------------------------------------------
 
@@ -439,6 +558,40 @@ def run_cell(
             extra["primitives_fired"] = fired
     extra["p8_added"] = p8_added
     extra["p8_skipped_dup"] = p8_skipped_dup
+
+    # Primitive 10 pass: per-platform check_and_update_config overrides.
+    plat_added = 0
+    if task in {"invariants", "both"} and source_root is not None:
+        tp = time.perf_counter()
+        _language, parser = base._load_parser()
+        existing_keys = {_tolerant_identity(inv) for inv in base_invs}
+        for path in base._expand_files(source_root, _PLATFORM_GLOBS.get(engine, [])):
+            src = base._read_source(path)
+            if not src:
+                continue
+            rel = str(path.relative_to(source_root))
+            try:
+                cand = _platform_override_invariants(
+                    engine=engine, cfg=cfg, source=src, rel_path=rel, parser=parser
+                )
+            except Exception as exc:  # degrade gracefully; never crash the cell
+                observations.append(f"platform-walk: parse-degraded on {rel}: {exc}")
+                continue
+            for inv in cand:
+                ident = _tolerant_identity(inv)
+                if ident in existing_keys:
+                    continue
+                existing_keys.add(ident)
+                inv["added_by"] = _ADDED_BY
+                base_invs.append(inv)
+                plat_added += 1
+        wall["platform_override"] = time.perf_counter() - tp
+        if plat_added:
+            fired = extra.get("primitives_fired", [])
+            if "p10" not in fired:
+                fired = sorted([*fired, "p10"])
+            extra["primitives_fired"] = fired
+    extra["p10_added"] = plat_added
 
     inv_env["invariants"] = base_invs
 
