@@ -311,6 +311,60 @@ _VLLM_BOOTSTRAP_NOISE = re.compile(
 )
 
 
+# The mechanical miner tags every vLLM class as ``vllm.<ClassName>`` (engine
+# namespace + bare class name). Most config classes are NOT re-exported at the
+# top-level ``vllm`` package - after the 0.19.1 config-subpackage split they
+# live under ``vllm.config.*`` (and a few nested options only in a config
+# submodule). A naive ``rpartition('.')`` import therefore resolves only the
+# top-level re-exports (``SamplingParams``, ``EngineArgs``) and infra-errors on
+# every config class. So, as for TRT-LLM, reduce the tag to a bare class name
+# and probe the canonical vLLM export modules in order (first hit wins). Deep
+# dotted tags (``vllm.config.ModelConfig``) reduce to the same bare name and
+# resolve via the same list. ``vllm.config.multimodal`` /
+# ``vllm.config.compilation`` carry nested options (``*DummyOptions``,
+# ``DynamicShapesConfig``) not re-exported at the ``vllm.config`` package level.
+_VLLM_RESOLVE_MODULES: tuple[str, ...] = (
+    "vllm",
+    "vllm.config",
+    "vllm.sampling_params",
+    "vllm.config.multimodal",
+    "vllm.config.compilation",
+)
+
+# Explicit deep-path overrides, keyed by bare class name, for cases where the
+# probe order would resolve to the wrong symbol. Empty today (the probe order
+# resolves every observed class to its concrete type); kept as the escape hatch
+# for future version drift, mirroring ``_TRTLLM_NATIVE_TYPE_MAP``.
+_VLLM_NATIVE_TYPE_MAP: dict[str, str] = {}
+
+
+def _construct_vllm(native_type: str, kwargs: dict[str, Any]) -> Any:
+    """Construct a vLLM type from its native_type tag.
+
+    Reduces the tag to a bare class name (stripping the ``vllm`` / deep-path
+    namespace) and resolves it by probing :data:`_VLLM_RESOLVE_MODULES` in
+    order. An explicit deep-path override in :data:`_VLLM_NATIVE_TYPE_MAP`
+    (keyed by bare name) wins when present.
+    """
+    class_name = native_type.rpartition(".")[2]
+    override = _VLLM_NATIVE_TYPE_MAP.get(class_name)
+    if override is not None:
+        module_path, _, class_name = override.rpartition(".")
+        return getattr(importlib.import_module(module_path), class_name)(**kwargs)
+    for mod_path in _VLLM_RESOLVE_MODULES:
+        try:
+            module = importlib.import_module(mod_path)
+        except ImportError:
+            continue
+        cls = getattr(module, class_name, None)
+        if cls is not None:
+            return cls(**kwargs)
+    raise AttributeError(
+        f"vLLM native_type {native_type!r} (class {class_name!r}) not "
+        f"resolvable in any of {_VLLM_RESOLVE_MODULES}"
+    )
+
+
 def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool) -> CaptureBuffers:
     """Execute one invariant's kwargs through the vLLM library.
 
@@ -319,10 +373,11 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     surfaces via ``logger.warning_once`` from inside ``__post_init__`` /
     ``_verify_args``. Both paths run on plain construction.
 
-    Dispatch: ``vllm.SamplingParams``, ``vllm.config.<X>``, and the dotted
-    ``vllm.<module>.<Class>`` fallback all flow through the generic
-    ``_construct_generic`` path. Logger names are vLLM's module loggers
-    (vLLM uses ``init_logger(__name__)`` per ``vllm/config/cache.py:20``).
+    Dispatch: every tag (``vllm.SamplingParams``, the bare ``vllm.<Class>``
+    config tags the miner emits, and deep ``vllm.config.<X>`` paths) flows
+    through ``_construct_vllm``, which reduces the tag to a bare class name and
+    probes the canonical vLLM export modules. Logger names are vLLM's module
+    loggers (vLLM uses ``init_logger(__name__)`` per ``vllm/config/cache.py:20``).
 
     INFO-level vLLM logs are pre-suppressed before delegating to
     ``run_case``: vLLM logs ``INFO 04-26 [model.py] Resolved architecture``
@@ -345,7 +400,7 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
         "vllm.engine",
     )
     result = run_case(
-        lambda: _construct_generic(native_type, kwargs),
+        lambda: _construct_vllm(native_type, kwargs),
         logger_names=logger_names,
         # vLLM doesn't expose a strict private-field allowlist concept; the
         # corpus loader will re-validate per-field anyway.

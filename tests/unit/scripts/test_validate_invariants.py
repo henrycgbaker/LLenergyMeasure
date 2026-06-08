@@ -10,6 +10,7 @@ and fast.
 from __future__ import annotations
 
 import sys
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -839,3 +840,104 @@ def test_vllm_bootstrap_noise_is_stripped(msg):
 def test_genuine_vllm_warning_survives_both_filters(msg):
     assert not validate_invariants._VLLM_IMPORT_NOISE.search(msg)
     assert not validate_invariants._VLLM_BOOTSTRAP_NOISE.search(msg)
+
+
+# ---------------------------------------------------------------------------
+# _construct_vllm - native_type resolution (module-probe)
+# ---------------------------------------------------------------------------
+
+
+class TestConstructVllm:
+    """Resolution logic of ``_construct_vllm``: reduce the mech tag to a bare
+    class name and probe the canonical vLLM export modules in order. Exercised
+    against fake modules so the test runs without the container-only ``vllm``
+    package installed.
+    """
+
+    @staticmethod
+    def _patch_import(monkeypatch: pytest.MonkeyPatch, registry: dict[str, Any]) -> None:
+        def _fake_import(name: str) -> Any:
+            if name in registry:
+                return registry[name]
+            raise ModuleNotFoundError(name)
+
+        monkeypatch.setattr(validate_invariants.importlib, "import_module", _fake_import)
+
+    def test_resolves_config_subpackage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class ParallelConfig:
+            def __init__(self, **kw: Any) -> None:
+                self.kw = kw
+
+        self._patch_import(
+            monkeypatch,
+            {
+                "vllm": types.SimpleNamespace(),  # not re-exported at top level
+                "vllm.config": types.SimpleNamespace(ParallelConfig=ParallelConfig),
+            },
+        )
+        obj = validate_invariants._construct_vllm("vllm.ParallelConfig", {"x": 1})
+        assert isinstance(obj, ParallelConfig)
+        assert obj.kw == {"x": 1}
+
+    def test_top_level_wins_probe_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class Top:
+            def __init__(self, **kw: Any) -> None: ...
+
+        class Sub:
+            def __init__(self, **kw: Any) -> None: ...
+
+        self._patch_import(
+            monkeypatch,
+            {
+                "vllm": types.SimpleNamespace(SamplingParams=Top),
+                "vllm.config": types.SimpleNamespace(SamplingParams=Sub),
+            },
+        )
+        # ``vllm`` is probed first, so the top-level re-export wins.
+        assert isinstance(validate_invariants._construct_vllm("vllm.SamplingParams", {}), Top)
+
+    def test_deep_dotted_tag_reduces_to_bare_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class ModelConfig:
+            def __init__(self, **kw: Any) -> None:
+                self.kw = kw
+
+        self._patch_import(
+            monkeypatch,
+            {
+                "vllm": types.SimpleNamespace(),
+                "vllm.config": types.SimpleNamespace(ModelConfig=ModelConfig),
+            },
+        )
+        obj = validate_invariants._construct_vllm("vllm.config.ModelConfig", {})
+        assert isinstance(obj, ModelConfig)
+
+    def test_missing_probe_module_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class Foo:
+            def __init__(self, **kw: Any) -> None: ...
+
+        # ``vllm`` import raises (ModuleNotFoundError <: ImportError); the loop
+        # must continue and resolve from a later probe module.
+        self._patch_import(monkeypatch, {"vllm.config": types.SimpleNamespace(Foo=Foo)})
+        assert isinstance(validate_invariants._construct_vllm("vllm.Foo", {}), Foo)
+
+    def test_unresolvable_raises_attribute_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch_import(monkeypatch, {"vllm": types.SimpleNamespace()})
+        with pytest.raises(AttributeError):
+            validate_invariants._construct_vllm("vllm.NoSuchClass", {})
+
+    def test_override_map_wins(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class Real:
+            def __init__(self, **kw: Any) -> None:
+                self.kw = kw
+
+        self._patch_import(
+            monkeypatch,
+            {
+                "vllm": types.SimpleNamespace(),
+                "vllm.special": types.SimpleNamespace(Real=Real),
+            },
+        )
+        monkeypatch.setitem(validate_invariants._VLLM_NATIVE_TYPE_MAP, "Weird", "vllm.special.Real")
+        obj = validate_invariants._construct_vllm("vllm.Weird", {"a": 2})
+        assert isinstance(obj, Real)
+        assert obj.kw == {"a": 2}
