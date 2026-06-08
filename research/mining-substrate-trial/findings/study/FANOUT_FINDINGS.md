@@ -212,6 +212,11 @@ SEPARATE ckey from the Opus-confirmed one, so contributing-source counts
 understate true agreement (another reason the dedicated mech-only / combined-det
 gate runs are the correct ceiling instrument).
 
+> NOTE: superseded by `FULL_MATRIX.md` (full 15-cell, 3-engine gradient). The
+> major-vs-minor PERSIST contrast below holds, but the "RE-BOUNDED / survivor
+> re-bound" numbers in this section and the next are RETRACTED as confounded by
+> predicate-encoding variance (see FULL_MATRIX Section 3). Trust PERSIST only.
+
 ## tensorrt 0.21.0 -> 1.0.0 -> 1.1.0 -> 1.2.1: the bump-robustness gradient
 
 Established GT for the full tensorrt window (0.21.0, 1.0.0, 1.1.0; 1.2.1 already

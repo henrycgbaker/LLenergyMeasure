@@ -90,6 +90,15 @@ deterministic, AND reliable (zero probe gap) throughout.
 
 ## 4. Finding 2 - bump robustness (the gradient)
 
+> SUPERSEDED + CORRECTED by `findings/study/FULL_MATRIX.md` (the full 15-cell,
+> 3-engine matrix). Two changes there: (a) the gradient is now well-powered across
+> 14 bumps and the major-vs-minor PERSIST contrast holds (major 53% vs minors
+> 76-100%); (b) the "survivor re-bound rate" headlined below (42% / 36%) is
+> RETRACTED - it is confounded by predicate-encoding variance across agents/sources
+> (transformers 5.8->5.9, byte-identical source, shows 0% rebound while a
+> PoC-folded cell shows 80%). Only field-level PERSIST is trustworthy; the
+> runtime-gate argument rests on field-level churn, not a rebound rate.
+
 Full tensorrt window, GT per cell from 2 Opus passes (+ mech/PoC where present),
 runtime-gated:
 
