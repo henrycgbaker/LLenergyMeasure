@@ -76,12 +76,16 @@ _ENGINE_CFG: dict[str, _EngineCfg] = {
         # Schema target classes -> envelope section.
         "engine_params": {"engine/arg_utils.py": ["EngineArgs"]},
         "sampling_params": {"sampling_params.py": ["SamplingParams"]},
-        # $defs: the long-tail subconfig classes the baseline missed.
-        "defs_files": ["config.py"],
+        # $defs: the long-tail subconfig classes the baseline missed. Globbed so
+        # the v0.19.1 config.py -> config/*.py subpackage split is covered
+        # without re-pinning (generalised-glob primitive).
+        "defs_files": ["config.py", "config/*.py"],
         # Files to scan for validator bodies + env enumeration.
         "validator_files": [
             "sampling_params.py",
+            "pooling_params.py",
             "config.py",
+            "config/*.py",
             "engine/arg_utils.py",
         ],
         "env_modules": ["envs.py"],
@@ -146,7 +150,11 @@ _ENGINE_CFG: dict[str, _EngineCfg] = {
     "tensorrt": {
         "engine_params": {"llmapi/llm_args.py": ["TorchLlmArgs", "LlmArgs", "BaseLlmArgs"]},
         "sampling_params": {"sampling_params.py": ["SamplingParams"]},
-        "defs_files": ["llmapi/llm_args.py", "llmapi/build_cache.py"],
+        "defs_files": ["llmapi/llm_args.py", "llmapi/build_cache.py", "plugin/plugin.py"],
+        # plugin/plugin.py is scanned for membership by Primitive 8 (the lever-1
+        # fold) but kept OUT of validator_files: its only methods are a wildcard
+        # logger + an SM-gate validate() whose body is all locals, which the
+        # bare-field fallback would mis-mine as fields (e.g. sm, val).
         "validator_files": ["llmapi/llm_args.py", "sampling_params.py"],
         "env_modules": ["_common.py", "llmapi/llm_args.py"],
         "aggregators": [("llmapi/llm_args.py", "LlmArgs"), ("llmapi/llm_args.py", "TorchLlmArgs")],
@@ -205,6 +213,24 @@ def _read_source(path: Path) -> bytes:
         return path.read_bytes()
     except OSError:
         return b""
+
+
+def _expand_files(source_root: Path, patterns: list[str]) -> list[Path]:
+    """Primitive: generalised subpackage glob. Expand path patterns (literal or
+    glob) against the source root, de-duped and order-preserving. Globbing
+    de-pins the landmark file list so subpackage refactors (e.g. vllm
+    ``config.py`` -> ``config/*.py``) and per-platform module fan-out are picked
+    up across bumps WITHOUT editing the config - never pin paths, they go
+    stale."""
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for pattern in patterns:
+        matches = sorted(source_root.glob(pattern)) if "*" in pattern else [source_root / pattern]
+        for p in matches:
+            if p.is_file() and p not in seen:
+                seen.add(p)
+                out.append(p)
+    return out
 
 
 def _node_text(source: bytes, node: Any) -> str:
@@ -1170,8 +1196,10 @@ def _build_schema(
                     schema[section].update(_extract_method_sig(src, node, "from_pretrained"))
             break  # one matching class file per section is enough for first match
 
-    # Primitive 1 long-tail $defs: every discovered config class in defs_files.
-    for rel_path in cfg.get("defs_files", []):
+    # Primitive 1 long-tail $defs: every discovered config class in defs_files
+    # (glob-expanded so subpackage splits are covered without re-pinning).
+    for defs_path in _expand_files(source_root, cfg.get("defs_files", [])):
+        rel_path = str(defs_path.relative_to(source_root))
         parsed = parse(rel_path)
         if parsed is None:
             continue
@@ -1215,11 +1243,14 @@ def _build_invariants(
     all_invs: list[dict[str, Any]] = []
     seen_global: set[tuple] = set()
 
-    for rel_path in cfg["validator_files"]:
-        src = _read_source(source_root / rel_path)
+    validator_paths = _expand_files(source_root, cfg["validator_files"])
+    if not validator_paths:
+        obs.append(f"no validator source files matched {cfg['validator_files']}")
+    for path in validator_paths:
+        src = _read_source(path)
         if not src:
-            obs.append(f"missing validator source: {rel_path}")
             continue
+        rel_path = str(path.relative_to(source_root))
         root = parser.parse(src).root_node
         discovered = _discover_classes(src, _class_nodes(root), cfg)
         if discovered:

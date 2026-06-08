@@ -75,25 +75,14 @@ _PRIMITIVE8_GLOBS: dict[str, list[str]] = {
         "llmapi/llm_args.py",
         "llmapi/build_cache.py",
         "sampling_params.py",
+        "plugin/plugin.py",  # PluginConfig: Optional[Literal]/aliased membership (lever-1 fold)
     ],
 }
 
 
 def _primitive8_files(engine: str, source_root: Path) -> list[Path]:
-    out: list[Path] = []
-    seen: set[Path] = set()
-    for pattern in _PRIMITIVE8_GLOBS.get(engine, []):
-        if "*" in pattern:
-            for p in sorted(source_root.glob(pattern)):
-                if p.is_file() and p not in seen:
-                    seen.add(p)
-                    out.append(p)
-        else:
-            p = source_root / pattern
-            if p.is_file() and p not in seen:
-                seen.add(p)
-                out.append(p)
-    return out
+    # Shared glob expansion (generalised-glob primitive) lives in the base.
+    return base._expand_files(source_root, _PRIMITIVE8_GLOBS.get(engine, []))
 
 
 # ---------------------------------------------------------------------------
@@ -146,16 +135,21 @@ def _bounds_in_call(call_text: str) -> list[str]:
     return kinds
 
 
-def _annotation_constraints(type_text: str) -> tuple[list[str], bool]:
+def _annotation_constraints(
+    type_text: str, literal_aliases: set[str] | None = None
+) -> tuple[list[str], bool]:
     """Inspect an annotation string for declarative constraints.
 
     Returns ``(numeric_kinds, is_membership)``:
     * numeric_kinds - bound kinds from any Field/Meta/conint/confloat call
       nested in an ``Annotated[...]`` (or a bare ``conint(...)`` annotation).
-    * is_membership - True when the annotation is a ``Literal[...]`` or a
+    * is_membership - True when the annotation is a ``Literal[...]``, a
+      module-level ``Literal`` alias (``literal_aliases``, e.g.
+      ``Optional[DefaultPluginDtype]`` - the lever-1 plugin-config fold), or a
       bare enum-like name (CamelCase, not a builtin/typing container), i.e.
       the value is constrained to a closed allowed set.
     """
+    literal_aliases = literal_aliases or set()
     text = type_text.strip()
     numeric: list[str] = []
     # Annotated[T, Field(...)] / Annotated[int, Meta(ge=...)]
@@ -187,7 +181,11 @@ def _annotation_constraints(type_text: str) -> tuple[list[str], bool]:
         # require the WHOLE (None-stripped) annotation to be one bare name
         # ending in a config-enum suffix to avoid flagging every typed field.
         stripped = head_text.replace("| None", "").replace("Optional[", "").rstrip("]").strip()
-        if re.fullmatch(r"[A-Z][A-Za-z0-9]*", stripped or ""):
+        # Module-level Literal alias (DefaultPluginDtype = Literal[...]) typed as
+        # Optional[DefaultPluginDtype]: resolve to membership (lever-1 fold).
+        if stripped in literal_aliases:
+            is_membership = True
+        elif re.fullmatch(r"[A-Z][A-Za-z0-9]*", stripped or ""):
             if stripped.endswith(("Mode", "Type", "Backend", "Policy", "Method", "Format", "Role")):
                 is_membership = True
     return numeric, is_membership
@@ -226,6 +224,29 @@ def _class_level_fields(source: bytes, class_node: Any) -> list[tuple[str, str, 
     return out
 
 
+def _module_literal_aliases(source: bytes, root: Any) -> set[str]:
+    """Module-level ``Name = Literal[...]`` / ``Name: X = Literal[...]`` aliases.
+
+    TRT-LLM's plugin config declares ``DefaultPluginDtype = Literal[...]`` and
+    types many fields ``Optional[DefaultPluginDtype]``; resolving the alias lets
+    those fields read as membership constraints (the lever-1 plugin-config fold).
+    """
+    aliases: set[str] = set()
+    for stmt in root.named_children:
+        if stmt.type != "expression_statement":
+            continue
+        for child in stmt.named_children:
+            if child.type != "assignment":
+                continue
+            left = child.child_by_field_name("left")
+            right = child.child_by_field_name("right")
+            if left is None or left.type != "identifier" or right is None:
+                continue
+            if base._node_text(source, right).lstrip().startswith("Literal["):
+                aliases.add(base._node_text(source, left))
+    return aliases
+
+
 def _primitive8_invariants(
     *,
     engine: str,
@@ -237,6 +258,7 @@ def _primitive8_invariants(
     """Run Primitive 8 over one source file: emit a declarative invariant per
     (field, bound) and per (Literal/enum field) membership."""
     root = parser.parse(source).root_node
+    literal_aliases = _module_literal_aliases(source, root)
     invs: list[dict[str, Any]] = []
     for class_node in base._class_nodes(root):
         cname = base._class_name(source, class_node)
@@ -250,7 +272,7 @@ def _primitive8_invariants(
             if rhs is not None:
                 numeric_kinds.extend(_bounds_in_call(rhs))
             # Annotation-side constraints (Annotated[...]/conint(...)/Literal).
-            ann_numeric, ann_member = _annotation_constraints(type_text)
+            ann_numeric, ann_member = _annotation_constraints(type_text, literal_aliases)
             for k in ann_numeric:
                 if k not in numeric_kinds:
                     numeric_kinds.append(k)
