@@ -36,6 +36,7 @@ Tasks mirror a_improved_det: ``schema`` | ``invariants`` | ``both`` (default).
 
 from __future__ import annotations
 
+import ast
 import re
 import time
 from pathlib import Path
@@ -254,21 +255,62 @@ def _bounds_in_call(call_text: str) -> list[str]:
     return kinds
 
 
+def _extract_literal_values(
+    type_text: str, aliases: dict[str, list[Any]] | None = None
+) -> list[Any] | None:
+    """Allowed values of a Literal annotation, resolving Optional / | None
+    wrappers and module-level Literal aliases.
+
+    Returns the value list (gate-probeable), [] when it IS a Literal but a member
+    is non-constant (values unknown), or None when the annotation is not a closed
+    literal set. The gate synthesises a membership probe from these values; an
+    EMPTY allowlist is unprobeable (it skips), so capturing the values is what
+    turns the plugin/enum membership fold from skipped into confirmable.
+    """
+    aliases = aliases or {}
+    try:
+        tree = ast.parse(type_text.strip(), mode="eval")
+    except SyntaxError:
+        return None
+    found: list[Any] | None = None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "Literal"
+        ):
+            sl = node.slice
+            elts = list(sl.elts) if isinstance(sl, ast.Tuple) else [sl]
+            vals: list[Any] = []
+            ok = True
+            for e in elts:
+                if isinstance(e, ast.Constant):
+                    vals.append(e.value)
+                else:
+                    ok = False
+                    break
+            found = vals if ok else []
+        elif isinstance(node, ast.Name) and node.id in aliases:
+            found = list(aliases[node.id])
+    return found
+
+
 def _annotation_constraints(
-    type_text: str, literal_aliases: set[str] | None = None
-) -> tuple[list[str], bool]:
+    type_text: str, literal_aliases: dict[str, list[Any]] | None = None
+) -> tuple[list[str], list[Any] | None]:
     """Inspect an annotation string for declarative constraints.
 
-    Returns ``(numeric_kinds, is_membership)``:
+    Returns ``(numeric_kinds, membership_values)``:
     * numeric_kinds - bound kinds from any Field/Meta/conint/confloat call
       nested in an ``Annotated[...]`` (or a bare ``conint(...)`` annotation).
-    * is_membership - True when the annotation is a ``Literal[...]``, a
-      module-level ``Literal`` alias (``literal_aliases``, e.g.
-      ``Optional[DefaultPluginDtype]`` - the lever-1 plugin-config fold), or a
-      bare enum-like name (CamelCase, not a builtin/typing container), i.e.
-      the value is constrained to a closed allowed set.
+    * membership_values - the allowed value set when the annotation is a
+      ``Literal[...]``, a module-level ``Literal`` alias (e.g.
+      ``Optional[DefaultPluginDtype]`` - the lever-1 plugin fold), or a bare
+      enum-like name; None when not a membership; ``[]`` when membership is
+      detected but the values are unknown (bare enum-suffix heuristic). A
+      non-empty list is gate-probeable.
     """
-    literal_aliases = literal_aliases or set()
+    literal_aliases = literal_aliases or {}
     text = type_text.strip()
     numeric: list[str] = []
     # Annotated[T, Field(...)] / Annotated[int, Meta(ge=...)]
@@ -287,27 +329,21 @@ def _annotation_constraints(
                         call_text = text[start : j + 1]
                         numeric.extend(k for k in _bounds_in_call(call_text) if k not in numeric)
                         break
-    is_membership = False
-    # Strip a leading Optional / | None so `Literal[...] | None` still reads.
-    head_text = text
-    if "Literal[" in head_text:
-        is_membership = True
-    else:
+    # Membership values: Literal[...] (inline) or a module-level Literal alias
+    # (DefaultPluginDtype) resolved to its values - both gate-probeable.
+    membership_values = _extract_literal_values(text, literal_aliases)
+    if membership_values is None:
         # Bare enum-like annotation: a single CamelCase name (optionally
-        # Optional-wrapped) that is not a typing container / builtin. This is
-        # a heuristic; the tolerant matcher only needs the leaf+bucket, so a
-        # false positive costs precision, not a crash. We are conservative:
-        # require the WHOLE (None-stripped) annotation to be one bare name
-        # ending in a config-enum suffix to avoid flagging every typed field.
-        stripped = head_text.replace("| None", "").replace("Optional[", "").rstrip("]").strip()
-        # Module-level Literal alias (DefaultPluginDtype = Literal[...]) typed as
-        # Optional[DefaultPluginDtype]: resolve to membership (lever-1 fold).
-        if stripped in literal_aliases:
-            is_membership = True
-        elif re.fullmatch(r"[A-Z][A-Za-z0-9]*", stripped or ""):
-            if stripped.endswith(("Mode", "Type", "Backend", "Policy", "Method", "Format", "Role")):
-                is_membership = True
-    return numeric, is_membership
+        # Optional-wrapped) ending in a config-enum suffix. Membership is likely
+        # but the allowed values are not inline, so emit values-unknown ([]) - it
+        # surfaces the field but is not gate-probeable. Conservative to avoid
+        # flagging every typed field.
+        stripped = text.replace("| None", "").replace("Optional[", "").rstrip("]").strip()
+        if re.fullmatch(r"[A-Z][A-Za-z0-9]*", stripped or "") and stripped.endswith(
+            ("Mode", "Type", "Backend", "Policy", "Method", "Format", "Role")
+        ):
+            membership_values = []
+    return numeric, membership_values
 
 
 def _class_level_fields(source: bytes, class_node: Any) -> list[tuple[str, str, str | None]]:
@@ -343,14 +379,14 @@ def _class_level_fields(source: bytes, class_node: Any) -> list[tuple[str, str, 
     return out
 
 
-def _module_literal_aliases(source: bytes, root: Any) -> set[str]:
-    """Module-level ``Name = Literal[...]`` / ``Name: X = Literal[...]`` aliases.
+def _module_literal_aliases(source: bytes, root: Any) -> dict[str, list[Any]]:
+    """Module-level ``Name = Literal[...]`` aliases mapped to their VALUES.
 
     TRT-LLM's plugin config declares ``DefaultPluginDtype = Literal[...]`` and
-    types many fields ``Optional[DefaultPluginDtype]``; resolving the alias lets
-    those fields read as membership constraints (the lever-1 plugin-config fold).
+    types many fields ``Optional[DefaultPluginDtype]``; resolving the alias to its
+    values lets those fields emit a probeable membership allowlist (lever-1 fold).
     """
-    aliases: set[str] = set()
+    aliases: dict[str, list[Any]] = {}
     for stmt in root.named_children:
         if stmt.type != "expression_statement":
             continue
@@ -361,8 +397,11 @@ def _module_literal_aliases(source: bytes, root: Any) -> set[str]:
             right = child.child_by_field_name("right")
             if left is None or left.type != "identifier" or right is None:
                 continue
-            if base._node_text(source, right).lstrip().startswith("Literal["):
-                aliases.add(base._node_text(source, left))
+            rtext = base._node_text(source, right)
+            if "Literal[" in rtext:
+                vals = _extract_literal_values(rtext)
+                if vals:
+                    aliases[base._node_text(source, left)] = vals
     return aliases
 
 
@@ -386,16 +425,14 @@ def _primitive8_invariants(
         namespace = base._resolve_namespace(cname, cfg)
         for fname, type_text, rhs in _class_level_fields(source, class_node):
             numeric_kinds: list[str] = []
-            is_membership = False
             # RHS Field(...)/conint(...) call bounds.
             if rhs is not None:
                 numeric_kinds.extend(_bounds_in_call(rhs))
             # Annotation-side constraints (Annotated[...]/conint(...)/Literal).
-            ann_numeric, ann_member = _annotation_constraints(type_text, literal_aliases)
+            ann_numeric, membership_values = _annotation_constraints(type_text, literal_aliases)
             for k in ann_numeric:
                 if k not in numeric_kinds:
                     numeric_kinds.append(k)
-            is_membership = ann_member
             line = class_node.start_point[0] + 1
             for kind in numeric_kinds:
                 invs.append(
@@ -413,22 +450,26 @@ def _primitive8_invariants(
                         fired_by="p8",
                     )
                 )
-            if is_membership:
-                invs.append(
-                    base._make_invariant(
-                        engine=engine,
-                        class_name=cname,
-                        method_name="__declarative__",
-                        namespace=namespace,
-                        primary_field=fname,
-                        kind="not_in",
-                        secondary_field="",
-                        rel_path=rel_path,
-                        line=line,
-                        severity="error",
-                        fired_by="p8",
-                    )
+            if membership_values is not None:
+                inv = base._make_invariant(
+                    engine=engine,
+                    class_name=cname,
+                    method_name="__declarative__",
+                    namespace=namespace,
+                    primary_field=fname,
+                    kind="not_in",
+                    secondary_field="",
+                    rel_path=rel_path,
+                    line=line,
+                    severity="error",
+                    fired_by="p8",
                 )
+                # Capture the allowed value set so the gate can synthesise a
+                # membership probe; an empty allowlist is unprobeable (skipped).
+                if membership_values:
+                    pkey = next(iter(inv["match"]["fields"]))
+                    inv["match"]["fields"][pkey] = {"not_in": membership_values}
+                invs.append(inv)
     return invs
 
 
