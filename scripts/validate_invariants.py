@@ -483,6 +483,12 @@ def _leaf_field(invariant: dict[str, Any]) -> str | None:
     return None
 
 
+def _is_cross_field(invariant: dict[str, Any]) -> bool:
+    """True when the match spans >1 field (a cross-field relation): there is no
+    single probe leaf, so the raise must be attributed differently."""
+    return len((invariant.get("match") or {}).get("fields") or {}) > 1
+
+
 def _raise_attributable_to(
     leaf: str,
     pos: CaptureBuffers,
@@ -754,12 +760,21 @@ def _validate_invariant_with_captures(
     # enforces the constraint. Covers synthesised probes AND hand-authored probes
     # lacking an expected_outcome (the study's Opus/mechanical sources). Entries
     # with a declared expected_outcome went through the STRICT branch, left as-is.
+    # CROSS-FIELD case: a multi-field match has no single probe leaf, so the
+    # single-field attribution above is skipped (probe_leaf empty). Such a confirm
+    # is SPURIOUS when the positive raised a FIELD-LEVEL pydantic error
+    # (exception_locs non-empty) - one field's own type/literal check fired before
+    # the cross-field model-validator ever ran (e.g. a constrained Literal field
+    # set out of its allowed set raises a literal_error, not the labelled
+    # relation). A genuine cross-field rule raises model-level (locs ()) or a
+    # plain ValueError (locs None). Reject the field-level case.
     expected_strict = expected.get("outcome") in _FIRING_OUTCOMES
     if positive_confirmed and not expected_strict:
         probe_leaf = _leaf_field(invariant) or ""
-        if probe_leaf and not _raise_attributable_to(
-            probe_leaf, pos, observed_messages, neg.observed_state
-        ):
+        if probe_leaf:
+            if not _raise_attributable_to(probe_leaf, pos, observed_messages, neg.observed_state):
+                positive_confirmed = False
+        elif _is_cross_field(invariant) and pos.exception_locs:
             positive_confirmed = False
 
     case = CaseResult(

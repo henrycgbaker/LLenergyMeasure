@@ -1037,3 +1037,15 @@ class TestRaiseAttributableTo:
         pos = _cap("temperature must be non-negative", locs=None)
         assert validate_invariants._raise_attributable_to("temperature", pos, [], None)
         assert not validate_invariants._raise_attributable_to("top_p", pos, [], None)
+
+
+class TestIsCrossField:
+    def test_multi_field_is_cross_field(self) -> None:
+        inv = {"match": {"fields": {"vllm.a": 1, "vllm.b": 2}}}
+        assert validate_invariants._is_cross_field(inv)
+
+    def test_single_field_is_not(self) -> None:
+        assert not validate_invariants._is_cross_field({"match": {"fields": {"vllm.a": 1}}})
+
+    def test_no_match_is_not(self) -> None:
+        assert not validate_invariants._is_cross_field({})
