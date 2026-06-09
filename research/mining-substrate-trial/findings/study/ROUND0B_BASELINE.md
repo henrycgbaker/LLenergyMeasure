@@ -127,7 +127,10 @@ added count (e.g. vllm 0.18->0.19 collapses 27 real new constraints to 9). Treat
 61% as "field-level tracking is good on minors," not a precise value-recovery
 rate.
 
-## Self-confirm recall (gated) - validated on tensorrt 1.2.1 + vllm 0.19.1
+## Self-confirm recall (gated) - deep-dive: tensorrt 1.2.1 + vllm 0.19.1
+
+(Per-cell detail for the two cells first validated; the full 15-cell fan-out
+table is in the next section.)
 
 - tensorrt 1.2.1 mech-only self-confirm: **15 -> 40** of 60 (the value-capture
   fold). All 19 plugin candidates now confirm (was 0/19, skipped on empty
@@ -173,9 +176,61 @@ rate.
      require it to be the message subject; non-pydantic keeps substring.
      Re-gate: vllm 32 -> 31 (drops only the spurious one), tensorrt 40 -> 40.
   2. MINER bucket-mislabel - bare `bool` fields get numeric/membership buckets
-     (cudagraph_mm_encoder, disable_additional_properties); they should be
-     `type` constraints so their confirms aren't mislabelled. CARRIED FORWARD
-     (miner-side; rippled-recall risk warrants its own scoped change).
+     (`cudagraph_mm_encoder`, `disable_additional_properties` confirm via pydantic
+     bool-type rejection), and `hadamard_size` (transformers) is an `int` whose
+     only constraint is the cross-field `hadamard_size % group_size == 0`
+     (confirms via a `TypeError` from a non-int probe) - none are the numeric/
+     membership bound they are tagged as. CARRIED FORWARD (miner-side;
+     rippled-recall risk warrants its own scoped change).
+
+## Self-confirm fan-out - all 15 cells (gated)
+
+Full self-confirm gate run across the window after the resolver + attribution
+fixes. tensorrt/vllm gate in-container; transformers gates in-process from the
+per-version tfvenv. Driver: `scripts/round0b/gate.py`. `new-ckeys` =
+gate-confirmed constraint-keys NOT in that cell's committed Round-0 GT.
+
+| cell | mech | confirmed | failed | skipped | infra | new-ckeys |
+|---|---|---|---|---|---|---|
+| tensorrt 0.20.0 | 23 | 4 | 7 | 12 | 0 | 0 |
+| tensorrt 0.21.0 | 56 | 4 | 9 | 36 | 7 | 0 |
+| tensorrt 1.0.0 | 63 | 7 | 16 | 40 | 0 | 2 |
+| tensorrt 1.1.0 | 71 | 12 | 17 | 42 | 0 | 9 |
+| tensorrt 1.2.1 | 129 | 40 | 25 | 64 | 0 | 0 |
+| vllm 0.18.1 | 308 | 30 | 78 | 192 | 8 | 11 |
+| vllm 0.19.1 | 315 | 31 | 79 | 197 | 8 | 11 |
+| vllm 0.20.0 | 348 | 32 | 84 | 224 | 8 | 9 |
+| vllm 0.21.0 | 363 | 33 | 89 | 233 | 8 | 6 |
+| vllm 0.22.0 | 380 | 34 | 90 | 248 | 8 | 8 |
+| transformers 5.6.2 | 92 | 4 | 10 | 74 | 4 | 0 |
+| transformers 5.7.0 | 92 | 4 | 10 | 74 | 4 | 4 |
+| transformers 5.8.1 | 92 | 4 | 10 | 74 | 4 | 4 |
+| transformers 5.9.0 | 93 | 4 | 11 | 74 | 4 | 2 |
+| transformers 5.10.2 | 92 | 4 | 11 | 73 | 4 | 4 |
+| **TOTAL (15)** | 2517 | 247 | 546 | 1657 | 67 | 70 |
+
+Reading: self-confirm scales with the mechanical surface. vllm 30-34 (largest
+mech, 308-380 candidates); tensorrt 4-40 (1.2.1 is the plugin-rich outlier);
+transformers flat at 4 - the LLM-tail engine, where ~80% of its 92 candidates
+are `skipped_unsynthesizable`/presence-dominated and not mechanically gateable.
+`infra_error` is non-deterministic dispatch noise (the entangled-args +
+non-constructible tail); the confirmed counts are deterministic.
+
+GT-growth (adversarially verified, honest wording): of the 70 net-new
+gate-confirmed constraint-keys across the 15 cells, only **29 cell-occurrences
+(= 10 DISTINCT fields: 9 vllm + tensorrt `stream_interval`) are genuine
+field-level GT-growth** - a new leaf, absent from that cell's GT under any
+bucket, enforced by a real validator (verified in source/container:
+`all2all_backend` Literal, `stream_interval`/`max_pattern_size` positivity).
+**28 are encoding-variance** (the leaf+bucket already exist in GT; only the
+canonical value differs - a lossy re-encoding of the same bound, e.g. bare `0`
+for GT's `{ge=0}`), which is NOT growth and carries the same caveat as the
+retracted survivor-rebound metric (FULL_MATRIX Section 3). **13 are
+bucket-mislabels** that must not count as growth (see DEFECTS #2:
+`disable_additional_properties`/`cudagraph_mm_encoder` bool, `hadamard_size`
+int-divisibility). Net defensible field-level growth: **10 distinct new fields**,
+concentrated in vllm pooling/quantization/MoE config. Do NOT report "70 new
+validated constraints" - that is ~7x the defensible distinct-field growth.
 
 ## Methodology decisions
 
@@ -195,9 +250,11 @@ the subpackage glob is the real win, transformers is the LLM-tail engine - but
 the value-blind headlines were inflated; corrected above).
 
 DONE: field-coverage (tolerant) surfacing-recall baseline + bump-delta field
-curve + pre/post lift (all 15 cells, offline), lever-1 self-confirm validated on
-tensorrt 1.2.1, and the vllm subpackage-resolver gate fix validated on vllm
-0.19.1 (infra_error 100 -> 4, self-confirm 4 -> 32; adversarially reviewed).
+curve + pre/post lift (all 15 cells, offline); the vllm subpackage-resolver gate
+fix + attribution hardening; and SELF-CONFIRM FAN-OUT across all 15 cells (247
+confirmed total; table above), with the GT-growth honestly classified
+(10 distinct genuine new fields, 28 encoding-variance, 13 bucket-mislabels;
+adversarially reviewed).
 
 NOT yet done (so this is NOT the full "deterministic baseline locked" of
 STUDY_DESIGN Section 7):
@@ -205,12 +262,13 @@ STUDY_DESIGN Section 7):
   rest on value-grain capture the miner is poor at; the p5 two-sided-range
   collapse (`0<=top_p<=1` keeps only one bound) is a direct cause and is NOT
   cosmetic - it is exactly the value-grain the baseline's strict number needs.
-- SELF-confirm exists for 2 of 15 cells (tensorrt 1.2.1 + vllm 0.19.1). The vllm
-  gate is now UNBLOCKED (resolver fix) and the attribution check is HARDENED, so
-  fan-out across the remaining 13 cells is mechanically possible and produces
-  trustworthy per-invariant confirms; P10 platform candidates are 0/16 confirmed
-  (dormant, not cheaply gateable - the GT-growth bucket); tensorrt mech also
-  shows 25 gate FAILS worth a look.
+- SELF-confirm now spans all 15 cells (fan-out table above). What remains: the
+  net-new genuine fields (10 distinct) are real GT-GROWTH the committed GT
+  under-counts but have NOT been folded into the GT (gating stays non-destructive
+  via `round0b/gate.py`); P10 platform candidates are 0/16 confirmed (dormant,
+  not cheaply gateable - the GT-growth bucket); tensorrt mech shows ~25 gate
+  FAILS/cell worth a look; the bucket-mislabel miner fix (DEFECTS #2) is still
+  carried forward.
 
 Carried forward (to finish the baseline / Phase-1 prereqs):
 - VALUE-GRAIN ALIGNMENT (the real blocker, attempted + reverted 2026-06-08):
