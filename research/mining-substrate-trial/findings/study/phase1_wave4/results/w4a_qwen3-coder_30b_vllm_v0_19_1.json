@@ -1,0 +1,37 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "pure_llm_prompt",
+  "model": "qwen3-coder:30b",
+  "n_llm_proposed_raw": 215,
+  "n_deduped_internal": 161,
+  "n_gateable": 161,
+  "verdicts": {
+    "confirmed": 17,
+    "failed": 104,
+    "skipped": 0,
+    "infra_error": 40,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.106,
+  "gt_confirmed_total": 80,
+  "recall_vs_gt_tol": 10,
+  "recall_frac": 0.125,
+  "gt_growth_ckeys": [
+    "_api_process_rank|numeric|_api_process_count",
+    "data_parallel_external_lb|exact|[data_parallel_external_lb,data_parallel_size]",
+    "data_parallel_rank|numeric|[data_parallel_rank,data_parallel_size]",
+    "data_parallel_size_local|numeric|data_parallel_size",
+    "frequency_penalty|numeric|2",
+    "logprobs|membership|-1",
+    "min_p|numeric|1",
+    "n|numeric|envs.VLLM_MAX_N_SEQUENCES",
+    "presence_penalty|numeric|2",
+    "prompt_logprobs|membership|-1",
+    "stop_token_ids|presence|True",
+    "stop_token_ids|type|[list]",
+    "top_p|numeric|1"
+  ],
+  "gt_growth_count": 13,
+  "wall_sec": 431.8
+}

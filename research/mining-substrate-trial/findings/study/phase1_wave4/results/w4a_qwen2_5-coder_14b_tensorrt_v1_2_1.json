@@ -1,0 +1,23 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "shape": "pure_llm_prompt",
+  "model": "qwen2.5-coder:14b",
+  "n_llm_proposed_raw": 77,
+  "n_deduped_internal": 61,
+  "n_gateable": 61,
+  "verdicts": {
+    "confirmed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "infra_error": 61,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.0,
+  "gt_confirmed_total": 61,
+  "recall_vs_gt_tol": 0,
+  "recall_frac": 0.0,
+  "gt_growth_ckeys": [],
+  "gt_growth_count": 0,
+  "wall_sec": 229.1
+}

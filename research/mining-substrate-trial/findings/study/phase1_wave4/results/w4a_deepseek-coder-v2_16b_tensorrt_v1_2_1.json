@@ -1,0 +1,35 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "shape": "pure_llm_prompt",
+  "model": "deepseek-coder-v2:16b",
+  "n_llm_proposed_raw": 52,
+  "n_deduped_internal": 42,
+  "n_gateable": 42,
+  "verdicts": {
+    "confirmed": 12,
+    "failed": 18,
+    "skipped": 0,
+    "infra_error": 12,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.286,
+  "gt_confirmed_total": 61,
+  "recall_vs_gt_tol": 4,
+  "recall_frac": 0.066,
+  "gt_growth_ckeys": [
+    "batch_wait_max_tokens_ratio|numeric|{<==0,present=True}",
+    "batch_wait_timeout_iters|numeric|{<=0,present=True}",
+    "draft_len_schedule|presence|{!==None,present=True}",
+    "enable_balance|presence|[batching_wait_iters,enable_balance,timeout_iters]",
+    "generation_config|presence|[eos_token_id,generation_config]",
+    "guided_decoding|presence|[grammar,guided_decoding,json,json_object,regex,structural_tag]",
+    "lora_config|membership|{not_in=[{}],present=True}",
+    "model|presence|True",
+    "peft_cache_config|membership|{not_in=[None],present=True}",
+    "speculative_config|membership|{not_in=[None],present=True}",
+    "stream_interval|numeric|{<==0,present=True}"
+  ],
+  "gt_growth_count": 11,
+  "wall_sec": 169.5
+}

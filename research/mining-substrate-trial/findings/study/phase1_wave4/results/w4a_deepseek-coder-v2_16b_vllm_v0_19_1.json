@@ -1,0 +1,28 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "pure_llm_prompt",
+  "model": "deepseek-coder-v2:16b",
+  "n_llm_proposed_raw": 87,
+  "n_deduped_internal": 73,
+  "n_gateable": 73,
+  "verdicts": {
+    "confirmed": 4,
+    "failed": 56,
+    "skipped": 3,
+    "infra_error": 10,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.055,
+  "gt_confirmed_total": 80,
+  "recall_vs_gt_tol": 1,
+  "recall_frac": 0.013,
+  "gt_growth_ckeys": [
+    "max_parallel_loading_workers|presence|True",
+    "max_pattern_size|numeric|[max_pattern_size,min_pattern_size]",
+    "pipeline_parallel_size|numeric|[enable_elastic_ep,pipeline_parallel_size]",
+    "tokenizer|type|[max_model_len,tokenizer]"
+  ],
+  "gt_growth_count": 4,
+  "wall_sec": 347.8
+}

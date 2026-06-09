@@ -1,0 +1,31 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "shape": "pure_llm_prompt",
+  "model": "llama3.1:70b",
+  "n_llm_proposed_raw": 46,
+  "n_deduped_internal": 44,
+  "n_gateable": 44,
+  "verdicts": {
+    "confirmed": 14,
+    "failed": 20,
+    "skipped": 0,
+    "infra_error": 10,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.318,
+  "gt_confirmed_total": 61,
+  "recall_vs_gt_tol": 11,
+  "recall_frac": 0.18,
+  "gt_growth_ckeys": [
+    "batch_wait_max_tokens_ratio|numeric|1",
+    "checkpoint_format|presence|[checkpoint_format,checkpoint_loader]",
+    "free_gpu_memory_fraction|numeric|{<=0,>=1}",
+    "max_attention_window|membership|{not_in=[[1,2,3]],present=True}",
+    "model|presence|False",
+    "top_p|numeric|1",
+    "truncate_prompt_tokens|numeric|1"
+  ],
+  "gt_growth_count": 7,
+  "wall_sec": 1675.0
+}

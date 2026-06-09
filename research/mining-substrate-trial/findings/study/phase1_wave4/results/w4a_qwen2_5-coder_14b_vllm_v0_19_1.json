@@ -1,0 +1,33 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "pure_llm_prompt",
+  "model": "qwen2.5-coder:14b",
+  "n_llm_proposed_raw": 190,
+  "n_deduped_internal": 150,
+  "n_gateable": 150,
+  "verdicts": {
+    "confirmed": 16,
+    "failed": 75,
+    "skipped": 8,
+    "infra_error": 51,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.107,
+  "gt_confirmed_total": 80,
+  "recall_vs_gt_tol": 13,
+  "recall_frac": 0.163,
+  "gt_growth_ckeys": [
+    "data_parallel_rank|presence|[data_parallel_rank,data_parallel_size]",
+    "distributed_executor_backend|type|{present=True,type_is_not=[str]}",
+    "frequency_penalty|numeric|-2",
+    "logprobs|numeric|-1",
+    "min_p|numeric|0",
+    "n|type|[int]",
+    "presence_penalty|numeric|-2",
+    "prompt_logprobs|numeric|-1",
+    "tokenizer|type|{present=True,type_is_not=[str]}"
+  ],
+  "gt_growth_count": 9,
+  "wall_sec": 629.1
+}

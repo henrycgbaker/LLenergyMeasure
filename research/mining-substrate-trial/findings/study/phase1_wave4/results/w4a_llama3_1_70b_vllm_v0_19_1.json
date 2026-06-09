@@ -1,0 +1,28 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "pure_llm_prompt",
+  "model": "llama3.1:70b",
+  "n_llm_proposed_raw": 88,
+  "n_deduped_internal": 69,
+  "n_gateable": 69,
+  "verdicts": {
+    "confirmed": 4,
+    "failed": 38,
+    "skipped": 1,
+    "infra_error": 26,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.058,
+  "gt_confirmed_total": 80,
+  "recall_vs_gt_tol": 1,
+  "recall_frac": 0.013,
+  "gt_growth_ckeys": [
+    "data_parallel_rank|numeric|[data_parallel_rank,data_parallel_size]",
+    "max_cpu_loras|numeric|vllm.max_loras",
+    "max_model_len|type|{present=True,type_is_not=[int]}",
+    "renderer_num_workers|numeric|[mm_processor_cache_gb,renderer_num_workers]"
+  ],
+  "gt_growth_count": 4,
+  "wall_sec": 4254.7
+}
