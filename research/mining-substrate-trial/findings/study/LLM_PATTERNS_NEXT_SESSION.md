@@ -9,11 +9,14 @@ looks off).
 
 Phase 1's WIDE NET, done systematically: empirically test patterns of directed
 LLM use for engine-config invariant mining, across the STUDY_DESIGN Section 8
-design space, scored by the real runtime gate. Waves 1-2 ran only the narrowest
-slice (det-then-llm-extend, single call-shape); this phase covers the rest. Use
-a real agentic-orchestration framework (LangGraph / LangChain) for the patterns
-that need it (closed-loop, self-consistency, ensemble-vote, agentic call-shape) -
-NOT the minimal single-call harness.
+design space, scored by the real runtime gate. The headline deliverable is the
+MODEL-SIZE x WORKFLOW-SHAPE matrix (see "CORE DELIVERABLE" below): map what each
+model size (small/mid/large OSS + Opus) achieves at each workflow shape
+(all assemblies x call-shapes, INCLUDING pure-LLM). Waves 1-2 ran only the
+narrowest slice (det-then-llm-extend, single call-shape, small-OSS + Opus); this
+phase fills the grid. Use a real agentic-orchestration framework (LangGraph /
+LangChain) for the patterns that need it (closed-loop, self-consistency,
+ensemble-vote, agentic call-shape) - NOT the minimal single-call harness.
 
 North star (unchanged): a cheap, CI-affordable workflow that keeps well-validated
 engine-config knowledge (schema + invariants) current across version bumps; the
@@ -79,15 +82,33 @@ Read PHASE1_WAVE1_FINDINGS.md + PHASE1_WAVE2_FINDINGS.md. Key results:
    verified-real growth -> decide next wave (deepen vs prune per the stopping
    rule).
 
-## Candidate first waves (user picks at kickoff)
+## CORE DELIVERABLE: the model-size x workflow-shape matrix (user-confirmed)
 
-- Assembly sweep at fixed tier: hold Opus, vary assembly {det-then-llm-extend
-  (done), llm-then-det-gate, self-consistency (k-vote), ensemble-vote} on the 2
-  cells - does a richer assembly beat single-shot extend?
-- Tier sweep at fixed assembly: hold det-then-llm-extend+kwargs, vary tier
-  {gemma3:12b (done), 32B, 70B, Opus (done)} - does a mid model bridge the gap?
-- Role sweep: the diagnose / diff-review roles scored on caught-a-silent-collapse
-  rate (NOT recall) - these are the self-update-adjacent roles.
+The headline of this phase is a MATRIX, not one-axis sweeps: cross
+{tier: small-OSS (gemma3:12b, done) x mid-OSS ~32B x large-OSS ~70B x Opus} with
+{workflow shape: ALL the assemblies x call-shapes, INCLUDING pure-LLM
+(llm-only, no deterministic floor)}. Goal = get a sense of WHAT IS ACHIEVABLE at
+each (model size, workflow shape) cell - recall/coverage vs the GT + cost
+(ordinal tier comparison). So:
+
+- Provision mid (~32B) + large (~70B) OSS up front (not optional) - they are
+  tested across EVERY shape, same as Opus.
+- Include PURE-LLM (llm-only assembly): the LLM extracts the full catalogue from
+  source with NO det floor. Waves 1-2 only did det-then-llm-extend; pure-LLM is
+  the untested "what can the model do alone" datapoint and is required for the
+  size x shape map. (The PoC has a `pure_b_prompt.md` locked prompt; the
+  kwargs-emission requirement from wave 2 should carry into every shape so the
+  gate can probe cross-field.)
+- Shapes to cover (fractional sampling, but spanning the space): pure-LLM,
+  det-then-llm-extend (+kwargs, done at small/Opus), llm-then-det-gate,
+  self-consistency (k-vote), ensemble-vote, closed-loop; call-shapes single vs
+  k-vote vs chunked. Roles: extract primary; diagnose/diff-review as the
+  self-update-adjacent roles (scored on caught-a-silent-collapse, NOT recall).
+
+Pre-register the matrix in tranches (it is large x 15 cells - sample cells +
+shapes per the discipline), but the deliverable is the filled size x shape grid:
+"this size at this shape achieves this coverage at this cost." Mandatory
+adversarial cross-field verification on every confirm, every cell.
 
 ## STRONGEST un-run north-star item (parallel option, per the 2026-06-09 audit)
 
