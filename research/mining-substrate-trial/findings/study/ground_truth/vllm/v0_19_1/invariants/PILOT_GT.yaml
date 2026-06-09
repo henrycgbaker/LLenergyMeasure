@@ -6,7 +6,7 @@ round: R0_pilot
 gate: scripts/validate_invariants.py (in vllm/vllm-openai:v0.19.1)
 identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
   tolerant_key = first two, for cross-source recall
-n_confirmed: 98
+n_confirmed: 105
 n_unverified: 157
 confirmed:
 - id: vllm_structuredoutputsconfig_backend_literal
@@ -279,6 +279,37 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_structuredoutputsconfig__validate_disable_additional_properties_backend
+  source: llm
+  constraint_key:
+  - disable_additional_properties
+  - exact
+  - '[backend,disable_additional_properties]'
+  tolerant_key:
+  - disable_additional_properties
+  - exact
+  native_type: vllm.StructuredOutputsConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_additional_properties: true
+      vllm.engine.backend:
+        present: true
+        not_equal: guidance
+  kwargs_positive:
+    backend: xgrammar
+    disable_additional_properties: true
+  kwargs_negative:
+    backend: guidance
+    disable_additional_properties: true
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: vllm_structuredoutputsconfig_raises_disable_additional_props_unsupported_backend
   source: passA
   constraint_key:
@@ -340,6 +371,39 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_structuredoutputsconfig__validate_disable_any_whitespace_backend
+  source: llm
+  constraint_key:
+  - disable_any_whitespace
+  - exact
+  - '[backend,disable_any_whitespace]'
+  tolerant_key:
+  - disable_any_whitespace
+  - exact
+  native_type: vllm.StructuredOutputsConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_any_whitespace: true
+      vllm.engine.backend:
+        present: true
+        not_in:
+        - xgrammar
+        - guidance
+  kwargs_positive:
+    backend: outlines
+    disable_any_whitespace: true
+  kwargs_negative:
+    backend: xgrammar
+    disable_any_whitespace: true
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: vllm_structuredoutputsconfig_raises_disable_whitespace_unsupported_backend
   source: passA
   constraint_key:
@@ -664,6 +728,37 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_structuredoutputsparams___post_init___count_exactly_one
+  source: llm
+  constraint_key:
+  - json
+  - presence
+  - '[json,regex]'
+  tolerant_key:
+  - json
+  - presence
+  native_type: vllm.StructuredOutputsParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.json:
+        present: true
+      vllm.engine.regex:
+        present: true
+  kwargs_positive:
+    json: '{"type": "object"}'
+    regex: '[0-9]+'
+  kwargs_negative:
+    json: '{"type": "object"}'
+    regex: null
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: vllm_kvtransferconfig_kv_load_failure_policy_literal
   source: passB
   constraint_key:
@@ -814,6 +909,36 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_eplbconfig__validate_log_balancedness_interval_le0
+  source: llm
+  constraint_key:
+  - log_balancedness
+  - exact
+  - '[log_balancedness,log_balancedness_interval]'
+  tolerant_key:
+  - log_balancedness
+  - exact
+  native_type: vllm.EPLBConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.log_balancedness: true
+      vllm.engine.log_balancedness_interval:
+        <=: 0
+  kwargs_positive:
+    log_balancedness: true
+    log_balancedness_interval: 0
+  kwargs_negative:
+    log_balancedness: true
+    log_balancedness_interval: 1
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: vllm_eplbconfig_raises_log_balancedness_interval_le_0
   source: passA
   constraint_key:
@@ -1131,6 +1256,37 @@ confirmed:
   contributing_sources:
   - passA
   - poc
+- id: vllm_loraconfig__validate_max_cpu_loras_lt_max_loras
+  source: llm
+  constraint_key:
+  - max_cpu_loras
+  - presence
+  - '[max_cpu_loras,max_loras]'
+  tolerant_key:
+  - max_cpu_loras
+  - presence
+  native_type: vllm.LoRAConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_cpu_loras:
+        present: true
+      vllm.engine.lora.max_loras:
+        present: true
+  kwargs_positive:
+    max_loras: 4
+    max_cpu_loras: 2
+  kwargs_negative:
+    max_loras: 4
+    max_cpu_loras: 8
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: vllm_loraconfig_max_cpu_loras_ge_max_loras
   source: passB
   constraint_key:
@@ -1455,6 +1611,39 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_repetitiondetectionparams___post_init___min_gt_max
+  source: llm
+  constraint_key:
+  - min_pattern_size
+  - presence
+  - '[max_pattern_size,min_pattern_size]'
+  tolerant_key:
+  - min_pattern_size
+  - presence
+  native_type: vllm.RepetitionDetectionParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.min_pattern_size:
+        present: true
+      vllm.engine.max_pattern_size:
+        present: true
+  kwargs_positive:
+    max_pattern_size: 2
+    min_pattern_size: 5
+    min_count: 2
+  kwargs_negative:
+    max_pattern_size: 5
+    min_pattern_size: 2
+    min_count: 2
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: vllm_samplingparams_raises_min_tokens_lt_0
   source: passA
   constraint_key:
@@ -1542,6 +1731,37 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_samplingparams__verify_args_min_tokens_gt_max_tokens
+  source: llm
+  constraint_key:
+  - min_tokens
+  - presence
+  - '[max_tokens,min_tokens]'
+  tolerant_key:
+  - min_tokens
+  - presence
+  native_type: vllm.SamplingParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        present: true
+      vllm.sampling.max_tokens:
+        present: true
+  kwargs_positive:
+    min_tokens: 10
+    max_tokens: 5
+  kwargs_negative:
+    min_tokens: 3
+    max_tokens: 5
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: vllm_multimodalconfig_mm_encoder_attn_backend_xformers_removed
   source: passB
   constraint_key:
@@ -7095,3 +7315,15 @@ foldins:
   - mm_tensor_ipc|membership|[direct_rpc,torch_shm]
   - seq_pooling_type|membership|[CLS,LAST,MEAN]
   - tok_pooling_type|membership|[ALL,STEP]
+- batch: wave2_armA_llm_kwargs
+  source: Opus + kwargs-emission (det-then-llm-extend), gate-confirmed + adversarially
+    source-verified REAL (the eplb spurious confirm is excluded by the cross-field
+    error-locus attribution fix)
+  added_constraint_keys:
+  - min_pattern_size|presence|[max_pattern_size,min_pattern_size]
+  - json|presence|[json,regex]
+  - min_tokens|presence|[max_tokens,min_tokens]
+  - disable_any_whitespace|exact|[backend,disable_any_whitespace]
+  - disable_additional_properties|exact|[backend,disable_additional_properties]
+  - log_balancedness|exact|[log_balancedness,log_balancedness_interval]
+  - max_cpu_loras|presence|[max_cpu_loras,max_loras]

@@ -48,7 +48,10 @@ Literal["default"]` is single-valued, so the labelled "async requires default
 policy" rule is logically unreachable via valid construction.) FIX = extend the
 wave-1 attribution hardening to cross-field: match the raised error's locus to
 the labelled rule, and treat relations over single-valued Literals as
-a-priori-unreachable. Bounded gate-hardening item (carried forward).
+a-priori-unreachable. DONE (commit `fix(gate): attribute cross-field confirms
+by error locus`): cross-field confirms are now rejected when the positive raised
+a field-level pydantic error; re-gate drops the eplb spurious confirm (vllm
+8 -> 7) and keeps the 7 source-verified rules.
 
 ## Cost-vs-coverage: small-OSS vs Opus (the cost story)
 
@@ -92,6 +95,24 @@ Two consequences:
    find the cheapest rung that bridges the gemma->Opus gap. Needs provisioning
    (not pulled) + spend. Alternatively, FOLD the 8 verified-real cross-field
    confirms as GT-growth (they are real, gate-confirmed, source-verified).
+
+## Consolidation (done 2026-06-09)
+
+Per the decision-gate "consolidate" path: (1) the cross-field error-locus
+attribution fix landed (above); (2) the 8 verified-real confirms were FOLDED into
+the GT via the fixed gate (the eplb spurious one auto-excluded): vllm 0.19.1
+n_confirmed 98 -> 105 (+7 cross-field), tensorrt 1.2.1 74 -> 75 (+1). Verified
+additive (0 lost, metadata preserved); entries carry `source: llm`, the full
+multi-field `match` (re-gateable), and a `foldins` audit batch. These are the
+first CROSS-FIELD constraints in the GT - a class the deterministic floor
+structurally cannot reach, now banked as runtime-confirmed knowledge.
+
+The tier sweep (32B/70B) is NOT run here: it belongs in the later systematic
+LLM-pattern phase (tiers x assemblies x call-shapes), which wants a real agentic-
+orchestration framework (LangGraph/LangChain) rather than this minimal single-
+call harness. Waves 1-2 established what that phase needs: the harness<->gate
+integration, the validation-path-is-the-bottleneck finding, the kwargs-emission
+lever, and the det/OSS/Opus cost-comparison method.
 
 ## Caveats
 

@@ -6,7 +6,7 @@ round: R0_pilot
 gate: scripts/validate_invariants.py (in nvcr.io/nvidia/tensorrt-llm/release:1.2.1)
 identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
   tolerant_key = first two, for cross-source recall
-n_confirmed: 74
+n_confirmed: 75
 n_unverified: 154
 confirmed:
 - id: tensorrt_decodingbaseconfig__validate_acceptance_length_threshold_acceptance_length_threshold_lt
@@ -90,6 +90,36 @@ confirmed:
   - passA
   - passB
   - poc
+- id: tensorrt_nvfp4gemmconfig_validate_allowed_backends_empty
+  source: llm
+  constraint_key:
+  - allowed_backends
+  - type
+  - '{present=True,type_is_not=[list]}'
+  tolerant_key:
+  - allowed_backends
+  - type
+  native_type: tensorrt.Nvfp4GemmConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends:
+        present: true
+        type_is_not:
+        - list
+  kwargs_positive:
+    allowed_backends: []
+  kwargs_negative:
+    allowed_backends:
+    - cutlass
+  observed_outcome: error
+  contributing_sources:
+  - llm
 - id: tensorrt_torchLlmArgs_allreduce_strategy_literal
   source: passA
   constraint_key:
@@ -6226,3 +6256,10 @@ unverified:
   - passB
   - poc
   gate_status: skipped
+foldins:
+- batch: wave2_armA_llm_kwargs
+  source: Opus + kwargs-emission (det-then-llm-extend), gate-confirmed + adversarially
+    source-verified REAL (the eplb spurious confirm is excluded by the cross-field
+    error-locus attribution fix)
+  added_constraint_keys:
+  - allowed_backends|type|{present=True,type_is_not=[list]}
