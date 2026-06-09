@@ -1,0 +1,40 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "construct_grounded",
+  "model": "deepseek-coder-v2:16b",
+  "n_classes_extracted": 15,
+  "n_llm_proposed_raw": 88,
+  "n_deduped_internal": 75,
+  "n_gateable": 75,
+  "verdicts": {
+    "confirmed": 15,
+    "failed": 43,
+    "skipped": 0,
+    "infra_error": 17,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.2,
+  "gt_confirmed_total": 80,
+  "recall_vs_gt_tol": 1,
+  "recall_frac": 0.013,
+  "gt_growth_ckeys": [
+    "all2all_backend|presence|[all2all_backend,enable_elastic_ep]",
+    "attention_config|presence|True",
+    "cache_config|presence|True",
+    "compilation_config|presence|True",
+    "device_config|presence|True",
+    "kernel_config|presence|True",
+    "load_config|presence|True",
+    "max_loras|numeric|[max_cpu_loras,max_loras]",
+    "max_num_partial_prefills|presence|[max_long_partial_prefills,max_num_partial_prefills]",
+    "model|presence|True",
+    "observability_config|presence|True",
+    "offload_config|presence|True",
+    "parallel_config|presence|True",
+    "profiler_config|presence|True",
+    "scheduler_config|presence|True"
+  ],
+  "gt_growth_count": 15,
+  "wall_sec": 256.2
+}

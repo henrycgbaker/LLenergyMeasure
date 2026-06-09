@@ -1,0 +1,1627 @@
+invariants:
+- id: engine_cuda_graph_max_batch_size_validation
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that cuda_graph_config.max_batch_size is non-negative
+  severity: error
+  native_type: CudaGraphConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_cuda_graph_max_batch_size
+    line_at_scan: 25
+  match:
+    engine: tensorrt
+    fields:
+      cuda_graph_config.max_batch_size:
+        <: 0
+  kwargs_positive:
+    max_batch_size: -1
+  kwargs_negative:
+    max_batch_size: 0
+  added_by: llm_construct_grounded
+- id: engine_sparse_attention_algorithm_presence
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Ensures sparse attention algorithm is provided when constructing
+    from dict
+  severity: error
+  native_type: BaseSparseAttentionConfig
+  miner_source:
+    path: llm_args.py
+    method: from_dict
+    line_at_scan: 45
+  match:
+    engine: tensorrt
+    fields:
+      algorithm:
+        present: true
+        not_in:
+        - rocket
+        - dsa
+        - skip_softmax
+  kwargs_positive:
+    algorithm: invalid_algorithm
+  kwargs_negative:
+    algorithm: rocket
+  added_by: llm_construct_grounded
+- id: engine_moe_load_balancer_num_slots_none
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Ensures num_slots is not None when calling setup() on MoeLoadBalancerConfig
+  severity: error
+  native_type: MoeLoadBalancerConfig
+  miner_source:
+    path: llm_args.py
+    method: setup
+    line_at_scan: 70
+  match:
+    engine: tensorrt
+    fields:
+      num_slots:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    num_slots: null
+  kwargs_negative:
+    num_slots: 100
+  added_by: llm_construct_grounded
+- id: engine_nvfp4_gemm_backends_empty
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Ensures allowed_backends is not empty in Nvfp4GemmConfig
+  severity: error
+  native_type: Nvfp4GemmConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_allowed_backends
+    line_at_scan: 110
+  match:
+    engine: tensorrt
+    fields:
+      allowed_backends:
+        present: true
+        not_in:
+        - cutlass
+        - cublaslt
+        - cutedsl
+        - cuda_core
+  kwargs_positive:
+    allowed_backends: []
+  kwargs_negative:
+    allowed_backends:
+    - cutlass
+  added_by: llm_construct_grounded
+- id: engine_parallel_config_devices_length
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that devices list has same length as world_size
+    in _ParallelConfig
+  severity: error
+  native_type: _ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: devices
+    line_at_scan: 120
+  match:
+    engine: tensorrt
+    fields:
+      world_size:
+        present: true
+        not_equal: null
+      devices:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    devices:
+    - 0
+    - 1
+    world_size: 3
+  kwargs_negative:
+    devices:
+    - 0
+    - 1
+    - 2
+    world_size: 3
+  added_by: llm_construct_grounded
+- id: engine_parallel_config_world_size_product
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that world_size equals tp_size * pp_size * cp_size
+    in _ParallelConfig
+  severity: error
+  native_type: _ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: world_size
+    line_at_scan: 130
+  match:
+    engine: tensorrt
+    fields:
+      tp_size:
+        present: true
+        not_equal: null
+      pp_size:
+        present: true
+        not_equal: null
+      cp_size:
+        present: true
+        not_equal: null
+      world_size:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    tp_size: 2
+    pp_size: 2
+    cp_size: 2
+    world_size: 7
+  kwargs_negative:
+    tp_size: 2
+    pp_size: 2
+    cp_size: 2
+    world_size: 8
+  added_by: llm_construct_grounded
+- id: engine_decoding_acceptance_window_negative
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that acceptance_window is non-negative in DecodingBaseConfig
+  severity: error
+  native_type: DecodingBaseConfig
+  miner_source:
+    path: llm_args.py
+    method: _validate_acceptance_window
+    line_at_scan: 140
+  match:
+    engine: tensorrt
+    fields:
+      acceptance_window:
+        <: 0
+  kwargs_positive:
+    acceptance_window: -1
+  kwargs_negative:
+    acceptance_window: 0
+  added_by: llm_construct_grounded
+- id: engine_decoding_acceptance_length_threshold_negative
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that acceptance_length_threshold is non-negative
+    in DecodingBaseConfig
+  severity: error
+  native_type: DecodingBaseConfig
+  miner_source:
+    path: llm_args.py
+    method: _validate_acceptance_length_threshold
+    line_at_scan: 152
+  match:
+    engine: tensorrt
+    fields:
+      acceptance_length_threshold:
+        <: 0
+  kwargs_positive:
+    acceptance_length_threshold: -1
+  kwargs_negative:
+    acceptance_length_threshold: 0
+  added_by: llm_construct_grounded
+- id: engine_decoding_draft_len_schedule_batch_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that batch size thresholds in draft_len_schedule
+    are >= 1
+  severity: error
+  native_type: DecodingBaseConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_draft_len_schedule_and_sort
+    line_at_scan: 165
+  match:
+    engine: tensorrt
+    fields:
+      draft_len_schedule:
+        present: true
+        not_in:
+        - 1
+  kwargs_positive:
+    draft_len_schedule:
+      0: 10
+  kwargs_negative:
+    draft_len_schedule:
+      1: 10
+  added_by: llm_construct_grounded
+- id: engine_eagle_choices_type
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that eagle_choices is a list or string representation
+    of list
+  severity: error
+  native_type: EagleDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_eagle_choices
+    line_at_scan: 220
+  match:
+    engine: tensorrt
+    fields:
+      eagle_choices:
+        present: true
+        type_is_not:
+        - list
+        - str
+  kwargs_positive:
+    eagle_choices: 123
+  kwargs_negative:
+    eagle_choices:
+    - - 0
+    - - 1
+  added_by: llm_construct_grounded
+- id: engine_eagle_config_validation
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that max_draft_len is required for Eagle decoding
+  severity: error
+  native_type: EagleDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 240
+  match:
+    engine: tensorrt
+    fields:
+      max_draft_len:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    max_draft_len: null
+  kwargs_negative:
+    max_draft_len: 10
+  added_by: llm_construct_grounded
+- id: engine_eagle_config_static_tree
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Ensures use_dynamic_tree is False when eagle_choices is provided
+  severity: error
+  native_type: EagleDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 255
+  match:
+    engine: tensorrt
+    fields:
+      eagle_choices:
+        present: true
+        not_equal: null
+      use_dynamic_tree:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    eagle_choices:
+    - - 0
+    - - 1
+    use_dynamic_tree: true
+  kwargs_negative:
+    eagle_choices:
+    - - 0
+    - - 1
+    use_dynamic_tree: false
+  added_by: llm_construct_grounded
+- id: engine_eagle_config_dynamic_tree
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that dynamic tree logic requires valid inputs
+  severity: error
+  native_type: EagleDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 275
+  match:
+    engine: tensorrt
+    fields:
+      use_dynamic_tree:
+        present: true
+        not_equal: true
+      eagle_choices:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    use_dynamic_tree: true
+    eagle_choices:
+    - - 0
+    - - 1
+  kwargs_negative:
+    use_dynamic_tree: true
+    eagle_choices: null
+  added_by: llm_construct_grounded
+- id: engine_save_hidden_states_validation
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Ensures output_directory and layers to capture are provided
+    for SaveHiddenStatesDecodingConfig
+  severity: error
+  native_type: SaveHiddenStatesDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate
+    line_at_scan: 295
+  match:
+    engine: tensorrt
+    fields:
+      output_directory:
+        present: true
+        not_equal: null
+      eagle3_layers_to_capture:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    output_directory: null
+    eagle3_layers_to_capture: null
+  kwargs_negative:
+    output_directory: /tmp
+    eagle3_layers_to_capture:
+    - 1
+    - 2
+  added_by: llm_construct_grounded
+- id: engine_mtp_eagle_one_model_deprecated
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Warns about deprecated mtp_eagle_one_model flag in MTPDecodingConfig
+  severity: warning
+  native_type: MTPDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: __init__
+    line_at_scan: 305
+  match:
+    engine: tensorrt
+    fields:
+      mtp_eagle_one_model:
+        present: true
+        not_equal: true
+  kwargs_positive:
+    mtp_eagle_one_model: false
+  kwargs_negative:
+    mtp_eagle_one_model: true
+  added_by: llm_construct_grounded
+- id: engine_ray_placement_groups_mismatch
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that placement_groups and placement_bundle_indices
+    have same length
+  severity: error
+  native_type: RayPlacementConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 320
+  match:
+    engine: tensorrt
+    fields:
+      placement_groups:
+        present: true
+        not_equal: null
+      placement_bundle_indices:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    placement_groups:
+    - 1
+    - 2
+    placement_bundle_indices:
+    - 1
+  kwargs_negative:
+    placement_groups:
+    - 1
+    - 2
+    placement_bundle_indices:
+    - 1
+    - 2
+  added_by: llm_construct_grounded
+- id: engine_ray_placement_gpu_share_range
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that per_worker_gpu_share is between 0 and 1.0
+  severity: error
+  native_type: RayPlacementConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 340
+  match:
+    engine: tensorrt
+    fields:
+      per_worker_gpu_share:
+        present: true
+        not_in:
+        - 0
+        - 1
+  kwargs_positive:
+    per_worker_gpu_share: 1.5
+  kwargs_negative:
+    per_worker_gpu_share: 0.5
+  added_by: llm_construct_grounded
+- id: engine_kv_cache_config_validate_free_gpu_memory_fraction
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that the fraction is between 0.0 and 1.0.
+  severity: error
+  native_type: KvCacheConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_free_gpu_memory_fraction
+    line_at_scan: 35
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_config.free_gpu_memory_fraction:
+        <: 0
+  kwargs_positive:
+    free_gpu_memory_fraction: -0.1
+  kwargs_negative:
+    free_gpu_memory_fraction: 0.5
+  added_by: llm_pure_kwargs
+- id: engine_kv_cache_config_validate_max_gpu_total_bytes
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that the value is non-negative.
+  severity: error
+  native_type: KvCacheConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_max_gpu_total_bytes
+    line_at_scan: 45
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_config.max_gpu_total_bytes:
+        <: 0
+  kwargs_positive:
+    max_gpu_total_bytes: -1
+  kwargs_negative:
+    max_gpu_total_bytes: 0
+  added_by: llm_pure_kwargs
+- id: engine_kv_cache_config_validate_max_attention_window
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that max_attention_window is a non-empty list of
+    positive integers.
+  severity: error
+  native_type: KvCacheConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_max_attention_window
+    line_at_scan: 55
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_config.max_attention_window:
+        present: true
+        not_in:
+        - list
+        - tuple
+  kwargs_positive:
+    max_attention_window: not_a_list
+  kwargs_negative:
+    max_attention_window:
+    - 1
+    - 2
+    - 3
+  added_by: llm_pure_kwargs
+- id: engine_model_wrapper_validate_model
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that model is provided and is a string or Path.
+  severity: error
+  native_type: _ModelWrapper
+  miner_source:
+    path: llm_args.py
+    method: __post_init__
+    line_at_scan: 70
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        present: true
+        not_in:
+        - str
+        - Path
+  kwargs_positive:
+    model: null
+  kwargs_negative:
+    model: some_model_path
+  added_by: llm_pure_kwargs
+- id: engine_base_llm_args_validate_dtype
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that dtype is valid for the GPU architecture.
+  severity: error
+  native_type: BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_dtype
+    line_at_scan: 90
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype:
+        present: true
+        not_in:
+        - str
+  kwargs_positive:
+    dtype: 123
+  kwargs_negative:
+    dtype: float16
+  added_by: llm_pure_kwargs
+- id: engine_base_llm_args_validate_gpus_per_node
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that gpus_per_node is set correctly based on environment.
+  severity: warning
+  native_type: BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_gpus_per_node
+    line_at_scan: 105
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.gpus_per_node:
+        present: true
+        not_equal: 8
+  kwargs_positive:
+    gpus_per_node: 4
+  kwargs_negative:
+    gpus_per_node: 8
+  added_by: llm_pure_kwargs
+- id: engine_trt_llm_args_validate_speculative_config_backend
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that speculative config supports the backend.
+  severity: error
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 190
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config.decoding_type:
+        present: true
+        not_in:
+        - Lookahead
+  kwargs_positive:
+    speculative_config:
+      decoding_type: Eagle
+    backend: pytorch
+  kwargs_negative:
+    speculative_config:
+      decoding_type: Lookahead
+    backend: trt
+  added_by: llm_pure_kwargs
+- id: engine_lookahead_decoding_config_validate_positive_values
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that lookahead decoding config values are positive.
+  severity: error
+  native_type: LookaheadDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_positive_values
+    line_at_scan: 25
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lookahead_decoding_config.max_window_size:
+        <: 1
+  kwargs_positive:
+    max_window_size: 0
+  kwargs_negative:
+    max_window_size: 1
+  added_by: llm_pure_kwargs
+- id: engine_lookahead_decoding_config_validate_positive_values_ngram
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that lookahead decoding config values are positive.
+  severity: error
+  native_type: LookaheadDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_positive_values
+    line_at_scan: 25
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lookahead_decoding_config.max_ngram_size:
+        <: 1
+  kwargs_positive:
+    max_ngram_size: 0
+  kwargs_negative:
+    max_ngram_size: 1
+  added_by: llm_pure_kwargs
+- id: engine_lookahead_decoding_config_validate_positive_values_verification_set
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that lookahead decoding config values are positive.
+  severity: error
+  native_type: LookaheadDecodingConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_positive_values
+    line_at_scan: 25
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lookahead_decoding_config.max_verification_set_size:
+        <: 1
+  kwargs_positive:
+    max_verification_set_size: 0
+  kwargs_negative:
+    max_verification_set_size: 1
+  added_by: llm_pure_kwargs
+- id: engine_trt_llm_args_validate_build_config_remaining
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that build config settings are consistent with runtime
+    parameters.
+  severity: warning
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_build_config_remaining
+    line_at_scan: 200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.fast_build:
+        present: true
+        not_equal: true
+  kwargs_positive:
+    fast_build: false
+    quant_config:
+      quant_algo: FP8
+  kwargs_negative:
+    fast_build: true
+    quant_config:
+      quant_algo: FP8
+  added_by: llm_pure_kwargs
+- id: engine_trt_llm_args_validate_build_config_remaining_lora_prefetch
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that lora_prefetch_dir is not set when LoRA prefetch
+    is not supported.
+  severity: error
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_peft_cache_config
+    line_at_scan: 220
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.peft_cache_config.lora_prefetch_dir:
+        present: true
+  kwargs_positive:
+    peft_cache_config:
+      lora_prefetch_dir: /some/path
+  kwargs_negative:
+    peft_cache_config: null
+  added_by: llm_pure_kwargs
+- id: engine_trt_llm_args_validate_build_config_remaining_lora_plugin
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that lora_plugin is set to 'auto' when LoRA is enabled.
+  severity: dormant
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_build_config_remaining
+    line_at_scan: 200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora:
+        present: true
+        not_equal: true
+  kwargs_positive:
+    enable_lora: true
+    backend: trt
+  kwargs_negative:
+    enable_lora: false
+    backend: trt
+  added_by: llm_pure_kwargs
+- id: engine_trt_llm_args_validate_build_config_remaining_prompt_adapter
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that max_prompt_embedding_table_size is set when
+    prompt adapter is enabled.
+  severity: dormant
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_build_config_remaining
+    line_at_scan: 200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_prompt_adapter:
+        present: true
+        not_equal: true
+  kwargs_positive:
+    enable_prompt_adapter: true
+    max_prompt_adapter_token: 10
+  kwargs_negative:
+    enable_prompt_adapter: false
+    max_prompt_adapter_token: 0
+  added_by: llm_pure_kwargs
+- id: engine_trt_llm_args_validate_build_config_remaining_max_beam_width
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that max_beam_width is set to build_config value
+    if not specified.
+  severity: dormant
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_build_config_remaining
+    line_at_scan: 200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: true
+        not_equal: 1
+  kwargs_positive:
+    max_beam_width: null
+    build_config:
+      max_beam_width: 2
+  kwargs_negative:
+    max_beam_width: 1
+    build_config:
+      max_beam_width: 1
+  added_by: llm_pure_kwargs
+- id: engine_trt_llm_args_validate_build_config_remaining_max_draft_len_eagle_model
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that EAGLE3 draft model is specified.
+  severity: error
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 190
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config.speculative_model:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    speculative_config:
+      decoding_type: Eagle
+      speculative_model: null
+  kwargs_negative:
+    speculative_config:
+      decoding_type: Eagle
+      speculative_model: some_model
+  added_by: llm_pure_kwargs
+- id: tensorrt_validate_model_format_misc
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates model format and loads build_config or parallel_config
+    accordingly
+  severity: error
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_model_format_misc
+    line_at_scan: 10
+  match:
+    engine: tensorrt
+    fields:
+      _model_format:
+        present: true
+  kwargs_positive:
+    model: test_model
+    backend: trtllm
+  kwargs_negative:
+    model: test_model
+    backend: pytorch
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_enable_build_cache
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that enable_build_cache is either bool or BuildCacheConfig
+  severity: error
+  native_type: TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_enable_build_cache
+    line_at_scan: 20
+  match:
+    engine: tensorrt
+    fields:
+      enable_build_cache:
+        present: true
+        not_equal: true
+  kwargs_positive:
+    enable_build_cache: invalid_value
+  kwargs_negative:
+    enable_build_cache: true
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_capture_num_tokens
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that capture_num_tokens contains only positive integers
+  severity: error
+  native_type: TorchCompileConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_capture_num_tokens
+    line_at_scan: 30
+  match:
+    engine: tensorrt
+    fields:
+      capture_num_tokens:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    capture_num_tokens:
+    - -1
+    - 2
+    - 3
+  kwargs_negative:
+    capture_num_tokens:
+    - 1
+    - 2
+    - 3
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_torch_compile_max_num_streams
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that torch_compile_config.max_num_streams >= 1
+  severity: error
+  native_type: TorchCompileConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_torch_compile_max_num_streams
+    line_at_scan: 40
+  match:
+    engine: tensorrt
+    fields:
+      max_num_streams:
+        present: true
+        <: 1
+  kwargs_positive:
+    max_num_streams: 0
+  kwargs_negative:
+    max_num_streams: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_convert_load_format
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Converts load_format string to LoadFormat enum
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: convert_load_format
+    line_at_scan: 50
+  match:
+    engine: tensorrt
+    fields:
+      load_format:
+        present: true
+        not_in:
+        - HF
+        - GGUF
+        - AUTO
+  kwargs_positive:
+    load_format: INVALID_FORMAT
+  kwargs_negative:
+    load_format: HF
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_stream_interval
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that stream_interval is positive
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_stream_interval
+    line_at_scan: 70
+  match:
+    engine: tensorrt
+    fields:
+      stream_interval:
+        present: true
+        <=: 0
+  kwargs_positive:
+    stream_interval: 0
+  kwargs_negative:
+    stream_interval: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_checkpoint_format
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates checkpoint format and loader conflict
+  severity: warning
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_checkpoint_format
+    line_at_scan: 80
+  match:
+    engine: tensorrt
+    fields:
+      checkpoint_format:
+        present: true
+      checkpoint_loader:
+        present: true
+  kwargs_positive:
+    checkpoint_format: HF
+    checkpoint_loader: some_loader
+  kwargs_negative:
+    checkpoint_format: HF
+    checkpoint_loader: null
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_load_balancer
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates MoE load balancer config file or dict
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_load_balancer
+    line_at_scan: 90
+  match:
+    engine: tensorrt
+    fields:
+      moe_config.load_balancer:
+        present: true
+        type_is_not:
+        - str
+        - dict
+  kwargs_positive:
+    moe_config:
+      load_balancer: invalid_type
+  kwargs_negative:
+    moe_config:
+      load_balancer: {}
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_cuda_graph_config
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates CUDA graph configuration constraints
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_cuda_graph_config
+    line_at_scan: 100
+  match:
+    engine: tensorrt
+    fields:
+      cuda_graph_config.batch_sizes:
+        present: true
+      cuda_graph_config.max_batch_size:
+        present: true
+        not_equal: 0
+  kwargs_positive:
+    cuda_graph_config:
+      batch_sizes:
+      - 1
+      - 2
+      - 3
+      max_batch_size: 10
+  kwargs_negative:
+    cuda_graph_config:
+      batch_sizes: null
+      max_batch_size: 10
+  added_by: llm_construct_grounded
+- id: tensorrt_warn_on_unstable_feature_usage
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Warns on unstable feature usage
+  severity: warning
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: warn_on_unstable_feature_usage
+    line_at_scan: 120
+  match:
+    engine: tensorrt
+    fields:
+      _unstable_feature_flag:
+        present: true
+  kwargs_positive:
+    _unstable_feature_flag: true
+  kwargs_negative:
+    _unstable_feature_flag: false
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_attention_dp_config
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates attention DP configuration constraints
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_attention_dp_config
+    line_at_scan: 130
+  match:
+    engine: tensorrt
+    fields:
+      attention_dp_config.enable_balance:
+        present: true
+        not_equal: false
+      attention_dp_config.batching_wait_iters:
+        present: true
+        <: 0
+  kwargs_positive:
+    attention_dp_config:
+      enable_balance: true
+      batching_wait_iters: -1
+  kwargs_negative:
+    attention_dp_config:
+      enable_balance: true
+      batching_wait_iters: 0
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_batch_wait_timeout_ms
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates batch wait timeout in milliseconds
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_batch_wait_timeout_ms
+    line_at_scan: 140
+  match:
+    engine: tensorrt
+    fields:
+      batch_wait_timeout_ms:
+        present: true
+        <: 0
+  kwargs_positive:
+    batch_wait_timeout_ms: -1
+  kwargs_negative:
+    batch_wait_timeout_ms: 0
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_batch_wait_timeout_iters
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates batch wait timeout in iterations
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_batch_wait_timeout_iters
+    line_at_scan: 150
+  match:
+    engine: tensorrt
+    fields:
+      batch_wait_timeout_iters:
+        present: true
+        <: 0
+  kwargs_positive:
+    batch_wait_timeout_iters: -1
+  kwargs_negative:
+    batch_wait_timeout_iters: 0
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_batch_wait_max_tokens_ratio
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates batch wait max tokens ratio is in [0, 1]
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_batch_wait_max_tokens_ratio
+    line_at_scan: 160
+  match:
+    engine: tensorrt
+    fields:
+      batch_wait_max_tokens_ratio:
+        present: true
+        not_in:
+        - 0
+        - 1
+  kwargs_positive:
+    batch_wait_max_tokens_ratio: 2.0
+  kwargs_negative:
+    batch_wait_max_tokens_ratio: 0.5
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_ray_worker_extension_cls
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates ray worker extension class is only supported with
+    ray orchestrator
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_worker_extension_cls
+    line_at_scan: 170
+  match:
+    engine: tensorrt
+    fields:
+      ray_worker_extension_cls:
+        present: true
+      orchestrator_type:
+        present: true
+        not_equal: ray
+  kwargs_positive:
+    ray_worker_extension_cls: some_cls
+    orchestrator_type: local
+  kwargs_negative:
+    ray_worker_extension_cls: null
+    orchestrator_type: ray
+  added_by: llm_construct_grounded
+- id: tensorrt_validate_ray_placement_config
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates ray placement config is only supported with ray
+    orchestrator
+  severity: error
+  native_type: TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_placement_config
+    line_at_scan: 180
+  match:
+    engine: tensorrt
+    fields:
+      ray_placement_config:
+        present: true
+      orchestrator_type:
+        present: true
+        not_equal: ray
+  kwargs_positive:
+    ray_placement_config: some_config
+    orchestrator_type: local
+  kwargs_negative:
+    ray_placement_config: null
+    orchestrator_type: ray
+  added_by: llm_construct_grounded
+- id: tensorrt_guided_decoding_params_validate
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that only one guide can be used for a request
+  severity: error
+  native_type: GuidedDecodingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 190
+  match:
+    engine: tensorrt.sampling
+    fields:
+      json:
+        present: true
+      regex:
+        present: true
+  kwargs_positive:
+    json: some_json
+    regex: some_regex
+  kwargs_negative:
+    json: some_json
+    regex: null
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_params_post_init
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Sets pad_id to end_id if not provided
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 200
+  match:
+    engine: tensorrt.sampling
+    fields:
+      pad_id:
+        present: true
+        not_equal: null
+      end_id:
+        present: true
+  kwargs_positive:
+    pad_id: null
+    end_id: 10
+  kwargs_negative:
+    pad_id: 10
+    end_id: 10
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_params_validate
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates sampling parameters for valid ranges and combinations
+  severity: error
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 210
+  match:
+    engine: tensorrt.sampling
+    fields:
+      top_p:
+        present: true
+        <: 0
+  kwargs_positive:
+    top_p: -0.1
+  kwargs_negative:
+    top_p: 0.5
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_params_validate_top_k
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that top_k is non-negative
+  severity: error
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 215
+  match:
+    engine: tensorrt.sampling
+    fields:
+      top_k:
+        present: true
+        <: 0
+  kwargs_positive:
+    top_k: -1
+  kwargs_negative:
+    top_k: 0
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_params_validate_temperature
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that temperature is non-negative
+  severity: error
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 220
+  match:
+    engine: tensorrt.sampling
+    fields:
+      temperature:
+        present: true
+        <: 0
+  kwargs_positive:
+    temperature: -0.1
+  kwargs_negative:
+    temperature: 0.5
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_params_validate_best_of
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that best_of is not less than n
+  severity: error
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 225
+  match:
+    engine: tensorrt.sampling
+    fields:
+      best_of:
+        present: true
+        <: 1
+  kwargs_positive:
+    best_of: 0
+    n: 1
+  kwargs_negative:
+    best_of: 2
+    n: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_params_validate_truncate_prompt_tokens
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Validates that truncate_prompt_tokens is >= 1
+  severity: error
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 240
+  match:
+    engine: tensorrt.sampling
+    fields:
+      truncate_prompt_tokens:
+        present: true
+        <: 1
+  kwargs_positive:
+    truncate_prompt_tokens: 0
+  kwargs_negative:
+    truncate_prompt_tokens: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_bad_words_not_processed
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Checks that bad words are processed by tokenizer before accessing
+    _bad_word_ids
+  severity: error
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_bad_words
+    line_at_scan: 20
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.bad:
+        present: true
+      tensorrt.sampling._bad_word_ids:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    bad: test
+    _bad_word_ids: null
+  kwargs_negative:
+    bad: null
+    _bad_word_ids: null
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_stop_words_not_processed
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Checks that stop words are processed by tokenizer before accessing
+    _stop_word_ids
+  severity: error
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_stop_words
+    line_at_scan: 29
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.stop:
+        present: true
+      tensorrt.sampling._stop_word_ids:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    stop: test
+    _stop_word_ids: null
+  kwargs_negative:
+    stop: null
+    _stop_word_ids: null
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_beam_search_with_best_of
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Ensures beam search parameters are correctly mapped when using
+    beam search
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_sampling_config
+    line_at_scan: 45
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.use_beam_search: true
+      tensorrt.sampling.best_of:
+        present: true
+  kwargs_positive:
+    use_beam_search: true
+    best_of: 2
+    n: 1
+  kwargs_negative:
+    use_beam_search: false
+    best_of: 2
+    n: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_guided_decoding_json_object
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Validates JSON object guided decoding type
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_guided_decoding_params
+    line_at_scan: 65
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.guided_decoding.json_object: true
+  kwargs_positive:
+    guided_decoding:
+      json_object: true
+  kwargs_negative:
+    guided_decoding:
+      json_object: false
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_guided_decoding_regex
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Validates regex guided decoding type
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_guided_decoding_params
+    line_at_scan: 80
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.guided_decoding.regex:
+        present: true
+  kwargs_positive:
+    guided_decoding:
+      regex: ^[a-z]+$
+  kwargs_negative:
+    guided_decoding:
+      regex: null
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_guided_decoding_grammar
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Validates EBNF grammar guided decoding type
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_guided_decoding_params
+    line_at_scan: 87
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.guided_decoding.grammar:
+        present: true
+  kwargs_positive:
+    guided_decoding:
+      grammar: start = 'hello'
+  kwargs_negative:
+    guided_decoding:
+      grammar: null
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_guided_decoding_structural_tag
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Validates structural tag guided decoding type
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_guided_decoding_params
+    line_at_scan: 94
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.guided_decoding.structural_tag:
+        present: true
+  kwargs_positive:
+    guided_decoding:
+      structural_tag: tag
+  kwargs_negative:
+    guided_decoding:
+      structural_tag: null
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_stop_token_ids_with_eos_token_id
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Ensures stop_token_ids includes eos_token_id from generation_config
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _setup
+    line_at_scan: 15
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.stop_token_ids:
+        present: true
+      tensorrt.sampling.end_id:
+        present: true
+  kwargs_positive:
+    stop_token_ids:
+    - 1
+    end_id: 1
+  kwargs_negative:
+    stop_token_ids: null
+    end_id: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_end_id_and_pad_id_assignment
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Assigns end_id and pad_id from tokenizer if not provided
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _setup
+    line_at_scan: 5
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.end_id: null
+      tensorrt.sampling.pad_id: null
+  kwargs_positive:
+    end_id: null
+    pad_id: null
+  kwargs_negative:
+    end_id: 1
+    pad_id: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_pad_id_fallback_to_end_id
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Sets pad_id to end_id if pad_id is None
+  severity: dormant
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _setup
+    line_at_scan: 10
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.pad_id: null
+      tensorrt.sampling.end_id:
+        present: true
+  kwargs_positive:
+    pad_id: null
+    end_id: 1
+  kwargs_negative:
+    pad_id: 1
+    end_id: 1
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_bad_token_ids_type_validation
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Validates that bad_token_ids is a list of integers
+  severity: warning
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_bad_words
+    line_at_scan: 10
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.bad_token_ids:
+        present: true
+        type_is_not:
+        - list
+  kwargs_positive:
+    bad_token_ids: not_a_list
+  kwargs_negative:
+    bad_token_ids:
+    - 1
+    - 2
+    - 3
+  added_by: llm_construct_grounded
+- id: tensorrt_sampling_stop_token_ids_type_validation
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Validates that stop_token_ids is a list of integers
+  severity: warning
+  native_type: SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_stop_words
+    line_at_scan: 19
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.stop_token_ids:
+        present: true
+        type_is_not:
+        - list
+  kwargs_positive:
+    stop_token_ids: not_a_list
+  kwargs_negative:
+    stop_token_ids:
+    - 1
+    - 2
+    - 3
+  added_by: llm_construct_grounded

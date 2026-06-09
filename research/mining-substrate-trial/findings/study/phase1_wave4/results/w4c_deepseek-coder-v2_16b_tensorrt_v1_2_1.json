@@ -1,0 +1,26 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "shape": "construct_grounded",
+  "model": "deepseek-coder-v2:16b",
+  "n_classes_extracted": 38,
+  "n_llm_proposed_raw": 29,
+  "n_deduped_internal": 24,
+  "n_gateable": 24,
+  "verdicts": {
+    "confirmed": 1,
+    "failed": 20,
+    "skipped": 0,
+    "infra_error": 3,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.042,
+  "gt_confirmed_total": 61,
+  "recall_vs_gt_tol": 1,
+  "recall_frac": 0.016,
+  "gt_growth_ckeys": [
+    "max_gpu_total_bytes|numeric|{<=0,present=True}"
+  ],
+  "gt_growth_count": 1,
+  "wall_sec": 89.3
+}

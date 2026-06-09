@@ -1,0 +1,37 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "shape": "construct_grounded",
+  "model": "qwen2.5-coder:32b",
+  "n_classes_extracted": 38,
+  "n_llm_proposed_raw": 83,
+  "n_deduped_internal": 58,
+  "n_gateable": 58,
+  "verdicts": {
+    "confirmed": 23,
+    "failed": 21,
+    "skipped": 0,
+    "infra_error": 14,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.397,
+  "gt_confirmed_total": 61,
+  "recall_vs_gt_tol": 14,
+  "recall_frac": 0.23,
+  "gt_growth_ckeys": [
+    "allowed_backends|exact|[]",
+    "batch_wait_max_tokens_ratio|membership|[0,1]",
+    "draft_len_schedule|membership|{not_in=[1],present=True}",
+    "draft_len_schedule|type|{present=True,type_is_not=[dict]}",
+    "free_gpu_memory_fraction|numeric|{<==1,>==0}",
+    "gpus_per_node|presence|True",
+    "max_attention_window|membership|{not_in=[[]],present=True,type_is_not=[None]}",
+    "max_beam_width|presence|True",
+    "max_draft_len|presence|False",
+    "max_num_streams|numeric|1",
+    "model|type|{present=True,type_is_not=[Path,str]}",
+    "output_directory|presence|False"
+  ],
+  "gt_growth_count": 12,
+  "wall_sec": 416.4
+}

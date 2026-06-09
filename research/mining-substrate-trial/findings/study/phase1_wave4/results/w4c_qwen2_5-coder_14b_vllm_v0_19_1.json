@@ -1,0 +1,37 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "construct_grounded",
+  "model": "qwen2.5-coder:14b",
+  "n_classes_extracted": 15,
+  "n_llm_proposed_raw": 180,
+  "n_deduped_internal": 146,
+  "n_gateable": 146,
+  "verdicts": {
+    "confirmed": 25,
+    "failed": 68,
+    "skipped": 2,
+    "infra_error": 51,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.171,
+  "gt_confirmed_total": 80,
+  "recall_vs_gt_tol": 16,
+  "recall_frac": 0.2,
+  "gt_growth_ckeys": [
+    "_api_process_rank|membership|[-1,0,1]",
+    "data_parallel_external_lb|exact|[data_parallel_external_lb,data_parallel_size]",
+    "data_parallel_rank|numeric|[data_parallel_rank,data_parallel_size]",
+    "data_parallel_rank|presence|[data_parallel_rank,data_parallel_size_local]",
+    "data_parallel_size_local|numeric|vllm.engine.data_parallel_size",
+    "logprobs|membership|[-1,0]",
+    "max_cpu_loras|numeric|[max_cpu_loras,max_loras]",
+    "nnodes|numeric|[distributed_executor_backend,nnodes]",
+    "num_redundant_experts|numeric|0",
+    "prompt_logprobs|membership|[-1,0]",
+    "stop|membership|{not_in=[],present=True}",
+    "stop|presence|[detokenize,stop]"
+  ],
+  "gt_growth_count": 12,
+  "wall_sec": 528.5
+}
