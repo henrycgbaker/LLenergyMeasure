@@ -941,3 +941,99 @@ class TestConstructVllm:
         obj = validate_invariants._construct_vllm("vllm.Weird", {"a": 2})
         assert isinstance(obj, Real)
         assert obj.kw == {"a": 2}
+
+
+# ---------------------------------------------------------------------------
+# Raise attribution - structured-loc + model-level subject
+# ---------------------------------------------------------------------------
+
+
+class _FakeValidationError(Exception):
+    """Duck-typed pydantic ValidationError: carries a structured ``errors()``."""
+
+    def __init__(self, errs: list[dict[str, Any]]) -> None:
+        self._errs = errs
+
+    def errors(self) -> list[dict[str, Any]]:
+        return self._errs
+
+
+def _cap(message: str = "", locs: tuple[str, ...] | None = None) -> CaptureBuffers:
+    return CaptureBuffers(
+        exception_type="ValidationError" if locs is not None else "ValueError",
+        exception_message=message,
+        warnings_captured=(),
+        logger_messages=(),
+        observed_state=None,
+        duration_ms=0,
+        exception_locs=locs,
+    )
+
+
+class TestExtractErrorLocs:
+    def test_field_level(self) -> None:
+        exc = _FakeValidationError([{"loc": ("cache_dtype",), "type": "literal_error"}])
+        assert _invariant_validation_common._extract_error_locs(exc) == ("cache_dtype",)
+
+    def test_model_level_is_empty_tuple(self) -> None:
+        exc = _FakeValidationError([{"loc": (), "type": "value_error"}])
+        assert _invariant_validation_common._extract_error_locs(exc) == ()
+
+    def test_non_pydantic_is_none(self) -> None:
+        assert _invariant_validation_common._extract_error_locs(ValueError("boom")) is None
+
+    def test_nested_loc_keeps_all_components(self) -> None:
+        # Union / smart-mode errors nest the member tag below the field name;
+        # both components are kept so attribution can match the field.
+        exc = _FakeValidationError([{"loc": ("lora_dtype", "is-instance[dtype]"), "type": "x"}])
+        assert _invariant_validation_common._extract_error_locs(exc) == (
+            "lora_dtype",
+            "is-instance[dtype]",
+        )
+
+
+class TestRaiseAttributableTo:
+    def test_field_level_leaf_in_locs(self) -> None:
+        pos = _cap("Input should be 'auto', ...", locs=("cache_dtype",))
+        assert validate_invariants._raise_attributable_to("cache_dtype", pos, [], None)
+
+    def test_field_level_cross_field_rejected(self) -> None:
+        # A field-level raise naming a DIFFERENT field is not attributable.
+        pos = _cap("some other field error", locs=("other_field",))
+        assert not validate_invariants._raise_attributable_to("cache_dtype", pos, [], None)
+
+    def test_field_level_union_member_does_not_block(self) -> None:
+        # Regression: loc[-1] is the union member tag, not the field name; the
+        # field must still be attributable when nested in the loc path.
+        pos = _cap(
+            "Input should be an instance of dtype", locs=("lora_dtype", "is-instance[dtype]")
+        )
+        assert validate_invariants._raise_attributable_to("lora_dtype", pos, [], None)
+
+    def test_model_level_spurious_remediation_tail_rejected(self) -> None:
+        # The real max_pattern_size>0 spurious confirm: raise is about min_count;
+        # max_pattern_size appears only in the remediation tail.
+        msg = "Value error, min_count must be >= 2 to detect patterns; set max_pattern_size to 0 to disable."
+        pos = _cap(msg, locs=())
+        neg_state = {"max_pattern_size": 0, "min_count": 1, "min_pattern_size": 1}
+        assert not validate_invariants._raise_attributable_to(
+            "max_pattern_size", pos, [], neg_state
+        )
+
+    def test_model_level_legit_subject_accepted(self) -> None:
+        # The legit max_pattern_size<0 bound: the field leads the message.
+        msg = "Value error, max_pattern_size, min_pattern_size must be >=0, with min_pattern_size <= max_pattern_size."
+        pos = _cap(msg, locs=())
+        neg_state = {"max_pattern_size": 0, "min_count": 1, "min_pattern_size": 1}
+        assert validate_invariants._raise_attributable_to("max_pattern_size", pos, [], neg_state)
+
+    def test_model_level_sole_field_is_permissive(self) -> None:
+        # Only the probed field is named -> it IS the subject.
+        pos = _cap("Value error, top_p must be in [0, 1]", locs=())
+        neg_state = {"top_p": 0.5, "top_k": -1}
+        assert validate_invariants._raise_attributable_to("top_p", pos, [], neg_state)
+
+    def test_non_pydantic_keeps_substring_presence(self) -> None:
+        pos = _cap("temperature must be non-negative", locs=None)
+        assert validate_invariants._raise_attributable_to("temperature", pos, [], None)
+        assert not validate_invariants._raise_attributable_to("top_p", pos, [], None)

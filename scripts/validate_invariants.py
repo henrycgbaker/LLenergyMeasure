@@ -483,6 +483,57 @@ def _leaf_field(invariant: dict[str, Any]) -> str | None:
     return None
 
 
+def _raise_attributable_to(
+    leaf: str,
+    pos: CaptureBuffers,
+    observed_messages: list[str],
+    neg_state: dict[str, Any] | None,
+) -> bool:
+    """Is the positive probe's raise ATTRIBUTABLE to the field under test?
+
+    Three regimes, by the structured pydantic loc in ``pos.exception_locs``:
+
+    - field-level errors (non-empty tuple): the field must BE one of the raised
+      locs. A cross-field raise naming a different field is rejected outright.
+    - model-level-only pydantic errors (``()``): the loc names no field, so fall
+      back to the message - but require the leaf to be the SUBJECT (the
+      earliest-named field of the class), not merely present in a remediation
+      tail (the spurious-confirm failure mode: a value that enables an unrelated
+      validator whose message happens to mention the probed field).
+    - non-pydantic raise (``None``): no structured subject available; keep the
+      permissive substring presence check (unchanged for e.g. transformers'
+      composed ValueErrors).
+    """
+    locs = pos.exception_locs
+    if locs:
+        return leaf in locs
+    haystack = (pos.exception_message or "") + " " + " ".join(observed_messages)
+    if locs == ():
+        return _leaf_is_message_subject(leaf, haystack, neg_state)
+    return leaf in haystack
+
+
+def _leaf_is_message_subject(leaf: str, haystack: str, neg_state: dict[str, Any] | None) -> bool:
+    """For a model-level raise: is ``leaf`` the EARLIEST-named class field in the
+    message (the violation's subject), vs a field named only in a later clause?
+
+    The class field vocabulary is taken from the negative probe's observed state
+    (it constructed cleanly, so its keys are the public fields). Permissive
+    (substring presence) when the leaf is the only field named or the vocabulary
+    is unavailable - the tightening only fires when a COMPETING field is present.
+    """
+    low = haystack.lower()
+    if leaf.lower() not in low:
+        return False
+    siblings = (
+        [k for k in (neg_state or {}) if isinstance(k, str)] if isinstance(neg_state, dict) else []
+    )
+    positions = {f: low.find(f.lower()) for f in siblings if f.lower() in low}
+    if leaf not in positions or len(positions) < 2:
+        return True
+    return positions[leaf] == min(positions.values())
+
+
 def _is_num(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
@@ -695,17 +746,20 @@ def _validate_invariant_with_captures(
     # declares no exact ``expected_outcome``, ``_positive_confirms`` accepts any
     # non-no_op firing - so a positive that trips an UNRELATED validator (or a
     # wrong-type error) would "confirm" for the wrong reason. Require the firing
-    # to be ATTRIBUTABLE to the field under test (leaf name present in the raised
-    # message). The pos/neg pair differ only in this field, so an attributable
-    # raise is strong evidence the field itself enforces the constraint. This
-    # covers both synthesised probes AND hand-authored probes that lack an
-    # expected_outcome (e.g. the study's Opus/mechanical sources). Entries with a
-    # declared expected_outcome went through the STRICT branch and are left as-is.
+    # to be ATTRIBUTABLE to the field under test: the field must be the SUBJECT
+    # of the raise, not merely mentioned (a bare field name appearing in a
+    # cross-field rule's remediation tail is not enough). See
+    # :func:`_raise_attributable_to`. The pos/neg pair differ only in this field,
+    # so a subject-attributable raise is strong evidence the field itself
+    # enforces the constraint. Covers synthesised probes AND hand-authored probes
+    # lacking an expected_outcome (the study's Opus/mechanical sources). Entries
+    # with a declared expected_outcome went through the STRICT branch, left as-is.
     expected_strict = expected.get("outcome") in _FIRING_OUTCOMES
     if positive_confirmed and not expected_strict:
         probe_leaf = _leaf_field(invariant) or ""
-        haystack = (pos.exception_message or "") + " " + " ".join(observed_messages)
-        if probe_leaf and probe_leaf not in haystack:
+        if probe_leaf and not _raise_attributable_to(
+            probe_leaf, pos, observed_messages, neg.observed_state
+        ):
             positive_confirmed = False
 
     case = CaseResult(

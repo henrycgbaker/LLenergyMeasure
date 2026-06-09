@@ -82,6 +82,11 @@ class CaptureBuffers:
     logger_messages: tuple[str, ...]
     observed_state: dict[str, Any] | None
     duration_ms: int
+    # Leaf field names from a pydantic ValidationError's structured ``loc``
+    # paths (for raise-attribution). ``None`` = non-pydantic raise (no
+    # structured errors); ``()`` = pydantic raise with only model-level
+    # (fieldless) errors; a populated tuple = field-level errors.
+    exception_locs: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -284,6 +289,42 @@ def _patch_warning_once() -> Callable[[], None]:
     return restore
 
 
+def _extract_error_locs(exc: Exception) -> tuple[str, ...] | None:
+    """Flatten a pydantic ``ValidationError``'s structured ``loc`` paths to
+    their leaf field names, for raise-attribution.
+
+    Returns ``None`` for non-pydantic exceptions (no ``.errors()`` -> the caller
+    falls back to string attribution). Returns ``()`` when the raise was
+    pydantic but carried only model-level (fieldless ``loc=()``) errors - the
+    field subject must then come from the message text, not the loc. Duck-typed
+    so the common module need not import pydantic (absent on some hosts).
+    """
+    errors_fn = getattr(exc, "errors", None)
+    if not callable(errors_fn):
+        return None
+    try:
+        errs = errors_fn()
+    except Exception:
+        return None
+    if not isinstance(errs, list):
+        return None
+    locs: list[str] = []
+    for e in errs:
+        loc = e.get("loc") if isinstance(e, dict) else None
+        if not loc:
+            continue
+        # Collect ALL string components of the loc path, not just the leaf:
+        # union / smart-mode errors nest the union-member tag below the field
+        # (e.g. ``('lora_dtype', 'is-instance[dtype]')``), so the field name is
+        # NOT ``loc[-1]``. Keeping every string component lets attribution match
+        # the field wherever it sits in the path; the non-field tags
+        # (``is-instance[dtype]``, ``list[str]``) never collide with a leaf name.
+        for part in loc:
+            if isinstance(part, str):
+                locs.append(part)
+    return tuple(locs)
+
+
 def run_case(
     callable_fn: Callable[[], Any],
     *,
@@ -301,6 +342,7 @@ def run_case(
     start = time.perf_counter()
     exc_type: str | None = None
     exc_msg: str | None = None
+    exc_locs: tuple[str, ...] | None = None
     obj: Any = None
     captured_warnings: list[warnings.WarningMessage] = []
 
@@ -312,6 +354,7 @@ def run_case(
             except Exception as exc:
                 exc_type = type(exc).__name__
                 exc_msg = str(exc)
+                exc_locs = _extract_error_locs(exc)
             # Snapshot inside the catch_warnings scope so warnings captured
             # alongside an exception are preserved (dormant-then-raise paths).
             captured_warnings = list(recorded or [])
@@ -334,6 +377,7 @@ def run_case(
         logger_messages=log_messages,
         observed_state=observed_state,
         duration_ms=duration_ms,
+        exception_locs=exc_locs,
     )
 
 
