@@ -1,0 +1,26 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "rung": "opus",
+  "model": "opus-4-8(agent-tool)",
+  "n_llm_proposed_raw": 40,
+  "n_deduped_vs_floor": 13,
+  "n_gateable": 13,
+  "verdicts": {
+    "confirmed": 1,
+    "failed": 1,
+    "skipped": 11,
+    "infra_error": 0,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.077,
+  "gt_confirmed_total": 60,
+  "floor_recall_tol": 35,
+  "llm_new_gt_keys_recovered": [],
+  "llm_lift_over_floor": 0,
+  "gt_growth_ckeys": [
+    "allowed_backends|type|{present=True,type_is_not=[list]}"
+  ],
+  "gt_growth_count": 1,
+  "wall_sec": 0.0
+}

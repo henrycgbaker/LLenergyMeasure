@@ -1,0 +1,35 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "rung": "opus",
+  "model": "opus-4-8(agent-tool)",
+  "n_llm_proposed_raw": 61,
+  "n_deduped_vs_floor": 43,
+  "n_gateable": 43,
+  "verdicts": {
+    "confirmed": 8,
+    "failed": 3,
+    "skipped": 27,
+    "infra_error": 5,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.186,
+  "gt_confirmed_total": 74,
+  "floor_recall_tol": 44,
+  "llm_new_gt_keys_recovered": [
+    "max_cpu_loras|presence"
+  ],
+  "llm_lift_over_floor": 1,
+  "gt_growth_ckeys": [
+    "disable_additional_properties|exact|[backend,disable_additional_properties]",
+    "disable_any_whitespace|exact|[backend,disable_any_whitespace]",
+    "json|presence|[json,regex]",
+    "log_balancedness|exact|[log_balancedness,log_balancedness_interval]",
+    "max_cpu_loras|presence|[max_cpu_loras,max_loras]",
+    "min_pattern_size|presence|[max_pattern_size,min_pattern_size]",
+    "min_tokens|presence|[max_tokens,min_tokens]",
+    "use_async|exact|[policy,use_async]"
+  ],
+  "gt_growth_count": 8,
+  "wall_sec": 0.0
+}

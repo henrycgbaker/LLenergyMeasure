@@ -37,9 +37,10 @@ L.FLOOR_ROOT = L.FINDINGS / "trial_runs" / "wave2" / "w2-a-improved-det-v2"
 
 
 def gen_oss(
-    engine: str, vslug: str, version_str: str, model: str
+    engine: str, vslug: str, version_str: str, model: str, body: str | None = None
 ) -> tuple[list[dict], float, list[str]]:
     eng_ns, samp_ns = L.NS[engine]
+    body = body or L.WG_BODY
     chunks = W.chunk_validator_source(W.source_files_for(engine, vslug))
     floor_blob = L.floor_summary_for_prompt(L.floor_invariants(engine, vslug))
     invs: list[dict] = []
@@ -47,7 +48,7 @@ def gen_oss(
     t0 = time.time()
     for ci, chunk in enumerate(chunks):
         prompt = L.render_prompt(
-            L.WG_BODY,
+            body,
             engine=engine,
             engine_version=version_str,
             field_namespace=eng_ns,
@@ -109,10 +110,12 @@ def main() -> None:
     ap.add_argument("--rung", required=True, choices=["oss", "opus"])
     ap.add_argument("--model", default="gemma3:12b")
     ap.add_argument("--proposed", default=None, help="opus rung: YAML of proposed invariants")
+    ap.add_argument("--prompt-file", default=None, help="oss rung: override the prompt body")
     a = ap.parse_args()
 
     if a.rung == "oss":
-        llm_invs, wall, raw = gen_oss(a.engine, a.vslug, a.version, a.model)
+        body = L.load_prompt_body(Path(a.prompt_file)) if a.prompt_file else None
+        llm_invs, wall, raw = gen_oss(a.engine, a.vslug, a.version, a.model, body)
         Path(f"/tmp/phase1_w1_{a.engine}_{a.vslug}_oss_raw.txt").write_text(
             "\n\n===CHUNK===\n\n".join(raw)
         )

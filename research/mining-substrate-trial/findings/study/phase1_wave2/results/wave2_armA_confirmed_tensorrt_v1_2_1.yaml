@@ -1,0 +1,18 @@
+- id: tensorrt_nvfp4gemmconfig_validate_allowed_backends_empty
+  ckey:
+  - allowed_backends
+  - type
+  - '{present=True,type_is_not=[list]}'
+  invariant_under_test: allowed_backends must not be empty after the invalid-backend check
+  native_type: tensorrt.Nvfp4GemmConfig
+  match:
+    tensorrt.allowed_backends:
+      present: true
+      type_is_not:
+      - list
+  kwargs_positive:
+    allowed_backends: []
+  kwargs_negative:
+    allowed_backends:
+    - cutlass
+  cross_field: false
