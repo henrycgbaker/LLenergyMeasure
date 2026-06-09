@@ -143,9 +143,12 @@ rate.
   naive `getattr(vllm, X)` infra-errored. Fixed with a `_construct_vllm`
   module-probe resolver (mirrors `_construct_trtllm`; commit on
   `spike/engine-knowledge-as-data`). On vllm 0.19.1 mech (315 candidates):
-  **infra_error 100 -> 4, confirmed 4 -> 32**. The residual 4 are classes
-  needing semantically entangled required args (SchedulerConfig,
-  SpeculativeConfig, StructuredOutputsParams) deliberately NOT fabricated.
+  **infra_error 100 -> 4, confirmed 4 -> 32**, then the attribution hardening
+  (below) corrected it to **31** by dropping the one spurious confirm. The
+  residual infra are classes needing semantically entangled required args
+  (SchedulerConfig, SpeculativeConfig, StructuredOutputsParams) deliberately NOT
+  fabricated (the gate-level infra_error tally is non-deterministic dispatch
+  noise, 4/8/14 across runs; the confirmed count is deterministic).
 - vllm 0.19.1 GT-growth (adversarially verified, honest wording): of the 11
   net-new gate-confirmed constraint-keys vs Round-0 GT, **8 are real pydantic
   `Literal[...]` allowlists** verified against source and reproduced
@@ -155,23 +158,24 @@ rate.
   `max_pattern_size < 0` is a real numeric bound. Two of the eleven are
   bucket-mislabels of bool fields (cudagraph_mm_encoder tagged numeric,
   disable_additional_properties tagged membership) that confirm via pydantic
-  bool-type rejection rather than the labelled constraint, and one sibling
-  invariant (`max_pattern_size > 0`) is a spurious confirm that slips past
-  attribution on an unrelated min_count error message. **The net-new ckey count
-  is not inflated** (the spurious sibling collapses to the real `<0` key), but
-  per-invariant verdicts include two type-vs-predicate mislabels and one
-  misattributed confirm. Do NOT claim "~10 net-new validated constraints"
-  unqualified - that is a mild overclaim.
+  bool-type rejection rather than the labelled constraint. **The net-new ckey
+  count is not inflated** (the one previously-spurious sibling, `max_pattern_size
+  > 0`, collapses to the real `<0` key anyway), and after the attribution
+  hardening (below) that spurious confirm is gone. Still, do NOT claim "~10
+  net-new validated constraints" unqualified - two are bool bucket-mislabels.
 - DEFECTS EXPOSED by unblocking the vllm gate (pre-existing, were hidden while
-  every vllm candidate infra-errored; carried forward, NOT fixed here):
-  1. ATTRIBUTION too weak - `validate_invariants.py` positive-confirm
-     attribution is a bare substring test (`probe_leaf in haystack`), so a raise
-     whose message merely mentions the field name for an unrelated reason passes
-     (the `max_pattern_size > 0` spurious confirm). Affects confirm
-     trustworthiness across ALL engines, not just vllm.
+  every vllm candidate infra-errored):
+  1. ATTRIBUTION too weak - FIXED (commit `fix(gate): attribute confirms to the
+     field that is the raise subject`). The bare-substring check let a raise
+     that merely mentioned the field pass (the `max_pattern_size > 0` spurious
+     confirm via an unrelated min_count rule). Now routed by pydantic structured
+     loc: field-level errors require the field in the loc; model-level errors
+     require it to be the message subject; non-pydantic keeps substring.
+     Re-gate: vllm 32 -> 31 (drops only the spurious one), tensorrt 40 -> 40.
   2. MINER bucket-mislabel - bare `bool` fields get numeric/membership buckets
      (cudagraph_mm_encoder, disable_additional_properties); they should be
-     `type` constraints so their confirms aren't mislabelled.
+     `type` constraints so their confirms aren't mislabelled. CARRIED FORWARD
+     (miner-side; rippled-recall risk warrants its own scoped change).
 
 ## Methodology decisions
 
@@ -202,12 +206,11 @@ STUDY_DESIGN Section 7):
   collapse (`0<=top_p<=1` keeps only one bound) is a direct cause and is NOT
   cosmetic - it is exactly the value-grain the baseline's strict number needs.
 - SELF-confirm exists for 2 of 15 cells (tensorrt 1.2.1 + vllm 0.19.1). The vllm
-  gate is now UNBLOCKED (resolver fix above), so fan-out across the remaining 13
-  cells is mechanically possible; P10 platform candidates are 0/16 confirmed
+  gate is now UNBLOCKED (resolver fix) and the attribution check is HARDENED, so
+  fan-out across the remaining 13 cells is mechanically possible and produces
+  trustworthy per-invariant confirms; P10 platform candidates are 0/16 confirmed
   (dormant, not cheaply gateable - the GT-growth bucket); tensorrt mech also
-  shows 25 gate FAILS worth a look. Fan-out is gated on whether to first harden
-  the attribution check (see DEFECTS above) for trustworthy per-invariant
-  confirms.
+  shows 25 gate FAILS worth a look.
 
 Carried forward (to finish the baseline / Phase-1 prereqs):
 - VALUE-GRAIN ALIGNMENT (the real blocker, attempted + reverted 2026-06-08):
@@ -223,10 +226,8 @@ Carried forward (to finish the baseline / Phase-1 prereqs):
 - Extend the gate's vllm subpackage `native_type` resolution: DONE (the
   `_construct_vllm` module-probe resolver). Remaining: full self-confirm fan-out
   across the other 13 cells.
-- HARDEN the gate attribution check (bare-substring -> structured: require the
-  raise to name the probed field as the constraint subject, e.g. pydantic
-  `loc`/`input_value`). Pre-existing; surfaced by the vllm unblock. Affects
-  confirm trustworthiness across all engines.
+- HARDEN the gate attribution check: DONE (structured pydantic loc routing;
+  vllm 32->31, tensorrt 40->40; see DEFECTS #1).
 - FIX miner bucket assignment for bare `bool` fields (numeric/membership ->
   type), so confirms are not mislabelled (cudagraph_mm_encoder,
   disable_additional_properties).
