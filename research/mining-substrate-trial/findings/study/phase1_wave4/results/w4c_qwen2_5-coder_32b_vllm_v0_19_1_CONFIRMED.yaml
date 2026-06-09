@@ -1,0 +1,669 @@
+confirmed:
+- id: structured_outputs_params_mutually_exclusive_constraints
+  ckey:
+  - json
+  - presence
+  - '[json,regex]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Only one kind of structured outputs constraint can be specified.
+  native_type: StructuredOutputsParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.json:
+        present: true
+      vllm.sampling.regex:
+        present: true
+  kwargs_positive:
+    json: {}
+    regex: .*
+  kwargs_negative:
+    json: {}
+  observed_outcome: error
+  error: ''
+- id: repetition_detection_params_max_pattern_size_non_negative
+  ckey:
+  - max_pattern_size
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_pattern_size must be >=0.
+  native_type: RepetitionDetectionParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_pattern_size:
+        <: 0
+  kwargs_positive:
+    max_pattern_size: -1
+  kwargs_negative:
+    max_pattern_size: 0
+  observed_outcome: error
+  error: ''
+- id: sampling_params_stop_token_ids_list_of_ints
+  ckey:
+  - stop_token_ids
+  - membership
+  - '[0,string]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: stop_token_ids must contain only integers.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop_token_ids:
+        not_equal:
+        - 0
+        - string
+  kwargs_positive:
+    stop_token_ids:
+    - 0
+    - string
+  kwargs_negative:
+    stop_token_ids:
+    - 0
+    - 1
+  observed_outcome: error
+  error: ''
+- id: sampling_params_n_int_at_least_1
+  ckey:
+  - n
+  - membership
+  - '{not_equal=1,type_is_not=[int]}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: n must be an int and at least 1.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        not_equal: 1
+        type_is_not:
+        - int
+  kwargs_positive:
+    n: string
+  kwargs_negative:
+    n: 1
+  observed_outcome: error
+  error: ''
+- id: sampling_params_n_int_at_most_max_n
+  ckey:
+  - n
+  - numeric
+  - envs.VLLM_MAX_N_SEQUENCES
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: n must be at most VLLM_MAX_N_SEQUENCES.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        '>': envs.VLLM_MAX_N_SEQUENCES
+  kwargs_positive:
+    n: 1000000
+  kwargs_negative:
+    n: 1
+  observed_outcome: error
+  error: ''
+- id: sampling_params_presence_penalty_in_range
+  ckey:
+  - presence_penalty
+  - membership
+  - '[-1,-1.5,-2,0,1,1.5,2]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: presence_penalty must be in [-2, 2].
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.presence_penalty:
+        not_in:
+        - -2
+        - -1.5
+        - -1
+        - 0
+        - 1
+        - 1.5
+        - 2
+  kwargs_positive:
+    presence_penalty: 3
+  kwargs_negative:
+    presence_penalty: 1
+  observed_outcome: error
+  error: ''
+- id: sampling_params_frequency_penalty_in_range
+  ckey:
+  - frequency_penalty
+  - membership
+  - '[-1,-1.5,-2,0,1,1.5,2]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: frequency_penalty must be in [-2, 2].
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.frequency_penalty:
+        not_in:
+        - -2
+        - -1.5
+        - -1
+        - 0
+        - 1
+        - 1.5
+        - 2
+  kwargs_positive:
+    frequency_penalty: 3
+  kwargs_negative:
+    frequency_penalty: 1
+  observed_outcome: error
+  error: ''
+- id: sampling_params_repetition_penalty_greater_than_zero
+  ckey:
+  - repetition_penalty
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: repetition_penalty must be greater than zero.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <=: 0
+  kwargs_positive:
+    repetition_penalty: 0
+  kwargs_negative:
+    repetition_penalty: 1
+  observed_outcome: error
+  error: ''
+- id: sampling_params_top_p_in_range
+  ckey:
+  - top_p
+  - membership
+  - '[0.1,0.5,1]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: top_p must be in (0, 1].
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_p:
+        not_in:
+        - 0.1
+        - 0.5
+        - 1
+  kwargs_positive:
+    top_p: 1.1
+  kwargs_negative:
+    top_p: 0.9
+  observed_outcome: error
+  error: ''
+- id: sampling_params_top_k_int_at_least_0_or_minus_1
+  ckey:
+  - top_k
+  - numeric
+  - '-1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: top_k must be 0 (disable), or at least 1.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        <: -1
+  kwargs_positive:
+    top_k: -2
+  kwargs_negative:
+    top_k: 0
+  observed_outcome: error
+  error: ''
+- id: sampling_params_min_p_in_range
+  ckey:
+  - min_p
+  - membership
+  - '[0,0.5,1]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: min_p must be in [0, 1].
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_p:
+        not_in:
+        - 0
+        - 0.5
+        - 1
+  kwargs_positive:
+    min_p: -0.1
+  kwargs_negative:
+    min_p: 0.5
+  observed_outcome: error
+  error: ''
+- id: sampling_params_max_tokens_at_least_1_if_set
+  ckey:
+  - max_tokens
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_tokens must be at least 1 if set.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        <: 1
+  kwargs_positive:
+    max_tokens: 0
+  kwargs_negative:
+    max_tokens: 1
+  observed_outcome: error
+  error: ''
+- id: sampling_params_min_tokens_non_negative
+  ckey:
+  - min_tokens
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: min_tokens must be greater than or equal to 0.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  kwargs_positive:
+    min_tokens: -1
+  kwargs_negative:
+    min_tokens: 0
+  observed_outcome: error
+  error: ''
+- id: sampling_params_logprobs_non_negative_or_minus_1
+  ckey:
+  - logprobs
+  - numeric
+  - '-1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: logprobs must be non-negative or -1.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs:
+        <: -1
+  kwargs_positive:
+    logprobs: -2
+  kwargs_negative:
+    logprobs: 0
+  observed_outcome: error
+  error: ''
+- id: sampling_params_prompt_logprobs_non_negative_or_minus_1
+  ckey:
+  - prompt_logprobs
+  - numeric
+  - '-1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: prompt_logprobs must be non-negative or -1.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs:
+        <: -1
+  kwargs_positive:
+    prompt_logprobs: -2
+  kwargs_negative:
+    prompt_logprobs: 0
+  observed_outcome: error
+  error: ''
+- id: sampling_params_stop_strings_non_empty
+  ckey:
+  - stop
+  - membership
+  - '{not_in=[],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: stop cannot contain an empty string.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: true
+        not_in:
+        - ''
+  kwargs_positive:
+    stop:
+    - ''
+  kwargs_negative:
+    stop:
+    - stop_string
+  observed_outcome: error
+  error: ''
+- id: sampling_params_stop_strings_only_with_detokenize_true
+  ckey:
+  - stop
+  - presence
+  - '[detokenize,stop]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: stop strings are only supported when detokenize is True.
+  native_type: SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: true
+      vllm.sampling.detokenize: false
+  kwargs_positive:
+    stop:
+    - stop_string
+    detokenize: false
+  kwargs_negative:
+    stop:
+    - stop_string
+    detokenize: true
+  observed_outcome: error
+  error: ''
+- id: engine_tokenizer_not_string
+  ckey:
+  - tokenizer
+  - type
+  - '[str]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: tokenizer must be a string.
+  native_type: ModelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer:
+        type_is_not:
+        - str
+  kwargs_positive:
+    tokenizer: 12345
+  kwargs_negative:
+    tokenizer: valid-tokenizer
+  observed_outcome: error
+  error: ''
+- id: engine_max_model_len_not_int
+  ckey:
+  - max_model_len
+  - type
+  - '[int]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_model_len must be a positive integer.
+  native_type: ModelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_model_len:
+        type_is_not:
+        - int
+  kwargs_positive:
+    max_model_len: not-an-int
+  kwargs_negative:
+    max_model_len: 2048
+  observed_outcome: error
+  error: ''
+- id: engine_log_balancedness_interval_less_than_or_equal_to_zero
+  ckey:
+  - log_balancedness
+  - exact
+  - '[log_balancedness,log_balancedness_interval]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: log_balancedness_interval must be greater than 0.
+  native_type: EPLBConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.log_balancedness: true
+      vllm.engine.log_balancedness_interval:
+        <=: 0
+  kwargs_positive:
+    log_balancedness: true
+    log_balancedness_interval: 0
+  kwargs_negative:
+    log_balancedness: true
+    log_balancedness_interval: 1
+  observed_outcome: error
+  error: ''
+- id: engine_data_parallel_size_local_greater_than_data_parallel_size
+  ckey:
+  - data_parallel_size_local
+  - numeric
+  - data_parallel_size
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: data_parallel_size_local must be <= data_parallel_size.
+  native_type: ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_size_local:
+        '>': data_parallel_size
+  kwargs_positive:
+    data_parallel_size: 2
+    data_parallel_size_local: 4
+  kwargs_negative:
+    data_parallel_size: 4
+    data_parallel_size_local: 2
+  observed_outcome: error
+  error: ''
+- id: engine_data_parallel_external_lb_without_multiple_data_parallel_sizes
+  ckey:
+  - data_parallel_size
+  - numeric
+  - '[data_parallel_external_lb,data_parallel_size]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: data_parallel_external_lb can only be set when data_parallel_size
+    > 1.
+  native_type: ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_size:
+        <=: 1
+      vllm.engine.data_parallel_external_lb: true
+  kwargs_positive:
+    data_parallel_size: 1
+    data_parallel_external_lb: true
+  kwargs_negative:
+    data_parallel_size: 2
+    data_parallel_external_lb: true
+  observed_outcome: error
+  error: ''
+- id: engine_data_parallel_rank_out_of_range
+  ckey:
+  - data_parallel_rank
+  - numeric
+  - '[data_parallel_rank,data_parallel_size]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: data_parallel_rank must be in the range [0, data_parallel_size).
+  native_type: ParallelConfig
+  match:
+    engine: vllm.engine
+    fields:
+      vllm.engine.data_parallel_rank:
+        '>=': 1
+      vllm.engine.data_parallel_size: 1
+  kwargs_positive:
+    data_parallel_rank: 1
+    data_parallel_size: 1
+  kwargs_negative:
+    data_parallel_rank: 0
+    data_parallel_size: 1
+  observed_outcome: dormant_silent
+  error: ''
+- id: engine_max_cpu_loras_must_be_greater_than_or_equal_to_max_loras
+  ckey:
+  - max_cpu_loras
+  - numeric
+  - vllm.engine.max_loras
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_cpu_loras must be >= max_loras.
+  native_type: LoRAConfig
+  match:
+    engine: vllm.engine
+    fields:
+      vllm.engine.max_cpu_loras:
+        <: vllm.engine.max_loras
+  kwargs_positive:
+    max_cpu_loras: 1
+    max_loras: 2
+  kwargs_negative:
+    max_cpu_loras: 2
+    max_loras: 2
+  observed_outcome: error
+  error: ''
+- id: vllm_structured_outputs_config_disable_any_whitespace_supported_backends
+  ckey:
+  - disable_any_whitespace
+  - exact
+  - '[backend,disable_any_whitespace]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: disable_any_whitespace is only supported for xgrammar and
+    guidance backends.
+  native_type: StructuredOutputsConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_any_whitespace: true
+      vllm.engine.backend:
+        not_in:
+        - xgrammar
+        - guidance
+  kwargs_positive:
+    disable_any_whitespace: true
+    backend: auto
+  kwargs_negative:
+    disable_any_whitespace: true
+    backend: xgrammar
+  observed_outcome: error
+  error: ''
+- id: vllm_structured_outputs_config_disable_additional_properties_supported_backends
+  ckey:
+  - disable_additional_properties
+  - exact
+  - '[backend,disable_additional_properties]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: disable_additional_properties is only supported for the guidance
+    backend.
+  native_type: StructuredOutputsConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_additional_properties: true
+      vllm.engine.backend:
+        not_equal: guidance
+  kwargs_positive:
+    disable_additional_properties: true
+    backend: auto
+  kwargs_negative:
+    disable_additional_properties: true
+    backend: guidance
+  observed_outcome: error
+  error: ''
+- id: engine_max_loras_greater_than_or_equal_to_one
+  ckey:
+  - max_loras
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_loras must be greater than or equal to 1
+  native_type: LoRAConfig
+  match:
+    engine: vllm.engine
+    fields:
+      vllm.engine.max_loras:
+        '>=': 1
+  kwargs_positive:
+    max_loras: 0
+  kwargs_negative:
+    max_loras: 1
+  observed_outcome: error
+  error: ''
+- id: engine_gpu_memory_utilization_greater_than_zero_and_less_than_or_equal_to_one
+  ckey:
+  - gpu_memory_utilization
+  - numeric
+  - '{<==1,>=0}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: gpu_memory_utilization must be greater than 0 and less than
+    or equal to 1
+  native_type: CacheConfig
+  match:
+    engine: vllm.engine
+    fields:
+      vllm.engine.gpu_memory_utilization:
+        '>': 0
+        <=: 1
+  kwargs_positive:
+    gpu_memory_utilization: 1.1
+  kwargs_negative:
+    gpu_memory_utilization: 0.9
+  observed_outcome: error
+  error: ''
+- id: engine_mamba_block_size_greater_than_zero
+  ckey:
+  - mamba_block_size
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: mamba_block_size must be greater than 0
+  native_type: CacheConfig
+  match:
+    engine: vllm.engine
+    fields:
+      vllm.engine.mamba_block_size:
+        '>': 0
+  kwargs_positive:
+    mamba_block_size: 0
+  kwargs_negative:
+    mamba_block_size: 1
+  observed_outcome: error
+  error: ''
+- id: engine_max_lora_rank_greater_than_zero
+  ckey:
+  - max_lora_rank
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_lora_rank must be greater than 0
+  native_type: LoRAConfig
+  match:
+    engine: vllm.engine
+    fields:
+      vllm.engine.max_lora_rank:
+        '>': 0
+  kwargs_positive:
+    max_lora_rank: 0
+  kwargs_negative:
+    max_lora_rank: 16
+  observed_outcome: error
+  error: ''

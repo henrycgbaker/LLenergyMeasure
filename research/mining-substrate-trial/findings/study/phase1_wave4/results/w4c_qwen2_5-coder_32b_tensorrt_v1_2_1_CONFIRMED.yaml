@@ -1,0 +1,488 @@
+confirmed:
+- id: engine_cuda_graph_max_batch_size_non_negative
+  ckey:
+  - max_batch_size
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: cuda_graph_config.max_batch_size must be non-negative
+  native_type: CudaGraphConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        <: 0
+  kwargs_positive:
+    max_batch_size: -1
+  kwargs_negative:
+    max_batch_size: 0
+  observed_outcome: error
+  error: ''
+- id: engine_nvfp4_gemm_invalid_backends
+  ckey:
+  - allowed_backends
+  - membership
+  - '[cublaslt,cuda_core,cutedsl,cutlass]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Invalid backends in allowed_backends
+  native_type: Nvfp4GemmConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends:
+        not_in:
+        - cutlass
+        - cublaslt
+        - cutedsl
+        - cuda_core
+  kwargs_positive:
+    allowed_backends:
+    - invalid
+  kwargs_negative:
+    allowed_backends:
+    - cutlass
+  observed_outcome: error
+  error: ''
+- id: engine_nvfp4_gemm_allowed_backends_empty
+  ckey:
+  - allowed_backends
+  - exact
+  - '[]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: allowed_backends cannot be empty.
+  native_type: Nvfp4GemmConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends: []
+  kwargs_positive:
+    allowed_backends: []
+  kwargs_negative:
+    allowed_backends:
+    - cutlass
+  observed_outcome: error
+  error: ''
+- id: engine_decoding_base_acceptance_window_non_negative
+  ckey:
+  - acceptance_window
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: acceptance_window must be >= 0 (0 disables)
+  native_type: DecodingBaseConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.acceptance_window:
+        <: 0
+  kwargs_positive:
+    acceptance_window: -1
+  kwargs_negative:
+    acceptance_window: 0
+  observed_outcome: error
+  error: ''
+- id: engine_decoding_base_acceptance_length_threshold_non_negative
+  ckey:
+  - acceptance_length_threshold
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: acceptance_length_threshold must be >= 0
+  native_type: DecodingBaseConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.acceptance_length_threshold:
+        <: 0
+  kwargs_positive:
+    acceptance_length_threshold: -1
+  kwargs_negative:
+    acceptance_length_threshold: 0
+  observed_outcome: error
+  error: ''
+- id: engine_decoding_base_draft_len_schedule_batch_size_threshold_non_negative
+  ckey:
+  - draft_len_schedule
+  - type
+  - '{present=True,type_is_not=[dict]}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: draft_len_schedule batch size threshold must be >= 1
+  native_type: DecodingBaseConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.draft_len_schedule:
+        present: true
+        type_is_not:
+        - dict
+  kwargs_positive:
+    draft_len_schedule:
+      -1: 1
+  kwargs_negative:
+    draft_len_schedule:
+      1: 1
+  observed_outcome: error
+  error: ''
+- id: engine_decoding_base_draft_len_schedule_batch_size_1_required
+  ckey:
+  - draft_len_schedule
+  - membership
+  - '{not_in=[1],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: draft_len_schedule must include batch_size=1
+  native_type: DecodingBaseConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.draft_len_schedule:
+        present: true
+        not_in:
+        - 1
+  kwargs_positive:
+    draft_len_schedule:
+      2: 1
+  kwargs_negative:
+    draft_len_schedule:
+      1: 1
+  observed_outcome: error
+  error: ''
+- id: engine_eagle_decoding_config_max_draft_len_required
+  ckey:
+  - max_draft_len
+  - presence
+  - 'False'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_draft_len is required for Eagle
+  native_type: EagleDecodingConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.max_draft_len:
+        present: false
+  kwargs_positive:
+    max_draft_len: null
+  kwargs_negative:
+    max_draft_len: 1
+  observed_outcome: error
+  error: ''
+- id: engine_save_hidden_states_decoding_config_output_directory_required
+  ckey:
+  - output_directory
+  - presence
+  - 'False'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Save directory must be provided
+  native_type: SaveHiddenStatesDecodingConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.output_directory:
+        present: false
+  kwargs_positive:
+    output_directory: null
+  kwargs_negative:
+    output_directory: path/to/save
+  observed_outcome: error
+  error: ''
+- id: lookahead_decoding_max_window_size_positive
+  ckey:
+  - max_window_size
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_window_size must be positive
+  native_type: LookaheadDecodingConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.max_window_size:
+        '>': 0
+  kwargs_positive:
+    max_window_size: -1
+  kwargs_negative:
+    max_window_size: 1
+  observed_outcome: error
+  error: ''
+- id: lookahead_decoding_max_ngram_size_positive
+  ckey:
+  - max_ngram_size
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_ngram_size must be positive
+  native_type: LookaheadDecodingConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.max_ngram_size:
+        '>': 0
+  kwargs_positive:
+    max_ngram_size: -1
+  kwargs_negative:
+    max_ngram_size: 1
+  observed_outcome: error
+  error: ''
+- id: lookahead_decoding_max_verification_set_size_positive
+  ckey:
+  - max_verification_set_size
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_verification_set_size must be positive
+  native_type: LookaheadDecodingConfig
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.sampling.max_verification_set_size:
+        '>': 0
+  kwargs_positive:
+    max_verification_set_size: -1
+  kwargs_negative:
+    max_verification_set_size: 1
+  observed_outcome: error
+  error: ''
+- id: kv_cache_free_gpu_memory_fraction_between_0_and_1
+  ckey:
+  - free_gpu_memory_fraction
+  - numeric
+  - '{<==1,>==0}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: free_gpu_memory_fraction must be between 0.0 and 1.0
+  native_type: KvCacheConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache.free_gpu_memory_fraction:
+        '>=': 0
+        <=: 1
+  kwargs_positive:
+    free_gpu_memory_fraction: -0.1
+  kwargs_negative:
+    free_gpu_memory_fraction: 0.5
+  observed_outcome: error
+  error: ''
+- id: kv_cache_max_gpu_total_bytes_non_negative
+  ckey:
+  - max_gpu_total_bytes
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_gpu_total_bytes must be non-negative
+  native_type: KvCacheConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache.max_gpu_total_bytes:
+        '>=': 0
+  kwargs_positive:
+    max_gpu_total_bytes: -1
+  kwargs_negative:
+    max_gpu_total_bytes: 0
+  observed_outcome: error
+  error: ''
+- id: kv_cache_max_attention_window_non_empty_list_of_positive_integers
+  ckey:
+  - max_attention_window
+  - membership
+  - '{not_in=[[]],present=True,type_is_not=[None]}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_attention_window must be a non-empty list of positive
+    integers
+  native_type: KvCacheConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache.max_attention_window:
+        present: true
+        type_is_not:
+        - None
+        not_in:
+        - []
+  kwargs_positive:
+    max_attention_window: []
+  kwargs_negative:
+    max_attention_window:
+    - 1
+  observed_outcome: error
+  error: ''
+- id: base_llm_args_gpus_per_node_ray_local_world_size
+  ckey:
+  - gpus_per_node
+  - presence
+  - 'True'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: gpus_per_node should be set based on RAY_LOCAL_WORLD_SIZE
+    if available
+  native_type: BaseLlmArgs
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.base_llm_args.gpus_per_node:
+        present: true
+  kwargs_positive:
+    gpus_per_node: None
+  kwargs_negative:
+    gpus_per_node: 8
+  observed_outcome: error
+  error: ''
+- id: base_llm_args_model_valid_type
+  ckey:
+  - model
+  - type
+  - '{present=True,type_is_not=[Path,str]}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: model must be a valid type (str or Path)
+  native_type: BaseLlmArgs
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.base_llm_args.model:
+        present: true
+        type_is_not:
+        - str
+        - Path
+  kwargs_positive:
+    model: 12345
+  kwargs_negative:
+    model: path/to/model
+  observed_outcome: error
+  error: ''
+- id: trt_llm_args_build_config_remaining_max_beam_width_default
+  ckey:
+  - max_beam_width
+  - presence
+  - 'True'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_beam_width is set to default if not provided
+  native_type: TrtLlmArgs
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.trt_llm_args.max_beam_width:
+        present: true
+  kwargs_positive:
+    max_beam_width: None
+  kwargs_negative:
+    max_beam_width: 4
+  observed_outcome: error
+  error: ''
+- id: engine_validate_torch_compile_max_num_streams_min_value
+  ckey:
+  - max_num_streams
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Checks if torch_compile_config.max_num_streams is >= 1.
+  native_type: TorchCompileConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.torch_compile_config.max_num_streams:
+        <: 1
+  kwargs_positive:
+    max_num_streams: 0
+  kwargs_negative:
+    max_num_streams: 1
+  observed_outcome: error
+  error: ''
+- id: engine_validate_stream_interval_positive
+  ckey:
+  - stream_interval
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Checks if stream_interval is positive.
+  native_type: TorchLlmArgs
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.stream_interval:
+        <=: 0
+  kwargs_positive:
+    stream_interval: -1
+  kwargs_negative:
+    stream_interval: 1
+  observed_outcome: error
+  error: ''
+- id: engine_validate_batch_wait_timeout_ms_positive
+  ckey:
+  - batch_wait_timeout_ms
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Checks if batch_wait_timeout_ms is greater than 0.
+  native_type: TorchLlmArgs
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_ms:
+        <=: 0
+  kwargs_positive:
+    batch_wait_timeout_ms: -1
+  kwargs_negative:
+    batch_wait_timeout_ms: 1
+  observed_outcome: error
+  error: ''
+- id: engine_validate_batch_wait_timeout_iters_non_negative
+  ckey:
+  - batch_wait_timeout_iters
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Checks if batch_wait_timeout_iters is >= 0.
+  native_type: TorchLlmArgs
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_timeout_iters:
+        <: 0
+  kwargs_positive:
+    batch_wait_timeout_iters: -1
+  kwargs_negative:
+    batch_wait_timeout_iters: 0
+  observed_outcome: error
+  error: ''
+- id: engine_validate_batch_wait_max_tokens_ratio_range
+  ckey:
+  - batch_wait_max_tokens_ratio
+  - membership
+  - '[0,1]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Checks if batch_wait_max_tokens_ratio is in range [0, 1].
+  native_type: TorchLlmArgs
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_max_tokens_ratio:
+        not_in:
+        - 0
+        - 1
+  kwargs_positive:
+    batch_wait_max_tokens_ratio: -0.1
+  kwargs_negative:
+    batch_wait_max_tokens_ratio: 0.5
+  observed_outcome: error
+  error: ''
