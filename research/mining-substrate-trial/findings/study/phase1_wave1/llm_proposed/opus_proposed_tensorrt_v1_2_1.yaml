@@ -1,0 +1,507 @@
+invariants:
+- id: tensorrt_basesparseattentionconfig_from_dict_algorithm_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: sparse attention algorithm is required (None raises)
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: from_dict
+    line_at_scan: 191
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.algorithm: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_basesparseattentionconfig_from_dict_algorithm_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: sparse attention algorithm must be a known dispatch key
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: from_dict
+    line_at_scan: 195
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.algorithm: {present: true, not_in: [rocket, dsa, skip_softmax]}
+  added_by: llm_wg_extend
+- id: tensorrt_moeloadbalancerconfig_setup_num_slots_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: num_slots cannot be None when calling setup()
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: setup
+    line_at_scan: 225
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.num_slots: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_moeloadbalancerconfig_setup_num_slots_divisible_by_ep_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: num_slots must be divisible by ep_size
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: setup
+    line_at_scan: 228
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.num_slots: {present: true}
+      tensorrt.ep_size: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_moeloadbalancerconfig_assignments_length_matches_num_slots
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: per-layer assignment length must equal num_slots
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: get_layer_initial_global_assignments
+    line_at_scan: 284
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.initial_global_assignments: {present: true}
+      tensorrt.num_slots: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_nvfp4gemmconfig_allowed_backends_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: allowed_backends entries must be a known backend
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_allowed_backends
+    line_at_scan: 295
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends: {present: true, not_in: [cutlass, cublaslt, cutedsl, cuda_core]}
+  added_by: llm_wg_extend
+- id: tensorrt_parallelconfig_devices_length_matches_world_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: devices length must equal world_size
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: devices
+    line_at_scan: 305
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.devices: {present: true}
+      tensorrt.world_size: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_parallelconfig_world_size_equals_tp_pp_cp_product
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: world_size must equal tp_size * pp_size * cp_size
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: world_size
+    line_at_scan: 313
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.world_size: {present: true}
+      tensorrt.tp_size: {present: true}
+      tensorrt.pp_size: {present: true}
+      tensorrt.cp_size: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_eagledecodingconfig_dynamic_tree_max_draft_len_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: max_draft_len must be > 0 when use_dynamic_tree
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 461
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_draft_len: {'<=': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_eagledecodingconfig_dynamic_tree_max_topk_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: dynamic_tree_max_topK must be > 0 when use_dynamic_tree
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 465
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dynamic_tree_max_topK: {'<=': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_eagledecodingconfig_dynamic_tree_max_total_draft_tokens_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: max_total_draft_tokens must be > 0 when use_dynamic_tree
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_eagle_config
+    line_at_scan: 469
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_total_draft_tokens: {'<=': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_rayplacementconfig_placement_bundle_indices_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: placement_groups and placement_bundle_indices must be provided together
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 515
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.placement_bundle_indices: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_rayplacementconfig_pg_and_indices_length_match
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: placement_groups length must equal placement_bundle_indices length
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 521
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.placement_groups: {present: true}
+      tensorrt.placement_bundle_indices: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_rayplacementconfig_per_worker_gpu_share_gt_one
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: per_worker_gpu_share must be <= 1.0
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_placement
+    line_at_scan: 534
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.per_worker_gpu_share: {'>': 1.0}
+  added_by: llm_wg_extend
+- id: tensorrt_kvcacheconfig_free_gpu_memory_fraction_gt_one
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: free_gpu_memory_fraction must be <= 1
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_free_gpu_memory_fraction
+    line_at_scan: 666
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.free_gpu_memory_fraction: {'>': 1}
+  added_by: llm_wg_extend
+- id: tensorrt_basellmargs_validate_dtype_bfloat16_pre_sm80
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: bfloat16 dtype unsupported on pre SM 80 GPUs
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_dtype
+    line_at_scan: 727
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype: bfloat16
+  added_by: llm_wg_extend
+- id: tensorrt_basellmargs_runtime_args_max_batch_size_gt_max_num_tokens
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: max_batch_size should be <= max_num_tokens (warns otherwise)
+  severity: warning
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_runtime_args
+    line_at_scan: 796
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size: {present: true}
+      tensorrt.max_num_tokens: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_basellmargs_peft_cache_config_lora_prefetch_dir_present
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: peft_cache_config.lora_prefetch_dir not supported when set
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_peft_cache_config
+    line_at_scan: 833
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_prefetch_dir: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_torchcompileconfig_capture_num_tokens_element_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: capture_num_tokens entries must be positive ints
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_capture_num_tokens
+    line_at_scan: 1078
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capture_num_tokens: {'<=': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_torchcompileconfig_max_num_streams_lt_one
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: torch_compile_config.max_num_streams must be >= 1
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_torch_compile_max_num_streams
+    line_at_scan: 1085
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_streams: {'<': 1}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_speculative_ngram_max_matching_ngram_size_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: NGram speculation requires max_matching_ngram_size > 0
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 1111
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_matching_ngram_size: {'<=': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_speculative_mtp_num_nextn_predict_layers_le
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: MTP speculation requires num_nextn_predict_layers > 0
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 1116
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.num_nextn_predict_layers: {'<=': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_savehiddenstates_backend_not_in
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: SaveHiddenStates speculation requires pytorch backend
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 1125
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend: {present: true, not_in: [pytorch]}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_attention_dp_batching_wait_iters_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: batching_wait_iters must be >= 0 when enable_balance
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_attention_dp_config
+    line_at_scan: 1279
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_wait_iters: {'<': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_attention_dp_timeout_iters_lt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: timeout_iters must be >= 0 when enable_balance
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_attention_dp_config
+    line_at_scan: 1283
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.timeout_iters: {'<': 0}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_batch_wait_max_tokens_ratio_gt_one
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: batch_wait_max_tokens_ratio must be in range [0, 1]
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_batch_wait_max_tokens_ratio
+    line_at_scan: 1306
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batch_wait_max_tokens_ratio: {'>': 1}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_ray_worker_extension_cls_orchestrator_not_ray
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: ray_worker_extension_cls only supported with orchestrator_type ray
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_worker_extension_cls
+    line_at_scan: 1314
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_worker_extension_cls: {present: true}
+      tensorrt.orchestrator_type: {present: true, not_equal: ray}
+  added_by: llm_wg_extend
+- id: tensorrt_torchllmargs_ray_placement_config_orchestrator_not_ray
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: ray_placement_config only supported with orchestrator_type ray
+  severity: error
+  native_type: tensorrt.EngineArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_ray_placement_config
+    line_at_scan: 1322
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.ray_placement_config: {present: true}
+      tensorrt.orchestrator_type: {present: true, not_equal: ray}
+  added_by: llm_wg_extend
+- id: tensorrt_guideddecodingparams_num_guides_gt_one
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: only one guide can be used for a request
+  severity: error
+  native_type: tensorrt.GenerationConfig
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 1426
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling.num_guides: {'>': 1}
+  added_by: llm_wg_extend
+- id: tensorrt_samplingparams_top_p_gt_one
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: top_p must satisfy 0 <= top_p <= 1
+  severity: error
+  native_type: tensorrt.GenerationConfig
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 1453
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling.top_p: {'>': 1}
+  added_by: llm_wg_extend
+- id: tensorrt_samplingparams_best_of_lt_n
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: best_of cannot be less than n
+  severity: error
+  native_type: tensorrt.GenerationConfig
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 1460
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling.best_of: {present: true}
+      tensorrt.sampling.n: {present: true}
+  added_by: llm_wg_extend
+- id: tensorrt_samplingparams_best_of_gt_one_greedy
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: greedy decoding disallows best_of > 1 without env override
+  severity: error
+  native_type: tensorrt.GenerationConfig
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 1463
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling.best_of: {'>': 1}
+  added_by: llm_wg_extend
+- id: tensorrt_samplingparams_truncate_prompt_tokens_lt_one
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: truncate_prompt_tokens must be >= 1
+  severity: error
+  native_type: tensorrt.GenerationConfig
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 1477
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling.truncate_prompt_tokens: {'<': 1}
+  added_by: llm_wg_extend

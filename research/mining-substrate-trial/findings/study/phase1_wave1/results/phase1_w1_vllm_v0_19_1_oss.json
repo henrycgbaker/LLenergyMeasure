@@ -1,0 +1,24 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "rung": "oss",
+  "model": "gemma3:12b",
+  "n_llm_proposed_raw": 114,
+  "n_deduped_vs_floor": 32,
+  "n_gateable": 32,
+  "verdicts": {
+    "confirmed": 0,
+    "failed": 11,
+    "skipped": 18,
+    "infra_error": 3,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.0,
+  "gt_confirmed_total": 74,
+  "floor_recall_tol": 44,
+  "llm_new_gt_keys_recovered": [],
+  "llm_lift_over_floor": 0,
+  "gt_growth_ckeys": [],
+  "gt_growth_count": 0,
+  "wall_sec": 595.1
+}
