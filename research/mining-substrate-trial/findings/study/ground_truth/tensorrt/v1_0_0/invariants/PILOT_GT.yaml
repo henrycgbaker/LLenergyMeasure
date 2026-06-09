@@ -6,7 +6,7 @@ round: R0_pilot
 gate: scripts/validate_invariants.py (in nvcr.io/nvidia/tensorrt-llm/release:1.0.0)
 identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
   tolerant_key = first two, for cross-source recall
-n_confirmed: 21
+n_confirmed: 22
 n_unverified: 102
 confirmed:
 - id: tensorrt_torchLlmArgs_allreduce_strategy_literal
@@ -576,6 +576,29 @@ confirmed:
   - mech
   - passA
   - passB
+- id: tensorrt_torchllmargs_validate_stream_interval_stream_interval_le
+  source: mech
+  constraint_key:
+  - stream_interval
+  - numeric
+  - '0'
+  tolerant_key:
+  - stream_interval
+  - numeric
+  native_type: tensorrt.TorchLlmArgs
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.stream_interval:
+        <=: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: tensorrt_baseLlmArgs_tokenizer_mode_literal
   source: passA
   constraint_key:
@@ -3484,3 +3507,8 @@ unverified:
   - passA
   - passB
   gate_status: skipped
+foldins:
+- batch: round0b_selfconfirm
+  source: mech (improved-det-v2 + Round 0b primitives), gate-confirmed
+  added_constraint_keys:
+  - stream_interval|numeric|0

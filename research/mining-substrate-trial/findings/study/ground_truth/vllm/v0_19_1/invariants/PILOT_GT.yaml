@@ -6,8 +6,8 @@ round: R0_pilot
 gate: scripts/validate_invariants.py (in vllm/vllm-openai:v0.19.1)
 identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
   tolerant_key = first two, for cross-source recall
-n_confirmed: 90
-n_unverified: 159
+n_confirmed: 98
+n_unverified: 157
 confirmed:
 - id: vllm_structuredoutputsconfig_backend_literal
   source: passB
@@ -70,6 +70,37 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_cacheconfig___declarative___cache_dtype_not_in
+  source: mech
+  constraint_key:
+  - cache_dtype
+  - membership
+  - '[auto,bfloat16,float16,fp8,fp8_ds_mla,fp8_e4m3,fp8_e5m2,fp8_inc]'
+  tolerant_key:
+  - cache_dtype
+  - membership
+  native_type: vllm.CacheConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_dtype:
+        not_in:
+        - auto
+        - float16
+        - bfloat16
+        - fp8
+        - fp8_e4m3
+        - fp8_e5m2
+        - fp8_inc
+        - fp8_ds_mla
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_observabilityconfig_raises_detailed_traces_without_endpoint
   source: passA
   constraint_key:
@@ -871,6 +902,33 @@ confirmed:
   contributing_sources:
   - passA
   - poc
+- id: vllm_modelconfig___declarative___logprobs_mode_not_in
+  source: mech
+  constraint_key:
+  - logprobs_mode
+  - membership
+  - '[processed_logits,processed_logprobs,raw_logits,raw_logprobs]'
+  tolerant_key:
+  - logprobs_mode
+  - membership
+  native_type: vllm.ModelConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.logprobs_mode:
+        not_in:
+        - raw_logits
+        - raw_logprobs
+        - processed_logits
+        - processed_logprobs
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_loraconfig_lora_dtype_literal
   source: passB
   constraint_key:
@@ -1015,6 +1073,32 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_cacheconfig___declarative___mamba_ssm_cache_dtype_not_in
+  source: mech
+  constraint_key:
+  - mamba_ssm_cache_dtype
+  - membership
+  - '[auto,float16,float32]'
+  tolerant_key:
+  - mamba_ssm_cache_dtype
+  - membership
+  native_type: vllm.CacheConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_ssm_cache_dtype:
+        not_in:
+        - auto
+        - float32
+        - float16
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
   source: passA
   constraint_key:
@@ -1169,6 +1253,29 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_repetitiondetectionparams___post_init___max_pattern_size_lt
+  source: mech
+  constraint_key:
+  - max_pattern_size
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_pattern_size
+  - numeric
+  native_type: vllm.RepetitionDetectionParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_pattern_size:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_samplingparams_raises_max_tokens_lt_1
   source: passA
   constraint_key:
@@ -1522,6 +1629,31 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_multimodalconfig___declarative___mm_tensor_ipc_not_in
+  source: mech
+  constraint_key:
+  - mm_tensor_ipc
+  - membership
+  - '[direct_rpc,torch_shm]'
+  tolerant_key:
+  - mm_tensor_ipc
+  - membership
+  native_type: vllm.MultiModalConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_tensor_ipc:
+        not_in:
+        - direct_rpc
+        - torch_shm
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_compilationconfig_raises_invalid_mode
   source: passA
   constraint_key:
@@ -1550,6 +1682,38 @@ confirmed:
   contributing_sources:
   - passA
   - poc
+- id: vllm_kernelconfig___declarative___moe_backend_not_in
+  source: mech
+  constraint_key:
+  - moe_backend
+  - membership
+  - '[aiter,auto,cutlass,deep_gemm,flashinfer_cutedsl,flashinfer_cutlass,flashinfer_trtllm,marlin,triton]'
+  tolerant_key:
+  - moe_backend
+  - membership
+  native_type: vllm.KernelConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.moe_backend:
+        not_in:
+        - auto
+        - triton
+        - deep_gemm
+        - cutlass
+        - flashinfer_trtllm
+        - flashinfer_cutlass
+        - flashinfer_cutedsl
+        - marlin
+        - aiter
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_samplingparams_raises_n_lt_1
   source: passA
   constraint_key:
@@ -2219,6 +2383,32 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_poolerconfig___declarative___seq_pooling_type_not_in
+  source: mech
+  constraint_key:
+  - seq_pooling_type
+  - membership
+  - '[CLS,LAST,MEAN]'
+  tolerant_key:
+  - seq_pooling_type
+  - membership
+  native_type: vllm.PoolerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.seq_pooling_type:
+        not_in:
+        - CLS
+        - LAST
+        - MEAN
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_observabilityconfig_show_hidden_metrics_version_parse
   source: passB
   constraint_key:
@@ -2425,6 +2615,31 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_poolerconfig___declarative___tok_pooling_type_not_in
+  source: mech
+  constraint_key:
+  - tok_pooling_type
+  - membership
+  - '[ALL,STEP]'
+  tolerant_key:
+  - tok_pooling_type
+  - membership
+  native_type: vllm.PoolerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tok_pooling_type:
+        not_in:
+        - ALL
+        - STEP
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_samplingparams_raises_top_k_lt_neg1
   source: passA
   constraint_key:
@@ -3101,42 +3316,6 @@ unverified:
   contributing_sources:
   - mech
   gate_status: skipped
-- id: vllm_cacheconfig_cache_dtype_literal
-  source: passB
-  constraint_key:
-  - cache_dtype
-  - membership
-  - '[auto,bfloat16,float16,fp8,fp8_ds_mla,fp8_e4m3,fp8_e5m2,fp8_inc]'
-  tolerant_key:
-  - cache_dtype
-  - membership
-  native_type: vllm.config.CacheConfig
-  native_field: CacheConfig.cache_dtype
-  predicate_kind: literal_in
-  predicate_value: &id057
-  - auto
-  - float16
-  - bfloat16
-  - fp8
-  - fp8_e4m3
-  - fp8_e5m2
-  - fp8_inc
-  - fp8_ds_mla
-  severity: error
-  runtime: failed
-  match:
-    engine: vllm
-    fields:
-      vllm.engine.cache_dtype:
-        not_in: *id057
-  kwargs_positive:
-    cache_dtype: __not_a_dtype__
-  kwargs_negative:
-    cache_dtype: fp8_e4m3
-  observed_outcome: error
-  contributing_sources:
-  - passB
-  gate_status: failed
 - id: vllm_cacheconfig___declarative___cache_dtype_not_in
   source: mech
   constraint_key:
@@ -3451,7 +3630,7 @@ unverified:
   native_type: vllm.config.ParallelConfig
   native_field: ParallelConfig.dcp_comm_backend
   predicate_kind: presence_conflict
-  predicate_value: &id058
+  predicate_value: &id057
     when: dcp_comm_backend == 'a2a'
     require: decode_context_parallel_size > 1
   severity: error
@@ -3460,7 +3639,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.dcp_comm_backend:
-        present: *id058
+        present: *id057
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passB
@@ -3616,7 +3795,7 @@ unverified:
   native_type: vllm.config.ModelConfig
   native_field: ModelConfig.dtype
   predicate_kind: literal_in
-  predicate_value: &id059
+  predicate_value: &id058
   - auto
   - half
   - float16
@@ -3629,7 +3808,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.dtype:
-        not_in: *id059
+        not_in: *id058
   observed_outcome: error
   contributing_sources:
   - passB
@@ -4599,7 +4778,7 @@ unverified:
   native_type: vllm.config.SchedulerConfig
   native_field: SchedulerConfig.max_long_partial_prefills
   predicate_kind: presence_conflict
-  predicate_value: &id060
+  predicate_value: &id059
     require: max_long_partial_prefills <= max_num_partial_prefills
   severity: error
   runtime: failed
@@ -4607,7 +4786,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.max_long_partial_prefills:
-        present: *id060
+        present: *id059
   kwargs_positive:
     max_model_len: 2048
     is_encoder_decoder: false
@@ -4865,7 +5044,7 @@ unverified:
   native_type: vllm.config.SchedulerConfig
   native_field: SchedulerConfig.max_num_batched_tokens
   predicate_kind: presence_conflict
-  predicate_value: &id061
+  predicate_value: &id060
     require: max_num_batched_tokens >= max_num_seqs
   severity: error
   runtime: failed
@@ -4873,7 +5052,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.max_num_batched_tokens:
-        present: *id061
+        present: *id060
   kwargs_positive:
     max_model_len: 2048
     is_encoder_decoder: false
@@ -4967,30 +5146,6 @@ unverified:
   contributing_sources:
   - mech
   gate_status: infra_error
-- id: vllm_repetitiondetectionparams___post_init___max_pattern_size_lt
-  source: mech
-  constraint_key:
-  - max_pattern_size
-  - numeric
-  - '0'
-  tolerant_key:
-  - max_pattern_size
-  - numeric
-  native_type: vllm.RepetitionDetectionParams
-  native_field: null
-  predicate_kind: null
-  predicate_value: null
-  severity: error
-  runtime: infra_error
-  match:
-    engine: vllm
-    fields:
-      vllm.engine.max_pattern_size:
-        <: 0
-  observed_outcome: error
-  contributing_sources:
-  - mech
-  gate_status: infra_error
 - id: vllm_samplingparams__verify_args_max_tokens_lt
   source: mech
   constraint_key:
@@ -5027,7 +5182,7 @@ unverified:
   native_type: vllm.config.SpeculativeConfig
   native_field: SpeculativeConfig.method
   predicate_kind: literal_in
-  predicate_value: &id062
+  predicate_value: &id061
   - ngram
   - medusa
   - mlp_speculator
@@ -5057,7 +5212,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.method:
-        not_in: *id062
+        not_in: *id061
   observed_outcome: error
   contributing_sources:
   - passB
@@ -5730,7 +5885,7 @@ unverified:
   native_type: vllm.config.ObservabilityConfig
   native_field: ObservabilityConfig.otlp_traces_endpoint
   predicate_kind: presence_conflict
-  predicate_value: &id063
+  predicate_value: &id062
     when: otlp_traces_endpoint set
     require: opentelemetry installed
   severity: error
@@ -5739,7 +5894,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.otlp_traces_endpoint:
-        present: *id063
+        present: *id062
   observed_outcome: skipped_unsynthesizable
   contributing_sources:
   - passB
@@ -5756,7 +5911,7 @@ unverified:
   native_type: vllm.PoolingParams
   native_field: PoolingParams.output_kind
   predicate_kind: allowlist_constant
-  predicate_value: &id064
+  predicate_value: &id063
     must_equal: RequestOutputKind.FINAL_ONLY
   severity: error
   runtime: failed
@@ -5764,7 +5919,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.output_kind:
-        not_in: *id064
+        not_in: *id063
   kwargs_positive:
     output_kind: '@vllm.sampling_params.RequestOutputKind.DELTA'
   kwargs_negative:
@@ -6209,7 +6364,7 @@ unverified:
   native_type: vllm.config.SpeculativeConfig
   native_field: SpeculativeConfig.rejection_sample_method
   predicate_kind: literal_in
-  predicate_value: &id065
+  predicate_value: &id064
   - strict
   - probabilistic
   - synthetic
@@ -6219,7 +6374,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.rejection_sample_method:
-        not_in: *id065
+        not_in: *id064
   observed_outcome: error
   contributing_sources:
   - passB
@@ -6681,7 +6836,7 @@ unverified:
   native_type: vllm.config.ModelConfig
   native_field: ModelConfig.tokenizer_mode
   predicate_kind: literal_in
-  predicate_value: &id066
+  predicate_value: &id065
   - auto
   - hf
   - slow
@@ -6693,7 +6848,7 @@ unverified:
     engine: vllm
     fields:
       vllm.engine.tokenizer_mode:
-        not_in: *id066
+        not_in: *id065
   observed_outcome: no_op
   contributing_sources:
   - passB
@@ -6928,3 +7083,15 @@ unverified:
   contributing_sources:
   - mech
   gate_status: infra_error
+foldins:
+- batch: round0b_selfconfirm
+  source: mech (improved-det-v2 + Round 0b primitives), gate-confirmed
+  added_constraint_keys:
+  - max_pattern_size|numeric|0
+  - cache_dtype|membership|[auto,bfloat16,float16,fp8,fp8_ds_mla,fp8_e4m3,fp8_e5m2,fp8_inc]
+  - mamba_ssm_cache_dtype|membership|[auto,float16,float32]
+  - moe_backend|membership|[aiter,auto,cutlass,deep_gemm,flashinfer_cutedsl,flashinfer_cutlass,flashinfer_trtllm,marlin,triton]
+  - logprobs_mode|membership|[processed_logits,processed_logprobs,raw_logits,raw_logprobs]
+  - mm_tensor_ipc|membership|[direct_rpc,torch_shm]
+  - seq_pooling_type|membership|[CLS,LAST,MEAN]
+  - tok_pooling_type|membership|[ALL,STEP]

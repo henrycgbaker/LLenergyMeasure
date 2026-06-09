@@ -232,6 +232,18 @@ int-divisibility). Net defensible field-level growth: **10 distinct new fields**
 concentrated in vllm pooling/quantization/MoE config. Do NOT report "70 new
 validated constraints" - that is ~7x the defensible distinct-field growth.
 
+FOLDED IN (2026-06-09): the 29 genuine-new occurrences (the 10 distinct fields
+across the cells that lacked them) are now committed into the per-cell
+`PILOT_GT.yaml` `confirmed` lists - tensorrt 1.0.0 (+1 `stream_interval`) and
+vllm 0.18.1/0.19.1/0.20.0/0.21.0/0.22.0 (+7/+8/+5/+3/+5); 2 of vllm 0.19.1's
+moved up from `unverified`. Entries carry `source: mech`, are independently
+re-gateable (full `match` block), and each cell records a `foldins` audit block.
+The encoding-variance (28) and bucket-mislabels (13) were NOT folded. NOTE: this
+grows the GT denominator, so the surfacing-recall table above is the PRE-fold
+snapshot against the Round-0 GT; it is the locked baseline measurement and is
+deliberately not restated (the fold is forward-looking GT enrichment, the
+methodology's endorsed GT-growth mechanism).
+
 ## Methodology decisions
 
 - **P10 platform overrides = separate GT-growth bucket** (user-confirmed): they

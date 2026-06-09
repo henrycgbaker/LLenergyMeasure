@@ -6,7 +6,7 @@ round: R0_pilot
 gate: scripts/validate_invariants.py (in vllm/vllm-openai:v0.22.0)
 identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
   tolerant_key = first two, for cross-source recall
-n_confirmed: 118
+n_confirmed: 123
 n_unverified: 86
 confirmed:
 - id: vllm_profilerconfig_active_iterations_ge_1
@@ -1327,6 +1327,33 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_modelconfig___declarative___logprobs_mode_not_in
+  source: mech
+  constraint_key:
+  - logprobs_mode
+  - membership
+  - '[processed_logits,processed_logprobs,raw_logits,raw_logprobs]'
+  tolerant_key:
+  - logprobs_mode
+  - membership
+  native_type: vllm.ModelConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.logprobs_mode:
+        not_in:
+        - raw_logits
+        - raw_logprobs
+        - processed_logits
+        - processed_logprobs
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_loraconfig_lora_dtype_literal
   source: passB
   constraint_key:
@@ -1470,6 +1497,33 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_cacheconfig___declarative___mamba_ssm_cache_dtype_not_in
+  source: mech
+  constraint_key:
+  - mamba_ssm_cache_dtype
+  - membership
+  - '[auto,bfloat16,float16,float32]'
+  tolerant_key:
+  - mamba_ssm_cache_dtype
+  - membership
+  native_type: vllm.CacheConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_ssm_cache_dtype:
+        not_in:
+        - auto
+        - float32
+        - float16
+        - bfloat16
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
   source: passA
   constraint_key:
@@ -1692,6 +1746,29 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_repetitiondetectionparams___post_init___max_pattern_size_lt
+  source: mech
+  constraint_key:
+  - max_pattern_size
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_pattern_size
+  - numeric
+  native_type: vllm.RepetitionDetectionParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_pattern_size:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_samplingparams_raises_max_tokens_lt_1
   source: passA
   constraint_key:
@@ -2916,6 +2993,32 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_poolerconfig___declarative___seq_pooling_type_not_in
+  source: mech
+  constraint_key:
+  - seq_pooling_type
+  - membership
+  - '[CLS,LAST,MEAN]'
+  tolerant_key:
+  - seq_pooling_type
+  - membership
+  native_type: vllm.PoolerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.seq_pooling_type:
+        not_in:
+        - CLS
+        - LAST
+        - MEAN
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_observabilityconfig_raises_invalid_show_hidden_metrics_version
   source: passA
   constraint_key:
@@ -3238,6 +3341,31 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_poolerconfig___declarative___tok_pooling_type_not_in
+  source: mech
+  constraint_key:
+  - tok_pooling_type
+  - membership
+  - '[ALL,STEP]'
+  tolerant_key:
+  - tok_pooling_type
+  - membership
+  native_type: vllm.PoolerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tok_pooling_type:
+        not_in:
+        - ALL
+        - STEP
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_samplingparams_raises_top_k_lt_neg1
   source: passA
   constraint_key:
@@ -5976,3 +6104,12 @@ unverified:
   contributing_sources:
   - passB
   gate_status: failed
+foldins:
+- batch: round0b_selfconfirm
+  source: mech (improved-det-v2 + Round 0b primitives), gate-confirmed
+  added_constraint_keys:
+  - max_pattern_size|numeric|0
+  - mamba_ssm_cache_dtype|membership|[auto,bfloat16,float16,float32]
+  - logprobs_mode|membership|[processed_logits,processed_logprobs,raw_logits,raw_logprobs]
+  - seq_pooling_type|membership|[CLS,LAST,MEAN]
+  - tok_pooling_type|membership|[ALL,STEP]

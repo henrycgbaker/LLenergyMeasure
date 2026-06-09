@@ -6,7 +6,7 @@ round: R0_pilot
 gate: scripts/validate_invariants.py (in vllm/vllm-openai:v0.21.0)
 identity: constraint = (leaf_native_field, coarse_predicate_bucket, canonical_predicate_value);
   tolerant_key = first two, for cross-source recall
-n_confirmed: 132
+n_confirmed: 135
 n_unverified: 81
 confirmed:
 - id: vllm_parallelconfig_raises_api_process_rank_out_of_range
@@ -1834,6 +1834,29 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_repetitiondetectionparams___post_init___max_pattern_size_lt
+  source: mech
+  constraint_key:
+  - max_pattern_size
+  - numeric
+  - '0'
+  tolerant_key:
+  - max_pattern_size
+  - numeric
+  native_type: vllm.RepetitionDetectionParams
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_pattern_size:
+        <: 0
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_samplingparams_raises_max_tokens_lt_1
   source: passA
   constraint_key:
@@ -3213,6 +3236,32 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_poolerconfig___declarative___seq_pooling_type_not_in
+  source: mech
+  constraint_key:
+  - seq_pooling_type
+  - membership
+  - '[CLS,LAST,MEAN]'
+  tolerant_key:
+  - seq_pooling_type
+  - membership
+  native_type: vllm.PoolerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.seq_pooling_type:
+        not_in:
+        - CLS
+        - LAST
+        - MEAN
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_observabilityconfig_raises_invalid_show_hidden_metrics_version
   source: passA
   constraint_key:
@@ -3532,6 +3581,31 @@ confirmed:
   observed_outcome: error
   contributing_sources:
   - passB
+- id: vllm_poolerconfig___declarative___tok_pooling_type_not_in
+  source: mech
+  constraint_key:
+  - tok_pooling_type
+  - membership
+  - '[ALL,STEP]'
+  tolerant_key:
+  - tok_pooling_type
+  - membership
+  native_type: vllm.PoolerConfig
+  native_field: null
+  predicate_kind: null
+  predicate_value: null
+  severity: error
+  runtime: confirmed
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tok_pooling_type:
+        not_in:
+        - ALL
+        - STEP
+  observed_outcome: error
+  contributing_sources:
+  - mech
 - id: vllm_samplingparams_raises_top_k_lt_neg1
   source: passA
   constraint_key:
@@ -6336,3 +6410,10 @@ unverified:
   contributing_sources:
   - passA
   gate_status: skipped
+foldins:
+- batch: round0b_selfconfirm
+  source: mech (improved-det-v2 + Round 0b primitives), gate-confirmed
+  added_constraint_keys:
+  - max_pattern_size|numeric|0
+  - seq_pooling_type|membership|[CLS,LAST,MEAN]
+  - tok_pooling_type|membership|[ALL,STEP]
