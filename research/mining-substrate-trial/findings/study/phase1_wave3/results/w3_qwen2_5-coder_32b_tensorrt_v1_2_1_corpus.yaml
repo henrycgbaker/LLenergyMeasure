@@ -1,0 +1,673 @@
+invariants:
+- id: engine_sparse_attention_algorithm_required
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Sparse attention algorithm is required
+  severity: error
+  native_type: tensorrt.BaseSparseAttentionConfig
+  miner_source:
+    path: llm_args.py
+    method: from_dict
+    line_at_scan: 40
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sparse_attention_config.algorithm:
+        present: false
+  kwargs_positive:
+    algorithm: null
+  kwargs_negative:
+    algorithm: rocket
+  added_by: llm_wg_extend_kwargs
+- id: engine_sparse_attention_algorithm_valid
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Invalid sparse attention algorithm provided
+  severity: error
+  native_type: tensorrt.BaseSparseAttentionConfig
+  miner_source:
+    path: llm_args.py
+    method: from_dict
+    line_at_scan: 46
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sparse_attention_config.algorithm:
+        not_in:
+        - rocket
+        - dsa
+        - skip_softmax
+  kwargs_positive:
+    algorithm: invalid
+  kwargs_negative:
+    algorithm: rocket
+  added_by: llm_wg_extend_kwargs
+- id: engine_moe_load_balancer_num_slots_not_none
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: num_slots cannot be None when calling setup()
+  severity: error
+  native_type: tensorrt.MoeLoadBalancerConfig
+  miner_source:
+    path: llm_args.py
+    method: setup
+    line_at_scan: 63
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer_config.num_slots:
+        present: false
+  kwargs_positive:
+    num_slots: null
+  kwargs_negative:
+    num_slots: 10
+  added_by: llm_wg_extend_kwargs
+- id: engine_moe_load_balancer_num_slots_divisible_by_ep_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: num_slots must be divisible by ep_size
+  severity: error
+  native_type: tensorrt.MoeLoadBalancerConfig
+  miner_source:
+    path: llm_args.py
+    method: setup
+    line_at_scan: 69
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer_config.num_slots:
+        not_equal: 0
+      tensorrt.moe_load_balancer_config.ep_size:
+        present: true
+        not_equal: 1
+  kwargs_positive:
+    num_slots: 10
+    ep_size: 3
+  kwargs_negative:
+    num_slots: 9
+    ep_size: 3
+  added_by: llm_wg_extend_kwargs
+- id: engine_moe_load_balancer_ep_rank_set
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: ep_rank is not set. Call setup() first.
+  severity: error
+  native_type: tensorrt.MoeLoadBalancerConfig
+  miner_source:
+    path: llm_args.py
+    method: ep_rank
+    line_at_scan: 81
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer_config.ep_rank:
+        present: false
+  kwargs_positive:
+    _ep_rank: null
+  kwargs_negative:
+    _ep_rank: 0
+  added_by: llm_wg_extend_kwargs
+- id: engine_moe_load_balancer_ep_size_set
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: ep_size is not set. Call setup() first.
+  severity: error
+  native_type: tensorrt.MoeLoadBalancerConfig
+  miner_source:
+    path: llm_args.py
+    method: ep_size
+    line_at_scan: 89
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer_config.ep_size:
+        present: false
+  kwargs_positive:
+    _ep_size: null
+  kwargs_negative:
+    _ep_size: 0
+  added_by: llm_wg_extend_kwargs
+- id: engine_moe_load_balancer_slot_start_calculable
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Cannot calculate slot_start. Call setup() first.
+  severity: error
+  native_type: tensorrt.MoeLoadBalancerConfig
+  miner_source:
+    path: llm_args.py
+    method: slot_start
+    line_at_scan: 105
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer_config._ep_rank:
+        present: false
+  kwargs_positive:
+    _ep_rank: null
+  kwargs_negative:
+    _ep_rank: 0
+  added_by: llm_wg_extend_kwargs
+- id: engine_moe_load_balancer_initial_global_assignments_layer_idx_found
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: layer_idx not found in initial_global_assignments.
+  severity: error
+  native_type: tensorrt.MoeLoadBalancerConfig
+  miner_source:
+    path: llm_args.py
+    method: get_layer_initial_global_assignments
+    line_at_scan: 120
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.moe_load_balancer_config.initial_global_assignments:
+        present: true
+        not_in:
+        - 0
+  kwargs_positive:
+    initial_global_assignments: {}
+    layer_idx: 0
+  kwargs_negative:
+    initial_global_assignments:
+      0: []
+    layer_idx: 0
+  added_by: llm_wg_extend_kwargs
+- id: engine_nvfp4gemmconfig_allowed_backends_valid
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Invalid backends in allowed_backends.
+  severity: error
+  native_type: tensorrt.Nvfp4GemmConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_allowed_backends
+    line_at_scan: 150
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends:
+        present: true
+        not_in:
+        - cutlass
+        - cublaslt
+        - cutedsl
+        - cuda_core
+  kwargs_positive:
+    allowed_backends:
+    - invalid_backend
+  kwargs_negative:
+    allowed_backends:
+    - cutlass
+    - cublaslt
+  added_by: llm_wg_extend_kwargs
+- id: engine_parallelconfig_devices_length_matches_world_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: devices should have the same length as world_size.
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: devices
+    line_at_scan: 164
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.devices:
+        present: true
+      tensorrt.world_size:
+        present: true
+        not_equal: 0
+  kwargs_positive:
+    devices:
+    - 0
+    world_size: 2
+  kwargs_negative:
+    devices:
+    - 0
+    - 1
+    world_size: 2
+  added_by: llm_wg_extend_kwargs
+- id: engine_parallelconfig_world_size_matches_tp_pp_cp_product
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: world_size should be equal to tp_size * pp_size * cp_size.
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: world_size
+    line_at_scan: 172
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.world_size:
+        present: true
+        not_equal: 0
+      tensorrt.tp_size:
+        present: true
+        not_equal: 0
+      tensorrt.pp_size:
+        present: true
+        not_equal: 0
+      tensorrt.cp_size:
+        present: true
+        not_equal: 0
+  kwargs_positive:
+    world_size: 1
+    tp_size: 2
+    pp_size: 1
+    cp_size: 1
+  kwargs_negative:
+    world_size: 2
+    tp_size: 2
+    pp_size: 1
+    cp_size: 1
+  added_by: llm_wg_extend_kwargs
+- id: engine_decodingbaseconfig_decoding_type_valid
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Invalid decoding type provided.
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llm_args.py
+    method: from_dict
+    line_at_scan: 251
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.decoding_type:
+        not_in:
+        - MTP
+        - Medusa
+        - Eagle
+        - Lookahead
+        - NGram
+        - DraftTarget
+        - SaveState
+        - UserProvided
+        - AUTO
+  kwargs_positive:
+    decoding_type: invalid
+  kwargs_negative:
+    decoding_type: MTP
+  added_by: llm_wg_extend_kwargs
+- id: engine_validate_max_attention_window_non_empty_list_of_positives
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: kv_cache_config.max_attention_window must be a non-empty list
+    of positive integers
+  severity: error
+  native_type: tensorrt.KvCacheConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_max_attention_window
+    line_at_scan: 61
+  match:
+    engine: tensorrt
+    fields:
+      kv_cache_config.max_attention_window:
+        not_equal: []
+  kwargs_positive:
+    max_attention_window: []
+  kwargs_negative:
+    max_attention_window:
+    - 1
+    - 2
+  added_by: llm_wg_extend
+- id: engine_validate_custom_tokenizer_compatibility
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Cannot use custom_tokenizer when tokenizer is already a tokenizer
+    object
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_and_init_tokenizer
+    line_at_scan: 164
+  match:
+    engine: tensorrt
+    fields:
+      custom_tokenizer:
+        present: true
+      tokenizer:
+        type_is_not:
+        - TokenizerBase
+        - PreTrainedTokenizerBase
+  kwargs_positive:
+    custom_tokenizer: custom_tokenizer
+    tokenizer: TokenizerBase()
+  kwargs_negative:
+    custom_tokenizer: None
+    tokenizer: path/to/tokenizer
+  added_by: llm_wg_extend
+- id: engine_validate_lora_config_consistency_empty_dir_and_modules
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Both lora_dir and lora_target_modules are empty, leading to
+    serious memory consumption
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 231
+  match:
+    engine: tensorrt
+    fields:
+      lora_config.lora_dir:
+        present: true
+        not_in: []
+      lora_config.lora_target_modules:
+        present: true
+        not_in: []
+  kwargs_positive:
+    lora_config: LoraConfig(lora_dir=[], lora_target_modules=[])
+  kwargs_negative:
+    lora_config: LoraConfig(lora_dir=["dir"], lora_target_modules=["module"])
+  added_by: llm_wg_extend
+- id: engine_validate_peft_cache_config_lora_prefetch_dir
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: LoRA prefetch is not supported if lora_prefetch_dir is set
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_peft_cache_config
+    line_at_scan: 250
+  match:
+    engine: tensorrt
+    fields:
+      peft_cache_config.lora_prefetch_dir:
+        present: true
+  kwargs_positive:
+    peft_cache_config: PeftCacheConfig(lora_prefetch_dir="dir")
+  kwargs_negative:
+    peft_cache_config: None
+  added_by: llm_wg_extend
+- id: engine_validate_speculative_config_backend_support
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Speculation type does not support backend
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 324
+  match:
+    engine: tensorrt
+    fields:
+      speculative_config.decoding_type:
+        present: true
+      backend:
+        not_in:
+        - pytorch
+        - _autodeploy
+  kwargs_positive:
+    speculative_config: LookaheadDecodingConfig()
+    backend: pytorch
+  kwargs_negative:
+    speculative_config: None
+    backend: trt
+  added_by: llm_wg_extend
+- id: engine_validate_speculative_config_max_draft_len_positive
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: max_draft_len must be positive for lookahead decoding config
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 340
+  match:
+    engine: tensorrt
+    fields:
+      speculative_config.max_draft_len:
+        <=: 0
+  kwargs_positive:
+    speculative_config: LookaheadDecodingConfig(max_draft_len=0)
+  kwargs_negative:
+    speculative_config: LookaheadDecodingConfig(max_draft_len=1)
+  added_by: llm_wg_extend
+- id: engine_validate_parallel_config_consistency_with_engine
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: tp_size, pp_size, cp_size must be consistent with the engine's
+    configuration
+  severity: error
+  native_type: tensorrt.TrtLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: _load_config_from_engine
+    line_at_scan: 401
+  match:
+    engine: tensorrt
+    fields:
+      parallel_config.tp_size:
+        not_equal: engine_config.mapping.tp_size
+  kwargs_positive:
+    parallel_config: ParallelConfig(tp_size=2)
+    _pretrained_config: PretrainedConfig(mapping=MappedParallelConfig(tp_size=1))
+  kwargs_negative:
+    parallel_config: ParallelConfig(tp_size=1)
+    _pretrained_config: PretrainedConfig(mapping=MappedParallelConfig(tp_size=1))
+  added_by: llm_wg_extend
+- id: engine_validate_capture_num_tokens_present_and_positive
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: capture_num_tokens must contain positive integers.
+  severity: error
+  native_type: tensorrt.TorchCompileConfig
+  miner_source:
+    path: llm_args.py
+    method: validate_capture_num_tokens
+    line_at_scan: 50
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capture_num_tokens:
+        present: true
+        not_in:
+        - 0
+        - -1
+  kwargs_positive:
+    capture_num_tokens:
+    - -1
+  kwargs_negative:
+    capture_num_tokens:
+    - 1
+    - 2
+  added_by: llm_wg_extend
+- id: engine_validate_speculative_config_ngram_decoding_max_matching_ngram_size_gt_0
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: max_matching_ngram_size must be greater than 0 for NGramDecodingConfig.
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 110
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config.max_matching_ngram_size:
+        '>': 0
+  kwargs_positive:
+    speculative_config: NGramDecodingConfig(max_draft_len=1, max_matching_ngram_size=0)
+  kwargs_negative:
+    speculative_config: NGramDecodingConfig(max_draft_len=1, max_matching_ngram_size=1)
+  added_by: llm_wg_extend
+- id: engine_validate_speculative_config_mtp_decoding_num_nextn_predict_layers_gt_0
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: num_nextn_predict_layers must be greater than 0 for MTPDecodingConfig.
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 140
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config.num_nextn_predict_layers:
+        '>': 0
+  kwargs_positive:
+    speculative_config: MTPDecodingConfig(num_nextn_predict_layers=0)
+  kwargs_negative:
+    speculative_config: MTPDecodingConfig(num_nextn_predict_layers=1)
+  added_by: llm_wg_extend
+- id: engine_validate_checkpoint_format_default_to_hf
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: checkpoint_format defaults to 'HF' if neither is provided.
+  severity: info
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_checkpoint_format
+    line_at_scan: 180
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.checkpoint_format:
+        present: true
+        not_equal: HF
+      tensorrt.checkpoint_loader:
+        present: false
+  kwargs_positive:
+    checkpoint_format: None
+    checkpoint_loader: None
+  kwargs_negative:
+    checkpoint_format: HF
+    checkpoint_loader: None
+  added_by: llm_wg_extend
+- id: engine_validate_cuda_graph_config_batch_sizes_max_batch_size_0
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: If cuda_graph_config.batch_sizes is provided, cuda_graph_config.max_batch_size
+    must be 0.
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_cuda_graph_config
+    line_at_scan: 200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.cuda_graph_config.batch_sizes:
+        present: true
+      tensorrt.cuda_graph_config.max_batch_size:
+        ==: 0
+  kwargs_positive:
+    cuda_graph_config: CudaGraphConfig(batch_sizes=[1, 2], max_batch_size=1)
+  kwargs_negative:
+    cuda_graph_config: CudaGraphConfig(batch_sizes=[1, 2], max_batch_size=0)
+  added_by: llm_wg_extend
+- id: engine_sync_quant_config_with_kv_cache_config_dtype_auto
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: kv_cache_config.dtype must not be 'auto' for quant_config
+    sync.
+  severity: warning
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: sync_quant_config_with_kv_cache_config_dtype
+    line_at_scan: 220
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.kv_cache_config.dtype:
+        present: true
+        not_equal: auto
+  kwargs_positive:
+    kv_cache_config: KvCacheConfig(dtype="auto")
+  kwargs_negative:
+    kv_cache_config: KvCacheConfig(dtype="fp8")
+  added_by: llm_wg_extend
+- id: engine_validate_attention_dp_config_enable_balance_batching_wait_iters_ge_0
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: If attention_dp_config.enable_balance is true, batching_wait_iters
+    must be >= 0.
+  severity: error
+  native_type: tensorrt.TorchLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_attention_dp_config
+    line_at_scan: 230
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.attention_dp_config.enable_balance: true
+      tensorrt.attention_dp_config.batching_wait_iters:
+        '>=': 0
+  kwargs_positive:
+    attention_dp_config: AttentionDpConfig(enable_balance=True, batching_wait_iters=-1)
+  kwargs_negative:
+    attention_dp_config: AttentionDpConfig(enable_balance=True, batching_wait_iters=0)
+  added_by: llm_wg_extend
+- id: tensorrt_sampling_bad_word_ids_not_processed_by_tokenizer
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Raises RuntimeError if bad is not None and _bad_word_ids is
+    None.
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_bad_words
+    line_at_scan: 34
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling.bad:
+        present: true
+      tensorrt.sampling._bad_word_ids: null
+  kwargs_positive:
+    bad: test
+    tokenizer: null
+    hf_model_config: null
+    generation_config: null
+  kwargs_negative:
+    bad: test
+    tokenizer: {}
+    hf_model_config: {}
+    generation_config: {}
+  added_by: llm_wg_extend_kwargs
+- id: tensorrt_sampling_stop_word_ids_not_processed_by_tokenizer
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: Raises RuntimeError if stop is not None and _stop_word_ids
+    is None.
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _get_stop_words
+    line_at_scan: 50
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling.stop:
+        present: true
+      tensorrt.sampling._stop_word_ids: null
+  kwargs_positive:
+    stop: test
+    tokenizer: null
+    hf_model_config: null
+    generation_config: null
+  kwargs_negative:
+    stop: test
+    tokenizer: {}
+    hf_model_config: {}
+    generation_config: {}
+  added_by: llm_wg_extend_kwargs

@@ -1,0 +1,52 @@
+confirmed:
+- id: engine_nvfp4gemmconfig_allowed_backends_valid
+  ckey:
+  - allowed_backends
+  - membership
+  - '{not_in=[cublaslt,cuda_core,cutedsl,cutlass],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Invalid backends in allowed_backends.
+  native_type: tensorrt.Nvfp4GemmConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.allowed_backends:
+        present: true
+        not_in:
+        - cutlass
+        - cublaslt
+        - cutedsl
+        - cuda_core
+  kwargs_positive:
+    allowed_backends:
+    - invalid_backend
+  kwargs_negative:
+    allowed_backends:
+    - cutlass
+    - cublaslt
+  observed_outcome: error
+  error: ''
+- id: engine_validate_max_attention_window_non_empty_list_of_positives
+  ckey:
+  - max_attention_window
+  - membership
+  - '[]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: kv_cache_config.max_attention_window must be a non-empty list
+    of positive integers
+  native_type: tensorrt.KvCacheConfig
+  match:
+    engine: tensorrt
+    fields:
+      kv_cache_config.max_attention_window:
+        not_equal: []
+  kwargs_positive:
+    max_attention_window: []
+  kwargs_negative:
+    max_attention_window:
+    - 1
+    - 2
+  observed_outcome: error
+  error: ''

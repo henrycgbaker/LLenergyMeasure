@@ -1,0 +1,29 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "rung": "oss",
+  "model": "llama3.1:70b",
+  "n_llm_proposed_raw": 26,
+  "n_deduped_vs_floor": 8,
+  "n_gateable": 8,
+  "verdicts": {
+    "confirmed": 2,
+    "failed": 4,
+    "skipped": 0,
+    "infra_error": 2,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.25,
+  "gt_confirmed_total": 61,
+  "floor_recall_tol": 35,
+  "llm_new_gt_keys_recovered": [
+    "capture_num_tokens|numeric"
+  ],
+  "llm_lift_over_floor": 1,
+  "gt_growth_ckeys": [
+    "capture_num_tokens|numeric|0",
+    "max_attention_window|membership|{not_in=[],present=True}"
+  ],
+  "gt_growth_count": 2,
+  "wall_sec": 1356.6
+}

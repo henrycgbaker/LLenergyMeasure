@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -31,7 +32,9 @@ import wave2_llm_cells as L  # noqa: E402
 import wave2_llm_source as W  # noqa: E402
 import yaml  # noqa: E402
 
-L.OLLAMA = "http://localhost:11434"  # live Ollama port (harness default was 11435)
+L.OLLAMA = os.environ.get(
+    "WAVE_OLLAMA", "http://localhost:11434"
+)  # override for a containerized ollama
 # baseline floor = improved-det-v2 (the locked deterministic baseline)
 L.FLOOR_ROOT = L.FINDINGS / "trial_runs" / "wave2" / "w2-a-improved-det-v2"
 

@@ -1,0 +1,31 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "rung": "oss",
+  "model": "llama3.1:70b",
+  "n_llm_proposed_raw": 67,
+  "n_deduped_vs_floor": 46,
+  "n_gateable": 46,
+  "verdicts": {
+    "confirmed": 4,
+    "failed": 20,
+    "skipped": 0,
+    "infra_error": 22,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.087,
+  "gt_confirmed_total": 80,
+  "floor_recall_tol": 44,
+  "llm_new_gt_keys_recovered": [
+    "max_cpu_loras|numeric"
+  ],
+  "llm_lift_over_floor": 1,
+  "gt_growth_ckeys": [
+    "_api_process_rank|numeric|[_api_process_count,_api_process_rank]",
+    "data_parallel_rank|numeric|[data_parallel_rank,data_parallel_size]",
+    "data_parallel_size_local|numeric|[data_parallel_size,data_parallel_size_local]",
+    "max_cpu_loras|numeric|[max_cpu_loras,max_loras]"
+  ],
+  "gt_growth_count": 4,
+  "wall_sec": 3079.2
+}

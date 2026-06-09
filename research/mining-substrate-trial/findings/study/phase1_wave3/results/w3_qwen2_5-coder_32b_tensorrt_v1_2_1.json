@@ -1,0 +1,29 @@
+{
+  "engine": "tensorrt",
+  "vslug": "v1_2_1",
+  "rung": "oss",
+  "model": "qwen2.5-coder:32b",
+  "n_llm_proposed_raw": 74,
+  "n_deduped_vs_floor": 28,
+  "n_gateable": 28,
+  "verdicts": {
+    "confirmed": 2,
+    "failed": 10,
+    "skipped": 0,
+    "infra_error": 16,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.071,
+  "gt_confirmed_total": 61,
+  "floor_recall_tol": 35,
+  "llm_new_gt_keys_recovered": [
+    "allowed_backends|membership"
+  ],
+  "llm_lift_over_floor": 1,
+  "gt_growth_ckeys": [
+    "allowed_backends|membership|{not_in=[cublaslt,cuda_core,cutedsl,cutlass],present=True}",
+    "max_attention_window|membership|[]"
+  ],
+  "gt_growth_count": 2,
+  "wall_sec": 694.3
+}

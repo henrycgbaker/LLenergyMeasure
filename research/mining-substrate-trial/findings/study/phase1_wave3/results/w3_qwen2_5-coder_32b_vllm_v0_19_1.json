@@ -1,0 +1,44 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "rung": "oss",
+  "model": "qwen2.5-coder:32b",
+  "n_llm_proposed_raw": 159,
+  "n_deduped_vs_floor": 88,
+  "n_gateable": 88,
+  "verdicts": {
+    "confirmed": 12,
+    "failed": 41,
+    "skipped": 0,
+    "infra_error": 35,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.136,
+  "gt_confirmed_total": 80,
+  "floor_recall_tol": 44,
+  "llm_new_gt_keys_recovered": [
+    "frequency_penalty|membership",
+    "json|presence",
+    "log_balancedness_interval|numeric",
+    "logprobs|numeric",
+    "max_cpu_loras|numeric",
+    "min_p|membership",
+    "presence_penalty|membership",
+    "top_p|membership"
+  ],
+  "llm_lift_over_floor": 8,
+  "gt_growth_ckeys": [
+    "data_parallel_external_lb|exact|[data_parallel_external_lb,data_parallel_size]",
+    "data_parallel_rank|membership|[data_parallel_rank,data_parallel_size]",
+    "data_parallel_size_local|numeric|data_parallel_size",
+    "frequency_penalty|membership|[-1,-1.5,-2,0,1,1.5,2]",
+    "logprobs|numeric|-1",
+    "max_cpu_loras|numeric|vllm.engine.max_loras",
+    "min_count|numeric|2",
+    "min_p|membership|[0,0.5,1]",
+    "presence_penalty|membership|[-1,-1.5,-2,0,1,1.5,2]",
+    "top_p|membership|[0,0.5,1]"
+  ],
+  "gt_growth_count": 10,
+  "wall_sec": 1986.0
+}

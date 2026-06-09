@@ -1,0 +1,24 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "rung": "oss",
+  "model": "qwen2.5-coder:7b",
+  "n_llm_proposed_raw": 0,
+  "n_deduped_vs_floor": 0,
+  "n_gateable": 0,
+  "verdicts": {
+    "confirmed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "infra_error": 0,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.0,
+  "gt_confirmed_total": 80,
+  "floor_recall_tol": 44,
+  "llm_new_gt_keys_recovered": [],
+  "llm_lift_over_floor": 0,
+  "gt_growth_ckeys": [],
+  "gt_growth_count": 0,
+  "wall_sec": 607.6
+}

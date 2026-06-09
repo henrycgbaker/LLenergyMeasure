@@ -1,0 +1,46 @@
+confirmed:
+- id: tensorrt_kvcacheconfig_validate_max_attention_window_not_list_or_empty
+  ckey:
+  - max_attention_window
+  - membership
+  - '{not_in=[],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_attention_window must be a non-empty list of positive
+    integers
+  native_type: tensorrt.KvCacheConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_attention_window:
+        present: true
+        not_in: []
+  kwargs_positive:
+    max_attention_window: []
+  kwargs_negative:
+    max_attention_window:
+    - 1
+  observed_outcome: error
+  error: ''
+- id: tensorrt_torchcompileconfig_validate_capture_num_tokens_lt
+  ckey:
+  - capture_num_tokens
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: capture_num_tokens must contain positive integers
+  native_type: TorchCompileConfig
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capture_num_tokens:
+        <: 0
+  kwargs_positive:
+    capture_num_tokens:
+    - 0
+  kwargs_negative:
+    capture_num_tokens:
+    - 1
+  observed_outcome: error
+  error: ''

@@ -1,0 +1,21 @@
+confirmed:
+- id: vllm_engine_model_config_validate_model_config_after_tokenizer_type
+  ckey:
+  - tokenizer
+  - type
+  - str
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: Validates tokenizer is a string.
+  native_type: vllm.ModelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer:
+        type_is_not: str
+  kwargs_positive:
+    tokenizer: 12345
+  kwargs_negative:
+    tokenizer: tokenizer_path
+  observed_outcome: error
+  error: ''
