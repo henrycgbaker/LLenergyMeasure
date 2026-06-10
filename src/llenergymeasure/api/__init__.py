@@ -1,6 +1,6 @@
 """Public library API for llenergymeasure."""
 
-from llenergymeasure.api._impl import run_experiment, run_study
+from llenergymeasure.api._impl import load_study, run_experiment, run_study
 from llenergymeasure.api.report_gaps import (
     ReportGapsError,
     find_runtime_gaps,
@@ -16,6 +16,7 @@ __all__ = [
     "find_resumable_study",
     "find_runtime_gaps",
     "load_resume_state",
+    "load_study",
     "probe_energy_sampler",
     "render_yaml_fragment",
     "run_experiment",

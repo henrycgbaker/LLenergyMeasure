@@ -418,10 +418,10 @@ def _run_study_impl(
     """Study execution path - separated for clean error handling."""
     import yaml
 
+    from llenergymeasure.api import load_study
     from llenergymeasure.cli._display import print_study_dry_run
     from llenergymeasure.cli._preflight_display import build_preflight_panel
     from llenergymeasure.config.grid import count_sweep_structure
-    from llenergymeasure.config.loader import load_study_config
 
     # Fast-fail: verify resume target exists before expensive grid expansion.
     # For resume, also load the manifest early so we can show a summary and
@@ -534,8 +534,8 @@ def _run_study_impl(
         refresh_per_second=8,
         transient=True,
     ):
-        study_config = load_study_config(
-            path=config,
+        study_config = load_study(
+            config,
             cli_overrides=study_cli_overrides if study_cli_overrides else None,
         )
     expand_elapsed = time.perf_counter() - t0_expand

@@ -34,6 +34,43 @@ _TASK_FIELDS: frozenset[str] = frozenset(TaskConfig.model_fields) - {"model", "d
 _MEASUREMENT_FIELDS: frozenset[str] = frozenset(MeasurementConfig.model_fields)
 
 # ---------------------------------------------------------------------------
+# load_study - parse + finalise composition
+# ---------------------------------------------------------------------------
+
+
+def load_study(
+    path: str | Path,
+    cli_overrides: dict[str, Any] | None = None,
+) -> StudyConfig:
+    """Load a study YAML and finalise it into a resolved StudyConfig.
+
+    Composes the config-layer parse/expand step
+    (:func:`llenergymeasure.config.loader.load_study_config`) with the
+    study-layer finalisation
+    (:func:`llenergymeasure.study.loading.finalise_study`). This is the single
+    public entry both the CLI and ``run_study`` use, so the config layer never
+    imports upward into ``study`` and the CLI never imports ``study`` directly.
+
+    Args:
+        path: Path to study YAML file.
+        cli_overrides: Optional dict of CLI flag overrides for the execution
+            block (e.g. {"study_execution": {"n_cycles": 5}}).
+
+    Returns:
+        Resolved StudyConfig with ordered experiments, study_design_hash, dedup
+        mode, and pre-run equivalence groups.
+
+    Raises:
+        ConfigError: File not found, parse error, all configs invalid, empty study.
+        ValidationError: Pydantic structural errors pass through unchanged.
+    """
+    from llenergymeasure.config.loader import load_study_config
+    from llenergymeasure.study.loading import finalise_study
+
+    return finalise_study(load_study_config(path, cli_overrides=cli_overrides))
+
+
+# ---------------------------------------------------------------------------
 # run_experiment - three overloaded forms
 # ---------------------------------------------------------------------------
 
@@ -192,10 +229,8 @@ def run_study(
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     if isinstance(config, (str, Path)):
-        from llenergymeasure.config.loader import load_study_config
-
         config_path = config_path or Path(config).resolve()
-        study = load_study_config(path=config_path)
+        study = load_study(config_path)
     elif isinstance(config, StudyConfig):
         # config_path may have been passed by caller (e.g. CLI pre-loads config)
         study = config
