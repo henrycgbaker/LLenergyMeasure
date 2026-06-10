@@ -312,23 +312,26 @@ def test_print_result_summary_with_flops(capsys):
 
 
 def test_print_result_summary_with_latency_stats(capsys):
-    """Result with latency_stats that has ttft_ms/itl_ms shows Latency lines.
+    """Result with latency_stats (real LatencyStatistics) shows TTFT/ITL lines.
 
-    The _display.py code checks hasattr(ls, "ttft_ms") - uses duck typing
-    so any object with those attributes will trigger the print.
+    The display reads the concrete field names ttft_mean_ms / itl_mean_ms.
     """
-    from unittest.mock import MagicMock
-
+    from llenergymeasure.domain.metrics import LatencyStatistics
     from tests.conftest import make_result
 
-    # Use MagicMock to create an object with ttft_ms and itl_ms attributes
-    # (the display code uses hasattr duck typing, not a concrete LatencyStatistics)
-    latency = MagicMock()
-    latency.ttft_ms = 12.5
-    latency.itl_ms = 3.2
+    latency = LatencyStatistics(
+        ttft_mean_ms=12.5,
+        ttft_median_ms=12.0,
+        ttft_p95_ms=14.0,
+        ttft_p99_ms=15.0,
+        ttft_min_ms=10.0,
+        ttft_max_ms=16.0,
+        ttft_samples=3,
+        itl_mean_ms=3.2,
+        itl_samples=10,
+    )
 
     result = make_result()
-    # Inject latency via model_construct to bypass validation
     result = result.model_copy(update={"latency_stats": latency})
     print_result_summary(result)
     out = capsys.readouterr().out

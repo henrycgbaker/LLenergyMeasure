@@ -31,6 +31,10 @@ class PowerThermalSample:
     memory_total_mb: float | None = None
     temperature_c: float | None = None
     sm_utilisation: float | None = None
+    memory_bandwidth_utilisation: float | None = None
+    """Percent of time the memory controller was active during the sample
+    interval (NVML ``utilization.memory`` proxy). This is NOT true achieved
+    memory bandwidth - it is the fraction of time any read/write was issued."""
     thermal_throttle: bool = False
     throttle_reasons: int = 0
     gpu_index: int = 0
@@ -186,10 +190,11 @@ class PowerThermalSampler:
                             except pynvml.NVMLError:
                                 pass
 
-                            # Utilisation
+                            # Utilisation (SM + memory-controller activity proxy)
                             try:
                                 util = pynvml.nvmlDeviceGetUtilizationRates(handle)
                                 sample.sm_utilisation = float(util.gpu)
+                                sample.memory_bandwidth_utilisation = float(util.memory)
                             except pynvml.NVMLError:
                                 pass
 

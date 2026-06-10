@@ -51,7 +51,7 @@ The scientific record. One JSON file per experiment cell. Schema version `4.0`.
 | Field | Type | Description |
 |-------|------|-------------|
 | `measurement_methodology` | `"total"` &#124; `"steady_state"` &#124; `"windowed"` | Which slice of the run produced the headline metrics |
-| `warmup_excluded_samples` | int &#124; null | Prompts excluded during warmup; `null` when `methodology = "total"` |
+| `warmup_excluded_samples` | int &#124; null | Number of warmup iterations run before the measurement window (from `warmup_result.iterations_completed`); `null` when no warmup result is available |
 | `reproducibility_notes` | str | Free-text caveats (default mentions NVML accuracy +/-5 %, thermal drift) |
 
 ### Aggregate metrics
@@ -97,6 +97,55 @@ These are the run totals (post-warmup-exclusion when applicable).
 | `energy_per_device_j` | list[float] &#124; null | Per-GPU energy breakdown (length = `num_processes`) |
 
 For the methodology that motivates baseline subtraction, see [Methodology &gt; Baseline power](/explanation/methodology/methodology#baseline-power).
+
+### Extended efficiency metrics
+
+`extended_metrics` is a nested object with five always-present sub-objects
+(`memory`, `gpu_utilisation`, `batch`, `kv_cache`, `request_latency`) plus two
+scalars (`tpot_ms`, `token_efficiency_index`). Every leaf is `null` when it
+cannot be computed for the engine/run; the harness fills what each engine can
+provide. `latency_stats`, `steady_state_window`, and `warmup_excluded_samples`
+live at the top level of `result.json`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `extended_metrics.tpot_ms` | float &#124; null | Time per output token (ITL mean). Always `null` today - requires streaming inter-token capture, not yet wired for any engine. |
+| `extended_metrics.token_efficiency_index` | float &#124; null | Composite `throughput x tokens_per_joule x precision_factor`. |
+| `extended_metrics.memory.model_memory_utilisation` | float &#124; null | Model weights / total VRAM (0-1). |
+| `extended_metrics.memory.tokens_per_gb_vram` | float &#124; null | Output tokens per GB of peak VRAM. |
+| `extended_metrics.memory.kv_cache_mb` / `kv_cache_memory_ratio` | float &#124; null | KV-cache size and its share of peak memory (vLLM only, when exposed). |
+| `extended_metrics.gpu_utilisation.sm_utilisation_mean` | float &#124; null | Mean SM utilisation (0-100) over NVML samples. |
+| `extended_metrics.gpu_utilisation.memory_bandwidth_utilisation` | float &#124; null | Mean memory-controller activity (0-100). NVML proxy: percent of time a read/write was issued, **not** achieved bandwidth. |
+| `extended_metrics.batch.num_batches` / `effective_batch_size` / `batch_utilisation` / `padding_overhead` | int/float &#124; null | Static-batching efficiency. `null` for vLLM (continuous batching). |
+| `extended_metrics.kv_cache.*` | float/int &#124; null | Prefix-cache hit rate and block occupancy (vLLM only). |
+| `extended_metrics.request_latency.e2e_latency_{mean,median,p95,p99}_ms` | float &#124; null | Per-request end-to-end latency distribution. |
+| `latency_stats` | object &#124; null | TTFT/ITL statistics from streaming capture (vLLM only). |
+| `steady_state_window` | [float, float] &#124; null | `(0.0, inference_time_sec)` - the measured window relative to inference start. |
+
+#### Per-engine support matrix
+
+A check means the engine populates the field in the single-process path; a dash
+means it stays `null` for that engine.
+
+| Metric group | vLLM | transformers | tensorrt |
+|--------------|:----:|:------------:|:--------:|
+| `request_latency.*` (per-request E2E) | yes (from RequestOutput metrics) | yes (per-batch approximation) | dash (metrics usually absent in 0.21.0) |
+| `latency_stats` (TTFT/ITL) | yes | dash (non-streaming) | dash |
+| `kv_cache.*` | yes (best-effort) | dash | dash |
+| `gpu_utilisation.*` (SM + mem-bw) | yes | yes | yes |
+| `memory.*` ratios | yes | yes | yes |
+| `batch.*` (num_batches/padding/utilisation) | dash (continuous batching) | yes | `num_batches=1` only; padding/utilisation dash |
+| `tpot_ms` | dash | dash | dash |
+
+**transformers latency is approximated.** A non-streaming `generate()` only
+exposes per-batch wall time, so each prompt in a batch is attributed
+`batch_time / batch_size` (the `PER_REQUEST_BATCH` mode). This is an estimate,
+not a true per-request timestamp - treat transformers `request_latency` as
+batch-level granularity. vLLM `request_latency`/`latency_stats` come from real
+per-request arrival/first-token/finish timestamps.
+
+`tpot_ms` is `null` for every engine pending streaming inter-token-latency
+capture; it is intentionally not derived from totals.
 
 ### Sidecar reference
 

@@ -284,6 +284,15 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
 # ---------------------------------------------------------------------------
 
 
+def _real_sample(**overrides):
+    """Build a minimal real PowerThermalSample (numeric fields, not MagicMock)."""
+    from llenergymeasure.device.power_thermal import PowerThermalSample
+
+    defaults = dict(timestamp=0.0, sm_utilisation=50.0, memory_total_mb=40960.0)
+    defaults.update(overrides)
+    return PowerThermalSample(**defaults)
+
+
 def _make_mock_pts(*, samples: list | None = None):
     """Build a PowerThermalSampler mock that satisfies the harness's usage."""
     from llenergymeasure.domain.metrics import ThermalThrottleInfo
@@ -1081,6 +1090,122 @@ def test_harness_save_timeseries_false_skips_parquet(tmp_path):
     assert result.timeseries is None
 
 
+def test_harness_populates_extended_metrics(minimal_config):
+    """A run with GPU samples + per-request latencies populates previously-null fields.
+
+    Verifies extended_metrics.gpu_utilisation / memory ratios / request_latency,
+    plus latency_stats, steady_state_window, and warmup_excluded_samples.
+    """
+    from llenergymeasure.device.power_thermal import PowerThermalSample
+
+    samples = [
+        PowerThermalSample(
+            timestamp=0.0,
+            sm_utilisation=80.0,
+            memory_bandwidth_utilisation=40.0,
+            memory_total_mb=40960.0,
+            memory_used_mb=10000.0,
+        ),
+        PowerThermalSample(
+            timestamp=0.1,
+            sm_utilisation=90.0,
+            memory_bandwidth_utilisation=60.0,
+            memory_total_mb=40960.0,
+            memory_used_mb=11000.0,
+        ),
+    ]
+
+    output = InferenceOutput(
+        elapsed_time_sec=2.0,
+        input_tokens=40,
+        output_tokens=200,
+        peak_memory_mb=4096.0,
+        model_memory_mb=0.0,
+        batch_times=[1.0, 1.0],
+        per_request_latencies_ms=[100.0, 120.0, 110.0],
+        ttft_ms=[10.0, 12.0, 11.0],
+        itl_ms=[2.0, 3.0],
+        num_batches=2,
+        padding_tokens=8,
+    )
+    engine = FakeBackend(inference_output=output)
+    harness = MeasurementHarness()
+
+    # model_memory_mb is captured by the harness (mocked here to a real value so
+    # model_memory_utilisation is computable).
+    with (
+        _apply_patches(),
+        patch(
+            "llenergymeasure.harness.PowerThermalSampler",
+            new=_make_mock_pts(samples=samples),
+        ),
+        patch.object(MeasurementHarness, "_capture_model_memory_mb", return_value=8192.0),
+    ):
+        result = harness.run(engine, minimal_config)
+
+    em = result.extended_metrics
+    assert em is not None
+    # GPU utilisation incl mem-bw
+    assert em.gpu_utilisation.sm_utilisation_mean == pytest.approx(85.0)
+    assert em.gpu_utilisation.memory_bandwidth_utilisation == pytest.approx(50.0)
+    assert em.gpu_utilisation.sm_utilisation_samples == 2
+    # Memory ratios (total_vram_mb from samples, model from _capture_model_memory_mb)
+    assert em.memory.model_memory_utilisation == pytest.approx(8192.0 / 40960.0)
+    assert em.memory.tokens_per_gb_vram is not None
+    # Request latency
+    assert em.request_latency.e2e_latency_mean_ms == pytest.approx(110.0)
+    assert em.request_latency.e2e_latency_samples == 3
+    # Batch metrics (transformers engine name "fake" != vllm, num_batches truthy)
+    assert em.batch.num_batches == 2
+    # Latency stats from TTFT/ITL
+    assert result.latency_stats is not None
+    assert result.latency_stats.ttft_mean_ms == pytest.approx(11.0)
+    assert result.latency_stats.itl_mean_ms == pytest.approx(2.5)
+    # Steady-state window + warmup exclusion
+    assert result.steady_state_window is not None
+    assert result.steady_state_window[0] == pytest.approx(0.0)
+    assert result.steady_state_window[1] > 0.0
+    assert result.warmup_excluded_samples == 1
+
+
+def test_harness_vllm_batch_metrics_none(minimal_config):
+    """vLLM engine (continuous batching) leaves batch metrics null even with num_batches set."""
+    from llenergymeasure.device.power_thermal import PowerThermalSample
+
+    samples = [PowerThermalSample(timestamp=0.0, sm_utilisation=70.0, memory_total_mb=40960.0)]
+    output = InferenceOutput(
+        elapsed_time_sec=1.0,
+        input_tokens=10,
+        output_tokens=20,
+        peak_memory_mb=512.0,
+        model_memory_mb=0.0,
+        per_request_latencies_ms=[50.0],
+        num_batches=None,
+        padding_tokens=None,
+        kv_cache_stats={"hit_rate": 0.9, "blocks_used": 10, "blocks_total": 100},
+    )
+    engine = FakeBackend(engine_name="vllm", inference_output=output)
+    harness = MeasurementHarness()
+
+    with (
+        _apply_patches(),
+        patch(
+            "llenergymeasure.harness.PowerThermalSampler",
+            new=_make_mock_pts(samples=samples),
+        ),
+    ):
+        result = harness.run(engine, minimal_config)
+
+    em = result.extended_metrics
+    assert em is not None
+    # vLLM: batch metrics remain null
+    assert em.batch.num_batches is None
+    assert em.batch.effective_batch_size is None
+    # KV cache populated from output.kv_cache_stats
+    assert em.kv_cache.kv_cache_hit_rate == pytest.approx(0.9)
+    assert em.kv_cache.kv_cache_blocks_used == 10
+
+
 def test_harness_save_timeseries_true_writes_parquet(tmp_path):
     """save_timeseries=True (default) writes timeseries parquet when output_dir is set."""
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
@@ -1107,7 +1232,8 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
         patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
         patch("llenergymeasure.harness._cuda_sync"),
         patch(
-            "llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts(samples=[MagicMock()])
+            "llenergymeasure.harness.PowerThermalSampler",
+            new=_make_mock_pts(samples=[_real_sample()]),
         ),
         patch(
             "llenergymeasure.harness.write_timeseries_parquet",

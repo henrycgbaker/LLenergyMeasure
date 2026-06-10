@@ -1,7 +1,10 @@
-"""Extended efficiency metrics computation.
+"""Extended efficiency metrics computation (pure math, Layer 0).
 
 Computes extended metrics from raw inference data. All metrics use graceful
 degradation - null values when data is unavailable, never errors.
+
+This module is pure: it depends only on ``domain.metrics`` and numpy, so it sits
+at the bottom of the architectural layering and can be called from the harness.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ def compute_extended_metrics(
     itl_mean_ms: float | None = None,
     per_request_latencies_ms: list[float] | None = None,
     gpu_utilisation_samples: list[float] | None = None,
+    memory_bandwidth_samples: list[float] | None = None,
     memory_stats: dict[str, float] | None = None,
     batch_stats: dict[str, Any] | None = None,
     kv_cache_stats: dict[str, Any] | None = None,
@@ -47,6 +51,7 @@ def compute_extended_metrics(
         itl_mean_ms: Mean inter-token latency in ms (for TPOT).
         per_request_latencies_ms: Per-request E2E latencies in ms.
         gpu_utilisation_samples: GPU SM utilisation samples (0-100).
+        memory_bandwidth_samples: GPU memory-bandwidth utilisation samples (0-100).
         memory_stats: Dict with peak_mb, total_vram_mb, model_mb, kv_cache_mb.
         batch_stats: Dict with effective_batch_size, padding_overhead, num_batches.
         kv_cache_stats: Dict with hit_rate, blocks_used, blocks_total (vLLM).
@@ -73,7 +78,9 @@ def compute_extended_metrics(
     metrics.memory = _compute_memory_metrics(output_tokens, memory_stats)
 
     # GPU utilisation
-    metrics.gpu_utilisation = _compute_gpu_utilisation_metrics(gpu_utilisation_samples)
+    metrics.gpu_utilisation = _compute_gpu_utilisation_metrics(
+        gpu_utilisation_samples, memory_bandwidth_samples
+    )
 
     # Batch efficiency
     metrics.batch = _compute_batch_metrics(batch_stats)
@@ -121,15 +128,23 @@ def _compute_memory_metrics(
 
 def _compute_gpu_utilisation_metrics(
     samples: list[float] | None,
+    memory_bandwidth_samples: list[float] | None = None,
 ) -> GPUUtilisationMetrics:
-    """Compute GPU utilisation metrics from samples."""
+    """Compute GPU utilisation metrics from samples.
+
+    Args:
+        samples: SM utilisation samples (0-100), one per NVML poll tick.
+        memory_bandwidth_samples: Memory-bandwidth utilisation samples (0-100).
+            NVML proxy: percent of time the memory controller was active.
+    """
     gpu = GPUUtilisationMetrics()
 
-    if not samples:
-        return gpu
+    if samples:
+        gpu.sm_utilisation_mean = float(np.mean(samples))
+        gpu.sm_utilisation_samples = len(samples)
 
-    gpu.sm_utilisation_mean = float(np.mean(samples))
-    gpu.sm_utilisation_samples = len(samples)
+    if memory_bandwidth_samples:
+        gpu.memory_bandwidth_utilisation = float(np.mean(memory_bandwidth_samples))
 
     return gpu
 

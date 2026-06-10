@@ -231,7 +231,7 @@ def _make_full_pynvml_mock() -> MagicMock:
         total=80 * 1024**3,
     )
     mock.nvmlDeviceGetTemperature.return_value = 75
-    mock.nvmlDeviceGetUtilizationRates.return_value = MagicMock(gpu=90)
+    mock.nvmlDeviceGetUtilizationRates.return_value = MagicMock(gpu=90, memory=45)
     mock.nvmlClocksEventReasonSwThermalSlowdown = 0x20
     mock.nvmlClocksEventReasonHwThermalSlowdown = 0x40
     mock.nvmlClocksEventReasonSwPowerCap = 0x04
@@ -261,6 +261,23 @@ def test_sampler_lifecycle_pynvml_available():
     mean = sampler.get_mean_power()
     assert mean is not None
     assert mean == pytest.approx(200.0, rel=0.01)
+
+
+def test_sampler_captures_memory_bandwidth_utilisation():
+    """memory_bandwidth_utilisation is read from nvmlDeviceGetUtilizationRates().memory."""
+    mock_pynvml = _make_full_pynvml_mock()
+
+    with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
+        sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=10)
+        with sampler:
+            time.sleep(0.07)
+
+    samples = sampler.get_samples()
+    assert samples, "expected at least one sample"
+    mem_bw = [s.memory_bandwidth_utilisation for s in samples]
+    assert all(v == pytest.approx(45.0) for v in mem_bw)
+    # SM utilisation still captured from the same call
+    assert all(s.sm_utilisation == pytest.approx(90.0) for s in samples)
 
 
 # =============================================================================

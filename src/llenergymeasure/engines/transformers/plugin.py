@@ -182,7 +182,13 @@ class TransformersEngine:
         total_input_tokens = 0
         total_output_tokens = 0
         total_time_sec = 0.0
+        total_padding_tokens = 0
         batch_times: list[float] = []
+        # PER_REQUEST_BATCH approximation (see LatencyMeasurementMode.PER_REQUEST_BATCH):
+        # non-streaming generate() gives only per-batch wall time, so each prompt in a
+        # batch is attributed batch_time / len(batch). This is an approximation, NOT a
+        # true per-request timestamp.
+        per_request_latencies_ms: list[float] = []
 
         logger.info(
             "Starting measurement: %d prompts, batch_size=%d, max_new_tokens=%s",
@@ -194,13 +200,16 @@ class TransformersEngine:
         for batch_start in range(0, len(prompts), batch_size):
             batch = prompts[batch_start : batch_start + batch_size]
             try:
-                batch_input, batch_output, batch_time = self._run_batch(
+                batch_input, batch_output, batch_time, batch_padding = self._run_batch(
                     hf_model, tokenizer, config, batch, generate_kwargs
                 )
                 total_input_tokens += batch_input
                 total_output_tokens += batch_output
                 total_time_sec += batch_time
+                total_padding_tokens += batch_padding
                 batch_times.append(batch_time)
+                per_request_ms = (batch_time * 1000.0) / len(batch)
+                per_request_latencies_ms.extend([per_request_ms] * len(batch))
 
                 logger.debug(
                     "Batch %d-%d: in=%d out=%d tokens in %.2fs",
@@ -245,6 +254,13 @@ class TransformersEngine:
                 # GenerationConfig state post-window without recomputing.
                 "generate_kwargs": generate_kwargs,
             },
+            # PER_REQUEST_BATCH approximation - each request gets batch_time/len(batch).
+            per_request_latencies_ms=per_request_latencies_ms,
+            ttft_ms=[],  # Non-streaming - no time-to-first-token
+            itl_ms=[],  # Non-streaming - no inter-token latency
+            num_batches=len(batch_times),
+            padding_tokens=total_padding_tokens,
+            kv_cache_stats=None,  # Transformers has no paged KV cache
         )
 
     # -------------------------------------------------------------------------
@@ -502,8 +518,13 @@ class TransformersEngine:
         config: ExperimentConfig,
         batch: list[str],
         generate_kwargs: dict[str, Any],
-    ) -> tuple[int, int, float]:
-        """Run a single batch through model.generate() and return (input_tokens, output_tokens, time_sec)."""
+    ) -> tuple[int, int, float, int]:
+        """Run a single batch through model.generate().
+
+        Returns (input_tokens, output_tokens, time_sec, padding_tokens) where
+        padding_tokens = total padded positions in the input
+        (``input_ids.numel() - attention_mask.sum()``).
+        """
         import time
 
         import torch
@@ -519,6 +540,8 @@ class TransformersEngine:
         inputs = tokenizer(batch, **tokenizer_kwargs)
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
         input_token_count = int(inputs["attention_mask"].sum().item())
+        # Padding tokens: total tensor positions minus real (attended) tokens.
+        padding_tokens = int(inputs["input_ids"].numel()) - input_token_count
 
         # Determine autocast settings
         from contextlib import nullcontext
@@ -545,7 +568,7 @@ class TransformersEngine:
         output_token_count = int(
             sum(max(0, outputs.shape[1] - int(inp_len.item())) for inp_len in input_lengths)
         )
-        return input_token_count, output_token_count, elapsed
+        return input_token_count, output_token_count, elapsed, padding_tokens
 
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build generation kwargs from TransformersSamplingConfig and TransformersConfig.
