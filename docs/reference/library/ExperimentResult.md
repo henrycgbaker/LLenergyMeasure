@@ -48,7 +48,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | Field | Type | Description |
 |-------|------|-------------|
 | `measurement_methodology` | `"total" \| "steady_state" \| "windowed"` | What was measured: the full run, the steady-state window after warmup, or an explicit time window. |
-| `steady_state_window` | `tuple[float, float] \| None` | `(start_sec, end_sec)` relative to experiment start. `None` when `methodology="total"`. |
+| `steady_state_window` | `tuple[float, float] \| None` | `(start_sec, end_sec)` relative to inference start. The single-process path sets `(0.0, inference_time_sec)`. `None` only when no inference window was recorded. |
 
 ### Core metrics
 
@@ -92,7 +92,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | Field | Type | Description |
 |-------|------|-------------|
 | `measurement_warnings` | `list[str]` | Quality warnings (e.g. short duration, thermal drift detected). |
-| `warmup_excluded_samples` | `int \| None` | Prompts excluded during warmup. `None` when `methodology="total"`. |
+| `warmup_excluded_samples` | `int \| None` | Warmup iterations run before the measurement window (from `warmup_result.iterations_completed`). `None` when no warmup result is available. |
 | `reproducibility_notes` | `str` | Fixed disclaimer about NVML measurement accuracy (+/- 5%). |
 | `thermal_throttle` | `ThermalThrottleInfo \| None` | GPU thermal and power throttle events during the run. |
 | `warmup_result` | `WarmupResult \| None` | Warmup convergence result (populated when CV convergence detection is enabled). |
