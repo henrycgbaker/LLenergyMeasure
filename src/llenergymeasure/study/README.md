@@ -12,7 +12,6 @@ Implements the sweep runner that executes a `StudyConfig` (a list of `Experiment
 |--------|-------------|
 | `runner.py` | `StudyRunner` - subprocess dispatch core |
 | `manifest.py` | `ManifestWriter`, `StudyManifest`, `ExperimentManifestEntry` - checkpoint model |
-| `_progress.py` | Progress bar display during sweeps |
 | `gpu_memory.py` | `check_gpu_memory_residual()` - pre-dispatch GPU memory check |
 | `gaps.py` | `run_gap()` - thermal gap between experiments |
 | `__init__.py` | Re-exports `StudyRunner`, `ManifestWriter`, `StudyManifest`, etc. |
