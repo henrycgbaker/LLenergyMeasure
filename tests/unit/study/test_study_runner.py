@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.study.image_prep import _parse_image_metadata
 from llenergymeasure.study.runner import (
     StudyRunner,
     _kill_process_group,
@@ -1571,7 +1572,7 @@ class TestPrepareImages:
 
         version_handshake.probe_image_engine_version.cache_clear()
         with patch(
-            "llenergymeasure.study.runner.probe_image_engine_version",
+            "llenergymeasure.study.image_prep.probe_image_engine_version",
             return_value=None,
         ):
             yield
@@ -1841,30 +1842,30 @@ class TestPrepareImages:
 
 
 class TestParseImageMetadata:
-    """Tests for StudyRunner._parse_image_metadata()."""
+    """Tests for study.image_prep._parse_image_metadata()."""
 
     def test_valid_inspect_output(self) -> None:
-        meta = StudyRunner._parse_image_metadata(FAKE_INSPECT_JSON)
+        meta = _parse_image_metadata(FAKE_INSPECT_JSON)
         assert meta is not None
         assert meta["id"] == "abc123def456"
         assert "GB" in meta["size"]
         assert meta["layers"] == "3"
 
     def test_empty_json_array(self) -> None:
-        assert StudyRunner._parse_image_metadata(b"[]") is None
+        assert _parse_image_metadata(b"[]") is None
 
     def test_invalid_json(self) -> None:
-        assert StudyRunner._parse_image_metadata(b"not json") is None
+        assert _parse_image_metadata(b"not json") is None
 
     def test_size_mb_format(self) -> None:
         data = b'[{"Id": "sha256:abc123", "Size": 524288000}]'
-        meta = StudyRunner._parse_image_metadata(data)
+        meta = _parse_image_metadata(data)
         assert meta is not None
         assert "MB" in meta["size"]
 
     def test_missing_fields_returns_none(self) -> None:
         data = b"[{}]"
-        assert StudyRunner._parse_image_metadata(data) is None
+        assert _parse_image_metadata(data) is None
 
     def test_handshake_labels_do_not_leak_into_display_metadata(self) -> None:
         """Display metadata never carries the raw 64-char fingerprint label."""
@@ -1875,7 +1876,7 @@ class TestParseImageMetadata:
             b'"org.opencontainers.image.version": "0.9.0"'
             b"}}}]"
         )
-        meta = StudyRunner._parse_image_metadata(data)
+        meta = _parse_image_metadata(data)
         assert meta is not None
         assert "llem_expconf_fingerprint" not in meta
         assert "llem_pkg_version" not in meta
@@ -2057,10 +2058,10 @@ class TestSchemaFingerprintHandshake:
 
         vh.probe_image_engine_version.cache_clear()
         with (
-            caplog.at_level(_logging.WARNING, logger="llenergymeasure.study.runner"),
+            caplog.at_level(_logging.WARNING, logger="llenergymeasure.study.image_prep"),
             patch("subprocess.run", return_value=ok),
             patch(
-                "llenergymeasure.study.runner.probe_image_engine_version",
+                "llenergymeasure.study.image_prep.probe_image_engine_version",
                 return_value=None,
             ),
         ):
