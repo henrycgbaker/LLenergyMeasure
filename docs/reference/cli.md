@@ -2,11 +2,13 @@
 
 ## CLI Reference
 
-llem provides two commands and one flag.
+llem provides four commands and a version flag.
 
 ```
 llem run [CONFIG] [OPTIONS]   # run an experiment or study
 llem config [OPTIONS]         # show environment and configuration status
+llem doctor [OPTIONS]         # verify Docker images match the host toolchain
+llem report-gaps [OPTIONS]    # propose invariants corpus entries from runtime feedback
 llem --version                # print version and exit
 ```
 

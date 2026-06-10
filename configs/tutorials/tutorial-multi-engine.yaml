@@ -76,7 +76,7 @@ sweep:
 
   # 3. Attention backend - measurable energy effect on prefill-heavy work.
   transformers.attn_implementation: [sdpa, flash_attention_2]
-  vllm.attention.backend: [flash_attn, flashinfer]
+  vllm.engine.attention.backend: [flash_attn, flashinfer]  # attention nests under engine
   # TensorRT-LLM uses its own fused attention; no axis here.
 
   # 4. KV-cache reuse - affects steady-state throughput and energy.
