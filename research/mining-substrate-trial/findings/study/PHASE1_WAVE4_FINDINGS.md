@@ -130,11 +130,20 @@ PluginConfig's constraints are pydantic `Literal`/enum FIELD TYPES (no explicit
 raise). The validator-body chunker structurally cannot see field-type constraints.
 The AST signature pass DOES capture the Literal values (they are in the
 construction-grounding INPUT 1) but the prompt mines invariants from INPUT 2 source,
-not from the signatures. LEVER for a future iteration: emit membership invariants
-directly from the AST-extracted Literal/enum field types (deterministically, or by
-prompting the LLM to mine the signature block) - this is where the remaining
-tensorrt recall lives. (`plugin.py` kept in the source set; harmless, genuine
-coverage even if insufficient alone.)
+not from the signatures.
+
+CONCLUSIVE RESOLUTION (no build needed - the lever already EXISTS in production):
+`scripts/engine_producers/_pydantic_lift.py` already extracts `Literal[...]` field
+constraints ("the lift emits a value-allowlist invariant"). The GT's 20 PluginConfig
+invariants came ENTIRELY from deterministic sources (prod 13, passB 6, passA 1;
+literal_in/None) - NOT from the LLM. So the tensorrt residual is a STUDY-FLOOR
+ARTIFACT: the study's `improved-det-v2` floor is older/narrower than the production
+pydantic-lift and does not parse `plugin.py`. Therefore **the study's 59% tensorrt
+hybrid recall UNDERSTATES production** - the real production floor already covers
+PluginConfig's Literal/field constraints, so production hybrid recall is materially
+higher. The remaining tensorrt recall is NOT an open capability gap; it is already
+solved by the production deterministic path the study floor predates. (`plugin.py`
+kept in the LLM source set; harmless.)
 
 ## Cost (ordinal)
 
