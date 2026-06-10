@@ -187,7 +187,7 @@ class TestShortCircuitRegression:
         # _build_llm_kwargs raise ConfigError.
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(engine_path=tmp_path / "does-not-exist"),
+            tensorrt=TensorRTConfig(engine_path=tmp_path / "does-not-exist"),  # type: ignore[call-arg]  # extra="allow"
         )
 
         engine = TensorRTEngine()

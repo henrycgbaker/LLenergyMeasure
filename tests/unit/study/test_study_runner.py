@@ -808,7 +808,7 @@ def test_progress_events_forwarded():
     from llenergymeasure.study.runner import _consume_progress_events
 
     mock_progress = MagicMock()
-    q = Queue()
+    q: Queue[dict[str, object]] = Queue()
     q.put({"event": "step_start", "step": "baseline", "description": "Measuring", "detail": "30s"})
     q.put({"event": "step_done", "step": "baseline", "elapsed_sec": 30.1})
     q.put({"event": "substep", "step": "model", "text": "loading weights", "elapsed_sec": 2.5})
@@ -909,7 +909,7 @@ def test_docker_runner_spec_dispatches_to_docker(
 
     fake_ctx = MagicMock()
     fake_ctx.Process.side_effect = lambda **kwargs: (
-        subprocess_process_calls.append(kwargs) or MagicMock()
+        subprocess_process_calls.append(kwargs) or MagicMock()  # type: ignore[func-returns-value]  # append-then-return idiom
     )
 
     with patch("multiprocessing.get_context", return_value=fake_ctx):

@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import pytest
 
@@ -75,7 +75,7 @@ def _quick_script() -> list[str]:
 
 
 @pytest.fixture
-def runner_factory() -> Iterator[callable]:
+def runner_factory() -> Iterator[Callable[..., DockerRunner]]:
     """Build a DockerRunner stub with watchdog params; yield a factory."""
     runners: list[DockerRunner] = []
 

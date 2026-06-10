@@ -712,12 +712,12 @@ class TestBeamSearchParams:
         ):
             VLLMConfig(
                 beam_search=VLLMBeamSearchConfig(beam_width=4),
-                sampling=VLLMSamplingConfig(max_tokens=100),
+                sampling=VLLMSamplingConfig(max_tokens=100),  # type: ignore[call-arg]  # extra="allow"
             )
 
     def test_beam_search_config_accepts_all_fields(self):
         """VLLMBeamSearchConfig accepts beam_width, length_penalty, early_stopping, max_tokens."""
-        bs = VLLMBeamSearchConfig(
+        bs = VLLMBeamSearchConfig(  # type: ignore[call-arg]  # max_tokens accepted via extra="allow"
             beam_width=8, length_penalty=1.2, early_stopping=True, max_tokens=256
         )
         assert bs.beam_width == 8

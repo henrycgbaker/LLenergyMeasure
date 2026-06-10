@@ -627,7 +627,7 @@ class TestValidateEngineDirectory:
 
     def test_missing_tp_size_key_skips_check(self, tmp_path):
         """config.json without mapping.tp_size skips tp_size check (non-blocking)."""
-        config = {"pretrained_config": {}, "build_config": {}}
+        config: dict[str, object] = {"pretrained_config": {}, "build_config": {}}
         (tmp_path / "config.json").write_text(json.dumps(config))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
         errors = _validate_engine_directory(tmp_path, tp_size=1)
@@ -646,7 +646,7 @@ class TestBuildLlmKwargsEnginePath:
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
-        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))  # type: ignore[call-arg]  # extra="allow"
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -661,7 +661,7 @@ class TestBuildLlmKwargsEnginePath:
 
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(engine_path=str(tmp_path), backend="trt"),
+            tensorrt=TensorRTConfig(engine_path=str(tmp_path), backend="trt"),  # type: ignore[call-arg]  # extra="allow"
         )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
@@ -678,7 +678,7 @@ class TestBuildLlmKwargsEnginePath:
 
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(
+            tensorrt=TensorRTConfig(  # type: ignore[call-arg]  # extra="allow"
                 engine_path=str(tmp_path), tensor_parallel_size=2, max_batch_size=16
             ),
         )
@@ -698,7 +698,7 @@ class TestBuildLlmKwargsEnginePath:
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
-        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))  # type: ignore[call-arg]  # extra="allow"
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -712,7 +712,7 @@ class TestBuildLlmKwargsEnginePath:
 
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(engine_path=str(tmp_path / "nonexistent")),
+            tensorrt=TensorRTConfig(engine_path=str(tmp_path / "nonexistent")),  # type: ignore[call-arg]  # extra="allow"
         )
         engine = TensorRTEngine()
         with pytest.raises(ConfigError, match="engine_path validation failed"):

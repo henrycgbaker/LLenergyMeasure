@@ -260,6 +260,8 @@ class TestComputeRequestLatencyMetrics:
 
     def test_ordering_p95_lte_p99(self):
         req = _compute_request_latency_metrics([10.0, 20.0, 30.0, 100.0, 200.0, 500.0])
+        assert req.e2e_latency_p95_ms is not None
+        assert req.e2e_latency_p99_ms is not None
         assert req.e2e_latency_p95_ms <= req.e2e_latency_p99_ms
 
 

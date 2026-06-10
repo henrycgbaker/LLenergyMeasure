@@ -82,6 +82,44 @@ disallow_untyped_calls = false
 warn_unused_ignores = false
 exclude = []
 
+# Test suite is type-checked, but with the strict-mode rules that fight
+# established test idioms relaxed. The valuable structural checks
+# (return-value, assignment, name-defined, call-arg, index, operator,
+# var-annotated, misc, ...) still run, so a real type regression in a test
+# is caught. The relaxations below are the categories that are pure noise
+# against deliberate test patterns and would otherwise drown the signal:
+#   - no-untyped-def: thousands of `def test_*(self):` bodies are untyped by
+#     convention; annotating every one adds churn without catching bugs.
+#   - arg-type: tests pass dict / str literals into Pydantic models that coerce
+#     them at runtime (e.g. task={...}, engine="vllm"); mypy can't see the
+#     coercion, but the runtime behaviour is the point of the test.
+#   - union-attr: tests read sub-config attributes off `X | None` fields they
+#     know are populated (e.g. cfg.transformers.dtype after setting it).
+#   - attr-defined: tests introspect private / non-exported members and patch
+#     targets (e.g. module.importlib, _dormant_observations) on purpose.
+#   - type-arg: bare generics (dict, list) in throwaway test locals.
+#   - no-any-return: helper/factory returns flowing through MagicMock / Any.
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disable_error_code = [
+    "arg-type",
+    "union-attr",
+    "attr-defined",
+    "type-arg",
+    "no-any-return",
+]
+
+# scripts/ holds mining-substrate research tooling. It is not part of the
+# typed product surface (src/ never imports it) and was never in the type
+# gate. Some test modules import its helpers directly, so mypy follows those
+# imports and would otherwise gate on pre-existing untyped research code.
+# Ignore errors in scripts.* until/unless it is brought into scope on its own.
+[[tool.mypy.overrides]]
+module = "scripts.*"
+ignore_errors = true
+
 [[tool.uv.index]]
 name = "nvidia"
 url = "https://pypi.nvidia.com/"

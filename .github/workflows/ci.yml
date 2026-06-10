@@ -121,7 +121,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --dev
       - name: mypy
-        run: uv run mypy src/
+        run: uv run mypy src/ tests/
 
   test:
     needs: filter

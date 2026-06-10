@@ -691,7 +691,7 @@ def test_trt_checkpoint_compat_skips_when_engine_path_set(
     )
     config = make_config(
         engine="tensorrt",
-        tensorrt=TensorRTConfig(tensor_parallel_size=1, engine_path="/some/built/engine"),
+        tensorrt=TensorRTConfig(tensor_parallel_size=1, engine_path="/some/built/engine"),  # type: ignore[call-arg]  # extra="allow"
     )
     assert _check_tensorrt_checkpoint_compat(config) is None
 

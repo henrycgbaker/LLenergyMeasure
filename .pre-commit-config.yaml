@@ -30,9 +30,9 @@ repos:
     rev: v1.19.0
     hooks:
       - id: mypy
-        additional_dependencies: [pydantic>=2.0, types-PyYAML]
+        additional_dependencies: [pydantic>=2.0, types-PyYAML, pytest]
         args: [--config-file=pyproject.toml]
-        files: ^src/
+        files: ^(src|tests)/
 
   # Local hooks: Architecture import contracts + doc regeneration
   # Uses language: system to run with project venv

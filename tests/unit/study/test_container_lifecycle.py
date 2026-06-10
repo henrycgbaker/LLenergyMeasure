@@ -173,7 +173,7 @@ class TestInstallSigtermBridge:
             handler = signal.getsignal(signal.SIGTERM)
 
             with pytest.raises(SystemExit) as exc_info:
-                handler(signal.SIGTERM, None)  # type: ignore[call-arg]
+                handler(signal.SIGTERM, None)  # type: ignore[operator,misc]  # handler is int|Callable|None
 
             assert exc_info.value.code == 0
         finally:

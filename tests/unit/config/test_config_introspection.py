@@ -247,7 +247,7 @@ def test_list_all_param_paths_unknown_engine_raises():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])
+@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
     config = make_config(dtype=dt)
@@ -256,7 +256,7 @@ def test_all_pytorch_dtype_values_produce_valid_config(dt):
 
 def test_ssot_dtype_values_match_param_test_values():
     """DTYPE_SUPPORT['transformers'] values match get_param_test_values('transformers.dtype')."""
-    from_ssot = set(DTYPE_SUPPORT["transformers"])
+    from_ssot = set(DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
     from_introspection = set(get_param_test_values("transformers.dtype"))
     # The test values from introspection should cover all SSOT dtype values
     assert from_ssot == from_introspection
