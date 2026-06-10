@@ -540,8 +540,10 @@ class MeasurementHarness:
             baseline=baseline,
             flops_result=flops_result,
             timeseries_path=timeseries_path,
+            timeseries_samples=timeseries_samples,
             measurement_warnings=measurement_warnings,
             warmup_result=warmup_result,
+            prompt_count=len(prompts),
         )
         _substep("save", "result assembled")
 
@@ -707,6 +709,20 @@ class MeasurementHarness:
             nvml_sample_count=nvml_count,
         )
 
+    @staticmethod
+    def _configured_batch_size(engine_name: str, config: ExperimentConfig) -> int | None:
+        """Return the configured static batch size for the engine, or None.
+
+        transformers -> config.transformers.batch_size
+        tensorrt     -> config.tensorrt.max_batch_size (its analogous field)
+        anything else (incl. vllm continuous batching) -> None
+        """
+        if engine_name == "transformers" and config.transformers is not None:
+            return config.transformers.batch_size
+        if engine_name == "tensorrt" and config.tensorrt is not None:
+            return config.tensorrt.max_batch_size
+        return None
+
     def _build_result(
         self,
         engine_name: str,
@@ -725,6 +741,8 @@ class MeasurementHarness:
         timeseries_path: str | None,
         measurement_warnings: list[str],
         warmup_result: Any = None,
+        timeseries_samples: list[PowerThermalSample] | None = None,
+        prompt_count: int = 0,
     ) -> ExperimentResult:
         """Assemble ExperimentResult from measurement data.
 
@@ -748,14 +766,17 @@ class MeasurementHarness:
             timeseries_path: Relative path to Parquet sidecar, or None.
             measurement_warnings: List of quality warning strings.
             warmup_result: WarmupResult from warmup phase, or None.
+            timeseries_samples: Raw PowerThermalSample list for GPU-utilisation /
+                memory-bandwidth / total-VRAM extraction. None = no samples.
+            prompt_count: Number of prompts in the run (for batch effective size).
 
         Returns:
             Fully assembled ExperimentResult.
         """
+        from llenergymeasure.domain.extended_metrics import compute_extended_metrics
         from llenergymeasure.domain.metrics import (
-            ExtendedEfficiencyMetrics,
-            MemoryEfficiencyMetrics,
             MultiGPUMetrics,
+            compute_latency_statistics,
         )
         from llenergymeasure.harness.baseline import create_energy_breakdown
 
@@ -838,12 +859,79 @@ class MeasurementHarness:
             output.peak_memory_mb,
             inference_memory_mb,
         )
-        extended_metrics = ExtendedEfficiencyMetrics(
-            memory=MemoryEfficiencyMetrics(
-                model_memory_mb=model_memory_mb,
-                peak_memory_mb=output.peak_memory_mb,
-                inference_memory_mb=inference_memory_mb,
-            )
+
+        # --- Extended efficiency metrics ---
+        samples = timeseries_samples or []
+        gpu_utilisation_samples = [
+            s.sm_utilisation for s in samples if s.sm_utilisation is not None
+        ]
+        memory_bandwidth_samples = [
+            s.memory_bandwidth_utilisation
+            for s in samples
+            if s.memory_bandwidth_utilisation is not None
+        ]
+        total_vram_mb = max(
+            (s.memory_total_mb for s in samples if s.memory_total_mb is not None),
+            default=0.0,
+        )
+
+        kv_cache_stats = output.kv_cache_stats
+        kv_cache_mb = kv_cache_stats.get("kv_cache_mb") if kv_cache_stats else None
+        memory_stats: dict[str, float] = {
+            "peak_mb": output.peak_memory_mb,
+            "model_mb": model_memory_mb,
+            "total_vram_mb": total_vram_mb,
+        }
+        if kv_cache_mb is not None:
+            memory_stats["kv_cache_mb"] = kv_cache_mb
+
+        # Batch stats: None for vLLM (continuous batching). Static-batching engines
+        # report num_batches + padding; effective batch size derives from prompt count.
+        batch_stats: dict[str, Any] | None = None
+        if engine_name != "vllm" and output.num_batches:
+            configured_batch_size = self._configured_batch_size(engine_name, config)
+            effective_batch_size: float | None = None
+            if output.num_batches > 0:
+                effective_batch_size = prompt_count / output.num_batches
+            padding_overhead: float | None = None
+            if output.padding_tokens is not None and output.input_tokens > 0:
+                total_positions = output.input_tokens + output.padding_tokens
+                if total_positions > 0:
+                    padding_overhead = output.padding_tokens / total_positions
+            batch_stats = {
+                "num_batches": output.num_batches,
+                "effective_batch_size": effective_batch_size,
+                "configured_batch_size": configured_batch_size,
+                "padding_overhead": padding_overhead,
+            }
+
+        extended_metrics = compute_extended_metrics(
+            output_tokens=output.output_tokens,
+            total_energy_j=total_energy_j,
+            tokens_per_second=avg_tokens_per_second,
+            precision_factor=1.0,  # No precision-scaling applied (default)
+            itl_mean_ms=None,  # tpot_ms stays null - needs streaming ITL capture
+            per_request_latencies_ms=output.per_request_latencies_ms or None,
+            gpu_utilisation_samples=gpu_utilisation_samples or None,
+            memory_bandwidth_samples=memory_bandwidth_samples or None,
+            memory_stats=memory_stats,
+            batch_stats=batch_stats,
+            kv_cache_stats=kv_cache_stats,
+        )
+        # Preserve inference-only memory delta (compute_extended_metrics does not
+        # know the model baseline split).
+        extended_metrics.memory.inference_memory_mb = inference_memory_mb
+
+        # Latency stats from streaming TTFT/ITL (vLLM only; null otherwise).
+        latency_stats = (
+            compute_latency_statistics(output.ttft_ms, itl_trimmed_ms=output.itl_ms or None)
+            if output.ttft_ms
+            else None
+        )
+
+        steady_state_window = (0.0, output.inference_time_sec)
+        warmup_excluded_samples = (
+            warmup_result.iterations_completed if warmup_result is not None else None
         )
 
         return ExperimentResult(
@@ -881,4 +969,7 @@ class MeasurementHarness:
             warmup_result=warmup_result,
             measurement_warnings=measurement_warnings,
             extended_metrics=extended_metrics,
+            latency_stats=latency_stats,
+            steady_state_window=steady_state_window,
+            warmup_excluded_samples=warmup_excluded_samples,
         )

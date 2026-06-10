@@ -61,10 +61,10 @@ def print_result_summary(result: ExperimentResult) -> None:
 
     if result.latency_stats is not None:
         ls = result.latency_stats
-        if hasattr(ls, "ttft_ms") and ls.ttft_ms is not None:
-            print(f"  Latency TTFT   {_sig3(ls.ttft_ms)} ms")
-        if hasattr(ls, "itl_ms") and ls.itl_ms is not None:
-            print(f"  Latency ITL    {_sig3(ls.itl_ms)} ms")
+        if ls.ttft_mean_ms is not None:
+            print(f"  Latency TTFT   {_sig3(ls.ttft_mean_ms)} ms")
+        if ls.itl_mean_ms is not None:
+            print(f"  Latency ITL    {_sig3(ls.itl_mean_ms)} ms")
     print()
 
     # --- Timing ---

@@ -152,7 +152,8 @@ class ExperimentResult(BaseModel):
     )
     warmup_excluded_samples: int | None = Field(
         default=None,
-        description="Number of prompts excluded during warmup. None when methodology=total.",
+        description="Warmup iterations run before the measurement window "
+        "(from WarmupResult.iterations_completed). None when no warmup result.",
     )
     reproducibility_notes: str = Field(
         default=(
