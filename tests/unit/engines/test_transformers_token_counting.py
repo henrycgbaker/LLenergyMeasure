@@ -103,3 +103,29 @@ class TestPaddedBatch:
         _, new_out = _count_tokens(inputs, outputs)
 
         assert new_out == 0, f"Expected 0 output tokens when no generation, got {new_out}"
+
+
+def _count_padding(inputs: dict) -> int:
+    """Replicate the padding-token math from TransformersEngine._run_batch()."""
+    input_token_count = int(inputs["attention_mask"].sum().item())
+    return int(inputs["input_ids"].numel()) - input_token_count
+
+
+class TestPaddingTokenCount:
+    """Padding tokens = input_ids.numel() - attention_mask.sum()."""
+
+    def test_no_padding_uniform(self) -> None:
+        input_ids = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
+        attention_mask = torch.ones_like(input_ids)
+        assert _count_padding({"input_ids": input_ids, "attention_mask": attention_mask}) == 0
+
+    def test_padded_batch(self) -> None:
+        # 2x5 = 10 positions, 8 real tokens -> 2 padding tokens
+        input_ids = torch.tensor([[1, 2, 3, 0, 0], [4, 5, 6, 7, 8]])
+        attention_mask = torch.tensor([[1, 1, 1, 0, 0], [1, 1, 1, 1, 1]])
+        assert _count_padding({"input_ids": input_ids, "attention_mask": attention_mask}) == 2
+
+    def test_single_sequence_no_padding(self) -> None:
+        input_ids = torch.tensor([[1, 2, 3]])
+        attention_mask = torch.ones_like(input_ids)
+        assert _count_padding({"input_ids": input_ids, "attention_mask": attention_mask}) == 0

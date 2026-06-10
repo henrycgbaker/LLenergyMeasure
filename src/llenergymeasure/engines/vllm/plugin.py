@@ -26,6 +26,100 @@ from llenergymeasure.utils.exceptions import EngineError
 logger = logging.getLogger(__name__)
 
 
+def _extract_request_metrics(outputs: Any) -> tuple[list[float], list[float]]:
+    """Extract per-request E2E latency and TTFT (ms) from vLLM RequestOutputs.
+
+    Best-effort: ``o.metrics`` may be None, and individual timestamp attrs may be
+    missing depending on the vLLM version / config. Any sample that cannot be
+    fully computed is skipped (rather than producing a partial/garbage value).
+
+    Args:
+        outputs: Iterable of vLLM ``RequestOutput`` objects.
+
+    Returns:
+        Tuple of (per_request_latencies_ms, ttft_ms). Either list may be empty
+        when no request exposed usable timestamps.
+    """
+    latencies_ms: list[float] = []
+    ttft_ms: list[float] = []
+    for o in outputs:
+        metrics = getattr(o, "metrics", None)
+        if metrics is None:
+            continue
+        arrival = getattr(metrics, "arrival_time", None)
+        finished = getattr(metrics, "finished_time", None)
+        first_token = getattr(metrics, "first_token_time", None)
+        if arrival is not None and finished is not None:
+            latencies_ms.append((finished - arrival) * 1000.0)
+        if arrival is not None and first_token is not None:
+            ttft_ms.append((first_token - arrival) * 1000.0)
+    return latencies_ms, ttft_ms
+
+
+def _capture_kv_cache_stats(llm: Any) -> dict[str, Any] | None:
+    """Capture KV-cache stats from a vLLM (V0-era) LLM engine, best-effort.
+
+    Reads:
+      - ``blocks_total`` from ``cache_config.num_gpu_blocks`` (reliable in 0.7.3).
+      - ``usage`` / ``hit_rate`` from the V0 Stats surface
+        (``gpu_cache_usage_sys`` / ``gpu_prefix_cache_hit_rate``) via the engine's
+        stat loggers, each guarded independently.
+      - ``kv_cache_mb`` derived from ``usage * num_gpu_blocks * block_size_bytes``
+        when block size is cheaply exposed; omitted otherwise.
+
+    Any unreadable value is left out of the dict. Returns None only when nothing
+    at all could be read.
+    """
+    stats: dict[str, Any] = {}
+
+    engine = getattr(llm, "llm_engine", None)
+    if engine is None:
+        return None
+
+    cache_config = getattr(engine, "cache_config", None)
+    num_gpu_blocks: int | None = None
+    block_size: int | None = None
+    if cache_config is not None:
+        num_gpu_blocks = getattr(cache_config, "num_gpu_blocks", None)
+        if isinstance(num_gpu_blocks, int) and num_gpu_blocks > 0:
+            stats["blocks_total"] = num_gpu_blocks
+        bs = getattr(cache_config, "block_size", None)
+        if isinstance(bs, int) and bs > 0:
+            block_size = bs
+
+    # V0 Stats surface via stat loggers: gpu_cache_usage_sys, gpu_prefix_cache_hit_rate.
+    usage: float | None = None
+    try:
+        stat_loggers = getattr(engine, "stat_loggers", None)
+        if stat_loggers:
+            for logger_obj in stat_loggers.values():
+                last = getattr(logger_obj, "last_local_log", None)
+                if last is None:
+                    continue
+                u = getattr(last, "gpu_cache_usage_sys", None)
+                if u is not None and usage is None:
+                    usage = float(u)
+                    stats["usage"] = usage
+                hr = getattr(last, "gpu_prefix_cache_hit_rate", None)
+                if hr is not None and "hit_rate" not in stats:
+                    stats["hit_rate"] = float(hr)
+    except Exception as exc:  # pragma: no cover - best-effort capture
+        logger.debug("vLLM KV-cache stats capture failed: %s", exc)
+
+    # Derive blocks_used and kv_cache_mb when both usage and block geometry known.
+    if usage is not None and num_gpu_blocks is not None and num_gpu_blocks > 0:
+        stats["blocks_used"] = round(usage * num_gpu_blocks)
+        if block_size is not None:
+            # block size in bytes is not directly exposed; only derive kv_cache_mb
+            # when cache_config carries a precomputed per-block byte size.
+            block_bytes = getattr(cache_config, "block_size_bytes", None)
+            if isinstance(block_bytes, int) and block_bytes > 0:
+                kv_bytes = usage * num_gpu_blocks * block_bytes
+                stats["kv_cache_mb"] = kv_bytes / (1024 * 1024)
+
+    return stats or None
+
+
 class VLLMEngine:
     """vLLM inference engine - offline batch mode, thin plugin.
 
@@ -255,6 +349,10 @@ class VLLMEngine:
         if hf_model is not None:
             extras["hf_model"] = hf_model
 
+        # Best-effort extended-metrics capture (continuous batching: no static batches).
+        per_request_latencies_ms, ttft_ms = _extract_request_metrics(outputs)
+        kv_cache_stats = _capture_kv_cache_stats(llm)
+
         return InferenceOutput(
             elapsed_time_sec=elapsed,
             input_tokens=input_token_count,
@@ -263,6 +361,11 @@ class VLLMEngine:
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=[elapsed],
             extras=extras,
+            per_request_latencies_ms=per_request_latencies_ms,
+            ttft_ms=ttft_ms,
+            num_batches=None,  # Continuous batching - no static batch count
+            padding_tokens=None,  # Continuous batching - no padding
+            kv_cache_stats=kv_cache_stats,
         )
 
     # -------------------------------------------------------------------------

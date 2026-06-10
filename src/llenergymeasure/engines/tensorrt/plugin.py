@@ -28,6 +28,7 @@ from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.protocol import InferenceOutput
+from llenergymeasure.engines.vllm.plugin import _extract_request_metrics
 from llenergymeasure.utils.exceptions import ConfigError, EngineError
 
 logger = logging.getLogger(__name__)
@@ -331,6 +332,10 @@ class TensorRTEngine:
         if self._build_metadata is not None:
             extras["build_metadata"] = self._build_metadata
 
+        # Defensive per-request metric capture - RequestOutput.metrics is usually
+        # absent in TRT-LLM 0.21.0, so these lists typically come back empty.
+        per_request_latencies_ms, ttft_ms = _extract_request_metrics(outputs)
+
         return InferenceOutput(
             elapsed_time_sec=elapsed,
             input_tokens=input_token_count,
@@ -339,6 +344,11 @@ class TensorRTEngine:
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=[elapsed],
             extras=extras,
+            per_request_latencies_ms=per_request_latencies_ms,
+            ttft_ms=ttft_ms,
+            num_batches=1,  # Single batched generate() call
+            padding_tokens=None,  # Not measurable from TRT-LLM RequestOutputs
+            kv_cache_stats=None,  # TRT-LLM does not expose paged KV-cache stats here
         )
 
     # -------------------------------------------------------------------------
