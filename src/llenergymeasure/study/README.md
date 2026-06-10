@@ -11,6 +11,7 @@ Implements the sweep runner that executes a `StudyConfig` (a list of `Experiment
 | Module | Description |
 |--------|-------------|
 | `runner.py` | `StudyRunner` - subprocess dispatch core |
+| `single.py` | `run_single_experiment()` - in-process / direct-DockerRunner path for a single experiment |
 | `manifest.py` | `ManifestWriter`, `StudyManifest`, `ExperimentManifestEntry` - checkpoint model |
 | `gpu_memory.py` | `check_gpu_memory_residual()` - pre-dispatch GPU memory check |
 | `gaps.py` | `run_gap()` - thermal gap between experiments |

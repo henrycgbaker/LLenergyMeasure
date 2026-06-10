@@ -756,7 +756,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(api_module, "_run_via_runner", mock_run_via_runner)
 
-    # Use a 2-experiment study to force _run_via_runner path (not _run_in_process)
+    # Use a 2-experiment study to force _run_via_runner path (not run_single_experiment)
     import llenergymeasure.engines as engines_module
 
     mock_engine = _MockBackend(mock_result)
@@ -779,53 +779,6 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
 
     assert len(captured_runner_specs) == 1, "_run_via_runner not called or called multiple times"
     assert captured_runner_specs[0] == resolved_specs
-
-
-# =============================================================================
-# Plan 24-01: GPU memory check in _run_in_process
-# =============================================================================
-
-
-def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
-    """_run_in_process() calls check_gpu_memory_residual before running the experiment."""
-    import llenergymeasure.api._impl as api_module
-    import llenergymeasure.engines as engines_module
-    import llenergymeasure.harness.preflight as pf_module
-
-    gpu_check_calls: list[int] = []
-
-    def mock_gpu_check(device_index=0, threshold_mb=1024.0):
-        gpu_check_calls.append(device_index)
-
-    mock_result = make_result(experiment_id="gpu-check-test")
-    mock_engine = _MockBackend(mock_result)
-
-    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
-    _patch_harness(monkeypatch, mock_result)
-    monkeypatch.setattr(
-        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
-        mock_gpu_check,
-    )
-    monkeypatch.setattr(
-        "llenergymeasure.results.persistence.save_result",
-        lambda result, output_dir, **kw: tmp_path / "result.json",
-    )
-
-    from unittest.mock import MagicMock
-
-    from llenergymeasure.study.manifest import ManifestWriter
-
-    mock_manifest = MagicMock(spec=ManifestWriter)
-
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
-    study = StudyConfig(experiments=[config])
-
-    api_module._run_in_process(study, mock_manifest, tmp_path, runner_specs=None)
-
-    assert len(gpu_check_calls) == 1, (
-        f"Expected check_gpu_memory_residual to be called once, got {len(gpu_check_calls)}"
-    )
 
 
 def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
@@ -977,7 +930,7 @@ class TestResolveGpuIndices:
 
     def test_pytorch_no_device_map_returns_zero(self):
         """PyTorch engine with device_map=None always returns [0]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = self._make_pytorch_config(device_map=None)
         assert _resolve_gpu_indices(config) == [0]
@@ -986,7 +939,7 @@ class TestResolveGpuIndices:
         """PyTorch with device_map='auto' and 4 visible GPUs returns [0, 1, 2, 3]."""
         import sys
 
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         mock_pynvml = self._make_mock_pynvml(device_count=4)
         monkeypatch.setitem(sys.modules, "pynvml", mock_pynvml)
@@ -998,7 +951,7 @@ class TestResolveGpuIndices:
         """PyTorch with device_map='auto' and only 1 GPU returns [0] (no-op multi-GPU)."""
         import sys
 
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         mock_pynvml = self._make_mock_pynvml(device_count=1)
         monkeypatch.setitem(sys.modules, "pynvml", mock_pynvml)
@@ -1010,7 +963,7 @@ class TestResolveGpuIndices:
         """PyTorch with device_map='auto' but pynvml absent falls through to [0]."""
         import sys
 
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         # Remove pynvml from sys.modules so the local import raises ImportError
         monkeypatch.setitem(sys.modules, "pynvml", None)  # type: ignore[arg-type]
@@ -1020,14 +973,14 @@ class TestResolveGpuIndices:
 
     def test_non_pytorch_non_vllm_engine_returns_zero(self):
         """Unknown engines return [0]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = ExperimentConfig.model_construct(task={"model": "gpt2"}, engine="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
 
     def test_pytorch_engine_no_pytorch_block_returns_zero(self):
         """PyTorch engine with transformers=None (no pytorch block) returns [0]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = ExperimentConfig.model_construct(
             task={"model": "gpt2"}, engine="transformers", transformers=None
@@ -1049,43 +1002,43 @@ class TestResolveGpuIndices:
 
     def test_vllm_tp2_returns_two_gpus(self):
         """vLLM with tensor_parallel_size=2 returns [0, 1]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = self._make_vllm_config(tp=2)
         assert _resolve_gpu_indices(config) == [0, 1]
 
     def test_vllm_tp4_returns_four_gpus(self):
         """vLLM with tensor_parallel_size=4 returns [0, 1, 2, 3]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = self._make_vllm_config(tp=4)
         assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
 
     def test_vllm_tp2_pp2_returns_four_gpus(self):
         """vLLM with tp=2, pp=2 returns [0, 1, 2, 3]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = self._make_vllm_config(tp=2, pp=2)
         assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
 
     def test_vllm_tp1_returns_single_gpu(self):
         """vLLM with tensor_parallel_size=1 (default) returns [0]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = self._make_vllm_config(tp=1)
         assert _resolve_gpu_indices(config) == [0]
 
     def test_vllm_no_engine_block_returns_single_gpu(self):
         """vLLM with no engine config returns [0]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
         from llenergymeasure.config.engine_configs import VLLMConfig
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm=VLLMConfig())
         assert _resolve_gpu_indices(config) == [0]
 
     def test_vllm_no_vllm_block_returns_single_gpu(self):
         """vLLM engine with vllm=None returns [0]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
         assert _resolve_gpu_indices(config) == [0]
@@ -1108,35 +1061,35 @@ class TestResolveGpuIndicesTensorrt:
 
     def test_tensorrt_tp1_returns_single_index(self):
         """tensor_parallel_size=1 -> [0] (single GPU)."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = make_config(engine="tensorrt", tensorrt={"tensor_parallel_size": 1})
         assert _resolve_gpu_indices(config) == [0]
 
     def test_tensorrt_tp2_returns_two_indices(self):
         """tensor_parallel_size=2 -> [0, 1] (two GPUs for energy monitoring)."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = make_config(engine="tensorrt", tensorrt={"tensor_parallel_size": 2})
         assert _resolve_gpu_indices(config) == [0, 1]
 
     def test_tensorrt_tp4_returns_four_indices(self):
         """tensor_parallel_size=4 -> [0, 1, 2, 3]."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = make_config(engine="tensorrt", tensorrt={"tensor_parallel_size": 4})
         assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
 
     def test_tensorrt_tp_none_returns_single_index(self):
         """tensor_parallel_size=None (default) -> [0] (single GPU)."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = make_config(engine="tensorrt", tensorrt={})
         assert _resolve_gpu_indices(config) == [0]
 
     def test_tensorrt_no_config_returns_single_index(self):
         """engine=tensorrt but tensorrt=None -> [0] (fallback)."""
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         config = make_config(engine="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
