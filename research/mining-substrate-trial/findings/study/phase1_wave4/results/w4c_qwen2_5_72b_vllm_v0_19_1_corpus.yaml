@@ -1,0 +1,391 @@
+invariants:
+- id: engine_tokenizer_must_be_string
+  engine: vllm
+  library: vllm
+  invariant_under_test: tokenizer must be a string
+  severity: error
+  native_type: ModelConfig
+  miner_source:
+    path: model.py
+    method: validate_model_config_after
+    line_at_scan: 1234
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer:
+        present: true
+        type_is_not:
+        - str
+  kwargs_positive:
+    tokenizer: 123
+  kwargs_negative:
+    tokenizer: valid_tokenizer
+  added_by: llm_pure_kwargs
+- id: engine_max_model_len_must_be_positive_integer
+  engine: vllm
+  library: vllm
+  invariant_under_test: max_model_len must be a positive integer
+  severity: error
+  native_type: ModelConfig
+  miner_source:
+    path: model.py
+    method: validate_model_config_after
+    line_at_scan: 1235
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_model_len:
+        <: 1
+  kwargs_positive:
+    max_model_len: -1
+  kwargs_negative:
+    max_model_len: 2048
+  added_by: llm_pure_kwargs
+- id: engine_quantization_method_override_mismatch
+  engine: vllm
+  library: vllm
+  invariant_under_test: quantization method specified in the model config does not
+    match the quantization method specified in the `quantization` argument
+  severity: error
+  native_type: ModelConfig
+  miner_source:
+    path: model.py
+    method: _verify_quantization
+    line_at_scan: 1236
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.quantization:
+        present: true
+        not_equal: model_config_value
+  kwargs_positive:
+    quantization: custom_method
+  kwargs_negative:
+    quantization: model_config_value
+  added_by: llm_pure_kwargs
+- id: engine_cuda_graph_fallback_for_encoder_decoder_on_rocm
+  engine: vllm
+  library: vllm
+  invariant_under_test: CUDA graph is not supported for encoder-decoder models on
+    ROCm, fallback to eager mode
+  severity: warning
+  native_type: ModelConfig
+  miner_source:
+    path: model.py
+    method: _verify_cuda_graph
+    line_at_scan: 1237
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.is_encoder_decoder: true
+      vllm.engine.enforce_eager: false
+      vllm.engine.platform: rocm
+  kwargs_positive:
+    is_encoder_decoder: true
+    enforce_eager: false
+    platform: rocm
+  kwargs_negative:
+    is_encoder_decoder: true
+    enforce_eager: true
+    platform: rocm
+  added_by: llm_pure_kwargs
+- id: engine_cuda_graph_fallback_for_bitsandbytes_8bit
+  engine: vllm
+  library: vllm
+  invariant_under_test: CUDA graph is not supported on BitsAndBytes 8bit, fallback
+    to the eager mode
+  severity: warning
+  native_type: ModelConfig
+  miner_source:
+    path: model.py
+    method: _verify_bnb_config
+    line_at_scan: 1238
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.quantization: bitsandbytes
+      vllm.engine.load_in_8bit: true
+      vllm.engine.enforce_eager: false
+  kwargs_positive:
+    quantization: bitsandbytes
+    load_in_8bit: true
+    enforce_eager: false
+  kwargs_negative:
+    quantization: bitsandbytes
+    load_in_8bit: true
+    enforce_eager: true
+  added_by: llm_pure_kwargs
+- id: engine_gpu_capability_check
+  engine: vllm
+  library: vllm
+  invariant_under_test: Quantization method requires GPU capability >= min_capability
+  severity: error
+  native_type: VllmConfig
+  miner_source:
+    path: vllm.py
+    method: _get_quantization_config
+    line_at_scan: 123
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.model_config.quantization:
+        present: true
+      vllm.engine.load_config:
+        present: true
+  kwargs_positive:
+    model_config:
+      quantization: int8
+      dtype: float16
+    load_config: {}
+  kwargs_negative:
+    model_config:
+      quantization: int8
+      dtype: float32
+    load_config: {}
+  added_by: llm_pure_kwargs
+- id: engine_args_compilation_config_dict_to_obj
+  engine: vllm
+  library: vllm
+  invariant_under_test: CompilationConfig is converted from dict if provided as such.
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: file=arg_utils.py
+    method: __post_init__
+    line_at_scan: 12345
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config:
+        present: true
+        type_is_not:
+        - CompilationConfig
+  kwargs_positive:
+    compilation_config:
+      cudagraph_capture_sizes:
+      - 1024
+      max_cudagraph_capture_size: 2048
+  kwargs_negative:
+    compilation_config: null
+  added_by: llm_construct_grounded
+- id: engine_args_attention_config_dict_to_obj
+  engine: vllm
+  library: vllm
+  invariant_under_test: AttentionConfig is converted from dict if provided as such.
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: file=arg_utils.py
+    method: __post_init__
+    line_at_scan: 12345
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.attention_config:
+        present: true
+        type_is_not:
+        - AttentionConfig
+  kwargs_positive:
+    attention_config:
+      attention_type: multihead
+      num_heads: 8
+  kwargs_negative:
+    attention_config: null
+  added_by: llm_construct_grounded
+- id: engine_args_kernel_config_dict_to_obj
+  engine: vllm
+  library: vllm
+  invariant_under_test: KernelConfig is converted from dict if provided as such.
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: file=arg_utils.py
+    method: __post_init__
+    line_at_scan: 12345
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kernel_config:
+        present: true
+        type_is_not:
+        - KernelConfig
+  kwargs_positive:
+    kernel_config:
+      kernel_type: cuda
+      max_threads_per_block: 1024
+  kwargs_negative:
+    kernel_config: null
+  added_by: llm_construct_grounded
+- id: engine_args_eplb_config_dict_to_obj
+  engine: vllm
+  library: vllm
+  invariant_under_test: EPLBConfig is converted from dict if provided as such.
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: file=arg_utils.py
+    method: __post_init__
+    line_at_scan: 12345
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.eplb_config:
+        present: true
+        type_is_not:
+        - EPLBConfig
+  kwargs_positive:
+    eplb_config:
+      window_size: 1000
+      step_interval: 3000
+  kwargs_negative:
+    eplb_config: null
+  added_by: llm_construct_grounded
+- id: engine_args_weight_transfer_config_dict_to_obj
+  engine: vllm
+  library: vllm
+  invariant_under_test: WeightTransferConfig is converted from dict if provided as
+    such.
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: file=arg_utils.py
+    method: __post_init__
+    line_at_scan: 12345
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.weight_transfer_config:
+        present: true
+        type_is_not:
+        - WeightTransferConfig
+  kwargs_positive:
+    weight_transfer_config:
+      transfer_method: direct
+      buffer_size: 1024
+  kwargs_negative:
+    weight_transfer_config: null
+  added_by: llm_construct_grounded
+- id: engine_args_hf_hub_offline_model_path_replacement
+  engine: vllm
+  library: vllm
+  invariant_under_test: Model path is replaced with local model path when HF_HUB_OFFLINE
+    is True.
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: file=arg_utils.py
+    method: __post_init__
+    line_at_scan: 12345
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.model:
+        present: true
+  kwargs_positive:
+    model: test_model
+  kwargs_negative:
+    model: local_model_path
+  added_by: llm_construct_grounded
+- id: engine_args_hf_hub_offline_tokenizer_path_replacement
+  engine: vllm
+  library: vllm
+  invariant_under_test: Tokenizer path is replaced with local tokenizer path when
+    HF_HUB_OFFLINE is True.
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: file=arg_utils.py
+    method: __post_init__
+    line_at_scan: 12345
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer:
+        present: true
+  kwargs_positive:
+    tokenizer: test_tokenizer
+  kwargs_negative:
+    tokenizer: local_tokenizer_path
+  added_by: llm_construct_grounded
+- id: engine_check_concurrent_partial_prefill
+  engine: vllm
+  library: vllm
+  invariant_under_test: Concurrent Partial Prefills are not supported
+  severity: error
+  native_type: EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _check_feature_supported
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_partial_prefills:
+        present: true
+        not_equal: 1
+      vllm.engine.max_long_partial_prefills:
+        present: true
+        not_equal: 1
+  kwargs_positive:
+    max_num_partial_prefills: 2
+    max_long_partial_prefills: 2
+  kwargs_negative:
+    max_num_partial_prefills: 1
+    max_long_partial_prefills: 1
+  added_by: llm_construct_grounded
+- id: engine_check_pipeline_parallelism_support
+  engine: vllm
+  library: vllm
+  invariant_under_test: Pipeline Parallelism requires supported distributed executor
+    backend
+  severity: error
+  native_type: EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _check_feature_supported
+    line_at_scan: 18
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.pipeline_parallel_size:
+        '>': 1
+      vllm.engine.distributed_executor_backend:
+        present: true
+        not_in:
+        - ray
+        - mp
+        - external_launcher
+  kwargs_positive:
+    pipeline_parallel_size: 2
+    distributed_executor_backend: unsupported_backend
+  kwargs_negative:
+    pipeline_parallel_size: 2
+    distributed_executor_backend: ray
+  added_by: llm_construct_grounded
+- id: engine_set_default_chunked_prefill_and_prefix_caching_args
+  engine: vllm
+  library: vllm
+  invariant_under_test: Default chunked prefill and prefix caching settings are applied
+    if not set
+  severity: dormant
+  native_type: EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _set_default_chunked_prefill_and_prefix_caching_args
+    line_at_scan: 50
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_chunked_prefill:
+        present: true
+        not_equal: null
+      vllm.engine.enable_prefix_caching:
+        present: true
+        not_equal: null
+  kwargs_positive:
+    enable_chunked_prefill: false
+    enable_prefix_caching: false
+  kwargs_negative:
+    enable_chunked_prefill: null
+    enable_prefix_caching: null
+  added_by: llm_construct_grounded

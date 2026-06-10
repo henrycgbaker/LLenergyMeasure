@@ -91,6 +91,7 @@ def gen_hybrid(engine, vslug, version_str, model, sigs):
                 version=version_str,
                 class_signatures=sig_block,
                 candidates=cand_yaml,
+                source=chunk,
             ),
         )
         raw.append(f"=STAGE1=\n{s1}\n=STAGE2=\n{s2}")

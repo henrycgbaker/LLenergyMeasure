@@ -1,0 +1,23 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "hybrid_chain",
+  "model": "qwen2.5-coder:32b",
+  "n_extension_raw": 207,
+  "n_extension_deduped": 118,
+  "n_gateable": 118,
+  "verdicts": {
+    "confirmed": 17,
+    "failed": 50,
+    "skipped": 1,
+    "infra_error": 50,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.144,
+  "gt_confirmed_total": 80,
+  "floor_recall": 44,
+  "llm_lift_over_floor": 5,
+  "hybrid_recall": 49,
+  "hybrid_recall_frac": 0.613,
+  "wall_sec": 2727.6
+}

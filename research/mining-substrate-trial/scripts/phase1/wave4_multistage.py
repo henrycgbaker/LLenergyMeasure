@@ -50,10 +50,13 @@ SOURCE:
 
 Emit the YAML now:"""
 
-STAGE2 = """You are constructing runnable gate probes for invariants already found in {engine} v{version}. For EACH invariant below, add a kwargs_positive (constructor kwargs that TRIGGER the rule) and kwargs_negative (that PASS), using the CONSTRUCTOR SIGNATURES to make them constructible.
+STAGE2 = """You are constructing runnable gate probes for invariants found in the {engine} v{version} SOURCE below. For EACH invariant, add a kwargs_positive (constructor kwargs that TRIGGER the rule) and kwargs_negative (that PASS). GROUND the kwargs in BOTH the constructor signatures (for field names + required args) AND the SOURCE (for the validator logic, field types, defaults, and how the rule actually fires).
 
 CONSTRUCTOR SIGNATURES (include every REQUIRED field; use exact field names):
 {class_signatures}
+
+VALIDATOR SOURCE (the rules + field definitions - ground your kwargs in THIS):
+{source}
 
 INVARIANTS TO PROBE:
 {candidates}
@@ -101,7 +104,11 @@ def gen_multistage(engine, vslug, version_str, model, sigs):
         s2 = _chat(
             llm,
             STAGE2.format(
-                engine=engine, version=version_str, class_signatures=sig_block, candidates=cand_yaml
+                engine=engine,
+                version=version_str,
+                class_signatures=sig_block,
+                candidates=cand_yaml,
+                source=chunk,
             ),
         )
         raw.append(f"=STAGE1=\n{s1}\n=STAGE2=\n{s2}")
