@@ -32,13 +32,13 @@ results/
 
 ## `result.json` - per-experiment record
 
-The scientific record. One JSON file per experiment cell. Schema version `3.0`.
+The scientific record. One JSON file per experiment cell. Schema version `4.0`.
 
 ### Identification
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | str | Result schema version (currently `"3.0"`) |
+| `schema_version` | str | Result schema version (currently `"4.0"`) |
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
@@ -56,7 +56,7 @@ The scientific record. One JSON file per experiment cell. Schema version `3.0`.
 
 ### Aggregate metrics
 
-These are the totals across all processes / GPUs (post-aggregation, post-warmup-exclusion when applicable).
+These are the run totals (post-warmup-exclusion when applicable).
 
 | Field | Type | Description |
 |-------|------|-------------|
