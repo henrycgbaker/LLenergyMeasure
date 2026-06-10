@@ -107,6 +107,7 @@ across engines.
 | `baseline.validation_interval` | int >= 1 | `5` | Re-validate every N experiments (validated only) | `models.py:165-171` |
 | `baseline.drift_threshold` | float [0.01, 0.50] | `0.10` | Drift fraction that triggers re-measurement (validated only) | `models.py:172-180` |
 | `energy_sampler` | `auto` \| `nvml` \| `zeus` \| `codecarbon` \| null | `auto` | Energy sampler; null disables energy measurement | `models.py:320-327` |
+| `latency_profiling` | bool | `false` | Opt-in per-token latency profiling. Captures TTFT/ITL (transformers via a streamer forced to `batch_size=1`; vLLM via decode-average ITL). Overhead may perturb energy and latency, so profiled runs are tagged in `measurement_warnings` and energy is emitted as-is. Unsupported on tensorrt. | `models.py:296-307` |
 
 ### Top-level optional fields
 
