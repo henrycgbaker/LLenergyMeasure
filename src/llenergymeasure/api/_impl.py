@@ -345,6 +345,11 @@ def _run(
 
     _api_logger = logging.getLogger(__name__)
 
+    # Preresolved runner specs bypass preflight; demanding skip_preflight makes the
+    # contract explicit rather than silently ignoring the precomputed result.
+    if preresolved is not None and not skip_preflight:
+        raise ValueError("preresolved requires skip_preflight=True")
+
     # Load user config first so runner context can be forwarded to preflight,
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
     user_config = load_user_config()

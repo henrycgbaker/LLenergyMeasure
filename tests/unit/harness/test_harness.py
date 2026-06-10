@@ -1057,6 +1057,41 @@ def test_build_result_populates_mj_per_tok(minimal_config):
     assert result.mj_per_tok_adjusted is None
 
 
+def test_build_result_batch_utilisation_defaults_for_transformers(minimal_config):
+    """A config WITHOUT a transformers block yields batch_utilisation == 1.0.
+
+    Regression: the transformers plugin defaults batch_size to 1 when the
+    transformers config block (or its batch_size) is unset, but
+    _configured_batch_size used to return None in that case, leaving
+    batch_utilisation silently null. It must now mirror the engine default of 1.
+    """
+    # minimal_config.transformers is None - the exact unset case.
+    assert minimal_config.transformers is None
+
+    engine = FakeBackend(
+        engine_name="transformers",
+        inference_output=InferenceOutput(
+            elapsed_time_sec=1.0,
+            input_tokens=10,
+            output_tokens=20,
+            peak_memory_mb=512.0,
+            model_memory_mb=256.0,
+            batch_times=[1.0],
+            num_batches=1,
+        ),
+    )
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(engine, minimal_config)
+
+    batch = result.extended_metrics.batch
+    # load_prompts is patched to one prompt; num_batches=1 -> effective 1.
+    assert batch.effective_batch_size == pytest.approx(1.0)
+    # configured defaults to 1 -> utilisation 1.0, not null.
+    assert batch.batch_utilisation == pytest.approx(1.0)
+
+
 def test_harness_flops_none_result_has_none_derived(minimal_config):
     """When FLOPs estimation returns None, derived fields are None."""
     engine = FakeBackend()

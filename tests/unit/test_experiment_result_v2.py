@@ -1,6 +1,6 @@
-"""Unit tests for ExperimentResult v3.0 schema.
+"""Unit tests for ExperimentResult v4.0 schema.
 
-Tests cover: schema_version="3.0", all RES-01..RES-11 fields, JSON round-trip,
+Tests cover: schema_version="4.0", all RES-01..RES-11 fields, JSON round-trip,
 config hash utility, MultiGPUMetrics, frozen model enforcement.
 """
 
@@ -51,7 +51,7 @@ def make_result():
 
 
 def test_schema_version_default_is_3_0(make_result):
-    """schema_version defaults to '3.0', not '3.0.0'."""
+    """schema_version defaults to '4.0', not '4.0.0'."""
     result = make_result()
     from tests.conftest import EXPERIMENT_SCHEMA_VERSION
 

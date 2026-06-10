@@ -48,7 +48,3 @@ class DockerPreFlightError(PreFlightError):
     Inherits from PreFlightError so it is caught by the existing CLI error
     handler (PreFlightError catch block in cli/run.py).
     """
-
-
-# Used by results/aggregation.py
-AggregationError = ExperimentError
