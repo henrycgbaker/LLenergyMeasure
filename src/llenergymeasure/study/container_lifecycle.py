@@ -17,19 +17,26 @@ from __future__ import annotations
 import atexit
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import sys
 from datetime import datetime, timezone
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.ssot import TIMEOUT_DOCKER_CLI, TIMEOUT_DOCKER_STOP
 
+if TYPE_CHECKING:
+    from llenergymeasure.utils.exceptions import DockerError
+
 __all__ = [
     "cleanup_study_containers",
+    "copy_artefact",
     "generate_container_labels",
     "generate_container_name",
     "install_sigterm_bridge",
+    "persist_failure_artefacts",
     "reap_orphaned_containers",
     "register_container_cleanup",
 ]
@@ -196,3 +203,59 @@ def reap_orphaned_containers() -> int:
     except Exception:
         pass  # Never block study start
     return reaped
+
+
+def copy_artefact(src: Path, dest: Path) -> str | None:
+    """Copy a single file, returning the dest filename on success or None."""
+    if not src.exists():
+        return None
+    try:
+        shutil.copy2(src, dest)
+        logger.debug("Artefact persisted to %s", dest)
+        return dest.name
+    except Exception as copy_exc:
+        logger.warning("Failed to persist %s to %s: %s", src.name, dest, copy_exc)
+        return None
+
+
+def persist_failure_artefacts(
+    exc: DockerError,
+    study_dir: Path,
+    config_hash: str,
+    cycle: int,
+    result: dict[str, Any],
+) -> None:
+    """Copy failure artefacts from the Docker exchange dir into ``failed-runs/``.
+
+    Copies ``container.log`` and any ``*_error.json`` from the exchange
+    directory. Adds a ``log_file`` key to *result* so the manifest records
+    where the log can be found.
+    """
+    exchange_dir_str = getattr(exc, "exchange_dir", None)
+    if not exchange_dir_str:
+        return
+
+    exchange_dir = Path(exchange_dir_str)
+    failed_runs_dir = study_dir / "failed-runs"
+    prefix = f"{config_hash}_cycle{cycle}"
+
+    try:
+        failed_runs_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as mkdir_exc:
+        logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
+        return
+
+    # Copy container.log (Docker stderr capture)
+    log_file = copy_artefact(
+        exchange_dir / "container.log",
+        failed_runs_dir / f"{prefix}_container.log",
+    )
+    if log_file:
+        result["log_file"] = f"failed-runs/{log_file}"
+
+    # Copy error JSON (structured traceback from container entrypoint).
+    # The error JSON uses the Docker config hash (output_dir=/run/llem),
+    # which differs from the study-level config_hash, so glob for it.
+    for src in exchange_dir.glob("*_error.json"):
+        copy_artefact(src, failed_runs_dir / f"{prefix}_error.json")
+        break  # only one expected
