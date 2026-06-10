@@ -213,7 +213,7 @@ Runs `scripts/_drift.py` over a curated version range (e.g. `vllm v0.9..v0.12`) 
 
 `runtime_observations.jsonl`:
 
-- **Producer:** `src/llenergymeasure/study/runtime_observations.py` (`warnings.catch_warnings` + logger handler wrapping each worker body); wired in `runner.py`.
+- **Producer:** `src/llenergymeasure/study/runtime_observations.py` (`warnings.catch_warnings` + logger handler wrapping each worker body); wired in `worker.py`.
 - **Schema:** `schema_version=1`; one record per `(study_run_id, config_hash, cycle)`; outcome in `{success, exception, subprocess_died}`.
 - **Consumer (today):** `llem report-gaps` with `--source runtime-warnings` (the only wired source). Output is a YAML fragment for manual append to the corpus, with `# TODO: human` markers on placeholder fields. Preserved as an escape-hatch.
 - **Consumer (long-term):** subsume into curation digest Section 3 ("Runtime gaps observed"). Deferred to [#475](https://github.com/henrycgbaker/llenergymeasure/issues/475); reactivate after 2-3 Renovate cycles of operational data.
