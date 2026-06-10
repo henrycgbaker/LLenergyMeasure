@@ -113,7 +113,7 @@ def save_config_sidecar(
 
     - ``observed_engine_params`` / ``observed_sampling_params`` - authoritative
       post-construction library state (populated by
-      :func:`llenergymeasure.engines._helpers.extract_observed_params`).
+      :func:`llenergymeasure.engines._observed.extract_observed_params`).
     - ``resolved_config_hash`` - library-resolution mechanism-output hash, carried forward from sweep
       expansion via ``StudyConfig.declared_resolved_config_hashes``.
     - ``observed_config_hash`` - library-observation hash computed from the effective

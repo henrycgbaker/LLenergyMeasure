@@ -714,3 +714,16 @@ def collect_itl_measurements(
             excluded += len(intervals)
 
     return itl_full, itl_trimmed, excluded
+
+
+def compute_cv(values: list[float]) -> float:
+    """Compute the coefficient of variation (std / mean) for *values*.
+
+    Returns 0.0 when the mean is zero or negative (avoids division by zero).
+    """
+    import numpy as np
+
+    mean = float(np.mean(values))
+    if mean <= 0:
+        return 0.0
+    return float(np.std(values)) / mean

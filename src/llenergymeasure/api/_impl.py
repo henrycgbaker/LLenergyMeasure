@@ -23,6 +23,7 @@ from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
+from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.utils.exceptions import ConfigError
 
 # Single source of truth for n_prompts default - derived from DatasetConfig field default
@@ -147,6 +148,7 @@ def run_study(
     no_lock: bool = False,
     config_path: Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None = None,
 ) -> StudyResult:
     """Run a multi-experiment study.
 
@@ -174,6 +176,11 @@ def run_study(
         cli_overrides: Flat dict of CLI flag overrides (e.g. {"model": "gpt2"}).
             Used to build per-experiment ``_resolution.json`` sidecars showing
             which fields were overridden by CLI flags vs YAML vs sweep.
+        preresolved: Optional ``(runner_specs, system_overrides)`` already
+            computed by a prior ``run_study_preflight`` call (e.g. the CLI runs
+            preflight to render the panel). When supplied, ``_run`` reuses it
+            instead of re-running preflight. Must be paired with
+            ``skip_preflight=True`` so the precomputed result is trusted.
 
     Returns:
         StudyResult with experiments, result_files, measurement_protocol, and inline summary fields.
@@ -225,6 +232,7 @@ def run_study(
         no_lock=no_lock,
         config_path=config_path,
         cli_overrides=cli_overrides,
+        preresolved=preresolved,
     )
 
 
@@ -317,6 +325,7 @@ def _run(
     no_lock: bool = False,
     config_path: Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -345,24 +354,29 @@ def _run(
     # Docker, or auto-elevates to Docker when available. Also runs Docker pre-flight
     # checks when any engine resolves to a Docker runner.
     # Preflight returns resolved runner specs so we don't resolve them twice.
-    if progress:
-        progress.on_step_start("preflight", "Checking", "environment and Docker")
-        t0_pf = time.perf_counter()
-    try:
-        runner_specs, system_overrides = run_study_preflight(
-            study,
-            skip_preflight=skip_preflight,
-            yaml_runners=study.runners,
-            user_config=user_config.runners,
-            yaml_images=study.images,
-            user_config_images=user_config.images or None,
-        )
-    except Exception:
+    # When the caller already ran preflight (e.g. the CLI, to render its panel),
+    # reuse that result instead of resolving runners a second time.
+    if preresolved is not None:
+        runner_specs, system_overrides = preresolved
+    else:
+        if progress:
+            progress.on_step_start("preflight", "Checking", "environment and Docker")
+            t0_pf = time.perf_counter()
+        try:
+            runner_specs, system_overrides = run_study_preflight(
+                study,
+                skip_preflight=skip_preflight,
+                yaml_runners=study.runners,
+                user_config=user_config.runners,
+                yaml_images=study.images,
+                user_config_images=user_config.images or None,
+            )
+        except Exception:
+            if progress:
+                progress.on_step_done("preflight", time.perf_counter() - t0_pf)
+            raise
         if progress:
             progress.on_step_done("preflight", time.perf_counter() - t0_pf)
-        raise
-    if progress:
-        progress.on_step_done("preflight", time.perf_counter() - t0_pf)
 
     # Warn on mixed runners (some local, some docker)
     modes = {spec.mode for spec in runner_specs.values()}

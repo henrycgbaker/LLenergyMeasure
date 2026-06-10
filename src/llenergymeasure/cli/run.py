@@ -419,7 +419,8 @@ def _run_study_impl(
     import yaml
 
     from llenergymeasure.cli._display import print_study_dry_run
-    from llenergymeasure.config.grid import build_preflight_panel, count_sweep_structure
+    from llenergymeasure.cli._preflight_display import build_preflight_panel
+    from llenergymeasure.config.grid import count_sweep_structure
     from llenergymeasure.config.loader import load_study_config
 
     # Fast-fail: verify resume target exists before expensive grid expansion.
@@ -589,12 +590,11 @@ def _run_study_impl(
     # Resolve runners and compute study dir preview - shared by both
     # dry-run and actual-run so both show the same preflight panel.
     # ---------------------------------------------------------------
-    from datetime import datetime, timezone
-
-    from llenergymeasure.api import probe_energy_sampler, run_study_preflight
+    from llenergymeasure.api import probe_energy_sampler, run_study_preflight, study_dir_name
     from llenergymeasure.config.user_config import load_user_config
 
     user_config = load_user_config()
+    preresolved: tuple[dict[str, Any], dict[str, dict[str, str]]] | None = None
     try:
         runner_specs, _system_overrides = run_study_preflight(
             study_config,
@@ -605,12 +605,11 @@ def _run_study_impl(
             yaml_images=study_config.images,
             user_config_images=user_config.images or None,
         )
+        preresolved = (runner_specs, _system_overrides)
     except Exception:
         runner_specs = None  # graceful: Docker unavailable, show YAML runners
 
-    prefix = study_config.study_name or "study"
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
-    study_dir_preview = Path("results") / f"{prefix}_{ts}"
+    study_dir_preview = Path("results") / study_dir_name(study_config.study_name)
 
     # --- Dry-run branch ---
     if dry_run:
@@ -727,6 +726,7 @@ def _run_study_impl(
             no_lock=no_lock,
             config_path=config.resolve(),
             cli_overrides=cli_overrides or None,
+            preresolved=preresolved,
         )
     finally:
         # Safety stop - ensures Rich Live is torn down even on exceptions

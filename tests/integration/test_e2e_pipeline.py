@@ -390,9 +390,9 @@ class TestCLIE2EStudy:
 
         monkeypatch.setattr(llenergymeasure, "run_study", lambda config, **kw: mock_study_result)
 
-        # Also patch format_preflight_summary to avoid real config.grid dependency
+        # Also patch format_preflight_summary to avoid the real preflight display path
         monkeypatch.setattr(
-            "llenergymeasure.config.grid.format_preflight_summary",
+            "llenergymeasure.cli._preflight_display.format_preflight_summary",
             lambda study_config: "Preflight: 2 experiments",
         )
 

@@ -357,6 +357,53 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     assert preflight_calls[0].task.model == "gpt2"
 
 
+def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
+    """_run() does NOT re-run study preflight when preresolved is provided."""
+    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.engines as engines_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+
+    study_preflight_calls: list = []
+
+    def _counting_preflight(study, **kw):
+        study_preflight_calls.append(study)
+        return _mock_preflight_return(study, **kw)
+
+    mock_result = make_result()
+    mock_engine = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _counting_preflight)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    _patch_harness(monkeypatch, mock_result)
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+
+    preresolved = (
+        {"transformers": RunnerSpec(mode="local", image=None, source="test")},
+        {},
+    )
+    api_module._run(study, skip_preflight=True, preresolved=preresolved)
+
+    assert study_preflight_calls == [], (
+        "run_study_preflight must not be called inside _run when preresolved is supplied"
+    )
+
+
 def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
     """_run() calls get_engine with the experiment's engine name."""
     import llenergymeasure.api._impl as api_module

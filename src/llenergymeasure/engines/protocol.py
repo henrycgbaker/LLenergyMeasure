@@ -141,7 +141,7 @@ class EnginePlugin(Protocol):
 
         Returns a dict with keys ``"engine"``, ``"sampling"``, and
         ``"library_version"`` - same shape as
-        :func:`llenergymeasure.engines._helpers.assemble_observed_params`.
+        :func:`llenergymeasure.engines._observed.assemble_observed_params`.
 
         Engines must never raise; any extraction failure should be caught and
         logged at DEBUG, returning empty dicts for the failed sub-field.

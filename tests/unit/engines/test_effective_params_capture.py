@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from llenergymeasure.engines._helpers import extract_observed_params
+from llenergymeasure.engines._observed import extract_observed_params
 
 # ---------------------------------------------------------------------------
 # Dispatch behaviour - one per native-type shape

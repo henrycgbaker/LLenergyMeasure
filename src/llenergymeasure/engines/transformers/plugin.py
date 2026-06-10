@@ -168,7 +168,7 @@ class TransformersEngine:
         # Reset peak stats BEFORE the measurement loop so max_memory_allocated()
         # captures inference-window-only peak (KV cache + activations + batch buffers),
         # NOT model weights already allocated by load_model().
-        from llenergymeasure.engines._helpers import reset_cuda_peak_memory
+        from llenergymeasure.engines._cuda import reset_cuda_peak_memory
 
         reset_cuda_peak_memory()
 
@@ -220,7 +220,7 @@ class TransformersEngine:
                     batch_time,
                 )
             except Exception as e:
-                from llenergymeasure.engines._helpers import raise_engine_error
+                from llenergymeasure.engines._errors import raise_engine_error
 
                 raise_engine_error(
                     e,
@@ -229,7 +229,7 @@ class TransformersEngine:
                 )
 
         # Track peak GPU memory (inference window only - reset above)
-        from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
+        from llenergymeasure.engines._cuda import get_cuda_peak_memory_mb
 
         peak_memory_mb = get_cuda_peak_memory_mb()
 
@@ -284,7 +284,7 @@ class TransformersEngine:
         Returns a dict with ``engine`` / ``sampling`` / ``library_version``
         entries ready for the observed-config hashing pipeline.
         """
-        from llenergymeasure.engines._helpers import (
+        from llenergymeasure.engines._observed import (
             assemble_observed_params,
             extract_observed_params,
         )
@@ -343,7 +343,7 @@ class TransformersEngine:
         Args:
             model: Tuple of (model, tokenizer) from load_model().
         """
-        from llenergymeasure.engines._helpers import cleanup_model
+        from llenergymeasure.engines._cuda import cleanup_model
 
         hf_model, _tokenizer = model
         cleanup_model(hf_model, use_gc=False)
