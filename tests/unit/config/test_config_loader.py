@@ -474,8 +474,13 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
         )
     )
     sc = _load_study(study_yaml)
-    # Captured from origin/main before the loader/finalise split (PR 13).
-    assert sc.study_design_hash == "5084ea3c6b9c7b78"
+    # Pinned over the full resolved-config surface (config.model_dump). Re-pinned
+    # when MeasurementConfig gained the opt-in latency_profiling field: a new
+    # defaulted field shifts the canonical JSON, so the fingerprint moves while
+    # the resolve -> dedup -> hash pipeline is unchanged (6 declared -> 4 unique
+    # below still holds). A value change with those structural assertions intact
+    # is a benign schema-surface shift; a change to the dedup counts is not.
+    assert sc.study_design_hash == "f6c89398e2a344dd"
     # 6 declared configs collapse to 4 unique under resolved-config dedup.
     assert len(sc.experiments) == 4
     assert len(sc.declared_resolved_config_hashes) == 6
