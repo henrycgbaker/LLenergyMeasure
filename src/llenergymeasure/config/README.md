@@ -714,6 +714,6 @@ Results include `effective_config` and `cli_overrides` fields for full reproduci
 ## Related
 
 - See `../cli/` for CLI commands (`llem run`, `llem config`)
-- See `../harness/__init__.py` for config usage in inference
+- See `../harness/measurement.py` for config usage in inference
 - See `../utils/constants.py` for shared constants
 - See `../domain/experiment.py` for result models with config tracking

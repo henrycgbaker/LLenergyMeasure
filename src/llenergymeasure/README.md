@@ -111,7 +111,7 @@ Security utilities:
 - `preflight.py` - study-level pre-flight validation (multi-engine Docker requirements)
 
 ### `harness/` and `results/` (Layer 5)
-- `harness/__init__.py` - `MeasurementHarness`, `select_energy_sampler()`
+- `harness/measurement.py` - `MeasurementHarness` measurement lifecycle (re-exported via `harness/__init__.py`)
 - `harness/preflight.py` - experiment-level pre-flight checks (CUDA, engine, model)
 - `harness/environment.py` - environment snapshot collection
 - `harness/warmup.py` - thermal floor wait and warmup utilities

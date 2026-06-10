@@ -244,7 +244,7 @@ sequenceDiagram
   into Container B under `/run/llem/`. No stdin pipes, no long-lived
   sidecars, no shared volumes beyond the read-only cache.
 - **`fresh` strategy is single-container.** The harness measures its own
-  baseline inside Container B (Branch B of `harness/__init__.py`). No
+  baseline inside Container B (Branch B of `harness/measurement.py`). No
   Container A is dispatched. This is the simplest path but pays the
   baseline cost on every experiment.
 

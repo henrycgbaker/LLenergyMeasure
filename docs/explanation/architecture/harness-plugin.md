@@ -34,7 +34,7 @@ and methodology improvements cannot roll out atomically.
 ## The plugin model
 
 `MeasurementHarness`
-([`src/llenergymeasure/harness/__init__.py:220`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/harness/__init__.py#L220))
+([`src/llenergymeasure/harness/measurement.py:223`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/harness/measurement.py#L223))
 is the orchestrator. It knows nothing about specific inference frameworks. It
 calls methods on an `EnginePlugin` instance and owns everything else.
 

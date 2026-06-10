@@ -10,7 +10,8 @@ Measurement lifecycle orchestration for any inference engine. Layer 3 in the six
 
 | Module | Description |
 |--------|-------------|
-| `__init__.py` | `MeasurementHarness` class, re-exports |
+| `measurement.py` | `MeasurementHarness` class, measurement lifecycle implementation |
+| `__init__.py` | Re-exports the public surface from `measurement.py` |
 | `warmup.py` | `warmup_until_converged()` - CV-based adaptive warmup; `thermal_floor_wait()` |
 | `baseline.py` | `measure_baseline_power()` - idle GPU power baseline with session cache |
 | `flops.py` | `estimate_flops_palm()`, `estimate_flops_palm_from_config()` - FLOPs estimation |
