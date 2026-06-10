@@ -1,0 +1,1280 @@
+confirmed:
+- id: vllm_sampling_n_min
+  ckey:
+  - n
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: n must be at least 1
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        <: 1
+  kwargs_positive:
+    n: 0
+  kwargs_negative:
+    n: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_n_greedy_must_be_one
+  ckey:
+  - n
+  - numeric
+  - '[n,temperature]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: when temperature is ~0 (greedy), n must be 1 (cross-field)
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        '>': 1
+      vllm.sampling.temperature:
+        <: 1.0e-05
+  kwargs_positive:
+    n: 2
+    temperature: 0.0
+  kwargs_negative:
+    n: 2
+    temperature: 1.0
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_presence_penalty_range
+  ckey:
+  - presence_penalty
+  - presence
+  - '[-2,2]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: presence_penalty must be in [-2, 2]
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.presence_penalty:
+        not_in_range:
+        - -2.0
+        - 2.0
+  kwargs_positive:
+    presence_penalty: 2.5
+  kwargs_negative:
+    presence_penalty: 0.0
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_frequency_penalty_range
+  ckey:
+  - frequency_penalty
+  - presence
+  - '[-2,2]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: frequency_penalty must be in [-2, 2]
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.frequency_penalty:
+        not_in_range:
+        - -2.0
+        - 2.0
+  kwargs_positive:
+    frequency_penalty: -3.0
+  kwargs_negative:
+    frequency_penalty: 0.0
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_repetition_penalty_positive
+  ckey:
+  - repetition_penalty
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: repetition_penalty must be greater than zero
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <=: 0.0
+  kwargs_positive:
+    repetition_penalty: 0.0
+  kwargs_negative:
+    repetition_penalty: 1.0
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_top_p_range
+  ckey:
+  - top_p
+  - presence
+  - '[0,1]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: top_p must be in (0, 1]
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_p:
+        not_in_half_open:
+        - 0.0
+        - 1.0
+  kwargs_positive:
+    top_p: 1.5
+  kwargs_negative:
+    top_p: 0.9
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_top_p_zero_rejected
+  ckey:
+  - top_p
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: top_p of exactly 0 is rejected (interval is open at 0)
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_p:
+        <=: 0.0
+  kwargs_positive:
+    top_p: 0.0
+  kwargs_negative:
+    top_p: 0.001
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_top_k_min
+  ckey:
+  - top_k
+  - numeric
+  - '-1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: top_k must be 0 (disable), -1 (also disable), or at least
+    1
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        <: -1
+  kwargs_positive:
+    top_k: -2
+  kwargs_negative:
+    top_k: 0
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_min_p_range
+  ckey:
+  - min_p
+  - presence
+  - '[0,1]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: min_p must be in [0, 1]
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_p:
+        not_in_range:
+        - 0.0
+        - 1.0
+  kwargs_positive:
+    min_p: 1.5
+  kwargs_negative:
+    min_p: 0.0
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_max_tokens_min
+  ckey:
+  - max_tokens
+  - numeric
+  - '{<=1,present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_tokens (when not None) must be at least 1
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        <: 1
+        present: true
+  kwargs_positive:
+    max_tokens: 0
+  kwargs_negative:
+    max_tokens: 16
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_min_tokens_non_negative
+  ckey:
+  - min_tokens
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: min_tokens must be >= 0
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  kwargs_positive:
+    min_tokens: -1
+  kwargs_negative:
+    min_tokens: 0
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_logprobs_non_negative_or_neg1
+  ckey:
+  - logprobs
+  - membership
+  - '{<=0,not_in=[-1],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: logprobs must be non-negative or exactly -1
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs:
+        <: 0
+        not_in:
+        - -1
+        present: true
+  kwargs_positive:
+    logprobs: -2
+  kwargs_negative:
+    logprobs: 5
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_prompt_logprobs_non_negative_or_neg1
+  ckey:
+  - prompt_logprobs
+  - membership
+  - '{<=0,not_in=[-1],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: prompt_logprobs must be non-negative or exactly -1
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs:
+        <: 0
+        not_in:
+        - -1
+        present: true
+  kwargs_positive:
+    prompt_logprobs: -3
+  kwargs_negative:
+    prompt_logprobs: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_stop_no_empty_string
+  ckey:
+  - stop
+  - presence
+  - 'True'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: stop list cannot contain an empty string
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        contains_empty_string: true
+  kwargs_positive:
+    stop:
+    - valid
+    - ''
+  kwargs_negative:
+    stop:
+    - valid
+  observed_outcome: error
+  error: ''
+- id: vllm_sampling_stop_token_ids_must_be_ints
+  ckey:
+  - stop_token_ids
+  - presence
+  - int
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: stop_token_ids must contain only integers
+  native_type: vllm.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop_token_ids:
+        element_type_not: int
+  kwargs_positive:
+    stop_token_ids:
+    - not_an_int
+  kwargs_negative:
+    stop_token_ids:
+    - 1
+    - 2
+    - 3
+  observed_outcome: error
+  error: ''
+- id: vllm_repetition_detection_sizes_non_negative
+  ckey:
+  - max_pattern_size
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_pattern_size and min_pattern_size must be >= 0
+  native_type: vllm.sampling_params.RepetitionDetectionParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_detection.max_pattern_size:
+        <: 0
+  kwargs_positive:
+    max_pattern_size: -1
+    min_count: 0
+    min_pattern_size: 0
+  kwargs_negative:
+    max_pattern_size: 0
+    min_count: 0
+    min_pattern_size: 0
+  observed_outcome: error
+  error: ''
+- id: vllm_structured_outputs_config_backend_enum
+  ckey:
+  - backend
+  - membership
+  - '{not_in=[auto,guidance,lm-format-enforcer,outlines,xgrammar],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: backend must be one of the allowed StructuredOutputsBackend
+    literals
+  native_type: vllm.config.StructuredOutputsConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.structured_outputs_config.backend:
+        not_in:
+        - auto
+        - xgrammar
+        - guidance
+        - outlines
+        - lm-format-enforcer
+        present: true
+  kwargs_positive:
+    backend: not_a_backend
+  kwargs_negative:
+    backend: auto
+  observed_outcome: error
+  error: ''
+- id: vllm_structured_outputs_config_disable_any_whitespace_backend
+  ckey:
+  - backend
+  - membership
+  - '[backend,disable_any_whitespace]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: disable_any_whitespace only supported for xgrammar/guidance
+    backends (cross-field conditional)
+  native_type: vllm.config.StructuredOutputsConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.structured_outputs_config.backend:
+        not_in:
+        - xgrammar
+        - guidance
+      vllm.engine.structured_outputs_config.disable_any_whitespace:
+        ==: true
+  kwargs_positive:
+    backend: outlines
+    disable_any_whitespace: true
+  kwargs_negative:
+    backend: xgrammar
+    disable_any_whitespace: true
+  observed_outcome: error
+  error: ''
+- id: vllm_structured_outputs_config_disable_additional_properties_backend
+  ckey:
+  - backend
+  - presence
+  - '[backend,disable_additional_properties]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: disable_additional_properties only supported for guidance
+    backend (cross-field conditional)
+  native_type: vllm.config.StructuredOutputsConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.structured_outputs_config.backend:
+        '!=': guidance
+      vllm.engine.structured_outputs_config.disable_additional_properties:
+        ==: true
+  kwargs_positive:
+    backend: xgrammar
+    disable_additional_properties: true
+  kwargs_negative:
+    backend: guidance
+    disable_additional_properties: true
+  observed_outcome: error
+  error: ''
+- id: vllm_lora_max_lora_rank_enum
+  ckey:
+  - max_lora_rank
+  - membership
+  - '{not_in=[1,128,16,256,32,320,512,64,8],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_lora_rank must be one of the allowed MaxLoRARanks literals
+  native_type: vllm.LoRAConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_lora_rank:
+        not_in:
+        - 1
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 320
+        - 512
+        present: true
+  kwargs_positive:
+    max_lora_rank: 17
+  kwargs_negative:
+    max_lora_rank: 16
+  observed_outcome: error
+  error: ''
+- id: vllm_lora_max_loras_ge_1
+  ckey:
+  - max_loras
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_loras must be >= 1 (Field ge=1)
+  native_type: vllm.LoRAConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_loras:
+        <: 1
+  kwargs_positive:
+    max_loras: 0
+  kwargs_negative:
+    max_loras: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_lora_max_cpu_loras_ge_max_loras
+  ckey:
+  - max_cpu_loras
+  - numeric
+  - '{<=vllm.engine.max_loras,present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_cpu_loras (when set) must be >= max_loras (cross-field)
+  native_type: vllm.LoRAConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_cpu_loras:
+        <: vllm.engine.max_loras
+        present: true
+  kwargs_positive:
+    max_cpu_loras: 2
+    max_loras: 4
+  kwargs_negative:
+    max_cpu_loras: 8
+    max_loras: 4
+  observed_outcome: error
+  error: ''
+- id: vllm_cache_gpu_memory_utilization_upper
+  ckey:
+  - gpu_memory_utilization
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: gpu_memory_utilization must be <= 1 (Field le=1)
+  native_type: vllm.config.CacheConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.gpu_memory_utilization:
+        '>': 1.0
+  kwargs_positive:
+    gpu_memory_utilization: 1.5
+  kwargs_negative:
+    gpu_memory_utilization: 0.9
+  observed_outcome: error
+  error: ''
+- id: vllm_cache_dtype_enum
+  ckey:
+  - cache_dtype
+  - membership
+  - '{not_in=[auto,bfloat16,float16,fp8,fp8_ds_mla,fp8_e4m3,fp8_e5m2,fp8_inc],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: cache_dtype must be one of the allowed CacheDType literals
+  native_type: vllm.config.CacheConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_dtype:
+        not_in:
+        - auto
+        - float16
+        - bfloat16
+        - fp8
+        - fp8_e4m3
+        - fp8_e5m2
+        - fp8_inc
+        - fp8_ds_mla
+        present: true
+  kwargs_positive:
+    cache_dtype: int8
+  kwargs_negative:
+    cache_dtype: auto
+  observed_outcome: error
+  error: ''
+- id: vllm_cache_prefix_caching_hash_algo_enum
+  ckey:
+  - prefix_caching_hash_algo
+  - membership
+  - '{not_in=[sha256,sha256_cbor,xxhash,xxhash_cbor],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: prefix_caching_hash_algo must be one of the allowed PrefixCachingHashAlgo
+    literals
+  native_type: vllm.config.CacheConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prefix_caching_hash_algo:
+        not_in:
+        - sha256
+        - sha256_cbor
+        - xxhash
+        - xxhash_cbor
+        present: true
+  kwargs_positive:
+    prefix_caching_hash_algo: md5
+  kwargs_negative:
+    prefix_caching_hash_algo: sha256
+  observed_outcome: error
+  error: ''
+- id: vllm_cache_mamba_block_size_positive
+  ckey:
+  - mamba_block_size
+  - numeric
+  - '{<==0,present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: mamba_block_size (when set) must be > 0 (Field gt=0)
+  native_type: vllm.config.CacheConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_block_size:
+        <=: 0
+        present: true
+  kwargs_positive:
+    mamba_block_size: 0
+  kwargs_negative:
+    mamba_block_size: 8
+  observed_outcome: error
+  error: ''
+- id: vllm_cache_mamba_cache_dtype_enum
+  ckey:
+  - mamba_cache_dtype
+  - membership
+  - '{not_in=[auto,float16,float32],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: mamba_cache_dtype must be one of the allowed MambaDType literals
+  native_type: vllm.config.CacheConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_cache_dtype:
+        not_in:
+        - auto
+        - float32
+        - float16
+        present: true
+  kwargs_positive:
+    mamba_cache_dtype: bfloat16
+  kwargs_negative:
+    mamba_cache_dtype: auto
+  observed_outcome: error
+  error: ''
+- id: vllm_cache_mamba_cache_mode_enum
+  ckey:
+  - mamba_cache_mode
+  - membership
+  - '{not_in=[align,all,none],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: mamba_cache_mode must be one of the allowed MambaCacheMode
+    literals
+  native_type: vllm.config.CacheConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_cache_mode:
+        not_in:
+        - all
+        - align
+        - none
+        present: true
+  kwargs_positive:
+    mamba_cache_mode: some
+  kwargs_negative:
+    mamba_cache_mode: none
+  observed_outcome: error
+  error: ''
+- id: vllm_cache_kv_offloading_backend_enum
+  ckey:
+  - kv_offloading_backend
+  - membership
+  - '{not_in=[lmcache,native],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: kv_offloading_backend must be one of the allowed KVOffloadingBackend
+    literals
+  native_type: vllm.config.CacheConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_offloading_backend:
+        not_in:
+        - native
+        - lmcache
+        present: true
+  kwargs_positive:
+    kv_offloading_backend: redis
+  kwargs_negative:
+    kv_offloading_backend: native
+  observed_outcome: error
+  error: ''
+- id: vllm_scheduler_max_num_seqs_ge_1
+  ckey:
+  - max_num_seqs
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_num_seqs must be >= 1 (Field ge=1)
+  native_type: vllm.config.SchedulerConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_seqs:
+        <: 1
+  kwargs_positive:
+    is_encoder_decoder: false
+    max_model_len: 128
+    max_num_seqs: 0
+  kwargs_negative:
+    is_encoder_decoder: false
+    max_model_len: 128
+    max_num_seqs: 128
+  observed_outcome: error
+  error: ''
+- id: vllm_scheduler_max_num_partial_prefills_ge_1
+  ckey:
+  - max_num_partial_prefills
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_num_partial_prefills must be >= 1 (Field ge=1)
+  native_type: vllm.config.SchedulerConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_partial_prefills:
+        <: 1
+  kwargs_positive:
+    is_encoder_decoder: false
+    max_model_len: 128
+    max_num_partial_prefills: 0
+  kwargs_negative:
+    is_encoder_decoder: false
+    max_model_len: 128
+    max_num_partial_prefills: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_scheduler_max_long_partial_prefills_ge_1
+  ckey:
+  - max_long_partial_prefills
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: max_long_partial_prefills must be >= 1 (Field ge=1)
+  native_type: vllm.config.SchedulerConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_long_partial_prefills:
+        <: 1
+  kwargs_positive:
+    is_encoder_decoder: false
+    max_long_partial_prefills: 0
+    max_model_len: 128
+  kwargs_negative:
+    is_encoder_decoder: false
+    max_long_partial_prefills: 1
+    max_model_len: 128
+  observed_outcome: error
+  error: ''
+- id: vllm_scheduler_stream_interval_ge_1
+  ckey:
+  - stream_interval
+  - numeric
+  - '1'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: stream_interval must be >= 1 (Field ge=1)
+  native_type: vllm.config.SchedulerConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.stream_interval:
+        <: 1
+  kwargs_positive:
+    is_encoder_decoder: false
+    max_model_len: 128
+    stream_interval: 0
+  kwargs_negative:
+    is_encoder_decoder: false
+    max_model_len: 128
+    stream_interval: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_scheduler_policy_enum
+  ckey:
+  - policy
+  - membership
+  - '{not_in=[fcfs,priority],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: policy must be one of the allowed SchedulerPolicy literals
+    (fcfs, priority)
+  native_type: vllm.config.SchedulerConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.policy:
+        not_in:
+        - fcfs
+        - priority
+        present: true
+  kwargs_positive:
+    is_encoder_decoder: false
+    max_model_len: 128
+    policy: lifo
+  kwargs_negative:
+    is_encoder_decoder: false
+    max_model_len: 128
+    policy: fcfs
+  observed_outcome: error
+  error: ''
+- id: vllm_scheduler_runner_type_enum
+  ckey:
+  - runner_type
+  - membership
+  - '{not_in=[draft,generate,pooling],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: runner_type must be one of the allowed RunnerType literals
+    (generate, pooling, draft)
+  native_type: vllm.config.SchedulerConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.runner_type:
+        not_in:
+        - generate
+        - pooling
+        - draft
+        present: true
+  kwargs_positive:
+    is_encoder_decoder: false
+    max_model_len: 128
+    runner_type: embed
+  kwargs_negative:
+    is_encoder_decoder: false
+    max_model_len: 128
+    runner_type: generate
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_api_process_rank_range
+  ckey:
+  - _api_process_rank
+  - numeric
+  - vllm.engine._api_process_count
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: _api_process_rank must be -1 or in [0, _api_process_count)
+    (cross-field)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._api_process_rank:
+        '>=': vllm.engine._api_process_count
+  kwargs_positive:
+    _api_process_count: 2
+    _api_process_rank: 2
+  kwargs_negative:
+    _api_process_count: 2
+    _api_process_rank: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_dp_size_local_le_dp_size
+  ckey:
+  - data_parallel_size_local
+  - numeric
+  - vllm.engine.data_parallel_size
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: data_parallel_size_local must be <= data_parallel_size (cross-field)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_size_local:
+        '>': vllm.engine.data_parallel_size
+  kwargs_positive:
+    data_parallel_size: 2
+    data_parallel_size_local: 4
+  kwargs_negative:
+    data_parallel_size: 4
+    data_parallel_size_local: 2
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_external_lb_requires_dp_gt_1
+  ckey:
+  - data_parallel_external_lb
+  - presence
+  - '[data_parallel_external_lb,data_parallel_size]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: data_parallel_external_lb can only be set when data_parallel_size
+    > 1 (cross-field conditional)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_external_lb:
+        ==: true
+      vllm.engine.data_parallel_size:
+        <=: 1
+  kwargs_positive:
+    data_parallel_external_lb: true
+    data_parallel_size: 1
+  kwargs_negative:
+    data_parallel_external_lb: true
+    data_parallel_size: 2
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_eplb_requires_expert_parallel
+  ckey:
+  - enable_eplb
+  - presence
+  - '[enable_eplb,enable_expert_parallel]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: enable_expert_parallel must be True to use EPLB (cross-field
+    conditional)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_eplb:
+        ==: true
+      vllm.engine.enable_expert_parallel:
+        ==: false
+  kwargs_positive:
+    enable_eplb: true
+    enable_expert_parallel: false
+  kwargs_negative:
+    enable_eplb: true
+    enable_expert_parallel: true
+    tensor_parallel_size: 2
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_dcp_a2a_requires_dcp_gt_1
+  ckey:
+  - dcp_comm_backend
+  - presence
+  - '[dcp_comm_backend,decode_context_parallel_size]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: dcp_comm_backend='a2a' requires decode_context_parallel_size
+    > 1 (cross-field conditional)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.dcp_comm_backend:
+        ==: a2a
+      vllm.engine.decode_context_parallel_size:
+        <=: 1
+  kwargs_positive:
+    dcp_comm_backend: a2a
+    decode_context_parallel_size: 1
+  kwargs_negative:
+    dcp_comm_backend: a2a
+    decode_context_parallel_size: 2
+    tensor_parallel_size: 2
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_dcp_comm_backend_enum
+  ckey:
+  - dcp_comm_backend
+  - membership
+  - '{not_in=[a2a,ag_rs],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: dcp_comm_backend must be one of the allowed DCPCommBackend
+    literals (ag_rs, a2a)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.dcp_comm_backend:
+        not_in:
+        - ag_rs
+        - a2a
+        present: true
+  kwargs_positive:
+    dcp_comm_backend: ring
+  kwargs_negative:
+    dcp_comm_backend: ag_rs
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_data_parallel_backend_enum
+  ckey:
+  - data_parallel_backend
+  - membership
+  - '{not_in=[mp,ray],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: data_parallel_backend must be one of the allowed DataParallelBackend
+    literals (ray, mp)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_backend:
+        not_in:
+        - ray
+        - mp
+        present: true
+  kwargs_positive:
+    data_parallel_backend: gloo
+  kwargs_negative:
+    data_parallel_backend: mp
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_expert_placement_strategy_enum
+  ckey:
+  - expert_placement_strategy
+  - membership
+  - '{not_in=[linear,round_robin],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: expert_placement_strategy must be one of the allowed ExpertPlacementStrategy
+    literals (linear, round_robin)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.expert_placement_strategy:
+        not_in:
+        - linear
+        - round_robin
+        present: true
+  kwargs_positive:
+    expert_placement_strategy: random
+  kwargs_negative:
+    expert_placement_strategy: linear
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_api_process_count_gt_0
+  ckey:
+  - _api_process_count
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: _api_process_count must be > 0 (Field gt=0)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._api_process_count:
+        <=: 0
+  kwargs_positive:
+    _api_process_count: 0
+  kwargs_negative:
+    _api_process_count: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_parallel_elastic_ep_requires_eplb
+  ckey:
+  - enable_elastic_ep
+  - presence
+  - '[enable_elastic_ep,enable_eplb]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: enable_elastic_ep requires enable_eplb=True (cross-field conditional,
+    raised in __post_init__)
+  native_type: vllm.ParallelConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_elastic_ep:
+        ==: true
+      vllm.engine.enable_eplb:
+        ==: false
+  kwargs_positive:
+    enable_elastic_ep: true
+    enable_eplb: false
+  kwargs_negative:
+    enable_elastic_ep: true
+    enable_eplb: true
+    enable_expert_parallel: true
+    tensor_parallel_size: 2
+  observed_outcome: error
+  error: ''
+- id: vllm_eplb_num_redundant_experts_ge_0
+  ckey:
+  - num_redundant_experts
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: num_redundant_experts must be >= 0 (Field ge=0)
+  native_type: vllm.config.parallel.EPLBConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.eplb_config.num_redundant_experts:
+        <: 0
+  kwargs_positive:
+    num_redundant_experts: -1
+  kwargs_negative:
+    num_redundant_experts: 0
+  observed_outcome: error
+  error: ''
+- id: vllm_eplb_log_balancedness_interval_positive
+  ckey:
+  - log_balancedness
+  - presence
+  - '[log_balancedness,log_balancedness_interval]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: log_balancedness_interval must be > 0 when log_balancedness
+    enabled (cross-field conditional)
+  native_type: vllm.config.parallel.EPLBConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.eplb_config.log_balancedness:
+        ==: true
+      vllm.engine.eplb_config.log_balancedness_interval:
+        <=: 0
+  kwargs_positive:
+    log_balancedness: true
+    log_balancedness_interval: 0
+  kwargs_negative:
+    log_balancedness: true
+    log_balancedness_interval: 1
+  observed_outcome: error
+  error: ''
+- id: vllm_spec_num_speculative_tokens_gt_0
+  ckey:
+  - num_speculative_tokens
+  - numeric
+  - '0'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: num_speculative_tokens must be > 0 (Field gt=0)
+  native_type: vllm.SpeculativeConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.num_speculative_tokens:
+        <=: 0
+  kwargs_positive:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 0
+  kwargs_negative:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+  observed_outcome: error
+  error: ''
+- id: vllm_spec_draft_tensor_parallel_size_ge_1
+  ckey:
+  - draft_tensor_parallel_size
+  - numeric
+  - '{<=1,present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: draft_tensor_parallel_size (when set) must be >= 1 (Field
+    ge=1)
+  native_type: vllm.SpeculativeConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.draft_tensor_parallel_size:
+        <: 1
+        present: true
+  kwargs_positive:
+    draft_tensor_parallel_size: 0
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+  kwargs_negative:
+    draft_tensor_parallel_size: 1
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+  observed_outcome: error
+  error: ''
+- id: vllm_spec_prompt_lookup_max_ge_1
+  ckey:
+  - prompt_lookup_max
+  - numeric
+  - '{<=1,present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: prompt_lookup_max (when set) must be >= 1 (Field ge=1)
+  native_type: vllm.SpeculativeConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prompt_lookup_max:
+        <: 1
+        present: true
+  kwargs_positive:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    prompt_lookup_max: 0
+  kwargs_negative:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    prompt_lookup_max: 5
+  observed_outcome: error
+  error: ''
+- id: vllm_spec_prompt_lookup_min_ge_1
+  ckey:
+  - prompt_lookup_min
+  - numeric
+  - '{<=1,present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: prompt_lookup_min (when set) must be >= 1 (Field ge=1)
+  native_type: vllm.SpeculativeConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prompt_lookup_min:
+        <: 1
+        present: true
+  kwargs_positive:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    prompt_lookup_min: 0
+  kwargs_negative:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    prompt_lookup_min: 2
+  observed_outcome: error
+  error: ''
+- id: vllm_spec_prompt_lookup_min_le_max
+  ckey:
+  - method
+  - presence
+  - '[method,prompt_lookup_min]'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: prompt_lookup_min must be <= prompt_lookup_max for ngram method
+    (cross-field conditional)
+  native_type: vllm.SpeculativeConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.method:
+        ==: ngram
+      vllm.engine.prompt_lookup_min:
+        '>': vllm.engine.prompt_lookup_max
+  kwargs_positive:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    prompt_lookup_max: 3
+    prompt_lookup_min: 7
+  kwargs_negative:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    prompt_lookup_max: 7
+    prompt_lookup_min: 3
+  observed_outcome: error
+  error: ''
+- id: vllm_spec_rejection_sample_method_enum
+  ckey:
+  - rejection_sample_method
+  - membership
+  - '{not_in=[probabilistic,strict,synthetic],present=True}'
+  cross_field_heuristic: true
+  n_match_fields: 2
+  invariant_under_test: rejection_sample_method must be one of the allowed RejectionSampleMethod
+    literals (strict, probabilistic, synthetic)
+  native_type: vllm.SpeculativeConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.rejection_sample_method:
+        not_in:
+        - strict
+        - probabilistic
+        - synthetic
+        present: true
+  kwargs_positive:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    rejection_sample_method: greedy
+  kwargs_negative:
+    method: ngram
+    model: ngram
+    num_speculative_tokens: 3
+    rejection_sample_method: strict
+  observed_outcome: error
+  error: ''
