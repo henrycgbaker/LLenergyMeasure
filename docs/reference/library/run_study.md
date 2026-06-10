@@ -211,7 +211,7 @@ distinct configurations (pre-cycle). Both are in the summary.
 ## See also
 
 - [`run_experiment`](./run_experiment) - single-experiment convenience wrapper
-- [`StudyConfig`](./StudyConfig) - the config model accepted and returned by the loader
+- [`StudyConfig`](./StudyConfig) - the config model accepted by `run_study` and returned by `api.load_study`
 - [`ExperimentResult`](./ExperimentResult) - the per-experiment result type
 - [Study config reference](/reference/study-config) - YAML syntax (sweep axes, execution block)
 - [Results schema](/reference/results-schema) - on-disk layout

@@ -22,7 +22,7 @@ import pytest
 import yaml
 from pydantic import BaseModel
 
-from llenergymeasure.config.loader import load_study_config
+from llenergymeasure.api import load_study
 from llenergymeasure.config.models import ExperimentConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -85,8 +85,8 @@ def _swept_paths(raw_study: dict) -> set[str]:
 
 @pytest.mark.parametrize("config_path", STUDY_CONFIGS, ids=lambda p: p.name)
 def test_study_config_parses(config_path: Path) -> None:
-    """The config loads through load_study_config and yields >=1 experiment."""
-    study = load_study_config(config_path)
+    """The config loads through the study loader and yields >=1 experiment."""
+    study = load_study(config_path)
     assert len(study.experiments) >= 1
 
 
