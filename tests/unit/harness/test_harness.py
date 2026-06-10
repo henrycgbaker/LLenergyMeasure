@@ -109,37 +109,37 @@ def _apply_patches():
     stack = contextlib.ExitStack()
     patches = [
         patch(
-            "llenergymeasure.harness.collect_environment_snapshot",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot",
             return_value=None,
         ),
         patch(
-            "llenergymeasure.harness.measure_baseline_power",
+            "llenergymeasure.harness.measurement.measure_baseline_power",
             return_value=None,
         ),
         patch(
-            "llenergymeasure.harness.load_prompts",
+            "llenergymeasure.harness.measurement.load_prompts",
             return_value=["test prompt"],
         ),
         patch(
-            "llenergymeasure.harness.select_energy_sampler",
+            "llenergymeasure.harness.measurement.select_energy_sampler",
             return_value=None,
         ),
         patch(
-            "llenergymeasure.harness.thermal_floor_wait",
+            "llenergymeasure.harness.measurement.thermal_floor_wait",
             return_value=0.0,
         ),
         patch(
-            "llenergymeasure.harness.estimate_flops_palm",
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
             return_value=MagicMock(value=1e9),
         ),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="timeseries.parquet"),
         ),
         patch(
-            "llenergymeasure.harness.collect_measurement_warnings",
+            "llenergymeasure.harness.measurement.collect_measurement_warnings",
             return_value=[],
         ),
     ]
@@ -245,7 +245,7 @@ def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
     with (
         _apply_patches(),
         patch(
-            "llenergymeasure.harness.thermal_floor_wait",
+            "llenergymeasure.harness.measurement.thermal_floor_wait",
             return_value=30.0,
         ),
     ):
@@ -268,7 +268,7 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
     with (
         _apply_patches(),
         patch(
-            "llenergymeasure.harness.thermal_floor_wait",
+            "llenergymeasure.harness.measurement.thermal_floor_wait",
             return_value=45.0,
         ),
     ):
@@ -315,21 +315,26 @@ def test_harness_passes_gpu_indices_to_energy_sampler(minimal_config):
 
     with (
         patch(
-            "llenergymeasure.harness.collect_environment_snapshot",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot",
             return_value=None,
         ),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None) as mock_seb,
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.select_energy_sampler", return_value=None
+        ) as mock_seb,
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         harness.run(engine, minimal_config, gpu_indices=[0, 1])
 
@@ -347,21 +352,24 @@ def test_harness_passes_gpu_indices_to_thermal_sampler(minimal_config):
 
     with (
         patch(
-            "llenergymeasure.harness.collect_environment_snapshot",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot",
             return_value=None,
         ),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=mock_pts_cls),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.measurement.select_energy_sampler", return_value=None),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=mock_pts_cls),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         harness.run(engine, minimal_config, gpu_indices=[0, 1])
 
@@ -390,21 +398,26 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
 
     with (
         patch(
-            "llenergymeasure.harness.collect_environment_snapshot",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot",
             return_value=None,
         ),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None) as mock_mbp,
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.measure_baseline_power", return_value=None
+        ) as mock_mbp,
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.measurement.select_energy_sampler", return_value=None),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         harness.run(engine, config_with_baseline, gpu_indices=[0, 1])
 
@@ -422,21 +435,26 @@ def test_harness_defaults_to_no_gpu_indices(minimal_config):
 
     with (
         patch(
-            "llenergymeasure.harness.collect_environment_snapshot",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot",
             return_value=None,
         ),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None) as mock_seb,
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=mock_pts_cls),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.select_energy_sampler", return_value=None
+        ) as mock_seb,
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=mock_pts_cls),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         harness.run(engine, minimal_config)
 
@@ -479,27 +497,30 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
 
     with (
         patch(
-            "llenergymeasure.harness.collect_environment_snapshot",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot",
             return_value=None,
         ),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
         patch(
-            "llenergymeasure.harness.select_energy_sampler",
+            "llenergymeasure.harness.measurement.select_energy_sampler",
             side_effect=fake_select_energy_sampler,
         ),
         patch(
-            "llenergymeasure.harness.thermal_floor_wait",
+            "llenergymeasure.harness.measurement.thermal_floor_wait",
             side_effect=fake_thermal_floor_wait,
         ),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         harness.run(engine, minimal_config)
 
@@ -541,7 +562,7 @@ def test_capture_model_memory_mb_multi_gpu(minimal_config):
 
     with (
         patch("importlib.util.find_spec", return_value=MagicMock()),
-        patch("llenergymeasure.harness.importlib") as mock_importlib,
+        patch("llenergymeasure.harness.measurement.importlib") as mock_importlib,
     ):
         mock_importlib.util.find_spec.return_value = MagicMock()
         with patch.dict("sys.modules", {"torch": mock_torch}):
@@ -648,7 +669,7 @@ def test_inference_time_sec_used_in_result(minimal_config):
 
     with (
         _apply_patches(),
-        patch("llenergymeasure.harness.time") as mock_time,
+        patch("llenergymeasure.harness.measurement.time") as mock_time,
     ):
         mock_time.perf_counter.side_effect = lambda: next(perf_counter_values)
         result = harness.run(engine, minimal_config)
@@ -801,7 +822,7 @@ def test_harness_warmup_result_wired_to_experiment_result(minimal_config):
     with (
         _apply_patches(),
         patch(
-            "llenergymeasure.harness.thermal_floor_wait",
+            "llenergymeasure.harness.measurement.thermal_floor_wait",
             return_value=15.0,
         ),
     ):
@@ -830,22 +851,27 @@ def test_harness_per_gpu_j_wired_to_energy_per_device_j(minimal_config):
     harness = MeasurementHarness()
 
     with (
-        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch(
-            "llenergymeasure.harness.select_energy_sampler",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
+        ),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch(
+            "llenergymeasure.harness.measurement.select_energy_sampler",
             return_value=mock_energy_sampler,
         ),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         result = harness.run(engine, minimal_config)
 
@@ -874,22 +900,27 @@ def test_harness_single_gpu_no_multi_gpu_metrics(minimal_config):
     harness = MeasurementHarness()
 
     with (
-        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch(
-            "llenergymeasure.harness.select_energy_sampler",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
+        ),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch(
+            "llenergymeasure.harness.measurement.select_energy_sampler",
             return_value=mock_energy_sampler,
         ),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         result = harness.run(engine, minimal_config)
 
@@ -925,19 +956,26 @@ def test_harness_stop_tracking_raises_cleanup_still_called(minimal_config):
     harness = MeasurementHarness()
 
     with (
-        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=mock_energy),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
+        ),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch(
+            "llenergymeasure.harness.measurement.select_energy_sampler", return_value=mock_energy
+        ),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
         pytest.raises(RuntimeError, match="NVML error"),
     ):
         harness.run(engine, minimal_config)
@@ -952,22 +990,24 @@ def test_harness_flops_estimation_raises_returns_zero_flops(minimal_config):
     harness = MeasurementHarness()
 
     with (
-        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
         patch(
-            "llenergymeasure.harness.estimate_flops_palm_from_config",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
+        ),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.measurement.select_energy_sampler", return_value=None),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm_from_config",
             side_effect=RuntimeError("model not found"),
         ),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         result = harness.run(engine, minimal_config)
 
@@ -1023,22 +1063,24 @@ def test_harness_flops_none_result_has_none_derived(minimal_config):
     harness = MeasurementHarness()
 
     with (
-        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
         patch(
-            "llenergymeasure.harness.estimate_flops_palm_from_config",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
+        ),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.measurement.select_energy_sampler", return_value=None),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm_from_config",
             return_value=None,
         ),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ),
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         result = harness.run(engine, minimal_config)
 
@@ -1070,19 +1112,24 @@ def test_harness_save_timeseries_false_skips_parquet(tmp_path):
     harness = MeasurementHarness()
 
     with (
-        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
-        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
+        ),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.measurement.select_energy_sampler", return_value=None),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="f"),
         ) as mock_write_ts,
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         result = harness.run(engine, config, output_dir=str(tmp_path), save_timeseries=False)
 
@@ -1136,7 +1183,7 @@ def test_harness_populates_extended_metrics(minimal_config):
     with (
         _apply_patches(),
         patch(
-            "llenergymeasure.harness.PowerThermalSampler",
+            "llenergymeasure.harness.measurement.PowerThermalSampler",
             new=_make_mock_pts(samples=samples),
         ),
         patch.object(MeasurementHarness, "_capture_model_memory_mb", return_value=8192.0),
@@ -1190,7 +1237,7 @@ def test_harness_vllm_batch_metrics_none(minimal_config):
     with (
         _apply_patches(),
         patch(
-            "llenergymeasure.harness.PowerThermalSampler",
+            "llenergymeasure.harness.measurement.PowerThermalSampler",
             new=_make_mock_pts(samples=samples),
         ),
     ):
@@ -1224,22 +1271,27 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
     harness = MeasurementHarness()
 
     with (
-        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
-        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.select_energy_sampler", return_value=None),
-        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
-        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
-        patch("llenergymeasure.harness._cuda_sync"),
         patch(
-            "llenergymeasure.harness.PowerThermalSampler",
+            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
+        ),
+        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.measurement.select_energy_sampler", return_value=None),
+        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            return_value=MagicMock(value=0),
+        ),
+        patch("llenergymeasure.harness.measurement._cuda_sync"),
+        patch(
+            "llenergymeasure.harness.measurement.PowerThermalSampler",
             new=_make_mock_pts(samples=[_real_sample()]),
         ),
         patch(
-            "llenergymeasure.harness.write_timeseries_parquet",
+            "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=Path(tmp_path / "timeseries.parquet"),
         ) as mock_write_ts,
-        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
         harness.run(engine, config, output_dir=str(tmp_path), save_timeseries=True)
 

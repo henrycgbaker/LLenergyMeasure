@@ -161,7 +161,7 @@ ignore_imports = [
     # Phase 50 M4: harness._write_config_sidecar() persists config.json
     # (needs results.persistence). Import is local-inside-method; no cycle risk.
     # H3 hashing now imports from domain.hashing (L0) - no layer breach.
-    "llenergymeasure.harness -> llenergymeasure.results.persistence",
+    "llenergymeasure.harness.measurement -> llenergymeasure.results.persistence",
 ]
 
 [[tool.importlinter.contracts]]
