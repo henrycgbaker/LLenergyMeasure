@@ -18,7 +18,9 @@ engines/
   __init__.py          # get_engine(name) factory, detect_default_engine()
   protocol.py          # EnginePlugin protocol + InferenceOutput dataclass
   probe_adapter.py     # Adapter helpers
-  _helpers.py          # Shared helpers (dataset loading, token counting)
+  _observed.py         # Observed-runtime-data extraction (effective params, metrics)
+  _cuda.py             # CUDA memory and warmup helpers
+  _errors.py           # OOM and import error helpers
 
   transformers/
     __init__.py        # Re-exports TransformersEngine from plugin
