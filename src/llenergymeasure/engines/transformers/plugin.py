@@ -15,9 +15,38 @@ from collections.abc import Callable
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.domain.metrics import LatencyMeasurementMode
 from llenergymeasure.engines.protocol import InferenceOutput
 
 logger = logging.getLogger(__name__)
+
+
+class _TimingStreamer:
+    """A minimal ``transformers.BaseStreamer`` that records token-arrival times.
+
+    ``model.generate(streamer=...)`` calls ``put()`` once per decode step (and
+    once for the prompt tensor, which we drop). Each call records
+    ``time.perf_counter() * 1000.0`` (ms). ``end()`` is a no-op. Used only under
+    latency profiling, which forces ``batch_size=1`` so each ``put()`` maps to a
+    single request's token.
+    """
+
+    def __init__(self) -> None:
+        self.token_times_ms: list[float] = []
+        self._prompt_seen = False
+
+    def put(self, value: Any) -> None:
+        import time
+
+        # The first put() carries the prompt input_ids (a 2-D tensor); drop it so
+        # only generated-token arrivals are timed.
+        if not self._prompt_seen:
+            self._prompt_seen = True
+            return
+        self.token_times_ms.append(time.perf_counter() * 1000.0)
+
+    def end(self) -> None:
+        """No-op: nothing to flush."""
 
 
 class TransformersEngine:
@@ -165,6 +194,35 @@ class TransformersEngine:
         else:
             logger.debug("Transformers batch_size not set, defaulting to 1")
 
+        # Latency profiling: per-token timing capture via a custom streamer. The
+        # streamer requires batch_size=1 (one put() per decode step maps to a
+        # single request), and beam search is incompatible with streaming, so we
+        # fall back to the non-profiled path when num_beams > 1.
+        profiling = config.measurement.latency_profiling
+        profiling_forced_batch_size = False
+        num_beams = (
+            config.transformers.num_beams
+            if config.transformers is not None and config.transformers.num_beams is not None
+            else 1
+        )
+        if profiling and num_beams > 1:
+            logger.warning(
+                "latency_profiling requested but num_beams=%d > 1; beam search is "
+                "incompatible with a generation streamer. Falling back to the "
+                "non-profiled inference path.",
+                num_beams,
+            )
+            profiling = False
+        if profiling and batch_size != 1:
+            logger.warning(
+                "latency_profiling requested with batch_size=%d; forcing "
+                "batch_size=1 so per-token timestamps map to a single request. "
+                "This perturbs throughput relative to non-profiled runs.",
+                batch_size,
+            )
+            batch_size = 1
+            profiling_forced_batch_size = True
+
         # Reset peak stats BEFORE the measurement loop so max_memory_allocated()
         # captures inference-window-only peak (KV cache + activations + batch buffers),
         # NOT model weights already allocated by load_model().
@@ -189,20 +247,38 @@ class TransformersEngine:
         # batch is attributed batch_time / len(batch). This is an approximation, NOT a
         # true per-request timestamp.
         per_request_latencies_ms: list[float] = []
+        # Under profiling, per-request cumulative token-arrival timestamps (ms),
+        # starting with t0 (pre-generate) so the first interval is TTFT.
+        token_timestamps_per_request: list[list[float]] = []
+        ttft_ms_per_request: list[float] = []
 
         logger.info(
-            "Starting measurement: %d prompts, batch_size=%d, max_new_tokens=%s",
+            "Starting measurement: %d prompts, batch_size=%d, max_new_tokens=%s%s",
             len(prompts),
             batch_size,
             config.task.max_output_tokens or "unlimited",
+            " (latency profiling)" if profiling else "",
         )
 
         for batch_start in range(0, len(prompts), batch_size):
             batch = prompts[batch_start : batch_start + batch_size]
             try:
-                batch_input, batch_output, batch_time, batch_padding = self._run_batch(
-                    hf_model, tokenizer, config, batch, generate_kwargs
-                )
+                if profiling:
+                    import time as _time
+
+                    streamer = _TimingStreamer()
+                    t0_ms = _time.perf_counter() * 1000.0
+                    batch_input, batch_output, batch_time, batch_padding = self._run_batch(
+                        hf_model, tokenizer, config, batch, generate_kwargs, streamer=streamer
+                    )
+                    put_times = streamer.token_times_ms
+                    token_timestamps_per_request.append([t0_ms, *put_times])
+                    if put_times:
+                        ttft_ms_per_request.append(put_times[0] - t0_ms)
+                else:
+                    batch_input, batch_output, batch_time, batch_padding = self._run_batch(
+                        hf_model, tokenizer, config, batch, generate_kwargs
+                    )
                 total_input_tokens += batch_input
                 total_output_tokens += batch_output
                 total_time_sec += batch_time
@@ -241,6 +317,31 @@ class TransformersEngine:
             total_time_sec,
         )
 
+        extras: dict[str, Any] = {
+            "hf_model": hf_model,  # For FLOPs estimation in harness
+            # generate_kwargs stashed so capture_observed_params can read
+            # GenerationConfig state post-window without recomputing.
+            "generate_kwargs": generate_kwargs,
+        }
+        if profiling_forced_batch_size:
+            extras["profiling_forced_batch_size"] = True
+
+        # Latency profiling capture: trimmed ITL from per-token timestamps + TTFT.
+        # The streamer gives true per-token arrivals (batch_size=1 forced), so this
+        # is TRUE_STREAMING provenance.
+        ttft_ms: list[float] = []
+        itl_ms: list[float] = []
+        latency_measurement_mode: str | None = None
+        if profiling:
+            from llenergymeasure.domain.metrics import collect_itl_measurements
+
+            _itl_full, itl_trimmed, _excluded = collect_itl_measurements(
+                token_timestamps_per_request
+            )
+            itl_ms = itl_trimmed
+            ttft_ms = ttft_ms_per_request
+            latency_measurement_mode = LatencyMeasurementMode.TRUE_STREAMING.value
+
         return InferenceOutput(
             elapsed_time_sec=total_time_sec,
             input_tokens=total_input_tokens,
@@ -248,16 +349,13 @@ class TransformersEngine:
             peak_memory_mb=peak_memory_mb,
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=batch_times,
-            extras={
-                "hf_model": hf_model,  # For FLOPs estimation in harness
-                # generate_kwargs stashed so capture_observed_params can read
-                # GenerationConfig state post-window without recomputing.
-                "generate_kwargs": generate_kwargs,
-            },
+            extras=extras,
             # PER_REQUEST_BATCH approximation - each request gets batch_time/len(batch).
+            # Under profiling batch_size=1, so this is the true per-request wall time.
             per_request_latencies_ms=per_request_latencies_ms,
-            ttft_ms=[],  # Non-streaming - no time-to-first-token
-            itl_ms=[],  # Non-streaming - no inter-token latency
+            ttft_ms=ttft_ms,  # Populated only under latency profiling
+            itl_ms=itl_ms,  # Populated only under latency profiling
+            latency_measurement_mode=latency_measurement_mode,
             num_batches=len(batch_times),
             padding_tokens=total_padding_tokens,
             kv_cache_stats=None,  # Transformers has no paged KV cache
@@ -518,12 +616,16 @@ class TransformersEngine:
         config: ExperimentConfig,
         batch: list[str],
         generate_kwargs: dict[str, Any],
+        streamer: Any | None = None,
     ) -> tuple[int, int, float, int]:
         """Run a single batch through model.generate().
 
         Returns (input_tokens, output_tokens, time_sec, padding_tokens) where
         padding_tokens = total padded positions in the input
         (``input_ids.numel() - attention_mask.sum()``).
+
+        When ``streamer`` is provided (latency profiling), it is forwarded to
+        ``generate(streamer=...)`` so per-token arrival times are recorded.
         """
         import time
 
@@ -560,6 +662,8 @@ class TransformersEngine:
             gen_kwargs = {**generate_kwargs}
             if config.task.max_output_tokens is not None:
                 gen_kwargs["max_new_tokens"] = config.task.max_output_tokens
+            if streamer is not None:
+                gen_kwargs["streamer"] = streamer
             outputs = model.generate(**inputs, **gen_kwargs)
         elapsed = time.perf_counter() - t0
 

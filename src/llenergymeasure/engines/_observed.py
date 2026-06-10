@@ -161,3 +161,43 @@ def extract_request_metrics(outputs: Any) -> tuple[list[float], list[float]]:
         if arrival is not None and first_token is not None:
             ttft_ms.append((first_token - arrival) * 1000.0)
     return latencies_ms, ttft_ms
+
+
+def extract_decode_itl(outputs: Any) -> list[float]:
+    """Extract a decode-average inter-token latency (ms) per request from RequestOutputs.
+
+    The engine does not expose a true per-token timestamp stream, so this derives
+    one average ITL per request from the decode phase: the wall time between the
+    first generated token and request completion, divided by the number of decode
+    intervals (``n_out - 1``). This is a PROPORTIONAL_ESTIMATE, not a true
+    per-token measurement - it assumes uniform spacing across decode steps.
+
+    Best-effort: a request is skipped (no sample produced) unless
+    ``first_token_time`` and ``finished_time`` are both present and the request
+    produced more than one output token (``n_out > 1``). The ``SimpleNamespace``
+    shape of ``o.metrics`` / ``o.outputs[*].token_ids`` makes this testable
+    without a live engine.
+
+    Args:
+        outputs: Iterable of ``RequestOutput`` objects.
+
+    Returns:
+        List of per-request decode-average ITL samples in ms (possibly empty).
+    """
+    itl_ms: list[float] = []
+    for o in outputs:
+        metrics = getattr(o, "metrics", None)
+        if metrics is None:
+            continue
+        first_token = getattr(metrics, "first_token_time", None)
+        finished = getattr(metrics, "finished_time", None)
+        if first_token is None or finished is None:
+            continue
+        request_outputs = getattr(o, "outputs", None)
+        if not request_outputs:
+            continue
+        n_out = sum(len(getattr(out, "token_ids", ()) or ()) for out in request_outputs)
+        if n_out <= 1:
+            continue
+        itl_ms.append((finished - first_token) * 1000.0 / (n_out - 1))
+    return itl_ms

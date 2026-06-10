@@ -39,6 +39,12 @@ class InferenceOutput:
     """Per-request time-to-first-token in ms. Empty for non-streaming engines."""
     itl_ms: list[float] = field(default_factory=list)
     """Inter-token latency samples in ms. Empty for non-streaming engines."""
+    latency_measurement_mode: str | None = None
+    """Engine-declared capture mode for ttft_ms/itl_ms (a
+    ``LatencyMeasurementMode`` value string, e.g. ``"true_streaming"`` or
+    ``"proportional"``). Plain string to keep the protocol dependency-free; the
+    harness maps it to the enum. None when the engine performed no streaming/ITL
+    capture for this run."""
     num_batches: int | None = None
     """Number of static batches processed. None for continuous batching (vLLM)."""
     padding_tokens: int | None = None
