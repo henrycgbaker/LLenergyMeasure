@@ -1,60 +1,83 @@
 # mining-substrate-trial
 
-Empirical trial investigating the substrate question for engine-config invariant mining: given a target engine + a frozen reference version, what extraction substrate (pure-static, pure-LLM, hybrid combinations) best balances recall, precision, brittleness across version bumps, and operational cost?
+Research spike on keeping **engine-config knowledge** (schema + invariants) current
+across upstream version bumps of the inference engines (vLLM, TensorRT-LLM,
+transformers), cheaply enough to run on every bump in CI.
 
-The trial spans four phases:
+An "invariant" is a rule the engine enforces at config construction (`if <pred>:
+raise/warn`, a `Field(ge/gt/le/Literal)` constraint, a cross-field relation). The
+north star: a cheap, general CI workflow that re-mines + re-validates this knowledge
+per bump. The engine owns the SSOT; a **runtime gate** validates mined knowledge in
+the engine's own container ("observe, don't re-encode"); cost is understood
+ordinally (deterministic ~free < small-OSS < mid-OSS < Opus).
 
-- **Phase 1** - version-lock + per-engine reference matrices (47 active + bumped cells across transformers / vLLM / TensorRT-LLM).
-- **Phase 2** - LLM infrastructure + locked prompts.
-- **Phase 3a** - pure-strategy bake-off (47 cells).
-- **Phase 3b** - hybrid pattern catalogue (H2/H3/H4/H6/H7/H9 + E6/E9).
-- **Phase 3c** (pending) - Claude-Opus / Claude-Sonnet agentic patterns once `ANTHROPIC_API_KEY` arrives.
-- **Phase 4** - synthesis + recommendation.
+## Start here
 
-The primary deliverable is [`findings/empirical_trial_outcome.md`](findings/empirical_trial_outcome.md), which records the chosen substrate and defended trade-offs against the validated-union ground truth.
+**[`findings/study/CONSOLIDATED_FINDINGS.md`](findings/study/CONSOLIDATED_FINDINGS.md)**
+is the single, self-contained writeup of the whole study: experimental design,
+the predecessor PoC bake-off, the deterministic-baseline / bump-robustness layer,
+the LLM-pattern waves (1-4), and the cross-bump degradation work (wave 5). It folds
+every load-bearing result into one narrative and is the canonical entry point.
+
+## The study, in two layers
+
+- **Layer 1 - deterministic baseline + bump-robustness.** A 15-cell matrix
+  (5 versions x 3 engines), runtime-gated and adversarially source-reviewed
+  (908/913 entries verified REAL). Establishes the major-vs-minor bump gradient
+  (a major bump churns ~half the config surface vs 76-100% persistence on minors)
+  and the silent vllm refactor cliff that a deterministic Primitive-8 recovers ~44%
+  of with no LLM.
+- **Layer 2 - LLM-pattern waves (1-4).** How far the OSS rung gets on a frozen cell:
+  the validation-path bottleneck, the kwargs-emission lever, the scale-vs-code-tuning
+  tier story, and construction-grounding as the OSS infra-wall lever. Plus the
+  cross-bump degradation signal + LLM diff-diagnose (wave 5) - the actual product
+  property.
+
+## Live canonical docs
+
+| doc | role |
+|---|---|
+| [`findings/study/CONSOLIDATED_FINDINGS.md`](findings/study/CONSOLIDATED_FINDINGS.md) | the consolidated writeup (entry point) |
+| [`STUDY_DESIGN.md`](STUDY_DESIGN.md) | the locked pre-registered program spec |
+| [`findings/study/FULL_MATRIX.md`](findings/study/FULL_MATRIX.md) | the authoritative 15-cell bump-robustness matrix + GT integrity |
+| [`findings/wave2_bump_survivability.md`](findings/wave2_bump_survivability.md) | the bump cliff + Primitive-8 recovery |
+| [`findings/study/PHASE1_WAVE{1,2,3,4}_FINDINGS.md`](findings/study/) | per-wave detail |
+| [`findings/study/WAVE4_RECONCILIATION_MAP.md`](findings/study/WAVE4_RECONCILIATION_MAP.md) | maps the waves onto the PoC taxonomy |
+| [`findings/study/REVIEW_northstar_strategy.md`](findings/study/REVIEW_northstar_strategy.md) | adversarial strategic review (the "wrong axis" correction) |
+
+`_archive/` holds the superseded prose: the predecessor PoC bake-off
+(`RESEARCH_WRITEUP.md`, `DECISIONS_LOG.md`), the Wave-2 PoC planning corpus
+(`wave2_poc/`), the per-wave pre-registrations (`prereg/`), and earlier synthesis
+drafts. It is lineage, not the hot path; the consolidated doc supersedes it.
 
 ## Status
 
-ACTIVE through the Phase 3c addendum (claude-opus / claude-sonnet patterns); ARCHIVED thereafter. The directory carries `DECISIONS_LOG.md` as the running narrative; expect a research-paper-style IA restructure (problem-statement / methodology / results / decision-space / recommendation) once the addendum lands.
-
-## Quick links
-
-- [`findings/empirical_trial_outcome.md`](findings/empirical_trial_outcome.md) - Phase 4 synthesis.
-- [`findings/trial_epistemic_framing.md`](findings/trial_epistemic_framing.md) - the framing this synthesis answers to.
-- [`findings/phase4_0_validated_union_summary.md`](findings/phase4_0_validated_union_summary.md) - validated-union ground truth (the corrected reference used for re-scoring).
-- [`findings/trial_matrix_vu.md`](findings/trial_matrix_vu.md) - validated-union per-cell results matrix.
-- [`findings/trial_matrix.md`](findings/trial_matrix.md) - original (a)-as-reference matrix (retained for delta comparison).
-- [`DECISIONS_LOG.md`](DECISIONS_LOG.md) - the full trial narrative (3500+ lines; chronological).
+Phase 1 waves 1-4 + cross-bump wave 5 complete, on `spike/engine-knowledge-as-data`
+(not on main). The `scripts/` tree is live - `scripts/strategies/wave2/` holds the
+`improved-det-v2` deterministic floor (the per-bump re-mine generator), consumed by
+`scripts/round0b/` and `scripts/wave2_runner.py`.
 
 ## Reproducibility
 
-Trial scripts live under `scripts/`. Because the directory name contains hyphens, the scripts are not importable as a Python package via the `-m` flag. Invoke via file path:
+Scripts live under `scripts/`. The directory name contains hyphens, so scripts are
+not importable as a package; invoke by file path, and each script prepends its
+scripts dir to `sys.path` for sibling imports.
 
-```bash
-uv run python research/mining-substrate-trial/scripts/trial_aggregate.py
-```
-
-Each script prepends the trial scripts directory to `sys.path` so sibling imports (`from trial_scoring import ...`, `from strategies.llm_b_oss import ...`) resolve at module load time. The project root is also on `sys.path` so trial code can import production helpers (`scripts.validate_invariants`, `engine_versions.<engine>`).
+- **LLM-pattern waves:** `scripts/phase1/wave*.py` (pure-LLM, construction-grounding,
+  multistage/hybrid langchain). The langchain cells need a venv with
+  `langchain-core` + `langchain-ollama` (`/tmp/round0b_venv` in this environment).
+- **Cross-bump:** `scripts/phase1/wave5_gate_acceptance.py` (degradation signal),
+  `scripts/phase1/wave5_bump_diagnose.py` (LLM diff-diagnose). Note: these resolve
+  source from `/tmp/trial_<engine>_<vslug>_venv/src` - if `/tmp` is reaped, re-point
+  to the surviving source (the chunked inputs are not committed; see the consolidated
+  doc's methodology note).
+- **Local Ollama:** a containerized Ollama on port 11435 (`--gpus all`) escapes the
+  shared-host cgroup cap; the wave runners point `OLLAMA` at it.
+- **Runtime gate:** `scripts/validate_invariants.py` + `scripts/study_gt_pilot.py`
+  construct violating configs in the engine's own container and observe the raise.
 
 ### Tests
 
-Run the trial smoke tests:
-
 ```bash
 uv run python -m pytest research/mining-substrate-trial/scripts/test_trial_scoring.py -v
-uv run python -m pytest research/mining-substrate-trial/scripts/strategies/test_agentic_tool_harness.py -v
 ```
-
-### Container Ollama
-
-The (b)/(c)/(d-ab)/h*/e* strategies dispatch to a local Ollama container on port 11435. See the Phase 1 + Phase 2 entries in `DECISIONS_LOG.md` for the launch incantation and image tag.
-
-### Per-engine validator containers
-
-Validation (Phase 4.0 validated-union builder) dispatches to per-engine production containers:
-
-- transformers: `llenergymeasure:transformers-4.57.3`
-- vLLM: `vllm/vllm-openai:v0.7.3`
-- TensorRT-LLM: `nvcr.io/nvidia/tensorrt-llm/release` (1.2.1)
-
-The dispatch logic is in `scripts/trial_scoring.py` (`runtime_validate_invariants`, `build_validated_union`).

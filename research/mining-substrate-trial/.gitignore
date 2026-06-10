@@ -1,0 +1,9 @@
+# Reproducible LLM mining intermediates - regenerate from the wave runners.
+# The load-bearing scored results (*.json) and verified confirms (*_CONFIRMED.yaml)
+# stay tracked; these two are raw model stdout + parsed candidate sets.
+findings/study/phase1_wave*/results/*_raw.txt
+findings/study/phase1_wave*/results/*_corpus.yaml
+
+# Build artefacts
+**/__pycache__/
+*.pyc

@@ -1,0 +1,17 @@
+{
+  "engine": "vllm",
+  "bump": "v0_19_1->v0_20_0",
+  "model": "qwen2.5-coder:32b",
+  "actually_broke_n": 4,
+  "actually_new_n": 17,
+  "diag_broke_n": 30,
+  "diag_new_n": 76,
+  "broke_precision": 0.067,
+  "broke_recall": 0.5,
+  "broke_tp": 2,
+  "new_precision": 0.066,
+  "new_recall": 0.294,
+  "new_tp": 5,
+  "alarm_raised": true,
+  "wall_sec": 640.5
+}

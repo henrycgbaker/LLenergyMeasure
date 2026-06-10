@@ -1,0 +1,48 @@
+{
+  "engine": "vllm",
+  "old_vslug": "v0_19_1",
+  "new_vslug": "v0_20_0",
+  "n_old_catalogue": 105,
+  "n_gateable": 105,
+  "verdicts": {
+    "confirmed": 99,
+    "failed": 2,
+    "skipped": 0,
+    "infra_error": 4,
+    "ungated": 0
+  },
+  "acceptance_rate_vs_new": 0.943,
+  "n_broke": 6,
+  "broke_sample": [
+    {
+      "id": "vllm_eplbconfig__validate_log_balancedness_interval_le0",
+      "verdict": "infra_error",
+      "native_type": "vllm.EPLBConfig"
+    },
+    {
+      "id": "vllm_modelconfig___declarative___logprobs_mode_not_in",
+      "verdict": "failed",
+      "native_type": "vllm.ModelConfig"
+    },
+    {
+      "id": "vllm_schedulerconfig_policy_literal",
+      "verdict": "failed",
+      "native_type": "vllm.config.SchedulerConfig"
+    },
+    {
+      "id": "vllm_modelconfig_raises_unknown_quantization_method",
+      "verdict": "infra_error",
+      "native_type": "vllm.config.ModelConfig"
+    },
+    {
+      "id": "vllm_modelconfig_raises_unknown_quantization_method",
+      "verdict": "infra_error",
+      "native_type": "vllm.config.ModelConfig"
+    },
+    {
+      "id": "vllm_profilerconfig_torch_dir_requires_torch_profiler",
+      "verdict": "infra_error",
+      "native_type": "vllm.config.ProfilerConfig"
+    }
+  ]
+}

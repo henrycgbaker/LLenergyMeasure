@@ -1,0 +1,53 @@
+{
+  "engine": "vllm",
+  "old_vslug": "v0_18_1",
+  "new_vslug": "v0_22_0",
+  "n_old_catalogue": 101,
+  "n_gateable": 101,
+  "verdicts": {
+    "confirmed": 94,
+    "failed": 4,
+    "skipped": 0,
+    "infra_error": 3,
+    "ungated": 0
+  },
+  "acceptance_rate_vs_new": 0.931,
+  "n_broke": 7,
+  "broke_sample": [
+    {
+      "id": "vllm_parallelconfig___declarative___all2all_backend_not_in",
+      "verdict": "failed",
+      "native_type": "vllm.ParallelConfig"
+    },
+    {
+      "id": "vllm_weighttransferconfig_backend_literal",
+      "verdict": "failed",
+      "native_type": "vllm.config.WeightTransferConfig"
+    },
+    {
+      "id": "vllm_ectransferconfig_raises_connector_without_role",
+      "verdict": "infra_error",
+      "native_type": "vllm.config.ECTransferConfig"
+    },
+    {
+      "id": "vllm_kvtransferconfig_raises_connector_without_role",
+      "verdict": "infra_error",
+      "native_type": "vllm.config.KVTransferConfig"
+    },
+    {
+      "id": "vllm_modelconfig___declarative___logprobs_mode_not_in",
+      "verdict": "failed",
+      "native_type": "vllm.ModelConfig"
+    },
+    {
+      "id": "vllm_cacheconfig_mamba_cache_dtype_literal",
+      "verdict": "failed",
+      "native_type": "vllm.config.CacheConfig"
+    },
+    {
+      "id": "vllm_profilerconfig_torch_dir_requires_torch_profiler",
+      "verdict": "infra_error",
+      "native_type": "vllm.config.ProfilerConfig"
+    }
+  ]
+}
