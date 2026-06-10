@@ -290,7 +290,6 @@ class TestExpandGridSweepGroups:
         quant_flags = [
             c.transformers.load_in_8bit if c.transformers is not None else None for c in valid
         ]
-        assert True in quant_flags
         assert quant_flags.count(True) == 1
 
     def test_two_groups_crossed(self):

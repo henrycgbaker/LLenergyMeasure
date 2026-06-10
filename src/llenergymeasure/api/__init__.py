@@ -2,10 +2,8 @@
 
 from llenergymeasure.api._impl import run_experiment, run_study
 from llenergymeasure.api.report_gaps import (
-    GapProposal,
     ReportGapsError,
     find_runtime_gaps,
-    load_engine_invariants,
     render_yaml_fragment,
 )
 from llenergymeasure.results.persistence import save_result
@@ -13,11 +11,9 @@ from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.study.resume import find_resumable_study, load_resume_state
 
 __all__ = [
-    "GapProposal",
     "ReportGapsError",
     "find_resumable_study",
     "find_runtime_gaps",
-    "load_engine_invariants",
     "load_resume_state",
     "probe_energy_sampler",
     "render_yaml_fragment",

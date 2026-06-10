@@ -27,17 +27,24 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v1.19.0
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
         args: [--config-file=pyproject.toml]
         files: ^src/
 
-  # Local hooks: Regenerate docs when SSOT sources change
-  # Uses language: system to run with project venv (needs pydantic)
+  # Local hooks: Architecture import contracts + doc regeneration
+  # Uses language: system to run with project venv
   - repo: local
     hooks:
+      - id: import-linter
+        name: Architecture import contracts
+        entry: uv run python -m importlinter.cli lint_imports --config pyproject.toml
+        language: system
+        pass_filenames: false
+        files: ^src/
+
       - id: generate-invalid-combos
         name: Regenerate invalid-combos.md
         entry: python scripts/generate_invalid_combos_doc.py
