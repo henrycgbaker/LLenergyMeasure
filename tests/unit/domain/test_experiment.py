@@ -133,3 +133,13 @@ class TestMeasurementConfigHash:
     def test_hash_is_string(self):
         h = compute_declared_config_hash(make_config())
         assert isinstance(h, str)
+
+    def test_latency_profiling_default_off(self):
+        config = make_config()
+        assert config.measurement.latency_profiling is False
+
+    def test_latency_profiling_distinct_hash(self):
+        """Toggling latency_profiling must change the declared config hash."""
+        h_off = compute_declared_config_hash(make_config(latency_profiling=False))
+        h_on = compute_declared_config_hash(make_config(latency_profiling=True))
+        assert h_off != h_on
