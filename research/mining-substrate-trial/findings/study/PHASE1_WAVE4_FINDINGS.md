@@ -113,6 +113,29 @@ GT-recall metric understates (the GT is itself incomplete). The residual ~30-40%
 of GT that neither floor nor construct-grounded-LLM reaches is the hard tail for
 further strategies (self-consistency, or the Opus ceiling).
 
+## Residual analysis + the source-coverage / extraction-method ceiling
+
+What does the hybrid MISS? (GT not covered by floor UNION construct-LLM, qwen-32b):
+- vllm: 25/80 missed - genuine cross-field tail (7 cross_field_combo, 5 literal_in,
+  3 presence_conflict) + observability classes (ProfilerConfig/ObservabilityConfig =
+  internals-guard territory, arguably should not be in the GT).
+- tensorrt: 25/61 missed, **20 of them a SINGLE class, PluginConfig** (mostly
+  literal_in). PluginConfig lives in `plugin/plugin.py`, NOT in the chunked source
+  (llm_args.py + sampling_params.py) - so the LLM never saw it. The 59% tensorrt
+  "ceiling" is therefore NOT a model limit.
+
+BUT: adding `plugin.py` to the source set did NOT lift recall (14 -> 14/61). The
+deeper limit: the chunker extracts VALIDATOR BODIES (`if x: raise`), while
+PluginConfig's constraints are pydantic `Literal`/enum FIELD TYPES (no explicit
+raise). The validator-body chunker structurally cannot see field-type constraints.
+The AST signature pass DOES capture the Literal values (they are in the
+construction-grounding INPUT 1) but the prompt mines invariants from INPUT 2 source,
+not from the signatures. LEVER for a future iteration: emit membership invariants
+directly from the AST-extracted Literal/enum field types (deterministically, or by
+prompting the LLM to mine the signature block) - this is where the remaining
+tensorrt recall lives. (`plugin.py` kept in the source set; harmless, genuine
+coverage even if insufficient alone.)
+
 ## Cost (ordinal)
 
 construction-grounding adds ~0 cost over 4a (one cheap AST pass; same single-shot

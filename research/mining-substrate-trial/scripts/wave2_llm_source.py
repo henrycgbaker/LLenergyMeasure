@@ -154,10 +154,12 @@ def source_files_for(engine: str, version_slug: str) -> list[Path]:
         return cands
     if engine == "tensorrt":
         root = base / "tensorrt_llm"
-        return [
+        cands = [
             root / "llmapi" / "llm_args.py",
             root / "sampling_params.py",
+            root / "plugin" / "plugin.py",  # PluginConfig - the wave-4 source-coverage gap
         ]
+        return [p for p in cands if p.exists()]
     return []
 
 
