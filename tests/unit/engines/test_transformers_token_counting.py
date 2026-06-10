@@ -5,7 +5,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 
-def _count_tokens(inputs: dict, outputs: torch.Tensor) -> tuple[int, int]:
+def _count_tokens(inputs: dict, outputs: "torch.Tensor") -> tuple[int, int]:  # type: ignore[name-defined]  # torch via importorskip
     """Replicate the token counting logic from TransformersEngine._run_batch()."""
     input_token_count = int(inputs["attention_mask"].sum().item())
     input_lengths = inputs["attention_mask"].sum(dim=1)  # shape: (batch,)
@@ -15,7 +15,7 @@ def _count_tokens(inputs: dict, outputs: torch.Tensor) -> tuple[int, int]:
     return input_token_count, output_token_count
 
 
-def _old_count_tokens(inputs: dict, outputs: torch.Tensor) -> tuple[int, int]:
+def _old_count_tokens(inputs: dict, outputs: "torch.Tensor") -> tuple[int, int]:  # type: ignore[name-defined]  # torch via importorskip
     """Previous (buggy) logic for comparison."""
     input_token_count = inputs["input_ids"].shape[1] * len(inputs["input_ids"])
     tokens_per_seq = outputs.shape[1] - inputs["input_ids"].shape[1]

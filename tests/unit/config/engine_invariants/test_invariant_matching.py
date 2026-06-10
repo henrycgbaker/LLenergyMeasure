@@ -255,7 +255,7 @@ def test_resolve_field_path_pydantic_field_wins_over_method_name() -> None:
     # method on the model, the field lookup wins.
     pydantic = pytest.importorskip("pydantic")
 
-    class M(pydantic.BaseModel):
+    class M(pydantic.BaseModel):  # type: ignore[name-defined,misc]  # pydantic via importorskip
         items: list[str] = pydantic.Field(default_factory=list)
         copy_count: int = 0
 

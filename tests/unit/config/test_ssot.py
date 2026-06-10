@@ -13,7 +13,7 @@ def test_engine_is_str_enum() -> None:
 
 
 def test_engine_members_are_strings() -> None:
-    assert Engine.TRANSFORMERS == "transformers"
+    assert Engine.TRANSFORMERS == "transformers"  # type: ignore[comparison-overlap]  # verifies str-enum value at runtime
     assert Engine.VLLM == "vllm"
     assert Engine.TENSORRT == "tensorrt"
 

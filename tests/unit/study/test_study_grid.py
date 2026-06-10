@@ -53,7 +53,7 @@ class TestExecutionConfig:
 
     def test_extra_fields_forbidden(self):
         with pytest.raises(ValidationError):
-            ExecutionConfig(unknown_field=42)
+            ExecutionConfig(unknown_field=42)  # type: ignore[call-arg]  # asserts extra rejected
 
     def test_valid_cycle_orders(self):
         for order in ("sequential", "interleave", "shuffle", "reverse", "latin_square"):
@@ -128,7 +128,7 @@ class TestStudyConfig:
     def test_extra_fields_forbidden(self):
         exp = ExperimentConfig(task={"model": "gpt2"})
         with pytest.raises(ValidationError):
-            StudyConfig(experiments=[exp], unknown_field="x")
+            StudyConfig(experiments=[exp], unknown_field="x")  # type: ignore[call-arg]  # asserts extra rejected
 
 
 # =============================================================================
@@ -197,6 +197,8 @@ class TestExpandGridSweep:
             assert c.vllm is None
         for c in vllm_configs:
             assert c.transformers is None
+            assert c.vllm is not None
+            assert c.vllm.engine is not None
             assert c.vllm.engine.max_num_seqs in (64, 256)
 
 

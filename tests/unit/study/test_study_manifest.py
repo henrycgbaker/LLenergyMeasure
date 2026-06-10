@@ -192,7 +192,7 @@ def test_study_manifest_roundtrip_json() -> None:
 def test_study_manifest_distinct_from_study_result() -> None:
     from llenergymeasure import StudyResult
 
-    assert StudyManifest is not StudyResult
+    assert StudyManifest is not StudyResult  # type: ignore[comparison-overlap]  # runtime regression guard on distinct types
     assert not issubclass(StudyManifest, StudyResult)
     assert not issubclass(StudyResult, StudyManifest)
 

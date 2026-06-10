@@ -483,6 +483,7 @@ def test_create_energy_breakdown_with_cached_baseline():
     # adjusted = 200 - (5W * 20s) = 200 - 100 = 100J
     assert breakdown.adjusted_j == pytest.approx(100.0)
     assert breakdown.baseline_method == "cached"
+    assert breakdown.baseline_cache_age_sec is not None
     assert breakdown.baseline_cache_age_sec > 1.0
 
 

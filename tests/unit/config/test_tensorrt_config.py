@@ -227,7 +227,7 @@ class TestSampling:
 
     def test_sampling_return_perf_metrics_is_extra_allow(self):
         """return_perf_metrics still accepted via extra='allow' passthrough."""
-        config = TensorRTSamplingConfig(return_perf_metrics=True)
+        config = TensorRTSamplingConfig(return_perf_metrics=True)  # type: ignore[call-arg]  # extra="allow"
         # No ValidationError - extra="allow"
         assert getattr(config, "return_perf_metrics", None) is True
 
@@ -290,14 +290,14 @@ class TestExperimentConfigIntegration:
 
     def test_tensorrt_extra_allow_forwards_unknown(self):
         """Extra fields on TensorRTConfig and sub-configs are accepted (not rejected)."""
-        config = TensorRTConfig(
+        config = TensorRTConfig(  # type: ignore[call-arg]  # extra="allow"
             tensor_parallel_size=1,
             custom_future_field="value",
         )
         # Should not raise - extra="allow"
         assert config.tensor_parallel_size == 1
 
-        quant = TensorRTQuantConfig(
+        quant = TensorRTQuantConfig(  # type: ignore[call-arg]  # extra="allow"
             quant_algo="INT8",
             custom_quant_field=42,
         )

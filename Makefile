@@ -74,8 +74,8 @@ lint-fix: ## Auto-fix lint issues (ruff check --fix + format)
 	uv run ruff check src/ tests/ --fix
 	uv run ruff format src/ tests/
 
-typecheck: ## Run mypy on src/
-	uv run mypy src/
+typecheck: ## Run mypy on src/ and tests/
+	uv run mypy src/ tests/
 
 check: lint typecheck ## lint + typecheck (no tests)
 
@@ -242,7 +242,7 @@ ci-docker: ## Run ci inside a clean Ubuntu container (matches GitHub Actions env
 		uv run ruff check src/ tests/ && \
 		uv run ruff format --check src/ tests/ && \
 		uv run lint-imports && \
-		uv run mypy src/ && \
+		uv run mypy src/ tests/ && \
 		uv run pytest tests/ -m "not gpu and not docker" -x -q --tb=short && \
 		echo "=== CI-docker: all checks passed ==="'
 	@docker rmi $(CI_IMAGE) 2>/dev/null || true

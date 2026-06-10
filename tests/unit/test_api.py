@@ -150,7 +150,7 @@ def test_run_experiment_no_config_no_model_raises():
     from llenergymeasure.utils.exceptions import ConfigError
 
     with pytest.raises(ConfigError):
-        run_experiment()
+        run_experiment()  # type: ignore[call-overload]  # asserts no-arg call raises ConfigError
 
 
 # =============================================================================
@@ -393,7 +393,7 @@ def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     study = StudyConfig(experiments=[config])
 
-    preresolved = (
+    preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] = (
         {"transformers": RunnerSpec(mode="local", image=None, source="test")},
         {},
     )
@@ -412,7 +412,7 @@ def test_run_preresolved_without_skip_preflight_raises():
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     study = StudyConfig(experiments=[config])
 
-    preresolved = (
+    preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] = (
         {"transformers": RunnerSpec(mode="local", image=None, source="test")},
         {},
     )

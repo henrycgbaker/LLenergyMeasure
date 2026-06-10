@@ -111,7 +111,7 @@ def test_peak_memory_reset_precedes_measurement():
         patch("torch.cuda.reset_peak_memory_stats", side_effect=lambda: call_log.append("reset")),
         patch(
             "torch.cuda.max_memory_allocated",
-            side_effect=lambda: (call_log.append("max_alloc"), 512 * 1024 * 1024)[1],
+            side_effect=lambda: (call_log.append("max_alloc"), 512 * 1024 * 1024)[1],  # type: ignore[func-returns-value]  # append-in-tuple side-effect idiom
         ),
         patch.object(
             TransformersEngine,
