@@ -35,7 +35,7 @@ class ProgressCallback(Protocol):
     Implementors:
         - StepDisplay (cli/_step_display.py) -- Rich-based TTY rendering
         - StreamProgressCallback (entrypoints/container.py) -- JSON lines to stdout
-        - _QueueProgressCallback (study/runner.py) -- multiprocessing.Queue bridge
+        - _QueueProgressCallback (study/_progress.py) -- multiprocessing.Queue bridge
     """
 
     def on_step_start(self, step: str, description: str, detail: str = "") -> None:

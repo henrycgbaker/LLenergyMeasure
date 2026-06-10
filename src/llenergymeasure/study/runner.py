@@ -47,14 +47,7 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_THREAD_JOIN,
 )
 from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
-
-# ``_QueueProgressCallback`` is re-imported only to keep it reachable as
-# ``study.runner._QueueProgressCallback`` for backward-compatible imports; the
-# worker subprocess constructs it internally, so it is unused in this module.
-from llenergymeasure.study._progress import (  # noqa: F401
-    _consume_progress_events,
-    _QueueProgressCallback,
-)
+from llenergymeasure.study._progress import _consume_progress_events
 from llenergymeasure.study.baseline_measure import _BaselineMixin
 from llenergymeasure.study.gaps import run_gap
 from llenergymeasure.study.image_prep import _ImageMixin
