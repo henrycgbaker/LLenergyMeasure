@@ -1,4 +1,4 @@
-"""Unit tests for domain/experiment.py - RawProcessResult, hashing, StudySummary, edge cases."""
+"""Unit tests for domain/experiment.py - hashing, StudySummary, edge cases."""
 
 from __future__ import annotations
 
@@ -12,53 +12,10 @@ from llenergymeasure.domain.experiment import (
     StudySummary,
     compute_declared_config_hash,
 )
-from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
 from tests.conftest import (
     make_config,
-    make_raw_process_result,
     make_result,
 )
-
-# ---------------------------------------------------------------------------
-# TestRawProcessResult
-# ---------------------------------------------------------------------------
-
-
-class TestRawProcessResult:
-    """RawProcessResult construction, frozen enforcement, defaults."""
-
-    def test_frozen_model_enforcement(self):
-        rpr = make_raw_process_result()
-        with pytest.raises(ValidationError):
-            rpr.engine = "vllm"
-
-    def test_minimal_construction(self):
-        """Builds with only required fields - no extra kwargs needed."""
-        rpr = make_raw_process_result()
-        assert rpr.experiment_id == "test-001"
-        assert rpr.process_index == 0
-        assert rpr.gpu_id == 0
-
-    def test_default_extended_metrics(self):
-        rpr = make_raw_process_result()
-        assert isinstance(rpr.extended_metrics, ExtendedEfficiencyMetrics)
-        # Default should have null tpot
-        assert rpr.extended_metrics.tpot_ms is None
-
-    def test_default_per_request_latencies(self):
-        rpr = make_raw_process_result()
-        assert rpr.per_request_latencies_ms == []
-
-    def test_default_gpu_utilisation_samples(self):
-        rpr = make_raw_process_result()
-        assert rpr.gpu_utilisation_samples == []
-
-    def test_optional_fields_default_none(self):
-        rpr = make_raw_process_result()
-        assert rpr.energy_breakdown is None
-        assert rpr.thermal_throttle is None
-        assert rpr.warmup_result is None
-
 
 # ---------------------------------------------------------------------------
 # TestAggregationMetadata

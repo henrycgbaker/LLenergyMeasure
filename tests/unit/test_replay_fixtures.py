@@ -24,7 +24,7 @@ class TestReplayFixtures:
             assert isinstance(result, ExperimentResult)
 
     def test_schema_version(self, replay_results):
-        """All replay fixtures have schema_version 3.0."""
+        """All replay fixtures match the current ExperimentResult schema_version."""
         self._require_fixtures(replay_results)
         for result in replay_results:
             from tests.conftest import EXPERIMENT_SCHEMA_VERSION

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.domain.experiment import Timestamps
 from llenergymeasure.domain.metrics import (
     CombinedMetrics,
     EnergyMetrics,
@@ -13,6 +12,7 @@ from llenergymeasure.domain.metrics import (
     LatencyMeasurements,
     PrecisionMetadata,
     collect_itl_measurements,
+    compute_latency_statistics,
 )
 from tests.conftest import make_compute_metrics, make_energy_metrics, make_inference_metrics
 
@@ -156,37 +156,64 @@ class TestCombinedMetrics:
 
 
 # ---------------------------------------------------------------------------
-# TestTimestamps
+# TestComputeLatencyStatistics
 # ---------------------------------------------------------------------------
 
 
-class TestTimestamps:
-    """from_times() classmethod."""
+class TestComputeLatencyStatistics:
+    """compute_latency_statistics() from flat sample lists."""
 
-    def test_positive_duration(self):
-        from datetime import datetime, timezone
+    def test_empty_ttft_returns_none(self):
+        assert compute_latency_statistics([]) is None
 
-        start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2026, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
-        ts = Timestamps.from_times(start, end)
-        assert ts.duration_sec == pytest.approx(10.0)
-        assert ts.start == start
-        assert ts.end == end
+    def test_empty_ttft_with_itl_still_none(self):
+        assert compute_latency_statistics([], itl_trimmed_ms=[5.0], itl_full_ms=[5.0]) is None
 
-    def test_zero_duration(self):
-        from datetime import datetime, timezone
+    def test_single_sample(self):
+        stats = compute_latency_statistics([42.0])
+        assert stats is not None
+        assert stats.ttft_mean_ms == pytest.approx(42.0)
+        assert stats.ttft_median_ms == pytest.approx(42.0)
+        assert stats.ttft_p95_ms == pytest.approx(42.0)
+        assert stats.ttft_p99_ms == pytest.approx(42.0)
+        assert stats.ttft_min_ms == pytest.approx(42.0)
+        assert stats.ttft_max_ms == pytest.approx(42.0)
+        assert stats.ttft_samples == 1
 
-        t = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
-        ts = Timestamps.from_times(t, t)
-        assert ts.duration_sec == 0.0
+    def test_multi_sample_percentiles(self):
+        ttft = [10.0, 20.0, 30.0, 40.0, 50.0]
+        stats = compute_latency_statistics(ttft)
+        assert stats is not None
+        assert stats.ttft_mean_ms == pytest.approx(30.0)
+        assert stats.ttft_median_ms == pytest.approx(30.0)
+        assert stats.ttft_min_ms == pytest.approx(10.0)
+        assert stats.ttft_max_ms == pytest.approx(50.0)
+        # p95 of 5 evenly spaced samples sits near the top
+        assert stats.ttft_p95_ms == pytest.approx(48.0)
+        assert stats.ttft_p99_ms == pytest.approx(49.6)
+        assert stats.ttft_samples == 5
 
-    def test_negative_duration(self):
-        from datetime import datetime, timezone
+    def test_itl_none_leaves_itl_fields_none(self):
+        stats = compute_latency_statistics([10.0, 20.0])
+        assert stats is not None
+        assert stats.itl_mean_ms is None
+        assert stats.itl_median_ms is None
+        assert stats.itl_p95_ms is None
+        assert stats.itl_p99_ms is None
+        assert stats.itl_samples == 0
+        assert stats.itl_full_mean_ms is None
+        assert stats.itl_full_p99_ms is None
 
-        start = datetime(2026, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
-        end = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        ts = Timestamps.from_times(start, end)
-        assert ts.duration_sec < 0
+    def test_itl_trimmed_computed(self):
+        stats = compute_latency_statistics(
+            [10.0], itl_trimmed_ms=[2.0, 4.0, 6.0, 8.0], itl_full_ms=[1.0, 2.0, 4.0, 6.0, 8.0, 9.0]
+        )
+        assert stats is not None
+        assert stats.itl_mean_ms == pytest.approx(5.0)
+        assert stats.itl_median_ms == pytest.approx(5.0)
+        assert stats.itl_samples == 4
+        assert stats.itl_full_mean_ms == pytest.approx(5.0)
+        assert stats.itl_full_p99_ms is not None
 
 
 # ---------------------------------------------------------------------------

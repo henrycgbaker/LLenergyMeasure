@@ -57,19 +57,7 @@ def print_result_summary(result: ExperimentResult) -> None:
 
     if result.total_flops > 0:
         flops_val = f"{result.total_flops:.2e}"
-        # Try to get method/confidence from process_results
-        method: str | None = None
-        confidence: str | None = None
-        if result.process_results:
-            cm = result.process_results[0].compute_metrics
-            method = cm.flops_method if cm.flops_method != "unknown" else None
-            confidence = cm.flops_confidence if cm.flops_confidence != "unknown" else None
-        if method and confidence:
-            print(f"  FLOPs          {flops_val} ({method}, {confidence})")
-        elif method:
-            print(f"  FLOPs          {flops_val} ({method})")
-        else:
-            print(f"  FLOPs          {flops_val}")
+        print(f"  FLOPs          {flops_val}")
 
     if result.latency_stats is not None:
         ls = result.latency_stats
