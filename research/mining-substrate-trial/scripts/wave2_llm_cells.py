@@ -59,7 +59,12 @@ def _digest(model: str) -> str:
 
 
 def ollama_generate(
-    model: str, prompt: str, *, num_ctx: int = 16384, num_predict: int = 4096
+    model: str,
+    prompt: str,
+    *,
+    num_ctx: int = 16384,
+    num_predict: int = 4096,
+    temperature: float = 0,
 ) -> str:
     body = json.dumps(
         {
@@ -67,7 +72,7 @@ def ollama_generate(
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": 0,
+                "temperature": temperature,
                 "num_ctx": num_ctx,
                 "num_predict": num_predict,
             },
