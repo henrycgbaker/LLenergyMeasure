@@ -59,15 +59,25 @@ source: tensorrt 20/23 REAL candidate-config; new-vllm 7/9 REAL. The non-real:
 
 ## NEW gate-hardening finding (a real SSOT improvement)
 
-All 3-4 non-real confirms share one mechanism: the positive raised a pydantic
-TYPE-COERCION error (`int_parsing` / `literal_error` / `string_type`) on the
-probed field, NOT a custom ValueError matching the labelled semantic validator.
-The wave-1/2 attribution guard blocks wrong-FIELD raises but does not distinguish
-a type-coercion error on the RIGHT field from the labelled semantic rule. FIX
-(implemented separately): down-weight/reject a confirm whose positive exception is
-a pydantic type-coercion error type on the probed field rather than a rule-matching
-ValueError. This auto-removes exactly this spurious class and makes raw strategy
-numbers trustworthy without per-run manual verification.
+The non-real confirms share one mechanism: the positive raised a pydantic
+PARSING/literal error (`int_parsing`, or `literal_error` on a numeric-labelled
+Literal) on the probed field, NOT a custom ValueError matching the labelled
+semantic validator (the canonical artefact: YAML `None` -> the string `"None"` ->
+`int_parsing` on a NON-raising normalisation). The wave-1/2 attribution guard
+blocks wrong-FIELD raises but did not distinguish a parsing artefact on the RIGHT
+field from the labelled semantic rule.
+
+FIX (IMPLEMENTED + tested, `scripts/validate_invariants.py`
+`_positive_is_type_coercion_artifact`): reject a LENIENT confirm whose positive
+raised a pydantic PARSING error (`int_parsing`/`float_parsing`/`bool_parsing`/
+`decimal_parsing`), or `literal_error` on a numeric-labelled predicate, unless the
+invariant predicate is itself a type-check. DELIBERATELY excludes `*_type` /
+`string_type` (those legitimately fire for REQUIRED-field "must be provided"
+rules). Gated on `not expected_strict`, so the strict-scored GT is untouched.
+Verified on the qwen-32b construct corpora: drops EXACTLY the 3 adversarially-
+confirmed spurious (gpus_per_node-ray, max_beam_width-default, max_lora_rank>0),
+keeps all reals incl the required-field `output_directory`. Zero false positives.
+Makes raw strategy numbers trustworthy without per-run manual verification.
 
 ## Agentic (4b/4c): a POOR strategy for OSS
 

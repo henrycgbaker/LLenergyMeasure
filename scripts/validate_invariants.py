@@ -489,6 +489,54 @@ def _is_cross_field(invariant: dict[str, Any]) -> bool:
     return len((invariant.get("match") or {}).get("fields") or {}) > 1
 
 
+_PYDANTIC_TYPE_COERCION = frozenset(
+    {"int_parsing", "float_parsing", "bool_parsing", "decimal_parsing"}
+)
+"""Pydantic v2 PARSING error codes only. A positive raising one of these on the probed
+field merely supplied an unparseable-as-number value (the canonical artefact: YAML
+``None`` -> the string ``"None"`` -> ``int_parsing`` on a NON-raising normalisation); it
+does not enforce a labelled SEMANTIC bound. DELIBERATELY EXCLUDED: the ``*_type`` /
+``string_type`` / ``none_required`` codes - those legitimately fire for REQUIRED-field
+("must be provided") rules where the type/required check IS the labelled rule (e.g. a
+required ``str`` field set to None). Constraint codes (``greater_than``/...) are real
+bounds. ``literal_error`` is handled separately (real for a membership predicate,
+spurious only on a numeric-labelled one)."""
+
+
+def _invariant_is_type_check(invariant: dict[str, Any]) -> bool:
+    """Does the labelled predicate itself test TYPE? Then a type error IS its rule."""
+    if (invariant.get("predicate_kind") or "") in ("type_is_not", "type_is", "type"):
+        return True
+    for pred in ((invariant.get("match") or {}).get("fields") or {}).values():
+        if isinstance(pred, dict) and any(k in pred for k in ("type_is_not", "type_is")):
+            return True
+    return False
+
+
+def _invariant_is_numeric_bound(invariant: dict[str, Any]) -> bool:
+    pk = invariant.get("predicate_kind") or ""
+    if any(s in pk for s in ("numeric", "greater", "less", "_gt", "_lt", "_ge", "_le", "range")):
+        return True
+    for pred in ((invariant.get("match") or {}).get("fields") or {}).values():
+        if isinstance(pred, dict) and any(k in pred for k in ("<", ">", "<=", ">=")):
+            return True
+    return False
+
+
+def _positive_is_type_coercion_artifact(invariant: dict[str, Any], pos: CaptureBuffers) -> bool:
+    """True when the positive's raise is a pydantic TYPE-COERCION error on the probed
+    field rather than the labelled semantic validator - a spurious confirm. Type-check
+    invariants are exempt (the type error IS their rule). ``literal_error`` counts only
+    when the labelled predicate is a numeric bound (a Literal field hit by an
+    out-of-set value, mislabelled as a ``>``/``<`` rule)."""
+    etypes = set(re.findall(r"type=([a-z_]+)", pos.exception_message or ""))
+    if not etypes or _invariant_is_type_check(invariant):
+        return False
+    if etypes & _PYDANTIC_TYPE_COERCION:
+        return True
+    return "literal_error" in etypes and _invariant_is_numeric_bound(invariant)
+
+
 def _raise_attributable_to(
     leaf: str,
     pos: CaptureBuffers,
@@ -770,12 +818,19 @@ def _validate_invariant_with_captures(
     # plain ValueError (locs None). Reject the field-level case.
     expected_strict = expected.get("outcome") in _FIRING_OUTCOMES
     if positive_confirmed and not expected_strict:
-        probe_leaf = _leaf_field(invariant) or ""
-        if probe_leaf:
-            if not _raise_attributable_to(probe_leaf, pos, observed_messages, neg.observed_state):
-                positive_confirmed = False
-        elif _is_cross_field(invariant) and pos.exception_locs:
+        if _positive_is_type_coercion_artifact(invariant, pos):
+            # positive raised a pydantic type-coercion error on the probed field, not
+            # the labelled semantic validator (see _positive_is_type_coercion_artifact)
             positive_confirmed = False
+        else:
+            probe_leaf = _leaf_field(invariant) or ""
+            if probe_leaf:
+                if not _raise_attributable_to(
+                    probe_leaf, pos, observed_messages, neg.observed_state
+                ):
+                    positive_confirmed = False
+            elif _is_cross_field(invariant) and pos.exception_locs:
+                positive_confirmed = False
 
     case = CaseResult(
         id=invariant_id,
