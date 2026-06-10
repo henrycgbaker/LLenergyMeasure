@@ -81,7 +81,7 @@ jobs:
         run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12' && always()
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
@@ -112,7 +112,7 @@ jobs:
       - name: Build package
         run: uv build
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: dist/*

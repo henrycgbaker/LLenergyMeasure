@@ -54,7 +54,7 @@ jobs:
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: List candidate versions to prune
         id: candidates
