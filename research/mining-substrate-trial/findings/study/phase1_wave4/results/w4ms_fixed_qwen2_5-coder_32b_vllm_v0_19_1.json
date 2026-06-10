@@ -1,0 +1,21 @@
+{
+  "engine": "vllm",
+  "vslug": "v0_19_1",
+  "shape": "multistage_chain",
+  "model": "qwen2.5-coder:32b",
+  "n_llm_proposed_raw": 212,
+  "n_deduped_internal": 146,
+  "n_gateable": 146,
+  "verdicts": {
+    "confirmed": 28,
+    "failed": 67,
+    "skipped": 4,
+    "infra_error": 47,
+    "ungated": 0
+  },
+  "gate_confirmed_precision": 0.192,
+  "gt_confirmed_total": 80,
+  "recall_vs_gt_tol": 20,
+  "recall_frac": 0.25,
+  "wall_sec": 1597.7
+}

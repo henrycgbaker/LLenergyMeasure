@@ -44,11 +44,13 @@ cross-bump results - add those).
 
 ## IN-FLIGHT when handed off (check + finish these first)
 
-- Fixed multistage qwen2.5-coder:32b was running (`wave4_multistage.py`, task may
-  have finished - check `/tmp/phase1_w4ms_vllm_v0_19_1_qwen2_5-coder_32b.json`). It
-  is the decisive test of the langchain FIX (stage 2 now sees source). BROKEN 32b was
-  143/143 infra, 0 conf. If still high-infra after the fix -> the fix is insufficient,
-  note it for future inspection. (14b fixed was MARGINAL: infra 89->91, conf 17->21.)
+- Fixed multistage qwen2.5-coder:32b: DONE. THE FIX WORKED: infra 143->47, conf
+  0->28, recall 0->20 - now COMPETITIVE with single-shot construct (30/21). The
+  catastrophic 143/143-infra was purely our bad chain setup (stage 2 blind to source).
+  (14b fix was marginal - 14b just isn't the catastrophic case.) So the langchain
+  result is: a PROPERLY-FORMED chain matches single-shot; whether it can EXCEED it is
+  OPEN (the hybrid-chain still trailed: 49 vs single-shot 55). Re-run the hybrid-chain
+  with the source fix to check.
 - BUMP-DIAGNOSE NOT YET RUN. Run it (needs the ollama free):
   `WAVE_OLLAMA=http://localhost:11435 PY=/tmp/round0b_venv/bin/python
    $PY scripts/phase1/wave5_bump_diagnose.py --engine vllm --old-vslug v0_19_1
@@ -92,12 +94,13 @@ THE METHOD WORKS / the strategy frontier (waves 1-4, committed, in PHASE1_WAVE{1
 LANGCHAIN cells (vllm, PROVISIONAL - likely bad setup):
 - single-shot construct hybrid (qwen-coder-32b): hybrid 55, lift 11.
 - langchain hybrid-chain (qwen-coder-32b): hybrid 49, lift 5 (worse).
-- langchain multistage (qwen-coder-32b): BROKEN - 143/143 infra, 0 conf (stage 2
-  decoupled from source). FIX applied (`wave4_multistage.py` STAGE2 now takes
-  `source=chunk`; `wave4_hybrid_chain.py` too). 14b fix marginal; 32b fix in-flight.
-  CONCLUSION: do NOT conclude "chains fail" - the chain was badly formed; needs
-  proper setup + re-test (e.g. stage 2 sees source [done], a separate repair stage,
-  fix AST-inheritance signature gaps).
+- langchain multistage (qwen-coder-32b): BROKEN was 143/143 infra, 0 conf (stage 2
+  decoupled from source). FIX (STAGE2 now takes `source=chunk` in `wave4_multistage.py`
+  + `wave4_hybrid_chain.py`) WORKED: infra 143->47, conf 0->28, recall 0->20 -
+  COMPETITIVE with single-shot construct (30/21). So the chain was badly formed, not
+  fundamentally worse. OPEN: can a chain EXCEED single-shot? (hybrid-chain still
+  trailed at 49 vs 55 - re-run it with the fix; try a separate repair stage; fix the
+  AST-inheritance signature gaps the methodology review flagged.)
 
 CROSS-BUMP (the north-star pivot, NEW):
 - gate-acceptance degradation signal WORKS (`wave5_gate_acceptance.py`): carry old
