@@ -17,7 +17,6 @@ Measurement lifecycle orchestration for any inference engine. Layer 3 in the six
 | `extended_metrics.py` | `compute_extended_metrics()` - derived efficiency metrics |
 | `timeseries.py` | `write_timeseries_parquet()` - power/thermal timeseries sidecar |
 | `measurement_warnings.py` | `collect_measurement_warnings()` - quality flag generation |
-| `state.py` | `ExperimentState`, `ExperimentPhase` - experiment lifecycle state machine |
 
 ## MeasurementHarness
 
