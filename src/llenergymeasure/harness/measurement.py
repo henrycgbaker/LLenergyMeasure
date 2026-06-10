@@ -730,6 +730,63 @@ class MeasurementHarness:
             return config.tensorrt.max_batch_size
         return None
 
+    @staticmethod
+    def _resolve_measurement_mode(
+        declared_mode: str | None,
+        measurement_warnings: list[str],
+    ) -> Any:
+        """Map an engine-declared latency mode string to LatencyMeasurementMode.
+
+        The engine sets ``output.latency_measurement_mode`` explicitly whenever it
+        emits TTFT. If it is missing while TTFT is present, that is an engine bug:
+        log a warning and fall back to the field's default (TRUE_STREAMING),
+        noting it in measurement_warnings.
+        """
+        from llenergymeasure.domain.metrics import LatencyMeasurementMode
+
+        if declared_mode is None:
+            logger.warning(
+                "Engine emitted TTFT samples but no latency_measurement_mode; "
+                "defaulting provenance to TRUE_STREAMING."
+            )
+            measurement_warnings.append(
+                "latency_measurement_mode missing despite TTFT capture; "
+                "provenance defaulted to true_streaming (engine should set it explicitly)."
+            )
+            return LatencyMeasurementMode.TRUE_STREAMING
+        return LatencyMeasurementMode(declared_mode)
+
+    @staticmethod
+    def _append_latency_profiling_warnings(
+        config: ExperimentConfig,
+        output: InferenceOutput,
+        engine_name: str,
+        measurement_warnings: list[str],
+    ) -> None:
+        """Append latency-profiling provenance warnings to measurement_warnings.
+
+        Only fires when ``config.measurement.latency_profiling`` is enabled. Adds
+        the fixed provenance note plus, when relevant, the batch-size-forcing note
+        (transformers) and the unsupported-engine note (tensorrt).
+        """
+        if not config.measurement.latency_profiling:
+            return
+        measurement_warnings.append(
+            "latency_profiling enabled: per-token timing capture (streamer/decode-average "
+            "ITL) may perturb energy and latency; energy figures emitted as-is and are not "
+            "directly comparable to non-profiled runs."
+        )
+        if output.extras.get("profiling_forced_batch_size"):
+            measurement_warnings.append(
+                "latency_profiling forced batch_size=1 for per-token timing capture; "
+                "throughput is not comparable to the configured batch size."
+            )
+        if output.extras.get("latency_profiling_unsupported"):
+            measurement_warnings.append(
+                f"latency_profiling is not supported by the {engine_name} engine; "
+                "no per-token timing was captured."
+            )
+
     def _build_result(
         self,
         engine_name: str,
@@ -912,12 +969,29 @@ class MeasurementHarness:
                 "padding_overhead": padding_overhead,
             }
 
+        # Latency stats from streaming TTFT/ITL. Computed BEFORE extended metrics
+        # so the ITL mean can feed tpot_ms. measurement_mode is mapped from the
+        # engine-declared capture mode (provenance). vLLM populates TTFT-only stats
+        # even without profiling; ITL (and thus tpot_ms) needs profiling.
+        latency_stats = None
+        if output.ttft_ms:
+            measurement_mode = self._resolve_measurement_mode(
+                output.latency_measurement_mode, measurement_warnings
+            )
+            latency_stats = compute_latency_statistics(
+                output.ttft_ms,
+                itl_trimmed_ms=output.itl_ms or None,
+                measurement_mode=measurement_mode,
+            )
+
+        itl_mean_ms = latency_stats.itl_mean_ms if latency_stats is not None else None
+
         extended_metrics = compute_extended_metrics(
             output_tokens=output.output_tokens,
             total_energy_j=total_energy_j,
             tokens_per_second=avg_tokens_per_second,
             precision_factor=1.0,  # No precision-scaling applied (default)
-            itl_mean_ms=None,  # tpot_ms stays null - needs streaming ITL capture
+            itl_mean_ms=itl_mean_ms,  # populates tpot_ms when ITL was captured
             per_request_latencies_ms=output.per_request_latencies_ms or None,
             gpu_utilisation_samples=gpu_utilisation_samples or None,
             memory_bandwidth_samples=memory_bandwidth_samples or None,
@@ -929,12 +1003,8 @@ class MeasurementHarness:
         # know the model baseline split).
         extended_metrics.memory.inference_memory_mb = inference_memory_mb
 
-        # Latency stats from streaming TTFT/ITL (vLLM only; null otherwise).
-        latency_stats = (
-            compute_latency_statistics(output.ttft_ms, itl_trimmed_ms=output.itl_ms or None)
-            if output.ttft_ms
-            else None
-        )
+        # Latency profiling provenance warnings (appended to measurement_warnings).
+        self._append_latency_profiling_warnings(config, output, engine_name, measurement_warnings)
 
         steady_state_window = (0.0, output.inference_time_sec)
         warmup_excluded_samples = (
