@@ -602,11 +602,15 @@ class LatencyStatistics:
     itl_full_mean_ms: float | None = None
     itl_full_p99_ms: float | None = None
 
+    # Provenance: how these latency measurements were obtained.
+    measurement_mode: LatencyMeasurementMode = LatencyMeasurementMode.TRUE_STREAMING
+
 
 def compute_latency_statistics(
     ttft_ms: list[float],
     itl_trimmed_ms: list[float] | None = None,
     itl_full_ms: list[float] | None = None,
+    measurement_mode: LatencyMeasurementMode = LatencyMeasurementMode.TRUE_STREAMING,
 ) -> LatencyStatistics | None:
     """Compute TTFT/ITL statistics from flat sample lists.
 
@@ -618,6 +622,8 @@ def compute_latency_statistics(
         ttft_ms: Per-request time-to-first-token samples in ms.
         itl_trimmed_ms: Trimmed inter-token latency samples (first/last excluded).
         itl_full_ms: All inter-token latency samples.
+        measurement_mode: How these measurements were obtained (provenance).
+            Defaults to TRUE_STREAMING.
 
     Returns:
         LatencyStatistics, or None when ttft_ms is empty.
@@ -668,6 +674,7 @@ def compute_latency_statistics(
         itl_samples=itl_samples,
         itl_full_mean_ms=itl_full_mean_ms,
         itl_full_p99_ms=itl_full_p99_ms,
+        measurement_mode=measurement_mode,
     )
 
 

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llenergymeasure.engines._observed import extract_request_metrics
+from llenergymeasure.engines._observed import extract_decode_itl, extract_request_metrics
 from llenergymeasure.engines.vllm.plugin import _capture_kv_cache_stats
 
 # ---------------------------------------------------------------------------
@@ -59,6 +59,65 @@ class TestExtractRequestMetrics:
         latencies, ttft = extract_request_metrics([])
         assert latencies == []
         assert ttft == []
+
+
+# ---------------------------------------------------------------------------
+# extract_decode_itl
+# ---------------------------------------------------------------------------
+
+
+def _req_decode(first_token=None, finished=None, n_out=0, with_metrics=True):
+    """Build a fake RequestOutput for extract_decode_itl.
+
+    ``n_out`` controls the total generated-token count across outputs (a single
+    CompletionOutput whose ``token_ids`` has length ``n_out``).
+    """
+    if not with_metrics:
+        return SimpleNamespace(metrics=None, outputs=[SimpleNamespace(token_ids=[0] * n_out)])
+    metrics = SimpleNamespace(first_token_time=first_token, finished_time=finished)
+    return SimpleNamespace(
+        metrics=metrics,
+        outputs=[SimpleNamespace(token_ids=list(range(n_out)))],
+    )
+
+
+class TestExtractDecodeItl:
+    def test_decode_average_math(self):
+        # finished-first_token = 0.9s over n_out-1 = 9 intervals -> 100 ms each.
+        outputs = [_req_decode(first_token=1.0, finished=1.9, n_out=10)]
+        itl = extract_decode_itl(outputs)
+        assert itl == pytest.approx([100.0])
+
+    def test_multi_request(self):
+        outputs = [
+            _req_decode(first_token=1.0, finished=1.9, n_out=10),  # 100 ms
+            _req_decode(first_token=0.0, finished=0.2, n_out=3),  # 0.2s / 2 = 100 ms
+        ]
+        itl = extract_decode_itl(outputs)
+        assert itl == pytest.approx([100.0, 100.0])
+
+    def test_n_out_one_skipped(self):
+        outputs = [_req_decode(first_token=1.0, finished=2.0, n_out=1)]
+        assert extract_decode_itl(outputs) == []
+
+    def test_n_out_zero_skipped(self):
+        outputs = [_req_decode(first_token=1.0, finished=2.0, n_out=0)]
+        assert extract_decode_itl(outputs) == []
+
+    def test_missing_first_token_skipped(self):
+        outputs = [_req_decode(first_token=None, finished=2.0, n_out=5)]
+        assert extract_decode_itl(outputs) == []
+
+    def test_missing_finished_skipped(self):
+        outputs = [_req_decode(first_token=1.0, finished=None, n_out=5)]
+        assert extract_decode_itl(outputs) == []
+
+    def test_metrics_none_skipped(self):
+        outputs = [_req_decode(with_metrics=False, n_out=5)]
+        assert extract_decode_itl(outputs) == []
+
+    def test_empty_outputs(self):
+        assert extract_decode_itl([]) == []
 
 
 # ---------------------------------------------------------------------------

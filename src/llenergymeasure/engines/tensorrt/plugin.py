@@ -331,6 +331,12 @@ class TensorRTEngine:
         if self._build_metadata is not None:
             extras["build_metadata"] = self._build_metadata
 
+        # TRT-LLM does not expose a per-token timing stream here, so latency
+        # profiling is unsupported: signal it so the harness can warn. Latency
+        # fields stay empty/None.
+        if config.measurement.latency_profiling:
+            extras["latency_profiling_unsupported"] = True
+
         # Defensive per-request metric capture - RequestOutput.metrics is usually
         # absent in TRT-LLM 0.21.0, so these lists typically come back empty.
         from llenergymeasure.engines._observed import extract_request_metrics

@@ -293,6 +293,17 @@ class MeasurementConfig(BaseModel):
         ),
         json_schema_extra={"display_label": "Sampler"},
     )
+    latency_profiling: bool = Field(
+        default=False,
+        description=(
+            "Opt-in per-token latency profiling. Default off. When enabled, the "
+            "engine captures per-token timing (transformers via a streamer forced "
+            "to batch_size=1; vLLM via decode-average inter-token latency); this "
+            "overhead may perturb energy and latency, so profiled runs are tagged "
+            "in measurement_warnings and energy figures are emitted as-is."
+        ),
+        json_schema_extra={"display_label": "Latency Profiling"},
+    )
 
 
 # =============================================================================

@@ -215,6 +215,24 @@ class TestComputeLatencyStatistics:
         assert stats.itl_full_mean_ms == pytest.approx(5.0)
         assert stats.itl_full_p99_ms is not None
 
+    def test_measurement_mode_defaults_to_true_streaming(self):
+        from llenergymeasure.domain.metrics import LatencyMeasurementMode
+
+        stats = compute_latency_statistics([10.0])
+        assert stats is not None
+        assert stats.measurement_mode is LatencyMeasurementMode.TRUE_STREAMING
+
+    def test_measurement_mode_round_trips(self):
+        from llenergymeasure.domain.metrics import LatencyMeasurementMode
+
+        stats = compute_latency_statistics(
+            [10.0],
+            itl_trimmed_ms=[5.0],
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,
+        )
+        assert stats is not None
+        assert stats.measurement_mode is LatencyMeasurementMode.PROPORTIONAL_ESTIMATE
+
 
 # ---------------------------------------------------------------------------
 # TestCollectItlMeasurements

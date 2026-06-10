@@ -49,7 +49,7 @@ def make_config(**overrides) -> ExperimentConfig:
     (dtype now lives per-engine on TransformersConfig/VLLMConfig/TensorRTConfig).
     """
     _TASK_FIELDS = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
-    _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler"}
+    _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler", "latency_profiling"}
 
     dtype = overrides.pop("dtype", None)
 

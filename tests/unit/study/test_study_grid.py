@@ -155,6 +155,25 @@ class TestExpandGridSweep:
         assert dtypes_set == {"float16", "bfloat16"}
         assert ns == {50, 100}
 
+    def test_latency_profiling_sweep_two_distinct_hashes(self):
+        """Sweeping measurement.latency_profiling yields 2 configs with distinct hashes."""
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
+
+        raw = {
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "sweep": {
+                "measurement.latency_profiling": [False, True],
+            },
+        }
+        valid, skipped = expand_grid(raw)
+        assert len(valid) == 2
+        assert len(skipped) == 0
+        flags = {c.measurement.latency_profiling for c in valid}
+        assert flags == {False, True}
+        hashes = {compute_declared_config_hash(c) for c in valid}
+        assert len(hashes) == 2
+
     def test_engine_scoped_sweep_routes_to_section(self):
         """transformers.batch_size routes to the transformers section, not top-level."""
         raw = {

@@ -320,10 +320,24 @@ class VLLMEngine:
             extras["hf_model"] = hf_model
 
         # Best-effort extended-metrics capture (continuous batching: no static batches).
-        from llenergymeasure.engines._observed import extract_request_metrics
+        from llenergymeasure.domain.metrics import LatencyMeasurementMode
+        from llenergymeasure.engines._observed import extract_decode_itl, extract_request_metrics
 
         per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
         kv_cache_stats = _capture_kv_cache_stats(llm)
+
+        # TTFT timestamps are engine-recorded (real per-request first_token_time),
+        # so on their own they are TRUE_STREAMING. Under latency profiling we
+        # additionally derive a decode-average ITL, which is only a
+        # PROPORTIONAL_ESTIMATE - the mode then describes that weakest signal.
+        itl_ms: list[float] = []
+        latency_measurement_mode: str | None = None
+        if config.measurement.latency_profiling:
+            itl_ms = extract_decode_itl(outputs)
+            if ttft_ms:
+                latency_measurement_mode = LatencyMeasurementMode.PROPORTIONAL_ESTIMATE.value
+        elif ttft_ms:
+            latency_measurement_mode = LatencyMeasurementMode.TRUE_STREAMING.value
 
         return InferenceOutput(
             elapsed_time_sec=elapsed,
@@ -335,6 +349,8 @@ class VLLMEngine:
             extras=extras,
             per_request_latencies_ms=per_request_latencies_ms,
             ttft_ms=ttft_ms,
+            itl_ms=itl_ms,
+            latency_measurement_mode=latency_measurement_mode,
             num_batches=None,  # Continuous batching - no static batch count
             padding_tokens=None,  # Continuous batching - no padding
             kv_cache_stats=kv_cache_stats,
