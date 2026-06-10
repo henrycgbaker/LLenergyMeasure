@@ -84,14 +84,6 @@ Two paths:
 1. `estimate_flops_palm_from_config(model_name, ...)` - uses HuggingFace `AutoConfig` (no weights loaded, works for all engines)
 2. `estimate_flops_palm(model, ...)` - uses loaded model object (higher confidence, PyTorch only)
 
-## State machine (state.py)
-
-Three-phase lifecycle: `INITIALISING → MEASURING → DONE`, with orthogonal `failed` flag. Used for resume/deduplication:
-
-```python
-from llenergymeasure.harness.state import ExperimentPhase, ExperimentState
-```
-
 ## Layer constraints
 
 - Layer 3 - may import from layers 0-2

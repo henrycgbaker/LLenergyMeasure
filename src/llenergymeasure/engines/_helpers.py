@@ -9,7 +9,6 @@ from __future__ import annotations
 import dataclasses
 import gc
 import logging
-from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -72,47 +71,6 @@ def library_version(module_name: str) -> str:
         return str(getattr(mod, "__version__", "unknown"))
     except Exception:
         return "unknown"
-
-
-def assemble_observed_params_safe(
-    *,
-    engine_extractor: Callable[[], dict[str, Any]] | None,
-    sampling_extractor: Callable[[], dict[str, Any]] | None,
-    module_name: str,
-    logger: logging.Logger,
-) -> dict[str, Any]:
-    """Try-extract-and-assemble scaffold shared by all three engine capture methods.
-
-    Each engine supplies small callables that produce its engine-specific and
-    sampling-specific observed-params dicts.  Extraction failures are logged at
-    DEBUG and silently produce empty dicts - sidecar writes are best-effort.
-
-    Args:
-        engine_extractor: Zero-arg callable returning engine-section params dict,
-            or ``None`` to skip engine extraction.
-        sampling_extractor: Zero-arg callable returning sampling-section params dict,
-            or ``None`` to skip sampling extraction.
-        module_name: Library module name for :func:`library_version` lookup.
-        logger: Caller's module-level logger for DEBUG messages.
-
-    Returns:
-        ``{"engine": ..., "sampling": ..., "library_version": ...}`` dict.
-    """
-    engine_params: dict[str, Any] = {}
-    if engine_extractor is not None:
-        try:
-            engine_params = engine_extractor()
-        except Exception as exc:
-            logger.debug("Engine param extraction failed: %s", exc)
-
-    sampling: dict[str, Any] = {}
-    if sampling_extractor is not None:
-        try:
-            sampling = sampling_extractor()
-        except Exception as exc:
-            logger.debug("Sampling param extraction failed: %s", exc)
-
-    return assemble_observed_params(engine_params, sampling, module_name)
 
 
 def assemble_observed_params(
