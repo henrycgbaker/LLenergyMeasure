@@ -16,7 +16,7 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
@@ -24,13 +24,17 @@ from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.progress import ProgressCallback
 
+if TYPE_CHECKING:
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.study.manifest import ManifestWriter
+
 
 def run_single_experiment(
     study: StudyConfig,
-    manifest: Any,
+    manifest: ManifestWriter,
     study_dir: Path,
     *,
-    runner_specs: Any = None,
+    runner_specs: dict[str, RunnerSpec] | None = None,
     progress: ProgressCallback | None = None,
     resolution_logs: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
