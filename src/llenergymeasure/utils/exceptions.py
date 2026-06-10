@@ -50,14 +50,5 @@ class DockerPreFlightError(PreFlightError):
     """
 
 
-class InvalidStateTransitionError(ExperimentError):
-    """Invalid state machine transition."""
-
-    def __init__(self, from_state: str, to_state: str):
-        super().__init__(f"Invalid transition: {from_state} -> {to_state}")
-        self.from_state = from_state
-        self.to_state = to_state
-
-
 # Used by results/aggregation.py
 AggregationError = ExperimentError
