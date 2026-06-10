@@ -576,7 +576,7 @@ class LatencyStatistics:
     """Computed statistics from raw latency measurements.
 
     Created at aggregation time from LatencyMeasurements. This is the final
-    form stored in AggregatedResult and displayed in CLI output.
+    form stored in ExperimentResult and displayed in CLI output.
 
     Primary metrics use trimmed ITL (excluding first/last tokens per request).
     Full ITL stats are provided for comparison/debugging.

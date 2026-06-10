@@ -425,23 +425,6 @@ def test_print_study_summary_basic():
     assert "abcd1234" in output
 
 
-def test_print_study_progress():
-    """print_study_progress produces a formatted line to stderr."""
-    from io import StringIO
-    from unittest.mock import patch
-
-    from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.study._progress import print_study_progress
-
-    config = ExperimentConfig(task={"model": "test/model"}, engine="transformers")
-    with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-        print_study_progress(1, 4, config, status="completed", elapsed=30.5, energy=100.0)
-    output = mock_stderr.getvalue()
-    assert "[1/4]" in output
-    assert "OK" in output
-    assert "test/model" in output
-
-
 # ---------------------------------------------------------------------------
 # Study routing tests - verify CLI actually invokes run_study for study YAMLs
 # ---------------------------------------------------------------------------

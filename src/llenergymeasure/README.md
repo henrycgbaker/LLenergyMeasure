@@ -109,7 +109,6 @@ Security utilities:
 ### `study/` (Layer 6)
 - `runner.py` - orchestrates multi-experiment sweeps
 - `preflight.py` - study-level pre-flight validation (multi-engine Docker requirements)
-- `_progress.py` - progress display (belongs here, not in cli/)
 
 ### `harness/` and `results/` (Layer 5)
 - `harness/__init__.py` - `MeasurementHarness`, `select_energy_sampler()`

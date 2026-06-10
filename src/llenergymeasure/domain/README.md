@@ -114,23 +114,6 @@ RawProcessResult(
 )
 ```
 
-**AggregatedResult** - Combined multi-GPU result:
-```python
-AggregatedResult(
-    experiment_id="exp_20240115_123456",
-    aggregation=AggregationMetadata(
-        method="sum_energy_avg_throughput",
-        num_processes=4,
-        temporal_overlap_verified=True,
-    ),
-    total_tokens=4096,
-    total_energy_j=600.0,
-    avg_tokens_per_second=819.2,
-    total_flops=6e12,
-    process_results=[...],  # Original raw results
-)
-```
-
 **Timestamps** - Timing info:
 ```python
 Timestamps.from_times(start_datetime, end_datetime)

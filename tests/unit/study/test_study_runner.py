@@ -920,7 +920,6 @@ def test_docker_runner_spec_dispatches_to_docker(
                 "llenergymeasure.infra.docker_runner.DockerRunner.run", side_effect=fake_docker_run
             ),
             patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
-            patch("llenergymeasure.study._progress.print_study_progress"),
             patch(
                 "llenergymeasure.results.persistence.save_result",
                 return_value=Path("/tmp/test-docker/r.json"),
@@ -1007,7 +1006,6 @@ def test_docker_error_caught_and_converted_to_failure_dict(
             "llenergymeasure.infra.docker_runner.DockerRunner.run", side_effect=raise_docker_error
         ),
         patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
-        patch("llenergymeasure.study._progress.print_study_progress"),
     ):
         runner = StudyRunner(
             study_config, manifest, Path("/tmp/test-docker-err"), runner_specs=runner_specs
@@ -1053,7 +1051,6 @@ def test_docker_timeout_normalised_to_timeout_error(
             side_effect=raise_docker_timeout,
         ),
         patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
-        patch("llenergymeasure.study._progress.print_study_progress"),
     ):
         runner = StudyRunner(
             study_config, manifest, Path("/tmp/test-docker-timeout"), runner_specs=runner_specs

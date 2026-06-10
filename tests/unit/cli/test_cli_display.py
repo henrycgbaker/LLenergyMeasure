@@ -19,7 +19,6 @@ from llenergymeasure.cli._display import (
     print_study_summary,
 )
 from llenergymeasure.cli._vram import DTYPE_BYTES
-from llenergymeasure.study._progress import print_study_progress
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
@@ -790,45 +789,3 @@ def test_print_study_summary_mj_tok_prefers_adjusted(capsys):
     # mJ/tok should show adjusted value (0.123), not total (0.456)
     assert "0.123" in out
     assert "0.456" not in out
-
-
-# =============================================================================
-# print_study_progress tests
-# =============================================================================
-
-
-def test_print_study_progress_running_status(capsys):
-    """Running status shows '...' icon."""
-    from tests.conftest import make_config
-
-    config = make_config(model="gpt2")
-    print_study_progress(1, 5, config, status="running")
-    err = capsys.readouterr().err
-
-    assert "[1/5]" in err
-    assert "..." in err
-    assert "gpt2" in err
-
-
-def test_print_study_progress_failed_status(capsys):
-    """Failed status shows 'FAIL' icon."""
-    from tests.conftest import make_config
-
-    config = make_config(model="gpt2")
-    print_study_progress(3, 5, config, status="failed")
-    err = capsys.readouterr().err
-
-    assert "FAIL" in err
-    assert "[3/5]" in err
-
-
-def test_print_study_progress_with_elapsed_and_energy(capsys):
-    """Progress line includes formatted elapsed time and energy when provided."""
-    from tests.conftest import make_config
-
-    config = make_config(model="gpt2")
-    print_study_progress(2, 4, config, status="completed", elapsed=90.0, energy=500.0)
-    err = capsys.readouterr().err
-
-    assert "1m 30s" in err  # 90s formatted
-    assert "500" in err  # energy value (500 J -> _sig3 -> "500")
