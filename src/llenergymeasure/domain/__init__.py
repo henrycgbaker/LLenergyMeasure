@@ -14,7 +14,6 @@ from llenergymeasure.domain.metrics import (
     FlopsResult,
     InferenceMetrics,
 )
-from llenergymeasure.domain.model_info import ModelInfo, QuantizationSpec
 from llenergymeasure.domain.progress import ProgressCallback, StudyProgressCallback
 
 __all__ = [
@@ -25,9 +24,7 @@ __all__ = [
     "ExperimentResult",
     "FlopsResult",
     "InferenceMetrics",
-    "ModelInfo",
     "ProgressCallback",
-    "QuantizationSpec",
     "RawProcessResult",
     "StudyProgressCallback",
     "StudyResult",

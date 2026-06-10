@@ -19,7 +19,7 @@ experiments:
       baseline:
         enabled: false
     vllm:
-      engine:
+      engine_params:
         enforce_eager: true
         gpu_memory_utilization: 0.3
 

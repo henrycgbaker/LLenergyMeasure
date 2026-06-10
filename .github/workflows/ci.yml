@@ -144,7 +144,7 @@ jobs:
         # Engines run only inside their Docker images; tests that import an
         # engine library (transformers/vllm/tensorrt-llm) gate themselves
         # via pytest.importorskip and are skipped on the host runner.
-        run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
+        run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml --cov-fail-under=80
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v6

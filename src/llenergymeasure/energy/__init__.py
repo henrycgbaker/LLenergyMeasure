@@ -36,9 +36,6 @@ from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
     from llenergymeasure.energy.codecarbon import (
-        CodeCarbonData as CodeCarbonData,
-    )
-    from llenergymeasure.energy.codecarbon import (
         CodeCarbonSampler as CodeCarbonSampler,
     )
 
@@ -152,7 +149,6 @@ def _instantiate(name: str, gpu_indices: list[int] | None = None) -> EnergySampl
 
 
 __all__ = [
-    "CodeCarbonData",
     "CodeCarbonSampler",
     "EnergyMeasurement",
     "EnergySampler",
