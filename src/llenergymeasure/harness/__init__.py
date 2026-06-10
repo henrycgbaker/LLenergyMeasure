@@ -866,7 +866,6 @@ class MeasurementHarness:
             flops_per_output_token=flops_per_output_token,
             flops_per_input_token=flops_per_input_token,
             flops_per_second=flops_per_second,
-            process_results=[],
             start_time=start_time,
             end_time=end_time,
             thermal_throttle=thermal_info,

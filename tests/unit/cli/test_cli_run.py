@@ -48,7 +48,6 @@ def _make_mock_result() -> MagicMock:
     result.total_flops = 0.0
     result.latency_stats = None
     result.warmup_excluded_samples = None
-    result.process_results = []
     return result
 
 

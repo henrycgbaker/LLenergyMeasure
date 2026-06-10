@@ -100,25 +100,8 @@ LatencyStatistics(
 ### experiment.py
 Experiment result models.
 
-**RawProcessResult** - Single GPU/process output:
-```python
-RawProcessResult(
-    experiment_id="exp_20240115_123456",
-    process_index=0,
-    gpu_id=0,
-    model_name="meta-llama/Llama-2-7b-hf",
-    timestamps=Timestamps(...),
-    inference_metrics=InferenceMetrics(...),
-    energy_metrics=EnergyMetrics(...),
-    compute_metrics=ComputeMetrics(...),
-)
-```
-
-**Timestamps** - Timing info:
-```python
-Timestamps.from_times(start_datetime, end_datetime)
-# .start, .end, .duration_sec
-```
+**ExperimentResult** - The user-visible output of a single-process measurement
+run. Holds the final metrics (energy, throughput, FLOPs, latency) directly.
 
 ### model_info.py
 Model metadata.
@@ -152,4 +135,3 @@ from llenergymeasure.utils.constants import SCHEMA_VERSION
 ## Related
 
 - See `../results/README.md` for result persistence
-- See `../results/aggregation.py` for aggregation logic

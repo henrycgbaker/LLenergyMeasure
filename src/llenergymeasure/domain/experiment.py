@@ -11,11 +11,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field
 
 from llenergymeasure.domain.metrics import (
-    ComputeMetrics,
     EnergyBreakdown,
-    EnergyMetrics,
     ExtendedEfficiencyMetrics,
-    InferenceMetrics,
     LatencyStatistics,
     MultiGPUMetrics,
     ThermalThrottleInfo,
@@ -47,77 +44,6 @@ def mj_per_token(energy_j: float, total_tokens: int) -> float | None:
     return (energy_j / total_tokens * 1000.0) if total_tokens > 0 else None
 
 
-class Timestamps(BaseModel):
-    """Timing information for an experiment run."""
-
-    start: datetime = Field(..., description="Experiment start time")
-    end: datetime = Field(..., description="Experiment end time")
-    duration_sec: float = Field(..., description="Duration in seconds")
-
-    @classmethod
-    def from_times(cls, start: datetime, end: datetime) -> Timestamps:
-        """Create Timestamps from start and end times."""
-        duration = (end - start).total_seconds()
-        return cls(start=start, end=end, duration_sec=duration)
-
-
-class RawProcessResult(BaseModel):
-    """Raw metrics from a single process - never aggregated inline.
-
-    This represents the output from one GPU/process during a distributed
-    experiment. Raw results are saved individually and aggregated separately.
-    """
-
-    schema_version: str = Field(default="3.0", description="Result schema version")
-    experiment_id: str = Field(..., description="Unique experiment identifier")
-    engine: str = Field(default="transformers", description="Inference engine used")
-    engine_version: str | None = Field(
-        default=None, description="Engine version string for reproducibility"
-    )
-    process_index: int = Field(..., description="Process rank in distributed setup")
-    gpu_id: int = Field(..., description="GPU device index")
-    gpu_name: str = Field(default="", description="GPU model name")
-    gpu_is_mig: bool = Field(default=False, description="Whether GPU is a MIG instance")
-    gpu_mig_profile: str | None = Field(default=None, description="MIG profile if applicable")
-    model_name: str = Field(..., description="Model name/path used")
-    timestamps: Timestamps = Field(..., description="Timing information")
-    inference_metrics: InferenceMetrics = Field(..., description="Inference performance metrics")
-    energy_metrics: EnergyMetrics = Field(..., description="Energy consumption metrics")
-    compute_metrics: ComputeMetrics = Field(..., description="Computational metrics")
-
-    # Extended efficiency metrics (always present, fields null when not computable)
-    extended_metrics: ExtendedEfficiencyMetrics = Field(
-        default_factory=ExtendedEfficiencyMetrics,
-        description="Extended efficiency metrics (TPOT, memory, GPU utilisation, etc.)",
-    )
-
-    # Raw data for late aggregation of extended metrics
-    per_request_latencies_ms: list[float] = Field(
-        default_factory=list,
-        description="Per-request E2E latencies for late aggregation",
-    )
-    gpu_utilisation_samples: list[float] = Field(
-        default_factory=list,
-        description="GPU utilisation samples for late aggregation",
-    )
-
-    # Energy breakdown, thermal, warmup
-    energy_breakdown: EnergyBreakdown | None = Field(
-        default=None,
-        description="Detailed energy breakdown with baseline adjustment",
-    )
-    thermal_throttle: ThermalThrottleInfo | None = Field(
-        default=None,
-        description="GPU thermal and power throttling information",
-    )
-    warmup_result: WarmupResult | None = Field(
-        default=None,
-        description="Warmup convergence detection result",
-    )
-
-    model_config = {"frozen": True}
-
-
 class AggregationMetadata(BaseModel):
     """Metadata about the aggregation process."""
 
@@ -138,15 +64,13 @@ class AggregationMetadata(BaseModel):
 class ExperimentResult(BaseModel):
     """Experiment result - the user-visible output of a measurement run.
 
-    Combines raw results from all processes into a single result with proper
-    aggregation (sum energy, average throughput). For single-GPU experiments,
-    process_results has exactly one item.
-
-    v2.0 schema: all fields ship together (decision #50).
+    Produced once per single-process measurement run by the harness. Holds the
+    final metrics (energy, throughput, FLOPs, latency) directly; there is no
+    per-process breakdown.
     """
 
     # Identity
-    schema_version: str = Field(default="3.0", description="Result schema version")
+    schema_version: str = Field(default="4.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
     measurement_config_hash: str = Field(
         ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"
@@ -248,12 +172,8 @@ class ExperimentResult(BaseModel):
     start_time: datetime = Field(..., description="Earliest process start time")
     end_time: datetime = Field(..., description="Latest process end time")
 
-    # Per-process breakdown (embedded, not separate files per CONTEXT.md)
-    process_results: list[RawProcessResult] = Field(
-        default_factory=list, description="Original per-process results"
-    )
     aggregation: AggregationMetadata | None = Field(
-        default=None, description="Aggregation metadata (populated for multi-GPU)"
+        default=None, description="Aggregation metadata (method, num_processes)"
     )
 
     # Carry-forward fields (v1.x compat, used by aggregation/CLI)

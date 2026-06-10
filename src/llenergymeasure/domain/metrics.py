@@ -603,6 +603,74 @@ class LatencyStatistics:
     itl_full_p99_ms: float | None = None
 
 
+def compute_latency_statistics(
+    ttft_ms: list[float],
+    itl_trimmed_ms: list[float] | None = None,
+    itl_full_ms: list[float] | None = None,
+) -> LatencyStatistics | None:
+    """Compute TTFT/ITL statistics from flat sample lists.
+
+    Single-process helper: takes raw sample lists collected during one run and
+    computes mean/median/p95/p99/min/max plus sample counts. Trimmed ITL is the
+    primary metric; full ITL is provided for comparison.
+
+    Args:
+        ttft_ms: Per-request time-to-first-token samples in ms.
+        itl_trimmed_ms: Trimmed inter-token latency samples (first/last excluded).
+        itl_full_ms: All inter-token latency samples.
+
+    Returns:
+        LatencyStatistics, or None when ttft_ms is empty.
+    """
+    import numpy as np
+
+    if not ttft_ms:
+        return None
+
+    ttft_arr = np.array(ttft_ms)
+
+    # ITL statistics (trimmed - primary metric)
+    itl_mean_ms: float | None = None
+    itl_median_ms: float | None = None
+    itl_p95_ms: float | None = None
+    itl_p99_ms: float | None = None
+    itl_samples = 0
+
+    if itl_trimmed_ms:
+        itl_arr = np.array(itl_trimmed_ms)
+        itl_mean_ms = float(np.mean(itl_arr))
+        itl_median_ms = float(np.median(itl_arr))
+        itl_p95_ms = float(np.percentile(itl_arr, 95))
+        itl_p99_ms = float(np.percentile(itl_arr, 99))
+        itl_samples = len(itl_trimmed_ms)
+
+    # ITL full statistics (for comparison)
+    itl_full_mean_ms: float | None = None
+    itl_full_p99_ms: float | None = None
+
+    if itl_full_ms:
+        itl_full_arr = np.array(itl_full_ms)
+        itl_full_mean_ms = float(np.mean(itl_full_arr))
+        itl_full_p99_ms = float(np.percentile(itl_full_arr, 99))
+
+    return LatencyStatistics(
+        ttft_mean_ms=float(np.mean(ttft_arr)),
+        ttft_median_ms=float(np.median(ttft_arr)),
+        ttft_p95_ms=float(np.percentile(ttft_arr, 95)),
+        ttft_p99_ms=float(np.percentile(ttft_arr, 99)),
+        ttft_min_ms=float(np.min(ttft_arr)),
+        ttft_max_ms=float(np.max(ttft_arr)),
+        ttft_samples=len(ttft_ms),
+        itl_mean_ms=itl_mean_ms,
+        itl_median_ms=itl_median_ms,
+        itl_p95_ms=itl_p95_ms,
+        itl_p99_ms=itl_p99_ms,
+        itl_samples=itl_samples,
+        itl_full_mean_ms=itl_full_mean_ms,
+        itl_full_p99_ms=itl_full_p99_ms,
+    )
+
+
 def collect_itl_measurements(
     token_timestamps_per_request: list[list[float]],
 ) -> tuple[list[float], list[float], int]:

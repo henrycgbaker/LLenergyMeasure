@@ -3,9 +3,7 @@
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
-    RawProcessResult,
     StudyResult,
-    Timestamps,
 )
 from llenergymeasure.domain.metrics import (
     CombinedMetrics,
@@ -25,8 +23,6 @@ __all__ = [
     "FlopsResult",
     "InferenceMetrics",
     "ProgressCallback",
-    "RawProcessResult",
     "StudyProgressCallback",
     "StudyResult",
-    "Timestamps",
 ]

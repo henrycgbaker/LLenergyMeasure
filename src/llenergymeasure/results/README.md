@@ -51,40 +51,6 @@ results/
     └── exp_20240115_123456.json
 ```
 
-### aggregation.py
-Aggregate raw results from multiple processes.
-
-```python
-from llenergymeasure.results.aggregation import AggregationContext, aggregate_results
-
-# Build context with all aggregation parameters
-ctx = AggregationContext(
-    experiment_id="exp_20240115_123456",
-    measurement_config_hash="abc123def456abcd",
-)
-
-# Aggregate raw results into single result
-aggregated = aggregate_results(raw_results, ctx)
-```
-
-**Aggregation logic:**
-- Energy: **Sum** across all processes (each GPU contributes)
-- Throughput: **Average** across processes
-- Tokens: **Sum** across processes
-- FLOPs: **Sum** across processes
-- Timestamps: Min start, max end
-
-**Verification flags:**
-```python
-AggregationMetadata(
-    method="sum_energy_avg_throughput",
-    num_processes=4,
-    temporal_overlap_verified=True,   # Processes ran concurrently
-    gpu_attribution_verified=True,    # Unique GPU IDs (no double count)
-    warnings=["GPU 0 appears in multiple processes"],
-)
-```
-
 ### exporters.py
 Export results to various formats.
 
