@@ -217,38 +217,6 @@ class DatasetConfig(BaseModel):
 
 
 # =============================================================================
-# LoRA Configuration
-# =============================================================================
-
-
-class LoRAConfig(BaseModel):
-    """LoRA adapter configuration.
-
-    Exactly one of adapter_id or adapter_path must be set.
-    """
-
-    model_config = {"extra": "forbid"}
-
-    adapter_id: str | None = Field(default=None, description="HuggingFace Hub adapter ID")
-    adapter_path: str | None = Field(default=None, description="Local path to adapter weights")
-    merge_weights: bool = Field(
-        default=False, description="Merge adapter weights into base model at load time"
-    )
-
-    @model_validator(mode="after")
-    def validate_exactly_one_source(self) -> LoRAConfig:
-        """Exactly one of adapter_id or adapter_path must be set."""
-        has_id = self.adapter_id is not None
-        has_path = self.adapter_path is not None
-        if has_id == has_path:  # both set or neither set
-            raise ValueError(
-                "LoRAConfig requires exactly one of adapter_id or adapter_path. "
-                f"Got: adapter_id={self.adapter_id!r}, adapter_path={self.adapter_path!r}"
-            )
-        return self
-
-
-# =============================================================================
 # Task Configuration (what to measure)
 # =============================================================================
 
@@ -387,9 +355,6 @@ class ExperimentConfig(BaseModel):
         default=None,
         description="TensorRT-LLM configuration (only used when engine=tensorrt)",
     )
-
-    # LoRA adapter (optional)
-    lora: LoRAConfig | None = Field(default=None, description="LoRA adapter configuration")
 
     # Escape hatch - explicitly declared for extra="forbid" compatibility
     passthrough_kwargs: dict[str, Any] | None = Field(

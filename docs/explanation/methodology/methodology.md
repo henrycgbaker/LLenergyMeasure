@@ -462,7 +462,6 @@ Everything else passes through without translation:
   `tensorrt.max_batch_size`, etc.) use native names - no mapping.
 - **Sub-configs** (`warmup`, `baseline`, `energy`) are consumed by the measurement harness,
   not by engines.
-- **`lora`** is defined in config but not yet implemented in any engine.
 
 ---
 

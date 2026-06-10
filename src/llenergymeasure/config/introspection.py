@@ -702,11 +702,6 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
             "vllm": "enable_prefix_caching" in vllm_fields,
             "tensorrt": False,
         },
-        "lora_adapters": {
-            "transformers": True,  # Via peft library
-            "vllm": False,  # Not in v2.0 minimal VLLMConfig
-            "tensorrt": False,  # Not in v2.0 minimal TensorRTConfig
-        },
         "torch_compile": {
             "transformers": "torch_compile" in transformers_fields,
             "vllm": False,
@@ -752,7 +747,6 @@ def get_capability_matrix_markdown() -> str:
         "float16_precision": "float16 precision",
         "bfloat16_precision": "bfloat16 precision",
         "prefix_caching": "Prefix Caching",
-        "lora_adapters": "LoRA Adapters",
         "torch_compile": "torch.compile",
         "beam_search": "Beam Search",
         "speculative_decoding": "Speculative Decoding",

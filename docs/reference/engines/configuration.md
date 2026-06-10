@@ -53,9 +53,6 @@ transformers:
 
 # Optional
 sampling_preset: deterministic   # deterministic | standard | creative | factual
-lora:
-  adapter_id: org/lora-adapter
-  merge_weights: false
 passthrough_kwargs:
   trust_remote_code: true
 ```
@@ -116,9 +113,6 @@ across engines.
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
 | `sampling_preset` | `deterministic` \| `standard` \| `creative` \| `factual` \| null | null | Merges preset values into the active engine's `sampling:` section at parse time. Explicit YAML values take precedence. | `models.py:367-375`, `ssot.py:27-32` |
-| `lora.adapter_id` | str \| null | null | HuggingFace Hub adapter ID (mutually exclusive with `adapter_path`) | `models.py:232` |
-| `lora.adapter_path` | str \| null | null | Local path to adapter weights | `models.py:233` |
-| `lora.merge_weights` | bool | `false` | Merge adapter weights into base model at load time | `models.py:234-236` |
 | `passthrough_kwargs` | dict \| null | null | Extra kwargs forwarded to the engine; keys must not collide with `ExperimentConfig` fields | `models.py:395-399` |
 
 ## Transformers engine (`transformers:`)

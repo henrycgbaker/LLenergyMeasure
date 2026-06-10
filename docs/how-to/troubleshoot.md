@@ -283,7 +283,6 @@ model, or package requirements.
 | float16 precision | Yes | Yes | Yes |
 | bfloat16 precision | Yes | Yes | Yes |
 | Prefix Caching | No | Yes | No |
-| LoRA Adapters | Yes | No | No |
 | torch.compile | Yes | No | No |
 | Beam Search | Yes | Yes | No |
 | Speculative Decoding | Yes | Yes | No |

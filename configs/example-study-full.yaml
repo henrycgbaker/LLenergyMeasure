@@ -84,12 +84,6 @@ measurement:
 # Sampling params now live per-engine - see `{transformers|vllm|tensorrt}.sampling`
 # in the engine-specific experiments below.
 
-# --- LoRA adapter (optional, applies to all experiments) ---
-# lora:
-#   adapter_id: my-org/my-lora-adapter
-#   merge_weights: false
-# TODO: VALUDATE that this works as intended - does this apply to all engines? if not, need to clarify in docs and potentially add engine-specific lora config using dotted notation (e.g. lora.transformers.adapter_id, lora.vllm.adapter_id, etc.)
-
 # --- Passthrough kwargs ---
 # passthrough_kwargs:
 #   use_safetensors: true
@@ -316,20 +310,6 @@ experiments:
   #     max_memory:
   #       0: "10GiB"
   #       cpu: "50GiB"
-  #     device_map: auto
-  #     trust_remote_code: true
-
-  # Transformers LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: transformers
-  #   dataset:
-  #     n_prompts: 50
-  #   lora:
-  #     adapter_id: my-org/my-lora-adapter
-  #     merge_weights: false
-  #   transformers:
-  #     dtype: bfloat16
-  #     batch_size: 4
   #     device_map: auto
   #     trust_remote_code: true
 

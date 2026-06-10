@@ -80,7 +80,6 @@ large = base.model_copy(update={"task": base.task.model_copy(update={"model": "g
 | `transformers` | `TransformersConfig \| None` | `None` | Transformers-specific settings (only used when `engine="transformers"`). |
 | `vllm` | `VLLMConfig \| None` | `None` | vLLM-specific settings (only used when `engine="vllm"`). |
 | `tensorrt` | `TensorRTConfig \| None` | `None` | TensorRT-LLM settings (only used when `engine="tensorrt"`). |
-| `lora` | `LoRAConfig \| None` | `None` | LoRA adapter configuration (adapter Hub ID or local path). |
 | `passthrough_kwargs` | `dict[str, Any] \| None` | `None` | Extra kwargs forwarded to the engine at execution time. Keys must not collide with top-level `ExperimentConfig` fields. |
 
 ### `TaskConfig` fields
