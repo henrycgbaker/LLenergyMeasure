@@ -404,6 +404,23 @@ def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     )
 
 
+def test_run_preresolved_without_skip_preflight_raises():
+    """Passing preresolved with skip_preflight=False is rejected, not silently honoured."""
+    import llenergymeasure.api._impl as api_module
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+
+    preresolved = (
+        {"transformers": RunnerSpec(mode="local", image=None, source="test")},
+        {},
+    )
+
+    with pytest.raises(ValueError, match="preresolved requires skip_preflight=True"):
+        api_module._run(study, skip_preflight=False, preresolved=preresolved)
+
+
 def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
     """_run() calls get_engine with the experiment's engine name."""
     import llenergymeasure.api._impl as api_module

@@ -104,10 +104,13 @@ Experiment result models.
 run. Holds the final metrics (energy, throughput, FLOPs, latency) directly.
 
 ### model_info.py
-Model metadata.
+Model metadata. These classes are not re-exported from the `domain` package;
+import them from `llenergymeasure.domain.model_info` directly.
 
 **ModelInfo** - Model characteristics:
 ```python
+from llenergymeasure.domain.model_info import ModelInfo
+
 ModelInfo(
     name="meta-llama/Llama-2-7b-hf",
     num_parameters=7_000_000_000,
@@ -118,6 +121,8 @@ ModelInfo(
 
 **QuantizationSpec** - Quantization details:
 ```python
+from llenergymeasure.domain.model_info import QuantizationSpec
+
 QuantizationSpec(
     enabled=True,
     bits=4,
