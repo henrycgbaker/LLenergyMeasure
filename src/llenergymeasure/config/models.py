@@ -731,7 +731,7 @@ class StudyConfig(BaseModel):
     )
     output: OutputConfig = Field(
         default_factory=OutputConfig,
-        description="Study-level output configuration (results_dir, format, save_timeseries)",
+        description="Study-level output configuration (results_dir, save_timeseries)",
     )
     study_execution: ExecutionConfig = Field(
         default_factory=ExecutionConfig,

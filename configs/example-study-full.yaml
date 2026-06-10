@@ -34,6 +34,8 @@ study_execution:
   circuit_breaker_cooldown_seconds: 60.0  # Pause before half-open probe
   wall_clock_timeout_hours: null  # Hard time limit in hours (null = no limit)
   experiment_timeout_seconds: 600.0  # Per-experiment kill timeout (10 min). Raise for large n_prompts or slow engine builds.
+  stdout_silence_timeout_seconds: 300.0  # Docker watchdog: kill container after this stdout-silent stretch (0=disable; raise for slow TRT-LLM builds)
+  deduplicate_equivalent: true    # Drop sweep configs that resolve to the same effective config (set false to run every declared cell)
 
 # =====================================================================
 # Shared fields (experiment-level)
@@ -189,7 +191,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   vllm.engine.block_size: [8, 16, 32]
   vllm.engine.kv_cache_dtype: [auto]  # fp8 requires SM >= 8.9 (Ada Lovelace / Hopper); add fp8 if hardware supports it
   vllm.engine.quantization: [null]  # fp8 requires SM >= 8.9; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
-  vllm.attention.backend: [flash_attn, flashinfer]  # xformers legacy, deprecated
+  vllm.engine.attention.backend: [flash_attn, flashinfer]  # xformers legacy, deprecated (attention nests under engine)
 
   # --- vLLM: dependent groups ─────────────────────────────────────
 
@@ -236,10 +238,9 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     - tensorrt.quant_config.quant_algo: INT8
     - tensorrt.quant_config.quant_algo: INT8
       tensorrt.quant_config.kv_cache_quant_algo: INT8
-    - tensorrt.quant_config.quant_algo: INT8
-      tensorrt.calib.calib_batches: 512
-      tensorrt.calib.calib_dataset: cnn_dailymail
-      tensorrt.calib.calib_max_seq_length: 512
+    # INT8 calibration sweeps (calib_batches/calib_dataset/calib_max_seq_length)
+    # are not yet supported: the TensorRT plugin consumes pre-quantised checkpoints
+    # and never reads calibration settings, so any calib.* path would be silently dropped.
     - tensorrt.quant_config.quant_algo: [W4A16_AWQ, W8A16]
     # - tensorrt.quant_config.quant_algo: FP8  # Requires SM >= 8.9 (Ada Lovelace / Hopper)
 
@@ -251,12 +252,6 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     - tensorrt.kv_cache_config.host_cache_size: 1073741824
     - tensorrt.kv_cache_config.max_tokens: 8192
       tensorrt.kv_cache_config.free_gpu_memory_fraction: 0.85
-
-    # --- Shared TRT-LLM engine settings ---
-# Applied to all TensorRT sweep experiments. Explicit TRT experiments
-# override these where needed.
-tensorrt: #TODO - IM LEAVING THIS HERE AS REMINDER TO WORK OUT WHART THIS WAS AND WHY IT WAS HERE -> REMOVE AND ASSOCIATED PATHS WITHIN THE TOOL.
-  max_input_len: 1024
 
 # =====================================================================
 # Explicit experiments (truly unique overrides only)
@@ -367,19 +362,19 @@ experiments:
   #     n_prompts: 50
   #   vllm:
   #     dtype: bfloat16
-  #     attention:
-  #       backend: flash_attn
-  #       flash_attn_version: 2            # Flash attention version (auto-detected)
-  #       flash_attn_max_num_splits_for_cuda_graph: 0  # Max splits for CUDA graph
-  #       use_prefill_decode_attention: true
-  #       use_prefill_query_quantization: false
-  #       use_cudnn_prefill: false
-  #       disable_flashinfer_prefill: false
-  #       disable_flashinfer_q_quantization: false
-  #       use_trtllm_attention: false      # Use TensorRT-LLM attention backend
-  #       use_trtllm_ragged_deepseek_prefill: false
   #     engine:
   #       enforce_eager: false
+  #       attention:                       # attention config nests under engine
+  #         backend: flash_attn
+  #         flash_attn_version: 2          # Flash attention version (auto-detected)
+  #         flash_attn_max_num_splits_for_cuda_graph: 0  # Max splits for CUDA graph
+  #         use_prefill_decode_attention: true
+  #         use_prefill_query_quantization: false
+  #         use_cudnn_prefill: false
+  #         disable_flashinfer_prefill: false
+  #         disable_flashinfer_q_quantization: false
+  #         use_trtllm_attention: false    # Use TensorRT-LLM attention backend
+  #         use_trtllm_ragged_deepseek_prefill: false
 
   # -----------------------------------------------------------------
   # Speculative decoding (dependent: speculative_model requires

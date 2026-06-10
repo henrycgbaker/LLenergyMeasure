@@ -19,10 +19,9 @@ dependencies = [
     "nvidia-ml-py>=12.0",
     "numpy>=1.24",
     "pyarrow>=14.0",
-    "tqdm>=4.66",
     "rich>=13.0",
     "python-dotenv>=1.0",
-    "filelock",
+    "filelock>=3.12",
 ]
 
 [project.optional-dependencies]
