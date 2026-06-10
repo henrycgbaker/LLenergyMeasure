@@ -245,8 +245,8 @@ def print_study_dry_run(
     from rich.console import Console as RichConsole
 
     from llenergymeasure.api import probe_energy_sampler
+    from llenergymeasure.cli._preflight_display import build_preflight_panel
     from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
-    from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.models import StudyConfig
     from llenergymeasure.utils.formatting import format_experiment_header
 

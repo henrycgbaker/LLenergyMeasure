@@ -10,11 +10,11 @@ import platform
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from llenergymeasure._version import __version__
-from llenergymeasure.device.environment import collect_environment_metadata
-from llenergymeasure.domain.environment import (
-    EnvironmentSnapshot,
+from llenergymeasure.device.environment import (
+    collect_environment_metadata,
     detect_cuda_version_with_source,
 )
+from llenergymeasure.domain.environment import EnvironmentSnapshot
 
 logger = logging.getLogger(__name__)
 

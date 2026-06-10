@@ -7,6 +7,7 @@ from llenergymeasure.api.report_gaps import (
     render_yaml_fragment,
 )
 from llenergymeasure.results.persistence import save_result
+from llenergymeasure.study.manifest import study_dir_name
 from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.study.resume import find_resumable_study, load_resume_state
 
@@ -21,6 +22,7 @@ __all__ = [
     "run_study",
     "run_study_preflight",
     "save_result",
+    "study_dir_name",
 ]
 
 

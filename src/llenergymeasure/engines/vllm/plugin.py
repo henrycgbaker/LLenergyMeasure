@@ -138,7 +138,7 @@ class VLLMEngine:
         Raises:
             EngineError: If vLLM is not installed or model loading fails.
         """
-        from llenergymeasure.engines._helpers import require_import
+        from llenergymeasure.engines._errors import require_import
 
         _vllm = require_import("vllm")
         LLM = _vllm.LLM
@@ -188,7 +188,7 @@ class VLLMEngine:
         """
         from vllm import SamplingParams
 
-        from llenergymeasure.engines._helpers import warmup_single_token
+        from llenergymeasure.engines._cuda import warmup_single_token
 
         llm, _sampling_params = model
         warmup_single_token(llm, [prompt], SamplingParams, temperature=0.0, max_tokens=1)
@@ -219,7 +219,7 @@ class VLLMEngine:
         """
         import time
 
-        from llenergymeasure.engines._helpers import reset_cuda_peak_memory
+        from llenergymeasure.engines._cuda import reset_cuda_peak_memory
 
         llm, sampling_params = model
 
@@ -250,7 +250,7 @@ class VLLMEngine:
             elapsed = time.perf_counter() - t0
 
         except Exception as e:
-            from llenergymeasure.engines._helpers import raise_engine_error
+            from llenergymeasure.engines._errors import raise_engine_error
 
             raise_engine_error(
                 e,
@@ -259,7 +259,7 @@ class VLLMEngine:
             )
 
         # Capture peak memory - torch first, NVML fallback for pre-allocation detection.
-        from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
+        from llenergymeasure.engines._cuda import get_cuda_peak_memory_mb
 
         peak_mb = get_cuda_peak_memory_mb()
 
@@ -320,7 +320,7 @@ class VLLMEngine:
             extras["hf_model"] = hf_model
 
         # Best-effort extended-metrics capture (continuous batching: no static batches).
-        from llenergymeasure.engines._helpers import extract_request_metrics
+        from llenergymeasure.engines._observed import extract_request_metrics
 
         per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
         kv_cache_stats = _capture_kv_cache_stats(llm)
@@ -359,7 +359,7 @@ class VLLMEngine:
         params derive from ``llm.llm_engine.vllm_config`` when available;
         otherwise we fall back to the declared kwargs dict.
         """
-        from llenergymeasure.engines._helpers import (
+        from llenergymeasure.engines._observed import (
             assemble_observed_params,
             extract_observed_params,
         )
@@ -411,7 +411,7 @@ class VLLMEngine:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        from llenergymeasure.engines._helpers import cleanup_model
+        from llenergymeasure.engines._cuda import cleanup_model
 
         llm, _sampling_params = model
         cleanup_model(llm)

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llenergymeasure.engines._helpers import extract_request_metrics
+from llenergymeasure.engines._observed import extract_request_metrics
 from llenergymeasure.engines.vllm.plugin import _capture_kv_cache_stats
 
 # ---------------------------------------------------------------------------

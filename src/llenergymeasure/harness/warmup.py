@@ -79,7 +79,7 @@ def warmup_until_converged(
             max_prompts=config.max_prompts,
         )
 
-    from llenergymeasure.engines._helpers import compute_cv
+    from llenergymeasure.domain.metrics import compute_cv
 
     latencies: list[float] = []
     converged = False
