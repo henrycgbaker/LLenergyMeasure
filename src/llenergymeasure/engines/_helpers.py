@@ -239,6 +239,44 @@ def compute_cv(values: list[float]) -> float:
     return float(np.std(values)) / mean
 
 
+# ---------------------------------------------------------------------------
+# Per-request metrics extraction (shared by vLLM and TRT-LLM RequestOutputs)
+# ---------------------------------------------------------------------------
+
+
+def extract_request_metrics(outputs: Any) -> tuple[list[float], list[float]]:
+    """Extract per-request E2E latency and TTFT (ms) from RequestOutputs.
+
+    vLLM and TRT-LLM both surface a ``RequestOutput.metrics`` namespace with
+    ``arrival_time`` / ``finished_time`` / ``first_token_time`` timestamps.
+
+    Best-effort: ``o.metrics`` may be None, and individual timestamp attrs may be
+    missing depending on the library version / config. Any sample that cannot be
+    fully computed is skipped (rather than producing a partial/garbage value).
+
+    Args:
+        outputs: Iterable of ``RequestOutput`` objects.
+
+    Returns:
+        Tuple of (per_request_latencies_ms, ttft_ms). Either list may be empty
+        when no request exposed usable timestamps.
+    """
+    latencies_ms: list[float] = []
+    ttft_ms: list[float] = []
+    for o in outputs:
+        metrics = getattr(o, "metrics", None)
+        if metrics is None:
+            continue
+        arrival = getattr(metrics, "arrival_time", None)
+        finished = getattr(metrics, "finished_time", None)
+        first_token = getattr(metrics, "first_token_time", None)
+        if arrival is not None and finished is not None:
+            latencies_ms.append((finished - arrival) * 1000.0)
+        if arrival is not None and first_token is not None:
+            ttft_ms.append((first_token - arrival) * 1000.0)
+    return latencies_ms, ttft_ms
+
+
 def cleanup_model(model_obj: Any, *, use_gc: bool = True) -> None:
     """Release a model object from GPU memory and clear CUDA cache.
 

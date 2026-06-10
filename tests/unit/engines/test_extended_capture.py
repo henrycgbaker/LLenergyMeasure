@@ -12,13 +12,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llenergymeasure.engines.vllm.plugin import (
-    _capture_kv_cache_stats,
-    _extract_request_metrics,
-)
+from llenergymeasure.engines._helpers import extract_request_metrics
+from llenergymeasure.engines.vllm.plugin import _capture_kv_cache_stats
 
 # ---------------------------------------------------------------------------
-# _extract_request_metrics
+# extract_request_metrics
 # ---------------------------------------------------------------------------
 
 
@@ -40,25 +38,25 @@ class TestExtractRequestMetrics:
             _req(arrival=1.0, finished=2.0, first_token=1.2),
             _req(arrival=10.0, finished=10.5, first_token=10.1),
         ]
-        latencies, ttft = _extract_request_metrics(outputs)
+        latencies, ttft = extract_request_metrics(outputs)
         assert latencies == pytest.approx([1000.0, 500.0])
         assert ttft == pytest.approx([200.0, 100.0])
 
     def test_metrics_none_skipped(self):
         outputs = [_req(with_metrics=False), _req(arrival=0.0, finished=1.0, first_token=0.1)]
-        latencies, ttft = _extract_request_metrics(outputs)
+        latencies, ttft = extract_request_metrics(outputs)
         assert latencies == pytest.approx([1000.0])
         assert ttft == pytest.approx([100.0])
 
     def test_partial_attrs(self):
         # arrival+finished present but no first_token -> latency captured, ttft skipped
         outputs = [_req(arrival=0.0, finished=2.0, first_token=None)]
-        latencies, ttft = _extract_request_metrics(outputs)
+        latencies, ttft = extract_request_metrics(outputs)
         assert latencies == pytest.approx([2000.0])
         assert ttft == []
 
     def test_empty_outputs(self):
-        latencies, ttft = _extract_request_metrics([])
+        latencies, ttft = extract_request_metrics([])
         assert latencies == []
         assert ttft == []
 

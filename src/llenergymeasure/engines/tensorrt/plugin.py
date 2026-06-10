@@ -28,7 +28,6 @@ from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.protocol import InferenceOutput
-from llenergymeasure.engines.vllm.plugin import _extract_request_metrics
 from llenergymeasure.utils.exceptions import ConfigError, EngineError
 
 logger = logging.getLogger(__name__)
@@ -334,7 +333,9 @@ class TensorRTEngine:
 
         # Defensive per-request metric capture - RequestOutput.metrics is usually
         # absent in TRT-LLM 0.21.0, so these lists typically come back empty.
-        per_request_latencies_ms, ttft_ms = _extract_request_metrics(outputs)
+        from llenergymeasure.engines._helpers import extract_request_metrics
+
+        per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
 
         return InferenceOutput(
             elapsed_time_sec=elapsed,
