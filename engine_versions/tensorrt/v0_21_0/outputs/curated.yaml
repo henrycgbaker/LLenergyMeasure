@@ -6,8 +6,9 @@
 # discovered schema. Curation is an exposure-time decision; mining never
 # narrows.
 #
-# Bootstrapped from the hand-written TensorRTConfig / TensorRTSamplingConfig
-# field sets in src/llenergymeasure/config/engine_configs.py. TensorRT-LLM has
+# Originally bootstrapped from the TensorRTConfig / TensorRTSamplingConfig
+# field sets in the deleted hand-written engine config classes (pre-v0.10).
+# TensorRT-LLM has
 # no llem-orchestration residual (HarnessConfig is empty for tensorrt).
 #
 # Each entry is cross-checked against schema.discovered.json for this pin.

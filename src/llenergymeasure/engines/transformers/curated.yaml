@@ -6,8 +6,9 @@
 # discovered schema. Curation is an exposure-time decision; mining never
 # narrows.
 #
-# Bootstrapped from the hand-written TransformersConfig / TransformersSamplingConfig
-# field sets in src/llenergymeasure/config/engine_configs.py. The 7 genuine
+# Originally bootstrapped from the TransformersConfig / TransformersSamplingConfig
+# field sets in the deleted hand-written engine config classes (pre-v0.10).
+# The 7 genuine
 # llem-orchestration knobs (batch_size, torch_compile, torch_compile_mode,
 # torch_compile_backend, allow_tf32, autocast_enabled, autocast_dtype) are
 # deliberately excluded: they belong to a future HarnessConfig, not engine
