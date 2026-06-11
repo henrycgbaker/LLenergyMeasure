@@ -16,6 +16,7 @@ under ``scripts.engine_producers``.
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import inspect
 import os
@@ -26,7 +27,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Union, get_args, get_origin
 
+from scripts.engine_producers._source_walker import walk_declarative_constraints
+
 SCHEMA_VERSION = "1.0.0"
+
+# Declarative-constraint keys the source walker emits (JSON Schema fragments)
+# that the schema introspectors fold onto discovered fields. Type / default
+# come from runtime introspection; these bounds + membership sets come from the
+# source-text walk (Field(ge/le/...) and Literal[...] annotations).
+_CONSTRAINT_KEYS: tuple[str, ...] = (
+    "enum",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+    "minLength",
+    "maxLength",
+    "minItems",
+    "maxItems",
+)
 
 # Only the transformers engine has a first-party Dockerfile. vllm and
 # tensorrt run inside upstream images (vllm/vllm-openai,
@@ -253,6 +273,55 @@ def _fold_model_defs(model: type, defs: dict[str, Any]) -> None:
         defs.setdefault(name, body)
     # The root schema body (title/properties/...) becomes this model's own def.
     defs.setdefault(model.__name__, schema)
+
+
+def merge_source_constraints(
+    schema_fields: dict[str, dict[str, Any]],
+    source_paths: list[Path],
+    *,
+    suffixes: tuple[str, ...] = ("Config", "Params", "Args"),
+) -> int:
+    """Fold source-text declarative constraints onto discovered ``schema_fields``.
+
+    Runtime introspection captures type + default but not the ``Field(ge/le/...)``
+    numeric bounds or ``Literal[...]`` membership sets that live in the class
+    source. This walks each path in ``source_paths`` with
+    :func:`scripts.engine_producers._source_walker.walk_declarative_constraints`
+    and overlays the per-field bounds/enum keys onto the matching discovered
+    field (by bare field name across all walked classes). Type/default already
+    present are never overwritten; only the constraint keys in
+    :data:`_CONSTRAINT_KEYS` are added, and only when the field is already in
+    ``schema_fields`` (discovery is the source of truth for which fields exist).
+
+    Mutates ``schema_fields`` in place and returns the number of fields that
+    gained at least one constraint key (the D3 surface-trend metric - expected
+    near zero on the current pins, where the entry classes carry few bounds the
+    walker reaches).
+    """
+    overlay: dict[str, dict[str, Any]] = {}
+    for path in source_paths:
+        if not path.is_file():
+            continue
+        module = ast.parse(path.read_text())
+        for fields in walk_declarative_constraints(module, suffixes=suffixes).values():
+            for field_name, fragment in fields.items():
+                constraints = {k: v for k, v in fragment.items() if k in _CONSTRAINT_KEYS}
+                if constraints:
+                    overlay.setdefault(field_name, {}).update(constraints)
+
+    touched = 0
+    for field_name, constraints in overlay.items():
+        spec = schema_fields.get(field_name)
+        if spec is None:
+            continue
+        added = False
+        for key, value in constraints.items():
+            if key not in spec:
+                spec[key] = value
+                added = True
+        if added:
+            touched += 1
+    return touched
 
 
 def make_envelope(

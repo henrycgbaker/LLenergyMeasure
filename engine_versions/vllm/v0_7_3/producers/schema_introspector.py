@@ -15,12 +15,14 @@ discovery loop below handles both shapes.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
     make_envelope,
+    merge_source_constraints,
 )
 
 LANDMARKS: tuple[str, ...] = (
@@ -76,6 +78,25 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 "reason": f"msgspec.json.schema(SamplingParams) failed: {exc!r}",
             }
         )
+
+    # D3: fold source-text Field(...) bounds + Literal[...] membership onto the
+    # discovered fields. vLLM's numeric/value constraints live in imperative
+    # _verify_args() (not field metadata), and EngineArgs is a flat stdlib
+    # dataclass, so the declarative walk surfaces near-zero here on 0.7.3 - the
+    # wiring is what carries forward to pins whose config classes use Field().
+    try:
+        import vllm.config as _vllm_config  # type: ignore[import-not-found]
+        import vllm.sampling_params as _vllm_sp  # type: ignore[import-not-found]
+
+        for module, fields in (
+            (_vllm_config, engine_params),
+            (_vllm_sp, sampling_params),
+        ):
+            src = inspect.getsourcefile(module)
+            if src is not None:
+                merge_source_constraints(fields, [Path(src)])
+    except Exception:  # pragma: no cover - defensive: discovery proceeds without bounds
+        pass
 
     limitations.append(
         {

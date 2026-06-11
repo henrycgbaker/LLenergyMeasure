@@ -22,6 +22,7 @@ from scripts.engine_producers._common import (
     annotation_to_type_str,
     jsonable,
     make_envelope,
+    merge_source_constraints,
     read_dockerfile_from,
 )
 
@@ -127,6 +128,14 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 "reason": "GenerationConfig has no type annotations; None defaults yield type='unknown'",
             }
         )
+
+    # D3: fold source-text Field(...) bounds + Literal[...] membership onto the
+    # discovered GenerationConfig sampling fields. GenerationConfig stuffs its
+    # fields via **kwargs self-assigns (no class-body Field()/Literal), so this
+    # is near-zero on 4.57.3 - the wiring is what's load-bearing for later pins.
+    gen_source = inspect.getsourcefile(GenerationConfig)
+    if gen_source is not None:
+        merge_source_constraints(sampling_params, [Path(gen_source)])
 
     base_image_ref = read_dockerfile_from(repo_root / TRANSFORMERS_DOCKERFILE)
     return make_envelope(

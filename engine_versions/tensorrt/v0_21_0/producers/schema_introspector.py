@@ -20,12 +20,14 @@ installed library no longer exposes a structure this introspector expects.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
     make_envelope,
+    merge_source_constraints,
 )
 
 LANDMARKS: tuple[str, ...] = (
@@ -87,6 +89,15 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     )
 
     sampling_params = dataclass_fields_to_specs(SamplingParams, skip_private=True)
+
+    # D3: fold source-text Field(...) bounds + Literal[...] membership onto the
+    # discovered SamplingParams fields. engine_params already carries pydantic's
+    # own bounds/enums via model_json_schema(), so the walk targets the dataclass
+    # sampling source where field metadata is otherwise absent - near-zero on
+    # 0.21.0; the wiring carries forward to later sampling surfaces.
+    sp_source = inspect.getsourcefile(SamplingParams)
+    if sp_source is not None:
+        merge_source_constraints(sampling_params, [Path(sp_source)])
 
     limitations.append(
         {
