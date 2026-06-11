@@ -8,7 +8,7 @@ no real vLLM import occurs.
 Coverage:
   - Protocol compliance and get_engine() registration
   - Precision mapping (fp32/fp16/bf16 → float32/float16/bfloat16)
-  - _build_llm_kwargs: minimal defaults + all VLLMConfig fields + None omission
+  - _build_llm_kwargs: minimal defaults + all engine_params fields + None omission
   - _build_sampling_params: greedy, sampling, top_k sentinel mapping
   - No streaming code (CM-07 structurally resolved)
   - --shm-size 8g present in DockerRunner._build_docker_cmd (VLLM-03)
@@ -21,13 +21,6 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from llenergymeasure.config.engine_configs import (
-    VLLMAttentionConfig,
-    VLLMBeamSearchConfig,
-    VLLMConfig,
-    VLLMEngineConfig,
-    VLLMSamplingConfig,
-)
 from llenergymeasure.engines.vllm import VLLMEngine
 from llenergymeasure.utils.exceptions import EngineError
 from tests.conftest import make_config
@@ -123,7 +116,7 @@ class TestProtocolCompliance:
 
 class TestBuildLlmKwargs:
     def test_minimal_config_has_required_keys(self):
-        """With no VLLMConfig, kwargs contains model, trust_remote_code, seed.
+        """With no vllm section, kwargs contains model, trust_remote_code, seed.
 
         dtype is omitted when the user hasn't set it - vLLM uses its own default.
         """
@@ -135,7 +128,7 @@ class TestBuildLlmKwargs:
         # HF default - env var LLEM_TRUST_REMOTE_CODE not set
         assert kwargs["trust_remote_code"] is False
         assert kwargs["seed"] == 42
-        # dtype is only forwarded when explicitly set in VLLMConfig
+        # dtype is only forwarded when explicitly set on engine_params
         assert "dtype" not in kwargs
 
     def test_trust_remote_code_env_var_opt_in(self, monkeypatch):
@@ -148,24 +141,26 @@ class TestBuildLlmKwargs:
         assert kwargs["trust_remote_code"] is True
 
     def test_explicit_dtype_passthrough(self):
-        """Explicit VLLMConfig.dtype passes through in kwargs."""
-        config = make_config(**_VLLM_DEFAULTS, vllm=VLLMConfig(dtype="bfloat16"))
+        """Explicit engine_params.dtype passes through in kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"dtype": "bfloat16"}})
         engine = VLLMEngine()
         kwargs = engine._build_llm_kwargs(config)
         assert kwargs["dtype"] == "bfloat16"
 
     def test_vllm_config_fields_applied_when_not_none(self):
-        """All non-None VLLMEngineConfig fields are present in the returned kwargs dict."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                tensor_parallel_size=2,
-                gpu_memory_utilization=0.85,
-                max_num_seqs=128,
-                enable_prefix_caching=True,
-                quantization="awq",
-            )
+        """All non-None engine_params fields are present in the returned kwargs dict."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "tensor_parallel_size": 2,
+                    "gpu_memory_utilization": 0.85,
+                    "max_num_seqs": 128,
+                    "enable_prefix_caching": True,
+                    "quantization": "awq",
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         engine = VLLMEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -176,14 +171,20 @@ class TestBuildLlmKwargs:
         assert kwargs["quantization"] == "awq"
 
     def test_none_vllm_config_fields_are_omitted(self):
-        """None VLLMEngineConfig fields are NOT added to kwargs - engine uses its own default."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(tensor_parallel_size=2))  # only TP set
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """None engine_params fields are NOT added to kwargs - engine uses its own default.
+
+        Only fields whose generated default is None are dropped by
+        model_dump(exclude_none=True); fields with non-None generated defaults
+        (e.g. gpu_memory_utilization) forward verbatim and are not asserted here.
+        """
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"tensor_parallel_size": 2}},  # only TP set
+        )
         engine = VLLMEngine()
         kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["tensor_parallel_size"] == 2
-        assert "gpu_memory_utilization" not in kwargs
         assert "max_num_seqs" not in kwargs
         assert "enable_prefix_caching" not in kwargs
         assert "quantization" not in kwargs
@@ -210,7 +211,7 @@ class TestBuildLlmKwargs:
 
     def test_dtype_auto_in_kwargs(self):
         """dtype='auto' passes through to vLLM (vLLM-specific value)."""
-        config = make_config(**_VLLM_DEFAULTS, vllm=VLLMConfig(dtype="auto"))
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"dtype": "auto"}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "auto"
 
@@ -227,16 +228,14 @@ class TestBuildLlmKwargs:
         assert kwargs["model"] == "meta-llama/Llama-3.1-8B"
 
     def test_quantization_gptq(self):
-        """VLLMEngineConfig.quantization='gptq' is forwarded correctly."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(quantization="gptq"))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """engine_params.quantization='gptq' is forwarded correctly."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"quantization": "gptq"}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["quantization"] == "gptq"
 
     def test_quantization_fp8(self):
-        """VLLMEngineConfig.quantization='fp8' is forwarded correctly."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(quantization="fp8"))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """engine_params.quantization='fp8' is forwarded correctly."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"quantization": "fp8"}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["quantization"] == "fp8"
 
@@ -248,50 +247,50 @@ class TestBuildLlmKwargs:
 
 class TestBuildSamplingParams:
     def test_greedy_via_temperature_zero(self):
-        """temperature=0.0 on VLLMSamplingConfig forwards as-is."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.0))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg, max_output_tokens=64)
+        """temperature=0.0 on sampling_params forwards as-is."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"sampling_params": {"temperature": 0.0}},
+            max_output_tokens=64,
+        )
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == 0.0
         assert params._kwargs["max_tokens"] == 64
 
     def test_sampling_mode_temperature(self):
-        """temperature=0.7 on VLLMSamplingConfig forwards as-is."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.7))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """temperature=0.7 on sampling_params forwards as-is."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"temperature": 0.7}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == pytest.approx(0.7)
 
     def test_sampling_mode_top_p(self):
-        """top_p on VLLMSamplingConfig propagates to SamplingParams kwargs."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(top_p=0.9))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """top_p on sampling_params propagates to SamplingParams kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"top_p": 0.9}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_p"] == pytest.approx(0.9)
 
     def test_top_k_minus_one_disabled_passthrough(self):
         """top_k=-1 (vLLM disabled sentinel) passes through without translation."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(top_k=-1))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"top_k": -1}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_k"] == -1
 
     def test_top_k_nonzero_preserved(self):
         """Positive top_k passes through unchanged."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(top_k=40))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"top_k": 40}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_k"] == 40
 
     def test_repetition_penalty_propagated(self):
-        """repetition_penalty on VLLMSamplingConfig is forwarded."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(repetition_penalty=1.1))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """repetition_penalty on sampling_params is forwarded."""
+        config = make_config(
+            **_VLLM_DEFAULTS, vllm={"sampling_params": {"repetition_penalty": 1.1}}
+        )
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["repetition_penalty"] == pytest.approx(1.1)
@@ -304,16 +303,20 @@ class TestBuildSamplingParams:
         assert params._kwargs["max_tokens"] == 256
 
     def test_min_p_included_when_set(self):
-        """min_p is added to kwargs when provided on VLLMSamplingConfig."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(min_p=0.05))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """min_p is added to kwargs when provided on sampling_params."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"min_p": 0.05}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert "min_p" in params._kwargs
         assert params._kwargs["min_p"] == pytest.approx(0.05)
 
     def test_min_p_absent_when_none(self):
-        """min_p is NOT in kwargs when VLLMSamplingConfig.min_p is unset."""
+        """min_p is NOT in kwargs when no sampling_params section is provided.
+
+        With no sampling_params block, config.active_sampling_params() is None,
+        so no sampling defaults (including min_p's non-None generated default)
+        are dumped into kwargs.
+        """
         config = make_config(**_VLLM_DEFAULTS)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
@@ -393,31 +396,30 @@ class TestShmSizeInDockerRunner:
 
 class TestEngineConfigFields:
     def test_enforce_eager_wires_to_kwargs(self):
-        """enforce_eager=True in VLLMEngineConfig → kwargs['enforce_eager'] is True."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(enforce_eager=True))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """enforce_eager=True on engine_params -> kwargs['enforce_eager'] is True."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"enforce_eager": True}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["enforce_eager"] is True
 
     def test_block_size_wires_to_kwargs(self):
-        """block_size=16 in VLLMEngineConfig → kwargs['block_size'] == 16."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(block_size=16))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """block_size=16 on engine_params -> kwargs['block_size'] == 16."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"block_size": 16}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["block_size"] == 16
 
     def test_speculative_sub_config_produces_speculative_config_dict(self):
-        """VLLMSpeculativeConfig → speculative_config dict (vLLM native shape)."""
-        from llenergymeasure.config.engine_configs import VLLMSpeculativeConfig
-
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                speculative_config=VLLMSpeculativeConfig(
-                    model="draft-model", num_speculative_tokens=5
-                )
-            )
+        """speculative_config dict -> speculative_config kwarg (vLLM native shape)."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "speculative_config": {
+                        "model": "draft-model",
+                        "num_speculative_tokens": 5,
+                    }
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert "speculative_model" not in kwargs
         assert kwargs["speculative_config"] == {
@@ -426,41 +428,45 @@ class TestEngineConfigFields:
         }
 
     def test_speculative_sub_config_with_method(self):
-        """VLLMSpeculativeConfig.method is forwarded in speculative_config dict."""
-        from llenergymeasure.config.engine_configs import VLLMSpeculativeConfig
-
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                speculative_config=VLLMSpeculativeConfig(
-                    model="eagle-model", num_speculative_tokens=3, method="eagle"
-                )
-            )
+        """speculative_config.method is forwarded in speculative_config dict."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "speculative_config": {
+                        "model": "eagle-model",
+                        "num_speculative_tokens": 3,
+                        "method": "eagle",
+                    }
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["speculative_config"]["method"] == "eagle"
 
     def test_all_engine_fields_wired(self):
         """All 14 non-speculative engine fields are forwarded when set."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                gpu_memory_utilization=0.9,
-                swap_space=4.0,
-                cpu_offload_gb=2.0,
-                block_size=32,
-                kv_cache_dtype="auto",
-                enforce_eager=False,
-                enable_chunked_prefill=True,
-                max_num_seqs=64,
-                max_num_batched_tokens=4096,
-                max_model_len=4096,
-                tensor_parallel_size=1,
-                pipeline_parallel_size=1,
-                enable_prefix_caching=True,
-                quantization=None,
-            )
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "gpu_memory_utilization": 0.9,
+                    "swap_space": 4.0,
+                    "cpu_offload_gb": 2.0,
+                    "block_size": 32,
+                    "kv_cache_dtype": "auto",
+                    "enforce_eager": False,
+                    "enable_chunked_prefill": True,
+                    "max_num_seqs": 64,
+                    "max_num_batched_tokens": 4096,
+                    "max_model_len": 4096,
+                    "tensor_parallel_size": 1,
+                    "pipeline_parallel_size": 1,
+                    "enable_prefix_caching": True,
+                    "quantization": None,
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["gpu_memory_utilization"] == 0.9
         assert kwargs["swap_space"] == 4.0
@@ -479,7 +485,7 @@ class TestEngineConfigFields:
 
 
 # =============================================================================
-# Test Group 9: VLLMSamplingConfig overrides (new in Plan 02)
+# Test Group 9: sampling_params overrides
 # =============================================================================
 
 
@@ -487,50 +493,49 @@ class TestSamplingConfigOverrides:
     def test_max_output_tokens_bridges_to_max_tokens(self):
         """ExperimentConfig.max_output_tokens bridges to SamplingParams.max_tokens.
 
-        max_tokens was dropped from VLLMSamplingConfig (R2 dup); bridged at adapter level.
+        max_tokens is not a sampling_params field; it is bridged at adapter level.
         """
         config = make_config(**_VLLM_DEFAULTS, max_output_tokens=128)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["max_tokens"] == 128
 
     def test_sampling_presence_penalty_applied(self):
-        """VLLMSamplingConfig.presence_penalty appears in SamplingParams kwargs."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(presence_penalty=0.5))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """sampling_params.presence_penalty appears in SamplingParams kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"presence_penalty": 0.5}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["presence_penalty"] == pytest.approx(0.5)
 
     def test_sampling_frequency_penalty_applied(self):
-        """VLLMSamplingConfig.frequency_penalty appears in SamplingParams kwargs."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(frequency_penalty=0.3))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """sampling_params.frequency_penalty appears in SamplingParams kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"frequency_penalty": 0.3}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["frequency_penalty"] == pytest.approx(0.3)
 
     def test_sampling_min_tokens_applied(self):
-        """VLLMSamplingConfig.min_tokens appears in SamplingParams kwargs."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(min_tokens=10))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """sampling_params.min_tokens appears in SamplingParams kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"min_tokens": 10}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["min_tokens"] == 10
 
     def test_sampling_ignore_eos_applied(self):
-        """VLLMSamplingConfig.ignore_eos=True appears in SamplingParams kwargs."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(ignore_eos=True))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """sampling_params.ignore_eos=True appears in SamplingParams kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"ignore_eos": True}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["ignore_eos"] is True
 
     def test_sampling_overrides_applied_to_greedy_path(self):
-        """VLLMSamplingConfig overrides work on the greedy (temperature=0.0) path too."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.0, presence_penalty=0.1))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg, max_output_tokens=128)
+        """sampling_params overrides work on the greedy (temperature=0.0) path too."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"sampling_params": {"temperature": 0.0, "presence_penalty": 0.1}},
+            max_output_tokens=128,
+        )
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["temperature"] == 0.0
         assert params._kwargs["max_tokens"] == 128  # from max_output_tokens bridge
 
     def test_none_sampling_config_does_not_add_extra_kwargs(self):
-        """When vllm.sampling is None, no extra sampling kwargs are added."""
+        """When vllm.sampling_params is None, no extra sampling kwargs are added."""
         config = make_config(**_VLLM_DEFAULTS)  # vllm=None by default
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert "presence_penalty" not in params._kwargs
@@ -539,54 +544,59 @@ class TestSamplingConfigOverrides:
 
 
 # =============================================================================
-# Test Group 10: New VLLMEngineConfig fields wiring
+# Test Group 10: New engine_params fields wiring
 # =============================================================================
 
 
 class TestNewEngineFields:
     def test_disable_custom_all_reduce_wired(self):
         """disable_custom_all_reduce=True -> kwargs['disable_custom_all_reduce'] is True."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(disable_custom_all_reduce=True))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"disable_custom_all_reduce": True}},
+        )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["disable_custom_all_reduce"] is True
 
     def test_kv_cache_memory_bytes_wired(self):
         """kv_cache_memory_bytes=2**30 -> kwargs['kv_cache_memory_bytes'] == 2**30."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(kv_cache_memory_bytes=2**30))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(
+            **_VLLM_DEFAULTS, vllm={"engine_params": {"kv_cache_memory_bytes": 2**30}}
+        )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["kv_cache_memory_bytes"] == 2**30
 
     def test_offload_params_list_to_set_conversion(self):
         """offload_params=['weight', 'bias'] -> kwargs['offload_params'] == {'weight', 'bias'}."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(offload_params=["weight", "bias"]))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"offload_params": ["weight", "bias"]}},
+        )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["offload_params"] == {"weight", "bias"}
 
     def test_offload_group_size_wired(self):
         """offload_group_size=4 -> kwargs['offload_group_size'] == 4."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(offload_group_size=4))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"offload_group_size": 4}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["offload_group_size"] == 4
 
     def test_compilation_config_dict_passthrough(self):
         """compilation_config dict passes through as-is to kwargs."""
         comp = {"mode": "default", "engine": "inductor"}
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(compilation_config=comp))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"compilation_config": comp}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["compilation_config"] == {"mode": "default", "engine": "inductor"}
 
     def test_none_new_fields_omitted(self):
-        """When new fields are None, they are NOT in kwargs."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig())
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """When new fields are None, they are NOT in kwargs.
+
+        disable_custom_all_reduce is excluded here: its generated default is
+        False (non-None), so it forwards verbatim rather than being dropped.
+        """
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         for key in [
-            "disable_custom_all_reduce",
             "kv_cache_memory_bytes",
             "offload_group_size",
             "offload_params",
@@ -596,50 +606,49 @@ class TestNewEngineFields:
 
 
 # =============================================================================
-# Test Group 11: VLLMAttentionConfig wiring
+# Test Group 11: attention dict wiring
 # =============================================================================
 
 
 class TestAttentionConfigWiring:
     def test_attention_backend_maps_to_attention_backend_kwarg(self):
         """attention.backend='flash_attn' -> kwargs['attention_backend'] == 'flash_attn'."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(attention=VLLMAttentionConfig(backend="flash_attn"))
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"attention": {"backend": "flash_attn"}}},
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["attention_backend"] == "flash_attn"
 
     def test_attention_boolean_fields_wired(self):
         """Boolean attention fields are forwarded as flat LLM() kwargs."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                attention=VLLMAttentionConfig(
-                    use_cudnn_prefill=True,
-                    disable_flashinfer_prefill=True,
-                )
-            )
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "attention": {
+                        "use_cudnn_prefill": True,
+                        "disable_flashinfer_prefill": True,
+                    }
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["use_cudnn_prefill"] is True
         assert kwargs["disable_flashinfer_prefill"] is True
 
     def test_attention_model_extra_forwarded(self):
-        """Unknown attention fields pass through via model_extra."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                attention=VLLMAttentionConfig(**{"backend": "flash_attn", "future_attn_opt": 42})
-            )
+        """Unknown attention dict keys pass through flat to LLM() kwargs."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"attention": {"backend": "flash_attn", "future_attn_opt": 42}}},
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["future_attn_opt"] == 42
 
     def test_no_attention_config_no_attention_keys(self):
-        """When engine.attention is None, no attention-related keys in kwargs."""
-        vllm_cfg = VLLMConfig(engine=VLLMEngineConfig())
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """When engine_params.attention is None, no attention-related keys in kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert "attention_backend" not in kwargs
         assert "use_cudnn_prefill" not in kwargs
@@ -652,39 +661,50 @@ class TestAttentionConfigWiring:
 
 class TestPassthroughKwargs:
     def test_engine_model_extra_forwarded_to_llm_kwargs(self):
-        """Unknown engine fields pass through to LLM() kwargs via model_extra."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(**{"gpu_memory_utilization": 0.9, "some_future_param": "value"})
+        """Unknown engine fields pass through to LLM() kwargs via extra='allow'."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "gpu_memory_utilization": 0.9,
+                    "some_future_param": "value",
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["some_future_param"] == "value"
         assert kwargs["gpu_memory_utilization"] == 0.9  # explicit still works
 
     def test_sampling_model_extra_forwarded(self):
         """Unknown sampling fields pass through to SamplingParams kwargs."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(**{"some_future_sampling_param": True}))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"sampling_params": {"some_future_sampling_param": True}},
+        )
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["some_future_sampling_param"] is True
 
     def test_sampling_n_field_forwarded(self):
-        """VLLMSamplingConfig.n=4 -> kwargs['n'] == 4."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(n=4))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        """sampling_params.n=4 -> kwargs['n'] == 4."""
+        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"n": 4}})
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["n"] == 4
 
     def test_engine_extra_overrides_explicit_when_colliding(self):
-        """model_extra is merged LAST - if user passes a known field name as extra, it overrides."""
+        """Extra keys are forwarded alongside known fields via extra='allow'."""
         # This tests the edge case: user deliberately passes a known field via passthrough
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(**{"enforce_eager": True, "enforce_eager_override": "test"})
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "enforce_eager": True,
+                    "enforce_eager_override": "test",
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["enforce_eager"] is True  # from explicit field
-        assert kwargs["enforce_eager_override"] == "test"  # from model_extra
+        assert kwargs["enforce_eager_override"] == "test"  # from extra='allow' passthrough
 
 
 # =============================================================================
@@ -695,47 +715,37 @@ class TestPassthroughKwargs:
 class TestBeamSearchParams:
     def test_beam_search_config_triggers_beam_path(self):
         """When beam_search is set, config structure reflects beam search mode."""
-        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"beam_search": {"beam_width": 4}}},
+        )
         # The beam search path imports BeamSearchParams from vllm - we can't call it without vLLM.
         # Instead, verify the beam_search branch would be taken by checking config structure.
         assert config.vllm is not None
-        assert config.vllm.beam_search is not None
-        assert config.vllm.beam_search.beam_width == 4
-
-    def test_beam_search_mutual_exclusion_with_sampling(self):
-        """Cannot set both beam_search and sampling on VLLMConfig."""
-        import pydantic
-
-        with pytest.raises(
-            pydantic.ValidationError, match=r"beam_search.*sampling|sampling.*beam_search"
-        ):
-            VLLMConfig(
-                beam_search=VLLMBeamSearchConfig(beam_width=4),
-                sampling=VLLMSamplingConfig(max_tokens=100),  # type: ignore[call-arg]  # extra="allow"
-            )
+        assert config.vllm.engine_params is not None
+        assert config.vllm.engine_params.beam_search == {"beam_width": 4}
+        assert VLLMEngine._beam_search(config) == {"beam_width": 4}
 
     def test_beam_search_config_accepts_all_fields(self):
-        """VLLMBeamSearchConfig accepts beam_width, length_penalty, early_stopping, max_tokens."""
-        bs = VLLMBeamSearchConfig(  # type: ignore[call-arg]  # max_tokens accepted via extra="allow"
-            beam_width=8, length_penalty=1.2, early_stopping=True, max_tokens=256
+        """The beam_search engine_params dict round-trips its native fields verbatim."""
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "beam_search": {
+                        "beam_width": 8,
+                        "length_penalty": 1.2,
+                        "early_stopping": True,
+                        "max_tokens": 256,
+                    }
+                }
+            },
         )
-        assert bs.beam_width == 8
-        assert bs.length_penalty == 1.2
-        assert bs.early_stopping is True
-        assert bs.max_tokens == 256
-
-    def test_beam_search_config_extra_allow(self):
-        """VLLMBeamSearchConfig accepts unknown fields via extra='allow'."""
-        bs = VLLMBeamSearchConfig(**{"beam_width": 4, "future_beam_param": True})
-        assert bs.model_extra.get("future_beam_param") is True
-
-    def test_beam_search_beam_width_ge_1(self):
-        """beam_width must be >= 1."""
-        import pydantic
-
-        with pytest.raises(pydantic.ValidationError):
-            VLLMBeamSearchConfig(beam_width=0)
+        bs = config.vllm.engine_params.beam_search
+        assert bs["beam_width"] == 8
+        assert bs["length_penalty"] == 1.2
+        assert bs["early_stopping"] is True
+        assert bs["max_tokens"] == 256
 
 
 # =============================================================================
@@ -855,55 +865,35 @@ class TestFlashAttnFieldsWired:
 
     def test_flash_attn_version_wired(self):
         """flash_attn_version=3 appears in LLM() kwargs."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=3))
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"attention": {"flash_attn_version": 3}}},
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_version"] == 3
 
     def test_flash_attn_max_num_splits_wired(self):
         """flash_attn_max_num_splits_for_cuda_graph=8 appears in LLM() kwargs."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                attention=VLLMAttentionConfig(flash_attn_max_num_splits_for_cuda_graph=8)
-            )
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={"engine_params": {"attention": {"flash_attn_max_num_splits_for_cuda_graph": 8}}},
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 8
 
-    def test_flash_attn_version_none_omitted(self):
-        """flash_attn_version=None is not added to kwargs."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=None))
-        )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMEngine()._build_llm_kwargs(config)
-        assert "flash_attn_version" not in kwargs
-
-    def test_flash_attn_max_splits_none_omitted(self):
-        """flash_attn_max_num_splits_for_cuda_graph=None is not added to kwargs."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                attention=VLLMAttentionConfig(flash_attn_max_num_splits_for_cuda_graph=None)
-            )
-        )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMEngine()._build_llm_kwargs(config)
-        assert "flash_attn_max_num_splits_for_cuda_graph" not in kwargs
-
     def test_both_flash_attn_fields_together(self):
         """Both flash_attn fields forwarded simultaneously."""
-        vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(
-                attention=VLLMAttentionConfig(
-                    flash_attn_version=2,
-                    flash_attn_max_num_splits_for_cuda_graph=16,
-                )
-            )
+        config = make_config(
+            **_VLLM_DEFAULTS,
+            vllm={
+                "engine_params": {
+                    "attention": {
+                        "flash_attn_version": 2,
+                        "flash_attn_max_num_splits_for_cuda_graph": 16,
+                    }
+                }
+            },
         )
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_version"] == 2
         assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 16

@@ -176,11 +176,8 @@ def _make_panel_study_config(
     for model in models:
         for engine in engines:
             for dt in dtypes:
-                # transformers nests dtype under engine_params (generated shape);
-                # vllm/tensorrt keep dtype flat on their hand-written configs.
-                section = (
-                    {"engine_params": {"dtype": dt}} if engine == "transformers" else {"dtype": dt}
-                )
+                # All engines nest dtype under engine_params (generated shape).
+                section = {"engine_params": {"dtype": dt}}
                 experiments.append(
                     ExperimentConfig(task={"model": model}, engine=engine, **{engine: section})
                 )

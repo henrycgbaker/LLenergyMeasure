@@ -528,6 +528,38 @@ def _major(version: str) -> int:
         ) from exc
 
 
+def _normalise_normalised_fields(
+    expected_outcome: dict[str, Any], match_fields: dict[str, Any]
+) -> dict[str, Any]:
+    """Rewrite bare ``normalised_fields`` names to dotted config paths.
+
+    The corpus records ``normalised_fields`` as bare engine field names (e.g.
+    ``seed``), but the dedup canonicaliser's fixpoint
+    (:mod:`llenergymeasure.study.library_resolution`) assigns them via
+    :func:`resolve_field_path`, which needs the full dotted config path (e.g.
+    ``vllm.sampling_params.seed``). A bare name silently fails to resolve, so
+    the rule's normalisation never fires.
+
+    We derive the dotted path from the rule's own ``match.fields`` keys: the
+    section prefix of the match path whose leaf equals the bare name. Bare names
+    with no matching leaf, and names already dotted, pass through unchanged. This
+    is a load-time fix in one place, not an edit to the committed corpus.
+    """
+    raw_fields = expected_outcome.get("normalised_fields")
+    if not raw_fields:
+        return expected_outcome
+    leaf_to_path = {path.rsplit(".", 1)[-1]: path for path in match_fields}
+    rewritten = [
+        leaf_to_path.get(str(name), str(name)) if "." not in str(name) else str(name)
+        for name in raw_fields
+    ]
+    if rewritten == list(raw_fields):
+        return expected_outcome
+    out = dict(expected_outcome)
+    out["normalised_fields"] = rewritten
+    return out
+
+
 def _parse_invariant(raw: dict[str, Any]) -> Invariant:
     required = (
         "id",
@@ -580,6 +612,8 @@ def _parse_invariant(raw: dict[str, Any]) -> Invariant:
                 f"Invariant {invariant_id!r} has cross_validated_by entry={source!r}; "
                 f"must be one of: {sorted(VALID_ADDED_BY)}"
             )
+    match_fields = dict(match["fields"])
+    expected_outcome = _normalise_normalised_fields(expected_outcome, match_fields)
     return Invariant(
         id=str(invariant_id),
         engine=str(raw["engine"]),
@@ -588,7 +622,7 @@ def _parse_invariant(raw: dict[str, Any]) -> Invariant:
         severity=severity,
         native_type=str(raw["native_type"]),
         match_engine=str(match.get("engine", raw["engine"])),
-        match_fields=dict(match["fields"]),
+        match_fields=match_fields,
         kwargs_positive=dict(raw["kwargs_positive"]),
         kwargs_negative=dict(raw["kwargs_negative"]),
         expected_outcome=expected_outcome,

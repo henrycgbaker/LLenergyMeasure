@@ -403,7 +403,7 @@ class TestExpandGridSweepGroups:
             "engine": ["transformers", "vllm"],
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
-                "vllm.dtype": ["float16", "bfloat16"],
+                "vllm.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"harness.transformers.torch_compile": False},
                     {
@@ -474,7 +474,7 @@ class TestExpandGridSweepGroupsMultiBackend:
             "engine": ["transformers", "vllm"],
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
-                "vllm.dtype": ["float16", "bfloat16"],
+                "vllm.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"harness.transformers.torch_compile": False},
                     {
@@ -484,7 +484,7 @@ class TestExpandGridSweepGroupsMultiBackend:
                 ],
                 "vllm.decoding": [
                     {},
-                    {"vllm.sampling.presence_penalty": 0.6},
+                    {"vllm.sampling_params.presence_penalty": 0.6},
                 ],
             },
         }

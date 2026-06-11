@@ -45,9 +45,9 @@ def make_config(**overrides) -> ExperimentConfig:
 
     Tests override only what they care about. Task-level fields (model, dataset,
     max_input_tokens, max_output_tokens, random_seed) are routed into task={}.
-    A top-level dtype= kwarg is routed into the active engine's config section:
-    transformers nests it under engine_params (generated Config shape); vllm and
-    tensorrt keep dtype top-level on their hand-written configs.
+    A top-level dtype= kwarg is routed into the active engine's config section.
+    All three engines (transformers, vllm, tensorrt) use the generated nested
+    Config, so dtype nests under engine_params.
     """
     _TASK_FIELDS = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
     _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler", "latency_profiling"}
@@ -77,20 +77,11 @@ def make_config(**overrides) -> ExperimentConfig:
     if dtype is not None:
         engine_name = ec.get("engine", TEST_ENGINE)
         engine_key = engine_name.value if hasattr(engine_name, "value") else str(engine_name)
-        if engine_key == "transformers":
-            # Nested generated Config: dtype lives on engine_params.
-            existing = ec.get(engine_key)
-            existing = existing if isinstance(existing, dict) else {}
-            engine_params = {**existing.get("engine_params", {}), "dtype": dtype}
-            ec[engine_key] = {**existing, "engine_params": engine_params}
-        else:
-            existing = ec.get(engine_key)
-            if hasattr(existing, "model_copy"):
-                ec[engine_key] = existing.model_copy(update={"dtype": dtype})
-            elif isinstance(existing, dict):
-                ec[engine_key] = {**existing, "dtype": dtype}
-            else:
-                ec[engine_key] = {"dtype": dtype}
+        # Nested generated Config (all engines): dtype lives on engine_params.
+        existing = ec.get(engine_key)
+        existing = existing if isinstance(existing, dict) else {}
+        engine_params = {**existing.get("engine_params", {}), "dtype": dtype}
+        ec[engine_key] = {**existing, "engine_params": engine_params}
 
     return ExperimentConfig(**ec)
 

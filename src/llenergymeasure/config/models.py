@@ -38,12 +38,10 @@ EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        VLLMConfig,
-    )
     from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
+    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
     from llenergymeasure.engines.transformers.config import Config as TransformersConfig
+    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
 
 
 @lru_cache(maxsize=1)
@@ -436,6 +434,26 @@ class ExperimentConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
+    # Active-engine accessors (all three engines share the nested shape)
+    # -------------------------------------------------------------------------
+
+    def active_engine_params(self) -> Any:
+        """Return the active engine's ``engine_params`` sub-model, or None.
+
+        One config-layer accessor for the nested shape every engine now shares,
+        replacing the per-site ``cfg.<engine>.engine_params if cfg.<engine> is
+        not None else None`` idiom. Returns None when the engine section is
+        absent (``engine: null``).
+        """
+        section = getattr(self, self.engine.value, None)
+        return getattr(section, "engine_params", None) if section is not None else None
+
+    def active_sampling_params(self) -> Any:
+        """Return the active engine's ``sampling_params`` sub-model, or None."""
+        section = getattr(self, self.engine.value, None)
+        return getattr(section, "sampling_params", None) if section is not None else None
+
+    # -------------------------------------------------------------------------
     # Pre-validators (run before field parsing)
     # -------------------------------------------------------------------------
 
@@ -455,20 +473,18 @@ class ExperimentConfig(BaseModel):
             return data
         engine = data.get("engine", Engine.TRANSFORMERS)
         engine_key = engine.value if hasattr(engine, "value") else str(engine)
-        # transformers uses the generated nested shape (sampling_params); vllm +
-        # tensorrt still use the hand-written flat shape (sampling) until their
-        # own migration.
-        sampling_key = "sampling_params" if engine_key == "transformers" else "sampling"
+        # All three engines use the generated nested shape: the sampling sub-dict
+        # is sampling_params.
         # Ensure the engine section and its sampling sub-dict exist as dicts
         # (an explicit ``engine: null`` in YAML would otherwise leave None here).
         engine_section = data.get(engine_key)
         if not isinstance(engine_section, dict):
             engine_section = {}
             data[engine_key] = engine_section
-        sampling_section = engine_section.get(sampling_key)
+        sampling_section = engine_section.get("sampling_params")
         if not isinstance(sampling_section, dict):
             sampling_section = {}
-            engine_section[sampling_key] = sampling_section
+            engine_section["sampling_params"] = sampling_section
         for key, value in SAMPLING_PRESETS[preset_name].items():
             sampling_section.setdefault(key, value)
         return data
@@ -597,10 +613,9 @@ class ExperimentConfig(BaseModel):
         ``GenerationConfig.validate``). See memory note
         ``project_phase_50_pipeline_replan.md``.
         """
-        ep = self.transformers.engine_params if self.transformers is not None else None
+        ep = self.active_engine_params() if self.engine == "transformers" else None
         if (
-            self.engine == "transformers"
-            and ep is not None
+            ep is not None
             and ep.attn_implementation in self._FLASH_ATTENTION_IMPLS
             and (ep.dtype or "bfloat16") == "float32"
         ):
@@ -664,15 +679,12 @@ class ExperimentConfig(BaseModel):
 def _rebuild_experiment_config() -> None:
     """Rebuild ExperimentConfig to resolve forward references.
 
-    transformers resolves to the generated nested ``Config`` (engine_params /
-    sampling_params shape); vllm + tensorrt still use the hand-written
-    engine_configs classes until their own migration.
+    All three engines resolve to their generated nested ``Config`` (engine_params /
+    sampling_params shape, projected from the mined schema).
     """
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        VLLMConfig,
-    )
+    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
     from llenergymeasure.engines.transformers.config import Config as TransformersConfig
+    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
 
     ExperimentConfig.model_rebuild(
         _types_namespace={

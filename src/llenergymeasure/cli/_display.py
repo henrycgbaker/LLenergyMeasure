@@ -111,14 +111,9 @@ def print_dry_run(
             return f" ({field} default)" if field not in ("engine", "dtype") else " (default)"
         return ""
 
-    engine_section = getattr(config, config.engine, None)
-    # transformers nests dtype under engine_params; vllm/tensorrt keep it flat.
-    transformers_ep = config.transformers.engine_params if config.transformers is not None else None
-    engine_dtype = (
-        getattr(transformers_ep, "dtype", None)
-        if config.engine == "transformers"
-        else getattr(engine_section, "dtype", None)
-    )
+    # All three engines nest dtype under engine_params.
+    engine_params = config.active_engine_params()
+    engine_dtype = getattr(engine_params, "dtype", None)
 
     print("Config (resolved)")
     print(f"  Model          {config.task.model}")

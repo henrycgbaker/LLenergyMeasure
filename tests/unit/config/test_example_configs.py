@@ -47,8 +47,16 @@ def _field_submodels(annotation: object) -> list[type[BaseModel]]:
 def _resolve_path(path: str) -> str | None:
     """Resolve a dotted sweep path against declared ExperimentConfig fields.
 
-    Returns ``None`` if every segment is a declared field, otherwise a string
-    describing the segment that failed (for an actionable assertion message).
+    Returns ``None`` if every segment resolves, otherwise a string describing
+    the segment that failed (for an actionable assertion message).
+
+    Resolution stops cleanly at an Any-typed engine field: the generated engine
+    configs expose curated discovery-debt containers (``engine_params.attention``,
+    ``engine_params.quant_config``, ...) as ``Any``-typed stubs whose leaf keys
+    the engine consumes through ``extra="allow"`` but which carry no typed
+    sub-model yet (enriched at the next in-container re-mine). A path descending
+    into such a field targets a real engine kwarg, so it resolves; only a path
+    that descends into a TYPED leaf (a real scalar field) is a mis-nesting bug.
     """
     model: type[BaseModel] = ExperimentConfig
     parts = path.split(".")
@@ -60,9 +68,20 @@ def _resolve_path(path: str) -> str | None:
         if i < len(parts) - 1:
             submodels = _field_submodels(fields[part].annotation)
             if not submodels:
+                # Any-typed engine container (discovery-debt stub) - the engine
+                # owns the leaf surface via extra="allow"; the path resolves.
+                if _is_any_typed(fields[part].annotation):
+                    return None
                 return f"'{part}' on {model.__name__} is a leaf field but path continues"
             model = submodels[0]
     return None
+
+
+def _is_any_typed(annotation: object) -> bool:
+    """Return True if the annotation is ``Any`` or ``Any | None`` (a stub field)."""
+    args = typing.get_args(annotation)
+    members = args or (annotation,)
+    return all(m is typing.Any or m is type(None) for m in members)
 
 
 def _swept_paths(raw_study: dict) -> set[str]:
@@ -104,11 +123,14 @@ def test_swept_paths_resolve_to_real_fields(config_path: Path) -> None:
 
 def test_example_full_resolver_self_check() -> None:
     """Sanity-check the resolver itself: a known-good and known-bad path."""
-    # transformers uses the generated nested shape; batch_size is a harness knob.
+    # All three engines use the generated nested shape; batch_size is a harness knob.
     assert _resolve_path("transformers.engine_params.dtype") is None
     assert _resolve_path("harness.transformers.batch_size") is None
-    assert _resolve_path("vllm.engine.attention.backend") is None
-    # Mis-nested attention path (the bug this module guards against).
+    # attention is an Any-typed engine_params stub; descending into its leaf
+    # resolves (the engine owns the surface via extra="allow").
+    assert _resolve_path("vllm.engine_params.attention.backend") is None
+    # Mis-nested attention path (the bug this module guards against): attention
+    # is not a top-level vllm field, so this fails before any extra="allow" lift.
     assert _resolve_path("vllm.attention.backend") is not None
     # batch_size moved to the harness section; the old flat path no longer resolves.
     assert _resolve_path("transformers.batch_size") is not None

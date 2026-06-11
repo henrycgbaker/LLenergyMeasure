@@ -377,99 +377,103 @@ def test_tp_plan_with_device_map_no_longer_rejected_at_parse():
 # ---------------------------------------------------------------------------
 
 
-def test_vllm_dtype_float32_rejected():
-    """VLLMConfig.dtype Literal rejects float32 (vLLM does not support fp32)."""
-    from llenergymeasure.config.engine_configs import VLLMConfig
+def test_vllm_dtype_float32_parses():
+    """vllm dtype is an Any passthrough now (no Literal), so float32 parses.
 
-    with pytest.raises(ValidationError):
-        VLLMConfig(dtype="float32")  # type: ignore[arg-type]
+    The generated config does not restrict dtype; vLLM itself rejects fp32 at
+    runtime. This asserts the nested config accepts the value rather than the
+    deleted Literal validator.
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"dtype": "float32"}},
+    )
+    assert cfg.vllm.engine_params.dtype == "float32"
 
 
 def test_vllm_fp8_float16_accepted():
     """fp8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16", engine=VLLMEngineConfig(quantization="fp8")),
+        vllm={"engine_params": {"dtype": "float16", "quantization": "fp8"}},
     )
-    assert cfg.vllm.dtype == "float16"
+    assert cfg.vllm.engine_params.dtype == "float16"
 
 
 def test_vllm_fp8_bfloat16_accepted():
     """fp8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="bfloat16", engine=VLLMEngineConfig(quantization="fp8")),
+        vllm={"engine_params": {"dtype": "bfloat16", "quantization": "fp8"}},
     )
-    assert cfg.vllm.dtype == "bfloat16"
+    assert cfg.vllm.engine_params.dtype == "bfloat16"
 
 
 def test_vllm_non_fp8_float16_accepted():
     """Non-fp8 quantization (awq) with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16", engine=VLLMEngineConfig(quantization="awq")),
+        vllm={"engine_params": {"dtype": "float16", "quantization": "awq"}},
     )
-    assert cfg.vllm.dtype == "float16"
+    assert cfg.vllm.engine_params.dtype == "float16"
 
 
 def test_vllm_no_quantization_default_dtype_accepted():
     """No quantization set, no explicit dtype, is accepted (engine default applies)."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(engine=VLLMEngineConfig()),
+        vllm={"engine_params": {}},
     )
-    assert cfg.vllm.dtype is None
+    # The generated default for vllm dtype is 'auto' (non-None).
+    assert cfg.vllm.engine_params.dtype == "auto"
 
 
 # ---------------------------------------------------------------------------
-# Bug 1.2 - max_num_batched_tokens < max_model_len (vLLM engine)
+# Bug 1.2 - max_num_batched_tokens / max_model_len (vLLM engine)
+#
+# The hand-written max_num_batched_tokens >= max_model_len cross-validator was
+# dropped with the migration to the generated config (vLLM enforces this at
+# runtime). These tests now assert the nested config accepts the values.
 # ---------------------------------------------------------------------------
-
-
-def test_vllm_batched_tokens_less_than_model_len_rejected():
-    """max_num_batched_tokens < max_model_len raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    with pytest.raises(ValidationError, match=r"max_num_batched_tokens.*must be >="):
-        VLLMEngineConfig(max_num_batched_tokens=512, max_model_len=1024)
 
 
 def test_vllm_batched_tokens_equal_model_len_accepted():
     """max_num_batched_tokens == max_model_len is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=1024, max_model_len=1024)
-    assert cfg.max_num_batched_tokens == 1024
-    assert cfg.max_model_len == 1024
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"max_num_batched_tokens": 1024, "max_model_len": 1024}},
+    )
+    ep = cfg.vllm.engine_params
+    assert ep.max_num_batched_tokens == 1024
+    assert ep.max_model_len == 1024
 
 
 def test_vllm_batched_tokens_greater_accepted():
     """max_num_batched_tokens > max_model_len is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=2048, max_model_len=1024)
-    assert cfg.max_num_batched_tokens == 2048
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"max_num_batched_tokens": 2048, "max_model_len": 1024}},
+    )
+    assert cfg.vllm.engine_params.max_num_batched_tokens == 2048
 
 
 def test_vllm_batched_tokens_one_none_accepted():
     """Only one of max_num_batched_tokens / max_model_len set is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=512)
-    assert cfg.max_num_batched_tokens == 512
-    assert cfg.max_model_len is None
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"max_num_batched_tokens": 512}},
+    )
+    ep = cfg.vllm.engine_params
+    assert ep.max_num_batched_tokens == 512
+    assert ep.max_model_len is None
 
 
 # ---------------------------------------------------------------------------
@@ -538,54 +542,49 @@ def test_pytorch_no_attn_impl_float32_accepted():
 # ---------------------------------------------------------------------------
 
 
-def test_trt_dtype_float32_rejected() -> None:
-    """TensorRTConfig.dtype Literal rejects float32 (TRT-LLM does not support fp32)."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
+def test_trt_dtype_float32_parses() -> None:
+    """tensorrt dtype is an Any passthrough now (no Literal), so float32 parses.
 
-    with pytest.raises(ValidationError):
-        TensorRTConfig(dtype="float32")  # type: ignore[arg-type]
+    The generated config does not restrict dtype; TRT-LLM itself rejects fp32 at
+    runtime. This asserts the nested config accepts the value rather than the
+    deleted Literal validator.
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="tensorrt",
+        tensorrt={"engine_params": {"dtype": "float32"}},
+    )
+    assert cfg.tensorrt.engine_params.dtype == "float32"
 
 
 def test_trt_fp8_accepts_float16() -> None:
     """FP8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
-        ),
+        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "FP8"}}},
     )
-    assert cfg.tensorrt.dtype == "float16"
+    assert cfg.tensorrt.engine_params.dtype == "float16"
 
 
 def test_trt_fp8_accepts_bfloat16() -> None:
     """FP8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="bfloat16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
-        ),
+        tensorrt={"engine_params": {"dtype": "bfloat16", "quant_config": {"quant_algo": "FP8"}}},
     )
-    assert cfg.tensorrt.dtype == "bfloat16"
+    assert cfg.tensorrt.engine_params.dtype == "bfloat16"
 
 
 def test_trt_non_fp8_accepts_float16() -> None:
     """Non-FP8 quantization (INT8) with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="INT8")
-        ),
+        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "INT8"}}},
     )
-    assert cfg.tensorrt.dtype == "float16"
+    assert cfg.tensorrt.engine_params.dtype == "float16"
 
 
 # ---------------------------------------------------------------------------

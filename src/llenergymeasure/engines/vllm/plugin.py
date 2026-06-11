@@ -160,8 +160,9 @@ class VLLMEngine:
         logger.debug("vLLM model loaded successfully")
 
         # Build SamplingParams or BeamSearchParams depending on config
-        if config.vllm is not None and config.vllm.beam_search is not None:
-            sampling_params = self._build_beam_search_params(config, config.vllm.beam_search)
+        beam_search = self._beam_search(config)
+        if beam_search is not None:
+            sampling_params = self._build_beam_search_params(config, beam_search)
         else:
             sampling_params = self._build_sampling_params(config, SamplingParams)
         if on_substep is not None:
@@ -272,14 +273,10 @@ class VLLMEngine:
                 total_vram = torch.cuda.get_device_properties(
                     torch.cuda.current_device()
                 ).total_memory / (1024 * 1024)
-                vllm_cfg = config.vllm
+                engine_params = config.active_engine_params()
                 gpu_util = 0.9  # vLLM default
-                if (
-                    vllm_cfg is not None
-                    and vllm_cfg.engine is not None
-                    and vllm_cfg.engine.gpu_memory_utilization is not None
-                ):
-                    gpu_util = vllm_cfg.engine.gpu_memory_utilization
+                if engine_params is not None and engine_params.gpu_memory_utilization is not None:
+                    gpu_util = engine_params.gpu_memory_utilization
                 expected_prealloc = total_vram * gpu_util
                 if abs(peak_mb - expected_prealloc) / expected_prealloc < 0.05:
                     logger.debug(
@@ -442,82 +439,58 @@ class VLLMEngine:
     # Private: model loading helpers
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _beam_search(config: ExperimentConfig) -> dict[str, Any] | None:
+        """Return the vllm beam_search sub-dict, or None.
+
+        ``beam_search`` is an Any-typed discovery-debt engine_params field
+        (curated but not surfaced as a typed sub-model on this pin), so it
+        arrives as a plain dict.
+        """
+        engine_params = config.active_engine_params()
+        beam = getattr(engine_params, "beam_search", None) if engine_params is not None else None
+        return beam if isinstance(beam, dict) and beam else None
+
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build kwargs dict for vllm.LLM() constructor."""
+        """Build kwargs dict for vllm.LLM() constructor.
+
+        All engine fields live on the generated ``engine_params`` block. Typed
+        scalars (gpu_memory_utilization, max_model_len, ...) and Any-typed
+        discovery-debt fields (speculative_config, attention, beam_search,
+        offload_*, distributed_executor_backend, compilation_config) alike are
+        dumped through ``model_dump(exclude_none=True)`` - the engine owns the
+        kwargs surface (extra="allow"), so non-None values forward verbatim.
+        """
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
-        vllm_cfg = config.vllm
         kwargs: dict[str, Any] = {
             "model": config.task.model,
             "trust_remote_code": trust_remote_code_enabled(),
             "seed": config.task.random_seed,
         }
-        if vllm_cfg is not None and vllm_cfg.dtype is not None:
-            kwargs["dtype"] = vllm_cfg.dtype
 
-        # Apply VLLMEngineConfig fields if provided - only set non-None values
-        if vllm_cfg is not None and vllm_cfg.engine is not None:
-            engine = vllm_cfg.engine
+        engine_params = config.active_engine_params()
+        if engine_params is None:
+            return kwargs
 
-            def _set(k: str, v: Any) -> None:
-                if v is not None:
-                    kwargs[k] = v
+        dumped: dict[str, Any] = engine_params.model_dump(exclude_none=True)
 
-            _set("gpu_memory_utilization", engine.gpu_memory_utilization)
-            _set("swap_space", engine.swap_space)
-            _set("cpu_offload_gb", engine.cpu_offload_gb)
-            _set("block_size", engine.block_size)
-            _set("kv_cache_dtype", engine.kv_cache_dtype)
-            _set("enforce_eager", engine.enforce_eager)
-            _set("enable_chunked_prefill", engine.enable_chunked_prefill)
-            _set("max_num_seqs", engine.max_num_seqs)
-            _set("max_num_batched_tokens", engine.max_num_batched_tokens)
-            _set("max_model_len", engine.max_model_len)
-            _set("tensor_parallel_size", engine.tensor_parallel_size)
-            _set("pipeline_parallel_size", engine.pipeline_parallel_size)
-            _set("enable_prefix_caching", engine.enable_prefix_caching)
-            _set("quantization", engine.quantization)
-            _set("num_scheduler_steps", engine.num_scheduler_steps)
-            _set("max_seq_len_to_capture", engine.max_seq_len_to_capture)
-            _set("distributed_executor_backend", engine.distributed_executor_backend)
+        # The attention block maps backend -> attention_backend and flattens its
+        # remaining keys; beam_search is dispatched separately (sampling path).
+        attention = dumped.pop("attention", None)
+        dumped.pop("beam_search", None)
+        offload_params = dumped.pop("offload_params", None)
 
-            # Speculative decoding - dump the typed sub-config straight into kwargs.
-            if engine.speculative_config is not None:
-                spec_dict = engine.speculative_config.model_dump(exclude_none=True)
-                if spec_dict:
-                    kwargs["speculative_config"] = spec_dict
+        kwargs.update(dumped)
 
-            _set("disable_custom_all_reduce", engine.disable_custom_all_reduce)
-            _set("kv_cache_memory_bytes", engine.kv_cache_memory_bytes)
-            _set("offload_group_size", engine.offload_group_size)
-            _set("offload_num_in_group", engine.offload_num_in_group)
-            _set("offload_prefetch_step", engine.offload_prefetch_step)
-            _set("compilation_config", engine.compilation_config)
+        if isinstance(attention, dict):
+            backend = attention.pop("backend", None)
+            if backend is not None:
+                kwargs["attention_backend"] = backend
+            kwargs.update(attention)
 
-            if engine.offload_params is not None:
-                kwargs["offload_params"] = set(engine.offload_params)
-
-            if engine.attention is not None:
-                attn = engine.attention
-                if attn.backend is not None:
-                    kwargs["attention_backend"] = attn.backend
-                _set("flash_attn_version", attn.flash_attn_version)
-                _set(
-                    "flash_attn_max_num_splits_for_cuda_graph",
-                    attn.flash_attn_max_num_splits_for_cuda_graph,
-                )
-                _set("use_prefill_decode_attention", attn.use_prefill_decode_attention)
-                _set("use_prefill_query_quantization", attn.use_prefill_query_quantization)
-                _set("use_cudnn_prefill", attn.use_cudnn_prefill)
-                _set("disable_flashinfer_prefill", attn.disable_flashinfer_prefill)
-                _set("disable_flashinfer_q_quantization", attn.disable_flashinfer_q_quantization)
-                _set("use_trtllm_attention", attn.use_trtllm_attention)
-                _set("use_trtllm_ragged_deepseek_prefill", attn.use_trtllm_ragged_deepseek_prefill)
-                if attn.model_extra:
-                    kwargs.update(attn.model_extra)
-
-            if engine.model_extra:
-                kwargs.update(engine.model_extra)
+        if offload_params is not None:
+            kwargs["offload_params"] = set(offload_params)
 
         return kwargs
 
@@ -528,11 +501,10 @@ class VLLMEngine:
         Returns ``{}`` when beam search is active (sampling path preempted);
         the caller dispatches to :meth:`_build_beam_search_params` in that case.
         """
-        vllm_cfg = config.vllm
-        if vllm_cfg is not None and vllm_cfg.beam_search is not None:
+        if VLLMEngine._beam_search(config) is not None:
             return {}
 
-        sampling = vllm_cfg.sampling if vllm_cfg is not None else None
+        sampling = config.active_sampling_params()
         kwargs: dict[str, Any] = (
             sampling.model_dump(exclude_none=True) if sampling is not None else {}
         )
@@ -542,21 +514,26 @@ class VLLMEngine:
 
     @staticmethod
     def _build_sampling_params(config: ExperimentConfig, sampling_params_cls: Any) -> Any:
-        """Build vllm.SamplingParams from VLLMSamplingConfig.
+        """Build vllm.SamplingParams from the generated sampling_params block.
 
-        All sampling fields live on ``config.vllm.sampling``. None values mean
-        "use vLLM's default", so we forward only explicit values.
-        User writes top_k=-1 directly to disable (vLLM convention). No translation.
+        All sampling fields live on ``config.vllm.sampling_params``. None values
+        mean "use vLLM's default", so we forward only explicit values. User
+        writes top_k=-1 directly to disable (vLLM convention). No translation.
         """
-        vllm_cfg = config.vllm
-        if vllm_cfg is not None and vllm_cfg.beam_search is not None:
-            return VLLMEngine._build_beam_search_params(config, vllm_cfg.beam_search)
+        beam_search = VLLMEngine._beam_search(config)
+        if beam_search is not None:
+            return VLLMEngine._build_beam_search_params(config, beam_search)
         kwargs = VLLMEngine._build_sampling_kwargs(config)
         return sampling_params_cls(**kwargs)
 
     @staticmethod
-    def _build_beam_search_params(config: ExperimentConfig, beam_cfg: Any) -> Any:
-        """Build vllm.BeamSearchParams from VLLMBeamSearchConfig."""
+    def _build_beam_search_params(config: ExperimentConfig, beam_cfg: dict[str, Any]) -> Any:
+        """Build vllm.BeamSearchParams from the beam_search engine_params dict.
+
+        ``beam_search`` is an Any-typed engine_params field, so it arrives as a
+        plain dict; its keys (beam_width, length_penalty, early_stopping, plus
+        any extras) forward verbatim.
+        """
         try:
             from vllm import BeamSearchParams
         except ImportError:
@@ -567,17 +544,9 @@ class VLLMEngine:
                 "vllm config."
             ) from None
 
-        kwargs: dict[str, Any] = {}
-        if beam_cfg.beam_width is not None:
-            kwargs["beam_width"] = beam_cfg.beam_width
-        if beam_cfg.length_penalty is not None:
-            kwargs["length_penalty"] = beam_cfg.length_penalty
-        if beam_cfg.early_stopping is not None:
-            kwargs["early_stopping"] = beam_cfg.early_stopping
+        kwargs = {k: v for k, v in beam_cfg.items() if v is not None}
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
-        if beam_cfg.model_extra:
-            kwargs.update(beam_cfg.model_extra)
         return BeamSearchParams(**kwargs)
 
     # -------------------------------------------------------------------------

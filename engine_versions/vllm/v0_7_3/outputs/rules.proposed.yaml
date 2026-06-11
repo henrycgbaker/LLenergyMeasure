@@ -16,7 +16,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.sampling.seed: -1
+      vllm.sampling_params.seed: -1
   kwargs_positive:
     seed: -1
   kwargs_negative:
@@ -45,7 +45,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.sampling.best_of:
+      vllm.sampling_params.best_of:
         present: true
         <: '@n'
   kwargs_positive:
@@ -77,9 +77,9 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.sampling.max_tokens:
+      vllm.sampling_params.max_tokens:
         present: true
-      vllm.sampling.min_tokens:
+      vllm.sampling_params.min_tokens:
         '>': '@max_tokens'
   kwargs_positive:
     max_tokens: 1
@@ -109,7 +109,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.sampling.min_tokens:
+      vllm.sampling_params.min_tokens:
         <: 0
   kwargs_positive:
     min_tokens: -1
@@ -137,7 +137,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.sampling.n:
+      vllm.sampling_params.n:
         <: 1
   kwargs_positive:
     n: 0
@@ -165,7 +165,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.sampling.n:
+      vllm.sampling_params.n:
         type_is_not: int
   kwargs_positive:
     n: x
@@ -193,7 +193,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.sampling.temperature:
+      vllm.sampling_params.temperature:
         <: 0.0
   kwargs_positive:
     temperature: -1.0
@@ -221,7 +221,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.engine.max_num_partial_prefills:
+      vllm.engine_params.max_num_partial_prefills:
         <: 1
   kwargs_positive:
     max_num_partial_prefills: 0
@@ -250,7 +250,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.engine.num_lookahead_slots:
+      vllm.engine_params.num_lookahead_slots:
         <: 0
   kwargs_positive:
     num_lookahead_slots: -1
@@ -278,7 +278,7 @@ invariants:
   match:
     engine: vllm
     fields:
-      vllm.engine.num_scheduler_steps:
+      vllm.engine_params.num_scheduler_steps:
         <: 1
   kwargs_positive:
     num_scheduler_steps: 0

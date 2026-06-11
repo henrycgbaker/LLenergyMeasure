@@ -17,7 +17,7 @@ invariants:
   match:
     engine: tensorrt
     fields:
-      tensorrt.max_ngram_size:
+      tensorrt.engine_params.max_ngram_size:
         <=: 0
   kwargs_positive:
     max_ngram_size: 0
@@ -46,7 +46,7 @@ invariants:
   match:
     engine: tensorrt
     fields:
-      tensorrt.max_verification_set_size:
+      tensorrt.engine_params.max_verification_set_size:
         <=: 0
   kwargs_positive:
     max_verification_set_size: 0
@@ -75,7 +75,7 @@ invariants:
   match:
     engine: tensorrt
     fields:
-      tensorrt.max_window_size:
+      tensorrt.engine_params.max_window_size:
         <=: 0
   kwargs_positive:
     max_window_size: 0

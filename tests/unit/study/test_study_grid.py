@@ -196,9 +196,9 @@ class TestExpandGridSweep:
             "engine": ["transformers", "vllm"],
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
-                "vllm.dtype": ["float16", "bfloat16"],
+                "vllm.engine_params.dtype": ["float16", "bfloat16"],
                 "harness.transformers.batch_size": [1, 8],
-                "vllm.engine.max_num_seqs": [64, 256],
+                "vllm.engine_params.max_num_seqs": [64, 256],
             },
         }
         valid, skipped = expand_grid(raw)
@@ -217,8 +217,8 @@ class TestExpandGridSweep:
         for c in vllm_configs:
             assert c.transformers is None
             assert c.vllm is not None
-            assert c.vllm.engine is not None
-            assert c.vllm.engine.max_num_seqs in (64, 256)
+            assert c.vllm.engine_params is not None
+            assert c.vllm.engine_params.max_num_seqs in (64, 256)
 
 
 # =============================================================================
@@ -406,12 +406,12 @@ class TestMultiBackendSectionStripping:
         """A top-level tensorrt: section must not leak into pytorch/vllm sweep configs."""
         raw = {
             "task": {"model": "gpt2"},
-            "tensorrt": {"max_input_len": 1024},
+            "tensorrt": {"engine_params": {"max_input_len": 1024}},
             "sweep": {
                 "transformers.engine_params.dtype": ["bfloat16"],
-                "tensorrt.dtype": ["bfloat16"],
+                "tensorrt.engine_params.dtype": ["bfloat16"],
                 "harness.transformers.batch_size": [1],
-                "tensorrt.max_batch_size": [4],
+                "tensorrt.engine_params.max_batch_size": [4],
             },
         }
         valid, skipped = expand_grid(raw)
@@ -425,12 +425,12 @@ class TestMultiBackendSectionStripping:
         assert pytorch_configs[0].tensorrt is None
         # Tensorrt config inherits the top-level tensorrt section
         assert tensorrt_configs[0].tensorrt is not None
-        assert tensorrt_configs[0].tensorrt.max_input_len == 1024
+        assert tensorrt_configs[0].tensorrt.engine_params.max_input_len == 1024
 
     def test_explicit_experiment_strips_inherited_not_explicit(self):
         """Inherited engine sections are stripped; explicitly written ones still fail."""
         raw = {
-            "tensorrt": {"max_input_len": 1024},
+            "tensorrt": {"engine_params": {"max_input_len": 1024}},
             "experiments": [
                 # Inherited tensorrt: should be stripped for this pytorch experiment
                 {"task": {"model": "gpt2"}, "engine": "transformers"},
@@ -438,7 +438,7 @@ class TestMultiBackendSectionStripping:
                 {
                     "task": {"model": "gpt2"},
                     "engine": "transformers",
-                    "vllm": {"engine": {"max_num_seqs": 64}},
+                    "vllm": {"engine_params": {"max_num_seqs": 64}},
                 },
             ],
         }
@@ -453,11 +453,11 @@ class TestMultiBackendSectionStripping:
         """Three-engine sweep with a shared tensorrt section produces valid configs for all."""
         raw = {
             "task": {"model": "gpt2"},
-            "tensorrt": {"max_input_len": 512},
+            "tensorrt": {"engine_params": {"max_input_len": 512}},
             "sweep": {
                 "harness.transformers.batch_size": [1],
-                "vllm.engine.max_num_seqs": [64],
-                "tensorrt.max_batch_size": [4],
+                "vllm.engine_params.max_num_seqs": [64],
+                "tensorrt.engine_params.max_batch_size": [4],
             },
         }
         valid, skipped = expand_grid(raw)

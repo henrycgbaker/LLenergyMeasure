@@ -46,27 +46,29 @@ def test_get_engine_params_pytorch_has_engine_support():
 
 
 def test_get_engine_params_vllm_returns_params():
-    """get_engine_params('vllm') returns params including vllm.engine.max_num_seqs."""
+    """get_engine_params('vllm') returns params on the nested engine_params shape."""
     params = get_engine_params("vllm")
     assert isinstance(params, dict)
-    assert "vllm.engine.max_num_seqs" in params
+    assert "vllm.engine_params.max_num_seqs" in params
 
 
 def test_get_engine_params_tensorrt_returns_params():
-    """get_engine_params('tensorrt') returns params including nested sub-config paths."""
+    """get_engine_params('tensorrt') returns params on the nested engine_params shape.
+
+    quant_config / kv_cache_config / scheduler_config are Any-typed dicts on the
+    generated config, so they register as single opaque paths (not expanded into
+    their inner fields).
+    """
     params = get_engine_params("tensorrt")
     assert isinstance(params, dict)
-    assert "tensorrt.max_batch_size" in params
-    # Verify expanded nested sub-config params are registered
-    assert "tensorrt.quant_config.quant_algo" in params
-    assert "tensorrt.kv_cache_config.free_gpu_memory_fraction" in params
-    assert "tensorrt.scheduler_config.capacity_scheduling_policy" in params
-    # build_cache and calib sub-configs dropped (D1/D3); return_perf_metrics dropped (D1)
-    assert "tensorrt.build_cache.max_records" not in params
-    assert "tensorrt.sampling.return_perf_metrics" not in params
+    assert "tensorrt.engine_params.max_batch_size" in params
+    # Sub-config dicts register as single opaque engine_params paths
+    assert "tensorrt.engine_params.quant_config" in params
+    assert "tensorrt.engine_params.kv_cache_config" in params
+    assert "tensorrt.engine_params.scheduler_config" in params
     # New fields from C.2
-    assert "tensorrt.pipeline_parallel_size" in params
-    assert "tensorrt.max_num_tokens" in params
+    assert "tensorrt.engine_params.pipeline_parallel_size" in params
+    assert "tensorrt.engine_params.max_num_tokens" in params
     assert len(params) >= 10
 
 
@@ -225,17 +227,19 @@ def test_list_all_param_paths_contains_expected_paths():
 
 
 def test_list_all_param_paths_contains_known_paths():
-    """list_all_param_paths() contains expected well-known param paths."""
+    """list_all_param_paths() contains expected well-known param paths.
+
+    All three engines use the generated nested shape now: sampling lives on
+    sampling_params, engine fields on engine_params.
+    """
     paths = list_all_param_paths()
     assert "transformers.batch_size" in paths
-    # transformers uses the generated nested shape; sampling lives on
-    # sampling_params, engine fields on engine_params. vllm/tensorrt keep flat.
     assert "transformers.sampling_params.temperature" in paths
-    assert "vllm.sampling.temperature" in paths
-    assert "tensorrt.sampling.temperature" in paths
+    assert "vllm.sampling_params.temperature" in paths
+    assert "tensorrt.sampling_params.temperature" in paths
     assert "transformers.engine_params.dtype" in paths
-    assert "vllm.dtype" in paths
-    assert "tensorrt.dtype" in paths
+    assert "vllm.engine_params.dtype" in paths
+    assert "tensorrt.engine_params.dtype" in paths
 
 
 def test_list_all_param_paths_filtered_by_engine():
@@ -385,8 +389,6 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     get_swept_field_paths must handle None values in optional sub-config lists
     rather than raising AttributeError.
     """
-    from llenergymeasure.config.engine_configs import VLLMConfig
-
     exp_pt = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
@@ -396,7 +398,7 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     exp_vllm = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16"),
+        vllm={"engine_params": {"dtype": "float16"}},
     )
     # Must not raise AttributeError
     result = get_swept_field_paths([exp_pt, exp_vllm])

@@ -139,8 +139,8 @@ def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
     if config.engine != Engine.TENSORRT:
         return None
 
-    trt = config.tensorrt
-    if trt is not None and getattr(trt, "engine_path", None):
+    engine_params = config.active_engine_params()
+    if engine_params is not None and getattr(engine_params, "engine_path", None):
         return None
 
     method = _read_model_quant_method(config.task.model)

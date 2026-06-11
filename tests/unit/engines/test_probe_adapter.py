@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.probe import ConfigProbe, DormantField
 from llenergymeasure.engines.probe_adapter import build_config_probe
@@ -144,7 +143,7 @@ def test_probe_errors_equal_check_hardware_for_hardware_only(monkeypatch):
     config = make_config(
         model="test-model",
         engine="tensorrt",
-        tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
+        tensorrt={"engine_params": {"quant_config": {"quant_algo": "FP8"}}},
     )
 
     from llenergymeasure.engines.tensorrt import TensorRTEngine

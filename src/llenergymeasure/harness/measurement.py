@@ -720,7 +720,7 @@ class MeasurementHarness:
                         (prompt-batching is a llem-orchestration knob; mirrors the
                         engine plugin, which defaults batch_size to 1 when the
                         harness block or its batch_size is unset)
-        tensorrt     -> config.tensorrt.max_batch_size (its analogous field)
+        tensorrt     -> config.tensorrt.engine_params.max_batch_size (its analogous field)
         anything else (incl. vllm continuous batching) -> None
         """
         if engine_name == "transformers":
@@ -728,8 +728,9 @@ class MeasurementHarness:
             if harness_t is not None and harness_t.batch_size is not None:
                 return harness_t.batch_size
             return 1
-        if engine_name == "tensorrt" and config.tensorrt is not None:
-            return config.tensorrt.max_batch_size
+        if engine_name == "tensorrt":
+            engine_params = config.active_engine_params()
+            return engine_params.max_batch_size if engine_params is not None else None
         return None
 
     @staticmethod

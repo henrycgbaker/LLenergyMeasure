@@ -254,39 +254,13 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
 
     Returns known-invalid values for constrained fields - used by runtime
     parameter tests to verify validation rejects out-of-range inputs.
-    One invalid value per constrained field (the simplest violation).
+
+    Empty since all three engines migrated to the generated nested Config: the
+    projection carries no ``ge``/``le`` bounds yet (discovery debt - the schema
+    ships no minimum/maximum keys), so there are no constrained config fields to
+    violate. Bounds return when the next in-container re-mine emits them.
     """
-    return {
-        # VLLMEngineConfig: one known-invalid value per constrained field
-        "vllm.engine.gpu_memory_utilization": [1.5],  # ge=0.0, lt=1.0: 1.5 violates lt
-        "vllm.engine.swap_space": [-1.0],  # ge=0.0: negative violates ge
-        "vllm.engine.cpu_offload_gb": [-0.5],  # ge=0.0: negative violates ge
-        "vllm.engine.max_num_seqs": [0],  # ge=1: 0 violates ge
-        "vllm.engine.max_num_batched_tokens": [0],  # ge=1: 0 violates ge
-        "vllm.engine.max_model_len": [0],  # ge=1: 0 violates ge
-        "vllm.engine.tensor_parallel_size": [0],  # ge=1: 0 violates ge
-        "vllm.engine.pipeline_parallel_size": [0],  # ge=1: 0 violates ge
-        "vllm.engine.num_speculative_tokens": [0],  # ge=1: 0 violates ge
-        # VLLMSamplingConfig: one known-invalid value per constrained field
-        "vllm.sampling.presence_penalty": [3.0],  # ge=-2.0, le=2.0: 3.0 violates le
-        "vllm.sampling.frequency_penalty": [-3.0],  # ge=-2.0, le=2.0: -3.0 violates ge
-        # VLLMEngineConfig: constrained fields
-        "vllm.engine.offload_num_in_group": [0],  # ge=1: 0 violates ge
-        "vllm.engine.kv_cache_memory_bytes": [0],  # ge=1: 0 violates ge
-        # VLLMSamplingConfig: constrained field
-        "vllm.sampling.n": [0],  # ge=1: 0 violates ge
-        # VLLMBeamSearchConfig: constrained fields
-        "vllm.beam_search.beam_width": [0],  # ge=1: 0 violates ge
-        # TensorRTConfig: compile-time params
-        "tensorrt.max_batch_size": [0],  # ge=1: 0 violates ge
-        "tensorrt.tensor_parallel_size": [0],  # ge=1: 0 violates ge
-        "tensorrt.max_input_len": [0],  # ge=1: 0 violates ge
-        "tensorrt.max_seq_len": [0],  # ge=1: 0 violates ge
-        # TensorRTKvCacheConfig: cache params
-        "tensorrt.kv_cache_config.max_tokens": [0],  # ge=1: 0 violates ge
-        # TensorRTSamplingConfig: sampling params
-        "tensorrt.sampling.n": [0],  # ge=1: 0 violates ge
-    }
+    return {}
 
 
 def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
@@ -299,12 +273,10 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
         Dict mapping param paths to metadata. Each param includes
         ``engine_support: list[str]`` indicating which engines expose it.
     """
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        VLLMConfig,
-    )
     from llenergymeasure.config.harness import TransformersHarness
+    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
     from llenergymeasure.engines.transformers.config import Config as TransformersConfig
+    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
 
     engine_models = {
         "transformers": TransformersConfig,
@@ -622,49 +594,28 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         Dict mapping capability names to per-engine support status.
         Values are True/False for simple support, or str for notes.
     """
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        TensorRTQuantConfig,
-        VLLMEngineConfig,
-    )
     from llenergymeasure.config.harness import TransformersHarness
-    from llenergymeasure.engines.transformers.config import EngineParams, SamplingParams
+    from llenergymeasure.engines.tensorrt import config as tensorrt_config
+    from llenergymeasure.engines.transformers import config as transformers_config
+    from llenergymeasure.engines.vllm import config as vllm_config
 
-    # Get field names for each engine
-    # VLLMConfig is nested: engine fields are in VLLMEngineConfig
-    # transformers is the generated nested Config: engine_params + sampling_params,
-    # plus the HarnessConfig residual (batch_size, torch_compile, ...). Flatten all
-    # three into one capability set keyed by bare field name.
-    transformers_fields = (
-        set(EngineParams.model_fields.keys())
-        | set(SamplingParams.model_fields.keys())
-        | set(TransformersHarness.model_fields.keys())
-    )
-    vllm_fields = set(VLLMEngineConfig.model_fields.keys())
-    tensorrt_fields = set(TensorRTConfig.model_fields.keys())
+    # All three engines are the generated nested Config: flatten engine_params +
+    # sampling_params into one capability set per engine, keyed by bare field
+    # name. transformers also carries the HarnessConfig residual (batch_size,
+    # torch_compile, ...) as llem-orchestration knobs.
+    def _fields(module: Any) -> set[str]:
+        return set(module.EngineParams.model_fields) | set(module.SamplingParams.model_fields)
 
-    # Get quantization Literal values for vLLM and TensorRT
-    vllm_quant_field = VLLMEngineConfig.model_fields.get("quantization")
-    vllm_quant_options: list[str] = []
-    if vllm_quant_field and vllm_quant_field.annotation:
-        args = get_args(vllm_quant_field.annotation)
-        # Filter out None from Optional[Literal[...]]
-        for arg in args:
-            if arg is not type(None):
-                inner_args = get_args(arg)
-                if inner_args:
-                    vllm_quant_options = [a for a in inner_args if a is not None]
+    transformers_fields = _fields(transformers_config) | set(TransformersHarness.model_fields)
+    vllm_fields = _fields(vllm_config)
+    tensorrt_fields = _fields(tensorrt_config)
 
-    trt_quant_field = TensorRTQuantConfig.model_fields.get("quant_algo")
-    trt_quant_options: list[str] = []
-    if trt_quant_field and trt_quant_field.annotation:
-        args = get_args(trt_quant_field.annotation)
-        # Filter out None from Optional[Literal[...]]
-        for arg in args:
-            if arg is not type(None):
-                inner_args = get_args(arg)
-                if inner_args:
-                    trt_quant_options = [a for a in inner_args if a is not None]
+    # Native quantization is curated as a single field on each engine
+    # (vllm.quantization, tensorrt.quant_config); the generated projection no
+    # longer carries the Literal allowlist (discovery debt), so capability is
+    # field-presence, not enumerated options.
+    vllm_quant_options = "quantization" in vllm_fields
+    trt_quant_options = "quant_config" in tensorrt_fields
 
     return {
         "tensor_parallel": {
@@ -728,7 +679,7 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         },
         "speculative_decoding": {
             "transformers": "prompt_lookup_num_tokens" in transformers_fields,
-            "vllm": "speculative_model" in vllm_fields,
+            "vllm": "speculative_config" in vllm_fields,
             "tensorrt": False,
         },
         "static_kv_cache": {

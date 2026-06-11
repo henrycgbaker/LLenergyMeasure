@@ -545,24 +545,21 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    if config.engine == Engine.VLLM and config.vllm is not None:
-        tp = 1
-        pp = 1
-        if config.vllm.engine is not None:
-            tp = config.vllm.engine.tensor_parallel_size or 1
-            pp = config.vllm.engine.pipeline_parallel_size or 1
+    engine_params = config.active_engine_params()
+    if config.engine == Engine.VLLM and engine_params is not None:
+        tp = engine_params.tensor_parallel_size or 1
+        pp = engine_params.pipeline_parallel_size or 1
         total = tp * pp
         if total > 1:
             return list(range(total))
-    elif config.engine == Engine.TENSORRT and config.tensorrt is not None:
-        tp = config.tensorrt.tensor_parallel_size or 1
+    elif config.engine == Engine.TENSORRT and engine_params is not None:
+        tp = engine_params.tensor_parallel_size or 1
         if tp > 1:
             return list(range(tp))
     elif (
         config.engine == Engine.TRANSFORMERS
-        and config.transformers is not None
-        and config.transformers.engine_params is not None
-        and config.transformers.engine_params.device_map is not None
+        and engine_params is not None
+        and engine_params.device_map is not None
     ):
         # Model will shard across all visible GPUs - measure all of them.
         # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].
