@@ -30,6 +30,7 @@ human-readable format).
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -673,6 +674,154 @@ def _negative_confirms(neg: CaptureBuffers, silent_normalisations: dict[str, Any
 
 
 # ---------------------------------------------------------------------------
+# Carried-catalogue re-gate (decay alarm, design § 6 signal 1)
+# ---------------------------------------------------------------------------
+
+VERDICT_CONFIRMED = "confirmed"
+VERDICT_FAILED = "failed"
+VERDICT_INFRA_ERROR = "infra_error"
+
+REGATE_REPORT_SCHEMA_VERSION = "1.0.0"
+
+# Construction-drift exception names: when the negative probe (which is supposed
+# to construct cleanly) raises one of these, the probe no longer builds against
+# the new library - constructor drift, not a rule change. Reported as
+# infra_error so the maintainer knows to refresh the probe, not chase a rule.
+_CONSTRUCTION_DRIFT_EXC_NAMES: frozenset[str] = frozenset(
+    {"NativeTypeResolutionError", "TypeError", "ImportError", "ModuleNotFoundError"}
+)
+
+
+def _carried_verdict(
+    invariant: dict[str, Any], pos: CaptureBuffers, neg: CaptureBuffers
+) -> tuple[str, str]:
+    """Classify one carried entry against the current container.
+
+    Returns ``(verdict, reason)``. Verdict is one of
+    :data:`VERDICT_CONFIRMED` / :data:`VERDICT_FAILED` / :data:`VERDICT_INFRA_ERROR`.
+
+    - ``infra_error`` - the probe will not construct against the new library:
+      the native_type no longer resolves (``NativeTypeResolutionError``), or the
+      *negative* probe (which should build cleanly) raised a construction-drift
+      error. Constructor drift, not necessarily a rule change.
+    - ``failed`` - the probe constructs but the rule no longer holds: the
+      positive case stopped firing, the negative case now fires, or a
+      gate-soundness check (locus / coercion / template / raise) flags.
+    - ``confirmed`` - the rule still holds exactly as carried.
+    """
+    # Resolution failure on the positive probe -> infra_error outright.
+    if pos.exception_type == "NativeTypeResolutionError":
+        return VERDICT_INFRA_ERROR, f"native_type unresolved: {pos.exception_message or ''}"
+
+    # Negative probe must construct cleanly; a construction-drift error there is
+    # an infra signal (the probe is broken), not a rule failure.
+    if neg.exception_type in _CONSTRUCTION_DRIFT_EXC_NAMES:
+        return (
+            VERDICT_INFRA_ERROR,
+            f"negative probe will not construct ({neg.exception_type}): "
+            f"{neg.exception_message or ''}",
+        )
+
+    pos_silent = (
+        diff_input_vs_state(dict(invariant.get("kwargs_positive") or {}), pos.observed_state)
+        if pos.observed_state
+        else {}
+    )
+    neg_silent = (
+        diff_input_vs_state(dict(invariant.get("kwargs_negative") or {}), neg.observed_state)
+        if neg.observed_state
+        else {}
+    )
+    expected = dict(invariant.get("expected_outcome") or {})
+    pos_outcome = classify_outcome(pos, pos_silent)
+
+    if not _positive_confirms(expected, pos_outcome):
+        return VERDICT_FAILED, f"positive no longer fires (outcome={pos_outcome})"
+    if not _negative_confirms(neg, neg_silent):
+        return VERDICT_FAILED, "negative now fires"
+
+    soundness = compute_gate_soundness_divergences(invariant, pos, neg)
+    if soundness:
+        checks = sorted({str(d.check_failed) for d in soundness if d.check_failed})
+        return VERDICT_FAILED, f"gate-soundness check(s) failed: {', '.join(checks)}"
+
+    return VERDICT_CONFIRMED, ""
+
+
+def regate_carried_catalogue(
+    *,
+    engine: str,
+    carried_corpus_path: Path,
+    gpu_mode: str = "all",
+) -> dict[str, Any]:
+    """Re-gate a previous pin's carried catalogue against the current container.
+
+    Runs each carried invariant through the live gate and emits the decay-alarm
+    report (design § 6 signal 1). The report shape is stable for a later CI step
+    (chunk C7) to render as a PR comment::
+
+        {
+          "schema_version": "1.0.0",
+          "engine": "vllm",
+          "engine_version": "0.21.0",          # current (in-container) version
+          "carried_corpus": "engine_versions/vllm/v0_19_1/.../invariants.proposed.yaml",
+          "total": 41,
+          "counts": {"confirmed": 37, "failed": 2, "infra_error": 2},
+          "acceptance_rate": 0.902,            # confirmed / total
+          "entries": [
+            {"id": "...", "verdict": "confirmed", "reason": ""},
+            {"id": "...", "verdict": "failed", "reason": "positive no longer fires (...)"},
+            {"id": "...", "verdict": "infra_error", "reason": "native_type unresolved: ..."}
+          ]
+        }
+
+    ``acceptance_rate`` is ``confirmed / total`` (infra_error and failed both
+    count against it); the split lets the report separate "rule changed" from
+    "probe broke", which the design calls for explicitly.
+    """
+    corpus = _load_corpus(carried_corpus_path)
+    engine_version = _resolve_engine_version(engine)
+
+    entries: list[dict[str, str]] = []
+    counts = {VERDICT_CONFIRMED: 0, VERDICT_FAILED: 0, VERDICT_INFRA_ERROR: 0}
+
+    for invariant in corpus.get("invariants", []):
+        invariant_id = str(invariant.get("id", "<unknown>"))
+        try:
+            _case, pos, neg = _validate_invariant_with_captures(
+                engine, invariant, gpu_mode=gpu_mode
+            )
+        except ValidationError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            verdict, reason = VERDICT_INFRA_ERROR, f"{type(exc).__name__}: {exc}"
+            entries.append({"id": invariant_id, "verdict": verdict, "reason": reason})
+            counts[verdict] += 1
+            continue
+
+        if pos is None or neg is None:
+            # Skipped (hardware-dependent under this gpu_mode); not gated here.
+            continue
+
+        verdict, reason = _carried_verdict(invariant, pos, neg)
+        entries.append({"id": invariant_id, "verdict": verdict, "reason": reason})
+        counts[verdict] += 1
+
+    total = len(entries)
+    acceptance_rate = (counts[VERDICT_CONFIRMED] / total) if total else 0.0
+    return {
+        "schema_version": REGATE_REPORT_SCHEMA_VERSION,
+        "engine": engine,
+        "engine_version": engine_version,
+        "carried_corpus": str(carried_corpus_path),
+        "total": total,
+        "counts": counts,
+        "acceptance_rate": round(acceptance_rate, 4),
+        "entries": entries,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Envelope assembly
 # ---------------------------------------------------------------------------
 
@@ -850,6 +999,45 @@ def _resolve_engine_version(engine: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _run_carried_mode(args: argparse.Namespace) -> int:
+    """Run the carried-catalogue re-gate and emit the JSON report. Returns exit code."""
+    try:
+        report = regate_carried_catalogue(
+            engine=args.engine,
+            carried_corpus_path=args.carried,
+            gpu_mode=args.gpu_cases,
+        )
+    except ValidationCorpusError as exc:
+        print(f"[{args.engine}] carried corpus error: {exc}", file=sys.stderr)
+        return 2
+    except ValidationEngineNotImportable as exc:
+        print(f"[{args.engine}] engine not importable: {exc}", file=sys.stderr)
+        return 2
+    except ValidationError as exc:
+        print(f"[{args.engine}] validation error: {exc}", file=sys.stderr)
+        return 2
+
+    payload = json.dumps(report, indent=2)
+    if args.regate_out is not None:
+        args.regate_out.parent.mkdir(parents=True, exist_ok=True)
+        args.regate_out.write_text(payload + "\n")
+        print(f"[{args.engine}] wrote re-gate report {args.regate_out}", file=sys.stderr)
+    else:
+        print(payload)
+
+    counts = report["counts"]
+    print(
+        f"[{args.engine}] carried re-gate: {report['total']} entries, "
+        f"acceptance {report['acceptance_rate']:.1%} "
+        f"(confirmed={counts[VERDICT_CONFIRMED]} "
+        f"failed={counts[VERDICT_FAILED]} infra_error={counts[VERDICT_INFRA_ERROR]})",
+        file=sys.stderr,
+    )
+    # The decay alarm is informational (design § 6: no auto-blocking thresholds
+    # in v0.10.0); always exit 0 so the CI step that consumes the report decides.
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -861,14 +1049,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--corpus",
         type=Path,
-        required=True,
-        help="Path to the YAML corpus file.",
+        default=None,
+        help="Path to the YAML corpus file (required unless --carried is given).",
     )
     parser.add_argument(
         "--out",
         type=Path,
-        required=True,
-        help="Path to write the validated YAML envelope.",
+        default=None,
+        help="Path to write the validated YAML envelope (required unless --carried is given).",
+    )
+    parser.add_argument(
+        "--carried",
+        type=Path,
+        default=None,
+        help=(
+            "Carried-catalogue re-gate mode (decay alarm). Path to a PREVIOUS pin's "
+            "invariant corpus (proposed shape, with kwargs). Runs it against the CURRENT "
+            "in-container engine and emits a JSON verdict report instead of the normal "
+            "validation envelope. Mutually exclusive with --corpus/--out."
+        ),
+    )
+    parser.add_argument(
+        "--regate-out",
+        type=Path,
+        default=None,
+        help="Path to write the carried re-gate JSON report (default: stdout).",
     )
     parser.add_argument(
         "--gpu-cases",
@@ -909,6 +1114,16 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+
+    # Carried-catalogue re-gate mode (decay alarm) takes a different output path
+    # entirely - a JSON verdict report, not the validation envelope.
+    if args.carried is not None:
+        if args.corpus is not None or args.out is not None:
+            parser.error("--carried is mutually exclusive with --corpus/--out")
+        return _run_carried_mode(args)
+
+    if args.corpus is None or args.out is None:
+        parser.error("--corpus and --out are required unless --carried is given")
 
     try:
         _envelope, divergences = validate_engine(

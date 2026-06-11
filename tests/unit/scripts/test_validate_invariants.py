@@ -921,3 +921,189 @@ class TestGateSoundnessLocusAndCoercion:
         assert all(
             d.check_failed != validate_invariants.CHECK_TYPE_COERCION_ARTIFACT for d in divergences
         )
+
+
+# ---------------------------------------------------------------------------
+# Carried-catalogue re-gate (decay alarm, design § 6 signal 1) - chunk C4
+# ---------------------------------------------------------------------------
+
+
+def _carried_corpus(tmp_path: Path, invariants: list[dict[str, Any]]) -> Path:
+    """Write a carried (proposed-shape) corpus to a temp file and return its path."""
+    path = tmp_path / "carried.proposed.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0.0",
+                "engine": "transformers",
+                "engine_version": "old-ver",
+                "mined_at": "2026-01-01T00:00:00Z",
+                "invariants": invariants,
+            },
+            sort_keys=False,
+        )
+    )
+    return path
+
+
+def _confirmed_invariant() -> dict[str, Any]:
+    return {
+        "id": "still_holds",
+        "severity": "error",
+        "native_type": "test.raises",
+        "match": {"fields": {"e.a": 1}},
+        "kwargs_positive": {"a": 1},
+        "kwargs_negative": {"a": 0},
+        "expected_outcome": {"outcome": "error"},
+        "message_template": "`a` must differ",
+    }
+
+
+class TestCarriedRegate:
+    """Stub-engine fixtures proving the three verdict classes and report shape."""
+
+    @pytest.fixture
+    def patched_engine(self, monkeypatch: pytest.MonkeyPatch):
+        """Synthetic runner + pinned engine version for deterministic re-gate."""
+
+        def synthetic_runner(
+            native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
+        ) -> CaptureBuffers:
+            if native_type == "test.raises":
+                # Positive (a=1) raises citing `a`; negative (a=0) constructs.
+                if kwargs.get("a"):
+                    return run_case(
+                        lambda: (_ for _ in ()).throw(ValueError("`a` must differ from 1"))
+                    )
+                return run_case(lambda: _DataclassConfig())
+            if native_type == "test.no_longer_fires":
+                # Rule decayed: positive no longer raises (constructs cleanly).
+                return run_case(lambda: _DataclassConfig())
+            if native_type == "test.unresolvable":
+                # Constructor drift: native_type will not resolve.
+                from scripts._engine_constructors import NativeTypeResolutionError
+
+                return run_case(
+                    lambda: (_ for _ in ()).throw(
+                        NativeTypeResolutionError("class vanished post-refactor")
+                    )
+                )
+            return run_case(lambda: _DataclassConfig(**kwargs))
+
+        monkeypatch.setitem(validate_invariants._ENGINE_RUNNERS, "transformers", synthetic_runner)
+        monkeypatch.setattr(validate_invariants, "_resolve_engine_version", lambda _e: "new-ver")
+        return synthetic_runner
+
+    def test_confirmed_verdict(self, tmp_path: Path, patched_engine: Any) -> None:
+        corpus = _carried_corpus(tmp_path, [_confirmed_invariant()])
+        report = validate_invariants.regate_carried_catalogue(
+            engine="transformers", carried_corpus_path=corpus
+        )
+        assert report["engine_version"] == "new-ver"
+        assert report["total"] == 1
+        assert report["counts"][validate_invariants.VERDICT_CONFIRMED] == 1
+        assert report["acceptance_rate"] == 1.0
+        assert report["entries"][0]["verdict"] == validate_invariants.VERDICT_CONFIRMED
+
+    def test_failed_verdict_rule_decayed(self, tmp_path: Path, patched_engine: Any) -> None:
+        decayed = {
+            "id": "decayed",
+            "severity": "error",
+            "native_type": "test.no_longer_fires",
+            "match": {"fields": {"e.a": 1}},
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "expected_outcome": {"outcome": "error"},
+            "message_template": "`a` must differ",
+        }
+        corpus = _carried_corpus(tmp_path, [decayed])
+        report = validate_invariants.regate_carried_catalogue(
+            engine="transformers", carried_corpus_path=corpus
+        )
+        assert report["counts"][validate_invariants.VERDICT_FAILED] == 1
+        assert report["entries"][0]["verdict"] == validate_invariants.VERDICT_FAILED
+        assert "no longer fires" in report["entries"][0]["reason"]
+
+    def test_infra_error_verdict_unresolvable(self, tmp_path: Path, patched_engine: Any) -> None:
+        unresolved = {
+            "id": "gone",
+            "severity": "error",
+            "native_type": "test.unresolvable",
+            "match": {"fields": {"e.a": 1}},
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "expected_outcome": {"outcome": "error"},
+            "message_template": "`a` must differ",
+        }
+        corpus = _carried_corpus(tmp_path, [unresolved])
+        report = validate_invariants.regate_carried_catalogue(
+            engine="transformers", carried_corpus_path=corpus
+        )
+        assert report["counts"][validate_invariants.VERDICT_INFRA_ERROR] == 1
+        assert report["entries"][0]["verdict"] == validate_invariants.VERDICT_INFRA_ERROR
+        assert "unresolved" in report["entries"][0]["reason"]
+
+    def test_mixed_report_shape_and_acceptance_rate(
+        self, tmp_path: Path, patched_engine: Any
+    ) -> None:
+        confirmed = _confirmed_invariant()
+        decayed = {**_confirmed_invariant(), "id": "decayed", "native_type": "test.no_longer_fires"}
+        gone = {**_confirmed_invariant(), "id": "gone", "native_type": "test.unresolvable"}
+        corpus = _carried_corpus(tmp_path, [confirmed, decayed, gone])
+        report = validate_invariants.regate_carried_catalogue(
+            engine="transformers", carried_corpus_path=corpus
+        )
+        # Stable report shape (consumed by chunk C7's PR comment step).
+        assert set(report) == {
+            "schema_version",
+            "engine",
+            "engine_version",
+            "carried_corpus",
+            "total",
+            "counts",
+            "acceptance_rate",
+            "entries",
+        }
+        assert report["total"] == 3
+        assert report["counts"] == {
+            validate_invariants.VERDICT_CONFIRMED: 1,
+            validate_invariants.VERDICT_FAILED: 1,
+            validate_invariants.VERDICT_INFRA_ERROR: 1,
+        }
+        # acceptance_rate = confirmed / total; infra_error + failed count against it.
+        assert report["acceptance_rate"] == round(1 / 3, 4)
+        assert all(set(e) == {"id", "verdict", "reason"} for e in report["entries"])
+
+    def test_cli_carried_mode_writes_report(self, tmp_path: Path, patched_engine: Any) -> None:
+        corpus = _carried_corpus(tmp_path, [_confirmed_invariant()])
+        out = tmp_path / "regate.json"
+        exit_code = validate_invariants.main(
+            [
+                "--engine",
+                "transformers",
+                "--carried",
+                str(corpus),
+                "--regate-out",
+                str(out),
+            ]
+        )
+        assert exit_code == 0
+        assert out.exists()
+        written = __import__("json").loads(out.read_text())
+        assert written["counts"]["confirmed"] == 1
+
+    def test_cli_carried_rejects_corpus_combo(self, tmp_path: Path) -> None:
+        corpus = _carried_corpus(tmp_path, [])
+        with pytest.raises(SystemExit):
+            validate_invariants.main(
+                [
+                    "--engine",
+                    "transformers",
+                    "--carried",
+                    str(corpus),
+                    "--corpus",
+                    str(corpus),
+                    "--out",
+                    str(tmp_path / "o.yaml"),
+                ]
+            )
