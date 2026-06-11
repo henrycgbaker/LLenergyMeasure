@@ -37,20 +37,21 @@ on:
       - 'engine_versions/**'
       - 'docker/Dockerfile.*'
       - 'scripts/engine_producers/**'
-      - 'scripts/validate_invariants.py'
-      - 'scripts/_invariant_validation_common.py'
-      - 'scripts/refresh_invariant_rules.sh'
+      - 'scripts/validate_rules.py'
+      - 'scripts/_rules_validation_common.py'
+      - 'scripts/refresh_rules.sh'
       - 'scripts/_drift.py'
-      - 'scripts/diff_engine_invariants.py'
+      - 'scripts/diff_engine_rules.py'
+      - 'scripts/diff_engine_surface.py'
       - 'scripts/diff_discovered_schemas.py'
-      - 'scripts/generate_invariants_doc.py'
+      - 'scripts/generate_rules_doc.py'
       - 'scripts/generate_curation_doc.py'
       - 'scripts/generate_schema_doc.py'
       - 'src/llenergymeasure/engines/**'
       - 'scripts/ci/upsert_pr_comment.sh'
       - 'pyproject.toml'
       - '.github/workflows/engine-pipeline.yml'
-      - '.github/workflows/_engine-invariants-cell.yml'
+      - '.github/workflows/_engine-rules-cell.yml'
       - '.github/workflows/_engine-schemas-cell.yml'
       - '.github/actions/**'
   schedule:
@@ -142,12 +143,12 @@ jobs:
               - 'scripts/engine_producers/transformers_*.py'
               - 'scripts/engine_producers/_*.py'
               - 'scripts/engine_producers/build_corpus.py'
-              - 'scripts/validate_invariants.py'
-              - 'scripts/_invariant_validation_common.py'
-              - 'scripts/refresh_invariant_rules.sh'
-              - 'src/llenergymeasure/engines/transformers/invariants.*.yaml'
+              - 'scripts/validate_rules.py'
+              - 'scripts/_rules_validation_common.py'
+              - 'scripts/refresh_rules.sh'
+              - 'src/llenergymeasure/engines/transformers/rules.*.yaml'
               - '.github/workflows/engine-pipeline.yml'
-              - '.github/workflows/_engine-invariants-cell.yml'
+              - '.github/workflows/_engine-rules-cell.yml'
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             invariants_vllm:
@@ -155,12 +156,12 @@ jobs:
               - 'scripts/engine_producers/vllm_*.py'
               - 'scripts/engine_producers/_*.py'
               - 'scripts/engine_producers/build_corpus.py'
-              - 'scripts/validate_invariants.py'
-              - 'scripts/_invariant_validation_common.py'
-              - 'scripts/refresh_invariant_rules.sh'
-              - 'src/llenergymeasure/engines/vllm/invariants.*.yaml'
+              - 'scripts/validate_rules.py'
+              - 'scripts/_rules_validation_common.py'
+              - 'scripts/refresh_rules.sh'
+              - 'src/llenergymeasure/engines/vllm/rules.*.yaml'
               - '.github/workflows/engine-pipeline.yml'
-              - '.github/workflows/_engine-invariants-cell.yml'
+              - '.github/workflows/_engine-rules-cell.yml'
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             invariants_tensorrt:
@@ -168,12 +169,12 @@ jobs:
               - 'scripts/engine_producers/tensorrt_*.py'
               - 'scripts/engine_producers/_*.py'
               - 'scripts/engine_producers/build_corpus.py'
-              - 'scripts/validate_invariants.py'
-              - 'scripts/_invariant_validation_common.py'
-              - 'scripts/refresh_invariant_rules.sh'
-              - 'src/llenergymeasure/engines/tensorrt/invariants.*.yaml'
+              - 'scripts/validate_rules.py'
+              - 'scripts/_rules_validation_common.py'
+              - 'scripts/refresh_rules.sh'
+              - 'src/llenergymeasure/engines/tensorrt/rules.*.yaml'
               - '.github/workflows/engine-pipeline.yml'
-              - '.github/workflows/_engine-invariants-cell.yml'
+              - '.github/workflows/_engine-rules-cell.yml'
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             schemas_transformers:
@@ -346,13 +347,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   invariants-transformers:
-    name: update invariants
+    name: update rules
     needs: [filter, build-transformers]
     if: |
       always()
       && needs.filter.outputs.invariants_transformers == 'true'
       && (needs.build-transformers.result == 'success' || needs.build-transformers.result == 'skipped')
-    uses: ./.github/workflows/_engine-invariants-cell.yml
+    uses: ./.github/workflows/_engine-rules-cell.yml
     with:
       engine: transformers
       runner: ubuntu-latest
@@ -362,7 +363,7 @@ jobs:
     secrets: inherit
 
   invariants-others:
-    name: update invariants
+    name: update rules
     needs: filter
     if: |
       always()
@@ -371,7 +372,7 @@ jobs:
       fail-fast: false
       matrix:
         cell: ${{ fromJSON(needs.filter.outputs.invariants_others_cells) }}
-    uses: ./.github/workflows/_engine-invariants-cell.yml
+    uses: ./.github/workflows/_engine-rules-cell.yml
     with:
       engine: ${{ matrix.cell.engine }}
       runner: ${{ matrix.cell.runner }}

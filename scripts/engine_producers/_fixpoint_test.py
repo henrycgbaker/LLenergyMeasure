@@ -364,7 +364,7 @@ def fixpoint_test_corpus(
 # as "no constraint". The structural fixpoint below pins those checks in
 # place: it synthesises one malformed invariant per check and asserts the gate
 # records exactly the matching divergence. If any of the three checks is
-# removed from ``validate_invariants.compute_gate_soundness_divergences``, the
+# removed from ``validate_rules.compute_gate_soundness_divergences``, the
 # corresponding fixpoint case fails loudly.
 
 
@@ -381,7 +381,7 @@ class GateSoundnessRegressionError(FixpointError):
             f"surface a divergence on a malformed invariant designed to trip it. "
             f"Observed divergences: {observed_divergences!r}. "
             f"This indicates the gate has been weakened - restore the check "
-            f"in scripts/validate_invariants.compute_gate_soundness_divergences."
+            f"in scripts/validate_rules.compute_gate_soundness_divergences."
         )
         self.check_name = check_name
         self.observed_divergences = observed_divergences
@@ -396,10 +396,10 @@ def synthesise_malformed_invariant_cases() -> list[dict[str, Any]]:
     """
     # Imported here to avoid a circular path dependency:
     # ``_fixpoint_test`` is loaded eagerly by ``tests/integration/...``, and
-    # ``scripts._invariant_validation_common`` is heavy. The deferred import keeps
+    # ``scripts._rules_validation_common`` is heavy. The deferred import keeps
     # the module load cheap for the corpus-shuffle path.
-    from scripts._invariant_validation_common import CaptureBuffers
-    from scripts.validate_invariants import (
+    from scripts._rules_validation_common import CaptureBuffers
+    from scripts.validate_rules import (
         CHECK_MESSAGE_TEMPLATE_MATCH,
         CHECK_NEGATIVE_DOES_NOT_RAISE,
         CHECK_POSITIVE_RAISES,
@@ -470,11 +470,11 @@ def assert_gate_soundness_fixpoint() -> None:
     """Assert the validation-CI gate's three soundness checks are all wired.
 
     Synthesises one malformed invariant per check, runs each through
-    :func:`scripts.validate_invariants.compute_gate_soundness_divergences`, and
+    :func:`scripts.validate_rules.compute_gate_soundness_divergences`, and
     raises :class:`GateSoundnessRegressionError` if any check's divergence
     is missing.
     """
-    from scripts.validate_invariants import compute_gate_soundness_divergences
+    from scripts.validate_rules import compute_gate_soundness_divergences
 
     for case in synthesise_malformed_invariant_cases():
         divergences = compute_gate_soundness_divergences(

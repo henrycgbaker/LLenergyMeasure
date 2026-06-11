@@ -114,7 +114,7 @@ flowchart TB
     pipeline --> vllm["vLLM:<br/>engine-pipeline.yml runs inside llem:vllm-VER<br/>on self-hosted GPU runner (Docker isolates uv.lock)"]
     pipeline --> trt["TRT-LLM:<br/>engine-pipeline.yml runs inside llem:tensorrt-VER<br/>on self-hosted GPU runner (CUDA-aware import)"]
 
-    tf & vllm & trt --> steps["Per-engine step sequence:<br/>1. Probe - scripts._drift checks landmarks<br/>2. Mine - build_corpus.py writes proposed.yaml<br/>3. Validate-replay - validate_invariants.py replays every rule<br/>4. Doc-gen - generate_invariants_doc.py refreshes docs/reference/engines/invariants-&lt;engine&gt;.md<br/>5. Atomic writeback - one bot commit covers all artefacts"]
+    tf & vllm & trt --> steps["Per-engine step sequence:<br/>1. Probe - scripts._drift checks landmarks<br/>2. Mine - build_corpus.py writes proposed.yaml<br/>3. Validate-replay - validate_rules.py replays every rule<br/>4. Doc-gen - generate_rules_doc.py refreshes docs/reference/engines/invariants-&lt;engine&gt;.md<br/>5. Atomic writeback - one bot commit covers all artefacts"]
 
     steps --> green[CI must be green before merge]
     green --> ship[Package ships with updated corpus]
@@ -184,8 +184,8 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
       └── build_corpus.py         Merge + dedup + validation-gate orchestration
 
   scripts/
-  ├── validate_invariants.py             Replay invariants against live library; write validated YAML
-  └── _invariant_validation_common.py Shared capture + comparison utilities
+  ├── validate_rules.py             Replay invariants against live library; write validated YAML
+  └── _rules_validation_common.py Shared capture + comparison utilities
 
   src/llenergymeasure/engines/
   └── {engine}/                        Per-engine sub-package, ships with the wheel

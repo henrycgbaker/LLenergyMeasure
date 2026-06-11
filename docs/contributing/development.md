@@ -64,7 +64,7 @@ for libnvinfer. See "Runtime-deps priming" below for the full mechanism.
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two - they need a CUDA device) for the other engines. The automated
 path is the `engine-pipeline.yml` orchestrator in `.github/workflows/`, which
-fans out per-engine cells (the `_engine-invariants-cell.yml` and
+fans out per-engine cells (the `_engine-rules-cell.yml` and
 `_engine-schemas-cell.yml` reusables) plus an inline `build-transformers`
 job for the first-party transformers image. See "CI pipeline ordering"
 below for the full sequence and

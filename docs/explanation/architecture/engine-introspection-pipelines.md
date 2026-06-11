@@ -221,7 +221,7 @@ flowchart TD
     lift[LIFT MODULES<br/>_pydantic_lift / _msgspec_lift / _dataclass_lift]
     staging[(staging files<br/>src/llenergymeasure/engines/_staging/)]
     build[build_corpus.py<br/>merge + dedup + fingerprint]
-    replay[validate_invariants.py<br/>replay against live library]
+    replay[validate_rules.py<br/>replay against live library]
     confirmed[(confirmed rules<br/>engines/&lt;e&gt;/rules.proposed.yaml<br/>engines/&lt;e&gt;/rules.validated.yaml)]
     quarantined[(quarantined rules<br/>engines/&lt;e&gt;/_staging/_failed_*.yaml)]
 
@@ -242,7 +242,7 @@ Three producers, then merge, then replay against the live library:
   metadata (Pydantic `FieldInfo`, msgspec `Meta`, stdlib `Literal`).
 
 Their outputs land in staging, then `build_corpus.py` merges and
-deduplicates by fingerprint. `validate_invariants.py` replays every
+deduplicates by fingerprint. `validate_rules.py` replays every
 rule against the live library inside the engine container; confirmed
 rules ship in the validated YAML, quarantined rules land in
 `_staging/_failed_*.yaml`.
@@ -430,7 +430,7 @@ flowchart TD
 - `negative_does_not_raise` - running with `kwargs_negative` must
   produce a `CaptureBuffers` with `exception_type is None`.
 
-Exit codes from `validate_invariants.py`:
+Exit codes from `validate_rules.py`:
 
 - `0` - all rules confirmed.
 - `1` - one or more divergences; validated YAML still written for

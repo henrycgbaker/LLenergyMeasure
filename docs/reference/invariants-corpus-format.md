@@ -28,7 +28,7 @@ see [parameter discovery](/explanation/architecture/parameter-discovery).
 ```
 
 The two corpus files form a lifecycle pair: the miner pipeline writes the
-proposed YAML, then `validate_invariants.py` replays each invariant inside the
+proposed YAML, then `validate_rules.py` replays each invariant inside the
 engine's Docker image and writes the validated YAML. The runtime loader
 overlays validated observations onto the proposed corpus, so consumers see
 CI-confirmed behaviour where available and the declared shape elsewhere.

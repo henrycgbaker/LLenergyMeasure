@@ -1,4 +1,4 @@
-name: Engine invariants cell
+name: Engine rules cell
 
 # Reusable workflow invoked from engine-pipeline.yml's matrix fan-out.
 # Runs probe + mine + validate for ONE engine, parameterised by inputs.
@@ -181,9 +181,9 @@ jobs:
             "scripts/engine_producers/_msgspec_lift.py"
             "scripts/engine_producers/_dataclass_lift.py"
             "scripts/engine_producers/_fixpoint_test.py"
-            "scripts/validate_invariants.py"
-            "scripts/_invariant_validation_common.py"
-            "scripts/refresh_invariant_rules.sh"
+            "scripts/validate_rules.py"
+            "scripts/_rules_validation_common.py"
+            "scripts/refresh_rules.sh"
           )
           ENGINE_PATHS=()
           case "$ENGINE" in
@@ -334,7 +334,7 @@ jobs:
             "${CMD_PREFIX[@]}" -c "
               set -euo pipefail
               python3 -m scripts.engine_producers.build_corpus --engine ${ENGINE}
-              python3 scripts/validate_invariants.py \
+              python3 scripts/validate_rules.py \
                 --engine ${ENGINE} \
                 --corpus '${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml' \
                 --out '${ENGINES_DIR}/${ENGINE}/rules.validated.yaml' \
@@ -354,14 +354,14 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
-      - name: Regenerate invariants digest
+      - name: Regenerate rules digest
         if: steps.probe.outputs.verdict == 'pass'
         env:
           ENGINE: ${{ inputs.engine }}
         run: |
-          uv run python scripts/generate_invariants_doc.py \
+          uv run python scripts/generate_rules_doc.py \
             --engine "${ENGINE}" \
-            --out "docs/user/generated/invariants-${ENGINE}.md"
+            --out "docs/reference/engines/invariants-${ENGINE}.md"
 
       - name: Classify diff (proposed + validated)
         if: steps.probe.outputs.verdict == 'pass'
@@ -370,7 +370,7 @@ jobs:
           ENGINE: ${{ inputs.engine }}
         run: |
           set +e
-          uv run python scripts/diff_engine_invariants.py \
+          uv run python scripts/diff_engine_rules.py \
             "/tmp/engine-invariants-diff/${ENGINE}.validated.old.yaml" \
             "${ENGINES_DIR}/${ENGINE}/rules.validated.yaml" \
             --out "/tmp/engine-invariants-diff/${ENGINE}.validated.md" \
@@ -431,7 +431,7 @@ jobs:
           # mirror of the canonical mining outputs. Gated on the engine's
           # versioned archive being present (i.e. the per-engine vendor PR
           # has landed). When an engine is not yet vendored at this version,
-          # the archive mirror is a no-op — the producer modules still use
+          # the archive mirror is a no-op - the producer modules still use
           # hardcoded LANDMARKS until the engine's vendor PR refactors them.
           # The per-engine __init__.py is the canonical "engine vendored at
           # this version" marker.
@@ -516,7 +516,7 @@ jobs:
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/rules.validated.yaml
             engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/rules.proposed.yaml
             engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/rules.validated.yaml
-            docs/user/generated/invariants-${{ inputs.engine }}.md
+            docs/reference/engines/invariants-${{ inputs.engine }}.md
           # ``warn`` rather than ``error``: canonical paths always exist by
           # the time this step runs (mining produced them), but the archive
           # mirror is gated on the engine being vendored at this version.

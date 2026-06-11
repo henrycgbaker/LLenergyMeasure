@@ -41,7 +41,7 @@ scripts/engine_producers/
 ├── {engine}_dynamic_invariant_miner.py       Shim (when applicable)
 ├── {engine}_schema_introspector.py           Shim
 ├── build_corpus.py                   Orchestration: merge + dedup + validate
-└── validate_invariants.py            Replays each rule against the live library
+└── validate_rules.py            Replays each rule against the live library
 
 engine_versions/{engine}/current.yaml          SSOT for library version (Renovate-writable input only)
 engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer modules
@@ -51,7 +51,7 @@ engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer mod
 ```
 
 The two committed YAML files form a lifecycle pair: the miners write
-the proposed YAML, then `validate_invariants.py` replays each rule
+the proposed YAML, then `validate_rules.py` replays each rule
 inside the engine's Docker image and writes the validated YAML. The
 runtime loader overlays validated observations onto the proposed
 corpus, so consumers see CI-confirmed behaviour where available and the

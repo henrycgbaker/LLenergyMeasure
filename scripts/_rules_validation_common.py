@@ -1,7 +1,7 @@
 """Shared utilities for the validate-invariants pipeline.
 
-Factored out of :mod:`scripts.validate_invariants` so that per-engine native-type
-runners can live here while the CLI + loop driver stays in ``validate_invariants``.
+Factored out of :mod:`scripts.validate_rules` so that per-engine native-type
+runners can live here while the CLI + loop driver stays in ``validate_rules``.
 
 This module is engine-agnostic. Per-engine behaviour lives behind
 :func:`get_native_type_runner`, which dispatches on engine name.

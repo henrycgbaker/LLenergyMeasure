@@ -183,7 +183,7 @@ jobs:
           fi
           PATHS=("${BASE_PATHS[@]}" "${ENGINE_PATHS[@]}")
           # Exclude bot writeback commits from anchor calculation. See
-          # _engine-invariants-cell.yml for the full rationale; same loop-
+          # _engine-rules-cell.yml for the full rationale; same loop-
           # breaking pattern applies here.
           DATE=$(git log -1 --format=%aI \
             --invert-grep --grep='^chore(bot): writeback' \

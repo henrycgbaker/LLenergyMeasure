@@ -4,7 +4,7 @@
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-check test-runtime-list test-runtime-docker
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
-.PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
+.PHONY: discover-schema discover-schemas-all refresh-rules refresh-rules-all
 .PHONY: package-check
 .PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
@@ -144,7 +144,7 @@ docs-all: ## Regenerate every SSOT-derived doc (CLI, config, invariants, schema,
 	uv run python scripts/generate_config_docs.py
 	uv run python scripts/generate_cli_reference.py
 	@for engine in transformers vllm tensorrt; do \
-		uv run python scripts/generate_invariants_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md; \
+		uv run python scripts/generate_rules_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md; \
 		uv run python scripts/generate_schema_doc.py --engine $$engine --out docs/reference/engines/schema-$$engine.md; \
 	done
 	uv run python scripts/generate_curation_doc.py
@@ -156,7 +156,7 @@ docs-check: ## Verify generated docs are up to date (used by CI)
 	@uv run python scripts/generate_cli_reference.py > /dev/null
 	@uv run python scripts/generate_invalid_combos_doc.py > /dev/null
 	@for engine in transformers vllm tensorrt; do \
-		uv run python scripts/generate_invariants_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md > /dev/null; \
+		uv run python scripts/generate_rules_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md > /dev/null; \
 		uv run python scripts/generate_schema_doc.py --engine $$engine --out docs/reference/engines/schema-$$engine.md > /dev/null; \
 	done
 	@uv run python scripts/generate_curation_doc.py > /dev/null
@@ -177,14 +177,14 @@ discover-schemas-all: ## Rediscover all three engine schemas in sequence
 
 # Mine engine invariants. Sibling of discover-schema; both halves of the engine
 # knowledge SSOT pipeline.
-refresh-invariants: ## Mine invariants for one engine (ENGINE=vllm|tensorrt|transformers)
-	@test -n "$(ENGINE)" || (echo "Usage: make refresh-invariants ENGINE={vllm|tensorrt|transformers}" && exit 1)
-	./scripts/refresh_invariants.sh $(ENGINE)
+refresh-rules: ## Mine invariants for one engine (ENGINE=vllm|tensorrt|transformers)
+	@test -n "$(ENGINE)" || (echo "Usage: make refresh-rules ENGINE={vllm|tensorrt|transformers}" && exit 1)
+	./scripts/refresh_rules.sh $(ENGINE)
 
-refresh-invariants-all: ## Mine invariants for all three engines in sequence
-	./scripts/refresh_invariants.sh vllm
-	./scripts/refresh_invariants.sh tensorrt
-	./scripts/refresh_invariants.sh transformers
+refresh-rules-all: ## Mine invariants for all three engines in sequence
+	./scripts/refresh_rules.sh vllm
+	./scripts/refresh_rules.sh tensorrt
+	./scripts/refresh_rules.sh transformers
 
 # Build wheel + validate package install + check version consistency
 package-check: ## Build wheel, validate install, and check pyproject/_version sync

@@ -12,7 +12,7 @@ The repo uses exactly three workflow patterns, picked per-concern:
 | Pattern | When | Examples |
 |---|---|---|
 | **Orchestrator** | dependency-graph + fan-out (engine pipeline) | `engine-pipeline.yml` |
-| **Reusable workflow** (`workflow_call` only) | per-target body invoked by an orchestrator | `_engine-invariants-cell.yml`, `_engine-schemas-cell.yml`, `docker-publish.yml` |
+| **Reusable workflow** (`workflow_call` only) | per-target body invoked by an orchestrator | `_engine-rules-cell.yml`, `_engine-schemas-cell.yml`, `docker-publish.yml` |
 | **Monolithic-direct** | single concern, no fan-out | `ci.yml`, `security.yml`, `release.yml`, `gpu-ci.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml` |
 
 Reusable workflows are file-prefixed `_` to signal "callable only, not a
@@ -99,7 +99,7 @@ flowchart LR
 
 ### Reusable cell workflow contract
 
-Both `_engine-invariants-cell.yml` and `_engine-schemas-cell.yml` accept
+Both `_engine-rules-cell.yml` and `_engine-schemas-cell.yml` accept
 the same input signature:
 
 | Input | Type | Description |
@@ -264,7 +264,7 @@ combined with dedup creates stale-comment edge cases.
 ### Workflow `name:` field
 
 - Imperative or noun phrase: `Engine pipeline`, `Build engine image`.
-- Reusable workflows: descriptive - `Engine invariants cell`,
+- Reusable workflows: descriptive - `Engine rules cell`,
   `Engine schemas cell`.
 - Single-word workflows: bare noun, Title-Case: `CI`, `GPU CI`, `Security`.
 
@@ -311,13 +311,13 @@ pipeline-kind:
 gh run list --workflow="Engine pipeline" --limit 20
 
 # Recent invariants-cell runs across all engines:
-gh run list --workflow="Engine invariants cell" --limit 20
+gh run list --workflow="Engine rules cell" --limit 20
 
 # Schemas runs:
 gh run list --workflow="Engine schemas cell" --limit 20
 
 # Specific engine cell of a specific pipeline (jq):
-gh run list --workflow="Engine invariants cell" --json databaseId,headBranch,jobs \
+gh run list --workflow="Engine rules cell" --json databaseId,headBranch,jobs \
   --jq '.[] | select(.jobs[].name | contains("vllm"))'
 ```
 

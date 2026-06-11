@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Re-validate an invariants YAML envelope by running scripts/validate_invariants.py
+# Re-validate an invariants YAML envelope by running scripts/validate_rules.py
 # inside the appropriate Docker image.
 #
-# Usage: ./scripts/refresh_invariants.sh {transformers|vllm|tensorrt}
+# Usage: ./scripts/refresh_rules.sh {transformers|vllm|tensorrt}
 #
 # Mirror of scripts/refresh_discovered_schemas.sh - same idioms (Dockerfile ARG
 # lookup, image build fallback, diff-only-no-commit output) - different
@@ -21,9 +21,9 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/refresh_invariants.sh {transformers|vllm|tensorrt}
+Usage: ./scripts/refresh_rules.sh {transformers|vllm|tensorrt}
 
-Builds or pulls the engine's Docker image, runs scripts/validate_invariants.py inside
+Builds or pulls the engine's Docker image, runs scripts/validate_rules.py inside
 it against the tracked corpus, writes the YAML envelope, and prints the git
 diff. Does NOT commit.
 EOF
@@ -75,14 +75,14 @@ if [[ ! -f "$REPO_ROOT/$CORPUS_REL" ]]; then
     exit 1
 fi
 
-echo "[$ENGINE] Running validate_invariants.py inside $IMAGE..." >&2
+echo "[$ENGINE] Running validate_rules.py inside $IMAGE..." >&2
 docker run --rm \
     --user "$(id -u):$(id -g)" \
     --entrypoint python3 \
     -v "$REPO_ROOT:/repo" \
     -w /repo \
     "$IMAGE" \
-    scripts/validate_invariants.py \
+    scripts/validate_rules.py \
     --engine "$ENGINE" \
     --corpus "/repo/$CORPUS_REL" \
     --out "/repo/$OUTPUT_REL" \

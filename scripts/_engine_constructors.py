@@ -22,7 +22,7 @@ ordered list of candidate submodules to probe when the bare name misses.
 
 This module deliberately holds NO construction kwargs logic (required-field
 placeholders, strictness routing) - that stays in the per-engine runners in
-:mod:`scripts.validate_invariants`. This module only answers "given this
+:mod:`scripts.validate_rules`. This module only answers "given this
 ``native_type`` string, what class object does the live library expose?".
 """
 
@@ -70,7 +70,7 @@ class EngineResolution:
 #
 # tensorrt: the llmapi args classes live deep under
 # ``tensorrt_llm.llmapi.llm_args``. The existing short-name overrides
-# (previously ``_TRTLLM_NATIVE_TYPE_MAP`` in validate_invariants) move here so
+# (previously ``_TRTLLM_NATIVE_TYPE_MAP`` in validate_rules) move here so
 # all native-type resolution lives in one table.
 #
 # transformers: monolithic - classes resolve off the package root, so no

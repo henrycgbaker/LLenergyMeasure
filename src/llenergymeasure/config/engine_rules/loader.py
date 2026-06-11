@@ -15,7 +15,7 @@ per-instance caching for test isolation, same lazy load pattern.
 Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
   The proposed YAML carries each invariant's declared ``expected_outcome``. The
   ``engine-invariants`` (validation gate) CI pipeline (see
-  ``scripts/validate_invariants.py``) runs every invariant through the real library
+  ``scripts/validate_rules.py``) runs every invariant through the real library
   and emits ``src/llenergymeasure/engines/{engine}/rules.validated.yaml``
   - this YAML captures observed outcomes. When present, the loader overlays
   the validated observations onto the corpus so downstream consumers see
@@ -647,7 +647,7 @@ class EngineRulesLoader:
          the maintainer-seeded source of truth; always present in-repo.
       2. **Validated YAML** under ``src/llenergymeasure/engines/{engine}/rules.validated.yaml`` -
          CI-validated observed behaviour, overlaid onto the corpus's invariants
-         when present. Written by ``scripts/validate_invariants.py`` under the
+         when present. Written by ``scripts/validate_rules.py`` under the
          engine-invariants CI.
     """
 
@@ -748,7 +748,7 @@ def _overlay_validated_observations(
     can act on CI-validated truth. The declared fields are left untouched
     - strict validation in :func:`_parse_invariant` is not re-exercised against
     the observed vocabulary (which is deliberately wider; see
-    ``scripts/_invariant_validation_common.py``).
+    ``scripts/_rules_validation_common.py``).
     """
     cases = {c["id"]: c for c in validated.get("cases", []) if isinstance(c, dict) and "id" in c}
     overlaid = tuple(

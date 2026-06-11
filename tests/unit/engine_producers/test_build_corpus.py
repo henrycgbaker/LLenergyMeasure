@@ -624,14 +624,14 @@ class TestAddedAtPreservation:
 def _stub_validate_engine(
     *, divergent_rule_ids: tuple[str, ...] = (), divergence_field: str = "outcome"
 ):
-    """Return a callable mirroring :func:`scripts.validate_invariants.validate_engine`.
+    """Return a callable mirroring :func:`scripts.validate_rules.validate_engine`.
 
     The stub doesn't run the real library - it returns synthetic divergences
-    keyed off invariant ids. Tests monkeypatch ``scripts.validate_invariants.validate_engine``
+    keyed off invariant ids. Tests monkeypatch ``scripts.validate_rules.validate_engine``
     onto this stub so the merger's validation wiring runs without needing the
     transformers package available in the test environment.
     """
-    from scripts._invariant_validation_common import Divergence
+    from scripts._rules_validation_common import Divergence
 
     def _stub(*, engine: str, corpus_path: Path, out_path: Path, **kwargs: Any):
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -664,7 +664,7 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Invariants with no divergence are kept in the canonical YAML."""
-        import scripts.validate_invariants as vr
+        import scripts.validate_rules as vr
 
         monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
 
@@ -687,7 +687,7 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An invariant whose validation outcome diverges is dropped from canonical."""
-        import scripts.validate_invariants as vr
+        import scripts.validate_rules as vr
 
         monkeypatch.setattr(
             vr,
@@ -720,7 +720,7 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """``--skip-validation`` short-circuits the gate; validate_engine never runs."""
-        import scripts.validate_invariants as vr
+        import scripts.validate_rules as vr
 
         # If validate_engine were called, this stub would mark ALL invariants as
         # divergent - but skip_validation should prevent the call entirely.
@@ -759,7 +759,7 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The quarantine file matches the documented {schema_version, engine, engine_version, generated_at, quarantined_rules} shape."""
-        import scripts.validate_invariants as vr
+        import scripts.validate_rules as vr
 
         monkeypatch.setattr(
             vr,
@@ -805,7 +805,7 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A pre-existing quarantine file is cleared when the new run has no divergences."""
-        import scripts.validate_invariants as vr
+        import scripts.validate_rules as vr
 
         # Plant a stale quarantine file from an earlier (hypothetical) run.
         staging = tmp_path / "transformers" / "_staging"
@@ -825,7 +825,7 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """``--check`` re-runs validation so drift detection compares apples-to-apples."""
-        import scripts.validate_invariants as vr
+        import scripts.validate_rules as vr
 
         monkeypatch.setattr(
             vr,
@@ -867,7 +867,7 @@ class TestVendorValidationGate:
         caused stale kwargs to dominate the re-merge under fingerprint
         dedup and silently masked extractor-side fixes.
         """
-        import scripts.validate_invariants as vr
+        import scripts.validate_rules as vr
 
         monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
 

@@ -123,7 +123,7 @@ raises `ModuleNotFoundError` naming the file path to create.
 ## What is automated
 
 Once items 1-4 exist and a PR is opened, the engine-pipeline CI surface
-(`engine-pipeline.yml` + `_engine-invariants-cell.yml` +
+(`engine-pipeline.yml` + `_engine-rules-cell.yml` +
 `_engine-schemas-cell.yml`) handles:
 
 - **Schema discovery** - runs the engine introspector inside the container,

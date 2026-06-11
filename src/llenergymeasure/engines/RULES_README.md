@@ -15,7 +15,7 @@ Design doc: [`.product/designs/config-deduplication-dormancy/runtime-config-vali
 Each engine is a sub-package containing its validation invariants and discovered schema:
 
 - `{engine}/rules.proposed.yaml` - post-mine corpus from `scripts/engine_producers/{engine}_miner.py`
-- `{engine}/rules.validated.yaml` - post-validation envelope from `scripts/validate_invariants.py`
+- `{engine}/rules.validated.yaml` - post-validation envelope from `scripts/validate_rules.py`
 - `{engine}/schema.discovered.json` - discovered parameters from `scripts/refresh_discovered_schemas.sh`
 - `{engine}/_staging/` - gitignored scratch directory for intermediate artefacts
 
@@ -185,7 +185,7 @@ encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 ### Corpus invariants
 
 These are enforced via `tests/unit/config/engine_rules/test_corpus_invariants.py`
-and extended by the validation-CI gate (`scripts/validate_invariants.py`).
+and extended by the validation-CI gate (`scripts/validate_rules.py`).
 
 1. Every invariant has a unique `id` within the engine.
 2. `match.fields` is non-empty.

@@ -13,7 +13,7 @@ Validation gate
 ----------------------
 Between merge and canonical-write, every candidate's ``kwargs_positive`` and
 ``kwargs_negative`` are replayed against the real engine library via
-:func:`scripts.validate_invariants.validate_engine`. Invariants whose declared
+:func:`scripts.validate_rules.validate_engine`. Invariants whose declared
 ``expected_outcome`` doesn't match observed library behaviour are quarantined
 to ``_staging/_failed_validation_{engine}.yaml`` instead of landing in the
 canonical corpus. The merger optimises for *recall*; validation-gate is the
@@ -26,7 +26,7 @@ Today the corpus is single-writer (dynamic miner only). With the static miner
 landing in parallel, we need a deterministic reconciliation step - same invariant
 discovered by two independent paths becomes evidence of cross-validation, not
 two duplicates. Different fingerprints across paths stay as two invariants; the
-validation CI pipeline (``scripts/validate_invariants.py``) runs every invariant's
+validation CI pipeline (``scripts/validate_rules.py``) runs every invariant's
 ``kwargs_positive`` / ``kwargs_negative`` against the real library and fails
 divergent invariants - the merger optimises for *recall* and lets CI kill false
 positives.
@@ -656,7 +656,7 @@ def _preserve_added_at(invariants: list[dict[str, Any]], prior: dict[bytes, str]
 
 _MERGED_CANDIDATES_BASENAME = "{engine}_merged_candidates.yaml"
 """Staging filename for the unfiltered merger output. Vendor validation reads
-this back as a corpus-shaped YAML so :func:`scripts.validate_invariants.validate_engine`
+this back as a corpus-shaped YAML so :func:`scripts.validate_rules.validate_engine`
 can replay every candidate's positive/negative kwargs."""
 
 _FAILED_VALIDATION_BASENAME = "_failed_validation_{engine}.yaml"
@@ -723,8 +723,8 @@ def _validate_candidates(
     """
     # Local import keeps the merger importable in environments that don't have
     # the engine library installed (e.g. CI lint job): only --skip-validation
-    # callers need to load validate_invariants.
-    from scripts.validate_invariants import validate_engine
+    # callers need to load validate_rules.
+    from scripts.validate_rules import validate_engine
 
     candidates_path = _write_merged_candidates(corpus_root, engine, candidates, envelope)
     validation_envelope_path = (

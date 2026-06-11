@@ -60,7 +60,7 @@ workflow cells:
   (`scripts/engine_producers/`) inside the new engine container. The
   introspector imports the live library and walks its Pydantic models to
   produce a JSON schema of all configurable parameters.
-- `_engine-invariants-cell.yml` - runs the `_drift.py` entry point
+- `_engine-rules-cell.yml` - runs the `_drift.py` entry point
   (`Mine + validate inside container` step) inside the container. The probe
   dispatches to the engine-specific miner (`scripts/engine_producers/`) which
   extracts validator functions, default values, and invalid-combination rules.
@@ -87,7 +87,7 @@ four tracked artefacts:
 | `schema.discovered.json` | Schema introspector | Full JSON Schema of all engine config parameters, with types, defaults, and docstrings |
 | `rules.proposed.yaml` | Invariant miner | Raw mined rules before validation |
 | `rules.validated.yaml` | Validation pass | Rules that passed the corpus validation check; used at runtime by the config validator |
-| `docs/user/generated/invariants-<engine>.md` | `generate_invariants_doc.py` | Human-readable invariant reference, regenerated from the validated YAML |
+| `docs/user/generated/invariants-<engine>.md` | `generate_rules_doc.py` | Human-readable invariant reference, regenerated from the validated YAML |
 
 The curation and schema docs (`docs/user/generated/curation-<engine>.md`,
 `schema-<engine>.md`) are also regenerated as part of the same writeback
@@ -105,7 +105,7 @@ library version, the same artefacts are produced on every run.
   JSON schema is a pure reflection of the class definitions; it cannot vary
   between runs of the same library version.
 - The cells compute a diff against the current committed artefacts
-  (`diff_engine_invariants.py`, `diff_discovered_schemas.py`) and post the
+  (`diff_engine_rules.py`, `diff_discovered_schemas.py`) and post the
   diff as a PR comment. If a re-run produces an empty diff (`no-changes`
   classification), the writeback job exits without committing. This is the
   determinism guard - a passing re-run that produces changes signals a

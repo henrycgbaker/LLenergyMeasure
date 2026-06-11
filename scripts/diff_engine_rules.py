@@ -10,7 +10,7 @@ when YAML's loader returns a non-mapping, so JSON-fixture tests still work.
 
 Usage::
 
-    python scripts/diff_engine_invariants.py <old.yaml> <new.yaml> [--out pr-comment.md]
+    python scripts/diff_engine_rules.py <old.yaml> <new.yaml> [--out pr-comment.md]
 
 Exit codes:
     0 - identical or invariants-safe changes only

@@ -427,7 +427,7 @@ python scripts/engine_producers/build_corpus.py --engine myengine --producer sta
 python scripts/engine_producers/build_corpus.py --engine myengine
 # Merges staging files, runs validation-CI gate, writes corpus
 
-python scripts/validate_invariants.py \
+python scripts/validate_rules.py \
   --engine myengine \
   --corpus src/llenergymeasure/engines/myengine.proposed.yaml \
   --out src/llenergymeasure/engines/myengine.validated.yaml
@@ -511,7 +511,7 @@ The probe's verdict (`pass` | `fail`) is the runtime gate. The DriftReport JSON 
 
 ### Loud failures caught by the validation gate
 
-After mining completes and a YAML corpus is written, `validate_invariants.py --fail-on-divergence` replays each invariant's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container:
+After mining completes and a YAML corpus is written, `validate_rules.py --fail-on-divergence` replays each invariant's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container:
 
 - **`--fail-on-divergence`** flips the validation gate to non-zero exit when an existing invariant's declared `expected_outcome` no longer matches the library's actual behaviour. This catches three distinct kinds of behavioural drift:
   1. The library changed its validation behaviour for an existing rule (e.g. relaxed a numeric bound, changed an error type).

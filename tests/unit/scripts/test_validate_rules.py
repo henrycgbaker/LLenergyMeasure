@@ -1,6 +1,6 @@
-"""Tests for :mod:`scripts.validate_invariants` and :mod:`scripts._invariant_validation_common`.
+"""Tests for :mod:`scripts.validate_rules` and :mod:`scripts._rules_validation_common`.
 
-The test strategy: exercise the validate_invariants script via synthetic native types -
+The test strategy: exercise the validate_rules script via synthetic native types -
 we construct small Pydantic / dataclass / ``__slots__`` fixtures and point
 the validation step at them. Tests that touch the real transformers library
 live in the workflow-smoke integration test; unit tests stay deterministic
@@ -21,8 +21,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts import _invariant_validation_common, validate_invariants  # noqa: E402
-from scripts._invariant_validation_common import (  # noqa: E402
+from scripts import _rules_validation_common, validate_rules  # noqa: E402
+from scripts._rules_validation_common import (  # noqa: E402
     CaptureBuffers,
     ErrorDetail,
     classify_emission_channel,
@@ -171,7 +171,7 @@ class TestRunCase:
     def test_captures_logger_output(self) -> None:
         import logging
 
-        logger_name = "llenergymeasure_test_validate_invariants_capture"
+        logger_name = "llenergymeasure_test_validate_rules_capture"
 
         def emitter() -> _DataclassConfig:
             logging.getLogger(logger_name).warning("observed emission")
@@ -203,7 +203,7 @@ class TestRunCase:
 
 class TestClassify:
     def test_error_on_exception(self) -> None:
-        buf = _invariant_validation_common.CaptureBuffers(
+        buf = _rules_validation_common.CaptureBuffers(
             exception_type="ValueError",
             exception_message="x",
             warnings_captured=(),
@@ -215,7 +215,7 @@ class TestClassify:
         assert classify_emission_channel(buf) == "none"
 
     def test_warn_on_captured_warning(self) -> None:
-        buf = _invariant_validation_common.CaptureBuffers(
+        buf = _rules_validation_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=("heads up",),
@@ -227,7 +227,7 @@ class TestClassify:
         assert classify_emission_channel(buf) == "warnings_warn"
 
     def test_dormant_announced_on_logger_only(self) -> None:
-        buf = _invariant_validation_common.CaptureBuffers(
+        buf = _rules_validation_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -242,8 +242,8 @@ class TestClassify:
         # Any sentinel-tagged line upgrades the classification from
         # logger_warning to logger_warning_once - the dedup-wrapped form is
         # the stricter claim on user visibility.
-        sentinel = _invariant_validation_common._WARNING_ONCE_SENTINEL
-        buf = _invariant_validation_common.CaptureBuffers(
+        sentinel = _rules_validation_common._WARNING_ONCE_SENTINEL
+        buf = _rules_validation_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -254,14 +254,14 @@ class TestClassify:
         assert classify_emission_channel(buf) == "logger_warning_once"
 
     def test_strip_warning_once_sentinel_cleans_messages(self) -> None:
-        sentinel = _invariant_validation_common._WARNING_ONCE_SENTINEL
+        sentinel = _rules_validation_common._WARNING_ONCE_SENTINEL
         messages = (f"{sentinel}deprecated kwarg", "plain log")
-        cleaned = _invariant_validation_common.strip_warning_once_sentinel(messages)
+        cleaned = _rules_validation_common.strip_warning_once_sentinel(messages)
         assert cleaned == ("deprecated kwarg", "plain log")
         assert all(sentinel not in m for m in cleaned)
 
     def test_dormant_silent_on_state_change_only(self) -> None:
-        buf = _invariant_validation_common.CaptureBuffers(
+        buf = _rules_validation_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -272,7 +272,7 @@ class TestClassify:
         assert classify_outcome(buf, {"a": {"declared": 2, "observed": 1}}) == "dormant_silent"
 
     def test_no_op_when_nothing_observed(self) -> None:
-        buf = _invariant_validation_common.CaptureBuffers(
+        buf = _rules_validation_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -337,14 +337,14 @@ class TestVendorRuleSynthetic:
     def patched_runner(self, monkeypatch: pytest.MonkeyPatch):
         def synthetic_runner(
             native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
-        ) -> _invariant_validation_common.CaptureBuffers:
+        ) -> _rules_validation_common.CaptureBuffers:
             if native_type == "test.raises":
                 return run_case(lambda: (_ for _ in ()).throw(ValueError("expected")))
             if native_type == "test.normalises":
                 return run_case(lambda: _NormalisingConfig(**kwargs))
             return run_case(lambda: _DataclassConfig(**kwargs))
 
-        monkeypatch.setitem(validate_invariants._ENGINE_RUNNERS, "transformers", synthetic_runner)
+        monkeypatch.setitem(validate_rules._ENGINE_RUNNERS, "transformers", synthetic_runner)
         return synthetic_runner
 
     def test_error_rule_positive_confirmed(self, patched_runner: Any) -> None:
@@ -356,7 +356,7 @@ class TestVendorRuleSynthetic:
             "kwargs_negative": {},
             "expected_outcome": {"outcome": "error", "emission_channel": "none"},
         }
-        result = validate_invariants.validate_invariant("transformers", invariant, gpu_mode="all")
+        result = validate_rules.validate_invariant("transformers", invariant, gpu_mode="all")
         assert result.outcome == "error"
         assert result.positive_confirmed is True
         assert result.observed_exception is not None
@@ -375,7 +375,7 @@ class TestVendorRuleSynthetic:
                 "normalised_fields": ["temperature"],
             },
         }
-        result = validate_invariants.validate_invariant("transformers", invariant, gpu_mode="all")
+        result = validate_rules.validate_invariant("transformers", invariant, gpu_mode="all")
         assert result.outcome == "dormant_silent"
         assert "temperature" in result.observed_silent_normalisations
 
@@ -389,7 +389,7 @@ class TestVendorRuleSynthetic:
             "kwargs_negative": {},
             "expected_outcome": {"outcome": "error"},
         }
-        result = validate_invariants.validate_invariant("transformers", invariant, gpu_mode="skip")
+        result = validate_rules.validate_invariant("transformers", invariant, gpu_mode="skip")
         assert result.outcome == "skipped_hardware_dependent"
         assert result.skipped_reason == "requires_gpu_and_gpu_mode_skip"
 
@@ -401,7 +401,7 @@ class TestVendorRuleSynthetic:
 
 class TestEnvelope:
     def test_assemble_writes_expected_keys(self) -> None:
-        envelope = validate_invariants.assemble_envelope(
+        envelope = validate_rules.assemble_envelope(
             engine="transformers",
             engine_version="4.56.0",
             image_ref="test:latest",
@@ -427,9 +427,9 @@ class TestEnvelope:
         )
         out_path = tmp_path / "t.validated.yaml"
 
-        monkeypatch.setattr(validate_invariants, "_resolve_engine_version", lambda _e: "test-ver")
+        monkeypatch.setattr(validate_rules, "_resolve_engine_version", lambda _e: "test-ver")
 
-        envelope, divergences = validate_invariants.validate_engine(
+        envelope, divergences = validate_rules.validate_engine(
             engine="transformers",
             corpus_path=corpus_path,
             out_path=out_path,
@@ -449,7 +449,7 @@ class TestEnvelope:
 def test_main_exits_2_on_missing_corpus(tmp_path: Path) -> None:
     missing = tmp_path / "nope.yaml"
     out = tmp_path / "out.validated.yaml"
-    exit_code = validate_invariants.main(
+    exit_code = validate_rules.main(
         [
             "--engine",
             "transformers",
@@ -470,9 +470,9 @@ def test_main_exits_0_on_no_divergence(tmp_path: Path, monkeypatch: pytest.Monke
     )
     out_path = tmp_path / "t.validated.yaml"
 
-    monkeypatch.setattr(validate_invariants, "_resolve_engine_version", lambda _e: "test-ver")
+    monkeypatch.setattr(validate_rules, "_resolve_engine_version", lambda _e: "test-ver")
 
-    exit_code = validate_invariants.main(
+    exit_code = validate_rules.main(
         [
             "--engine",
             "transformers",
@@ -598,7 +598,7 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="field `a` must be non-zero")
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         assert divergences == []
 
     def test_positive_did_not_raise_for_error_severity(self) -> None:
@@ -611,8 +611,8 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(observed_state={"a": 1})  # construction succeeded
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
-        assert any(d.check_failed == validate_invariants.CHECK_POSITIVE_RAISES for d in divergences)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert any(d.check_failed == validate_rules.CHECK_POSITIVE_RAISES for d in divergences)
 
     def test_dormant_severity_accepts_warning(self) -> None:
         invariant = {
@@ -624,9 +624,9 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(logger_messages=("use `a=0` for stability",))
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         # Dormant invariant fired (logger.warning) - no positive_raises divergence.
-        assert all(d.check_failed != validate_invariants.CHECK_POSITIVE_RAISES for d in divergences)
+        assert all(d.check_failed != validate_rules.CHECK_POSITIVE_RAISES for d in divergences)
 
     def test_dormant_severity_no_op_is_divergence(self) -> None:
         invariant = {
@@ -638,8 +638,8 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(observed_state={"a": 1})  # nothing fired
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
-        assert any(d.check_failed == validate_invariants.CHECK_POSITIVE_RAISES for d in divergences)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert any(d.check_failed == validate_rules.CHECK_POSITIVE_RAISES for d in divergences)
 
     def test_message_template_match_failure(self) -> None:
         invariant = {
@@ -651,9 +651,9 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="totally different message")
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
-            d.check_failed == validate_invariants.CHECK_MESSAGE_TEMPLATE_MATCH for d in divergences
+            d.check_failed == validate_rules.CHECK_MESSAGE_TEMPLATE_MATCH for d in divergences
         )
 
     def test_message_template_too_dynamic(self) -> None:
@@ -666,9 +666,9 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="anything")
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
-            d.check_failed == validate_invariants.CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC
+            d.check_failed == validate_rules.CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC
             for d in divergences
         )
 
@@ -682,9 +682,9 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="field `a` must be non-zero")
         neg = _capture(exception_type="TypeError", exception_message="oops")
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
-            d.check_failed == validate_invariants.CHECK_NEGATIVE_DOES_NOT_RAISE for d in divergences
+            d.check_failed == validate_rules.CHECK_NEGATIVE_DOES_NOT_RAISE for d in divergences
         )
 
     def test_divergence_dict_includes_check_failed_field(self) -> None:
@@ -697,10 +697,10 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(observed_state={"a": 1})  # no raise - should trip positive_raises
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         d = divergences[0].as_dict()
         assert "check_failed" in d
-        assert d["check_failed"] == validate_invariants.CHECK_POSITIVE_RAISES
+        assert d["check_failed"] == validate_rules.CHECK_POSITIVE_RAISES
         assert d["invariant_id"] == "r8"
         assert d["field"] == "kwargs_positive"
 
@@ -860,8 +860,8 @@ class TestGateSoundnessLocusAndCoercion:
             error_details=(ErrorDetail(loc=("mode",), error_type="literal_error"),),
         )
         neg = _capture(observed_state={"a": 0, "b": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
-        assert any(d.check_failed == validate_invariants.CHECK_LOCUS_MISMATCH for d in divergences)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert any(d.check_failed == validate_rules.CHECK_LOCUS_MISMATCH for d in divergences)
 
     def test_matching_locus_no_locus_divergence(self) -> None:
         invariant = {
@@ -878,8 +878,8 @@ class TestGateSoundnessLocusAndCoercion:
             error_details=(ErrorDetail(loc=("a",), error_type="plain"),),
         )
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
-        assert all(d.check_failed != validate_invariants.CHECK_LOCUS_MISMATCH for d in divergences)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert all(d.check_failed != validate_rules.CHECK_LOCUS_MISMATCH for d in divergences)
 
     def test_coercion_artifact_recorded_for_value_rule(self) -> None:
         # Value rule (not a type-check) whose positive probe tripped int_parsing.
@@ -897,9 +897,9 @@ class TestGateSoundnessLocusAndCoercion:
             error_details=(ErrorDetail(loc=("a",), error_type="int_parsing"),),
         )
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
-            d.check_failed == validate_invariants.CHECK_TYPE_COERCION_ARTIFACT for d in divergences
+            d.check_failed == validate_rules.CHECK_TYPE_COERCION_ARTIFACT for d in divergences
         )
 
     def test_coercion_artifact_exempt_for_type_check_invariant(self) -> None:
@@ -917,9 +917,9 @@ class TestGateSoundnessLocusAndCoercion:
             error_details=(ErrorDetail(loc=("compile_config",), error_type="int_parsing"),),
         )
         neg = _capture(observed_state={"compile_config": {}})
-        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         assert all(
-            d.check_failed != validate_invariants.CHECK_TYPE_COERCION_ARTIFACT for d in divergences
+            d.check_failed != validate_rules.CHECK_TYPE_COERCION_ARTIFACT for d in divergences
         )
 
 
@@ -990,20 +990,20 @@ class TestCarriedRegate:
                 )
             return run_case(lambda: _DataclassConfig(**kwargs))
 
-        monkeypatch.setitem(validate_invariants._ENGINE_RUNNERS, "transformers", synthetic_runner)
-        monkeypatch.setattr(validate_invariants, "_resolve_engine_version", lambda _e: "new-ver")
+        monkeypatch.setitem(validate_rules._ENGINE_RUNNERS, "transformers", synthetic_runner)
+        monkeypatch.setattr(validate_rules, "_resolve_engine_version", lambda _e: "new-ver")
         return synthetic_runner
 
     def test_confirmed_verdict(self, tmp_path: Path, patched_engine: Any) -> None:
         corpus = _carried_corpus(tmp_path, [_confirmed_invariant()])
-        report = validate_invariants.regate_carried_catalogue(
+        report = validate_rules.regate_carried_catalogue(
             engine="transformers", carried_corpus_path=corpus
         )
         assert report["engine_version"] == "new-ver"
         assert report["total"] == 1
-        assert report["counts"][validate_invariants.VERDICT_CONFIRMED] == 1
+        assert report["counts"][validate_rules.VERDICT_CONFIRMED] == 1
         assert report["acceptance_rate"] == 1.0
-        assert report["entries"][0]["verdict"] == validate_invariants.VERDICT_CONFIRMED
+        assert report["entries"][0]["verdict"] == validate_rules.VERDICT_CONFIRMED
 
     def test_failed_verdict_rule_decayed(self, tmp_path: Path, patched_engine: Any) -> None:
         decayed = {
@@ -1017,11 +1017,11 @@ class TestCarriedRegate:
             "message_template": "`a` must differ",
         }
         corpus = _carried_corpus(tmp_path, [decayed])
-        report = validate_invariants.regate_carried_catalogue(
+        report = validate_rules.regate_carried_catalogue(
             engine="transformers", carried_corpus_path=corpus
         )
-        assert report["counts"][validate_invariants.VERDICT_FAILED] == 1
-        assert report["entries"][0]["verdict"] == validate_invariants.VERDICT_FAILED
+        assert report["counts"][validate_rules.VERDICT_FAILED] == 1
+        assert report["entries"][0]["verdict"] == validate_rules.VERDICT_FAILED
         assert "no longer fires" in report["entries"][0]["reason"]
 
     def test_infra_error_verdict_unresolvable(self, tmp_path: Path, patched_engine: Any) -> None:
@@ -1036,11 +1036,11 @@ class TestCarriedRegate:
             "message_template": "`a` must differ",
         }
         corpus = _carried_corpus(tmp_path, [unresolved])
-        report = validate_invariants.regate_carried_catalogue(
+        report = validate_rules.regate_carried_catalogue(
             engine="transformers", carried_corpus_path=corpus
         )
-        assert report["counts"][validate_invariants.VERDICT_INFRA_ERROR] == 1
-        assert report["entries"][0]["verdict"] == validate_invariants.VERDICT_INFRA_ERROR
+        assert report["counts"][validate_rules.VERDICT_INFRA_ERROR] == 1
+        assert report["entries"][0]["verdict"] == validate_rules.VERDICT_INFRA_ERROR
         assert "unresolved" in report["entries"][0]["reason"]
 
     def test_mixed_report_shape_and_acceptance_rate(
@@ -1050,7 +1050,7 @@ class TestCarriedRegate:
         decayed = {**_confirmed_invariant(), "id": "decayed", "native_type": "test.no_longer_fires"}
         gone = {**_confirmed_invariant(), "id": "gone", "native_type": "test.unresolvable"}
         corpus = _carried_corpus(tmp_path, [confirmed, decayed, gone])
-        report = validate_invariants.regate_carried_catalogue(
+        report = validate_rules.regate_carried_catalogue(
             engine="transformers", carried_corpus_path=corpus
         )
         # Stable report shape (consumed by chunk C7's PR comment step).
@@ -1066,9 +1066,9 @@ class TestCarriedRegate:
         }
         assert report["total"] == 3
         assert report["counts"] == {
-            validate_invariants.VERDICT_CONFIRMED: 1,
-            validate_invariants.VERDICT_FAILED: 1,
-            validate_invariants.VERDICT_INFRA_ERROR: 1,
+            validate_rules.VERDICT_CONFIRMED: 1,
+            validate_rules.VERDICT_FAILED: 1,
+            validate_rules.VERDICT_INFRA_ERROR: 1,
         }
         # acceptance_rate = confirmed / total; infra_error + failed count against it.
         assert report["acceptance_rate"] == round(1 / 3, 4)
@@ -1077,7 +1077,7 @@ class TestCarriedRegate:
     def test_cli_carried_mode_writes_report(self, tmp_path: Path, patched_engine: Any) -> None:
         corpus = _carried_corpus(tmp_path, [_confirmed_invariant()])
         out = tmp_path / "regate.json"
-        exit_code = validate_invariants.main(
+        exit_code = validate_rules.main(
             [
                 "--engine",
                 "transformers",
@@ -1095,7 +1095,7 @@ class TestCarriedRegate:
     def test_cli_carried_rejects_corpus_combo(self, tmp_path: Path) -> None:
         corpus = _carried_corpus(tmp_path, [])
         with pytest.raises(SystemExit):
-            validate_invariants.main(
+            validate_rules.main(
                 [
                     "--engine",
                     "transformers",

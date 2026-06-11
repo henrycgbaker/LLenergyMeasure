@@ -10,7 +10,7 @@ observed fails CI.
 
 Usage (inside the engine's Docker container)::
 
-    python scripts/validate_invariants.py \\
+    python scripts/validate_rules.py \\
         --engine transformers \\
         --corpus src/llenergymeasure/engines/transformers/rules.proposed.yaml \\
         --out src/llenergymeasure/engines/transformers/rules.validated.yaml
@@ -50,7 +50,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts._engine_constructors import (  # noqa: E402  (late import after sys.path)
     resolve_native_type,
 )
-from scripts._invariant_validation_common import (  # noqa: E402  (late import after sys.path)
+from scripts._rules_validation_common import (  # noqa: E402  (late import after sys.path)
     TENSORRT_PRIVATE_FIELD_ALLOWLIST,
     TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST,
     CaptureBuffers,

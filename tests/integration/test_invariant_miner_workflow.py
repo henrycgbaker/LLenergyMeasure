@@ -19,9 +19,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts import _invariant_validation_common, validate_invariants  # noqa: E402
-from scripts import diff_engine_invariants as diff_invariants  # noqa: E402
-from scripts._invariant_validation_common import run_case  # noqa: E402
+from scripts import _rules_validation_common, validate_rules  # noqa: E402
+from scripts import diff_engine_rules as diff_invariants  # noqa: E402
+from scripts._rules_validation_common import run_case  # noqa: E402
 from scripts.engine_producers._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ class _Normaliser:
 
 def _synthetic_runner(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
-) -> _invariant_validation_common.CaptureBuffers:
+) -> _rules_validation_common.CaptureBuffers:
     if native_type == "fixture.raises":
         if kwargs.get("x", 0) > 0:
 
@@ -119,8 +119,8 @@ def fixture_corpus_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def patched_runner(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setitem(validate_invariants._ENGINE_RUNNERS, "transformers", _synthetic_runner)
-    monkeypatch.setattr(validate_invariants, "_resolve_engine_version", lambda _e: "test-1.0.0")
+    monkeypatch.setitem(validate_rules._ENGINE_RUNNERS, "transformers", _synthetic_runner)
+    monkeypatch.setattr(validate_rules, "_resolve_engine_version", lambda _e: "test-1.0.0")
     return _synthetic_runner
 
 
@@ -134,7 +134,7 @@ class TestWorkflowGlue:
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
         out = tmp_path / "transformers.validated.yaml"
-        _envelope, divergences = validate_invariants.validate_engine(
+        _envelope, divergences = validate_rules.validate_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
             out_path=out,
@@ -149,7 +149,7 @@ class TestWorkflowGlue:
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
         out1 = tmp_path / "first.validated.yaml"
-        envelope1, _ = validate_invariants.validate_engine(
+        envelope1, _ = validate_rules.validate_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
             out_path=out1,
@@ -184,7 +184,7 @@ class TestWorkflowGlue:
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
         out = tmp_path / "validation.validated.yaml"
-        envelope, _ = validate_invariants.validate_engine(
+        envelope, _ = validate_rules.validate_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
             out_path=out,

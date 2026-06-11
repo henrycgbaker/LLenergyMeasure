@@ -34,7 +34,7 @@ from scripts.engine_producers._fixpoint_test import (  # noqa: E402
     load_dormant_invariants,
     synthesise_malformed_invariant_cases,
 )
-from scripts.validate_invariants import (  # noqa: E402
+from scripts.validate_rules import (  # noqa: E402
     CHECK_MESSAGE_TEMPLATE_MATCH,
     CHECK_NEGATIVE_DOES_NOT_RAISE,
     CHECK_POSITIVE_RAISES,
@@ -291,14 +291,14 @@ class TestGateSoundnessFixpoint:
 
     def test_assert_gate_soundness_fixpoint_passes_on_real_gate(self) -> None:
         """The single entry-point used by CI integration runs cleanly."""
-        # Should not raise - all three checks are wired in validate_invariants.py.
+        # Should not raise - all three checks are wired in validate_rules.py.
         assert_gate_soundness_fixpoint()
 
     def test_regression_error_fires_when_check_is_disabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """If a check is removed, ``assert_gate_soundness_fixpoint`` must fail-loud."""
-        from scripts import validate_invariants as vr
+        from scripts import validate_rules as vr
         from scripts.engine_producers import _fixpoint_test as fpm
 
         # Snapshot the real gate before patching so the stub doesn't
@@ -313,7 +313,7 @@ class TestGateSoundnessFixpoint:
             ]
 
         # The fixpoint function imports ``compute_gate_soundness_divergences``
-        # lazily from ``scripts.validate_invariants``, so patching the module
+        # lazily from ``scripts.validate_rules``, so patching the module
         # attribute is sufficient.
         monkeypatch.setattr(vr, "compute_gate_soundness_divergences", stripped_gate)
 
