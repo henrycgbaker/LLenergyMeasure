@@ -17,6 +17,7 @@ v2.0 removals:
 
 from __future__ import annotations
 
+import difflib
 import logging
 import warnings
 from functools import lru_cache
@@ -57,6 +58,57 @@ def _get_rules_loader() -> EngineRulesLoader:
 def _reset_rules_loader_cache() -> None:
     """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
     _get_rules_loader.cache_clear()
+
+
+# Soft-validation cutoff for difflib suggestions on extra keys. 0.8 keeps the
+# suggestion conservative (clear typos like ``dtypee`` -> ``dtype``) without
+# nagging on genuinely-new engine fields that happen to share a prefix.
+_CLOSE_MATCH_CUTOFF = 0.8
+
+
+def _resolve_submodel(annotation: Any) -> type[BaseModel] | None:
+    """Resolve a ``SubModel | None`` annotation to its BaseModel class, else None."""
+    from typing import get_args
+
+    candidates = get_args(annotation) or (annotation,)
+    for candidate in candidates:
+        if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+            return candidate
+    return None
+
+
+def _nested_subsection_models(section: BaseModel) -> dict[str, type[BaseModel]]:
+    """Return the ``engine_params`` / ``sampling_params`` sub-model classes.
+
+    Detects the generated nested shape by field presence rather than engine name
+    so vllm/tensorrt inherit the same checks once they migrate to it. A section
+    that lacks both sub-fields (the hand-written flat engine configs) yields an
+    empty dict and is left untouched.
+    """
+    models: dict[str, type[BaseModel]] = {}
+    for sub_name in ("engine_params", "sampling_params"):
+        field = type(section).model_fields.get(sub_name)
+        if field is None:
+            continue
+        sub_model = _resolve_submodel(field.annotation)
+        if sub_model is not None:
+            models[sub_name] = sub_model
+    return models
+
+
+def _discovered_field_names(engine: str, sub_name: str) -> set[str]:
+    """Discovered-schema field names for a sub-section; empty if no schema ships.
+
+    Broadens the soft-validation vocabulary beyond the curated ``model_fields``
+    so a typo of an un-curated-but-discovered passthrough field is still caught.
+    """
+    from llenergymeasure.config.schema_loader import SchemaLoader
+
+    try:
+        schema = SchemaLoader().load_schema(engine)
+    except (FileNotFoundError, ValueError):
+        return set()
+    return set(getattr(schema, sub_name, {}) or {})
 
 
 # =============================================================================
@@ -450,6 +502,68 @@ class ExperimentConfig(BaseModel):
                 f"tensorrt: config section provided but engine={self.engine!r}. "
                 "Remove the tensorrt: section or set engine: tensorrt."
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_engine_section_extras(self) -> ExperimentConfig:
+        """Soft/hard validation of extra keys on the active engine's nested section.
+
+        Only applies to engine sections using the generated nested shape
+        (``engine_params`` / ``sampling_params`` sub-models); flat sections are
+        skipped. Two checks:
+
+        - Wrapper-level extras (keys on the section itself) are ERRORS: the
+          engine never sees them. If a key names a known nested field it is a
+          pre-nested-shape flat config, so the message is a migration hint
+          pointing at the correct nested location; otherwise it is a typo and the
+          message carries a ``did you mean`` suggestion.
+        - Extras inside ``engine_params`` / ``sampling_params`` DO pass through to
+          the engine (``extra="allow"``), so a genuinely-new engine field is
+          legitimate. We only WARN, and only when the key is a close typo of a
+          known field, using the discovered schema plus generated fields as the
+          vocabulary.
+        """
+        section = getattr(self, self.engine.value, None)
+        if not isinstance(section, BaseModel):
+            return self
+        sub_models = _nested_subsection_models(section)
+        if not sub_models:
+            return self
+
+        nested_field_names = {name for model in sub_models.values() for name in model.model_fields}
+
+        # (1) Wrapper-level extras: always an error.
+        for key in section.model_extra or {}:
+            for sub_name, model in sub_models.items():
+                if key in model.model_fields:
+                    raise ValueError(
+                        f"{self.engine.value}.{key} moved to "
+                        f"{self.engine.value}.{sub_name}.{key} (flat engine config was "
+                        "replaced by the nested shape in v0.10)."
+                    )
+            suggestion = difflib.get_close_matches(key, sorted(nested_field_names), n=1)
+            hint = f"; did you mean engine_params.{suggestion[0]}?" if suggestion else ""
+            raise ValueError(f"unknown field {key!r} on {self.engine.value}{hint}")
+
+        # (2) Sub-section extras: pass through to the engine - warn on close typos.
+        for sub_name, model in sub_models.items():
+            sub_section = getattr(section, sub_name, None)
+            if sub_section is None:
+                continue
+            vocabulary = sorted(
+                set(model.model_fields) | _discovered_field_names(self.engine.value, sub_name)
+            )
+            for key in sub_section.model_extra or {}:
+                suggestion = difflib.get_close_matches(
+                    key, vocabulary, n=1, cutoff=_CLOSE_MATCH_CUTOFF
+                )
+                if suggestion:
+                    warnings.warn(
+                        f"unknown field {key!r} in {self.engine.value}.{sub_name}; "
+                        f"did you mean {suggestion[0]}?",
+                        ConfigValidationWarning,
+                        stacklevel=2,
+                    )
         return self
 
     @model_validator(mode="after")
