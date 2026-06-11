@@ -372,7 +372,7 @@ jobs:
           ENGINE: ${{ inputs.engine }}
           SAFE_VER: ${{ steps.version.outputs.safe_version }}
         run: |
-          # Derivative dual-write — see invariants cell for rationale.
+          # Derivative dual-write - see invariants cell for rationale.
           # Gated on the engine being vendored (per-engine __init__.py present).
           ARCHIVE_INIT="engine_versions/${ENGINE}/${SAFE_VER}/__init__.py"
           if [[ ! -f "$ARCHIVE_INIT" ]]; then
