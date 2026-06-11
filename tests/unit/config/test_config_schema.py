@@ -146,32 +146,28 @@ def test_pytorch_config_section_composition():
 
 
 # ---------------------------------------------------------------------------
-# TransformersConfig.num_processes removal (M3 audit fix)
+# Generated transformers Config: no num_processes field
 # ---------------------------------------------------------------------------
 
 
-def test_pytorch_config_has_no_num_processes_field():
-    """TransformersConfig does not have a num_processes field (removed in M3 audit)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+def test_transformers_engine_params_has_no_num_processes_field():
+    """The generated transformers EngineParams has no num_processes field."""
+    from llenergymeasure.engines.transformers.config import EngineParams
 
-    assert "num_processes" not in TransformersConfig.model_fields
+    assert "num_processes" not in EngineParams.model_fields
 
 
-def test_pytorch_config_num_processes_not_a_declared_field():
-    """num_processes is not a declared field on TransformersConfig.
+def test_transformers_num_processes_not_a_declared_field():
+    """num_processes is not a declared field on the generated EngineParams.
 
-    TransformersConfig uses extra='allow' for HuggingFace passthrough, so passing
-    num_processes as an extra kwarg does not raise a ValidationError, but it
-    is NOT a typed model field and will not be type-checked or validated.
+    The generated Config uses extra='allow' for HuggingFace passthrough, so an
+    unknown kwarg is accepted into model_extra but is NOT a typed model field.
     """
-    from llenergymeasure.config.engine_configs import TransformersConfig
+    from llenergymeasure.engines.transformers.config import EngineParams
 
-    # Verify it is absent from the declared model fields
-    assert "num_processes" not in TransformersConfig.model_fields
-    # Extra kwargs are accepted (extra='allow') but go into __pydantic_extra__
-    config = TransformersConfig(num_processes=4)  # type: ignore[call-arg]
-    # Not a typed field - no attribute access by name on the typed model
-    assert "num_processes" not in type(config).model_fields
+    assert "num_processes" not in EngineParams.model_fields
+    params = EngineParams(num_processes=4)  # type: ignore[call-arg]
+    assert "num_processes" not in type(params).model_fields
 
 
 def test_pytorch_section_with_wrong_engine_rejected():
@@ -341,67 +337,39 @@ def test_save_timeseries_false_accepted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# TransformersConfig tensor parallelism fields (tp_plan, tp_size)
+# Transformers tensor parallelism (tp_plan, tp_size) on the generated config
 # ---------------------------------------------------------------------------
+#
+# After migration these are curated Any-typed engine_params fields (no Literal /
+# ge constraint - that typing was lost to discovery debt). The V5 rule
+# (tp_plan XOR device_map) is a conscious drop: enforcement is from_pretrained-
+# side (execution grain), where the engine raises at model load, so it is no
+# longer a config-parse validator. A deferred mining target.
 
 
-def test_pytorch_config_tp_plan_accepts_auto():
-    """TransformersConfig(tp_plan='auto') succeeds."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    cfg = TransformersConfig(tp_plan="auto")
-    assert cfg.tp_plan == "auto"
-
-
-def test_pytorch_config_tp_plan_rejects_invalid():
-    """TransformersConfig(tp_plan='custom') raises ValidationError (Literal enforcement)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    with pytest.raises(ValidationError):
-        TransformersConfig(tp_plan="custom")  # type: ignore[arg-type]
+def test_tp_plan_and_tp_size_accepted_on_engine_params():
+    """tp_plan / tp_size pass through on the generated engine_params."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"tp_plan": "auto", "tp_size": 4}},
+    )
+    assert cfg.transformers.engine_params.tp_plan == "auto"
+    assert cfg.transformers.engine_params.tp_size == 4
 
 
-def test_pytorch_config_tp_size_accepts_positive():
-    """TransformersConfig(tp_plan='auto', tp_size=4) succeeds."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+def test_tp_plan_with_device_map_no_longer_rejected_at_parse():
+    """V5 (tp_plan XOR device_map) is dropped: the engine raises at model load.
 
-    cfg = TransformersConfig(tp_plan="auto", tp_size=4)
-    assert cfg.tp_plan == "auto"
-    assert cfg.tp_size == 4
-
-
-def test_pytorch_config_tp_size_rejects_zero():
-    """TransformersConfig(tp_size=0) raises ValidationError (ge=1)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    with pytest.raises(ValidationError):
-        TransformersConfig(tp_size=0)
-
-
-def test_pytorch_config_tp_plan_device_map_exclusive():
-    """TransformersConfig(tp_plan='auto', device_map='auto') raises ValidationError."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    with pytest.raises(ValidationError, match="mutually exclusive"):
-        TransformersConfig(tp_plan="auto", device_map="auto")
-
-
-def test_pytorch_config_tp_plan_without_device_map_ok():
-    """TransformersConfig(tp_plan='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    cfg = TransformersConfig(tp_plan="auto")
-    assert cfg.tp_plan == "auto"
-    assert cfg.device_map is None
-
-
-def test_pytorch_config_device_map_without_tp_plan_ok():
-    """TransformersConfig(device_map='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    cfg = TransformersConfig(device_map="auto")
-    assert cfg.device_map == "auto"
-    assert cfg.tp_plan is None
+    Config parse accepts both; from_pretrained enforces the exclusivity.
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"tp_plan": "auto", "device_map": "auto"}},
+    )
+    assert cfg.transformers.engine_params.tp_plan == "auto"
+    assert cfg.transformers.engine_params.device_map == "auto"
 
 
 # ---------------------------------------------------------------------------

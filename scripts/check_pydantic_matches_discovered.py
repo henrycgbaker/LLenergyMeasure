@@ -33,32 +33,12 @@ ENGINES = tuple(e.value for e in Engine)
 # Pydantic fields intentionally added by llem without an engine counterpart.
 # Each entry: (engine, leaf_name) with explanation.
 LLEM_NATIVE_FIELDS: set[tuple[str, str]] = {
-    # -- transformers --
-    # Quantization params surfaced at engine level for consistent interface
-    ("transformers", "batch_size"),
-    # dtype is HF-native (torch_dtype is a deprecated BC alias). Passed via
-    # from_pretrained **kwargs, so signature-based discovery misses it.
-    ("transformers", "dtype"),
-    ("transformers", "load_in_4bit"),
-    ("transformers", "load_in_8bit"),
-    ("transformers", "bnb_4bit_compute_dtype"),
-    ("transformers", "bnb_4bit_quant_type"),
-    ("transformers", "bnb_4bit_use_double_quant"),
-    # Runtime/compile params not in from_pretrained or GenerationConfig
-    ("transformers", "attn_implementation"),
-    ("transformers", "torch_compile"),
-    ("transformers", "torch_compile_mode"),
-    ("transformers", "torch_compile_backend"),
-    # Device/memory params
-    ("transformers", "device_map"),
-    ("transformers", "max_memory"),
-    ("transformers", "allow_tf32"),
-    ("transformers", "autocast_enabled"),
-    ("transformers", "autocast_dtype"),
-    ("transformers", "low_cpu_mem_usage"),
-    # Parallelism
-    ("transformers", "tp_plan"),
-    ("transformers", "tp_size"),
+    # transformers dissolved: it migrated to the generated nested Config
+    # (engine_params / sampling_params projected from the mined schema), so the
+    # config now carries no fields without a discovered counterpart. The former
+    # llem-orchestration knobs (batch_size, torch_compile, allow_tf32,
+    # autocast_*) live on config.harness.TransformersHarness, a separate model
+    # the gate does not walk.
     # -- vLLM --
     # Speculative decoding sub-config
     ("vllm", "method"),
@@ -215,7 +195,9 @@ def _get_pydantic_leaves(engine: str, schema: dict[str, Any]) -> dict[str, dict[
 
     # Build a lookup from the JSON schema for detailed type info
     engine_config_names = {
-        "transformers": ["TransformersConfig"],
+        # transformers is the generated nested Config; its $defs are the
+        # EngineParams / SamplingParams sub-models.
+        "transformers": ["EngineParams", "SamplingParams"],
         "vllm": [
             "VLLMEngineConfig",
             "VLLMSamplingConfig",
@@ -253,7 +235,18 @@ def _get_pydantic_leaves(engine: str, schema: dict[str, Any]) -> dict[str, dict[
 
 
 def check_engine(engine: str, schema: dict[str, Any]) -> list[dict[str, str]]:
-    """Check one engine for drift. Returns list of drift records."""
+    """Check one engine for drift. Returns list of drift records.
+
+    transformers is exempt: its config is the generated
+    ``engines.transformers.Config``, mechanically projected from the discovered
+    schema + curated.yaml. Drift-by-construction is impossible, and the
+    projection is already guarded by ``regen_engine_configs.py --check``. This
+    gate is the precision check for the HAND-WRITTEN vllm + tensorrt configs,
+    where a stale Literal can silently diverge from the engine enum.
+    """
+    if engine == "transformers":
+        return []
+
     drifts: list[dict[str, str]] = []
     defs = schema.get("$defs", {})
 
