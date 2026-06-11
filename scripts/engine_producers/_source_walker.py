@@ -110,7 +110,9 @@ def module_literal_aliases(module: ast.Module) -> dict[str, list[Any]]:
         target = stmt.targets[0]
         if not isinstance(target, ast.Name):
             continue
-        values = _literal_values(stmt.value)
+        # The RHS must itself be a ``Literal[...]`` subscript - not merely contain
+        # one buried in a larger expression - to count as a type alias.
+        values = _literal_subscript_values(stmt.value)
         if values is not None:
             aliases[target.id] = values
     return aliases
@@ -307,25 +309,39 @@ def _literal_values(node: ast.expr) -> list[Any] | None:
     """Closed value set if ``node`` is (or wraps) a ``Literal[...]``, else None.
 
     Handles bare ``Literal[a, b]``, ``Optional[Literal[...]]``, ``Literal[...] |
-    None``, and ``Annotated[Literal[...], ...]``. Returns ``None`` when there is
-    no Literal; an empty list is never returned (a Literal with a non-constant
-    member is treated as not-closed -> ``None``).
+    None``, and ``Annotated[Literal[...], ...]`` by descending into the
+    annotation tree. Returns ``None`` when there is no Literal; an empty list is
+    never returned (a Literal with a non-constant member -> not-closed -> ``None``).
     """
     for sub in ast.walk(node):
-        if (
-            isinstance(sub, ast.Subscript)
-            and isinstance(sub.value, ast.Name)
-            and sub.value.id == "Literal"
-        ):
-            elts = sub.slice.elts if isinstance(sub.slice, ast.Tuple) else [sub.slice]
-            values: list[Any] = []
-            for elt in elts:
-                if isinstance(elt, ast.Constant):
-                    values.append(elt.value)
-                else:
-                    return None
-            return values
+        if isinstance(sub, ast.Subscript):
+            values = _literal_subscript_values(sub)
+            if values is not None:
+                return values
     return None
+
+
+def _literal_subscript_values(node: ast.expr) -> list[Any] | None:
+    """Closed value set if ``node`` is *directly* a ``Literal[...]`` subscript.
+
+    Unlike :func:`_literal_values` this does not descend into wrappers - the node
+    itself must be the ``Literal`` subscript (used for module-level alias RHS
+    matching). ``None`` if not a Literal or any member is non-constant.
+    """
+    if not (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "Literal"
+    ):
+        return None
+    elts = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+    values: list[Any] = []
+    for elt in elts:
+        if isinstance(elt, ast.Constant):
+            values.append(elt.value)
+        else:
+            return None
+    return values
 
 
 def _is_field_like(call: ast.Call) -> bool:

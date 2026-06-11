@@ -192,7 +192,10 @@ def dataclass_fields_to_specs(
     same ``defs`` dict to :func:`make_envelope` to ship it.
     """
     specs: dict[str, dict[str, Any]] = {}
-    hints = _safe_type_hints(cls)
+    # Only resolve string annotations to real types when recursion is requested -
+    # the legacy (defs=None) path keeps rendering ``fld.type`` exactly as before
+    # so existing committed schema type strings are unchanged.
+    hints = _safe_type_hints(cls) if defs is not None else {}
     for fld in dataclasses.fields(cls):
         if skip_private and fld.name.startswith("_"):
             continue
@@ -204,17 +207,17 @@ def dataclass_fields_to_specs(
                 default = fld.default_factory()
             except Exception:
                 default = None
-        annotation = hints.get(fld.name, fld.type)
-        nested = _resolve_pydantic_type(annotation) if defs is not None else None
-        if nested is not None and defs is not None:
-            _fold_model_defs(nested, defs)
-            specs[fld.name] = {
-                "$ref": f"#/$defs/{nested.__name__}",
-                "default": jsonable(default),
-            }
-            continue
+        if defs is not None:
+            nested = _resolve_pydantic_type(hints.get(fld.name, fld.type))
+            if nested is not None:
+                _fold_model_defs(nested, defs)
+                specs[fld.name] = {
+                    "$ref": f"#/$defs/{nested.__name__}",
+                    "default": jsonable(default),
+                }
+                continue
         specs[fld.name] = {
-            "type": annotation_to_type_str(annotation),
+            "type": annotation_to_type_str(fld.type),
             "default": jsonable(default),
         }
     return specs
