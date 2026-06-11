@@ -77,6 +77,10 @@ from scripts.engine_producers._base import (  # noqa: E402  (late import after s
     format_call_template,
     render_binop_concat_template,
 )
+from scripts.engine_producers._section_classifier import (  # noqa: E402
+    field_path,
+    load_curated_sections,
+)
 
 # Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
 # ConditionalSelfAssignDetector, etc.) and instead define parallel
@@ -122,24 +126,10 @@ NATIVE_TYPE_WMK = "transformers.WatermarkingConfig"
 NATIVE_TYPE_SYNTH = "transformers.SynthIDTextWatermarkingConfig"
 NATIVE_TYPE_BNB = "transformers.BitsAndBytesConfig"
 
-# Field-path namespace for GenerationConfig fields. The corpus convention
-# (see existing transformers.yaml entries) puts every GenerationConfig
-# attribute under transformers.sampling.<field>, even those that aren't
-# strictly "sampling" parameters - that namespace is how the project's
-# Pydantic config model exposes them.
-GENCONFIG_NAMESPACE = "transformers.sampling"
-
-# BitsAndBytesConfig fields are exposed at the top level of the
-# project's TransformersConfig Pydantic model (e.g. config.transformers.load_in_4bit),
-# NOT nested under a quant sub-model. See src/llenergymeasure/config/engine_configs.py
-# class TransformersConfig where load_in_4bit / bnb_4bit_* / llm_int8_* are direct fields.
-BNB_NAMESPACE = "transformers"
-
-# A small allowlist of decoder-config field paths used by the project's
-# Pydantic models. Most generation-config fields live under .sampling.
-# Some (max_new_tokens, etc.) live under .decoder. The miner emits paths
-# under sampling. by default; if validation CI flags a path mismatch we can
-# refine. Recall first.
+# Rule-path sections (engine_params / sampling_params) are decided per field by
+# the D2 classifier (scripts.engine_producers._section_classifier): curated.yaml
+# first, then native-class origin (BitsAndBytesConfig -> engine_params;
+# GenerationConfig / CompileConfig / watermarking configs -> sampling_params).
 
 # Default values used to synthesise positive / negative kwargs when the
 # miner cannot infer better ones from the predicate.
@@ -842,7 +832,7 @@ def walk_function(
     *,
     native_type: str,
     method_name: str,
-    namespace: str,
+    curated_sections: dict[str, str],
     rel_source_path: str,
     today: str,
     library: str = LIBRARY,
@@ -850,7 +840,9 @@ def walk_function(
 ) -> list[InvariantCandidate]:
     """Walk a single function body and return invariant candidates.
 
-    ``library`` is recorded on each emitted invariant (BNB invariants use
+    ``curated_sections`` is the ``{field: section}`` map the D2 classifier uses
+    to route each field's rule path. ``library`` is recorded on each emitted
+    invariant (BNB invariants use
     ``bitsandbytes`` rather than ``transformers``). ``class_short_name`` is
     used in human-readable invariant descriptions; defaults to the bare class
     suffix of ``native_type``.
@@ -939,7 +931,7 @@ def walk_function(
                 detected=detected,
                 native_type=native_type,
                 method_name=method_name,
-                namespace=namespace,
+                curated_sections=curated_sections,
                 rel_source_path=rel_source_path,
                 line_at_scan=getattr(stmt, "lineno", line_at_scan),
                 today=today,
@@ -959,7 +951,7 @@ def _build_rule(
     detected: DetectedBody,
     native_type: str,
     method_name: str,
-    namespace: str,
+    curated_sections: dict[str, str],
     rel_source_path: str,
     line_at_scan: int,
     today: str,
@@ -992,7 +984,9 @@ def _build_rule(
                 )
             )
 
-    match_fields = _build_match_fields(preds, namespace)
+    match_fields = _build_match_fields(
+        preds, native_type=native_type, curated_sections=curated_sections
+    )
     kwargs_pos = _synthesise_kwargs(preds, sense="positive")
     kwargs_neg = _synthesise_kwargs(negate_predicates(preds), sense="negative")
 
@@ -1046,25 +1040,26 @@ def _build_rule(
     )
 
 
-def _build_match_fields(preds: list[FieldPredicate], namespace: str) -> dict[str, Any]:
-    """Group predicates by field path and combine multi-key specs."""
+def _build_match_fields(
+    preds: list[FieldPredicate],
+    *,
+    native_type: str,
+    curated_sections: dict[str, str],
+) -> dict[str, Any]:
+    """Group predicates by field path and combine multi-key specs.
+
+    Paths are ``{engine}.{section}.{field}``; the section is decided per field by
+    the D2 classifier (curated.yaml first, native-class origin as fallback). The
+    ``@<name>`` cross-field rhs refs stay bare - the loader resolves them as a
+    sibling of the predicate field within the same section.
+    """
     grouped: dict[str, dict[str, Any]] = {}
     for p in preds:
-        path = f"{namespace}.{p.field}"
+        path = field_path(ENGINE, native_type, p.field, curated_sections)
         spec = grouped.setdefault(path, {})
-        # Translate @<name> field refs into namespace-qualified bare-sibling form.
-        rhs = p.rhs
-        if isinstance(rhs, str) and rhs.startswith("@") and "." not in rhs:
-            # Bare reference: corpus loader resolves it as a sibling of the
-            # predicate field, which is exactly what we want - no rewrite needed.
-            pass
-        if p.op in spec:
-            # Two predicates with the same operator on the same field -
-            # corpus invariant shape can't represent that natively. Keep the
-            # last one wins.
-            spec[p.op] = rhs
-        else:
-            spec[p.op] = rhs
+        # Two predicates with the same operator on the same field collapse to
+        # last-wins (the corpus invariant shape cannot represent both).
+        spec[p.op] = p.rhs
     # Collapse single-spec fields with sole == operator into bare value form.
     out: dict[str, Any] = {}
     for path, spec in grouped.items():
@@ -1468,6 +1463,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
 
     candidates: list[InvariantCandidate] = []
     today = dt.date(2026, 4, 25).isoformat()
+    curated_sections = load_curated_sections(ENGINE)
 
     # 1) GenerationConfig.validate
     gen_cls = find_class(module_ast, "GenerationConfig")
@@ -1481,7 +1477,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
             validate_fn,
             native_type=NATIVE_TYPE_GEN,
             method_name="validate",
-            namespace=GENCONFIG_NAMESPACE,
+            curated_sections=curated_sections,
             rel_source_path=rel_path,
             today=today,
         )
@@ -1497,7 +1493,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
                     wmk_validate,
                     native_type=NATIVE_TYPE_WMK,
                     method_name="validate",
-                    namespace="transformers.sampling.watermarking_config",
+                    curated_sections=curated_sections,
                     rel_source_path=rel_path,
                     today=today,
                 )
@@ -1513,7 +1509,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
                     synth_validate,
                     native_type=NATIVE_TYPE_SYNTH,
                     method_name="validate",
-                    namespace="transformers.sampling.watermarking_config",
+                    curated_sections=curated_sections,
                     rel_source_path=rel_path,
                     today=today,
                 )
@@ -1524,12 +1520,12 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
     # without importing ``bitsandbytes`` itself (that would touch CUDA on
     # GPU hosts). The class lives in transformers.utils.quantization_config,
     # a separate source module from GenerationConfig.
-    candidates.extend(_walk_bnb_post_init(today))
+    candidates.extend(_walk_bnb_post_init(today, curated_sections))
 
     return candidates, engine_version, rel_path
 
 
-def _walk_bnb_post_init(today: str) -> list[InvariantCandidate]:
+def _walk_bnb_post_init(today: str, curated_sections: dict[str, str]) -> list[InvariantCandidate]:
     """Walk ``BitsAndBytesConfig.post_init`` for type-check raises.
 
     Returns an empty list if the quantization_config module isn't importable
@@ -1560,7 +1556,7 @@ def _walk_bnb_post_init(today: str) -> list[InvariantCandidate]:
         post_init_fn,
         native_type=NATIVE_TYPE_BNB,
         method_name="post_init",
-        namespace=BNB_NAMESPACE,
+        curated_sections=curated_sections,
         rel_source_path=rel_path,
         today=today,
         library=LIBRARY_BNB,

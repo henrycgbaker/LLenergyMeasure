@@ -54,6 +54,10 @@ from scripts.engine_producers._base import (
     find_method,
     first_string_arg,
 )
+from scripts.engine_producers._section_classifier import (
+    load_curated_sections,
+    relabel_match_fields,
+)
 from scripts.engine_producers._source_walker import _literal_values
 
 # ---------------------------------------------------------------------------
@@ -1249,7 +1253,7 @@ def _read_source_version(source_root: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
+def _candidate_to_dict(c: InvariantCandidate, curated_sections: dict[str, str]) -> dict[str, Any]:
     return {
         "id": c.id,
         "engine": c.engine,
@@ -1264,7 +1268,14 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         },
         "match": {
             "engine": c.engine,
-            "fields": c.match_fields,
+            # D2: re-key onto classified {engine}.{section}.{field} paths
+            # (curation first, then llm_args-side / sampling-side native origin).
+            "fields": relabel_match_fields(
+                c.match_fields,
+                engine=ENGINE,
+                native_type=c.native_type,
+                curated_sections=curated_sections,
+            ),
         },
         "kwargs_positive": c.kwargs_positive,
         "kwargs_negative": c.kwargs_negative,
@@ -1291,12 +1302,13 @@ def emit_yaml(
         if frozen
         else dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     )
+    curated_sections = load_curated_sections(ENGINE)
     doc: dict[str, Any] = {
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
         "mined_at": mined_at,
-        "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
+        "invariants": [_candidate_to_dict(c, curated_sections) for c in sorted_candidates],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 

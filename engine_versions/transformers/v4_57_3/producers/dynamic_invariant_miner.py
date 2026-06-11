@@ -126,6 +126,12 @@ if str(_WALKERS_DIR) in sys.path:
 
 from scripts.engine_producers._base import InvariantCandidate, MinerSource  # noqa: E402
 from scripts.engine_producers._dataclass_lift import lift as _dataclass_lift  # noqa: E402
+from scripts.engine_producers._section_classifier import (  # noqa: E402
+    load_curated_sections,
+    relabel_match_fields,
+)
+
+ENGINE = "transformers"
 
 # ---------------------------------------------------------------------------
 # Probe contract
@@ -1760,8 +1766,14 @@ def _relative_source_path(abs_path: str) -> str:
     return Path(abs_path).name
 
 
-def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
-    """Render a :class:`InvariantCandidate` into the YAML corpus entry shape."""
+def _candidate_to_dict(c: InvariantCandidate, curated_sections: dict[str, str]) -> dict[str, Any]:
+    """Render a :class:`InvariantCandidate` into the YAML corpus entry shape.
+
+    Re-keys ``match.fields`` onto classified ``{engine}.{section}.{field}`` paths
+    at serialisation (D2): the section is decided by curation + native-class
+    origin, so the dynamic miner's per-cluster namespace becomes the authoritative
+    per-field section.
+    """
     return {
         "id": c.id,
         "engine": c.engine,
@@ -1776,7 +1788,12 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         },
         "match": {
             "engine": c.engine,
-            "fields": c.match_fields,
+            "fields": relabel_match_fields(
+                c.match_fields,
+                engine=ENGINE,
+                native_type=c.native_type,
+                curated_sections=curated_sections,
+            ),
         },
         "kwargs_positive": c.kwargs_positive,
         "kwargs_negative": c.kwargs_negative,
@@ -1848,13 +1865,14 @@ def main(argv: list[str] | None = None) -> int:
         dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     )
 
+    curated_sections = load_curated_sections(ENGINE)
     doc = {
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": version,
         "mined_at": mined_at,
         "extractor": "transformers_dynamic_miner",
-        "invariants": [_candidate_to_dict(c) for c in candidates_sorted],
+        "invariants": [_candidate_to_dict(c, curated_sections) for c in candidates_sorted],
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
