@@ -48,9 +48,9 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
-# Engines with config generation enabled. C8 fans vllm + tensorrt out by
-# adding their names here once their schema shadows are pilot-validated.
-ENGINES: tuple[str, ...] = ("transformers",)
+# Engines with config generation enabled. All three engines now generate their
+# config.py from the discovered schema + curated.yaml.
+ENGINES: tuple[str, ...] = ("transformers", "vllm", "tensorrt")
 
 # Native schema sections, projected into same-named sub-models.
 SECTIONS: tuple[str, ...] = ("engine_params", "sampling_params")
