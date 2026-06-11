@@ -46,6 +46,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from scripts._engine_constructors import (  # noqa: E402  (late import after sys.path)
+    resolve_native_type,
+)
 from scripts._invariant_validation_common import (  # noqa: E402  (late import after sys.path)
     TENSORRT_PRIVATE_FIELD_ALLOWLIST,
     TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST,
@@ -56,6 +59,10 @@ from scripts._invariant_validation_common import (  # noqa: E402  (late import a
     classify_outcome,
     compare_expected_vs_observed,
     diff_input_vs_state,
+    invariant_claimed_fields,
+    is_type_check_invariant,
+    is_type_coercion_artifact,
+    locus_confirms_invariant,
     message_matches_template,
     run_case,
     strip_warning_once_sentinel,
@@ -147,9 +154,9 @@ def _run_transformers(
             logger_names=logger_names,
             private_allowlist=TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST,
         )
-    # Fallback: treat native_type as a dotted import path.
+    # Fallback: resolve native_type against the live transformers package.
     return run_case(
-        lambda: _construct_generic(native_type, kwargs),
+        lambda: _construct_generic("transformers", native_type, kwargs),
         logger_names=logger_names,
         private_allowlist=TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST,
     )
@@ -171,10 +178,8 @@ def _construct_bitsandbytes_config(kwargs: dict[str, Any]) -> Any:
     return BitsAndBytesConfig(**kwargs)
 
 
-def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
-    module_path, _, class_name = native_type.rpartition(".")
-    module = __import__(module_path, fromlist=[class_name])
-    cls = getattr(module, class_name)
+def _construct_generic(engine: str, native_type: str, kwargs: dict[str, Any]) -> Any:
+    cls = resolve_native_type(engine, native_type)
     return cls(**kwargs)
 
 
@@ -188,19 +193,11 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
 # ``validate-tensorrt`` job in ``.github/workflows/engine-invariants.yml``.
 #
 # The static miner emits short-form ``native_type`` values (``tensorrt_llm.X``)
-# matching the AST symbol it walked. Map those to the deep import paths inside
-# the library, and substitute ``BaseLlmArgs`` -> ``TrtLlmArgs`` because
-# ``BaseLlmArgs`` is the abstract parent and invariants tagged on it apply to
-# inherited fields on the concrete subclass.
-
-_TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {
-    "tensorrt_llm.BaseLlmArgs": "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
-    "tensorrt_llm.TrtLlmArgs": "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
-    "tensorrt_llm.LookaheadDecodingConfig": (
-        "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig"
-    ),
-    "tensorrt_llm.CalibConfig": "tensorrt_llm.llmapi.llm_args.CalibConfig",
-}
+# matching the AST symbol it walked. The short-name -> deep-import-path mapping
+# (and the ``BaseLlmArgs`` -> ``TrtLlmArgs`` substitution, since ``BaseLlmArgs``
+# is the abstract parent and invariants tagged on it apply to inherited fields
+# on the concrete subclass) lives in the per-engine resolution table in
+# :mod:`scripts._engine_constructors`.
 
 # ``BaseLlmArgs`` / ``TrtLlmArgs`` declare ``model`` as a required field. The
 # corpus's ``kwargs_positive`` / ``kwargs_negative`` only carry the field under
@@ -240,14 +237,12 @@ def _run_tensorrt(
 def _construct_trtllm(native_type: str, kwargs: dict[str, Any]) -> Any:
     """Construct a TRT-LLM type by short native_type name.
 
-    Maps short names to deep import paths via :data:`_TRTLLM_NATIVE_TYPE_MAP`
-    and injects the required ``model`` placeholder for ``*LlmArgs`` types
-    when the corpus kwargs don't set it.
+    Resolves the class via the per-engine table in
+    :mod:`scripts._engine_constructors` (which holds the short-name -> deep-path
+    overrides) and injects the required ``model`` placeholder for ``*LlmArgs``
+    types when the corpus kwargs don't set it.
     """
-    actual = _TRTLLM_NATIVE_TYPE_MAP.get(native_type, native_type)
-    module_path, _, class_name = actual.rpartition(".")
-    module = __import__(module_path, fromlist=[class_name])
-    cls = getattr(module, class_name)
+    cls = resolve_native_type("tensorrt", native_type)
     use_kwargs = dict(kwargs)
     if native_type in _TRTLLM_LLMARGS_TYPES and "model" not in use_kwargs:
         use_kwargs["model"] = _TRTLLM_MODEL_PLACEHOLDER
@@ -321,7 +316,7 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
         "vllm.engine",
     )
     result = run_case(
-        lambda: _construct_generic(native_type, kwargs),
+        lambda: _construct_generic("vllm", native_type, kwargs),
         logger_names=logger_names,
         # vLLM doesn't expose a strict private-field allowlist concept; the
         # corpus loader will re-validate per-field anyway.
@@ -490,6 +485,29 @@ CHECK_POSITIVE_RAISES = "positive_raises"
 CHECK_NEGATIVE_DOES_NOT_RAISE = "negative_does_not_raise"
 CHECK_MESSAGE_TEMPLATE_MATCH = "message_template_match"
 CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC = "message_template_too_dynamic"
+# Chunk C4 gate hardening: confirm-attribution by error locus + coercion guard.
+CHECK_LOCUS_MISMATCH = "locus_mismatch"
+CHECK_TYPE_COERCION_ARTIFACT = "type_coercion_artifact"
+
+
+def _erroring_field_value_is_numeric(invariant: dict[str, Any], error_details: list[Any]) -> bool:
+    """True iff the field the error fired on carries a numeric ``kwargs_positive`` value.
+
+    Used to decide whether a ``literal_error`` is a numeric-allowlist coercion
+    artefact (reject) versus a categorical-allowlist rule (keep). Keyed on the
+    *erroring* field (the error locus), not the claimed fields: a literal error
+    on an unrelated categorical field must not be reclassified as a numeric
+    coercion artefact just because some other claimed field is numeric. A purely
+    structural signal off the probe kwargs - no schema lookup needed.
+    """
+    kwargs = invariant.get("kwargs_positive") or {}
+    if not isinstance(kwargs, dict):
+        return False
+    error_fields = {part for detail in error_details for part in detail.loc}
+    return any(
+        isinstance(kwargs.get(name), (int, float)) and not isinstance(kwargs.get(name), bool)
+        for name in error_fields
+    )
 
 
 def compute_gate_soundness_divergences(
@@ -590,6 +608,43 @@ def compute_gate_soundness_divergences(
                 check_failed=CHECK_NEGATIVE_DOES_NOT_RAISE,
             )
         )
+
+    # 4 + 5. Confirm-attribution by error locus and type-coercion-artefact
+    #        rejection (chunk C4). Only meaningful when the positive raised -
+    #        these refine *why* a raise counts as a confirm of THIS rule.
+    if pos.exception_type is not None:
+        claimed = invariant_claimed_fields(invariant)
+        type_check = is_type_check_invariant(invariant)
+
+        # Coercion artefact: a parse/coercion error standing in for the claimed
+        # value rule. Checked before locus so the more specific cause wins.
+        numeric_predicate = _erroring_field_value_is_numeric(invariant, pos.error_details)
+        if is_type_coercion_artifact(
+            pos.error_details, is_type_check=type_check, numeric_predicate=numeric_predicate
+        ):
+            artefact_types = sorted({d.error_type for d in pos.error_details})
+            divergences.append(
+                Divergence(
+                    invariant_id=invariant_id,
+                    field="kwargs_positive",
+                    expected="rule_fires_not_type_coercion",
+                    observed=artefact_types,
+                    check_failed=CHECK_TYPE_COERCION_ARTIFACT,
+                )
+            )
+        # Locus mismatch: the raise concerns a field the invariant does not
+        # claim (an incidental sibling/Literal error firing first).
+        elif not locus_confirms_invariant(claimed, pos.error_details):
+            observed_loc = sorted({part for d in pos.error_details for part in d.loc})
+            divergences.append(
+                Divergence(
+                    invariant_id=invariant_id,
+                    field="kwargs_positive",
+                    expected=sorted(claimed),
+                    observed=observed_loc,
+                    check_failed=CHECK_LOCUS_MISMATCH,
+                )
+            )
 
     return divergences
 

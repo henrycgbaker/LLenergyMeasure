@@ -24,11 +24,17 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts import _invariant_validation_common, validate_invariants  # noqa: E402
 from scripts._invariant_validation_common import (  # noqa: E402
     CaptureBuffers,
+    ErrorDetail,
     classify_emission_channel,
     classify_outcome,
     compare_expected_vs_observed,
     diff_input_vs_state,
+    extract_error_details,
     extract_state,
+    invariant_claimed_fields,
+    is_type_check_invariant,
+    is_type_coercion_artifact,
+    locus_confirms_invariant,
     message_matches_template,
     message_template_to_substring,
     run_case,
@@ -565,6 +571,7 @@ def _capture(
     warnings_captured: tuple[str, ...] = (),
     logger_messages: tuple[str, ...] = (),
     observed_state: dict[str, Any] | None = None,
+    error_details: tuple[ErrorDetail, ...] = (),
 ) -> CaptureBuffers:
     """Convenience constructor for synthetic capture buffers."""
     return CaptureBuffers(
@@ -574,6 +581,7 @@ def _capture(
         logger_messages=logger_messages,
         observed_state=observed_state,
         duration_ms=0,
+        error_details=error_details,
     )
 
 
@@ -695,3 +703,221 @@ class TestComputeGateSoundnessDivergences:
         assert d["check_failed"] == validate_invariants.CHECK_POSITIVE_RAISES
         assert d["invariant_id"] == "r8"
         assert d["field"] == "kwargs_positive"
+
+
+# ---------------------------------------------------------------------------
+# extract_error_details - pydantic / msgspec / plain (chunk C4)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractErrorDetails:
+    def test_pydantic_validation_error_structured_loc(self) -> None:
+        pydantic = pytest.importorskip("pydantic")
+
+        class M(pydantic.BaseModel):
+            x: int = 0
+
+        try:
+            M(x="not-an-int")
+        except pydantic.ValidationError as exc:
+            details = extract_error_details(exc)
+        assert len(details) == 1
+        assert details[0].loc == ("x",)
+        assert details[0].error_type == "int_parsing"
+
+    def test_msgspec_validation_error_parsed_from_message(self) -> None:
+        msgspec = pytest.importorskip("msgspec")
+
+        class S(msgspec.Struct):
+            n: int
+
+        try:
+            msgspec.convert({"n": "x"}, S)
+        except msgspec.ValidationError as exc:
+            details = extract_error_details(exc)
+        assert len(details) == 1
+        assert details[0].loc == ("n",)
+        assert details[0].error_type == "msgspec_parsing"
+
+    def test_plain_raise_backtick_field_locus(self) -> None:
+        details = extract_error_details(ValueError("`num_beams` is greater than 1"))
+        assert details == (ErrorDetail(loc=("num_beams",), error_type="plain"),)
+
+    def test_plain_raise_no_backtick_yields_empty(self) -> None:
+        assert extract_error_details(ValueError("something went wrong")) == ()
+
+
+# ---------------------------------------------------------------------------
+# invariant_claimed_fields + is_type_check_invariant
+# ---------------------------------------------------------------------------
+
+
+class TestClaimedFields:
+    def test_extracts_bare_field_names_from_match(self) -> None:
+        invariant = {
+            "match": {"engine": "x", "fields": {"transformers.sampling.num_beams": 1}},
+        }
+        assert invariant_claimed_fields(invariant) == frozenset({"num_beams"})
+
+    def test_cross_field_multiple(self) -> None:
+        invariant = {"match": {"fields": {"e.s.a": 1, "e.s.b": 2}}}
+        assert invariant_claimed_fields(invariant) == frozenset({"a", "b"})
+
+    def test_no_match_block_empty(self) -> None:
+        assert invariant_claimed_fields({}) == frozenset()
+
+
+class TestIsTypeCheckInvariant:
+    def test_explicit_flag(self) -> None:
+        assert is_type_check_invariant({"type_check": True}) is True
+
+    def test_id_segment(self) -> None:
+        assert is_type_check_invariant({"id": "transformers_compile_config_type_foo"}) is True
+
+    def test_message_marker(self) -> None:
+        assert is_type_check_invariant(
+            {"id": "x", "message_template": "you provided it but it must be an instance of Y"}
+        )
+
+    def test_value_rule_not_type_check(self) -> None:
+        assert (
+            is_type_check_invariant({"id": "x", "message_template": "`a` must be non-zero"})
+            is False
+        )
+
+
+# ---------------------------------------------------------------------------
+# locus_confirms_invariant (D1) + is_type_coercion_artifact (D2) - unit
+# ---------------------------------------------------------------------------
+
+
+class TestLocusConfirms:
+    def test_intersecting_locus_confirms(self) -> None:
+        details = (ErrorDetail(loc=("num_beams",), error_type="plain"),)
+        assert locus_confirms_invariant({"num_beams"}, details) is True
+
+    def test_incidental_error_does_not_confirm_cross_field(self) -> None:
+        # Claimed cross-field rule {a, b}; error fired on unrelated `mode`.
+        details = (ErrorDetail(loc=("mode",), error_type="literal_error"),)
+        assert locus_confirms_invariant({"a", "b"}, details) is False
+
+    def test_empty_details_is_permissive(self) -> None:
+        # No structured locus recoverable (composed ValueError) - do not block.
+        assert locus_confirms_invariant({"a"}, ()) is True
+
+    def test_no_claimed_fields_is_permissive(self) -> None:
+        details = (ErrorDetail(loc=("x",), error_type="plain"),)
+        assert locus_confirms_invariant(set(), details) is True
+
+
+class TestIsTypeCoercionArtifact:
+    def test_int_parsing_is_artifact(self) -> None:
+        details = (ErrorDetail(loc=("a",), error_type="int_parsing"),)
+        assert is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
+
+    def test_msgspec_parsing_is_artifact(self) -> None:
+        details = (ErrorDetail(loc=("a",), error_type="msgspec_parsing"),)
+        assert is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
+
+    def test_type_check_invariant_exempt(self) -> None:
+        details = (ErrorDetail(loc=("a",), error_type="int_parsing"),)
+        assert not is_type_coercion_artifact(details, is_type_check=True, numeric_predicate=False)
+
+    def test_literal_error_numeric_predicate_is_artifact(self) -> None:
+        details = (ErrorDetail(loc=("a",), error_type="literal_error"),)
+        assert is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=True)
+
+    def test_literal_error_categorical_predicate_kept(self) -> None:
+        # Literal on a categorical field is a real rule, not a coercion artefact.
+        details = (ErrorDetail(loc=("mode",), error_type="literal_error"),)
+        assert not is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
+
+    def test_greater_than_is_not_artifact(self) -> None:
+        # A genuine bound violation is the rule firing, not coercion.
+        details = (ErrorDetail(loc=("a",), error_type="greater_than"),)
+        assert not is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
+
+
+# ---------------------------------------------------------------------------
+# compute_gate_soundness_divergences - locus + coercion integration (C4)
+# ---------------------------------------------------------------------------
+
+
+class TestGateSoundnessLocusAndCoercion:
+    def test_locus_mismatch_recorded(self) -> None:
+        # Cross-field rule claims {a, b} but the raise concerns `mode`.
+        invariant = {
+            "id": "cross",
+            "severity": "error",
+            "match": {"fields": {"e.a": 1, "e.b": 2}},
+            "kwargs_positive": {"a": 1, "b": 2},
+            "kwargs_negative": {"a": 0, "b": 0},
+            "message_template": "incompatible `a` and `b`",
+        }
+        pos = _capture(
+            exception_type="ValidationError",
+            exception_message="bad mode",
+            error_details=(ErrorDetail(loc=("mode",), error_type="literal_error"),),
+        )
+        neg = _capture(observed_state={"a": 0, "b": 0})
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert any(d.check_failed == validate_invariants.CHECK_LOCUS_MISMATCH for d in divergences)
+
+    def test_matching_locus_no_locus_divergence(self) -> None:
+        invariant = {
+            "id": "ok",
+            "severity": "error",
+            "match": {"fields": {"e.a": 1}},
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "incompatible `a`",
+        }
+        pos = _capture(
+            exception_type="ValueError",
+            exception_message="incompatible `a`",
+            error_details=(ErrorDetail(loc=("a",), error_type="plain"),),
+        )
+        neg = _capture(observed_state={"a": 0})
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert all(d.check_failed != validate_invariants.CHECK_LOCUS_MISMATCH for d in divergences)
+
+    def test_coercion_artifact_recorded_for_value_rule(self) -> None:
+        # Value rule (not a type-check) whose positive probe tripped int_parsing.
+        invariant = {
+            "id": "val",
+            "severity": "error",
+            "match": {"fields": {"e.a": 5}},
+            "kwargs_positive": {"a": 5},
+            "kwargs_negative": {"a": 0},
+            "message_template": "`a` must be positive",
+        }
+        pos = _capture(
+            exception_type="ValidationError",
+            exception_message="int_parsing",
+            error_details=(ErrorDetail(loc=("a",), error_type="int_parsing"),),
+        )
+        neg = _capture(observed_state={"a": 0})
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert any(
+            d.check_failed == validate_invariants.CHECK_TYPE_COERCION_ARTIFACT for d in divergences
+        )
+
+    def test_coercion_artifact_exempt_for_type_check_invariant(self) -> None:
+        invariant = {
+            "id": "transformers_compile_config_type_check",
+            "severity": "error",
+            "match": {"fields": {"e.compile_config": 1}},
+            "kwargs_positive": {"compile_config": 1},
+            "kwargs_negative": {"compile_config": {}},
+            "message_template": "must be an instance of CompileConfig",
+        }
+        pos = _capture(
+            exception_type="ValidationError",
+            exception_message="must be an instance",
+            error_details=(ErrorDetail(loc=("compile_config",), error_type="int_parsing"),),
+        )
+        neg = _capture(observed_state={"compile_config": {}})
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert all(
+            d.check_failed != validate_invariants.CHECK_TYPE_COERCION_ARTIFACT for d in divergences
+        )

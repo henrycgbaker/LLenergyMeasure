@@ -11,6 +11,24 @@ never re-interprets the invariant's declared shape - if the library behaves
 differently from what the corpus claims, CI fails. See
 :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`
 §4.3 for the full contract.
+
+Type-coercion-artefact guard - msgspec coverage status
+------------------------------------------------------
+:func:`is_type_coercion_artifact` covers both pydantic and msgspec validation
+errors (:func:`extract_error_details` reads pydantic's structured ``.errors()``
+and parses msgspec's ``Expected X, got Y - at `$.field``` message shape). The
+spike's version was pydantic-only; this closes that gap for the case where a
+msgspec ValidationError actually surfaces.
+
+One residual, documented rather than over-engineered: the gate constructs
+probes by *direct* ``Struct(**kwargs)`` construction, and a msgspec ``Struct``
+does NOT validate types or constraints on direct construction (it validates
+only on ``decode`` / ``convert``). vllm's ``SamplingParams`` is a msgspec
+Struct, but its value rules fire in ``__post_init__`` / ``_verify_args`` as
+plain ``ValueError``s, not msgspec errors. So on the live construction path a
+msgspec *parse* artefact is not reachable in the first place; the msgspec branch
+here is a correctness backstop for any path that does surface one (e.g. a future
+decode-based probe), not a hot path today.
 """
 
 from __future__ import annotations
@@ -73,6 +91,23 @@ TENSORRT_PRIVATE_FIELD_ALLOWLIST: frozenset[str] = _DEFAULT_PRIVATE_FIELD_ALLOWL
 
 
 @dataclass(frozen=True)
+class ErrorDetail:
+    """One structured field-error extracted from a raised validation exception.
+
+    ``loc`` is the (possibly nested) field path the error concerns; the last
+    element is the field name. ``error_type`` is the validator's machine code
+    (pydantic's ``int_parsing`` / ``literal_error`` / ``greater_than`` / ...;
+    for msgspec and plain raises a synthesised label, see
+    :func:`extract_error_details`). These two together let the gate attribute a
+    confirm to the rule whose field(s) the error actually concerns and reject
+    type-coercion artefacts - without bare substring matching on the message.
+    """
+
+    loc: tuple[str, ...]
+    error_type: str
+
+
+@dataclass(frozen=True)
 class CaptureBuffers:
     """Container for everything a single ``native_type(**kwargs)`` call produced."""
 
@@ -82,6 +117,7 @@ class CaptureBuffers:
     logger_messages: tuple[str, ...]
     observed_state: dict[str, Any] | None
     duration_ms: int
+    error_details: tuple[ErrorDetail, ...] = ()
 
 
 @dataclass
@@ -284,6 +320,101 @@ def _patch_warning_once() -> Callable[[], None]:
     return restore
 
 
+# Backtick-quoted field name in a plain-raise message, e.g.
+# "`num_beams` is greater than 1". The engines (transformers, vllm, tensorrt)
+# consistently backtick the field name in their validation messages, so this is
+# a reliable structured locus for plain (non-pydantic) raises - far tighter
+# than whole-message substring matching.
+_BACKTICK_FIELD_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
+
+# msgspec encodes the failing field as a trailing JSON-pointer-ish locus,
+# e.g. "Expected `int`, got `str` - at `$.temperature`". The leading `$.`
+# is msgspec's document-root marker.
+_MSGSPEC_LOC_RE = re.compile(r"at `\$\.([A-Za-z_][A-Za-z0-9_.\[\]]*)`")
+
+# msgspec parse-error shape: "Expected `<type>`, got `<type>`" with no
+# constraint operator. A constraint failure instead reads "Expected `int` >= 0".
+_MSGSPEC_PARSE_RE = re.compile(r"Expected `[^`]+`, got `[^`]+`")
+
+
+def extract_error_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
+    """Extract structured ``(loc, error_type)`` pairs from a raised exception.
+
+    Three sources, in priority order:
+
+    1. **pydantic ``ValidationError``** - the structured ``.errors()`` list is
+       authoritative: each entry carries a ``loc`` tuple and a machine
+       ``type`` (``int_parsing``, ``literal_error``, ``greater_than``, ...).
+    2. **msgspec ``ValidationError``** - no ``.errors()`` API; the locus and a
+       coarse type are parsed from the message (``... - at `$.field```; the
+       ``Expected X, got Y`` shape marks a parse/coercion artefact, surfaced as
+       error_type ``msgspec_parsing``, else ``msgspec_validation``).
+    3. **plain exceptions** (``ValueError`` from ``__post_init__`` /
+       ``_verify_args`` / ``GenerationConfig.validate``) - backtick-quoted
+       field names in the message are the locus; error_type is
+       ``plain`` (no machine code available).
+
+    Returns ``()`` when no field locus can be recovered (the caller then falls
+    back to permissive behaviour - it never *blocks* a confirm on absence of a
+    locus, only refines attribution when one is present).
+    """
+    details = _extract_pydantic_details(exc)
+    if details:
+        return details
+    details = _extract_msgspec_details(exc)
+    if details:
+        return details
+    return _extract_plain_details(exc)
+
+
+def _extract_pydantic_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
+    errors_fn = getattr(exc, "errors", None)
+    if not callable(errors_fn):
+        return ()
+    # Guard: only pydantic ValidationError carries the (loc, type) error shape.
+    # Duck-type on the structure rather than importing pydantic (this module is
+    # engine-agnostic and pydantic may be absent in some test environments).
+    try:
+        raw_errors = errors_fn()
+    except Exception:
+        return ()
+    if not isinstance(raw_errors, (list, tuple)):
+        return ()
+    collected: list[ErrorDetail] = []
+    for err in raw_errors:
+        if not isinstance(err, dict) or "loc" not in err or "type" not in err:
+            return ()  # not a pydantic-shaped error list
+        loc = tuple(str(part) for part in err["loc"])
+        collected.append(ErrorDetail(loc=loc, error_type=str(err["type"])))
+    return tuple(collected)
+
+
+def _extract_msgspec_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
+    # msgspec.ValidationError is a subclass of ValueError; identify it by class
+    # name to avoid a hard import dependency on msgspec.
+    if type(exc).__name__ != "ValidationError" or type(exc).__module__.split(".")[0] != "msgspec":
+        return ()
+    message = str(exc)
+    loc_match = _MSGSPEC_LOC_RE.search(message)
+    if not loc_match:
+        return ()
+    loc = tuple(loc_match.group(1).split("."))
+    error_type = "msgspec_parsing" if _MSGSPEC_PARSE_RE.search(message) else "msgspec_validation"
+    return (ErrorDetail(loc=loc, error_type=error_type),)
+
+
+def _extract_plain_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
+    fields = _BACKTICK_FIELD_RE.findall(str(exc))
+    # De-dup preserving order; each backticked field becomes a one-element loc.
+    seen: set[str] = set()
+    details: list[ErrorDetail] = []
+    for name in fields:
+        if name not in seen:
+            seen.add(name)
+            details.append(ErrorDetail(loc=(name,), error_type="plain"))
+    return tuple(details)
+
+
 def run_case(
     callable_fn: Callable[[], Any],
     *,
@@ -301,6 +432,7 @@ def run_case(
     start = time.perf_counter()
     exc_type: str | None = None
     exc_msg: str | None = None
+    error_details: tuple[ErrorDetail, ...] = ()
     obj: Any = None
     captured_warnings: list[warnings.WarningMessage] = []
 
@@ -312,6 +444,7 @@ def run_case(
             except Exception as exc:
                 exc_type = type(exc).__name__
                 exc_msg = str(exc)
+                error_details = extract_error_details(exc)
             # Snapshot inside the catch_warnings scope so warnings captured
             # alongside an exception are preserved (dormant-then-raise paths).
             captured_warnings = list(recorded or [])
@@ -334,6 +467,7 @@ def run_case(
         logger_messages=log_messages,
         observed_state=observed_state,
         duration_ms=duration_ms,
+        error_details=error_details,
     )
 
 
@@ -569,3 +703,147 @@ def message_matches_template(observed_message: str, template: str) -> tuple[bool
     if not fragment:
         return False, ""
     return fragment.lower() in (observed_message or "").lower(), fragment
+
+
+# ---------------------------------------------------------------------------
+# Locus attribution + type-coercion-artefact rejection (chunk C4 gate hardening)
+# ---------------------------------------------------------------------------
+#
+# Two false-confirm classes the mining-substrate study hit (carry-forward audit
+# D2). Both are guarded here against the structured ``error_details`` captured
+# by :func:`run_case`, never against bare message substrings.
+
+
+# pydantic machine error codes for value-parsing/coercion (D2 pitfall 2). When
+# the positive probe raised one of these AND the invariant is not itself a
+# type-check, the "confirm" is a coercion artefact, not the claimed rule firing.
+_PARSING_ERROR_TYPES: frozenset[str] = frozenset(
+    {
+        "int_parsing",
+        "float_parsing",
+        "bool_parsing",
+        "decimal_parsing",
+        # msgspec's synthesised parse label (see extract_error_details).
+        "msgspec_parsing",
+    }
+)
+
+# ``literal_error`` is a coercion artefact only when the predicate it guards is
+# numeric-labelled - a Literal allowlist on a genuinely categorical field is a
+# real rule. The caller passes whether the predicate is numeric.
+_LITERAL_ERROR_TYPE = "literal_error"
+
+
+def invariant_claimed_fields(invariant: dict[str, Any]) -> frozenset[str]:
+    """Return the bare field names an invariant claims to govern.
+
+    Reads ``match.fields`` (dotted keys like ``transformers.sampling.num_beams``)
+    and returns the last dotted segment of each - the live library raises errors
+    keyed on the bare field name (``num_beams``), so that is the grain to match
+    against the captured error locus.
+    """
+    match = invariant.get("match")
+    if not isinstance(match, dict):
+        return frozenset()
+    fields = match.get("fields")
+    if not isinstance(fields, dict):
+        return frozenset()
+    return frozenset(str(key).rsplit(".", 1)[-1] for key in fields)
+
+
+_TYPE_CHECK_MESSAGE_MARKERS: tuple[str, ...] = (
+    "must be an instance of",
+    "must be a boolean",
+    "must be of type",
+    "must be an int",
+    "must be a float",
+    "must be a str",
+    "must be a string",
+    "expected type",
+    "is not a valid",
+)
+
+
+def is_type_check_invariant(invariant: dict[str, Any]) -> bool:
+    """True iff the invariant itself asserts a field's *type* (not a value rule).
+
+    Type-check invariants legitimately fire a parsing/coercion error on their
+    positive probe - that IS the behaviour under test - so the coercion guard
+    (:func:`is_type_coercion_artifact`) must exempt them. Detection is
+    structural: the corpus may set ``type_check: true`` explicitly; otherwise we
+    infer from the id segment ``_type_`` and the type-assertion phrasing in the
+    ``message_template`` / ``invariant_under_test``.
+    """
+    if bool(invariant.get("type_check", False)):
+        return True
+    invariant_id = str(invariant.get("id", ""))
+    if "_type_" in invariant_id:
+        return True
+    haystack = (
+        str(invariant.get("message_template") or "")
+        + " "
+        + str(invariant.get("invariant_under_test") or "")
+    ).lower()
+    return any(marker in haystack for marker in _TYPE_CHECK_MESSAGE_MARKERS)
+
+
+def locus_confirms_invariant(
+    claimed_fields: Iterable[str], error_details: Iterable[ErrorDetail]
+) -> bool:
+    """True iff the captured error locus matches the invariant's claimed fields.
+
+    Decision (audit D2 pitfall 1): a confirm must be attributed to the rule
+    whose field(s) the raised error actually concerns. An incidental error
+    (e.g. a Literal allowlist violation on field X firing before the claimed
+    cross-field validator on fields Y/Z) must NOT confirm the claimed rule.
+
+    Matching rule:
+
+    - No captured locus (``error_details`` empty) -> ``True``. We never *block*
+      a confirm purely because no structured locus was recoverable; locus
+      attribution only *refines* when evidence is present (e.g. transformers'
+      ``GenerationConfig.validate`` composes a single ValueError with no
+      per-field loc, where the existing message-template check still applies).
+    - No claimed fields (invariant omits ``match.fields``) -> ``True``. Nothing
+      to attribute against; defer to the other gate checks.
+    - Otherwise: at least one captured locus element must intersect the claimed
+      fields. A cross-field rule claiming {Y, Z} is confirmed only if the error
+      touches Y or Z, never if it touches an unrelated X.
+    """
+    claimed = frozenset(claimed_fields)
+    if not claimed:
+        return True
+    details = tuple(error_details)
+    if not details:
+        return True
+    error_fields = {part for detail in details for part in detail.loc}
+    return bool(error_fields & claimed)
+
+
+def is_type_coercion_artifact(
+    error_details: Iterable[ErrorDetail],
+    *,
+    is_type_check: bool,
+    numeric_predicate: bool,
+) -> bool:
+    """True iff a confirm should be rejected as a type-coercion artefact.
+
+    Decision (audit D2 pitfall 2): reject a lenient/recall-mode confirm whose
+    positive probe raised a pydantic PARSING error (int/float/bool/decimal
+    parsing, or msgspec's parse equivalent), or a ``literal_error`` on a
+    numeric-labelled predicate - UNLESS the invariant under test is itself a
+    type-check rule (then the parse error is the intended behaviour).
+
+    ``numeric_predicate`` distinguishes a ``literal_error`` that fired because a
+    numeric value missed a numeric Literal allowlist (a coercion artefact) from
+    one on a genuinely categorical field (a real rule). The caller derives this
+    from the claimed field's declared predicate.
+    """
+    if is_type_check:
+        return False
+    for detail in error_details:
+        if detail.error_type in _PARSING_ERROR_TYPES:
+            return True
+        if detail.error_type == _LITERAL_ERROR_TYPE and numeric_predicate:
+            return True
+    return False
