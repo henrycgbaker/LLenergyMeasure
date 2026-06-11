@@ -167,7 +167,7 @@ def _debt_marked_fields(engine: str) -> set[str]:
         stripped = line.strip()
         if stripped.startswith("- ") and _DEBT_MARKER in line:
             # "- field_name  # discovery debt: ..."  ->  "field_name"
-            marked.add(stripped[2:].split("#", 1)[0].split(",")[0].strip())
+            marked.add(stripped[2:].split("#", 1)[0].strip())
     return marked
 
 

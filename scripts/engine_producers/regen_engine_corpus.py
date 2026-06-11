@@ -55,18 +55,6 @@ def _shadow_dir(engine: str) -> Path:
     return _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine
 
 
-def _files_for(engine: str) -> tuple[Path, list[str]]:
-    """Return the SSOT outputs dir and the filenames to sync for an engine.
-
-    Optional files are included only when present in the SSOT outputs dir, so
-    their absence is never reported as drift.
-    """
-    outputs = current_outputs_dir(engine)
-    names = [*CORPUS_FILES]
-    names.extend(name for name in OPTIONAL_FILES if (outputs / name).exists())
-    return outputs, names
-
-
 def _file_diff(src: Path, dst: Path) -> str:
     """Return a unified diff (shadow vs SSOT); empty when byte-identical."""
     src_lines = src.read_text(encoding="utf-8").splitlines(keepends=True)
@@ -87,12 +75,16 @@ def sync_engine(engine: str, *, write: bool) -> tuple[list[str], list[str]]:
     every current pin is expected to carry a full corpus, so a gap is a real
     error, not a silently-tolerated state.
     """
-    outputs, names = _files_for(engine)
+    outputs = current_outputs_dir(engine)
     if not outputs.is_dir():
         raise FileNotFoundError(
             f"{engine}: SSOT outputs dir not found ({outputs}). "
             f"Check engine_versions/{engine}/current.yaml and the vendored pin."
         )
+
+    # Optional files are synced only when the SSOT carries one, so their
+    # absence is never reported as drift.
+    names = [*CORPUS_FILES, *(n for n in OPTIONAL_FILES if (outputs / n).exists())]
 
     shadow = _shadow_dir(engine)
     drift: list[str] = []
