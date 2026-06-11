@@ -1301,3 +1301,144 @@ invariants:
   - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
+- id: transformers_bnb_load_in_4bit_xor_load_in_8bit
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_ValueError: raises when load_in_4bit
+    and load_in_8bit are both True (V1 parity row)'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: transformers/utils/quantization_config.py
+    method: __init__
+    line_at_scan: 0
+  match:
+    engine: transformers
+    fields:
+      transformers.engine_params.load_in_4bit: true
+      transformers.engine_params.load_in_8bit: true
+  kwargs_positive:
+    load_in_4bit: true
+    load_in_8bit: true
+  kwargs_negative:
+    load_in_4bit: true
+    load_in_8bit: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: load_in_4bit and load_in_8bit are both True, but only one can
+    be used at the same time
+  references:
+  - transformers.BitsAndBytesConfig - observed via construction-time ValueError (V1
+    parity row, in-container probe 4.57.3)
+  added_by: manual_seed
+  added_at: '2026-06-11'
+- id: transformers_bnb_4bit_quant_type_dormant_without_load_in_4bit
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig silently ignores bnb_4bit_quant_type when
+    load_in_4bit is not True (V3 parity row)'
+  severity: dormant
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: transformers/utils/quantization_config.py
+    method: __init__
+    line_at_scan: 0
+  match:
+    engine: transformers
+    fields:
+      transformers.engine_params.load_in_4bit:
+        not_equal: true
+      transformers.engine_params.bnb_4bit_quant_type:
+        present: true
+  kwargs_positive:
+    load_in_4bit: false
+    bnb_4bit_quant_type: nf4
+  kwargs_negative:
+    load_in_4bit: true
+    bnb_4bit_quant_type: nf4
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - bnb_4bit_quant_type
+  message_template: bnb_4bit_quant_type is set but load_in_4bit is not True, so it
+    is silently ignored (4-bit quantization is off)
+  references:
+  - transformers.BitsAndBytesConfig - observed via construction (V3 parity row, in-container
+    probe 4.57.3; silent acceptance, fields ignored)
+  added_by: manual_seed
+  added_at: '2026-06-11'
+- id: transformers_bnb_4bit_compute_dtype_dormant_without_load_in_4bit
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig silently ignores bnb_4bit_compute_dtype
+    when load_in_4bit is not True (V3 parity row)'
+  severity: dormant
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: transformers/utils/quantization_config.py
+    method: __init__
+    line_at_scan: 0
+  match:
+    engine: transformers
+    fields:
+      transformers.engine_params.load_in_4bit:
+        not_equal: true
+      transformers.engine_params.bnb_4bit_compute_dtype:
+        present: true
+  kwargs_positive:
+    load_in_4bit: false
+    bnb_4bit_compute_dtype: bfloat16
+  kwargs_negative:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: bfloat16
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - bnb_4bit_compute_dtype
+  message_template: bnb_4bit_compute_dtype is set but load_in_4bit is not True, so
+    it is silently ignored (4-bit quantization is off)
+  references:
+  - transformers.BitsAndBytesConfig - observed via construction (V3 parity row, in-container
+    probe 4.57.3; silent acceptance, fields ignored)
+  added_by: manual_seed
+  added_at: '2026-06-11'
+- id: transformers_bnb_4bit_use_double_quant_dormant_without_load_in_4bit
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig silently ignores bnb_4bit_use_double_quant
+    when load_in_4bit is not True (V3 parity row)'
+  severity: dormant
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: transformers/utils/quantization_config.py
+    method: __init__
+    line_at_scan: 0
+  match:
+    engine: transformers
+    fields:
+      transformers.engine_params.load_in_4bit:
+        not_equal: true
+      transformers.engine_params.bnb_4bit_use_double_quant:
+        present: true
+  kwargs_positive:
+    load_in_4bit: false
+    bnb_4bit_use_double_quant: true
+  kwargs_negative:
+    load_in_4bit: true
+    bnb_4bit_use_double_quant: true
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - bnb_4bit_use_double_quant
+  message_template: bnb_4bit_use_double_quant is set but load_in_4bit is not True,
+    so it is silently ignored (4-bit quantization is off)
+  references:
+  - transformers.BitsAndBytesConfig - observed via construction (V3 parity row, in-container
+    probe 4.57.3; silent acceptance, fields ignored)
+  added_by: manual_seed
+  added_at: '2026-06-11'

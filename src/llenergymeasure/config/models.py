@@ -522,6 +522,12 @@ class ExperimentConfig(BaseModel):
                     effective_value=match.effective_value,
                     reason=annotated,
                 )
+                # A measurement tool must not let users silently measure something
+                # other than what they configured: announce the ignored field and
+                # the condition that made it dormant (covers the V3 hazard - bnb_4bit_*
+                # set without load_in_4bit). The observation above stays the
+                # machine-readable record; this is the user-visible nudge.
+                warnings.warn(annotated, ConfigValidationWarning, stacklevel=2)
                 continue
             # Typo in the corpus: loader validation would normally reject this,
             # but surface it visibly if anything slips past.

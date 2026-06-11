@@ -202,6 +202,39 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
     assert "test_dormant_rule" in (obs.reason or "")
 
 
+def test_dormant_severity_emits_config_validation_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dormant match warns the user that the field is silently ignored.
+
+    The observation is the machine-readable record; the warning is the
+    user-visible nudge so a measurement isn't silently different from the
+    config (the V3 hazard).
+    """
+    invariant = _make_invariant(
+        "test_dormant_rule",
+        "dormant",
+        {"transformers.sampling.temperature": {"present": True, "not_equal": 1.0}},
+        message_template="temperature is dormant under greedy decoding",
+        outcome="dormant_announced",
+    )
+    _install_test_invariants(monkeypatch, [invariant])
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ConfigValidationWarning)
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers=TransformersConfig(
+                sampling=TransformersSamplingConfig(temperature=0.9),
+            ),
+        )
+
+    matched = [w for w in caught if issubclass(w.category, ConfigValidationWarning)]
+    assert matched, "expected a ConfigValidationWarning for the dormant field"
+    assert "test_dormant_rule" in str(matched[0].message)
+
+
 # ---------------------------------------------------------------------------
 # Fallbacks - missing corpus / empty invariant set
 # ---------------------------------------------------------------------------

@@ -135,7 +135,27 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # on the next library bump. This PR's regeneration drops the legacy
     # hand-curated BNB type-check entries; the AST miner now emits them
     # under ``added_by: static_miner``.
-    manual = [invariant.id for invariant in invariants if invariant.added_by == "manual_seed"]
+    #
+    # Exception: the V1/V3 cross-field BNB parity rows. These express
+    # load_in_4bit-vs-load_in_8bit exclusivity (V1) and bnb_4bit_* dormancy
+    # without 4-bit (V3) - cross-field shapes the current static/dynamic miners
+    # don't yet extract (future walker work). They are hand-authored from the
+    # in-container probe and carry the loader-documented ``manual_seed``
+    # provenance ("cases the miners can't reach, e.g. BNB invariants"). V1 is
+    # gate-confirmed (error); V3 stays proposed (silent dormancy is not
+    # construction-confirmable). Named explicitly so an accidental hand-edit of
+    # any OTHER rule still trips this guard.
+    _VROW_MANUAL_SEED = {
+        "transformers_bnb_load_in_4bit_xor_load_in_8bit",
+        "transformers_bnb_4bit_quant_type_dormant_without_load_in_4bit",
+        "transformers_bnb_4bit_compute_dtype_dormant_without_load_in_4bit",
+        "transformers_bnb_4bit_use_double_quant_dormant_without_load_in_4bit",
+    }
+    manual = [
+        invariant.id
+        for invariant in invariants
+        if invariant.added_by == "manual_seed" and invariant.id not in _VROW_MANUAL_SEED
+    ]
     assert not manual, (
         f"corpus contains {len(manual)} hand-seeded invariants; corpus must be "
         f"machine-extracted (run scripts/engine_producers/build_corpus.py): {manual}"
