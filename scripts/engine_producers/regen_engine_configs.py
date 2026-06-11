@@ -111,17 +111,13 @@ def _python_type_to_json_schema(type_str: str | None) -> dict[str, Any]:
 
     Handles the live envelope's vocabulary:
 
-    - canonical scalars (``"str"`` -> ``{"type": "string"}``, etc.);
-    - the ``"unknown"`` / ``None`` sentinel (GenerationConfig fields with no
-      annotation) -> ``{}`` (datamodel-codegen renders ``Any | None``);
-    - Python union strings (``"str | bool | None"``,
-      ``"PretrainedConfig | str | PathLike | None"``). The scalar members map
-      to a JSON Schema ``anyOf``; non-scalar members (engine classes, PathLike)
-      and a trailing ``None`` collapse to permissive ``Any | None``, since the
-      generated class only validates SHAPE and the engine owns the rest.
-
-    A single recognised scalar returns ``{"type": <scalar>}`` directly; an
-    unrecognised single token returns ``{}`` (permissive).
+    - scalars (``"str"`` -> ``{"type": "string"}``, etc.) -> ``{"type": ...}``;
+    - the ``"unknown"`` / ``None`` sentinel (fields with no annotation) -> ``{}``
+      (datamodel-codegen renders ``Any | None``);
+    - Python union strings (``"str | bool | None"``). Scalar members map to a
+      JSON Schema ``anyOf``; any non-scalar member (engine class, PathLike)
+      collapses the whole field to permissive ``Any | None`` (``{}``), since the
+      generated class validates SHAPE only and the engine owns the rest.
     """
     if not type_str or type_str == "unknown":
         return {}
@@ -130,9 +126,6 @@ def _python_type_to_json_schema(type_str: str | None) -> dict[str, Any]:
     scalars = [_SCALAR_TYPES[m] for m in members if m in _SCALAR_TYPES]
     has_unmappable = any(m not in _SCALAR_TYPES and m != "None" for m in members)
 
-    # Any non-scalar member (engine class, PathLike, ...) makes the whole
-    # field permissive: we cannot express it as JSON Schema and the engine
-    # validates it anyway.
     if has_unmappable or not scalars:
         return {}
     if len(scalars) == 1:
@@ -171,18 +164,12 @@ def _field_shape_to_property(shape: dict[str, Any]) -> dict[str, Any]:
 def _load_curated(outputs: Path) -> dict[str, list[str]]:
     """Read curated.yaml; return per-section exposure allowlists.
 
-    Missing curated.yaml or section -> empty list (nothing exposed).
+    curated.yaml is part of the synced SSOT (always present); a missing
+    section just exposes nothing.
     """
-    path = outputs / "curated.yaml"
-    if not path.is_file():
-        return {section: [] for section in SECTIONS}
-    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    raw: dict[str, Any] = yaml.safe_load((outputs / "curated.yaml").read_text("utf-8")) or {}
     exposed = raw.get("exposed_fields", {})
-    if not isinstance(exposed, dict):
-        raise ValueError(
-            f"{path}: 'exposed_fields' must be a mapping, got {type(exposed).__name__}"
-        )
-    return {section: list(exposed.get(section, []) or []) for section in SECTIONS}
+    return {section: list(exposed.get(section) or []) for section in SECTIONS}
 
 
 # Keys an overlay narrowing may TIGHTEN on a mined field.
@@ -198,33 +185,19 @@ _NARROWING_KEYS: tuple[str, ...] = (
 
 
 def _load_overlay(outputs: Path) -> dict[str, dict[str, dict[str, Any]]]:
-    """Read overlay.yaml; return narrowings + completions per section.
+    """Read the optional overlay.yaml; return narrowings + completions per section.
 
     Missing overlay.yaml -> empty (the live path on this branch). Shape::
 
         {"narrowings": {<section>: {<field>: {...}}},
          "completions": {<section>: {<field>: {...}}}}
     """
-    empty: dict[str, dict[str, dict[str, Any]]] = {
-        "narrowings": {section: {} for section in SECTIONS},
-        "completions": {section: {} for section in SECTIONS},
-    }
     path = outputs / "overlay.yaml"
-    if not path.is_file():
-        return empty
-    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    for top in ("narrowings", "completions"):
-        block = raw.get(top)
-        if block is None:
-            continue
-        if not isinstance(block, dict):
-            raise ValueError(f"{path}: '{top}' must be a mapping, got {type(block).__name__}")
-        for section in SECTIONS:
-            section_block = block.get(section) or {}
-            if not isinstance(section_block, dict):
-                raise ValueError(f"{path}: '{top}.{section}' must be a mapping.")
-            empty[top][section] = section_block
-    return empty
+    raw: dict[str, Any] = yaml.safe_load(path.read_text("utf-8")) or {} if path.is_file() else {}
+    return {
+        top: {section: (raw.get(top) or {}).get(section) or {} for section in SECTIONS}
+        for top in ("narrowings", "completions")
+    }
 
 
 # JSON Schema "type" subtype relations the overlay may tighten TO. A narrowing
@@ -264,17 +237,6 @@ def _apply_narrowing(
     reason = narrowing.get("x-narrowing-reason")
     if reason is not None:
         out["x-narrowing-applied"] = str(reason).strip()
-    return out
-
-
-def _completion_to_property(completion: dict[str, Any]) -> dict[str, Any]:
-    """Translate an overlay completion (a brand-new field) to a JSON Schema property."""
-    drop = {"x-completion-reason"}
-    out = {k: v for k, v in completion.items() if k not in drop}
-    out.setdefault("x-source", "engine_overlay")
-    reason = completion.get("x-completion-reason")
-    if reason is not None:
-        out["x-completion-applied"] = str(reason).strip()
     return out
 
 
@@ -324,7 +286,11 @@ def compose_synthetic_schema(
                     f"overlay completion {section}.{name!r} shadows a curated field; "
                     "use a narrowing to modify a field mining already surfaced."
                 )
-            section_props[name] = _completion_to_property(completion)
+            prop = {k: v for k, v in completion.items() if k != "x-completion-reason"}
+            prop.setdefault("x-source", "engine_overlay")
+            if (reason := completion.get("x-completion-reason")) is not None:
+                prop["x-completion-applied"] = str(reason).strip()
+            section_props[name] = prop
 
         title = "".join(part.capitalize() for part in section.split("_"))
         defs[title] = {
@@ -349,17 +315,6 @@ def compose_synthetic_schema(
 # ---------------------------------------------------------------------------
 
 
-def _custom_header(engine: str, safe_version: str) -> str:
-    """Per-engine 'DO NOT EDIT' header passed via --custom-file-header."""
-    return (
-        "# DO NOT EDIT - regenerated from "
-        f"engine_versions/{engine}/{safe_version}/outputs/"
-        "{curated.yaml,schema.discovered.json}\n"
-        "# Edit those upstream and run "
-        "`uv run python scripts/engine_producers/regen_engine_configs.py --write`."
-    )
-
-
 def _ruff_normalise(path: Path) -> None:
     """Apply repo ruff style to a generated file in place.
 
@@ -381,6 +336,12 @@ def generate_config(engine: str, outputs: Path) -> bytes:
     overlay = _load_overlay(outputs)
     synthetic = compose_synthetic_schema(discovered, curated, overlay)
     safe_version = "v" + str(discovered.get("engine_version", "unknown")).replace(".", "_")
+    header = (
+        f"# DO NOT EDIT - regenerated from engine_versions/{engine}/{safe_version}/outputs/"
+        "{curated.yaml,schema.discovered.json}\n"
+        "# Edit those upstream and run "
+        "`uv run python scripts/engine_producers/regen_engine_configs.py --write`."
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         in_path = Path(tmpdir) / "schema.json"
@@ -395,7 +356,7 @@ def generate_config(engine: str, outputs: Path) -> bytes:
             "--output",
             str(out_path),
             "--custom-file-header",
-            _custom_header(engine, safe_version),
+            header,
             *_DMCG_FLAGS,
         ]
         proc = subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=_PROJECT_ROOT)
