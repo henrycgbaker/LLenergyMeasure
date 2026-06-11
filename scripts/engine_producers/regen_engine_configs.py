@@ -22,6 +22,11 @@ Two modes mirror ``regen_engine_corpus.py``: ``--check`` (default) regenerates
 in memory and byte-compares against the committed file (exit 1 with a diff on
 drift); ``--write`` regenerates and writes. ``--engine`` restricts the run; the
 default is every engine in ``ENGINES`` (transformers pilot only today).
+
+Data gap: the committed schema carries no ``enum``/``minimum``/``maximum`` keys
+yet, so no ``Literal``/bounds appear in today's generated file; real enums and
+bounds land with the next in-container re-mine (the projection itself is proven
+by synthetic-fixture tests).
 """
 
 from __future__ import annotations

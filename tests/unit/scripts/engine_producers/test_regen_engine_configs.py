@@ -194,9 +194,11 @@ def test_overlay_completion_shadowing_curated_field_errors() -> None:
 def fake_ssot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     """Build a one-engine SSOT + shadow under tmp_path wired into the module.
 
-    The discovered schema carries an enum (-> Literal) and a numeric field an
-    overlay narrows with a bound (-> Field(ge=)), so generated-shape assertions
-    have something to bite on. Returns ``(outputs_dir, config_path)``.
+    The discovered schema carries an enum (-> Literal) and a numeric field with
+    MINED bounds (``minimum``/``maximum`` -> Field(ge=/le=), the schema-native
+    path that the C9/C10 re-mine will populate), plus a field an overlay narrows
+    with a bound (the overlay path). So generated-shape assertions exercise both
+    bound sources. Returns ``(outputs_dir, config_path)``.
     """
     outputs = tmp_path / "engine_versions" / "demo" / "v9_9_9" / "outputs"
     shadow = tmp_path / "src" / "llenergymeasure" / "engines" / "demo"
@@ -211,7 +213,12 @@ def fake_ssot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pa
                     "dtype": {"type": "str", "default": "auto", "enum": ["half", "bf16", "auto"]},
                     "device_map": {"type": "unknown", "default": None},
                 },
-                "sampling_params": {"temperature": {"type": "float", "default": 1.0}},
+                "sampling_params": {
+                    "temperature": {"type": "float", "default": 1.0},
+                    # Mined bounds straight off the schema (no overlay): proves the
+                    # minimum/maximum -> Field(ge=/le=) projection through the full path.
+                    "top_k": {"type": "int", "default": 50, "minimum": 0, "maximum": 100},
+                },
             }
         ),
         encoding="utf-8",
@@ -222,7 +229,7 @@ def fake_ssot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pa
                 "engine": "demo",
                 "exposed_fields": {
                     "engine_params": ["dtype", "device_map"],
-                    "sampling_params": ["temperature"],
+                    "sampling_params": ["temperature", "top_k"],
                 },
             }
         ),
@@ -265,7 +272,12 @@ def test_check_fails_on_drift(fake_ssot: tuple[Path, Path]) -> None:
 
 
 def test_generated_shape(fake_ssot: tuple[Path, Path]) -> None:
-    """Literal for the enum field, ge= bound from the overlay, extra=allow, header."""
+    """Literal for the enum, mined + overlay bounds, extra=allow, header.
+
+    Asserts the EXACT generated annotations (not just substrings) so the
+    enum -> Literal and minimum/maximum -> Field(ge=/le=) projections are
+    pinned through the full pre-step + datamodel-codegen + ruff path.
+    """
     _outputs, config_path = fake_ssot
     rec.main(["--write"])
     text = config_path.read_text(encoding="utf-8")
@@ -274,9 +286,12 @@ def test_generated_shape(fake_ssot: tuple[Path, Path]) -> None:
     # ruff post-step ran: double-quoted strings, not the generator's single quotes.
     assert 'extra="allow"' in text
     assert "extra='allow'" not in text
-    # enum -> Literal.
-    assert 'Literal["half", "bf16", "auto"]' in text
-    # overlay narrowing bound -> Field(ge=0.0).
+    # enum -> Literal, exact field annotation.
+    assert 'dtype: Literal["half", "bf16", "auto"] | None = "auto"' in text
+    # MINED minimum/maximum -> Field(ge=/le=), the schema-native bound path.
+    assert "ge=0" in text
+    assert "le=100" in text
+    # OVERLAY narrowing bound -> Field(ge=0.0), the hand-authored bound path.
     assert "ge=0.0" in text
     # the three classes are present.
     for cls in ("class EngineParams", "class SamplingParams", "class Config"):
