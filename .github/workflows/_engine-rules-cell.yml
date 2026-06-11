@@ -367,19 +367,17 @@ jobs:
         env:
           ENGINE: ${{ inputs.engine }}
         run: |
-          PREV=$(uv run python -m scripts.engine_producers._current \
-            --engine "${ENGINE}" --previous-pin-outputs)
-          MAJOR=$(uv run python -m scripts.engine_producers._current \
-            --engine "${ENGINE}" --major-bump)
+          # One resolution pass emits both `prev_outputs=` and `major_bump=`
+          # as GITHUB_OUTPUT lines; capture them for both the step output and
+          # a human log line.
+          RESOLVED=$(uv run python -m scripts.engine_producers._current --engine "${ENGINE}")
+          echo "$RESOLVED" >> "$GITHUB_OUTPUT"
+          PREV=$(printf '%s\n' "$RESOLVED" | sed -n 's/^prev_outputs=//p')
           if [[ -n "$PREV" ]]; then
-            echo "Previous pin outputs resolved: ${PREV} (major bump: ${MAJOR})"
+            echo "Previous pin outputs resolved: ${PREV}"
           else
             echo "No prior vendored pin with outputs/ for ${ENGINE}; decay alarm + surface trend skip."
           fi
-          {
-            echo "prev_outputs=${PREV}"
-            echo "major_bump=${MAJOR}"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Re-gate carried catalogue (decay alarm, in container)
         # Design section 6 signal 1: run the PREVIOUS pin's carried corpus

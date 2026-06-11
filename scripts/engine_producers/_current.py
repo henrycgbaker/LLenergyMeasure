@@ -138,15 +138,8 @@ def previous_pin_outputs_dir(engine: str) -> Path | None:
         outputs = version_dir / "outputs"
         if not outputs.is_dir() or not any(outputs.iterdir()):
             continue
-        # Recover the dotted version from the v<safe> directory name. safe_version
-        # maps both '.' and '-' to '_', and upstream engine versions in scope are
-        # dotted release segments, so '_' -> '.' round-trips the comparison key.
-        dotted = version_dir.name[1:].replace("_", ".")
-        try:
-            parsed = Version(dotted)
-        except InvalidVersion:
-            continue
-        if parsed < current:
+        parsed = _dir_version(version_dir.name)
+        if parsed is not None and parsed < current:
             candidates.append((parsed, outputs))
 
     if not candidates:
@@ -154,15 +147,15 @@ def previous_pin_outputs_dir(engine: str) -> Path | None:
     return max(candidates, key=lambda item: item[0])[1]
 
 
-def _previous_pin_version(engine: str) -> Version | None:
-    """The semver of the most-recent prior pin (parsed from its outputs dir),
-    or ``None`` when no prior exists."""
-    outputs = previous_pin_outputs_dir(engine)
-    if outputs is None:
-        return None
-    dotted = outputs.parent.name[1:].replace("_", ".")
+def _dir_version(version_dir_name: str) -> Version | None:
+    """Recover the semver from a ``v<safe>`` version-directory name.
+
+    ``safe_version`` maps both ``.`` and ``-`` to ``_``, and the engine
+    versions in scope are dotted release segments, so ``_`` -> ``.``
+    round-trips the comparison key. Returns ``None`` when it does not parse.
+    """
     try:
-        return Version(dotted)
+        return Version(version_dir_name[1:].replace("_", "."))
     except InvalidVersion:
         return None
 
@@ -174,7 +167,10 @@ def is_major_bump(engine: str) -> bool:
     major component is unchanged. Drives the major-bump label + the expected-
     churn warning the report leads with (design section 5 step 6).
     """
-    prev = _previous_pin_version(engine)
+    outputs = previous_pin_outputs_dir(engine)
+    if outputs is None:
+        return False
+    prev = _dir_version(outputs.parent.name)
     if prev is None:
         return False
     try:
@@ -185,33 +181,21 @@ def is_major_bump(engine: str) -> bool:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    """Tiny CLI for the engine-pipeline cell.
-
-    Resolves prior-pin facts the alarm steps + report need: the previous
-    pin's outputs/ directory and whether the current pin is a major bump over
-    it. The shell skips both alarm steps gracefully on an empty outputs path.
+    """Resolve the prior-pin facts the engine-pipeline cell needs and print
+    them as ``KEY=value`` lines for ``$GITHUB_OUTPUT``: the previous pin's
+    outputs/ directory (empty when no prior exists) and whether the current
+    pin is a major bump over it. The shell skips both alarm steps gracefully
+    on an empty ``prev_outputs``.
     """
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", required=True, help="Engine name")
-    parser.add_argument(
-        "--previous-pin-outputs",
-        action="store_true",
-        help="Print the previous pin's outputs/ dir (empty when no prior exists).",
-    )
-    parser.add_argument(
-        "--major-bump",
-        action="store_true",
-        help="Print 'true' when the current pin crosses a semver MAJOR over the prior, else 'false'.",
-    )
     args = parser.parse_args(argv)
 
-    if args.previous_pin_outputs:
-        prev = previous_pin_outputs_dir(args.engine)
-        print(prev if prev is not None else "")
-    if args.major_bump:
-        print("true" if is_major_bump(args.engine) else "false")
+    prev = previous_pin_outputs_dir(args.engine)
+    print(f"prev_outputs={prev if prev is not None else ''}")
+    print(f"major_bump={'true' if is_major_bump(args.engine) else 'false'}")
     return 0
 
 
