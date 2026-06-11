@@ -38,10 +38,14 @@ from tests.conftest import TEST_CONFIG_HASH
 def _make_experiment(
     model: str = "meta-llama/Llama-3.1-8B", engine: str = "transformers"
 ) -> ExperimentConfig:
-    # dtype now lives per-engine; attach it to the matching engine section.
-    kwargs = (
-        {engine: {"dtype": "bfloat16"}} if engine in ("transformers", "vllm", "tensorrt") else {}
-    )
+    # dtype now lives per-engine. transformers uses the generated nested shape
+    # (engine_params); vllm/tensorrt keep the flat hand-written shape.
+    if engine == "transformers":
+        kwargs = {engine: {"engine_params": {"dtype": "bfloat16"}}}
+    elif engine in ("vllm", "tensorrt"):
+        kwargs = {engine: {"dtype": "bfloat16"}}
+    else:
+        kwargs = {}
     return ExperimentConfig(task={"model": model}, engine=engine, **kwargs)
 
 
@@ -366,7 +370,7 @@ def test_config_summary_from_experiment() -> None:
     config = ExperimentConfig(
         task={"model": "meta-llama/Llama-3.1-8B"},
         engine="transformers",
-        transformers={"dtype": "bfloat16"},
+        transformers={"engine_params": {"dtype": "bfloat16"}},
     )
     summary = build_config_summary(config)
     # Uses format_experiment_header: "Llama-3.1-8B / pytorch"

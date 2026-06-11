@@ -48,14 +48,17 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     runs.  Callers pass the resolved config, not the declared one - resolved_config_hash is
     meaningless on a pre-resolved config.
 
-    Engine-specific sub-models carry a ``sampling`` attribute; it is lifted
-    into its own dict so the resolved-config / observed-config ordering separates
-    "how the engine constructs" from "what it generates with".
+    Engine-specific sub-models carry their sampling state in a dedicated
+    attribute; it is lifted into its own dict so the resolved-config /
+    observed-config ordering separates "how the engine constructs" from "what it
+    generates with". The generated nested shape names it ``sampling_params``
+    (transformers); the hand-written flat shape names it ``sampling`` (vllm,
+    tensorrt). Lift whichever is present so the bucket split survives migration.
     """
     engine_name = config.engine.value if hasattr(config.engine, "value") else str(config.engine)
     section: Any = getattr(config, engine_name, None)
     dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
-    sampling = dump.pop("sampling", None) or {}
+    sampling = dump.pop("sampling_params", None) or dump.pop("sampling", None) or {}
 
     return ConfigHashView(
         engine=engine_name,
