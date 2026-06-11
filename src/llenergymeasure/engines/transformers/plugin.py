@@ -399,7 +399,7 @@ class TransformersEngine:
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
-        ep = config.transformers.engine_params if config.transformers is not None else None
+        ep = TransformersEngine._engine_params(config)
         if ep is not None and (ep.load_in_4bit or ep.load_in_8bit):
             try:
                 bnb = getattr(hf_model, "quantization_config", None)
