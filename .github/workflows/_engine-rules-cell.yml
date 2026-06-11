@@ -354,6 +354,99 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
+      - name: Resolve previous pin (carried-input source for the alarms)
+        # The decay alarm + surface-trend compare against the most-recent
+        # PRIOR vendored pin's outputs/. Resolution is pure-filesystem (needs
+        # `packaging`), so it runs host-side after uv sync and feeds the
+        # path into the in-container re-gate + the host surface diff. Today
+        # every engine has exactly one outputs-bearing version dir (the
+        # current pin), so this resolves empty and both alarm steps skip -
+        # a structural no-op until C10 populates the trailing window.
+        id: prior
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          PREV=$(uv run python -m scripts.engine_producers._current \
+            --engine "${ENGINE}" --previous-pin-outputs)
+          MAJOR=$(uv run python -m scripts.engine_producers._current \
+            --engine "${ENGINE}" --major-bump)
+          if [[ -n "$PREV" ]]; then
+            echo "Previous pin outputs resolved: ${PREV} (major bump: ${MAJOR})"
+          else
+            echo "No prior vendored pin with outputs/ for ${ENGINE}; decay alarm + surface trend skip."
+          fi
+          {
+            echo "prev_outputs=${PREV}"
+            echo "major_bump=${MAJOR}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Re-gate carried catalogue (decay alarm, in container)
+        # Design section 6 signal 1: run the PREVIOUS pin's carried corpus
+        # through the live gate against the NEW container. The validated
+        # envelope records gate output only, so the carried input is the prior
+        # pin's rules.proposed.yaml (it carries the probe kwargs). Skips when
+        # no prior exists (today's state for every engine).
+        if: steps.probe.outputs.verdict == 'pass' && steps.prior.outputs.prev_outputs != ''
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
+          RUNNER: ${{ inputs.runner }}
+          PREV_OUTPUTS: ${{ steps.prior.outputs.prev_outputs }}
+        run: |
+          mkdir -p /tmp/engine-rules-alarms
+          DOCKER_FLAGS=()
+          if [[ "$RUNNER" == "self-hosted" ]]; then
+            DOCKER_FLAGS+=(
+              --gpus all
+              --user "$(id -u):$(id -g)"
+              -v /tmp/llem-passwd-synth:/etc/passwd:ro
+              -v /tmp/llem-group-synth:/etc/group:ro
+              -e LD_LIBRARY_PATH
+            )
+          fi
+          ENTRYPOINT_FLAG=(--entrypoint bash)
+          CMD_PREFIX=()
+          if [[ "$ENGINE" == "tensorrt" ]]; then
+            DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
+            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
+            CMD_PREFIX=(bash)
+          fi
+          docker run --rm "${DOCKER_FLAGS[@]}" \
+            -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
+            -e PREV_OUTPUTS \
+            -v "${GITHUB_WORKSPACE}:/repo" \
+            -v /tmp/engine-rules-alarms:/tmp/engine-rules-alarms:rw \
+            -w /repo \
+            "${ENTRYPOINT_FLAG[@]}" \
+            "$IMAGE" \
+            "${CMD_PREFIX[@]}" -c "
+              set -euo pipefail
+              python3 scripts/validate_rules.py \
+                --engine ${ENGINE} \
+                --carried '${PREV_OUTPUTS}/rules.proposed.yaml' \
+                --regate-out /tmp/engine-rules-alarms/${ENGINE}.regate.json
+            "
+
+      - name: Surface trend (blindness heuristic, host)
+        # Design section 6 signal 2: a pure-artefact census diff of the prior
+        # pin's outputs/ against the current pin's. No engine imports; runs
+        # host-side. Skips when no prior exists.
+        if: steps.probe.outputs.verdict == 'pass' && steps.prior.outputs.prev_outputs != ''
+        env:
+          ENGINE: ${{ inputs.engine }}
+          PREV_OUTPUTS: ${{ steps.prior.outputs.prev_outputs }}
+        run: |
+          mkdir -p /tmp/engine-rules-alarms
+          # The freshly-mined shadow under src/ is the current side: it holds
+          # all three artefacts and is always present after mine+validate (the
+          # engine_versions/ archive mirror is a later, vendor-gated derivative).
+          uv run python scripts/diff_engine_surface.py \
+            "${PREV_OUTPUTS}" "${ENGINES_DIR}/${ENGINE}" \
+            --out "/tmp/engine-rules-alarms/${ENGINE}.surface.json"
+
       - name: Regenerate rules digest
         if: steps.probe.outputs.verdict == 'pass'
         env:
@@ -560,6 +653,91 @@ jobs:
             fi
           } | scripts/ci/upsert_pr_comment.sh
 
+      - name: Post gate report comment (decay alarm + surface trend)
+        # ONE upserted comment per engine carrying the per-bump gate report
+        # (design section 5 step 6): proposed/validated counts, the carried-
+        # catalogue re-gate acceptance + failed/infra splits, and the surface
+        # trend - the latter two present only when a prior pin exists. A major
+        # bump leads with the expected-churn warning. Today no prior exists,
+        # so the body is just the counts (+ a "no prior" note).
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr-number }}
+          MARKER: "bot-id: rules-${{ inputs.engine }}"
+          REPO: ${{ github.repository }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
+          MAJOR_BUMP: ${{ steps.prior.outputs.major_bump }}
+          PREV_OUTPUTS: ${{ steps.prior.outputs.prev_outputs }}
+        run: |
+          PROPOSED="${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml"
+          VALIDATED="${ENGINES_DIR}/${ENGINE}/rules.validated.yaml"
+          PROPOSED_N=$(yq '.invariants | length' "$PROPOSED")
+          VALIDATED_N=$(yq '.cases | length' "$VALIDATED")
+          REGATE="/tmp/engine-rules-alarms/${ENGINE}.regate.json"
+          SURFACE="/tmp/engine-rules-alarms/${ENGINE}.surface.json"
+          {
+            echo "<!-- ${MARKER} -->"
+            echo "## Engine rules gate report - ${ENGINE} (${VER})"
+            echo
+            if [[ "$MAJOR_BUMP" == "true" ]]; then
+              echo "> **Major version bump.** Expect ~2x more churn than a minor"
+              echo "> (study: 53% vs 76-100% field persistence) and the carried-"
+              echo "> catalogue alarm is unvalidated on majors - review source-level."
+              echo
+            fi
+            echo "- Proposed invariants: \`${PROPOSED_N}\`"
+            echo "- Validated cases: \`${VALIDATED_N}\`"
+            echo
+            if [[ -f "$REGATE" ]]; then
+              ACC=$(jq -r '.acceptance_rate' "$REGATE")
+              TOTAL=$(jq -r '.total' "$REGATE")
+              CONFIRMED=$(jq -r '.counts.confirmed' "$REGATE")
+              FAILED=$(jq -r '.counts.failed' "$REGATE")
+              INFRA=$(jq -r '.counts.infra_error' "$REGATE")
+              echo "### Decay alarm (carried catalogue re-gate)"
+              echo
+              echo "Carried from \`${PREV_OUTPUTS}/rules.proposed.yaml\`."
+              echo
+              echo "Acceptance \`${ACC}\` - ${CONFIRMED}/${TOTAL} confirmed, ${FAILED} failed, ${INFRA} infra-error."
+              if [[ "$FAILED" -gt 0 ]]; then
+                echo
+                echo "<details><summary>Failed (rule no longer holds)</summary>"
+                echo
+                jq -r '.entries[] | select(.verdict=="failed") | "- `" + .id + "` - " + .reason' "$REGATE"
+                echo
+                echo "</details>"
+              fi
+              if [[ "$INFRA" -gt 0 ]]; then
+                echo
+                echo "<details><summary>Infra-error (probe no longer constructs)</summary>"
+                echo
+                jq -r '.entries[] | select(.verdict=="infra_error") | "- `" + .id + "` - " + .reason' "$REGATE"
+                echo
+                echo "</details>"
+              fi
+              echo
+            fi
+            if [[ -f "$SURFACE" ]]; then
+              echo "### Surface trend"
+              echo
+              FLAGS=$(jq -r '.shrinkage_flags | length' "$SURFACE")
+              if [[ "$FLAGS" -gt 0 ]]; then
+                echo "Shrinkage flags (possible walker regression):"
+                echo
+                jq -r '.shrinkage_flags[] | "- " + .' "$SURFACE"
+              else
+                echo "No shrinkage flags."
+              fi
+              echo
+            fi
+            if [[ ! -f "$REGATE" && ! -f "$SURFACE" ]]; then
+              echo "_No prior vendored pin: decay alarm + surface trend skipped"
+              echo "(populated once the version window backfills)._"
+            fi
+          } | scripts/ci/upsert_pr_comment.sh
+
       - name: Clean up stale probe-blocked comment (probe now passes)
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
         env:
@@ -585,6 +763,22 @@ jobs:
             safe)      gh pr edit "$PR_NUMBER" --add-label "invariants-safe" --add-label "invariants-changed" 2>/dev/null || true ;;
             no-changes) ;;
           esac
+
+      - name: Apply major-bump label
+        # A semver MAJOR crossing over the previous pin gets a label so the
+        # mandatory-review policy (design section 5) is visible at a glance;
+        # the gate-report comment leads with the expected-churn warning.
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          MAJOR_BUMP: ${{ steps.prior.outputs.major_bump }}
+        run: |
+          if [[ "$MAJOR_BUMP" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "major-bump" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --remove-label "major-bump" 2>/dev/null || true
+          fi
 
       - name: Apply cross-pipeline rollup label
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''

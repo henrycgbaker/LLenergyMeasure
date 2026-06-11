@@ -8,6 +8,11 @@ This module exposes the lookup helpers that read it:
 - :func:`safe_version` - identifier-safe mangling of a PEP 440 version.
 - :func:`current_version` - the pinned version string for an engine.
 - :func:`current_outputs_dir` - the SSOT outputs/ directory for the active pin.
+- :func:`previous_pin_outputs_dir` - the most-recent prior pin's outputs/
+  directory (the carried-input source for the decay alarm + surface trend),
+  or ``None`` when no prior vendored pin exists yet.
+- :func:`is_major_bump` - whether the current pin crosses a semver MAJOR
+  over the previous pin (drives the major-bump label + churn warning).
 
 The current-state path is resolved by walking up from this file until a
 ``pyproject.toml`` marker is found - the canonical project-root marker
@@ -20,6 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from packaging.version import InvalidVersion, Version
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -98,3 +104,116 @@ def safe_version(version: str) -> str:
             f"resulting candidate {safe!r} contains non-alphanumeric chars."
         )
     return safe
+
+
+def previous_pin_outputs_dir(engine: str) -> Path | None:
+    """Return the outputs/ directory of the most-recent prior vendored pin.
+
+    "Prior" means: a ``engine_versions/{engine}/v<safe>/`` version directory
+    that (a) carries a populated ``outputs/`` directory and (b) is a STRICTLY
+    LOWER semver than the current pin. The newest such version wins. Returns
+    ``None`` when no qualifying prior exists - which is the state for every
+    engine today (each has exactly one outputs-bearing version dir, the
+    current pin), so the decay alarm and surface-trend steps are a structural
+    no-op until C10 populates the trailing window.
+
+    The carried-input source for the decay alarm (``rules.proposed.yaml`` in
+    the returned directory; the validated envelope records gate output only)
+    and the OLD side of the surface-trend diff.
+    """
+    root = _find_repo_root(Path(__file__).resolve())
+    engine_dir = root / "engine_versions" / engine
+    if not engine_dir.is_dir():
+        return None
+
+    try:
+        current = Version(current_version(engine))
+    except InvalidVersion:
+        return None
+
+    candidates: list[tuple[Version, Path]] = []
+    for version_dir in engine_dir.iterdir():
+        if not version_dir.is_dir() or not version_dir.name.startswith("v"):
+            continue
+        outputs = version_dir / "outputs"
+        if not outputs.is_dir() or not any(outputs.iterdir()):
+            continue
+        # Recover the dotted version from the v<safe> directory name. safe_version
+        # maps both '.' and '-' to '_', and upstream engine versions in scope are
+        # dotted release segments, so '_' -> '.' round-trips the comparison key.
+        dotted = version_dir.name[1:].replace("_", ".")
+        try:
+            parsed = Version(dotted)
+        except InvalidVersion:
+            continue
+        if parsed < current:
+            candidates.append((parsed, outputs))
+
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def _previous_pin_version(engine: str) -> Version | None:
+    """The semver of the most-recent prior pin (parsed from its outputs dir),
+    or ``None`` when no prior exists."""
+    outputs = previous_pin_outputs_dir(engine)
+    if outputs is None:
+        return None
+    dotted = outputs.parent.name[1:].replace("_", ".")
+    try:
+        return Version(dotted)
+    except InvalidVersion:
+        return None
+
+
+def is_major_bump(engine: str) -> bool:
+    """True when the current pin crosses a semver MAJOR over the previous pin.
+
+    False when there is no prior, when neither version parses, or when the
+    major component is unchanged. Drives the major-bump label + the expected-
+    churn warning the report leads with (design section 5 step 6).
+    """
+    prev = _previous_pin_version(engine)
+    if prev is None:
+        return False
+    try:
+        current = Version(current_version(engine))
+    except InvalidVersion:
+        return False
+    return current.major != prev.major
+
+
+def _main(argv: list[str] | None = None) -> int:
+    """Tiny CLI for the engine-pipeline cell.
+
+    Resolves prior-pin facts the alarm steps + report need: the previous
+    pin's outputs/ directory and whether the current pin is a major bump over
+    it. The shell skips both alarm steps gracefully on an empty outputs path.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--engine", required=True, help="Engine name")
+    parser.add_argument(
+        "--previous-pin-outputs",
+        action="store_true",
+        help="Print the previous pin's outputs/ dir (empty when no prior exists).",
+    )
+    parser.add_argument(
+        "--major-bump",
+        action="store_true",
+        help="Print 'true' when the current pin crosses a semver MAJOR over the prior, else 'false'.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.previous_pin_outputs:
+        prev = previous_pin_outputs_dir(args.engine)
+        print(prev if prev is not None else "")
+    if args.major_bump:
+        print("true" if is_major_bump(args.engine) else "false")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())
