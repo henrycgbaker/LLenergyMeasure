@@ -462,6 +462,16 @@ jobs:
           merge-multiple: true
           path: /tmp/writeback-staging
 
+      - name: Set up Python (for shadow + config regeneration)
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: writeback-regen-3.12
+          python-version: "3.12"
+
+      - name: Install lean host project for regeneration
+        run: uv sync --dev
+
       - name: Apply artefacts and emit single commit
         env:
           APP_ID: ${{ secrets.APP_ID }}
@@ -495,14 +505,24 @@ jobs:
           # Apply staging onto the working tree, preserving relative paths.
           rsync -a /tmp/writeback-staging/ ./
 
+          # Regenerate the data shadow + generated config.py from the freshly
+          # applied mined data so they always travel in the SAME commit. The
+          # corpus shadow sync is idempotent (cells already upload it); the
+          # config.py regen is the load-bearing one - config.py is generated,
+          # never uploaded by a cell, so it must be projected from the new
+          # schema here or it drifts against the data.
+          uv run python scripts/engine_producers/regen_engine_corpus.py --write
+          uv run python scripts/engine_producers/regen_engine_configs.py --write
+
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"
 
-          # Stage only the paths writeback artefacts may produce.
+          # Stage only the paths writeback artefacts + regeneration may produce.
           git add \
             'src/llenergymeasure/engines/*/rules.proposed.yaml' \
             'src/llenergymeasure/engines/*/rules.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
+            'src/llenergymeasure/engines/*/config.py' \
             'engine_versions/*/current.yaml' \
             'docs/reference/engines/invariants-*.md' \
             'docs/reference/engines/curation-*.md' \
