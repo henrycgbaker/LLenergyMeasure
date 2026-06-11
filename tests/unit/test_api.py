@@ -928,11 +928,10 @@ class TestResolveGpuIndices:
 
     def _make_pytorch_config(self, device_map: str | None = None) -> ExperimentConfig:
         """Build a minimal PyTorch ExperimentConfig."""
-        from llenergymeasure.config.engine_configs import TransformersConfig
-
-        pytorch_cfg = TransformersConfig(device_map=device_map)
         return ExperimentConfig(
-            task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers={"engine_params": {"device_map": device_map}},
         )
 
     def _make_mock_pynvml(self, device_count: int):

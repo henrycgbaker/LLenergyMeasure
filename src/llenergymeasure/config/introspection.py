@@ -301,9 +301,10 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     """
     from llenergymeasure.config.engine_configs import (
         TensorRTConfig,
-        TransformersConfig,
         VLLMConfig,
     )
+    from llenergymeasure.config.harness import TransformersHarness
+    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
 
     engine_models = {
         "transformers": TransformersConfig,
@@ -317,6 +318,11 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     model_class = engine_models[engine]
     # All values are Pydantic BaseModel subclasses, mypy can't infer this from dict
     params = get_params_from_model(model_class, prefix=engine)  # type: ignore[arg-type]
+
+    # transformers also exposes the HarnessConfig residual (batch_size,
+    # torch_compile, ...) as llem-orchestration knobs under the engine prefix.
+    if engine == "transformers":
+        params.update(get_params_from_model(TransformersHarness, prefix=engine))
 
     # Add engine_support to every param
     for param in params.values():
@@ -619,13 +625,21 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
     from llenergymeasure.config.engine_configs import (
         TensorRTConfig,
         TensorRTQuantConfig,
-        TransformersConfig,
         VLLMEngineConfig,
     )
+    from llenergymeasure.config.harness import TransformersHarness
+    from llenergymeasure.engines.transformers.config import EngineParams, SamplingParams
 
     # Get field names for each engine
     # VLLMConfig is nested: engine fields are in VLLMEngineConfig
-    transformers_fields = set(TransformersConfig.model_fields.keys())
+    # transformers is the generated nested Config: engine_params + sampling_params,
+    # plus the HarnessConfig residual (batch_size, torch_compile, ...). Flatten all
+    # three into one capability set keyed by bare field name.
+    transformers_fields = (
+        set(EngineParams.model_fields.keys())
+        | set(SamplingParams.model_fields.keys())
+        | set(TransformersHarness.model_fields.keys())
+    )
     vllm_fields = set(VLLMEngineConfig.model_fields.keys())
     tensorrt_fields = set(TensorRTConfig.model_fields.keys())
 

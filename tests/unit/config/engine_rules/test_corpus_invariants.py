@@ -56,50 +56,49 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # before weakening this list.
     required_fields = (
         # Greedy dormancy: do_sample=False / num_beams=1 strip these.
-        "transformers.sampling.temperature",
-        "transformers.sampling.top_p",
-        "transformers.sampling.top_k",
-        "transformers.sampling.min_p",
-        "transformers.sampling.typical_p",
-        "transformers.sampling.epsilon_cutoff",
-        "transformers.sampling.eta_cutoff",
+        "transformers.sampling_params.temperature",
+        "transformers.sampling_params.top_p",
+        "transformers.sampling_params.top_k",
+        "transformers.sampling_params.min_p",
+        "transformers.sampling_params.typical_p",
+        "transformers.sampling_params.epsilon_cutoff",
+        "transformers.sampling_params.eta_cutoff",
         # Single-beam dormancy.
-        "transformers.sampling.early_stopping",
-        "transformers.sampling.length_penalty",
+        "transformers.engine_params.early_stopping",
+        "transformers.engine_params.length_penalty",
         # Note: num_beam_groups + diversity_penalty validations were softened
         # in transformers 4.57.x (error → dormant_announced or no_op). The
         # validation-CI gate quarantines the corpus invariants that previously claimed
         # error severity. Coverage loss tracked separately; do NOT re-add
         # without first confirming the library re-introduced enforcement.
         # No-return-dict dormancy.
-        "transformers.sampling.output_scores",
-        "transformers.sampling.output_attentions",
-        "transformers.sampling.output_hidden_states",
+        "transformers.sampling_params.output_scores",
+        "transformers.sampling_params.output_attentions",
+        "transformers.sampling_params.output_hidden_states",
         # GenerationConfig.validate() error invariants.
-        "transformers.sampling.max_new_tokens",
-        "transformers.sampling.cache_implementation",
-        "transformers.sampling.num_return_sequences",
-        "transformers.sampling.pad_token_id",
-        "transformers.sampling.compile_config",
+        "transformers.sampling_params.max_new_tokens",
+        "transformers.engine_params.cache_implementation",
+        "transformers.sampling_params.num_return_sequences",
+        "transformers.sampling_params.pad_token_id",
+        "transformers.sampling_params.compile_config",
         # PR #387 cross-field invariant gates.
-        "transformers.sampling.num_beams",
-        # Watermarking + BNB type-check paths landed in PR 5 (validation-
-        # validation gate). The BNB invariants use the field paths the real
-        # ExperimentConfig schema exposes (``transformers.load_in_4bit``
-        # etc.) rather than the old ``transformers.quant.<field>`` paths
-        # which never resolved at runtime.
-        "transformers.sampling.watermarking_config",
-        "transformers.load_in_4bit",
-        "transformers.load_in_8bit",
-        "transformers.llm_int8_threshold",
-        "transformers.llm_int8_skip_modules",
-        "transformers.llm_int8_enable_fp32_cpu_offload",
-        "transformers.llm_int8_has_fp16_weight",
+        "transformers.engine_params.num_beams",
+        # Watermarking + BNB type-check paths. After the transformers migration
+        # these resolve against the nested generated shape: BnB / loading fields
+        # under ``transformers.engine_params.<field>``, sampling fields under
+        # ``transformers.sampling_params.<field>``.
+        "transformers.sampling_params.watermarking_config",
+        "transformers.engine_params.load_in_4bit",
+        "transformers.engine_params.load_in_8bit",
+        "transformers.engine_params.llm_int8_threshold",
+        "transformers.engine_params.llm_int8_skip_modules",
+        "transformers.engine_params.llm_int8_enable_fp32_cpu_offload",
+        "transformers.engine_params.llm_int8_has_fp16_weight",
         # Note: transformers.bnb_4bit_compute_dtype - validation-CI quarantined
         # the type-check invariant under 4.57.3. Coverage loss tracked in a
         # follow-up alongside num_beam_groups / diversity_penalty.
-        "transformers.bnb_4bit_quant_type",
-        "transformers.bnb_4bit_use_double_quant",
+        "transformers.engine_params.bnb_4bit_quant_type",
+        "transformers.engine_params.bnb_4bit_use_double_quant",
     )
     missing = [path for path in required_fields if not covers_field(path)]
     assert not missing, (
@@ -117,7 +116,10 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         # diversity_penalty) cross-field invariants were quarantined in 4.57.x
         # along with the single-field dormancy invariants; see required_fields
         # comment above.
-        ("transformers.sampling.num_beams", "transformers.sampling.num_return_sequences"),
+        (
+            "transformers.engine_params.num_beams",
+            "transformers.sampling_params.num_return_sequences",
+        ),
     )
     missing_pairs = [
         pair

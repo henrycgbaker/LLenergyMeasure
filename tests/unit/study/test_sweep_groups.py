@@ -342,9 +342,9 @@ class TestExpandGridSweepGroups:
                 "transformers.decoding": [
                     {},  # baseline: use engine default sampling
                     {
-                        "transformers.sampling.do_sample": False,
-                        "transformers.sampling.temperature": 0.0,
-                        "transformers.num_beams": 4,
+                        "transformers.sampling_params.do_sample": False,
+                        "transformers.sampling_params.temperature": 0.0,
+                        "transformers.engine_params.num_beams": 4,
                     },
                 ],
             },
@@ -352,11 +352,15 @@ class TestExpandGridSweepGroups:
         valid, _skipped = expand_grid(raw)
         assert len(valid) == 2
         beam_config = next(
-            c for c in valid if c.transformers is not None and c.transformers.num_beams is not None
+            c
+            for c in valid
+            if c.transformers is not None
+            and c.transformers.engine_params is not None
+            and c.transformers.engine_params.num_beams is not None
         )
-        assert beam_config.transformers.sampling.do_sample is False
-        assert beam_config.transformers.sampling.temperature == 0.0
-        assert beam_config.transformers.num_beams == 4
+        assert beam_config.transformers.sampling_params.do_sample is False
+        assert beam_config.transformers.sampling_params.temperature == 0.0
+        assert beam_config.transformers.engine_params.num_beams == 4
 
     def test_group_plus_explicit_experiments(self):
         """Groups and explicit experiments coexist."""
@@ -494,23 +498,30 @@ class TestCombinatorialWarnings:
     def test_large_study_info_log(self, caplog):
         """Studies with >100 valid experiments log an info message."""
         # 3 dtype x 5 batch x 3 attn x 3 compile = 135 raw combos, minus 15
-        # invalid (flash_attention_2 + float32) = 120 valid experiments
+        # invalid (flash_attention_2 + float32) = 120 valid experiments. Paths use
+        # the nested shape so dtype/attn land on engine_params where the
+        # FA2+float32 cross-validator can see them; batch_size + torch_compile are
+        # harness knobs.
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float32", "float16", "bfloat16"],
-                "transformers.batch_size": [1, 4, 8, 16, 32],
-                "transformers.attn_implementation": ["sdpa", "flash_attention_2", "eager"],
+                "transformers.engine_params.dtype": ["float32", "float16", "bfloat16"],
+                "harness.transformers.batch_size": [1, 4, 8, 16, 32],
+                "transformers.engine_params.attn_implementation": [
+                    "sdpa",
+                    "flash_attention_2",
+                    "eager",
+                ],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "max-autotune",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "max-autotune",
                     },
                 ],
             },

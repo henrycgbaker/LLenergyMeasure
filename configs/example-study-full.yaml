@@ -123,13 +123,16 @@ output:
 
 sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- dtype per engine (each axis applies only when its engine is active) ---
-  transformers.dtype: [float32, float16, bfloat16]
+  # transformers uses the generated nested shape (engine_params / sampling_params);
+  # vllm + tensorrt keep their flat shape.
+  transformers.engine_params.dtype: [float32, float16, bfloat16]
   vllm.dtype: [float16, bfloat16]  # vLLM rejects float32
   tensorrt.dtype: [float16, bfloat16]  # TRT-LLM rejects float32
 
   # --- Transformers parameter space ---
-  transformers.batch_size: [1, 4, 8, 16, 32]
-  transformers.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
+  # batch_size is a llem-orchestration knob (HarnessConfig), not engine config.
+  harness.transformers.batch_size: [1, 4, 8, 16, 32]
+  transformers.engine_params.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
 
   # --- Transformers: dependent groups ─────────────────────────────────
 
@@ -143,36 +146,37 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     # Baseline: no compile, no quantisation
     - {}
     # bitsandbytes 8-bit (no compile)
-    - transformers.load_in_8bit: true
+    - transformers.engine_params.load_in_8bit: true
     # bitsandbytes 4-bit, nf4 and fp4 (no compile)
-    - transformers.load_in_4bit: true
-      transformers.bnb_4bit_compute_dtype: float16
-      transformers.bnb_4bit_quant_type: [nf4, fp4]
+    - transformers.engine_params.load_in_4bit: true
+      transformers.engine_params.bnb_4bit_compute_dtype: float16
+      transformers.engine_params.bnb_4bit_quant_type: [nf4, fp4]
     # bitsandbytes 4-bit + double-quant (no compile)
-    - transformers.load_in_4bit: true
-      transformers.bnb_4bit_compute_dtype: float16
-      transformers.bnb_4bit_quant_type: nf4
-      transformers.bnb_4bit_use_double_quant: true
+    - transformers.engine_params.load_in_4bit: true
+      transformers.engine_params.bnb_4bit_compute_dtype: float16
+      transformers.engine_params.bnb_4bit_quant_type: nf4
+      transformers.engine_params.bnb_4bit_use_double_quant: true
     # torch.compile on unquantised weights - all three modes safe here
-    - transformers.torch_compile: true
-      transformers.torch_compile_backend: inductor
-      transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]
+    # (torch.compile is a HarnessConfig knob - llem owns the compile call)
+    - harness.transformers.torch_compile: true
+      harness.transformers.torch_compile_backend: inductor
+      harness.transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]
 
   # cache_implementation requires use_cache: true
   transformers.caching:
     - {}                                          # baseline: default caching
-    - transformers.use_cache: true
-      transformers.cache_implementation: [static, offloaded_static, sliding_window]
+    - transformers.engine_params.use_cache: true
+      transformers.engine_params.cache_implementation: [static, offloaded_static, sliding_window]
 
   # beam search requires do_sample: false (cross-section dependency)
   transformers.decoding:
     - {}                                          # baseline: use engine defaults
-    - transformers.sampling.do_sample: false
-      transformers.sampling.temperature: 0.0
-      transformers.num_beams: 4
-      transformers.early_stopping: true
-      transformers.length_penalty: 1.0
-      transformers.no_repeat_ngram_size: 3
+    - transformers.sampling_params.do_sample: false
+      transformers.sampling_params.temperature: 0.0
+      transformers.engine_params.num_beams: 4
+      transformers.engine_params.early_stopping: true
+      transformers.engine_params.length_penalty: 1.0
+      transformers.engine_params.no_repeat_ngram_size: 3
 
   # --- vLLM parameter space ---
   # (vLLM uses continuous batching - no user-facing batch_size parameter)
@@ -275,11 +279,14 @@ experiments:
     dataset:
       n_prompts: 50
     transformers:
-      dtype: bfloat16
-      batch_size: 1
-      prompt_lookup_num_tokens: 3
-      device_map: auto
-      trust_remote_code: true
+      engine_params:
+        dtype: bfloat16
+        prompt_lookup_num_tokens: 3
+        device_map: auto
+        trust_remote_code: true
+    harness:
+      transformers:
+        batch_size: 1
 
   # -----------------------------------------------------------------
   # Tensor parallelism (requires multi-GPU; tp_plan and device_map are
@@ -290,11 +297,14 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   transformers:
-  #     dtype: bfloat16
-  #     batch_size: 4
-  #     tp_plan: auto
-  #     tp_size: 2
-  #     trust_remote_code: true
+  #     engine_params:
+  #       dtype: bfloat16
+  #       tp_plan: auto
+  #       tp_size: 2
+  #       trust_remote_code: true
+  #   harness:
+  #     transformers:
+  #       batch_size: 4
 
   # -----------------------------------------------------------------
   # Model loading with revision pin + memory limits
@@ -304,14 +314,17 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   transformers:
-  #     dtype: bfloat16
-  #     batch_size: 4
-  #     revision: main
-  #     max_memory:
-  #       0: "10GiB"
-  #       cpu: "50GiB"
-  #     device_map: auto
-  #     trust_remote_code: true
+  #     engine_params:
+  #       dtype: bfloat16
+  #       revision: main
+  #       max_memory:
+  #         0: "10GiB"
+  #         cpu: "50GiB"
+  #       device_map: auto
+  #       trust_remote_code: true
+  #   harness:
+  #     transformers:
+  #       batch_size: 4
 
   # =================================================================
   # VLLM - unique experiments

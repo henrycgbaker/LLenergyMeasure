@@ -127,11 +127,15 @@ config = ExperimentConfig(
 
 **Sub-configurations:**
 - `DatasetConfig` - source, n_prompts, order (nested sub-object)
-- `TransformersConfig` - PyTorch engine options (including `sampling: TransformersSamplingConfig`)
+- `transformers` - the generated `engines.transformers.Config` (nested
+  `engine_params` / `sampling_params` shape, projected from the mined schema)
 - `VLLMConfig` - vLLM engine options (including `sampling: VLLMSamplingConfig`)
 - `TensorRTConfig` - TensorRT-LLM backend options (including `sampling: TensorRTSamplingConfig`)
+- `HarnessConfig` - per-engine llem-orchestration knobs (transformers
+  `batch_size`, `torch_compile`, `allow_tf32`, `autocast_*`); no engine-native API
 - `sampling_preset: deterministic | standard | creative | factual` - expands
-  preset values into the active engine's `sampling` section at parse time
+  preset values into the active engine's sampling section at parse time
+  (`sampling_params` for transformers, `sampling` for vllm/tensorrt)
 
 **Cross-boundary contract:** `ExperimentConfig.model_json_schema()` is the
 canonical host/container contract. Every Docker image is stamped at build time

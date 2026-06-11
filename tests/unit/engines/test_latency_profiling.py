@@ -113,7 +113,7 @@ class TestTransformersProfilingPath:
         config = make_config(
             engine="transformers",
             latency_profiling=True,
-            transformers={"batch_size": 4},
+            harness={"transformers": {"batch_size": 4}},
         )
         engine = TransformersEngine()
         out = engine.run_inference(config, (object(), object()), ["p1", "p2", "p3"])
@@ -137,7 +137,7 @@ class TestTransformersProfilingPath:
         config = make_config(
             engine="transformers",
             latency_profiling=True,
-            transformers={"num_beams": 4},
+            transformers={"engine_params": {"num_beams": 4}},
         )
         engine = TransformersEngine()
         out = engine.run_inference(config, (object(), object()), ["p1", "p2"])

@@ -561,7 +561,8 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     elif (
         config.engine == Engine.TRANSFORMERS
         and config.transformers is not None
-        and config.transformers.device_map is not None
+        and config.transformers.engine_params is not None
+        and config.transformers.engine_params.device_map is not None
     ):
         # Model will shard across all visible GPUs - measure all of them.
         # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].

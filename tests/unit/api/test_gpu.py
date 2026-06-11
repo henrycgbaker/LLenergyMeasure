@@ -139,11 +139,10 @@ def test_tensorrt_none_tensor_parallel_size_returns_single_gpu():
 
 def test_pytorch_device_map_auto_single_gpu():
     """pytorch with device_map='auto' but 1 GPU falls through to [0]."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    pytorch_cfg = TransformersConfig(device_map="auto")
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"device_map": "auto"}},
     )
 
     mock_pynvml = MagicMock()
@@ -159,11 +158,10 @@ def test_pytorch_device_map_auto_single_gpu():
 
 def test_pytorch_device_map_auto_multi_gpu():
     """pytorch with device_map='auto' and 4 GPUs returns [0, 1, 2, 3]."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    pytorch_cfg = TransformersConfig(device_map="auto")
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"device_map": "auto"}},
     )
 
     mock_pynvml = MagicMock()
@@ -179,11 +177,10 @@ def test_pytorch_device_map_auto_multi_gpu():
 
 def test_pytorch_device_map_none_returns_single_gpu():
     """pytorch with device_map=None (not set) returns [0]."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    pytorch_cfg = TransformersConfig(device_map=None)
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"device_map": None}},
     )
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -191,11 +188,10 @@ def test_pytorch_device_map_none_returns_single_gpu():
 
 def test_pytorch_device_map_pynvml_error_falls_through():
     """pytorch device_map with pynvml error falls through to [0]."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    pytorch_cfg = TransformersConfig(device_map="auto")
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"device_map": "auto"}},
     )
 
     # pynvml raises on init - should fall through silently
@@ -210,11 +206,10 @@ def test_pytorch_device_map_pynvml_error_falls_through():
 
 def test_pytorch_device_map_pynvml_import_error_falls_through():
     """pytorch device_map with pynvml absent falls through to [0]."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    pytorch_cfg = TransformersConfig(device_map="auto")
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"device_map": "auto"}},
     )
 
     # Remove pynvml from sys.modules to simulate it being absent

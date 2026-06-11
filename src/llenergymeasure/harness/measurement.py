@@ -716,15 +716,17 @@ class MeasurementHarness:
     def _configured_batch_size(engine_name: str, config: ExperimentConfig) -> int | None:
         """Return the configured static batch size for the engine, or None.
 
-        transformers -> config.transformers.batch_size, defaulting to 1 (mirrors
-                        the engine plugin, which defaults batch_size to 1 when the
-                        transformers config block or its batch_size is unset)
+        transformers -> config.harness.transformers.batch_size, defaulting to 1
+                        (prompt-batching is a llem-orchestration knob; mirrors the
+                        engine plugin, which defaults batch_size to 1 when the
+                        harness block or its batch_size is unset)
         tensorrt     -> config.tensorrt.max_batch_size (its analogous field)
         anything else (incl. vllm continuous batching) -> None
         """
         if engine_name == "transformers":
-            if config.transformers is not None and config.transformers.batch_size is not None:
-                return config.transformers.batch_size
+            harness_t = config.harness.transformers if config.harness is not None else None
+            if harness_t is not None and harness_t.batch_size is not None:
+                return harness_t.batch_size
             return 1
         if engine_name == "tensorrt" and config.tensorrt is not None:
             return config.tensorrt.max_batch_size

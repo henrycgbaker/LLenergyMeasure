@@ -159,10 +159,16 @@ def test_get_param_test_values_pytorch_batch_size_returns_list():
     assert 1 in values
 
 
-def test_get_param_test_values_dtype_returns_all_options():
-    """get_param_test_values('transformers.dtype') returns all 3 dtype options."""
-    values = get_param_test_values("transformers.dtype")
-    assert set(values) == {"float32", "float16", "bfloat16"}
+def test_get_param_test_values_transformers_dtype_is_untyped_after_migration():
+    """transformers dtype is a curated Any-typed passthrough on the generated Config.
+
+    The hand-written TransformersConfig typed dtype as a 3-value Literal; the
+    generated engine_params.dtype is ``Any`` (discovery debt - the field is HF
+    **kwargs, not signature-typed), so no enumerated test values are derived.
+    Enumerated dtype options still come from vllm/tensorrt, which keep Literals.
+    """
+    values = get_param_test_values("transformers.engine_params.dtype")
+    assert values == []
 
 
 def test_get_param_test_values_decoder_temperature_returns_floats():
@@ -212,20 +218,22 @@ def test_list_all_param_paths_contains_expected_paths():
     """list_all_param_paths() returns a sorted list containing known param paths."""
     paths = list_all_param_paths()
     assert isinstance(paths, list)
+    # batch_size is a harness knob, surfaced flat under the transformers prefix.
     assert "transformers.batch_size" in paths
-    assert "transformers.dtype" in paths
+    # dtype now lives on the generated nested engine_params shape.
+    assert "transformers.engine_params.dtype" in paths
 
 
 def test_list_all_param_paths_contains_known_paths():
     """list_all_param_paths() contains expected well-known param paths."""
     paths = list_all_param_paths()
     assert "transformers.batch_size" in paths
-    # Sampling params live per-engine, not on a universal decoder
-    assert "transformers.sampling.temperature" in paths
+    # transformers uses the generated nested shape; sampling lives on
+    # sampling_params, engine fields on engine_params. vllm/tensorrt keep flat.
+    assert "transformers.sampling_params.temperature" in paths
     assert "vllm.sampling.temperature" in paths
     assert "tensorrt.sampling.temperature" in paths
-    # dtype also lives per-engine
-    assert "transformers.dtype" in paths
+    assert "transformers.engine_params.dtype" in paths
     assert "vllm.dtype" in paths
     assert "tensorrt.dtype" in paths
 
@@ -251,15 +259,17 @@ def test_list_all_param_paths_unknown_engine_raises():
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
     config = make_config(dtype=dt)
-    assert config.transformers.dtype == dt
+    assert config.transformers.engine_params.dtype == dt
 
 
-def test_ssot_dtype_values_match_param_test_values():
-    """DTYPE_SUPPORT['transformers'] values match get_param_test_values('transformers.dtype')."""
-    from_ssot = set(DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
-    from_introspection = set(get_param_test_values("transformers.dtype"))
-    # The test values from introspection should cover all SSOT dtype values
-    assert from_ssot == from_introspection
+def test_transformers_dtype_has_no_introspected_test_values_after_migration():
+    """transformers dtype is a curated Any-typed passthrough (no enumerated Literal).
+
+    The generated engine_params.dtype is ``Any`` (HF **kwargs discovery debt), so
+    introspection derives no enumerated test values - unlike vllm/tensorrt which
+    keep dtype Literals. The SSOT DTYPE_SUPPORT still drives sweep generation.
+    """
+    assert get_param_test_values("transformers.engine_params.dtype") == []
 
 
 # ---------------------------------------------------------------------------
@@ -345,13 +355,17 @@ def test_get_swept_field_paths_single_experiment():
 def test_get_swept_field_paths_dtype_swept():
     """Two experiments with different engine dtypes sweep the engine subconfig path."""
     exp1 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "float16"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "float16"}},
     )
     exp2 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "bfloat16"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "bfloat16"}},
     )
     result = get_swept_field_paths([exp1, exp2])
-    assert "transformers.dtype" in result
+    assert "transformers.engine_params.dtype" in result
 
 
 def test_get_swept_field_paths_nested_field():
@@ -371,12 +385,13 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     get_swept_field_paths must handle None values in optional sub-config lists
     rather than raising AttributeError.
     """
-    from llenergymeasure.config.engine_configs import TransformersConfig, VLLMConfig
+    from llenergymeasure.config.engine_configs import VLLMConfig
 
     exp_pt = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="float16", batch_size=4),
+        transformers={"engine_params": {"dtype": "float16"}},
+        harness={"transformers": {"batch_size": 4}},
     )
     exp_vllm = ExperimentConfig(
         task={"model": "gpt2"},

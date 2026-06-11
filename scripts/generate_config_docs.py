@@ -41,7 +41,8 @@ _SECTION_ORDER = [
     ("decoder", "Decoder / Sampling (`decoder:`)"),
     ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
-    ("transformers", "PyTorch Engine (`pytorch:`)"),
+    ("transformers_engine", "Transformers Engine (`transformers.engine_params:`)"),
+    ("transformers_sampling", "Transformers Sampling (`transformers.sampling_params:`)"),
     ("vllm_engine", "vLLM Engine (`vllm.engine:`)"),
     ("vllm_sampling", "vLLM Sampling (`vllm.sampling:`)"),
     ("vllm_beam_search", "vLLM Beam Search (`vllm.beam_search:`)"),
@@ -49,12 +50,14 @@ _SECTION_ORDER = [
     ("tensorrt", "TensorRT-LLM Engine (`tensorrt:`)"),
 ]
 
-# Map from JSON schema $defs key to our section key
+# Map from JSON schema $defs key to our section key. transformers is the
+# generated nested Config: its $defs are EngineParams / SamplingParams.
 _DEF_TO_SECTION: dict[str, str] = {
     "DecoderConfig": "decoder",
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
-    "TransformersConfig": "transformers",
+    "EngineParams": "transformers_engine",
+    "SamplingParams": "transformers_sampling",
     "VLLMEngineConfig": "vllm_engine",
     "VLLMSamplingConfig": "vllm_sampling",
     "VLLMBeamSearchConfig": "vllm_beam_search",

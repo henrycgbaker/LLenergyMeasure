@@ -55,23 +55,27 @@ def test_load_valid_yaml(tmp_path):
 
 
 def test_load_yaml_with_dtype(tmp_path):
-    """YAML with per-engine dtype loads correctly (dtype is nested under the engine section)."""
+    """YAML with per-engine dtype loads correctly (transformers nests under engine_params)."""
     path = _write_yaml(
         tmp_path,
-        "task:\n  model: gpt2\nengine: transformers\ntransformers:\n  dtype: float16\n",
+        "task:\n  model: gpt2\nengine: transformers\n"
+        "transformers:\n  engine_params:\n    dtype: float16\n",
     )
     config = load_experiment_config(path)
     assert config.transformers is not None
-    assert config.transformers.dtype == "float16"
+    assert config.transformers.engine_params.dtype == "float16"
 
 
 def test_load_yaml_with_pytorch_section(tmp_path):
-    """YAML with nested pytorch: section loads correctly."""
-    yaml_content = "task:\n  model: gpt2\nengine: transformers\ntransformers:\n  batch_size: 4\n"
+    """YAML with the nested transformers engine_params section loads correctly."""
+    yaml_content = (
+        "task:\n  model: gpt2\nengine: transformers\n"
+        "transformers:\n  engine_params:\n    device_map: auto\n"
+    )
     path = _write_yaml(tmp_path, yaml_content)
     config = load_experiment_config(path)
     assert config.transformers is not None
-    assert config.transformers.batch_size == 4
+    assert config.transformers.engine_params.device_map == "auto"
 
 
 def test_load_yaml_with_version_field_stripped(tmp_path):
@@ -467,21 +471,23 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
                 "engine": "transformers",
                 "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
                 "sweep": {
-                    "transformers.sampling.do_sample": [True, False],
-                    "transformers.sampling.temperature": [0.5, 1.0, 1.5],
+                    # Nested generated shape: sampling lives on sampling_params,
+                    # where the greedy-strips dormancy rules can match it and the
+                    # dedup canonicaliser collapses the greedy configs.
+                    "transformers.sampling_params.do_sample": [True, False],
+                    "transformers.sampling_params.temperature": [0.5, 1.0, 1.5],
                 },
             }
         )
     )
     sc = _load_study(study_yaml)
     # Pinned over the full resolved-config surface (config.model_dump). Re-pinned
-    # when MeasurementConfig gained latency_profiling, then again when
-    # ExperimentConfig gained the harness section: a new defaulted field shifts
-    # the canonical JSON, so the fingerprint moves while the resolve -> dedup ->
-    # hash pipeline is unchanged (6 declared -> 4 unique below still holds). A
-    # value change with those structural assertions intact is a benign
+    # when MeasurementConfig gained latency_profiling, when ExperimentConfig
+    # gained the harness section, and when transformers migrated to the nested
+    # generated shape (the swept paths and resolved surface both moved). A value
+    # change with the dedup counts (6 declared -> 4 unique) intact is a benign
     # schema-surface shift; a change to the dedup counts is not.
-    assert sc.study_design_hash == "08944c0d10563a07"
+    assert sc.study_design_hash == "5c22555c069e9540"
     # 6 declared configs collapse to 4 unique under resolved-config dedup.
     assert len(sc.experiments) == 4
     assert len(sc.declared_resolved_config_hashes) == 6

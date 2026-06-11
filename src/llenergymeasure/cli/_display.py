@@ -112,7 +112,13 @@ def print_dry_run(
         return ""
 
     engine_section = getattr(config, config.engine, None)
-    engine_dtype = getattr(engine_section, "dtype", None)
+    # transformers nests dtype under engine_params; vllm/tensorrt keep it flat.
+    transformers_ep = config.transformers.engine_params if config.transformers is not None else None
+    engine_dtype = (
+        getattr(transformers_ep, "dtype", None)
+        if config.engine == "transformers"
+        else getattr(engine_section, "dtype", None)
+    )
 
     print("Config (resolved)")
     print(f"  Model          {config.task.model}")
@@ -120,10 +126,11 @@ def print_dry_run(
     dtype_display = engine_dtype or "-"
     print(f"  Dtype          {dtype_display}{_annotate('dtype', engine_dtype)}")
 
-    # Batch size - from transformers section if present
+    # Batch size - transformers prompt-batching lives on the harness residual.
     batch_size: int | None = None
-    if config.transformers is not None and hasattr(config.transformers, "batch_size"):
-        batch_size = config.transformers.batch_size
+    harness_t = config.harness.transformers if config.harness is not None else None
+    if harness_t is not None:
+        batch_size = harness_t.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")
 

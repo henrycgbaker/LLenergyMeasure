@@ -273,14 +273,13 @@ def test_model_load_kwargs_no_passthrough_when_none(monkeypatch):
 def test_model_load_kwargs_pytorch_config_attn_implementation():
     """TransformersConfig.attn_implementation is included in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(attn_implementation="sdpa"),
+        transformers={"engine_params": {"attn_implementation": "sdpa"}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -296,14 +295,13 @@ def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
     """flash_attention_2 falls back to sdpa when flash_attn package is missing."""
     pytest.importorskip("torch")
 
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(attn_implementation="flash_attention_2"),
+        transformers={"engine_params": {"attn_implementation": "flash_attention_2"}},
     )
 
     # flash_attn is not installed in the test environment, so the guard
@@ -320,14 +318,13 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
     import types
     from unittest.mock import patch
 
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(attn_implementation="flash_attention_2"),
+        transformers={"engine_params": {"attn_implementation": "flash_attention_2"}},
     )
 
     # Simulate flash_attn and flash_attn.bert_padding being importable by
@@ -349,14 +346,13 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
 def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
     """sdpa attention is passed through without flash_attn availability check."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(attn_implementation="sdpa"),
+        transformers={"engine_params": {"attn_implementation": "sdpa"}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -367,14 +363,13 @@ def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
 def test_model_load_kwargs_eager_not_affected_by_flash_guard():
     """eager attention is passed through without flash_attn availability check."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(attn_implementation="eager"),
+        transformers={"engine_params": {"attn_implementation": "eager"}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -385,14 +380,13 @@ def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
     """flash_attention_3 also falls back to sdpa when flash_attn is missing."""
     pytest.importorskip("torch")
 
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(attn_implementation="flash_attention_3"),
+        transformers={"engine_params": {"attn_implementation": "flash_attention_3"}},
     )
 
     # flash_attn is not installed in the test environment, so the guard
@@ -407,14 +401,13 @@ def test_model_load_kwargs_pytorch_config_load_in_4bit():
     pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(load_in_4bit=True),
+        transformers={"engine_params": {"load_in_4bit": True}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -429,14 +422,13 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
     pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(load_in_8bit=True),
+        transformers={"engine_params": {"load_in_8bit": True}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -449,14 +441,13 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
 def test_model_load_kwargs_pytorch_config_none_values_not_included():
     """None values from TransformersConfig are NOT included in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(),
+        transformers={},
         # all fields None,
     )
     kwargs = engine._model_load_kwargs(config)
@@ -547,21 +538,21 @@ def test_build_generate_kwargs_defaults():
 
 def test_build_generate_kwargs_explicit_sampling_forwarded():
     """Explicit transformers.sampling fields flow through to generate kwargs."""
-    from llenergymeasure.config.engine_configs import (
-        TransformersConfig,
-        TransformersSamplingConfig,
-    )
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(
-            sampling=TransformersSamplingConfig(
-                temperature=0.7, top_k=40, top_p=0.9, repetition_penalty=1.1, do_sample=True
-            ),
-        ),
+        transformers={
+            "sampling_params": {
+                "temperature": 0.7,
+                "top_k": 40,
+                "top_p": 0.9,
+                "repetition_penalty": 1.1,
+                "do_sample": True,
+            }
+        },
     )
     kwargs = engine._build_generate_kwargs(config)
 
@@ -574,19 +565,13 @@ def test_build_generate_kwargs_explicit_sampling_forwarded():
 
 def test_build_generate_kwargs_greedy_decoding():
     """Greedy decoding (temperature=0) removes sampling params and forces do_sample=False."""
-    from llenergymeasure.config.engine_configs import (
-        TransformersConfig,
-        TransformersSamplingConfig,
-    )
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(
-            sampling=TransformersSamplingConfig(temperature=0.0, do_sample=False),
-        ),
+        transformers={"sampling_params": {"temperature": 0.0, "do_sample": False}},
     )
     kwargs = engine._build_generate_kwargs(config)
 
@@ -656,13 +641,12 @@ def test_get_engine_unknown_message_lists_tensorrt():
 def test_model_load_kwargs_tp_plan_forwarded():
     """With TransformersConfig(tp_plan='auto'), kwargs contains tp_plan and no device_map."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
-        task={"model": "gpt2"}, transformers=TransformersConfig(tp_plan="auto")
+        task={"model": "gpt2"}, transformers={"engine_params": {"tp_plan": "auto"}}
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -673,14 +657,13 @@ def test_model_load_kwargs_tp_plan_forwarded():
 def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
     """With TransformersConfig(tp_plan='auto', tp_size=4), kwargs contains both and no device_map."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        transformers=TransformersConfig(tp_plan="auto", tp_size=4),
+        transformers={"engine_params": {"tp_plan": "auto", "tp_size": 4}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -696,13 +679,14 @@ def test_model_load_kwargs_tp_size_without_tp_plan_ignored(monkeypatch):
     since the helper is now pure passthrough (unset → None → kwarg omitted).
     """
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"}, transformers=TransformersConfig(tp_size=4))
+    config = ExperimentConfig(
+        task={"model": "gpt2"}, transformers={"engine_params": {"tp_size": 4}}
+    )
     kwargs = engine._model_load_kwargs(config)
 
     assert "tp_size" not in kwargs
@@ -713,13 +697,12 @@ def test_model_load_kwargs_tp_size_without_tp_plan_ignored(monkeypatch):
 def test_model_load_kwargs_device_map_still_works():
     """TransformersConfig(device_map='cpu') produces device_map='cpu', no tp_plan in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
-        task={"model": "gpt2"}, transformers=TransformersConfig(device_map="cpu")
+        task={"model": "gpt2"}, transformers={"engine_params": {"device_map": "cpu"}}
     )
     kwargs = engine._model_load_kwargs(config)
 

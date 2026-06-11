@@ -39,10 +39,10 @@ SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 if TYPE_CHECKING:
     from llenergymeasure.config.engine_configs import (
         TensorRTConfig,
-        TransformersConfig,
         VLLMConfig,
     )
     from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
+    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
 
 
 @lru_cache(maxsize=1)
@@ -403,16 +403,20 @@ class ExperimentConfig(BaseModel):
             return data
         engine = data.get("engine", Engine.TRANSFORMERS)
         engine_key = engine.value if hasattr(engine, "value") else str(engine)
+        # transformers uses the generated nested shape (sampling_params); vllm +
+        # tensorrt still use the hand-written flat shape (sampling) until their
+        # own migration.
+        sampling_key = "sampling_params" if engine_key == "transformers" else "sampling"
         # Ensure the engine section and its sampling sub-dict exist as dicts
         # (an explicit ``engine: null`` in YAML would otherwise leave None here).
         engine_section = data.get(engine_key)
         if not isinstance(engine_section, dict):
             engine_section = {}
             data[engine_key] = engine_section
-        sampling_section = engine_section.get("sampling")
+        sampling_section = engine_section.get(sampling_key)
         if not isinstance(sampling_section, dict):
             sampling_section = {}
-            engine_section["sampling"] = sampling_section
+            engine_section[sampling_key] = sampling_section
         for key, value in SAMPLING_PRESETS[preset_name].items():
             sampling_section.setdefault(key, value)
         return data
@@ -479,14 +483,15 @@ class ExperimentConfig(BaseModel):
         ``GenerationConfig.validate``). See memory note
         ``project_phase_50_pipeline_replan.md``.
         """
+        ep = self.transformers.engine_params if self.transformers is not None else None
         if (
             self.engine == "transformers"
-            and self.transformers is not None
-            and self.transformers.attn_implementation in self._FLASH_ATTENTION_IMPLS
-            and (self.transformers.dtype or "bfloat16") == "float32"
+            and ep is not None
+            and ep.attn_implementation in self._FLASH_ATTENTION_IMPLS
+            and (ep.dtype or "bfloat16") == "float32"
         ):
             raise ValueError(
-                f"attn_implementation='{self.transformers.attn_implementation}' requires "
+                f"attn_implementation='{ep.attn_implementation}' requires "
                 "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
                 "float32 computation."
             )
@@ -543,12 +548,17 @@ class ExperimentConfig(BaseModel):
 
 # Rebuild to resolve forward references for engine configs
 def _rebuild_experiment_config() -> None:
-    """Rebuild ExperimentConfig to resolve forward references."""
+    """Rebuild ExperimentConfig to resolve forward references.
+
+    transformers resolves to the generated nested ``Config`` (engine_params /
+    sampling_params shape); vllm + tensorrt still use the hand-written
+    engine_configs classes until their own migration.
+    """
     from llenergymeasure.config.engine_configs import (
         TensorRTConfig,
-        TransformersConfig,
         VLLMConfig,
     )
+    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
 
     ExperimentConfig.model_rebuild(
         _types_namespace={

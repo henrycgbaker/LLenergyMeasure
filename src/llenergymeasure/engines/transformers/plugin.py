@@ -114,18 +114,22 @@ class TransformersEngine:
         if on_substep is not None:
             on_substep("model weights loaded", _time.perf_counter() - t0)
 
+        # allow_tf32 + torch.compile are llem-orchestration knobs (HarnessConfig),
+        # not engine config: llem makes the torch calls around the engine.
+        harness = self._harness(config)
+
         # Apply allow_tf32 (Ampere+ TF32 toggle)
-        if config.transformers is not None and config.transformers.allow_tf32 is not None:
+        if harness is not None and harness.allow_tf32 is not None:
             import torch as _torch
 
-            _torch.backends.cuda.matmul.allow_tf32 = config.transformers.allow_tf32
+            _torch.backends.cuda.matmul.allow_tf32 = harness.allow_tf32
 
         # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
-        if config.transformers is not None and config.transformers.torch_compile:
+        if harness is not None and harness.torch_compile:
             import torch as _torch
 
-            mode = config.transformers.torch_compile_mode or "default"
-            backend = config.transformers.torch_compile_backend or "inductor"
+            mode = harness.torch_compile_mode or "default"
+            backend = harness.torch_compile_backend or "inductor"
             try:
                 t0 = _time.perf_counter()
                 model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
@@ -188,9 +192,10 @@ class TransformersEngine:
         """
         hf_model, tokenizer = model
 
+        harness = self._harness(config)
         batch_size = 1
-        if config.transformers is not None and config.transformers.batch_size is not None:
-            batch_size = config.transformers.batch_size
+        if harness is not None and harness.batch_size is not None:
+            batch_size = harness.batch_size
         else:
             logger.debug("Transformers batch_size not set, defaulting to 1")
 
@@ -200,11 +205,8 @@ class TransformersEngine:
         # fall back to the non-profiled path when num_beams > 1.
         profiling = config.measurement.latency_profiling
         profiling_forced_batch_size = False
-        num_beams = (
-            config.transformers.num_beams
-            if config.transformers is not None and config.transformers.num_beams is not None
-            else 1
-        )
+        _ep = self._engine_params(config)
+        num_beams = _ep.num_beams if _ep is not None and _ep.num_beams is not None else 1
         if profiling and num_beams > 1:
             logger.warning(
                 "latency_profiling requested but num_beams=%d > 1; beam search is "
@@ -397,8 +399,8 @@ class TransformersEngine:
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
-        pt = config.transformers
-        if pt is not None and (pt.load_in_4bit or pt.load_in_8bit):
+        ep = config.transformers.engine_params if config.transformers is not None else None
+        if ep is not None and (ep.load_in_4bit or ep.load_in_8bit):
             try:
                 bnb = getattr(hf_model, "quantization_config", None)
                 if bnb is not None:
@@ -453,6 +455,25 @@ class TransformersEngine:
         return []
 
     # -------------------------------------------------------------------------
+    # Private: nested-config accessors (engine_params / sampling_params / harness)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _engine_params(config: ExperimentConfig) -> Any:
+        """Return the transformers engine_params block, or None."""
+        return config.transformers.engine_params if config.transformers is not None else None
+
+    @staticmethod
+    def _sampling_params(config: ExperimentConfig) -> Any:
+        """Return the transformers sampling_params block, or None."""
+        return config.transformers.sampling_params if config.transformers is not None else None
+
+    @staticmethod
+    def _harness(config: ExperimentConfig) -> Any:
+        """Return the transformers HarnessConfig block (llem-orchestration knobs), or None."""
+        return config.harness.transformers if config.harness is not None else None
+
+    # -------------------------------------------------------------------------
     # Private: model loading helpers
     # -------------------------------------------------------------------------
 
@@ -465,7 +486,10 @@ class TransformersEngine:
         Returns:
             Dict of kwargs ready for from_pretrained().
         """
-        pt = config.transformers
+        # All from_pretrained-side fields live on engine_params (dtype, tp_*,
+        # device_map, attn_implementation, BnB knobs, max_memory, etc.); extras
+        # flow through engine_params.model_extra (extra="allow").
+        pt = self._engine_params(config)
         dtype = pt.dtype if pt is not None else None
         kwargs: dict[str, Any] = {
             "torch_dtype": self._resolve_torch_dtype(dtype or "bfloat16"),
@@ -645,14 +669,14 @@ class TransformersEngine:
         # Padding tokens: total tensor positions minus real (attended) tokens.
         padding_tokens = int(inputs["input_ids"].numel()) - input_token_count
 
-        # Determine autocast settings
+        # Determine autocast settings (HarnessConfig - llem wraps generate()).
         from contextlib import nullcontext
 
-        _pt = config.transformers
-        if _pt is not None and _pt.autocast_enabled is True and torch.cuda.is_available():
+        _h = self._harness(config)
+        if _h is not None and _h.autocast_enabled is True and torch.cuda.is_available():
             _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
             _amp_ctx = torch.autocast(
-                device_type="cuda", dtype=_dtype_map[_pt.autocast_dtype or "bfloat16"]
+                device_type="cuda", dtype=_dtype_map[_h.autocast_dtype or "bfloat16"]
             )
         else:
             _amp_ctx = nullcontext()  # type: ignore[assignment]
@@ -675,34 +699,36 @@ class TransformersEngine:
         return input_token_count, output_token_count, elapsed, padding_tokens
 
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build generation kwargs from TransformersSamplingConfig and TransformersConfig.
+        """Build generation kwargs from the nested sampling_params + engine_params.
 
         None values mean "use HF's default"; only explicit fields are forwarded.
-        Greedy decoding (temperature=0 or do_sample=False) strips sampling params
-        and forces do_sample=False, matching HF's own greedy semantics.
+        Sampling fields (temperature, top_k, ...) live on sampling_params; the
+        generation-control fields (num_beams, cache_implementation, ...) live on
+        engine_params. Greedy decoding (temperature=0 or do_sample=False) strips
+        sampling params and forces do_sample=False, matching HF greedy semantics.
         """
-        pt = config.transformers
-        sampling = pt.sampling if pt is not None else None
+        sampling = self._sampling_params(config)
+        ep = self._engine_params(config)
 
         kwargs: dict[str, Any] = (
             sampling.model_dump(exclude_none=True) if sampling is not None else {}
         )
 
-        if pt is not None:
-            if pt.use_cache is not None:
-                kwargs["use_cache"] = pt.use_cache
-            if pt.cache_implementation is not None:
-                kwargs["cache_implementation"] = pt.cache_implementation
-            if pt.num_beams is not None:
-                kwargs["num_beams"] = pt.num_beams
-            if pt.early_stopping is not None:
-                kwargs["early_stopping"] = pt.early_stopping
-            if pt.length_penalty is not None:
-                kwargs["length_penalty"] = pt.length_penalty
-            if pt.no_repeat_ngram_size is not None:
-                kwargs["no_repeat_ngram_size"] = pt.no_repeat_ngram_size
-            if pt.prompt_lookup_num_tokens is not None:
-                kwargs["prompt_lookup_num_tokens"] = pt.prompt_lookup_num_tokens
+        if ep is not None:
+            if ep.use_cache is not None:
+                kwargs["use_cache"] = ep.use_cache
+            if ep.cache_implementation is not None:
+                kwargs["cache_implementation"] = ep.cache_implementation
+            if ep.num_beams is not None:
+                kwargs["num_beams"] = ep.num_beams
+            if ep.early_stopping is not None:
+                kwargs["early_stopping"] = ep.early_stopping
+            if ep.length_penalty is not None:
+                kwargs["length_penalty"] = ep.length_penalty
+            if ep.no_repeat_ngram_size is not None:
+                kwargs["no_repeat_ngram_size"] = ep.no_repeat_ngram_size
+            if ep.prompt_lookup_num_tokens is not None:
+                kwargs["prompt_lookup_num_tokens"] = ep.prompt_lookup_num_tokens
 
         if kwargs.get("temperature") == 0.0 or kwargs.get("do_sample") is False:
             kwargs["do_sample"] = False
