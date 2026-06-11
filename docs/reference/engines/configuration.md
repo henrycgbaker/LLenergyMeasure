@@ -53,9 +53,6 @@ transformers:
 
 # Optional
 sampling_preset: deterministic   # deterministic | standard | creative | factual
-lora:
-  adapter_id: org/lora-adapter
-  merge_weights: false
 passthrough_kwargs:
   trust_remote_code: true
 ```
@@ -110,15 +107,13 @@ across engines.
 | `baseline.validation_interval` | int >= 1 | `5` | Re-validate every N experiments (validated only) | `models.py:165-171` |
 | `baseline.drift_threshold` | float [0.01, 0.50] | `0.10` | Drift fraction that triggers re-measurement (validated only) | `models.py:172-180` |
 | `energy_sampler` | `auto` \| `nvml` \| `zeus` \| `codecarbon` \| null | `auto` | Energy sampler; null disables energy measurement | `models.py:320-327` |
+| `latency_profiling` | bool | `false` | Opt-in per-token latency profiling. Captures TTFT/ITL (transformers via a streamer forced to `batch_size=1`; vLLM via decode-average ITL). Overhead may perturb energy and latency, so profiled runs are tagged in `measurement_warnings` and energy is emitted as-is. Unsupported on tensorrt. | `models.py:296-307` |
 
 ### Top-level optional fields
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
 | `sampling_preset` | `deterministic` \| `standard` \| `creative` \| `factual` \| null | null | Merges preset values into the active engine's `sampling:` section at parse time. Explicit YAML values take precedence. | `models.py:367-375`, `ssot.py:27-32` |
-| `lora.adapter_id` | str \| null | null | HuggingFace Hub adapter ID (mutually exclusive with `adapter_path`) | `models.py:232` |
-| `lora.adapter_path` | str \| null | null | Local path to adapter weights | `models.py:233` |
-| `lora.merge_weights` | bool | `false` | Merge adapter weights into base model at load time | `models.py:234-236` |
 | `passthrough_kwargs` | dict \| null | null | Extra kwargs forwarded to the engine; keys must not collide with `ExperimentConfig` fields | `models.py:395-399` |
 
 ## Transformers engine (`transformers:`)

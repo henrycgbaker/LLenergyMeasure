@@ -1,30 +1,29 @@
 """Public library API for llenergymeasure."""
 
-from llenergymeasure.api._impl import run_experiment, run_study
+from llenergymeasure.api._impl import load_study, run_experiment, run_study
 from llenergymeasure.api.report_gaps import (
-    GapProposal,
     ReportGapsError,
     find_runtime_gaps,
-    load_engine_invariants,
     render_yaml_fragment,
 )
 from llenergymeasure.results.persistence import save_result
+from llenergymeasure.study.manifest import study_dir_name
 from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.study.resume import find_resumable_study, load_resume_state
 
 __all__ = [
-    "GapProposal",
     "ReportGapsError",
     "find_resumable_study",
     "find_runtime_gaps",
-    "load_engine_invariants",
     "load_resume_state",
+    "load_study",
     "probe_energy_sampler",
     "render_yaml_fragment",
     "run_experiment",
     "run_study",
     "run_study_preflight",
     "save_result",
+    "study_dir_name",
 ]
 
 

@@ -19,7 +19,6 @@ from llenergymeasure.cli._display import (
     print_study_summary,
 )
 from llenergymeasure.cli._vram import DTYPE_BYTES
-from llenergymeasure.study._progress import print_study_progress
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
@@ -313,23 +312,26 @@ def test_print_result_summary_with_flops(capsys):
 
 
 def test_print_result_summary_with_latency_stats(capsys):
-    """Result with latency_stats that has ttft_ms/itl_ms shows Latency lines.
+    """Result with latency_stats (real LatencyStatistics) shows TTFT/ITL lines.
 
-    The _display.py code checks hasattr(ls, "ttft_ms") - uses duck typing
-    so any object with those attributes will trigger the print.
+    The display reads the concrete field names ttft_mean_ms / itl_mean_ms.
     """
-    from unittest.mock import MagicMock
-
+    from llenergymeasure.domain.metrics import LatencyStatistics
     from tests.conftest import make_result
 
-    # Use MagicMock to create an object with ttft_ms and itl_ms attributes
-    # (the display code uses hasattr duck typing, not a concrete LatencyStatistics)
-    latency = MagicMock()
-    latency.ttft_ms = 12.5
-    latency.itl_ms = 3.2
+    latency = LatencyStatistics(
+        ttft_mean_ms=12.5,
+        ttft_median_ms=12.0,
+        ttft_p95_ms=14.0,
+        ttft_p99_ms=15.0,
+        ttft_min_ms=10.0,
+        ttft_max_ms=16.0,
+        ttft_samples=3,
+        itl_mean_ms=3.2,
+        itl_samples=10,
+    )
 
     result = make_result()
-    # Inject latency via model_construct to bypass validation
     result = result.model_copy(update={"latency_stats": latency})
     print_result_summary(result)
     out = capsys.readouterr().out
@@ -790,45 +792,3 @@ def test_print_study_summary_mj_tok_prefers_adjusted(capsys):
     # mJ/tok should show adjusted value (0.123), not total (0.456)
     assert "0.123" in out
     assert "0.456" not in out
-
-
-# =============================================================================
-# print_study_progress tests
-# =============================================================================
-
-
-def test_print_study_progress_running_status(capsys):
-    """Running status shows '...' icon."""
-    from tests.conftest import make_config
-
-    config = make_config(model="gpt2")
-    print_study_progress(1, 5, config, status="running")
-    err = capsys.readouterr().err
-
-    assert "[1/5]" in err
-    assert "..." in err
-    assert "gpt2" in err
-
-
-def test_print_study_progress_failed_status(capsys):
-    """Failed status shows 'FAIL' icon."""
-    from tests.conftest import make_config
-
-    config = make_config(model="gpt2")
-    print_study_progress(3, 5, config, status="failed")
-    err = capsys.readouterr().err
-
-    assert "FAIL" in err
-    assert "[3/5]" in err
-
-
-def test_print_study_progress_with_elapsed_and_energy(capsys):
-    """Progress line includes formatted elapsed time and energy when provided."""
-    from tests.conftest import make_config
-
-    config = make_config(model="gpt2")
-    print_study_progress(2, 4, config, status="completed", elapsed=90.0, energy=500.0)
-    err = capsys.readouterr().err
-
-    assert "1m 30s" in err  # 90s formatted
-    assert "500" in err  # energy value (500 J -> _sig3 -> "500")

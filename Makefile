@@ -74,8 +74,8 @@ lint-fix: ## Auto-fix lint issues (ruff check --fix + format)
 	uv run ruff check src/ tests/ --fix
 	uv run ruff format src/ tests/
 
-typecheck: ## Run mypy on src/
-	uv run mypy src/
+typecheck: ## Run mypy on src/ and tests/
+	uv run mypy src/ tests/
 
 check: lint typecheck ## lint + typecheck (no tests)
 
@@ -143,8 +143,10 @@ docs-all: ## Regenerate every SSOT-derived doc (CLI, config, invariants, schema,
 	uv run python scripts/generate_invalid_combos_doc.py
 	uv run python scripts/generate_config_docs.py
 	uv run python scripts/generate_cli_reference.py
-	uv run python scripts/generate_invariants_doc.py
-	uv run python scripts/generate_schema_doc.py
+	@for engine in transformers vllm tensorrt; do \
+		uv run python scripts/generate_invariants_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md; \
+		uv run python scripts/generate_schema_doc.py --engine $$engine --out docs/reference/engines/schema-$$engine.md; \
+	done
 	uv run python scripts/generate_curation_doc.py
 	uv run python scripts/generate_api_docs.py
 	@echo "All generated docs refreshed"
@@ -153,6 +155,12 @@ docs-check: ## Verify generated docs are up to date (used by CI)
 	@uv run python scripts/generate_config_docs.py > /dev/null
 	@uv run python scripts/generate_cli_reference.py > /dev/null
 	@uv run python scripts/generate_invalid_combos_doc.py > /dev/null
+	@for engine in transformers vllm tensorrt; do \
+		uv run python scripts/generate_invariants_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md > /dev/null; \
+		uv run python scripts/generate_schema_doc.py --engine $$engine --out docs/reference/engines/schema-$$engine.md > /dev/null; \
+	done
+	@uv run python scripts/generate_curation_doc.py > /dev/null
+	@uv run python scripts/generate_api_docs.py > /dev/null
 	@echo "Generated docs are up to date"
 
 # Rediscover a vendored engine schema by running introspection inside the
@@ -234,7 +242,7 @@ ci-docker: ## Run ci inside a clean Ubuntu container (matches GitHub Actions env
 		uv run ruff check src/ tests/ && \
 		uv run ruff format --check src/ tests/ && \
 		uv run lint-imports && \
-		uv run mypy src/ && \
+		uv run mypy src/ tests/ && \
 		uv run pytest tests/ -m "not gpu and not docker" -x -q --tb=short && \
 		echo "=== CI-docker: all checks passed ==="'
 	@docker rmi $(CI_IMAGE) 2>/dev/null || true
@@ -248,6 +256,7 @@ ci-docker: ## Run ci inside a clean Ubuntu container (matches GitHub Actions env
 
 gpu-ci: ## GPU integration tests (mirrors gpu-ci.yml; transformers engine)
 	docker build -f docker/Dockerfile.transformers -t llenergymeasure-ci:transformers .
+	docker rm llem-ci-setup 2>/dev/null || true
 	docker run --name llem-ci-setup llenergymeasure-ci:transformers pip install --no-cache-dir pytest pytest-xdist
 	docker commit llem-ci-setup llenergymeasure-ci:transformers
 	docker rm llem-ci-setup

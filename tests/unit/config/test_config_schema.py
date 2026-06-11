@@ -39,13 +39,13 @@ def test_model_only_uses_pytorch_default():
 def test_extra_fields_forbidden():
     """Unknown top-level fields are rejected with ValidationError (extra='forbid')."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(task={"model": "gpt2"}, engine="transformers", unknown_field="x")
+        ExperimentConfig(task={"model": "gpt2"}, engine="transformers", unknown_field="x")  # type: ignore[call-arg]  # asserts extra rejected
 
 
 def test_multiple_extra_fields_all_rejected():
     """Multiple unknown fields are all rejected."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(task={"model": "gpt2"}, engine="transformers", foo="a", bar="b")
+        ExperimentConfig(task={"model": "gpt2"}, engine="transformers", foo="a", bar="b")  # type: ignore[call-arg]  # asserts extra rejected
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ def test_valid_dtype_bfloat16():
     assert config.transformers.dtype == "bfloat16"
 
 
-@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])
+@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
 def test_all_pytorch_dtypes_valid(dt):
     """Schema-driven: all SSOT DTYPE_SUPPORT['transformers'] values are valid."""
     config = make_config(dtype=dt)

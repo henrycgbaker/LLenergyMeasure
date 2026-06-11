@@ -89,8 +89,8 @@ run_study(...)
         ├─ run_study_preflight()
         ├─ resolve_study_runners()
         ├─ create_study_dir() + ManifestWriter
-        ├─ _run_in_process()  # single experiment: harness or DockerRunner directly
-        └─ _run_via_runner()  # multi-experiment: StudyRunner subprocess loop
+        ├─ run_single_experiment()  # single experiment (study layer): harness or DockerRunner directly
+        └─ _run_via_runner()        # multi-experiment: StudyRunner subprocess loop
 ```
 
 ## Layer constraints

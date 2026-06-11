@@ -27,7 +27,6 @@ from llenergymeasure.utils.exceptions import (
     StudyError,          # study orchestration errors
     DockerError,         # Docker container dispatch
     DockerPreFlightError,  # Docker pre-flight check (inherits PreFlightError)
-    InvalidStateTransitionError,  # invalid state machine transition
 )
 ```
 

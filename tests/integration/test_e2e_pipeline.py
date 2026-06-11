@@ -164,7 +164,7 @@ class TestPipelineMultiExperimentSweep:
         (StudyRunner uses multiprocessing spawn; subprocess patching is not feasible
         for cross-process injection). Runner integration is covered by CLI E2E tests.
         """
-        from llenergymeasure.config.loader import load_study_config
+        from llenergymeasure.api import load_study
 
         yaml_content = """\
 task:
@@ -185,7 +185,7 @@ measurement:
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
 
-        study_config = load_study_config(yaml_path)
+        study_config = load_study(yaml_path)
 
         # Sweep over 2 dtypes, n_cycles=1 → 2 experiments total
         assert len(study_config.experiments) == 2
@@ -194,7 +194,7 @@ measurement:
 
     def test_study_yaml_model_sweep(self, tmp_path: Path) -> None:
         """YAML with model sweep produces correct number of experiment configs."""
-        from llenergymeasure.config.loader import load_study_config
+        from llenergymeasure.api import load_study
 
         yaml_content = """\
 sweep:
@@ -207,7 +207,7 @@ study_execution:
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
 
-        study_config = load_study_config(yaml_path)
+        study_config = load_study(yaml_path)
 
         assert len(study_config.experiments) == 2
         models = {exp.task.model for exp in study_config.experiments}
@@ -215,13 +215,13 @@ study_execution:
 
     def test_study_config_study_design_hash_set(self, tmp_path: Path) -> None:
         """StudyConfig.study_design_hash is populated after loading."""
-        from llenergymeasure.config.loader import load_study_config
+        from llenergymeasure.api import load_study
 
         yaml_content = "task:\n  model: gpt2\nstudy_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
 
-        study_config = load_study_config(yaml_path)
+        study_config = load_study(yaml_path)
 
         assert study_config.study_design_hash
         assert len(study_config.study_design_hash) == 16
@@ -390,9 +390,9 @@ class TestCLIE2EStudy:
 
         monkeypatch.setattr(llenergymeasure, "run_study", lambda config, **kw: mock_study_result)
 
-        # Also patch format_preflight_summary to avoid real config.grid dependency
+        # Also patch format_preflight_summary to avoid the real preflight display path
         monkeypatch.setattr(
-            "llenergymeasure.config.grid.format_preflight_summary",
+            "llenergymeasure.cli._preflight_display.format_preflight_summary",
             lambda study_config: "Preflight: 2 experiments",
         )
 

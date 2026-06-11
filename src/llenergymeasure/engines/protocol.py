@@ -15,6 +15,11 @@ class InferenceOutput:
 
     Engine-specific data (e.g. vLLM RequestOutput objects) goes in extras.
     The harness uses these fields to assemble the full ExperimentResult.
+
+    The extended-metrics fields below are best-effort: an empty list or ``None``
+    means the engine could not provide that signal for this run (the harness
+    leaves the corresponding result field null). Engine-internal opaque objects
+    (model handles, RequestOutput lists) stay in ``extras``.
     """
 
     elapsed_time_sec: float
@@ -25,6 +30,29 @@ class InferenceOutput:
     batch_times: list[float] = field(default_factory=list)
     extras: dict[str, Any] = field(default_factory=dict)
     inference_time_sec: float = 0.0  # Set by harness after perf_counter brackets
+
+    # Extended-metrics capture (best-effort; empty/None = engine cannot provide)
+    per_request_latencies_ms: list[float] = field(default_factory=list)
+    """Per-request end-to-end latency in ms. Empty when the engine cannot
+    attribute timing per request (e.g. a single batched call)."""
+    ttft_ms: list[float] = field(default_factory=list)
+    """Per-request time-to-first-token in ms. Empty for non-streaming engines."""
+    itl_ms: list[float] = field(default_factory=list)
+    """Inter-token latency samples in ms. Empty for non-streaming engines."""
+    latency_measurement_mode: str | None = None
+    """Engine-declared capture mode for ttft_ms/itl_ms (a
+    ``LatencyMeasurementMode`` value string, e.g. ``"true_streaming"`` or
+    ``"proportional"``). Plain string to keep the protocol dependency-free; the
+    harness maps it to the enum. None when the engine performed no streaming/ITL
+    capture for this run."""
+    num_batches: int | None = None
+    """Number of static batches processed. None for continuous batching (vLLM)."""
+    padding_tokens: int | None = None
+    """Total padding tokens added across batches. None when not measurable
+    (continuous batching, or engines that do not pad)."""
+    kv_cache_stats: dict[str, Any] | None = None
+    """KV-cache stats dict (hit_rate/blocks_used/blocks_total/kv_cache_mb).
+    None for engines that do not expose a paged KV cache (Transformers/TRT-LLM)."""
 
     @property
     def total_tokens(self) -> int:
@@ -119,7 +147,7 @@ class EnginePlugin(Protocol):
 
         Returns a dict with keys ``"engine"``, ``"sampling"``, and
         ``"library_version"`` - same shape as
-        :func:`llenergymeasure.engines._helpers.assemble_observed_params`.
+        :func:`llenergymeasure.engines._observed.assemble_observed_params`.
 
         Engines must never raise; any extraction failure should be caught and
         logged at DEBUG, returning empty dicts for the failed sub-field.

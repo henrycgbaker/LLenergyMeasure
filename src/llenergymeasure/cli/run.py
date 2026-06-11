@@ -418,9 +418,10 @@ def _run_study_impl(
     """Study execution path - separated for clean error handling."""
     import yaml
 
+    from llenergymeasure.api import load_study
     from llenergymeasure.cli._display import print_study_dry_run
-    from llenergymeasure.config.grid import build_preflight_panel, count_sweep_structure
-    from llenergymeasure.config.loader import load_study_config
+    from llenergymeasure.cli._preflight_display import build_preflight_panel
+    from llenergymeasure.config.grid import count_sweep_structure
 
     # Fast-fail: verify resume target exists before expensive grid expansion.
     # For resume, also load the manifest early so we can show a summary and
@@ -533,8 +534,8 @@ def _run_study_impl(
         refresh_per_second=8,
         transient=True,
     ):
-        study_config = load_study_config(
-            path=config,
+        study_config = load_study(
+            config,
             cli_overrides=study_cli_overrides if study_cli_overrides else None,
         )
     expand_elapsed = time.perf_counter() - t0_expand
@@ -589,12 +590,11 @@ def _run_study_impl(
     # Resolve runners and compute study dir preview - shared by both
     # dry-run and actual-run so both show the same preflight panel.
     # ---------------------------------------------------------------
-    from datetime import datetime, timezone
-
-    from llenergymeasure.api import probe_energy_sampler, run_study_preflight
+    from llenergymeasure.api import probe_energy_sampler, run_study_preflight, study_dir_name
     from llenergymeasure.config.user_config import load_user_config
 
     user_config = load_user_config()
+    preresolved: tuple[dict[str, Any], dict[str, dict[str, str]]] | None = None
     try:
         runner_specs, _system_overrides = run_study_preflight(
             study_config,
@@ -605,12 +605,11 @@ def _run_study_impl(
             yaml_images=study_config.images,
             user_config_images=user_config.images or None,
         )
+        preresolved = (runner_specs, _system_overrides)
     except Exception:
         runner_specs = None  # graceful: Docker unavailable, show YAML runners
 
-    prefix = study_config.study_name or "study"
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
-    study_dir_preview = Path("results") / f"{prefix}_{ts}"
+    study_dir_preview = Path("results") / study_dir_name(study_config.study_name)
 
     # --- Dry-run branch ---
     if dry_run:
@@ -727,6 +726,7 @@ def _run_study_impl(
             no_lock=no_lock,
             config_path=config.resolve(),
             cli_overrides=cli_overrides or None,
+            preresolved=preresolved,
         )
     finally:
         # Safety stop - ensures Rich Live is torn down even on exceptions

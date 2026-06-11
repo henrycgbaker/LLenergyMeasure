@@ -1147,7 +1147,7 @@ class StudyStepDisplay:
                 return max(3, int(env_rows))
             except ValueError:
                 pass
-        return max(5, self._console.size.height - _VIEWPORT_RESERVED_LINES)
+        return max(5, int(self._console.size.height) - _VIEWPORT_RESERVED_LINES)
 
     def _build_table(self) -> tuple[Table, int]:
         """Build the Rich Table of completed experiments with viewport limiting.

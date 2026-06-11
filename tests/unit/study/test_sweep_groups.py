@@ -228,12 +228,12 @@ class TestApplyGroupOverlay:
 
 class TestValidateSweepGroups:
     def test_no_collision_passes(self):
-        groups = {"transformers.compilation": [{}]}
+        groups: dict[str, list[dict[str, object]]] = {"transformers.compilation": [{}]}
         axis_keys = {"transformers.batch_size"}
         _validate_sweep_groups(groups, axis_keys)  # should not raise
 
     def test_collision_raises(self):
-        groups = {"transformers.batch_size": [{}]}
+        groups: dict[str, list[dict[str, object]]] = {"transformers.batch_size": [{}]}
         axis_keys = {"transformers.batch_size"}
         with pytest.raises(ConfigError, match="collide"):
             _validate_sweep_groups(groups, axis_keys)
@@ -290,7 +290,6 @@ class TestExpandGridSweepGroups:
         quant_flags = [
             c.transformers.load_in_8bit if c.transformers is not None else None for c in valid
         ]
-        assert True in quant_flags
         assert quant_flags.count(True) == 1
 
     def test_two_groups_crossed(self):

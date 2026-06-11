@@ -244,7 +244,7 @@ def test_list_all_param_paths_unknown_engine_raises():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])
+@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config.
 

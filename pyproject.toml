@@ -19,10 +19,9 @@ dependencies = [
     "nvidia-ml-py>=12.0",
     "numpy>=1.24",
     "pyarrow>=14.0",
-    "tqdm>=4.66",
     "rich>=13.0",
     "python-dotenv>=1.0",
-    "filelock",
+    "filelock>=3.12",
 ]
 
 [project.optional-dependencies]
@@ -95,6 +94,44 @@ warn_unused_ignores = false
 # research/ holds exploratory artefacts; not held to production type-check standards.
 exclude = ["^research/"]
 
+# Test suite is type-checked, but with the strict-mode rules that fight
+# established test idioms relaxed. The valuable structural checks
+# (return-value, assignment, name-defined, call-arg, index, operator,
+# var-annotated, misc, ...) still run, so a real type regression in a test
+# is caught. The relaxations below are the categories that are pure noise
+# against deliberate test patterns and would otherwise drown the signal:
+#   - no-untyped-def: thousands of `def test_*(self):` bodies are untyped by
+#     convention; annotating every one adds churn without catching bugs.
+#   - arg-type: tests pass dict / str literals into Pydantic models that coerce
+#     them at runtime (e.g. task={...}, engine="vllm"); mypy can't see the
+#     coercion, but the runtime behaviour is the point of the test.
+#   - union-attr: tests read sub-config attributes off `X | None` fields they
+#     know are populated (e.g. cfg.transformers.dtype after setting it).
+#   - attr-defined: tests introspect private / non-exported members and patch
+#     targets (e.g. module.importlib, _dormant_observations) on purpose.
+#   - type-arg: bare generics (dict, list) in throwaway test locals.
+#   - no-any-return: helper/factory returns flowing through MagicMock / Any.
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disable_error_code = [
+    "arg-type",
+    "union-attr",
+    "attr-defined",
+    "type-arg",
+    "no-any-return",
+]
+
+# scripts/ holds mining-substrate research tooling. It is not part of the
+# typed product surface (src/ never imports it) and was never in the type
+# gate. Some test modules import its helpers directly, so mypy follows those
+# imports and would otherwise gate on pre-existing untyped research code.
+# Ignore errors in scripts.* until/unless it is brought into scope on its own.
+[[tool.mypy.overrides]]
+module = "scripts.*"
+ignore_errors = true
+
 [[tool.uv.index]]
 name = "nvidia"
 url = "https://pypi.nvidia.com/"
@@ -127,11 +164,13 @@ omit = [
     # They run only inside Docker, so coverage on the host is meaningless.
     "*/engines/vllm/*.py",
     "*/engines/tensorrt/*.py",
+    "*/engines/transformers/*.py",
     "*/infra/docker_runner.py",
     "*/entrypoints/container.py",
 ]
 
 [tool.coverage.report]
+fail_under = 80
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
@@ -163,16 +202,10 @@ layers = [
     "llenergymeasure.utils",
 ]
 ignore_imports = [
-    # Phase 50 M4: config.loader.load_study_config invokes resolve_library_effective
-    # as part of the grid-expansion pipeline (between expand_grid and
-    # apply_cycles). The library-resolution mechanism lives under study/ - reviewer
-    # may decide to invert this by moving dedup into api/cli callers; for now
-    # the import is local-inside-function so there is no cycle risk.
-    "llenergymeasure.config.loader -> llenergymeasure.study.library_resolution",
     # Phase 50 M4: harness._write_config_sidecar() persists config.json
     # (needs results.persistence). Import is local-inside-method; no cycle risk.
     # H3 hashing now imports from domain.hashing (L0) - no layer breach.
-    "llenergymeasure.harness -> llenergymeasure.results.persistence",
+    "llenergymeasure.harness.measurement -> llenergymeasure.results.persistence",
 ]
 
 [[tool.importlinter.contracts]]
@@ -219,10 +252,6 @@ forbidden_modules = [
     "llenergymeasure.infra",
     "llenergymeasure.results",
     "llenergymeasure.datasets",
-]
-ignore_imports = [
-    # Phase 50 M4: see matching ignore on main-layers contract above.
-    "llenergymeasure.config.loader -> llenergymeasure.study.library_resolution",
 ]
 
 [[tool.importlinter.contracts]]

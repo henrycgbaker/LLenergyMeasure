@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.loader import deep_merge, load_experiment_config, load_study_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+from llenergymeasure.study.loading import finalise_study
 from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
@@ -26,6 +27,17 @@ def _write_yaml(tmp_path: Path, content: str, name: str = "config.yaml") -> Path
     path = tmp_path / name
     path.write_text(content)
     return path
+
+
+def _load_study(path: Path, cli_overrides: dict | None = None) -> StudyConfig:
+    """Parse + finalise a study YAML into a resolved StudyConfig.
+
+    The config loader now returns a LoadedStudyRaw (pure parse/expand); the
+    study-layer finalise step adds dedup, study_design_hash, cycles, and
+    equivalence groups. These tests assert on the finalised StudyConfig, so
+    compose both steps here.
+    """
+    return finalise_study(load_study_config(path, cli_overrides=cli_overrides))
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +249,7 @@ def test_load_study_config_grid_sweep(tmp_path):
             }
         )
     )
-    sc = load_study_config(study_yaml)
+    sc = _load_study(study_yaml)
     assert isinstance(sc, StudyConfig)
     # 2 dtypes x 2 n values = 4 configs, default 1 cycle
     assert len(sc.experiments) == 4
@@ -272,7 +284,7 @@ def test_load_study_config_explicit_experiments(tmp_path):
             }
         )
     )
-    sc = load_study_config(study_yaml)
+    sc = _load_study(study_yaml)
     assert len(sc.experiments) == 3
 
 
@@ -293,7 +305,7 @@ def test_load_study_config_combined_mode(tmp_path):
             }
         )
     )
-    sc = load_study_config(study_yaml)
+    sc = _load_study(study_yaml)
     # 2 sweep + 1 explicit = 3
     assert len(sc.experiments) == 3
 
@@ -316,7 +328,7 @@ def test_load_study_config_with_execution_block(tmp_path):
             }
         )
     )
-    sc = load_study_config(study_yaml)
+    sc = _load_study(study_yaml)
     assert sc.study_execution.n_cycles == 3
     assert sc.study_execution.experiment_order == "interleave"
     # 2 base configs x 3 cycles = 6 runs
@@ -336,7 +348,7 @@ def test_load_study_config_cli_overrides(tmp_path):
             }
         )
     )
-    sc = load_study_config(study_yaml, cli_overrides={"study_execution": {"n_cycles": 5}})
+    sc = _load_study(study_yaml, cli_overrides={"study_execution": {"n_cycles": 5}})
     assert sc.study_execution.n_cycles == 5
     # 2 configs x 5 cycles = 10
     assert len(sc.experiments) == 10
@@ -364,7 +376,7 @@ def test_load_study_config_with_base(tmp_path):
             }
         )
     )
-    sc = load_study_config(study_yaml)
+    sc = _load_study(study_yaml)
     assert len(sc.experiments) == 2
     # All experiments should inherit n_prompts=75 from base
     for exp in sc.experiments:
@@ -433,6 +445,42 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))
     study_yaml_b.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 5}}))
 
-    sc_a = load_study_config(study_yaml_a)
-    sc_b = load_study_config(study_yaml_b)
+    sc_a = _load_study(study_yaml_a)
+    sc_b = _load_study(study_yaml_b)
     assert sc_a.study_design_hash == sc_b.study_design_hash
+
+
+def test_load_study_config_design_hash_is_stable(tmp_path):
+    """study_design_hash for a known study must not drift across refactors.
+
+    The hash is persisted in study manifests and used for resume drift
+    detection, so its VALUE is a stable contract. This pin guards against any
+    accidental change to the resolve -> dedup -> hash pipeline (e.g. the
+    finalisation moving out of the config loader). If this assertion fails, a
+    behaviour change has slipped in - it is not safe to "just update the value".
+    """
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        yaml.dump(
+            {
+                "study_name": "dedup_test",
+                "engine": "transformers",
+                "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
+                "sweep": {
+                    "transformers.sampling.do_sample": [True, False],
+                    "transformers.sampling.temperature": [0.5, 1.0, 1.5],
+                },
+            }
+        )
+    )
+    sc = _load_study(study_yaml)
+    # Pinned over the full resolved-config surface (config.model_dump). Re-pinned
+    # when MeasurementConfig gained the opt-in latency_profiling field: a new
+    # defaulted field shifts the canonical JSON, so the fingerprint moves while
+    # the resolve -> dedup -> hash pipeline is unchanged (6 declared -> 4 unique
+    # below still holds). A value change with those structural assertions intact
+    # is a benign schema-surface shift; a change to the dedup counts is not.
+    assert sc.study_design_hash == "f6c89398e2a344dd"
+    # 6 declared configs collapse to 4 unique under resolved-config dedup.
+    assert len(sc.experiments) == 4
+    assert len(sc.declared_resolved_config_hashes) == 6

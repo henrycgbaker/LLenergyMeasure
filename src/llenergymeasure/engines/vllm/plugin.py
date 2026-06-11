@@ -26,6 +26,70 @@ from llenergymeasure.utils.exceptions import EngineError
 logger = logging.getLogger(__name__)
 
 
+def _capture_kv_cache_stats(llm: Any) -> dict[str, Any] | None:
+    """Capture KV-cache stats from a vLLM (V0-era) LLM engine, best-effort.
+
+    Reads:
+      - ``blocks_total`` from ``cache_config.num_gpu_blocks`` (reliable in 0.7.3).
+      - ``usage`` / ``hit_rate`` from the V0 Stats surface
+        (``gpu_cache_usage_sys`` / ``gpu_prefix_cache_hit_rate``) via the engine's
+        stat loggers, each guarded independently.
+      - ``kv_cache_mb`` derived from ``usage * num_gpu_blocks * block_size_bytes``
+        when block size is cheaply exposed; omitted otherwise.
+
+    Any unreadable value is left out of the dict. Returns None only when nothing
+    at all could be read.
+    """
+    stats: dict[str, Any] = {}
+
+    engine = getattr(llm, "llm_engine", None)
+    if engine is None:
+        return None
+
+    cache_config = getattr(engine, "cache_config", None)
+    num_gpu_blocks: int | None = None
+    block_size: int | None = None
+    if cache_config is not None:
+        num_gpu_blocks = getattr(cache_config, "num_gpu_blocks", None)
+        if isinstance(num_gpu_blocks, int) and num_gpu_blocks > 0:
+            stats["blocks_total"] = num_gpu_blocks
+        bs = getattr(cache_config, "block_size", None)
+        if isinstance(bs, int) and bs > 0:
+            block_size = bs
+
+    # V0 Stats surface via stat loggers: gpu_cache_usage_sys, gpu_prefix_cache_hit_rate.
+    usage: float | None = None
+    try:
+        stat_loggers = getattr(engine, "stat_loggers", None)
+        if stat_loggers:
+            for logger_obj in stat_loggers.values():
+                last = getattr(logger_obj, "last_local_log", None)
+                if last is None:
+                    continue
+                u = getattr(last, "gpu_cache_usage_sys", None)
+                if u is not None and usage is None:
+                    usage = float(u)
+                    stats["usage"] = usage
+                hr = getattr(last, "gpu_prefix_cache_hit_rate", None)
+                if hr is not None and "hit_rate" not in stats:
+                    stats["hit_rate"] = float(hr)
+    except Exception as exc:  # pragma: no cover - best-effort capture
+        logger.debug("vLLM KV-cache stats capture failed: %s", exc)
+
+    # Derive blocks_used and kv_cache_mb when both usage and block geometry known.
+    if usage is not None and num_gpu_blocks is not None and num_gpu_blocks > 0:
+        stats["blocks_used"] = round(usage * num_gpu_blocks)
+        if block_size is not None:
+            # block size in bytes is not directly exposed; only derive kv_cache_mb
+            # when cache_config carries a precomputed per-block byte size.
+            block_bytes = getattr(cache_config, "block_size_bytes", None)
+            if isinstance(block_bytes, int) and block_bytes > 0:
+                kv_bytes = usage * num_gpu_blocks * block_bytes
+                stats["kv_cache_mb"] = kv_bytes / (1024 * 1024)
+
+    return stats or None
+
+
 class VLLMEngine:
     """vLLM inference engine - offline batch mode, thin plugin.
 
@@ -74,7 +138,7 @@ class VLLMEngine:
         Raises:
             EngineError: If vLLM is not installed or model loading fails.
         """
-        from llenergymeasure.engines._helpers import require_import
+        from llenergymeasure.engines._errors import require_import
 
         _vllm = require_import("vllm")
         LLM = _vllm.LLM
@@ -125,7 +189,7 @@ class VLLMEngine:
         """
         from vllm import SamplingParams
 
-        from llenergymeasure.engines._helpers import warmup_single_token
+        from llenergymeasure.engines._cuda import warmup_single_token
 
         llm, _sampling_params = model
         warmup_single_token(llm, [prompt], SamplingParams, temperature=0.0, max_tokens=1)
@@ -156,7 +220,7 @@ class VLLMEngine:
         """
         import time
 
-        from llenergymeasure.engines._helpers import reset_cuda_peak_memory
+        from llenergymeasure.engines._cuda import reset_cuda_peak_memory
 
         llm, sampling_params = model
 
@@ -187,7 +251,7 @@ class VLLMEngine:
             elapsed = time.perf_counter() - t0
 
         except Exception as e:
-            from llenergymeasure.engines._helpers import raise_engine_error
+            from llenergymeasure.engines._errors import raise_engine_error
 
             raise_engine_error(
                 e,
@@ -196,7 +260,7 @@ class VLLMEngine:
             )
 
         # Capture peak memory - torch first, NVML fallback for pre-allocation detection.
-        from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
+        from llenergymeasure.engines._cuda import get_cuda_peak_memory_mb
 
         peak_mb = get_cuda_peak_memory_mb()
 
@@ -253,6 +317,26 @@ class VLLMEngine:
         if hf_model is not None:
             extras["hf_model"] = hf_model
 
+        # Best-effort extended-metrics capture (continuous batching: no static batches).
+        from llenergymeasure.domain.metrics import LatencyMeasurementMode
+        from llenergymeasure.engines._observed import extract_decode_itl, extract_request_metrics
+
+        per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
+        kv_cache_stats = _capture_kv_cache_stats(llm)
+
+        # TTFT timestamps are engine-recorded (real per-request first_token_time),
+        # so on their own they are TRUE_STREAMING. Under latency profiling we
+        # additionally derive a decode-average ITL, which is only a
+        # PROPORTIONAL_ESTIMATE - the mode then describes that weakest signal.
+        itl_ms: list[float] = []
+        latency_measurement_mode: str | None = None
+        if config.measurement.latency_profiling:
+            itl_ms = extract_decode_itl(outputs)
+            if ttft_ms:
+                latency_measurement_mode = LatencyMeasurementMode.PROPORTIONAL_ESTIMATE.value
+        elif ttft_ms:
+            latency_measurement_mode = LatencyMeasurementMode.TRUE_STREAMING.value
+
         return InferenceOutput(
             elapsed_time_sec=elapsed,
             input_tokens=input_token_count,
@@ -261,6 +345,13 @@ class VLLMEngine:
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=[elapsed],
             extras=extras,
+            per_request_latencies_ms=per_request_latencies_ms,
+            ttft_ms=ttft_ms,
+            itl_ms=itl_ms,
+            latency_measurement_mode=latency_measurement_mode,
+            num_batches=None,  # Continuous batching - no static batch count
+            padding_tokens=None,  # Continuous batching - no padding
+            kv_cache_stats=kv_cache_stats,
         )
 
     # -------------------------------------------------------------------------
@@ -282,7 +373,7 @@ class VLLMEngine:
         params derive from ``llm.llm_engine.vllm_config`` when available;
         otherwise we fall back to the declared kwargs dict.
         """
-        from llenergymeasure.engines._helpers import (
+        from llenergymeasure.engines._observed import (
             assemble_observed_params,
             extract_observed_params,
         )
@@ -334,7 +425,7 @@ class VLLMEngine:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        from llenergymeasure.engines._helpers import cleanup_model
+        from llenergymeasure.engines._cuda import cleanup_model
 
         llm, _sampling_params = model
         cleanup_model(llm)

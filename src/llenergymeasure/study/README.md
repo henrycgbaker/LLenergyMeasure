@@ -10,9 +10,14 @@ Implements the sweep runner that executes a `StudyConfig` (a list of `Experiment
 
 | Module | Description |
 |--------|-------------|
-| `runner.py` | `StudyRunner` - subprocess dispatch core |
+| `runner.py` | `StudyRunner` - study-level run loop, dispatch, and result handling |
+| `worker.py` | `_run_experiment_worker()` (child entry point), `_collect_result()`, process-group signalling |
+| `_progress.py` | `_QueueProgressCallback` + `_consume_progress_events()` - cross-process progress bridge |
+| `baseline_measure.py` | `_BaselineMixin` - baseline measurement, caching, and drift validation |
+| `image_prep.py` | `_ImageMixin` - Docker image preparation and schema-fingerprint verification |
+| `container_lifecycle.py` | Container naming/labels/cleanup, SIGTERM bridge, orphan reaper, failure artefacts |
+| `single.py` | `run_single_experiment()` - in-process / direct-DockerRunner path for a single experiment |
 | `manifest.py` | `ManifestWriter`, `StudyManifest`, `ExperimentManifestEntry` - checkpoint model |
-| `_progress.py` | Progress bar display during sweeps |
 | `gpu_memory.py` | `check_gpu_memory_residual()` - pre-dispatch GPU memory check |
 | `gaps.py` | `run_gap()` - thermal gap between experiments |
 | `__init__.py` | Re-exports `StudyRunner`, `ManifestWriter`, `StudyManifest`, etc. |

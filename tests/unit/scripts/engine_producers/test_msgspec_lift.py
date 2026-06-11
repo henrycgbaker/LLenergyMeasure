@@ -22,14 +22,14 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts.engine_producers._msgspec_lift import lift  # noqa: E402
 
 
-class _BoundedStruct(msgspec.Struct):
+class _BoundedStruct(msgspec.Struct):  # type: ignore[name-defined,misc]  # msgspec via importorskip
     """Fixture struct with one numeric Meta and one Literal field."""
 
     temperature: Annotated[float, msgspec.Meta(ge=0.0, le=2.0)] = 1.0
     mode: Literal["greedy", "beam"] = "greedy"
 
 
-class _PlainStruct(msgspec.Struct):
+class _PlainStruct(msgspec.Struct):  # type: ignore[name-defined,misc]  # msgspec via importorskip
     """Fixture mirroring vLLM ``SamplingParams``: no ``Meta`` annotations."""
 
     seed: int = 0

@@ -6,7 +6,6 @@ This module is internal (underscore prefix). Import via llenergymeasure.__init__
 from __future__ import annotations
 
 import json
-import shutil
 import time
 from pathlib import Path
 from typing import Any, overload
@@ -19,10 +18,11 @@ from llenergymeasure.config.models import (
     StudyConfig,
     TaskConfig,
 )
-from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
-from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
+from llenergymeasure.infra.runner_resolution import RunnerSpec
+from llenergymeasure.study.single import run_single_experiment
 from llenergymeasure.utils.exceptions import ConfigError
 
 # Single source of truth for n_prompts default - derived from DatasetConfig field default
@@ -32,6 +32,43 @@ _N_PROMPTS_DEFAULT: int = DatasetConfig.model_fields["n_prompts"].default
 # Derived from model fields so routing auto-updates when sub-models gain new fields.
 _TASK_FIELDS: frozenset[str] = frozenset(TaskConfig.model_fields) - {"model", "dataset"}
 _MEASUREMENT_FIELDS: frozenset[str] = frozenset(MeasurementConfig.model_fields)
+
+# ---------------------------------------------------------------------------
+# load_study - parse + finalise composition
+# ---------------------------------------------------------------------------
+
+
+def load_study(
+    path: str | Path,
+    cli_overrides: dict[str, Any] | None = None,
+) -> StudyConfig:
+    """Load a study YAML and finalise it into a resolved StudyConfig.
+
+    Composes the config-layer parse/expand step
+    (:func:`llenergymeasure.config.loader.load_study_config`) with the
+    study-layer finalisation
+    (:func:`llenergymeasure.study.loading.finalise_study`). This is the single
+    public entry both the CLI and ``run_study`` use, so the config layer never
+    imports upward into ``study`` and the CLI never imports ``study`` directly.
+
+    Args:
+        path: Path to study YAML file.
+        cli_overrides: Optional dict of CLI flag overrides for the execution
+            block (e.g. {"study_execution": {"n_cycles": 5}}).
+
+    Returns:
+        Resolved StudyConfig with ordered experiments, study_design_hash, dedup
+        mode, and pre-run equivalence groups.
+
+    Raises:
+        ConfigError: File not found, parse error, all configs invalid, empty study.
+        ValidationError: Pydantic structural errors pass through unchanged.
+    """
+    from llenergymeasure.config.loader import load_study_config
+    from llenergymeasure.study.loading import finalise_study
+
+    return finalise_study(load_study_config(path, cli_overrides=cli_overrides))
+
 
 # ---------------------------------------------------------------------------
 # run_experiment - three overloaded forms
@@ -147,6 +184,7 @@ def run_study(
     no_lock: bool = False,
     config_path: Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None = None,
 ) -> StudyResult:
     """Run a multi-experiment study.
 
@@ -174,6 +212,11 @@ def run_study(
         cli_overrides: Flat dict of CLI flag overrides (e.g. {"model": "gpt2"}).
             Used to build per-experiment ``_resolution.json`` sidecars showing
             which fields were overridden by CLI flags vs YAML vs sweep.
+        preresolved: Optional ``(runner_specs, system_overrides)`` already
+            computed by a prior ``run_study_preflight`` call (e.g. the CLI runs
+            preflight to render the panel). When supplied, ``_run`` reuses it
+            instead of re-running preflight. Must be paired with
+            ``skip_preflight=True`` so the precomputed result is trusted.
 
     Returns:
         StudyResult with experiments, result_files, measurement_protocol, and inline summary fields.
@@ -186,10 +229,8 @@ def run_study(
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     if isinstance(config, (str, Path)):
-        from llenergymeasure.config.loader import load_study_config
-
         config_path = config_path or Path(config).resolve()
-        study = load_study_config(path=config_path)
+        study = load_study(config_path)
     elif isinstance(config, StudyConfig):
         # config_path may have been passed by caller (e.g. CLI pre-loads config)
         study = config
@@ -225,6 +266,7 @@ def run_study(
         no_lock=no_lock,
         config_path=config_path,
         cli_overrides=cli_overrides,
+        preresolved=preresolved,
     )
 
 
@@ -317,6 +359,7 @@ def _run(
     no_lock: bool = False,
     config_path: Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -337,6 +380,11 @@ def _run(
 
     _api_logger = logging.getLogger(__name__)
 
+    # Preresolved runner specs bypass preflight; demanding skip_preflight makes the
+    # contract explicit rather than silently ignoring the precomputed result.
+    if preresolved is not None and not skip_preflight:
+        raise ValueError("preresolved requires skip_preflight=True")
+
     # Load user config first so runner context can be forwarded to preflight,
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
     user_config = load_user_config()
@@ -345,24 +393,29 @@ def _run(
     # Docker, or auto-elevates to Docker when available. Also runs Docker pre-flight
     # checks when any engine resolves to a Docker runner.
     # Preflight returns resolved runner specs so we don't resolve them twice.
-    if progress:
-        progress.on_step_start("preflight", "Checking", "environment and Docker")
-        t0_pf = time.perf_counter()
-    try:
-        runner_specs, system_overrides = run_study_preflight(
-            study,
-            skip_preflight=skip_preflight,
-            yaml_runners=study.runners,
-            user_config=user_config.runners,
-            yaml_images=study.images,
-            user_config_images=user_config.images or None,
-        )
-    except Exception:
+    # When the caller already ran preflight (e.g. the CLI, to render its panel),
+    # reuse that result instead of resolving runners a second time.
+    if preresolved is not None:
+        runner_specs, system_overrides = preresolved
+    else:
+        if progress:
+            progress.on_step_start("preflight", "Checking", "environment and Docker")
+            t0_pf = time.perf_counter()
+        try:
+            runner_specs, system_overrides = run_study_preflight(
+                study,
+                skip_preflight=skip_preflight,
+                yaml_runners=study.runners,
+                user_config=user_config.runners,
+                yaml_images=study.images,
+                user_config_images=user_config.images or None,
+            )
+        except Exception:
+            if progress:
+                progress.on_step_done("preflight", time.perf_counter() - t0_pf)
+            raise
         if progress:
             progress.on_step_done("preflight", time.perf_counter() - t0_pf)
-        raise
-    if progress:
-        progress.on_step_done("preflight", time.perf_counter() - t0_pf)
 
     # Warn on mixed runners (some local, some docker)
     modes = {spec.mode for spec in runner_specs.values()}
@@ -499,7 +552,7 @@ def _run(
             )
 
         exp_start = time.monotonic()
-        result_files, experiment_results, warnings = _run_in_process(
+        result_files, experiment_results, warnings = run_single_experiment(
             study,
             manifest,
             study_dir,
@@ -584,174 +637,6 @@ def _run(
         summary=summary,
         skipped_experiments=study.skipped_configs,
     )
-
-
-def _run_in_process(
-    study: StudyConfig,
-    manifest: Any,
-    study_dir: Path,
-    runner_specs: Any = None,
-    progress: ProgressCallback | None = None,
-    resolution_logs: dict[str, dict[str, Any]] | None = None,
-) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
-    """Run a single experiment in-process or via DockerRunner directly.
-
-    When runner_specs resolves the engine to "docker", uses DockerRunner directly
-    (no subprocess spawning). Otherwise runs in-process via the engine.
-
-    Errors from run_preflight() and harness.run(engine, config) propagate unchanged (PreFlightError,
-    EngineError). Only result-saving errors are caught so a save failure does not
-    discard a completed measurement.
-    """
-    from llenergymeasure.domain.experiment import compute_declared_config_hash
-    from llenergymeasure.study.runner import _save_and_record
-
-    config = study.experiments[0]
-    config_hash = compute_declared_config_hash(config)
-    cycle = 1
-
-    # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
-    # Mirrors the pattern used in StudyRunner._run_one() and _run_one_docker().
-    from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
-
-    check_gpu_memory_residual()
-
-    # Collect environment snapshot once - used for both harness and environment.json sidecar
-    from llenergymeasure.harness.environment import collect_environment_snapshot
-
-    snapshot = collect_environment_snapshot()
-
-    # Check runner spec for this engine
-    spec = runner_specs.get(config.engine) if runner_specs else None
-
-    manifest.mark_running(config_hash, cycle)
-
-    save_ts = study.output.save_timeseries
-    ts_tmpdir: Path | None = None  # Only set for local path
-
-    if spec is not None and spec.mode == RUNNER_DOCKER:
-        # Docker path: dispatch to container directly (no subprocess)
-        from llenergymeasure.infra.docker_errors import (
-            DockerStdoutSilenceError,
-            DockerTimeoutError,
-        )
-        from llenergymeasure.infra.docker_runner import DockerRunner
-        from llenergymeasure.infra.image_registry import get_default_image
-        from llenergymeasure.utils.exceptions import DockerError
-
-        image = spec.image if spec.image is not None else get_default_image(config.engine)
-
-        docker_runner = DockerRunner(
-            image=image,
-            timeout=study.study_execution.experiment_timeout_seconds,
-            silence_timeout=study.study_execution.stdout_silence_timeout_seconds,
-            source=spec.source,
-            extra_mounts=spec.extra_mounts,
-        )
-        docker_ts_dir: Path | None = None
-        try:
-            result, docker_ts_dir = docker_runner.run(
-                config, progress=progress, save_timeseries=save_ts
-            )
-        except DockerStdoutSilenceError as exc:
-            # Distinct error type so users can tell stuck-process kills
-            # from wall-clock timeouts when reading the manifest.
-            error_payload: dict[str, Any] = {
-                "type": "StdoutSilenceTimeoutError",
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            manifest.mark_failed(
-                config_hash, cycle, error_payload["type"], error_payload["message"]
-            )
-            return [], [None], [error_payload["message"]]
-        except DockerTimeoutError as exc:
-            # Normalise to "TimeoutError" so the circuit breaker sees the same
-            # failure class as the subprocess path.
-            error_payload = {
-                "type": "TimeoutError",
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            manifest.mark_failed(
-                config_hash, cycle, error_payload["type"], error_payload["message"]
-            )
-            return [], [None], [error_payload["message"]]
-        except DockerError as exc:
-            # Convert to failure dict - manifest marks failed, study continues
-            error_payload = {
-                "type": type(exc).__name__,
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            manifest.mark_failed(
-                config_hash, cycle, error_payload["type"], error_payload["message"]
-            )
-            return [], [None], [error_payload["message"]]
-        # Docker path: ts_tmpdir comes from DockerRunner
-        ts_tmpdir = docker_ts_dir
-    else:
-        # Local in-process path - errors propagate naturally (PreFlightError, EngineError)
-        import tempfile
-
-        from llenergymeasure.engines import get_engine
-        from llenergymeasure.harness import MeasurementHarness
-        from llenergymeasure.harness.preflight import run_preflight
-
-        if progress:
-            progress.on_step_start("container_preflight", "Checking", "CUDA, model access")
-        t0 = time.perf_counter()
-        run_preflight(config)
-        if progress:
-            progress.on_step_done("container_preflight", time.perf_counter() - t0)
-
-        # Create temp dir for timeseries parquet (if enabled)
-        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
-
-        try:
-            engine = get_engine(config.engine)
-            harness = MeasurementHarness()
-            gpu_indices = _resolve_gpu_indices(config)
-            result = harness.run(
-                engine,
-                config,
-                snapshot=snapshot,
-                gpu_indices=gpu_indices,
-                progress=progress,
-                output_dir=str(ts_tmpdir) if ts_tmpdir else None,
-                save_timeseries=save_ts,
-            )
-        except Exception:
-            if ts_tmpdir is not None:
-                shutil.rmtree(ts_tmpdir, ignore_errors=True)
-            raise
-
-    # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
-    if isinstance(result, dict) and "type" in result:
-        error_type = result.get("type", "UnknownError")
-        error_message = result.get("message", "")
-        manifest.mark_failed(config_hash, cycle, error_type, error_message)
-        return [], [None], [error_message]
-
-    result_files: list[str] = []
-    warnings: list[str] = []
-    _save_and_record(
-        result,
-        study_dir,
-        manifest,
-        config_hash,
-        cycle,
-        result_files,
-        ts_source_dir=ts_tmpdir,
-        environment_snapshot=snapshot,
-        resolution_log=(resolution_logs or {}).get(config_hash),
-    )
-
-    # Clean up temp dirs
-    if ts_tmpdir is not None and ts_tmpdir.exists():
-        shutil.rmtree(ts_tmpdir, ignore_errors=True)
-
-    return result_files, [result], warnings
 
 
 def _run_via_runner(

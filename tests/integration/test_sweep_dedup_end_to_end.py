@@ -1,9 +1,9 @@
 """End-to-end integration test for sweep canonicalisation + resolved-config dedup.
 
 Exercises the full load path: a study YAML with measurement-equivalent
-sweep configs goes through ``load_study_config`` and the resulting
-``StudyConfig`` records the pre-run equivalence groups + deduplicated
-canonical configs.
+sweep configs goes through the config-loader parse step plus the study-layer
+finalisation, and the resulting ``StudyConfig`` records the pre-run
+equivalence groups + deduplicated canonical configs.
 
 Run time: < 1s - no GPU involved, all operations are on Pydantic models
 and the engine-invariants loader.
@@ -16,12 +16,19 @@ from pathlib import Path
 import yaml
 
 from llenergymeasure.config.loader import load_study_config
+from llenergymeasure.config.models import StudyConfig
+from llenergymeasure.study.loading import finalise_study
 
 
 def _write_study(tmp_path: Path, raw: dict) -> Path:
     path = tmp_path / "study.yaml"
     path.write_text(yaml.safe_dump(raw))
     return path
+
+
+def load_study_config_finalised(path: Path, **kwargs) -> StudyConfig:
+    """Parse + finalise a study YAML into a resolved StudyConfig."""
+    return finalise_study(load_study_config(path, **kwargs))
 
 
 def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
@@ -36,7 +43,7 @@ def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
         },
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config(path)
+    study_config = load_study_config_finalised(path)
 
     # Dedup mode default is resolved.
     assert study_config.dedup_mode == "resolved"
@@ -63,7 +70,7 @@ def test_no_dedup_preserves_all_configs(tmp_path: Path) -> None:
         "study_execution": {"deduplicate_equivalent": False},
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config(path)
+    study_config = load_study_config_finalised(path)
 
     assert study_config.dedup_mode == "off"
     # All 6 declared configs run - library-resolution mechanism still populated the groups.
@@ -84,7 +91,7 @@ def test_cli_override_no_dedup(tmp_path: Path) -> None:
         },
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config(
+    study_config = load_study_config_finalised(
         path,
         cli_overrides={"study_execution": {"deduplicate_equivalent": False}},
     )
@@ -106,7 +113,7 @@ def test_n_cycles_multiplies_unique_set(tmp_path: Path) -> None:
         "study_execution": {"n_cycles": 3},
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config(path)
+    study_config = load_study_config_finalised(path)
 
     # 4 declared -> 3 unique (greedy-0.5 + greedy-0.7 collapse to greedy-1.0,
     # plus 2 sampling variants). 3 unique x 3 cycles = 9 runs.
@@ -134,7 +141,7 @@ def test_single_config_sweep_no_dedup(tmp_path: Path) -> None:
         },
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config(path)
+    study_config = load_study_config_finalised(path)
 
     # Sampling=true so temperature matters; three temps stay distinct.
     assert len(study_config.experiments) == 3

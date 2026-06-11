@@ -717,11 +717,6 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
             "vllm": "enable_prefix_caching" in vllm_engine_fields,
             "tensorrt": False,
         },
-        "lora_adapters": {
-            "transformers": True,
-            "vllm": False,
-            "tensorrt": False,
-        },
         "torch_compile": {
             # torch_compile is a HarnessConfig-bound llem orchestration field
             # (not on the engine API surface); see
@@ -769,7 +764,6 @@ def get_capability_matrix_markdown() -> str:
         "float16_precision": "float16 precision",
         "bfloat16_precision": "bfloat16 precision",
         "prefix_caching": "Prefix Caching",
-        "lora_adapters": "LoRA Adapters",
         "torch_compile": "torch.compile",
         "beam_search": "Beam Search",
         "speculative_decoding": "Speculative Decoding",

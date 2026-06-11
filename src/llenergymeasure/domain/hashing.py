@@ -107,7 +107,7 @@ class ConfigHashView:
     - ``observed_engine_params`` - engine state (library-resolution mechanism output for
       resolved-config-hash, live library observation for observed-config-hash)
     - ``observed_sampling_params`` - sampling state (same sources as above)
-    - ``lora`` / ``passthrough_kwargs`` - user-attached overrides
+    - ``passthrough_kwargs`` - user-attached overrides
 
     Excluded: ``MeasurementConfig`` (observation dials), ``ExecutionConfig``
     (runner/parallelism), ``experiment_id``.
@@ -117,7 +117,6 @@ class ConfigHashView:
     task: dict[str, Any]
     observed_engine_params: dict[str, Any] = field(default_factory=dict)
     observed_sampling_params: dict[str, Any] = field(default_factory=dict)
-    lora: dict[str, Any] | None = None
     passthrough_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -142,7 +141,6 @@ def build_observed_view(
     task: dict[str, Any],
     observed_engine_params: dict[str, Any],
     observed_sampling_params: dict[str, Any],
-    lora: dict[str, Any] | None = None,
     passthrough_kwargs: dict[str, Any] | None = None,
 ) -> ConfigHashView:
     """Assemble an observed-config view from per-engine ``extract_observed_params`` output.
@@ -156,6 +154,5 @@ def build_observed_view(
         task=task,
         observed_engine_params=dict(observed_engine_params),
         observed_sampling_params=dict(observed_sampling_params),
-        lora=lora,
         passthrough_kwargs=dict(passthrough_kwargs or {}),
     )

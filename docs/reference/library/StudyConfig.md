@@ -16,14 +16,20 @@ list of fully-validated [`ExperimentConfig`](./ExperimentConfig) objects (the sw
 expanded - no axes, no templates) plus two operational blocks: `output` for where to write
 results, and `study_execution` for how to sequence experiments across cycles.
 
-The key design point is that sweep resolution happens *at YAML parse time* in the loader,
-before the `StudyConfig` is constructed. By the time a `StudyConfig` exists, every item in
-`experiments` is a concrete, validated configuration ready to run. The study runner and
-harness never perform expansion - they iterate the list.
+The key design point is that sweep resolution happens *at YAML parse time* in the config
+loader, before the `StudyConfig` is constructed. By the time a `StudyConfig` exists, every
+item in `experiments` is a concrete, validated configuration ready to run. The study runner
+and harness never perform expansion - they iterate the list.
+
+Loading a `StudyConfig` from YAML is a two-step pipeline. The config loader
+(`config.loader.load_study_config`) does pure parse + sweep-expansion and returns a
+`LoadedStudyRaw`; study finalisation (`study.loading.finalise_study`) applies dedup,
+computes `study_design_hash`, and orders cycles to produce the resolved `StudyConfig`. The
+public entry that runs both steps is `api.load_study`. `run_study` calls it for you.
 
 `StudyConfig` is rarely constructed directly in userland. The normal path is to pass a YAML
-path to [`run_study`](./run_study) and let the loader produce it. Direct construction is
-useful for programmatic test generation or pipeline integration.
+path to [`run_study`](./run_study) and let it load and finalise the config. Direct
+construction is useful for programmatic test generation or pipeline integration.
 
 ---
 
@@ -37,15 +43,20 @@ from llenergymeasure import run_study
 result = run_study("study.yaml")
 ```
 
-### From YAML (via loader, for inspection)
+### From YAML (via `load_study`, for inspection)
 
 ```python
-from llenergymeasure.config.loader import load_study_config
+from llenergymeasure.api import load_study
 from pathlib import Path
 
-study = load_study_config(path=Path("study.yaml"))
+study = load_study(Path("study.yaml"))
 print(f"Expanded to {len(study.experiments)} experiments")
 ```
+
+`load_study` returns the resolved `StudyConfig`. For the raw pre-finalisation material
+(sweep-expanded but before dedup/hash/cycles), call `config.loader.load_study_config`
+directly; it returns a `LoadedStudyRaw` whose `valid_experiments` list holds the expanded
+configs.
 
 ### Programmatic construction
 
@@ -72,7 +83,7 @@ study = StudyConfig(
 |-------|------|---------|-------------|
 | `experiments` | `list[ExperimentConfig]` | _(required)_ | Resolved list of experiments to run. Minimum length 1. |
 | `study_name` | `str \| None` | `None` | Study name used in output directory naming (e.g. `gpt2-sweep_2026-05-07T14-00-00`). |
-| `study_design_hash` | `str \| None` | `None` | 16-char SHA-256 hex of the resolved experiment list (execution block excluded). Set by the loader after expansion; `None` when constructed programmatically. |
+| `study_design_hash` | `str \| None` | `None` | 16-char SHA-256 hex of the resolved experiment list (execution block excluded). Set by study finalisation after dedup; `None` when constructed programmatically. |
 
 ### `output` block (`OutputConfig`)
 
@@ -109,9 +120,9 @@ Controls sequencing, cycles, and failure handling:
 | `runners` | `dict[str, str] \| None` | `None` | Per-engine runner: `{"transformers": "local", "vllm": "docker"}`. `None` = use user config or auto-detection. |
 | `images` | `dict[str, str] \| None` | `None` | Per-engine Docker image overrides: `{"vllm": "ghcr.io/org/img:tag"}`. `None` = smart default (local build then registry fallback). |
 
-### Loader-populated metadata fields
+### Finalisation-populated metadata fields
 
-These are written by the loader and study runner; you rarely set them manually:
+These are written by study finalisation and the study runner; you rarely set them manually:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -140,10 +151,10 @@ engine-section matching and engine-invariants checking).
 ### Inspect expanded experiments before running
 
 ```python
-from llenergymeasure.config.loader import load_study_config
+from llenergymeasure.api import load_study
 from pathlib import Path
 
-study = load_study_config(path=Path("sweep.yaml"))
+study = load_study(Path("sweep.yaml"))
 print(f"{len(study.experiments)} experiments after expansion")
 for i, exp in enumerate(study.experiments, 1):
     print(f"  {i:>3}. {exp.task.model} / {exp.engine}")
@@ -152,7 +163,7 @@ for i, exp in enumerate(study.experiments, 1):
 ### Override output directory programmatically
 
 ```python
-study = load_study_config(path=Path("study.yaml"))
+study = load_study(Path("study.yaml"))
 study = study.model_copy(
     update={"output": study.output.model_copy(update={"results_dir": "/data/results"})}
 )
@@ -179,6 +190,7 @@ result = run_study(study)
 
 - [`ExperimentConfig`](./ExperimentConfig) - the per-experiment config model
 - [`run_study`](./run_study) - the function that accepts a `StudyConfig`
+- `api.load_study` - load a YAML path into a resolved `StudyConfig` (parse + finalise)
 - [`ExperimentResult`](./ExperimentResult) - result type for each experiment
 - [Study config reference](/reference/study-config) - YAML syntax (sweep, execution block)
 - [Results schema](/reference/results-schema) - on-disk layout

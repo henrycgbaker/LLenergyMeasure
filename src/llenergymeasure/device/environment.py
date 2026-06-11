@@ -9,6 +9,7 @@ import importlib.util
 import logging
 import os
 import platform
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -243,3 +244,60 @@ def _unavailable_metadata() -> EnvironmentMetadata:
         container=_collect_container(),
         collected_at=datetime.now(),
     )
+
+
+# ---------------------------------------------------------------------------
+# CUDA version detection - multi-source fallback chain
+# ---------------------------------------------------------------------------
+
+
+def detect_cuda_version_with_source() -> tuple[str | None, str | None]:
+    """Detect the CUDA version using a fallback chain.
+
+    Returns:
+        Tuple of (version_string, source_name) where source_name is one of:
+        "torch", "version_txt", "nvcc", or None if detection failed.
+    """
+    # Source 1: torch.version.cuda
+    if importlib.util.find_spec("torch") is not None:
+        try:
+            import torch
+
+            cuda_ver = torch.version.cuda
+            if cuda_ver:
+                return cuda_ver, "torch"
+        except Exception:
+            logger.debug("CUDA version: torch source failed", exc_info=True)
+
+    # Source 2: /usr/local/cuda/version.txt or version.json
+    import re
+
+    for version_file in (
+        "/usr/local/cuda/version.txt",
+        "/usr/local/cuda/version.json",
+    ):
+        try:
+            with open(version_file) as f:
+                content = f.read()
+            match = re.search(r"(\d+\.\d+)", content)
+            if match:
+                return match.group(1), "version_txt"
+        except Exception:
+            pass
+
+    # Source 3: nvcc --version
+    try:
+        result = subprocess.run(
+            ["nvcc", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        match = re.search(r"release (\d+\.\d+)", result.stdout)
+        if match:
+            return match.group(1), "nvcc"
+    except Exception:
+        logger.debug("CUDA version: nvcc source failed", exc_info=True)
+
+    # Source 4: Give up
+    return None, None

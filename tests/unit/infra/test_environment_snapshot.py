@@ -15,12 +15,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import llenergymeasure.device.environment as device_env_module
 import llenergymeasure.domain.environment as env_module
 import llenergymeasure.harness.environment as harness_env_module
-from llenergymeasure.domain.environment import (
-    EnvironmentSnapshot,
-    detect_cuda_version_with_source,
-)
+from llenergymeasure.device.environment import detect_cuda_version_with_source
+from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.harness.environment import (
     _collect_installed_packages,
     collect_environment_snapshot_async,
@@ -96,7 +95,7 @@ def test_cuda_version_from_torch(monkeypatch: pytest.MonkeyPatch) -> None:
             return MagicMock()  # truthy - torch is "installed"
         return original_find_spec(name)
 
-    monkeypatch.setattr(env_module.importlib.util, "find_spec", patched_find_spec)
+    monkeypatch.setattr(device_env_module.importlib.util, "find_spec", patched_find_spec)
 
     version, source = detect_cuda_version_with_source()
     assert version == "12.1"
@@ -116,16 +115,18 @@ def test_cuda_version_from_torch_empty(monkeypatch: pytest.MonkeyPatch) -> None:
             return MagicMock()
         return original_find_spec(name)
 
-    monkeypatch.setattr(env_module.importlib.util, "find_spec", patched_find_spec)
+    monkeypatch.setattr(device_env_module.importlib.util, "find_spec", patched_find_spec)
 
     # No version.txt, no nvcc → should fall through to (None, None)
     monkeypatch.setattr(
-        env_module.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
+        device_env_module.subprocess,
+        "run",
+        lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
     )
 
     # Narrow patch: only affects open() calls within the environment module
     monkeypatch.setattr(
-        "llenergymeasure.domain.environment.open",
+        "llenergymeasure.device.environment.open",
         lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
         raising=False,
     )
@@ -142,7 +143,7 @@ def test_cuda_version_from_torch_empty(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_cuda_version_from_version_txt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # No torch
-    monkeypatch.setattr(env_module.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(device_env_module.importlib.util, "find_spec", lambda name: None)
 
     # Create a fake version.txt
     version_file = tmp_path / "version.txt"
@@ -156,7 +157,7 @@ def test_cuda_version_from_version_txt(monkeypatch: pytest.MonkeyPatch, tmp_path
             return real_open(str(version_file), *args, **kwargs)
         return real_open(path, *args, **kwargs)
 
-    monkeypatch.setattr("llenergymeasure.domain.environment.open", fake_open, raising=False)
+    monkeypatch.setattr("llenergymeasure.device.environment.open", fake_open, raising=False)
 
     version, source = detect_cuda_version_with_source()
     assert version == "12.4"
@@ -170,11 +171,11 @@ def test_cuda_version_from_version_txt(monkeypatch: pytest.MonkeyPatch, tmp_path
 
 def test_cuda_version_from_nvcc(monkeypatch: pytest.MonkeyPatch) -> None:
     # No torch
-    monkeypatch.setattr(env_module.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(device_env_module.importlib.util, "find_spec", lambda name: None)
 
     # Narrow patch: version.txt open fails within environment module only
     monkeypatch.setattr(
-        "llenergymeasure.domain.environment.open",
+        "llenergymeasure.device.environment.open",
         lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
         raising=False,
     )
@@ -183,7 +184,7 @@ def test_cuda_version_from_nvcc(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result = MagicMock()
     mock_result.stdout = "nvcc: NVIDIA (R) Cuda compiler driver\nrelease 12.2, V12.2.140\n"
 
-    monkeypatch.setattr(env_module.subprocess, "run", lambda *a, **kw: mock_result)
+    monkeypatch.setattr(device_env_module.subprocess, "run", lambda *a, **kw: mock_result)
 
     version, source = detect_cuda_version_with_source()
     assert version == "12.2"
@@ -197,18 +198,18 @@ def test_cuda_version_from_nvcc(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_cuda_version_none(monkeypatch: pytest.MonkeyPatch) -> None:
     # No torch
-    monkeypatch.setattr(env_module.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(device_env_module.importlib.util, "find_spec", lambda name: None)
 
     # Narrow patch: no version.txt within environment module only
     monkeypatch.setattr(
-        "llenergymeasure.domain.environment.open",
+        "llenergymeasure.device.environment.open",
         lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
         raising=False,
     )
 
     # nvcc not available
     monkeypatch.setattr(
-        env_module.subprocess,
+        device_env_module.subprocess,
         "run",
         lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
     )

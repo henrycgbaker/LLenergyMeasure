@@ -332,7 +332,7 @@ def test_nvml_trapezoidal_integration() -> None:
     assert isinstance(result, EnergyMeasurement)
     assert result.duration_sec == pytest.approx(0.2, abs=1e-9)
     assert result.total_j == pytest.approx(20.0, abs=1e-6)
-    assert result.per_gpu_j == {0: pytest.approx(20.0, abs=1e-6)}
+    assert result.per_gpu_j == {0: pytest.approx(20.0, abs=1e-6)}  # type: ignore[comparison-overlap]  # Optional dict vs approx mapping
 
 
 def test_nvml_trapezoidal_skips_none_power() -> None:

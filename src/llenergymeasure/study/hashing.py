@@ -69,6 +69,5 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
         task=config.task.model_dump(mode="python"),
         observed_engine_params=observed_engine,
         observed_sampling_params=sampling,
-        lora=None,  # No LoRA field yet on ExperimentConfig - reserved for future.
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
     )

@@ -66,3 +66,8 @@ engine_versions/*.compat.json
 # Created during the 2026-05-25 migration to keep stale local checkouts
 # resolving for ~1 week. Drop the symlink after the cutover settles.
 /_spike
+# Local caches (tooling scratch; never committed).
+.cache/
+
+# Proof-of-concept writeup scratch (local-only drafts).
+PoC-writeup/

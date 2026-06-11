@@ -10,14 +10,14 @@ Measurement lifecycle orchestration for any inference engine. Layer 3 in the six
 
 | Module | Description |
 |--------|-------------|
-| `__init__.py` | `MeasurementHarness` class, re-exports |
+| `measurement.py` | `MeasurementHarness` class, measurement lifecycle implementation |
+| `__init__.py` | Re-exports the public surface from `measurement.py` |
 | `warmup.py` | `warmup_until_converged()` - CV-based adaptive warmup; `thermal_floor_wait()` |
 | `baseline.py` | `measure_baseline_power()` - idle GPU power baseline with session cache |
 | `flops.py` | `estimate_flops_palm()`, `estimate_flops_palm_from_config()` - FLOPs estimation |
 | `extended_metrics.py` | `compute_extended_metrics()` - derived efficiency metrics |
 | `timeseries.py` | `write_timeseries_parquet()` - power/thermal timeseries sidecar |
 | `measurement_warnings.py` | `collect_measurement_warnings()` - quality flag generation |
-| `state.py` | `ExperimentState`, `ExperimentPhase` - experiment lifecycle state machine |
 
 ## MeasurementHarness
 
@@ -83,14 +83,6 @@ PaLM/Chinchilla formula: `FLOPs = 2 * N_non_embedding_params * total_tokens`
 Two paths:
 1. `estimate_flops_palm_from_config(model_name, ...)` - uses HuggingFace `AutoConfig` (no weights loaded, works for all engines)
 2. `estimate_flops_palm(model, ...)` - uses loaded model object (higher confidence, PyTorch only)
-
-## State machine (state.py)
-
-Three-phase lifecycle: `INITIALISING → MEASURING → DONE`, with orthogonal `failed` flag. Used for resume/deduplication:
-
-```python
-from llenergymeasure.harness.state import ExperimentPhase, ExperimentState
-```
 
 ## Layer constraints
 

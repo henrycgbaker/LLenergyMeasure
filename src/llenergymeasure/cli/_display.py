@@ -57,26 +57,14 @@ def print_result_summary(result: ExperimentResult) -> None:
 
     if result.total_flops > 0:
         flops_val = f"{result.total_flops:.2e}"
-        # Try to get method/confidence from process_results
-        method: str | None = None
-        confidence: str | None = None
-        if result.process_results:
-            cm = result.process_results[0].compute_metrics
-            method = cm.flops_method if cm.flops_method != "unknown" else None
-            confidence = cm.flops_confidence if cm.flops_confidence != "unknown" else None
-        if method and confidence:
-            print(f"  FLOPs          {flops_val} ({method}, {confidence})")
-        elif method:
-            print(f"  FLOPs          {flops_val} ({method})")
-        else:
-            print(f"  FLOPs          {flops_val}")
+        print(f"  FLOPs          {flops_val}")
 
     if result.latency_stats is not None:
         ls = result.latency_stats
-        if hasattr(ls, "ttft_ms") and ls.ttft_ms is not None:
-            print(f"  Latency TTFT   {_sig3(ls.ttft_ms)} ms")
-        if hasattr(ls, "itl_ms") and ls.itl_ms is not None:
-            print(f"  Latency ITL    {_sig3(ls.itl_ms)} ms")
+        if ls.ttft_mean_ms is not None:
+            print(f"  Latency TTFT   {_sig3(ls.ttft_mean_ms)} ms")
+        if ls.itl_mean_ms is not None:
+            print(f"  Latency ITL    {_sig3(ls.itl_mean_ms)} ms")
     print()
 
     # --- Timing ---
@@ -262,8 +250,8 @@ def print_study_dry_run(
     from rich.console import Console as RichConsole
 
     from llenergymeasure.api import probe_energy_sampler
+    from llenergymeasure.cli._preflight_display import build_preflight_panel
     from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
-    from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.models import StudyConfig
     from llenergymeasure.utils.formatting import format_experiment_header
 

@@ -12,28 +12,28 @@ Priority (highest wins): cli_overrides > path YAML > user_config_defaults
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import yaml
 from pydantic import ValidationError
 
 from llenergymeasure.config._dict_utils import _unflatten, deep_merge
-from llenergymeasure.config.grid import (
-    ExperimentOrder,
-    apply_cycles,
-    compute_study_design_hash,
-    expand_grid,
-)
+from llenergymeasure.config.grid import SkippedConfig, expand_grid
 from llenergymeasure.config.models import (
     ExecutionConfig,
     ExperimentConfig,
     OutputConfig,
-    StudyConfig,
 )
 from llenergymeasure.utils.exceptions import ConfigError
 
-__all__ = ["deep_merge", "load_experiment_config", "load_study_config"]
+__all__ = [
+    "LoadedStudyRaw",
+    "deep_merge",
+    "load_experiment_config",
+    "load_study_config",
+]
 
 
 # =============================================================================
@@ -113,24 +113,59 @@ def load_experiment_config(
         raise ConfigError(f"Config construction failed{context}: {e}") from e
 
 
+@dataclass(frozen=True)
+class LoadedStudyRaw:
+    """Parsed + sweep-expanded study material, before dedup/hash/cycle finalisation.
+
+    Output of :func:`load_study_config`. Carries everything the study-layer
+    finalisation step (``llenergymeasure.study.loading.finalise_study``) needs to
+    build a resolved :class:`~llenergymeasure.config.models.StudyConfig`, without
+    the config layer reaching upward into ``study`` for the library-resolution /
+    dedup mechanism.
+
+    Attributes:
+        valid_experiments: Sweep-expanded, Pydantic-validated declared configs
+            (pre-dedup, pre-cycle). At least one entry (guards raise otherwise).
+        skipped: Grid points that failed validation during expansion.
+        study_name: Optional study name (output directory naming).
+        output: Parsed study-level output configuration.
+        execution: Parsed execution block (cycles, ordering, dedup toggle).
+        runners: Per-engine runner config, or None.
+        images: Per-engine Docker image overrides, or None.
+    """
+
+    valid_experiments: list[ExperimentConfig]
+    skipped: list[SkippedConfig]
+    study_name: str | None
+    output: OutputConfig
+    execution: ExecutionConfig
+    runners: dict[str, str] | None
+    images: dict[str, str] | None
+
+
 def load_study_config(
     path: Path | str,
     cli_overrides: dict[str, Any] | None = None,
-) -> StudyConfig:
-    """Load, expand, and validate a study YAML file.
+) -> LoadedStudyRaw:
+    """Load, expand, and validate a study YAML file (pure config-layer parse).
 
     Resolution order:
       1. Load YAML file
       2. Apply CLI overrides on execution block
-      3. Parse execution block (Pydantic validates it)
+      3. Parse output + execution blocks (Pydantic validates them)
       4. expand_grid() - Cartesian product + Pydantic validation of each ExperimentConfig
-      5. Guard: empty or all-invalid → ConfigError
-      6. compute_study_design_hash() over valid experiments
-      7. apply_cycles() for cycle ordering
-      8. Construct and return StudyConfig
+      5. Guard: empty or all-invalid -> ConfigError
 
     This is the CFG-12 contract: sweep resolution at YAML parse time, before
     Pydantic sees the individual ExperimentConfig objects.
+
+    Dedup, study_design_hash, cycle ordering, and equivalence-group serialisation
+    are deliberately NOT done here - they require the study-layer
+    library-resolution mechanism, and the config layer must not import upward.
+    Those steps live in ``llenergymeasure.study.loading.finalise_study``, which
+    consumes the :class:`LoadedStudyRaw` returned here and produces the resolved
+    :class:`~llenergymeasure.config.models.StudyConfig`. Use
+    ``llenergymeasure.api.load_study`` to run both steps in one call.
 
     Args:
         path: Path to study YAML file.
@@ -139,7 +174,8 @@ def load_study_config(
             --cycles/--order/--no-gaps flags into this dict.
 
     Returns:
-        Resolved StudyConfig with ordered experiments and study_design_hash.
+        :class:`LoadedStudyRaw` - sweep-expanded experiments plus the parsed
+        metadata the study-layer finalisation needs.
 
     Raises:
         ConfigError: File not found, parse error, base file missing, ALL configs invalid,
@@ -191,60 +227,14 @@ def load_study_config(
             "Nothing to run. Check sweep dimensions against engine constraints.\n" + skip_details
         )
 
-    # Apply library-resolution mechanism + resolved-config-hash dedup to the declared configs
-    # before running cycles. See sweep-dedup.md §2 - this collapses measurement-equivalent
-    # configs so a 6-config sweep with dormant sampling fields becomes 4 unique runs.
-    from llenergymeasure.study.library_resolution import resolve_library_effective
-
-    dedup = resolve_library_effective(
-        valid_experiments,
-        deduplicate=execution.deduplicate_equivalent,
-    )
-
-    run_experiments = dedup.canonical_configs
-    dedup_mode: Literal["resolved", "off"] = (
-        "resolved" if execution.deduplicate_equivalent else "off"
-    )
-
-    # Compute study_design_hash over the post-dedup configs - the hash
-    # identifies the *unique* measurement set, not duplicate declarations.
-    study_hash = compute_study_design_hash(run_experiments)
-
-    # Apply cycle ordering to produce execution sequence
-    ordered = apply_cycles(
-        run_experiments,
-        n_cycles=execution.n_cycles,
-        experiment_order=ExperimentOrder(execution.experiment_order),
-        study_design_hash=study_hash,
-        shuffle_seed=execution.shuffle_seed,
-    )
-
-    # Serialise pre-run equivalence groups for the sidecar writer.
-    pre_run_groups = [
-        {
-            "resolved_config_hash": g.resolved_config_hash,
-            "canonical_config_excerpt": g.canonical_excerpt,
-            "member_indices": list(g.member_indices),
-            "member_count": g.member_count,
-            "representative_index": g.representative_index,
-            "would_dedup": g.member_count > 1,
-            "deduplicated": dedup.deduplicated and g.member_count > 1,
-        }
-        for g in dedup.groups
-    ]
-
-    return StudyConfig(
-        experiments=ordered,
+    return LoadedStudyRaw(
+        valid_experiments=valid_experiments,
+        skipped=skipped,
         study_name=name,
         output=output,
-        study_execution=execution,
+        execution=execution,
         runners=runners,
         images=images,
-        study_design_hash=study_hash,
-        skipped_configs=[s.to_dict() for s in skipped],
-        dedup_mode=dedup_mode,
-        pre_run_equivalence_groups=pre_run_groups,
-        declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
     )
 
 

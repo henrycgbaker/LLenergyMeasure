@@ -618,7 +618,7 @@ class TestValidateEngineDirectory:
 
     def test_missing_tp_size_key_skips_check(self, tmp_path):
         """config.json without mapping.tp_size skips tp_size check (non-blocking)."""
-        config = {"pretrained_config": {}, "build_config": {}}
+        config: dict[str, object] = {"pretrained_config": {}, "build_config": {}}
         (tmp_path / "config.json").write_text(json.dumps(config))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
         errors = _validate_engine_directory(tmp_path, tp_size=1)

@@ -100,48 +100,17 @@ LatencyStatistics(
 ### experiment.py
 Experiment result models.
 
-**RawProcessResult** - Single GPU/process output:
-```python
-RawProcessResult(
-    experiment_id="exp_20240115_123456",
-    process_index=0,
-    gpu_id=0,
-    model_name="meta-llama/Llama-2-7b-hf",
-    timestamps=Timestamps(...),
-    inference_metrics=InferenceMetrics(...),
-    energy_metrics=EnergyMetrics(...),
-    compute_metrics=ComputeMetrics(...),
-)
-```
-
-**AggregatedResult** - Combined multi-GPU result:
-```python
-AggregatedResult(
-    experiment_id="exp_20240115_123456",
-    aggregation=AggregationMetadata(
-        method="sum_energy_avg_throughput",
-        num_processes=4,
-        temporal_overlap_verified=True,
-    ),
-    total_tokens=4096,
-    total_energy_j=600.0,
-    avg_tokens_per_second=819.2,
-    total_flops=6e12,
-    process_results=[...],  # Original raw results
-)
-```
-
-**Timestamps** - Timing info:
-```python
-Timestamps.from_times(start_datetime, end_datetime)
-# .start, .end, .duration_sec
-```
+**ExperimentResult** - The user-visible output of a single-process measurement
+run. Holds the final metrics (energy, throughput, FLOPs, latency) directly.
 
 ### model_info.py
-Model metadata.
+Model metadata. These classes are not re-exported from the `domain` package;
+import them from `llenergymeasure.domain.model_info` directly.
 
 **ModelInfo** - Model characteristics:
 ```python
+from llenergymeasure.domain.model_info import ModelInfo
+
 ModelInfo(
     name="meta-llama/Llama-2-7b-hf",
     num_parameters=7_000_000_000,
@@ -152,6 +121,8 @@ ModelInfo(
 
 **QuantizationSpec** - Quantization details:
 ```python
+from llenergymeasure.domain.model_info import QuantizationSpec
+
 QuantizationSpec(
     enabled=True,
     bits=4,
@@ -169,4 +140,3 @@ from llenergymeasure.utils.constants import SCHEMA_VERSION
 ## Related
 
 - See `../results/README.md` for result persistence
-- See `../results/aggregation.py` for aggregation logic

@@ -1251,6 +1251,7 @@ class TestErrorJsonOnNonZeroExit:
         exc = exc_info.value
         # Structured payload attached to the exception
         assert hasattr(exc, "error_payload")
+        assert exc.error_payload is not None
         assert exc.error_payload["type"] == "RuntimeError"
         assert exc.error_payload["message"] == "CUDA out of memory inside container"
         assert "traceback" in exc.error_payload

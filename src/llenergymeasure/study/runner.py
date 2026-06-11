@@ -1,69 +1,70 @@
-"""StudyRunner - subprocess dispatch core for experiment isolation.
+"""StudyRunner - orchestrates per-experiment subprocess/Docker dispatch.
 
-Each experiment in a study runs in a freshly spawned subprocess with a clean CUDA
-context. Results travel parent←child via multiprocessing.Pipe. The parent survives
-experiment failures, timeouts, and SIGINT without data corruption.
+``StudyRunner`` owns the study-level run loop: SIGINT handling, GPU locks,
+container lifecycle, circuit breaker, wall-clock timeout, and result handling.
+The separable concerns live in sibling modules and are mixed in or imported:
 
-Key design decisions (locked in .product/decisions/experiment-isolation.md):
-- spawn context: CUDA-safe; fork causes silent CUDA corruption (CP-1)
-- daemon=False: clean CUDA teardown if parent exits unexpectedly (CP-4)
-- Pipe-only IPC: ExperimentResult fits in Pipe buffer for typical experiment sizes
-- SIGKILL on timeout: SIGTERM may be ignored by hung CUDA operations
-- Process group kill: worker calls os.setpgrp() to become group leader so all
-  descendant processes (vLLM workers, MPI ranks, etc.) are killed together
+- ``study.worker``: subprocess-worker surface (child entry point, result
+  collection, process-group signalling).
+- ``study._progress``: cross-process progress plumbing.
+- ``study.baseline_measure`` (``_BaselineMixin``): baseline measurement,
+  caching, and drift validation.
+- ``study.image_prep`` (``_ImageMixin``): Docker image preparation and
+  schema-fingerprint verification.
+- ``study.container_lifecycle``: container naming/labels/cleanup plus failure
+  artefact persistence.
+
+Each experiment runs in a freshly spawned subprocess with a clean CUDA context
+(or in a Docker container). Results travel parent<-child via multiprocessing.Pipe
+or DockerRunner. The parent survives experiment failures, timeouts, and SIGINT
+without data corruption.
 """
 
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import multiprocessing
-import os
+import os  # noqa: F401 - patch target: tests patch study.runner.os.{killpg,setpgrp}
 import shutil
 import signal
-import subprocess
 import sys
 import tempfile
 import threading
 import time
-import traceback
 import uuid
 from concurrent.futures import Future
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from llenergymeasure._version import __version__ as _HOST_PKG_VERSION
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
-    DOCKER_PULL_TIMEOUT,
     RUNNER_DOCKER,
     TEMP_PREFIX_TIMESERIES,
-    TIMEOUT_DOCKER_INSPECT,
     TIMEOUT_ENV_SNAPSHOT,
     TIMEOUT_INTERRUPT_POLL,
     TIMEOUT_SIGTERM_GRACE,
     TIMEOUT_THREAD_JOIN,
 )
-from llenergymeasure.domain.progress import STEP_BASELINE, STEPS_LOCAL, docker_steps
-from llenergymeasure.infra.version_handshake import (
-    ENV_SKIP_IMAGE_CHECK,
-    LABEL_SCHEMA_FINGERPRINT,
-    BundledEngineVersionMismatchError,
-    ImageStamp,
-    SchemaStatus,
-    VersionMismatchError,
-    classify_engine_version,
-    classify_stamp,
-    compute_expconf_fingerprint,
-    parse_image_stamp,
-    probe_image_engine_version,
-    read_bundled_engine_version,
-    rebuild_hint,
-    skip_check_enabled,
-)
+from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
+from llenergymeasure.study._progress import _consume_progress_events
+from llenergymeasure.study.baseline_measure import _BaselineMixin
 from llenergymeasure.study.gaps import run_gap
+from llenergymeasure.study.image_prep import _ImageMixin
+
+# Re-imported into this module's namespace so that (a) existing
+# ``from llenergymeasure.study.runner import X`` sites keep working and
+# (b) ``patch("llenergymeasure.study.runner.<name>")`` intercepts the
+# bare-name call sites inside ``_run_one`` / ``run``.
+from llenergymeasure.study.worker import (
+    _UNSET,
+    COLLECT_RESULT_PROCESS_CRASH,
+    COLLECT_RESULT_TIMEOUT,
+    _collect_result,
+    _derive_exit_reason,
+    _kill_process_group,
+    _run_experiment_worker,
+)
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
@@ -71,7 +72,6 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
-    from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = [
     "StudyRunner",
@@ -86,42 +86,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Module-level helpers
 # =============================================================================
-
-
-# Failure classifiers produced by ``_collect_result`` and consumed by
-# parent-side sentinel handling. Lifted so the producer and consumer don't
-# drift on bare strings.
-COLLECT_RESULT_PROCESS_CRASH = "ProcessCrash"
-COLLECT_RESULT_TIMEOUT = "TimeoutError"
-
-
-def _derive_exit_reason(exitcode: int | None) -> str | None:
-    """Map a negative subprocess exit code to its POSIX signal name.
-
-    Negative exit codes are signals (POSIX convention). Returns the signal
-    name (e.g. ``SIGKILL``, ``SIGSEGV``, ``SIGTERM``) for any recognised
-    signal, ``None`` otherwise. The raw code is preserved elsewhere.
-    """
-    if exitcode is None or exitcode >= 0:
-        return None
-    try:
-        return signal.Signals(-exitcode).name
-    except ValueError:
-        return None
-
-
-def _sanitize_image_for_filename(image: str) -> str:
-    """Return a filename-safe slug for a Docker image tag.
-
-    Replaces path separators, tag markers, digest markers, and whitespace with
-    underscores. Clipped to 128 chars and stripped of trailing underscores so
-    the resulting basename stays well under typical filesystem limits.
-    """
-    sanitized = image
-    for ch in ("/", ":", "@", " ", "\t", "\n"):
-        sanitized = sanitized.replace(ch, "_")
-    sanitized = sanitized[:128].rstrip("_")
-    return sanitized or "unknown"
 
 
 def _save_and_record(
@@ -233,354 +197,12 @@ def _save_and_record(
         manifest.mark_failed(config_hash, cycle, type(exc).__name__, str(exc))
 
 
-def _kill_process_group(pid: int, sig: int) -> None:
-    """Send signal to the entire process group rooted at pid.
-
-    Uses os.killpg so that all descendant processes (vLLM workers, MPI ranks, etc.)
-    receive the signal, not just the parent. Errors are suppressed because the
-    process group may already be dead by the time this is called.
-    """
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(pid, sig)
-
-
-# =============================================================================
-# Queue-based progress callback (runs inside child process)
-# =============================================================================
-
-
-class _QueueProgressCallback:
-    """ProgressCallback that serialises step events onto a multiprocessing.Queue.
-
-    Created inside the worker subprocess. Events are dicts consumed by the
-    parent's _consume_progress_events thread and forwarded to StudyStepDisplay.
-    """
-
-    def __init__(self, queue: Any) -> None:
-        self._queue = queue
-
-    def _put(self, event: dict[str, Any]) -> None:
-        with contextlib.suppress(Exception):
-            self._queue.put(event)
-
-    def on_step_start(self, step: str, description: str, detail: str = "") -> None:
-        self._put(
-            {"event": "step_start", "step": step, "description": description, "detail": detail}
-        )
-
-    def on_step_update(self, step: str, detail: str) -> None:
-        self._put({"event": "step_update", "step": step, "detail": detail})
-
-    def on_step_done(self, step: str, elapsed_sec: float) -> None:
-        self._put({"event": "step_done", "step": step, "elapsed_sec": elapsed_sec})
-
-    def on_step_skip(self, step: str, reason: str = "") -> None:
-        self._put({"event": "step_skip", "step": step, "reason": reason})
-
-    def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
-        self._put({"event": "substep", "step": step, "text": text, "elapsed_sec": elapsed_sec})
-
-    def on_substep_start(self, step: str, text: str) -> None:
-        self._put({"event": "substep_start", "step": step, "text": text})
-
-    def on_substep_done(
-        self,
-        step: str,
-        text: str | None = None,
-        elapsed_sec: float | None = None,
-    ) -> None:
-        self._put(
-            {
-                "event": "substep_done",
-                "step": step,
-                "text": text,
-                "elapsed_sec": elapsed_sec,
-            }
-        )
-
-
-# =============================================================================
-# Worker function (runs inside child process)
-# =============================================================================
-
-
-def _run_experiment_worker(
-    config: ExperimentConfig,
-    conn: Any,  # multiprocessing.Connection (child end)
-    progress_queue: Any,  # multiprocessing.Queue
-    snapshot: EnvironmentSnapshot | None = None,
-    output_dir: str | None = None,
-    save_timeseries: bool = True,
-    baseline: Any = None,  # BaselineCache | None (avoids import at module level)
-    *,
-    study_dir: str,
-    study_run_id: str,
-    cycle: int,
-    config_hash: str,
-) -> None:
-    """Entry point for the child process. Runs one experiment and returns result via Pipe.
-
-    Signal handling:
-        Installs SIGINT → SIG_IGN so the child ignores Ctrl+C.
-        The parent handles SIGINT and decides whether to kill the child.
-
-    IPC protocol:
-        On success: sends ExperimentResult (or result dict) via conn.
-        On failure: sends {"type": ..., "message": ..., "traceback": ...} via conn.
-        Progress events are put to progress_queue for the consumer thread.
-
-    Args:
-        output_dir: Directory for timeseries parquet output. Passed through to harness.
-        save_timeseries: Whether to persist GPU timeseries. Passed through to harness.
-        baseline: Pre-measured baseline power from parent process (study-level cache).
-        study_dir: Study output directory. Runtime observations append to
-            ``{study_dir}/runtime_observations.jsonl``.
-        study_run_id: UUID identifying this invocation of ``StudyRunner.run()``.
-        cycle: 1-based cycle counter for this config within the study.
-        config_hash: ``compute_declared_config_hash(config)``. The parent is
-            the single SSOT for this value.
-    """
-    # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
-    # share this PGID. The parent can then kill the whole group via os.killpg().
-    os.setpgrp()
-
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    # Wrap the worker body BEFORE run_preflight() / get_engine() so engine
-    # import-time warnings under ``spawn`` are captured.
-    from llenergymeasure.study.runtime_observations import capture_runtime_observations
-
-    obs_ctx = capture_runtime_observations(
-        config,
-        study_dir=study_dir,
-        study_run_id=study_run_id,
-        cycle=cycle,
-        config_hash=config_hash,
-    )
-
-    try:
-        with obs_ctx:
-            progress_queue.put({"event": "started", "config_hash": config_hash})
-
-            # Create progress callback that serialises step events to queue
-            progress_cb = _QueueProgressCallback(progress_queue)
-
-            # Run the actual experiment in-process (within the spawned subprocess)
-            from llenergymeasure.engines import get_engine
-            from llenergymeasure.harness import MeasurementHarness
-            from llenergymeasure.harness.preflight import run_preflight
-
-            # Pre-flight inside subprocess: CUDA availability must be checked in the
-            # process that will use the GPU.
-            progress_cb.on_step_start("container_preflight", "Checking", "CUDA, model access")
-            t0_pf = time.perf_counter()
-            run_preflight(config)
-            progress_cb.on_step_done("container_preflight", time.perf_counter() - t0_pf)
-
-            engine = get_engine(config.engine)
-            harness = MeasurementHarness()
-            from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-
-            gpu_indices = _resolve_gpu_indices(config)
-            result = harness.run(
-                engine,
-                config,
-                snapshot=snapshot,
-                gpu_indices=gpu_indices,
-                progress=progress_cb,
-                output_dir=output_dir,
-                save_timeseries=save_timeseries,
-                baseline=baseline,
-            )
-
-            # Send result back to parent via Pipe
-            conn.send(result)
-            progress_queue.put({"event": "completed", "config_hash": config_hash})
-
-    except Exception as exc:
-        error_payload = {
-            "type": type(exc).__name__,
-            "message": str(exc),
-            "traceback": traceback.format_exc(),
-        }
-        with contextlib.suppress(Exception):
-            # Pipe may be broken (e.g. parent killed). Best-effort only.
-            conn.send(error_payload)
-
-        with contextlib.suppress(Exception):
-            progress_queue.put({"event": "failed", "error": str(exc)})
-
-        raise
-
-    finally:
-        conn.close()
-
-
-# =============================================================================
-# Progress consumer (daemon thread in parent)
-# =============================================================================
-
-
-def _consume_progress_events(
-    q: Any,
-    study_progress: StudyProgressCallback | None = None,
-) -> None:
-    """Consume progress events from the queue and forward to study display.
-
-    Runs as a daemon thread in the parent process. Receives step events from
-    the child subprocess via multiprocessing.Queue and forwards them to the
-    StudyProgressCallback (typically StudyStepDisplay).
-
-    Coarse events (started/completed/failed) are ignored here - study-level
-    begin/end experiment tracking is handled directly by _run_one().
-    """
-    while True:
-        event = q.get()
-        if event is None:
-            break
-
-        if not isinstance(event, dict) or study_progress is None:
-            continue
-
-        event_type = event.get("event")
-
-        # Forward step-level events to study display
-        if event_type == "step_start":
-            study_progress.on_step_start(
-                event["step"], event.get("description", ""), event.get("detail", "")
-            )
-        elif event_type == "step_update":
-            study_progress.on_step_update(event["step"], event.get("detail", ""))
-        elif event_type == "step_done":
-            study_progress.on_step_done(event["step"], event.get("elapsed_sec", 0))
-        elif event_type == "step_skip":
-            study_progress.on_step_skip(event["step"], event.get("reason", ""))
-        elif event_type == "substep":
-            study_progress.on_substep(
-                event["step"], event.get("text", ""), event.get("elapsed_sec", 0)
-            )
-        elif event_type == "substep_start":
-            study_progress.on_substep_start(event["step"], event.get("text", ""))
-        elif event_type == "substep_done":
-            study_progress.on_substep_done(
-                event["step"], event.get("text"), event.get("elapsed_sec")
-            )
-
-
-# =============================================================================
-# Result collection (parent, after p.join)
-# =============================================================================
-
-# Sentinel object used to distinguish "no payload provided" from a None payload.
-_UNSET = object()
-
-
-def _collect_result(
-    p: Any,  # multiprocessing.Process
-    parent_conn: Any,  # multiprocessing.Connection (parent end)
-    config: ExperimentConfig,
-    timeout: float,
-    pipe_payload: Any = _UNSET,
-) -> Any:
-    """Inspect process outcome and return either a result or a failure dict.
-
-    Called after the pipe has been drained and p.join() has returned.
-
-    Args:
-        p: The child process.
-        parent_conn: Parent end of the Pipe (read-only).
-        config: Experiment configuration.
-        timeout: Timeout used for the experiment (for error messages).
-        pipe_payload: Pre-drained pipe value from the recv-before-join pattern
-            (H5 deadlock fix). When provided, skips calling recv() again.
-            Pass _UNSET (default) to fall back to reading from the pipe directly.
-
-    Returns:
-        ExperimentResult on success, dict with keys (type, message) on failure.
-    """
-    from llenergymeasure.domain.experiment import compute_declared_config_hash
-
-    config_hash = compute_declared_config_hash(config)
-
-    if p.is_alive():
-        # Timed out - kill with SIGKILL
-        # SIGKILL: SIGTERM may be ignored by hung CUDA operations
-        _kill_process_group(p.pid, signal.SIGKILL)
-        p.join()
-        return {
-            "type": COLLECT_RESULT_TIMEOUT,
-            "message": f"Experiment exceeded timeout of {timeout}s and was killed.",
-            "config_hash": config_hash,
-        }
-
-    if p.exitcode != 0:
-        # Non-zero exit - try to read error payload from pipe
-        # Use pre-drained payload if available; otherwise poll/recv
-        if pipe_payload is not _UNSET:
-            payload = pipe_payload
-            if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                payload["config_hash"] = config_hash
-                return payload
-        elif parent_conn.poll():
-            try:
-                payload = parent_conn.recv()
-                if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                    payload["config_hash"] = config_hash
-                    return payload
-            except Exception:
-                pass
-
-        return {
-            "type": COLLECT_RESULT_PROCESS_CRASH,
-            "message": f"Subprocess exited with code {p.exitcode} and no error data in Pipe.",
-            "config_hash": config_hash,
-        }
-
-    # Success path - use pre-drained payload if available
-    if pipe_payload is not _UNSET:
-        try:
-            payload = pipe_payload
-            # If payload is an error dict (exception in worker), treat as failure
-            if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                payload["config_hash"] = config_hash
-                return payload
-            return payload
-        except Exception as exc:
-            return {
-                "type": "PipeError",
-                "message": f"Failed to process pre-drained pipe payload: {exc}",
-                "config_hash": config_hash,
-            }
-
-    # Fallback: read from pipe directly (no pre-drained payload)
-    if parent_conn.poll():
-        try:
-            payload = parent_conn.recv()
-            # If payload is an error dict (exception in worker), treat as failure
-            if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                payload["config_hash"] = config_hash
-                return payload
-            return payload
-        except Exception as exc:
-            return {
-                "type": "PipeError",
-                "message": f"Failed to receive result from subprocess: {exc}",
-                "config_hash": config_hash,
-            }
-
-    return {
-        "type": COLLECT_RESULT_PROCESS_CRASH,
-        "message": "Subprocess exited 0 but sent no data through Pipe.",
-        "config_hash": config_hash,
-    }
-
-
 # =============================================================================
 # StudyRunner
 # =============================================================================
 
 
-class StudyRunner:
+class StudyRunner(_BaselineMixin, _ImageMixin):
     """Dispatcher: runs each experiment in a freshly spawned subprocess.
 
     Uses multiprocessing.get_context('spawn') - never fork.
@@ -970,710 +592,6 @@ class StudyRunner:
             self._env_snapshot_future = collect_environment_snapshot_async()
         return self._env_snapshot_future.result(timeout=TIMEOUT_ENV_SNAPSHOT)
 
-    def _baseline_cache_key(self, config: ExperimentConfig) -> str:
-        """Return the cache key for this experiment's runner target.
-
-        Baselines are keyed per runner target because the container's CUDA init
-        footprint (~8.7 W/GPU on A100) is process-local and may differ between
-        engine images. See ``.product/research/baseline-measurement-location.md``.
-
-        The ``image_`` prefix uses an underscore (not ``:``) so the key is
-        safe to embed directly in both filesystem paths and Docker bind-mount
-        sources. A ``:`` in the mount source string would be parsed by Docker
-        as the mount-mode separator and fail with ``invalid mode``.
-        """
-        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
-        if spec is None or spec.mode != RUNNER_DOCKER or not spec.image:
-            return "local"
-        return f"image_{_sanitize_image_for_filename(spec.image)}"
-
-    def _get_baseline(self, config: ExperimentConfig) -> Any:
-        """Return baseline power according to the configured strategy.
-
-        Strategies: ``cached`` (measure once per runner target, persist to disk,
-        reuse within TTL), ``validated`` (same, with periodic drift spot-check),
-        and ``fresh`` (returns None; harness measures in-container per experiment).
-
-        For Docker targets the measurement runs inside a short-lived container
-        of the same engine image, so the CUDA init state matches the experiment
-        container (see ``.product/research/baseline-measurement-location.md``).
-        """
-        strategy = config.measurement.baseline.strategy
-
-        if strategy == "fresh":
-            return None
-
-        cache_key = self._baseline_cache_key(config)
-        location = "host" if cache_key == "local" else "baseline container"
-        cached = self._baselines.get(cache_key)
-
-        # TTL expiry check
-        if cached is not None:
-            age = time.time() - cached.timestamp
-            if age >= config.measurement.baseline.cache_ttl_seconds:
-                logger.info(
-                    "Baseline expired (age=%.0fs > ttl=%.0fs). Re-measuring.",
-                    age,
-                    config.measurement.baseline.cache_ttl_seconds,
-                )
-                cached = None
-                self._baselines.pop(cache_key, None)
-
-        # validated: periodic spot-check for drift (only if baseline still valid)
-        if strategy == "validated" and cached is not None:
-            self._experiments_since_validation[cache_key] = (
-                self._experiments_since_validation.get(cache_key, 0) + 1
-            )
-            if (
-                self._experiments_since_validation[cache_key]
-                >= config.measurement.baseline.validation_interval
-            ):
-                self._validate_baseline(config, cache_key)
-                cached = self._baselines.get(cache_key)  # may have been re-measured
-
-        # In-memory hit → emit "Reusing" and return
-        if cached is not None:
-            if self._progress is not None:
-                self._progress.on_step_start(
-                    STEP_BASELINE,
-                    "Reusing",
-                    f"cached {cached.power_w:.1f}W · {location}",
-                )
-                self._emit_baseline_result_substeps(cached, elapsed=0.0, mode="cached")
-                self._progress.on_step_done(STEP_BASELINE, 0.0)
-            return cached
-
-        # Try loading from disk first (handles mid-study restarts)
-        disk_path = self._get_baseline_cache_path(cache_key)
-        if disk_path.exists():
-            from llenergymeasure.harness.baseline import load_baseline_cache
-
-            if self._progress is not None:
-                self._progress.on_step_start(
-                    STEP_BASELINE, "Loading", f"baseline cache · {location}"
-                )
-                t0_load = time.perf_counter()
-
-            loaded = load_baseline_cache(
-                disk_path, ttl=config.measurement.baseline.cache_ttl_seconds
-            )
-
-            if self._progress is not None:
-                load_elapsed = time.perf_counter() - t0_load
-                if loaded is not None:
-                    self._emit_baseline_result_substeps(loaded, elapsed=load_elapsed, mode="disk")
-                self._progress.on_step_done(STEP_BASELINE, load_elapsed)
-
-            if loaded is not None:
-                if loaded.method is None:
-                    loaded.method = strategy
-                self._baselines[cache_key] = loaded
-                self._experiments_since_validation.setdefault(cache_key, 0)
-                logger.debug("Loaded baseline from disk cache: %.1fW", loaded.power_w)
-                return loaded
-
-        # Measure fresh baseline (in-container for Docker targets)
-        dur = config.measurement.baseline.duration_seconds
-        # Prefer the image tag over engine name so users see which container
-        # is running in multi-engine studies.
-        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
-        target_label = (spec.image if spec and spec.image else config.engine) or "baseline"
-        if self._progress is not None:
-            self._progress.on_step_start(STEP_BASELINE, "Calibrating", "sampling idle GPU draw")
-            t0_meas = time.perf_counter()
-            # Seed first substep before Popen so the docker cold-start is visible.
-            if cache_key != "local":
-                self._progress.on_substep_start(
-                    STEP_BASELINE,
-                    f"launching separate {target_label} baseline container",
-                )
-
-        on_stage = (
-            self._make_baseline_stage_callback(duration_sec=dur, target_label=target_label)
-            if self._progress is not None
-            else None
-        )
-        measured = self._measure_baseline(config, cache_key, on_stage=on_stage)
-
-        if measured is not None:
-            measured.method = strategy
-            self._baselines[cache_key] = measured
-            self._experiments_since_validation[cache_key] = 0
-
-            from llenergymeasure.harness.baseline import save_baseline_cache
-
-            save_baseline_cache(disk_path, measured)
-
-        if self._progress is not None:
-            elapsed = time.perf_counter() - t0_meas
-            if measured is None:
-                # Freeze any live substep with the failure text + accurate
-                # elapsed so users don't see a silent tick hiding a crash.
-                self._progress.on_substep_done(
-                    STEP_BASELINE,
-                    text=(
-                        f"measurement failed after {elapsed:.1f}s - see log warnings "
-                        f"(experiment container will re-measure fresh)"
-                    ),
-                    elapsed_sec=elapsed,
-                )
-            elif cache_key == "local":
-                # No container subprocess → emit a retroactive sampling substep
-                # so the local path still gets a breakdown. The Docker path
-                # already emitted substeps live via the on_stage callback.
-                self._emit_baseline_result_substeps(
-                    measured,
-                    elapsed=elapsed,
-                    mode="fresh",
-                    is_containerised=False,
-                )
-            self._progress.on_step_done(STEP_BASELINE, elapsed)
-
-        return measured
-
-    def _make_baseline_stage_callback(
-        self, *, duration_sec: float, target_label: str = "baseline"
-    ) -> Any:
-        """Build a stage-marker callback that drives live baseline sub-bullets.
-
-        Each transition ``on_substep_done``s the prior substep (freezing with
-        a tick) and ``on_substep_start``s the next one. The very first substep
-        ("launching <target_label> container") is seeded in ``_get_baseline``
-        before ``subprocess.Popen`` so the docker cold-start is visible.
-        """
-        dur_label = f"{duration_sec:.0f}s"
-
-        def on_stage(name: str, elapsed: float, kv: dict[str, str]) -> None:
-            if self._progress is None:
-                return
-            if name == "container_ready":
-                self._progress.on_substep_done(
-                    STEP_BASELINE, f"{target_label} baseline container ready"
-                )
-                self._progress.on_substep_start(
-                    STEP_BASELINE, "initialising CUDA runtime inside baseline container"
-                )
-            elif name == "cuda_primed":
-                self._progress.on_substep_done(STEP_BASELINE, "CUDA runtime primed")
-                self._progress.on_substep_start(
-                    STEP_BASELINE, f"sampling idle GPU draw ({dur_label})"
-                )
-            elif name == "sampling_done":
-                power_w = kv.get("power_w", "?")
-                samples = kv.get("samples", "?")
-                sampled = kv.get("duration", "?")
-                self._progress.on_substep_done(
-                    STEP_BASELINE,
-                    f"sampled idle GPU draw · {sampled}s ({power_w}W · {samples} samples)",
-                )
-                self._progress.on_substep_start(
-                    STEP_BASELINE,
-                    f"writing baseline result · tearing down {target_label} baseline container",
-                )
-            elif name == "result_written":
-                self._progress.on_substep_done(
-                    STEP_BASELINE,
-                    f"baseline result cached · {target_label} baseline container torn down",
-                )
-
-        return on_stage
-
-    def _emit_baseline_result_substeps(
-        self,
-        baseline: Any,  # BaselineCache
-        *,
-        elapsed: float,
-        mode: str,  # "fresh" | "cached" | "disk"
-        is_containerised: bool = False,
-    ) -> None:
-        """Emit dim-bullet substeps explaining where the baseline time went.
-
-        For a fresh Docker measurement we split the wall-clock into container
-        launch/teardown (the residual) vs the NVML sampling window (recorded
-        inside ``measure_baseline_power``). This answers "why did a 30s
-        measurement take 37.7s?" without the user having to dig through logs.
-
-        For in-memory and disk-loaded reuse we only emit the result summary -
-        there is no sampling window to describe.
-        """
-        if self._progress is None:
-            return
-        if mode == "fresh" and is_containerised:
-            # Residual captures docker run startup + CUDA prime + result write
-            # + container teardown.
-            overhead = max(0.0, elapsed - baseline.duration_sec)
-            self._progress.on_substep(
-                STEP_BASELINE,
-                f"container launch + teardown: {overhead:.1f}s",
-                overhead,
-            )
-            self._progress.on_substep(
-                STEP_BASELINE,
-                f"sampling: {baseline.duration_sec:.1f}s "
-                f"({baseline.power_w:.1f}W · {baseline.sample_count} samples)",
-                baseline.duration_sec,
-            )
-        elif mode == "fresh":
-            self._progress.on_substep(
-                STEP_BASELINE,
-                f"sampling: {baseline.duration_sec:.1f}s "
-                f"({baseline.power_w:.1f}W · {baseline.sample_count} samples)",
-                baseline.duration_sec,
-            )
-        else:
-            source = "in-memory" if mode == "cached" else "disk"
-            self._progress.on_substep(
-                STEP_BASELINE,
-                f"reused from {source} cache: "
-                f"{baseline.power_w:.1f}W ({baseline.sample_count} samples)",
-            )
-
-    def _measure_baseline(
-        self,
-        config: ExperimentConfig,
-        cache_key: str,
-        on_stage: Any = None,  # StageCallback | None
-    ) -> Any:
-        """Measure a fresh baseline on host or inside a baseline container.
-
-        Local runner targets measure on host (no process boundary, no bias).
-        Docker targets dispatch a short-lived baseline container of the engine
-        image so the CUDA init state matches the experiment container. See
-        ``.product/research/baseline-measurement-location.md`` for the
-        empirical rationale (~8.7 W/GPU bias on A100).
-
-        Args:
-            config: Experiment config with baseline settings.
-            cache_key: "local" or "image_<slug>" - chooses dispatch path.
-            on_stage: Optional callback forwarded to ``run_baseline_container``
-                for streaming stage markers. Ignored on the local path (there
-                is no subprocess to stream from).
-        """
-        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-
-        gpu_indices = _resolve_gpu_indices(config)
-
-        if cache_key == "local":
-            from llenergymeasure.harness.baseline import measure_baseline_power
-
-            return measure_baseline_power(
-                duration_sec=config.measurement.baseline.duration_seconds,
-                gpu_indices=gpu_indices,
-            )
-
-        # Docker: _baseline_cache_key already guaranteed a resolved image when
-        # it returned a non-"local" key.
-        assert self._runner_specs is not None
-        spec = self._runner_specs[config.engine]
-        assert spec.image is not None
-        from llenergymeasure.study.baseline_container import run_baseline_container
-
-        return run_baseline_container(
-            image=spec.image,
-            mode="measure",
-            duration_sec=config.measurement.baseline.duration_seconds,
-            gpu_indices=gpu_indices,
-            on_stage=on_stage,
-        )
-
-    def _spot_check_baseline(
-        self,
-        config: ExperimentConfig,
-        cache_key: str,
-        gpu_indices: list[int],
-    ) -> float | None:
-        """Quick drift-check measurement for the validated strategy.
-
-        Dispatches to host or baseline container matching the cache key. Returns
-        the measured power in watts, or None on failure.
-        """
-        if cache_key == "local":
-            from llenergymeasure.harness.baseline import measure_spot_check
-
-            return measure_spot_check(gpu_indices=gpu_indices, duration_sec=5.0)
-
-        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
-        if spec is None or spec.image is None:
-            return None
-
-        from llenergymeasure.study.baseline_container import run_baseline_container
-
-        result = run_baseline_container(
-            image=spec.image,
-            mode="spot_check",
-            duration_sec=5.0,
-            gpu_indices=gpu_indices,
-        )
-        return result.power_w if result is not None else None
-
-    def _validate_baseline(self, config: ExperimentConfig, cache_key: str) -> None:
-        """Spot-check baseline for drift (strategy='validated' only).
-
-        Performs a short measurement and compares with the cached baseline. On
-        drift beyond the configured threshold, re-measures the full baseline and
-        updates the disk cache. Emits a single ``Validating`` step (with an
-        ``on_step_update`` mid-step when a re-measure is triggered) so the
-        display step counter stays clean.
-        """
-        cached = self._baselines.get(cache_key)
-        if cached is None:
-            return
-
-        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-        from llenergymeasure.harness.baseline import save_baseline_cache
-
-        gpu_indices = _resolve_gpu_indices(config)
-        location = "host" if cache_key == "local" else "baseline container"
-
-        if self._progress is not None:
-            self._progress.on_step_start(
-                STEP_BASELINE, "Validating", f"{location} · drift check (5s)"
-            )
-            t0 = time.perf_counter()
-
-        spot = self._spot_check_baseline(config, cache_key, gpu_indices)
-        self._experiments_since_validation[cache_key] = 0
-
-        if spot is None:
-            logger.warning("Baseline validation: spot-check measurement failed")
-            if self._progress is not None:
-                self._progress.on_step_done(STEP_BASELINE, time.perf_counter() - t0)
-            return
-
-        drift = abs(spot - cached.power_w) / cached.power_w
-        if drift > config.measurement.baseline.drift_threshold:
-            dur = config.measurement.baseline.duration_seconds
-            logger.info(
-                "Baseline drift detected: %.1fW -> %.1fW (%.1f%% > %.1f%% threshold). "
-                "Re-measuring full baseline.",
-                cached.power_w,
-                spot,
-                drift * 100,
-                config.measurement.baseline.drift_threshold * 100,
-            )
-            if self._progress is not None:
-                self._progress.on_step_update(
-                    STEP_BASELINE,
-                    f"{location} · drift {drift * 100:.1f}% > "
-                    f"{config.measurement.baseline.drift_threshold * 100:.0f}%, "
-                    f"re-measuring ({dur:.0f}s)",
-                )
-
-            remeasured = self._measure_baseline(config, cache_key)
-            if remeasured is not None:
-                remeasured.method = "validated"
-                self._baselines[cache_key] = remeasured
-                save_baseline_cache(self._get_baseline_cache_path(cache_key), remeasured)
-        else:
-            cached.method = "validated"
-            logger.debug(
-                "Baseline validation passed: drift=%.1f%% (threshold=%.1f%%)",
-                drift * 100,
-                config.measurement.baseline.drift_threshold * 100,
-            )
-
-        if self._progress is not None:
-            self._progress.on_step_done(STEP_BASELINE, time.perf_counter() - t0)
-
-    def _get_baseline_cache_path(self, cache_key: str) -> Path:
-        """Return the disk path for the baseline cache file keyed by runner target.
-
-        File lives at ``{study_dir}/_study-artefacts/baseline_cache_{cache_key}.json``.
-        Creates the artefacts directory if needed.
-        """
-        artefacts_dir = self.study_dir / "_study-artefacts"
-        artefacts_dir.mkdir(parents=True, exist_ok=True)
-        return artefacts_dir / f"baseline_cache_{cache_key}.json"
-
-    def _prepare_images(self) -> None:
-        """Check/pull Docker images for all Docker engines before experiments.
-
-        Runs once at the start of the study. Each engine's image is verified
-        (or pulled) sequentially. On failure, raises so the study aborts early.
-        Sets ``_images_prepared`` so per-experiment image_check is skipped.
-        """
-
-        if not self._runner_specs:
-            return
-
-        docker_engines = [
-            (engine_name, spec)
-            for engine_name, spec in self._runner_specs.items()
-            if spec.mode == RUNNER_DOCKER and spec.image
-        ]
-        if not docker_engines:
-            return
-
-        if self._progress:
-            self._progress.begin_image_prep([e for e, _ in docker_engines])
-
-        for engine_name, spec in docker_engines:
-            image = spec.image
-            assert image is not None  # narrowing for type checker
-            t0 = time.monotonic()
-
-            # Check if image exists locally
-            try:
-                check = subprocess.run(
-                    ["docker", "image", "inspect", image],
-                    capture_output=True,
-                    timeout=TIMEOUT_DOCKER_INSPECT,
-                )
-            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-                check = None
-
-            if check is not None and check.returncode == 0:
-                elapsed = time.monotonic() - t0
-                mismatch_error = self._finalise_image(
-                    engine_name, image, check.stdout, cached=True, elapsed=elapsed
-                )
-                if mismatch_error is not None:
-                    if self._progress:
-                        self._progress.end_image_prep()
-                    raise mismatch_error
-                continue
-
-            # Image not found locally - try to pull
-            logger.info("Image %s not found locally, pulling...", image)
-            try:
-                pull = subprocess.run(
-                    ["docker", "pull", image],
-                    capture_output=True,
-                    timeout=DOCKER_PULL_TIMEOUT,
-                )
-            except subprocess.TimeoutExpired as exc:
-                if self._progress:
-                    self._progress.image_failed(engine_name, image, "pull timed out (30min)")
-                    self._progress.end_image_prep()
-                from llenergymeasure.infra.docker_errors import DockerImagePullError
-
-                raise DockerImagePullError(
-                    message=f"Image pull timed out: {image}",
-                    fix_suggestion=f"docker compose build {engine_name}",
-                ) from exc
-
-            if pull.returncode != 0:
-                tip = f"docker compose build {engine_name}"
-                if self._progress:
-                    self._progress.image_failed(engine_name, image, f"not found \u2014 run: {tip}")
-                    self._progress.end_image_prep()
-                from llenergymeasure.infra.docker_errors import DockerImagePullError
-
-                raise DockerImagePullError(
-                    message=f"Image not found: {image}",
-                    fix_suggestion=tip,
-                )
-
-            elapsed = time.monotonic() - t0
-            try:
-                inspect = subprocess.run(
-                    ["docker", "image", "inspect", image],
-                    capture_output=True,
-                    timeout=TIMEOUT_DOCKER_INSPECT,
-                )
-                inspect_stdout = inspect.stdout if inspect.returncode == 0 else b""
-            except Exception:
-                inspect_stdout = b""
-
-            mismatch_error = self._finalise_image(
-                engine_name, image, inspect_stdout, cached=False, elapsed=elapsed
-            )
-            if mismatch_error is not None:
-                if self._progress:
-                    self._progress.end_image_prep()
-                raise mismatch_error
-
-        if self._progress:
-            self._progress.end_image_prep()
-
-        self._images_prepared = True
-
-    @staticmethod
-    def _parse_image_metadata(inspect_stdout: bytes) -> dict[str, str] | None:
-        """Extract human-readable display metadata from ``docker image inspect`` JSON.
-
-        Returns the id/size/built/layers fields the progress display renders
-        inline. Schema-handshake labels are handled separately via
-        ``parse_image_stamp`` so the raw 64-char fingerprint never leaks into
-        the display metadata.
-        """
-        try:
-            data = json.loads(inspect_stdout)
-            if not data:
-                return None
-            info = data[0]
-            meta: dict[str, str] = {}
-
-            image_id = info.get("Id", "")
-            if image_id.startswith("sha256:"):
-                image_id = image_id[7:19]
-            if image_id:
-                meta["id"] = image_id
-
-            size_bytes = info.get("Size", 0)
-            if size_bytes:
-                if size_bytes >= 1_073_741_824:
-                    meta["size"] = f"{size_bytes / 1_073_741_824:.1f} GB"
-                else:
-                    meta["size"] = f"{size_bytes / 1_048_576:.0f} MB"
-
-            created = info.get("Created", "")
-            if created:
-                try:
-                    created_dt = datetime.fromisoformat(created[:26].rstrip("Z"))
-                    created_dt = created_dt.replace(tzinfo=timezone.utc)
-                    age = datetime.now(timezone.utc) - created_dt
-                    if age.days > 0:
-                        meta["built"] = f"{age.days}d ago"
-                    elif age.seconds >= 3600:
-                        meta["built"] = f"{age.seconds // 3600}h ago"
-                    else:
-                        meta["built"] = f"{age.seconds // 60}m ago"
-                except (ValueError, TypeError):
-                    pass
-
-            layers = info.get("RootFS", {}).get("Layers", [])
-            if layers:
-                meta["layers"] = str(len(layers))
-
-            return meta if meta else None
-        except (json.JSONDecodeError, KeyError, IndexError):
-            return None
-
-    def _finalise_image(
-        self,
-        engine_name: str,
-        image: str,
-        inspect_stdout: bytes,
-        *,
-        cached: bool,
-        elapsed: float,
-    ) -> Exception | None:
-        """Report an image-ready progress event and return any mismatch error.
-
-        Parses display metadata and the schema stamp from *inspect_stdout*,
-        classifies the schema status, renders it through
-        ``progress.image_ready`` so the engine row appears before any abort,
-        and returns the ``VersionMismatchError`` for the caller to raise.
-        """
-        metadata = self._parse_image_metadata(inspect_stdout) or {}
-        stamp = parse_image_stamp(inspect_stdout)
-        schema_status, mismatch_error = self._verify_image_fingerprint(engine_name, image, stamp)
-        metadata["schema"] = schema_status
-
-        if self._progress:
-            self._progress.image_ready(
-                engine_name, image, cached=cached, elapsed=elapsed, metadata=metadata
-            )
-        return mismatch_error
-
-    def _verify_image_fingerprint(
-        self,
-        engine_name: str,
-        image: str,
-        stamp: ImageStamp,
-    ) -> tuple[str, Exception | None]:
-        """Compare the host schema fingerprint to *stamp* and classify the result.
-
-        Returns ``(schema_status, error)`` where ``schema_status`` is the
-        short display string and ``error`` is a ``VersionMismatchError`` to
-        raise (or ``None``). Callers raise after rendering so the offending
-        engine appears in the terminal before the study aborts.
-
-        Two-tier classification:
-
-        1. **Label-based fingerprint check** (preferred when present).
-           Definitive ``OK`` / ``MISMATCH`` answers are trusted directly.
-        2. **Bundled engine-version probe** (fallback). When the label is
-           absent or stamped ``"unknown"``, probe the engine library's
-           ``__version__`` inside the image and compare against the
-           ``engine_version`` envelope field on the bundled invariants +
-           schema artefacts (read via :func:`read_bundled_engine_version`,
-           which cross-checks both bundled artefacts agree). Closes the
-           verification gap for upstream-direct images (vllm, tensorrt)
-           which never had a llem schema-fingerprint label, and for legacy
-           local images where the fingerprint was stamped as ``"unknown"``.
-        """
-        if skip_check_enabled():
-            return "bypassed", None
-
-        host_fp = compute_expconf_fingerprint()
-        label_status = classify_stamp(stamp, host_fp)
-
-        if label_status is SchemaStatus.OK:
-            return "ok", None
-
-        if label_status is SchemaStatus.MISMATCH:
-            # Image has a real fingerprint label and it disagrees with the
-            # host. Hard-error - the label is authoritative when present.
-            assert stamp.expconf_fingerprint is not None
-            error = VersionMismatchError(
-                f"Docker image '{image}' was built from llenergymeasure "
-                f"{stamp.pkg_version or 'unknown'} (schema {stamp.expconf_fingerprint[:12]}) "
-                f"but the host is running {_HOST_PKG_VERSION} (schema {host_fp[:12]}). "
-                f"The container will reject ExperimentConfig fields added on the host "
-                f"after the image was built.\n\n"
-                f"To fix:\n"
-                f"  {rebuild_hint(engine_name)}       # rebuild locally\n"
-                f"  make docker-pull                  # or pull a newer tagged release\n\n"
-                f"If you're certain the skew is harmless, set {ENV_SKIP_IMAGE_CHECK}=1."
-            )
-            return "mismatch", error
-
-        # label_status is UNVERIFIED or UNREACHABLE: fall back to engine-
-        # version probe. The probe takes one docker-run (a few seconds)
-        # and is cached per (image, engine). The "expected" version comes
-        # from the bundled invariants/schema envelopes (the artefacts llem
-        # actually applies at experiment time), not from current.toml -
-        # current.toml isn't shipped in the wheel, so an SSOT-based check
-        # is silently UNREACHABLE for installed users. The bundled envelope
-        # works in both wheel and editable installs.
-        probed = probe_image_engine_version(image, engine_name)
-        try:
-            expected = read_bundled_engine_version(engine_name)
-        except BundledEngineVersionMismatchError as exc:
-            return "mismatch (bundled artefact disagreement)", exc
-        probe_status = classify_engine_version(probed, expected)
-
-        if probe_status is SchemaStatus.OK:
-            logger.debug(
-                "Image %s verified via engine-version probe: %s matches bundled envelope",
-                image,
-                probed,
-            )
-            return f"ok (engine={probed})", None
-
-        if probe_status is SchemaStatus.UNREACHABLE:
-            # Neither label nor probe yielded a definitive answer. Soft-warn
-            # and proceed - the bind-mounted framework on the host still
-            # defines the actual contract; we just can't independently
-            # verify the engine version.
-            logger.warning(
-                "Image %s has no %s label and the engine-version probe was "
-                "inconclusive (probed=%r, bundled=%r). Dispatch will proceed; "
-                "the bind-mounted framework defines the contract regardless.",
-                image,
-                LABEL_SCHEMA_FINGERPRINT,
-                probed,
-                expected,
-            )
-            return "unverified (no labels, probe inconclusive)", None
-
-        # probe_status is MISMATCH
-        error = VersionMismatchError(
-            f"Docker image '{image}' has {engine_name} library version "
-            f"{probed!r} but the bundled invariants + discovered schemas "
-            f"in this wheel were mined against {expected!r}. Applying "
-            f"version-{expected!r} validation rules to a version-{probed!r} "
-            f"substrate is not safe.\n\n"
-            f"To fix:\n"
-            f"  Pull an image matching {expected!r}, or install a wheel "
-            f"built against {probed!r}.\n\n"
-            f"If you're certain the skew is harmless, set "
-            f"{ENV_SKIP_IMAGE_CHECK}=1."
-        )
-        return f"mismatch (engine {probed} vs bundled {expected})", error
-
     def _run_gap(self, seconds: float, label: str) -> None:
         """Run a thermal gap, rendering countdown in the live display or terminal."""
         if self._progress:
@@ -1957,6 +875,7 @@ class StudyRunner:
         from llenergymeasure.study.container_lifecycle import (
             generate_container_labels,
             generate_container_name,
+            persist_failure_artefacts,
         )
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
         from llenergymeasure.utils.exceptions import DockerError
@@ -2043,7 +962,7 @@ class StudyRunner:
                 "message": str(exc),
                 "config_hash": config_hash,
             }
-            self._persist_failure_artefacts(exc, config_hash, cycle, result)
+            persist_failure_artefacts(exc, self.study_dir, config_hash, cycle, result)
         except DockerTimeoutError as exc:
             # Normalise to "TimeoutError" so the circuit breaker sees the same
             # failure class as the subprocess path (see _collect_result).
@@ -2052,7 +971,7 @@ class StudyRunner:
                 "message": str(exc),
                 "config_hash": config_hash,
             }
-            self._persist_failure_artefacts(exc, config_hash, cycle, result)
+            persist_failure_artefacts(exc, self.study_dir, config_hash, cycle, result)
         except DockerError as exc:
             # Use structured error payload from container entrypoint when available,
             # falling back to the exception type/message for stderr-based errors.
@@ -2069,7 +988,7 @@ class StudyRunner:
                     "message": str(exc),
                     "config_hash": config_hash,
                 }
-            self._persist_failure_artefacts(exc, config_hash, cycle, result)
+            persist_failure_artefacts(exc, self.study_dir, config_hash, cycle, result)
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(
@@ -2087,58 +1006,3 @@ class StudyRunner:
             shutil.rmtree(docker_ts_dir, ignore_errors=True)
 
         return result
-
-    def _persist_failure_artefacts(
-        self,
-        exc: DockerError,
-        config_hash: str,
-        cycle: int,
-        result: dict[str, Any],
-    ) -> None:
-        """Copy failure artefacts from the Docker exchange dir into ``failed-runs/``.
-
-        Copies ``container.log`` and any ``*_error.json`` from the exchange
-        directory. Adds a ``log_file`` key to *result* so the manifest records
-        where the log can be found.
-        """
-        exchange_dir_str = getattr(exc, "exchange_dir", None)
-        if not exchange_dir_str:
-            return
-
-        exchange_dir = Path(exchange_dir_str)
-        failed_runs_dir = self.study_dir / "failed-runs"
-        prefix = f"{config_hash}_cycle{cycle}"
-
-        try:
-            failed_runs_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as mkdir_exc:
-            logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
-            return
-
-        # Copy container.log (Docker stderr capture)
-        log_file = self._copy_artefact(
-            exchange_dir / "container.log",
-            failed_runs_dir / f"{prefix}_container.log",
-        )
-        if log_file:
-            result["log_file"] = f"failed-runs/{log_file}"
-
-        # Copy error JSON (structured traceback from container entrypoint).
-        # The error JSON uses the Docker config hash (output_dir=/run/llem),
-        # which differs from the study-level config_hash, so glob for it.
-        for src in exchange_dir.glob("*_error.json"):
-            self._copy_artefact(src, failed_runs_dir / f"{prefix}_error.json")
-            break  # only one expected
-
-    @staticmethod
-    def _copy_artefact(src: Path, dest: Path) -> str | None:
-        """Copy a single file, returning the dest filename on success or None."""
-        if not src.exists():
-            return None
-        try:
-            shutil.copy2(src, dest)
-            logger.debug("Artefact persisted to %s", dest)
-            return dest.name
-        except Exception as copy_exc:
-            logger.warning("Failed to persist %s to %s: %s", src.name, dest, copy_exc)
-            return None

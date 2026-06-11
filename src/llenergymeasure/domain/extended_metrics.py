@@ -1,7 +1,10 @@
-"""Extended efficiency metrics computation.
+"""Extended efficiency metrics computation (pure math, Layer 0).
 
 Computes extended metrics from raw inference data. All metrics use graceful
 degradation - null values when data is unavailable, never errors.
+
+This module is pure: it depends only on ``domain.metrics`` and numpy, so it sits
+at the bottom of the architectural layering and can be called from the harness.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ def compute_extended_metrics(
     itl_mean_ms: float | None = None,
     per_request_latencies_ms: list[float] | None = None,
     gpu_utilisation_samples: list[float] | None = None,
+    memory_bandwidth_samples: list[float] | None = None,
     memory_stats: dict[str, float] | None = None,
     batch_stats: dict[str, Any] | None = None,
     kv_cache_stats: dict[str, Any] | None = None,
@@ -47,6 +51,7 @@ def compute_extended_metrics(
         itl_mean_ms: Mean inter-token latency in ms (for TPOT).
         per_request_latencies_ms: Per-request E2E latencies in ms.
         gpu_utilisation_samples: GPU SM utilisation samples (0-100).
+        memory_bandwidth_samples: GPU memory-bandwidth utilisation samples (0-100).
         memory_stats: Dict with peak_mb, total_vram_mb, model_mb, kv_cache_mb.
         batch_stats: Dict with effective_batch_size, padding_overhead, num_batches.
         kv_cache_stats: Dict with hit_rate, blocks_used, blocks_total (vLLM).
@@ -73,7 +78,9 @@ def compute_extended_metrics(
     metrics.memory = _compute_memory_metrics(output_tokens, memory_stats)
 
     # GPU utilisation
-    metrics.gpu_utilisation = _compute_gpu_utilisation_metrics(gpu_utilisation_samples)
+    metrics.gpu_utilisation = _compute_gpu_utilisation_metrics(
+        gpu_utilisation_samples, memory_bandwidth_samples
+    )
 
     # Batch efficiency
     metrics.batch = _compute_batch_metrics(batch_stats)
@@ -121,15 +128,23 @@ def _compute_memory_metrics(
 
 def _compute_gpu_utilisation_metrics(
     samples: list[float] | None,
+    memory_bandwidth_samples: list[float] | None = None,
 ) -> GPUUtilisationMetrics:
-    """Compute GPU utilisation metrics from samples."""
+    """Compute GPU utilisation metrics from samples.
+
+    Args:
+        samples: SM utilisation samples (0-100), one per NVML poll tick.
+        memory_bandwidth_samples: Memory-bandwidth utilisation samples (0-100).
+            NVML proxy: percent of time the memory controller was active.
+    """
     gpu = GPUUtilisationMetrics()
 
-    if not samples:
-        return gpu
+    if samples:
+        gpu.sm_utilisation_mean = float(np.mean(samples))
+        gpu.sm_utilisation_samples = len(samples)
 
-    gpu.sm_utilisation_mean = float(np.mean(samples))
-    gpu.sm_utilisation_samples = len(samples)
+    if memory_bandwidth_samples:
+        gpu.memory_bandwidth_utilisation = float(np.mean(memory_bandwidth_samples))
 
     return gpu
 
@@ -191,91 +206,3 @@ def _compute_request_latency_metrics(
     req.e2e_latency_samples = len(latencies_ms)
 
     return req
-
-
-def aggregate_extended_metrics(
-    raw_extended_metrics: list[ExtendedEfficiencyMetrics],
-    all_request_latencies: list[float],
-    all_gpu_samples: list[float],
-    aggregated_output_tokens: int,
-    aggregated_energy_j: float,
-    aggregated_tokens_per_sec: float,
-    itl_mean_ms: float | None,
-    precision_factor: float = 1.0,
-) -> ExtendedEfficiencyMetrics:
-    """Aggregate extended metrics from multiple processes.
-
-    Strategy:
-    - Request latencies: concatenate samples, compute percentiles
-    - GPU utilisation: concatenate samples, compute mean
-    - Memory: max peak across processes, sum totals for distributed
-    - Batch: average across processes
-    - KV cache: average hit rates, sum blocks
-    - TPOT/TEI: recompute from aggregated values
-
-    Args:
-        raw_extended_metrics: Per-process extended metrics.
-        all_request_latencies: Concatenated per-request latencies from all processes.
-        all_gpu_samples: Concatenated GPU samples from all processes.
-        aggregated_output_tokens: Total output tokens across all processes.
-        aggregated_energy_j: Total energy across all processes.
-        aggregated_tokens_per_sec: Average throughput.
-        itl_mean_ms: Mean ITL from aggregated latency statistics.
-        precision_factor: Precision factor for TEI calculation.
-
-    Returns:
-        Aggregated ExtendedEfficiencyMetrics.
-    """
-    if not raw_extended_metrics:
-        return ExtendedEfficiencyMetrics()
-
-    # Aggregate memory stats (max peak, sum model memory for distributed)
-    memory_stats: dict[str, float] | None = None
-    memory_list = [m.memory for m in raw_extended_metrics if m.memory.peak_memory_mb > 0]
-    if memory_list:
-        memory_stats = {
-            "peak_mb": max(m.peak_memory_mb for m in memory_list),
-            "total_vram_mb": sum(m.total_vram_mb for m in memory_list),
-            "model_mb": sum(m.model_memory_mb for m in memory_list),
-        }
-        # KV cache - take from first non-null
-        for m in memory_list:
-            if m.kv_cache_mb is not None:
-                memory_stats["kv_cache_mb"] = m.kv_cache_mb
-                break
-
-    # Aggregate batch stats (average effective batch size, padding overhead)
-    batch_stats: dict[str, Any] | None = None
-    batch_list = [m.batch for m in raw_extended_metrics if m.batch.effective_batch_size is not None]
-    if batch_list:
-        eff_sizes = [b.effective_batch_size for b in batch_list if b.effective_batch_size]
-        padding = [b.padding_overhead for b in batch_list if b.padding_overhead is not None]
-        batch_stats = {
-            "effective_batch_size": float(np.mean(eff_sizes)) if eff_sizes else None,
-            "padding_overhead": float(np.mean(padding)) if padding else None,
-            "num_batches": sum(b.num_batches or 0 for b in batch_list),
-        }
-
-    # Aggregate KV cache stats (average hit rates)
-    kv_stats: dict[str, Any] | None = None
-    kv_list = [m.kv_cache for m in raw_extended_metrics if m.kv_cache.kv_cache_hit_rate is not None]
-    if kv_list:
-        hit_rates = [k.kv_cache_hit_rate for k in kv_list if k.kv_cache_hit_rate is not None]
-        kv_stats = {
-            "hit_rate": float(np.mean(hit_rates)) if hit_rates else None,
-            "blocks_used": sum(k.kv_cache_blocks_used or 0 for k in kv_list),
-            "blocks_total": sum(k.kv_cache_blocks_total or 0 for k in kv_list),
-        }
-
-    return compute_extended_metrics(
-        output_tokens=aggregated_output_tokens,
-        total_energy_j=aggregated_energy_j,
-        tokens_per_second=aggregated_tokens_per_sec,
-        precision_factor=precision_factor,
-        itl_mean_ms=itl_mean_ms,
-        per_request_latencies_ms=all_request_latencies or None,
-        gpu_utilisation_samples=all_gpu_samples or None,
-        memory_stats=memory_stats,
-        batch_stats=batch_stats,
-        kv_cache_stats=kv_stats,
-    )

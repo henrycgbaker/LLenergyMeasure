@@ -229,38 +229,6 @@ class DatasetConfig(BaseModel):
 
 
 # =============================================================================
-# LoRA Configuration
-# =============================================================================
-
-
-class LoRAConfig(BaseModel):
-    """LoRA adapter configuration.
-
-    Exactly one of adapter_id or adapter_path must be set.
-    """
-
-    model_config = {"extra": "forbid"}
-
-    adapter_id: str | None = Field(default=None, description="HuggingFace Hub adapter ID")
-    adapter_path: str | None = Field(default=None, description="Local path to adapter weights")
-    merge_weights: bool = Field(
-        default=False, description="Merge adapter weights into base model at load time"
-    )
-
-    @model_validator(mode="after")
-    def validate_exactly_one_source(self) -> LoRAConfig:
-        """Exactly one of adapter_id or adapter_path must be set."""
-        has_id = self.adapter_id is not None
-        has_path = self.adapter_path is not None
-        if has_id == has_path:  # both set or neither set
-            raise ValueError(
-                "LoRAConfig requires exactly one of adapter_id or adapter_path. "
-                f"Got: adapter_id={self.adapter_id!r}, adapter_path={self.adapter_path!r}"
-            )
-        return self
-
-
-# =============================================================================
 # Task Configuration (what to measure)
 # =============================================================================
 
@@ -336,6 +304,17 @@ class MeasurementConfig(BaseModel):
             "auto=best available (Zeus>NVML>CodeCarbon). null disables energy measurement."
         ),
         json_schema_extra={"display_label": "Sampler"},
+    )
+    latency_profiling: bool = Field(
+        default=False,
+        description=(
+            "Opt-in per-token latency profiling. Default off. When enabled, the "
+            "engine captures per-token timing (transformers via a streamer forced "
+            "to batch_size=1; vLLM via decode-average inter-token latency); this "
+            "overhead may perturb energy and latency, so profiled runs are tagged "
+            "in measurement_warnings and energy figures are emitted as-is."
+        ),
+        json_schema_extra={"display_label": "Latency Profiling"},
     )
 
 
@@ -414,9 +393,6 @@ class ExperimentConfig(BaseModel):
             "sub-shapes; only the sub-section matching `engine` is used."
         ),
     )
-
-    # LoRA adapter (optional)
-    lora: LoRAConfig | None = Field(default=None, description="LoRA adapter configuration")
 
     # Escape hatch - explicitly declared for extra="forbid" compatibility
     passthrough_kwargs: dict[str, Any] | None = Field(
@@ -772,7 +748,7 @@ class StudyConfig(BaseModel):
     )
     output: OutputConfig = Field(
         default_factory=OutputConfig,
-        description="Study-level output configuration (results_dir, format, save_timeseries)",
+        description="Study-level output configuration (results_dir, save_timeseries)",
     )
     study_execution: ExecutionConfig = Field(
         default_factory=ExecutionConfig,

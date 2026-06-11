@@ -260,7 +260,7 @@ class TestFullLifecycle:
         assert cb.state == "open"
         # open -> probe -> half_open
         cb.start_probe()
-        assert cb.state == "half_open"
+        assert cb.state == "half_open"  # type: ignore[comparison-overlap]  # mypy can't model state mutation
         # half_open -> success -> closed
         cb.record_success()
         assert cb.state == "closed"
@@ -285,4 +285,4 @@ class TestFullLifecycle:
             # Recover
             cb.start_probe()
             cb.record_success()
-            assert cb.state == "closed", f"Expected closed at cycle {cycle}"
+            assert cb.state == "closed", f"Expected closed at cycle {cycle}"  # type: ignore[comparison-overlap]  # mypy can't model state mutation

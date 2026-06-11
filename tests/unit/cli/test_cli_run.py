@@ -48,7 +48,6 @@ def _make_mock_result() -> MagicMock:
     result.total_flops = 0.0
     result.latency_stats = None
     result.warmup_excluded_samples = None
-    result.process_results = []
     return result
 
 
@@ -80,7 +79,7 @@ def _make_mock_config() -> MagicMock:
 def _make_capture_load() -> tuple:
     """Return (capture_fn, captured_overrides) for study routing tests.
 
-    The capture function mimics load_study_config: records cli_overrides
+    The capture function mimics the api load_study facade: records cli_overrides
     and returns a MagicMock with properly configured study attributes.
     """
     captured: list = []
@@ -425,23 +424,6 @@ def test_print_study_summary_basic():
     assert "abcd1234" in output
 
 
-def test_print_study_progress():
-    """print_study_progress produces a formatted line to stderr."""
-    from io import StringIO
-    from unittest.mock import patch
-
-    from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.study._progress import print_study_progress
-
-    config = ExperimentConfig(task={"model": "test/model"}, engine="transformers")
-    with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-        print_study_progress(1, 4, config, status="completed", elapsed=30.5, energy=100.0)
-    output = mock_stderr.getvalue()
-    assert "[1/4]" in output
-    assert "OK" in output
-    assert "test/model" in output
-
-
 # ---------------------------------------------------------------------------
 # Study routing tests - verify CLI actually invokes run_study for study YAMLs
 # ---------------------------------------------------------------------------
@@ -457,12 +439,12 @@ def test_run_study_routing_sweep_yaml(tmp_path):
     )
     mock_study_result = make_study_result()
 
-    # run_study and load_study_config are lazily imported inside _run_study_impl;
-    # patch at the source modules, not at llenergymeasure.cli.run
+    # run_study and load_study (api facade) are lazily imported inside
+    # _run_study_impl; patch at the source modules, not at llenergymeasure.cli.run
     with (
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
-        patch("llenergymeasure.config.loader.load_study_config") as mock_load,
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.api.load_study") as mock_load,
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         mock_config = MagicMock()
@@ -490,8 +472,8 @@ def test_run_study_routing_experiments_yaml(tmp_path):
 
     with (
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
-        patch("llenergymeasure.config.loader.load_study_config") as mock_load,
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.api.load_study") as mock_load,
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         mock_config = MagicMock()
@@ -538,12 +520,12 @@ def test_run_study_cli_defaults_applied(tmp_path):
     mock_study_result = make_study_result()
     _capture_load, captured_overrides = _make_capture_load()
 
-    # load_study_config, run_study, and build_preflight_panel are all lazily
-    # imported inside _run_study_impl - patch at source modules
+    # load_study (api facade), run_study, and build_preflight_panel are all
+    # lazily imported inside _run_study_impl - patch at source modules
     with (
-        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml)])
@@ -609,9 +591,9 @@ def test_fail_fast_sets_max_consecutive_failures(tmp_path):
     _capture_load, captured_overrides = _make_capture_load()
 
     with (
-        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--fail-fast"])
@@ -630,9 +612,9 @@ def test_no_circuit_breaker_sets_max_failures_zero(tmp_path):
     _capture_load, captured_overrides = _make_capture_load()
 
     with (
-        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--no-circuit-breaker"])
@@ -650,9 +632,9 @@ def test_timeout_flag_sets_wall_clock_timeout(tmp_path):
     _capture_load, captured_overrides = _make_capture_load()
 
     with (
-        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "24"])
@@ -670,9 +652,9 @@ def test_timeout_flag_fractional(tmp_path):
     _capture_load, captured_overrides = _make_capture_load()
 
     with (
-        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "1.5"])
@@ -695,9 +677,9 @@ def test_resume_flag_passes_resume_to_api(tmp_path):
     mock_study_config.study_execution.n_cycles = 3
 
     with (
-        patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
+        patch("llenergymeasure.api.load_study", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
         patch(
             "llenergymeasure.api.find_resumable_study",
@@ -728,9 +710,9 @@ def test_resume_dir_flag_passes_path_to_api(tmp_path):
     (explicit_dir / "manifest.json").write_text("{}")
 
     with (
-        patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
+        patch("llenergymeasure.api.load_study", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
-        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
         patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--resume-dir", str(explicit_dir)])

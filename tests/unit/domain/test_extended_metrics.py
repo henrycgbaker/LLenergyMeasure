@@ -1,24 +1,18 @@
-"""Unit tests for results/extended_metrics.py - compute and aggregate functions."""
+"""Unit tests for domain/extended_metrics.py - compute_extended_metrics and helpers."""
 
 from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.domain.metrics import (
-    BatchEfficiencyMetrics,
-    ExtendedEfficiencyMetrics,
-    KVCacheEfficiencyMetrics,
-    MemoryEfficiencyMetrics,
-)
-from llenergymeasure.results.extended_metrics import (
+from llenergymeasure.domain.extended_metrics import (
     _compute_batch_metrics,
     _compute_gpu_utilisation_metrics,
     _compute_kv_cache_metrics,
     _compute_memory_metrics,
     _compute_request_latency_metrics,
-    aggregate_extended_metrics,
     compute_extended_metrics,
 )
+from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
 
 # ---------------------------------------------------------------------------
 # TestComputeExtendedMetrics
@@ -165,6 +159,20 @@ class TestComputeGPUUtilisationMetrics:
         assert gpu.sm_utilisation_mean == pytest.approx(42.0)
         assert gpu.sm_utilisation_samples == 1
 
+    def test_memory_bandwidth_mean(self):
+        gpu = _compute_gpu_utilisation_metrics([50.0, 60.0], [30.0, 50.0])
+        assert gpu.sm_utilisation_mean == pytest.approx(55.0)
+        assert gpu.memory_bandwidth_utilisation == pytest.approx(40.0)
+
+    def test_memory_bandwidth_none_when_absent(self):
+        gpu = _compute_gpu_utilisation_metrics([50.0, 60.0], None)
+        assert gpu.memory_bandwidth_utilisation is None
+
+    def test_memory_bandwidth_without_sm(self):
+        gpu = _compute_gpu_utilisation_metrics(None, [10.0, 20.0])
+        assert gpu.sm_utilisation_mean is None
+        assert gpu.memory_bandwidth_utilisation == pytest.approx(15.0)
+
 
 # ---------------------------------------------------------------------------
 # TestComputeBatchMetrics
@@ -252,202 +260,55 @@ class TestComputeRequestLatencyMetrics:
 
     def test_ordering_p95_lte_p99(self):
         req = _compute_request_latency_metrics([10.0, 20.0, 30.0, 100.0, 200.0, 500.0])
+        assert req.e2e_latency_p95_ms is not None
+        assert req.e2e_latency_p99_ms is not None
         assert req.e2e_latency_p95_ms <= req.e2e_latency_p99_ms
 
 
 # ---------------------------------------------------------------------------
-# TestAggregateExtendedMetrics
+# TestComputeExtendedMetricsIntegrated - full wiring through grouped sub-metrics
 # ---------------------------------------------------------------------------
 
 
-class TestAggregateExtendedMetrics:
-    """aggregate_extended_metrics() from multiple process metrics."""
+class TestComputeExtendedMetricsIntegrated:
+    """compute_extended_metrics() wiring memory/batch/gpu/kv-cache together."""
 
-    def test_empty_input(self):
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=0,
-            aggregated_energy_j=0.0,
-            aggregated_tokens_per_sec=0.0,
-            itl_mean_ms=None,
+    def test_full_population(self):
+        result = compute_extended_metrics(
+            output_tokens=1000,
+            total_energy_j=20.0,
+            tokens_per_second=200.0,
+            per_request_latencies_ms=[100.0, 120.0, 110.0],
+            gpu_utilisation_samples=[80.0, 90.0],
+            memory_bandwidth_samples=[40.0, 60.0],
+            memory_stats={
+                "peak_mb": 4096.0,
+                "model_mb": 8192.0,
+                "total_vram_mb": 40960.0,
+                "kv_cache_mb": 1024.0,
+            },
+            batch_stats={
+                "num_batches": 4,
+                "effective_batch_size": 8.0,
+                "configured_batch_size": 16,
+                "padding_overhead": 0.2,
+            },
+            kv_cache_stats={"hit_rate": 0.5, "blocks_used": 100, "blocks_total": 200},
         )
-        assert isinstance(result, ExtendedEfficiencyMetrics)
-        assert result.tpot_ms is None
-
-    def test_memory_max_peak(self):
-        m1 = ExtendedEfficiencyMetrics(
-            memory=MemoryEfficiencyMetrics(
-                peak_memory_mb=1024.0, total_vram_mb=40960.0, model_memory_mb=8000.0
-            )
-        )
-        m2 = ExtendedEfficiencyMetrics(
-            memory=MemoryEfficiencyMetrics(
-                peak_memory_mb=2048.0, total_vram_mb=40960.0, model_memory_mb=8000.0
-            )
-        )
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[m1, m2],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        assert result.memory.peak_memory_mb == pytest.approx(2048.0)
-
-    def test_memory_sum_vram_and_model(self):
-        m1 = ExtendedEfficiencyMetrics(
-            memory=MemoryEfficiencyMetrics(
-                peak_memory_mb=1024.0, total_vram_mb=20000.0, model_memory_mb=4000.0
-            )
-        )
-        m2 = ExtendedEfficiencyMetrics(
-            memory=MemoryEfficiencyMetrics(
-                peak_memory_mb=1024.0, total_vram_mb=20000.0, model_memory_mb=4000.0
-            )
-        )
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[m1, m2],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        assert result.memory.total_vram_mb == pytest.approx(40000.0)
-        assert result.memory.model_memory_mb == pytest.approx(8000.0)
-
-    def test_kv_cache_from_first_non_null(self):
-        m1 = ExtendedEfficiencyMetrics(memory=MemoryEfficiencyMetrics(peak_memory_mb=1024.0))
-        m2 = ExtendedEfficiencyMetrics(
-            memory=MemoryEfficiencyMetrics(peak_memory_mb=1024.0, kv_cache_mb=256.0)
-        )
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[m1, m2],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        # kv_cache_mb should come from m2 (first non-null)
-        assert result.memory.kv_cache_mb == pytest.approx(256.0)
-
-    def test_batch_mean_effective_size(self):
-        m1 = ExtendedEfficiencyMetrics(
-            batch=BatchEfficiencyMetrics(
-                effective_batch_size=8.0, padding_overhead=0.1, num_batches=10
-            )
-        )
-        m2 = ExtendedEfficiencyMetrics(
-            batch=BatchEfficiencyMetrics(
-                effective_batch_size=12.0, padding_overhead=0.2, num_batches=10
-            )
-        )
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[m1, m2],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        assert result.batch.effective_batch_size == pytest.approx(10.0)
-        assert result.batch.padding_overhead == pytest.approx(0.15)
-        assert result.batch.num_batches == 20
-
-    def test_kv_cache_mean_hit_rate_sum_blocks(self):
-        m1 = ExtendedEfficiencyMetrics(
-            kv_cache=KVCacheEfficiencyMetrics(
-                kv_cache_hit_rate=0.8, kv_cache_blocks_used=100, kv_cache_blocks_total=200
-            )
-        )
-        m2 = ExtendedEfficiencyMetrics(
-            kv_cache=KVCacheEfficiencyMetrics(
-                kv_cache_hit_rate=0.6, kv_cache_blocks_used=50, kv_cache_blocks_total=200
-            )
-        )
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[m1, m2],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        assert result.kv_cache.kv_cache_hit_rate == pytest.approx(0.7)
-        assert result.kv_cache.kv_cache_blocks_used == 150
-        assert result.kv_cache.kv_cache_blocks_total == 400
-
-    def test_recomputes_tei_from_aggregated(self):
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[ExtendedEfficiencyMetrics()],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=200,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=100.0,
-            itl_mean_ms=None,
-            precision_factor=1.0,
-        )
-        # TEI = 100 * (200/10) * 1.0 = 2000.0
-        assert result.token_efficiency_index == pytest.approx(2000.0)
-
-    def test_concatenated_latencies_single_percentile(self):
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[ExtendedEfficiencyMetrics()],
-            all_request_latencies=[10.0, 20.0, 30.0, 40.0, 50.0],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        assert result.request_latency.e2e_latency_samples == 5
-        assert result.request_latency.e2e_latency_mean_ms == pytest.approx(30.0)
-
-    def test_concatenated_gpu_samples_single_mean(self):
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[ExtendedEfficiencyMetrics()],
-            all_request_latencies=[],
-            all_gpu_samples=[50.0, 60.0, 70.0, 80.0],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        assert result.gpu_utilisation.sm_utilisation_mean == pytest.approx(65.0)
-        assert result.gpu_utilisation.sm_utilisation_samples == 4
-
-    def test_tpot_from_itl_mean(self):
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[ExtendedEfficiencyMetrics()],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=8.5,
-        )
-        assert result.tpot_ms == pytest.approx(8.5)
-
-    def test_no_peak_memory_no_aggregation(self):
-        """Processes with peak_memory_mb=0 should not contribute to memory aggregation."""
-        m1 = ExtendedEfficiencyMetrics(memory=MemoryEfficiencyMetrics(peak_memory_mb=0.0))
-        result = aggregate_extended_metrics(
-            raw_extended_metrics=[m1],
-            all_request_latencies=[],
-            all_gpu_samples=[],
-            aggregated_output_tokens=100,
-            aggregated_energy_j=10.0,
-            aggregated_tokens_per_sec=50.0,
-            itl_mean_ms=None,
-        )
-        assert result.memory.peak_memory_mb == 0.0
+        # Memory ratios
+        assert result.memory.model_memory_utilisation == pytest.approx(8192.0 / 40960.0)
+        assert result.memory.kv_cache_memory_ratio == pytest.approx(1024.0 / 4096.0)
+        assert result.memory.tokens_per_gb_vram == pytest.approx(1000 / (4096.0 / 1024))
+        # GPU utilisation incl mem-bw
+        assert result.gpu_utilisation.sm_utilisation_mean == pytest.approx(85.0)
+        assert result.gpu_utilisation.memory_bandwidth_utilisation == pytest.approx(50.0)
+        # Batch
+        assert result.batch.num_batches == 4
+        assert result.batch.batch_utilisation == pytest.approx(0.5)
+        assert result.batch.padding_overhead == pytest.approx(0.2)
+        # KV cache
+        assert result.kv_cache.kv_cache_hit_rate == pytest.approx(0.5)
+        assert result.kv_cache.kv_cache_blocks_used == 100
+        # Request latency
+        assert result.request_latency.e2e_latency_samples == 3
+        assert result.request_latency.e2e_latency_mean_ms == pytest.approx(110.0)

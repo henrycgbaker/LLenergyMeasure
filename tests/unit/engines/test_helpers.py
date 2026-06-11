@@ -1,8 +1,8 @@
-"""Unit tests for engines/_helpers.py - shared engine utilities.
+"""Unit tests for harness.warmup convergence detection.
 
-All tests run GPU-free. warmup_until_converged is now in harness.warmup;
-this file tests the remaining helpers: compute_cv, warmup_single_token
-(interface), and cleanup/memory helpers (import-only, no GPU needed).
+All tests run GPU-free. Exercises warmup_until_converged (which delegates
+CV computation to domain.metrics.compute_cv) across disabled / fixed / CV
+modes and the inference-failure path.
 """
 
 from __future__ import annotations

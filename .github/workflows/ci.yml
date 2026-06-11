@@ -157,7 +157,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --dev
       - name: mypy
-        run: uv run mypy src/
+        run: uv run mypy src/ tests/
 
   test:
     needs: filter
@@ -180,6 +180,8 @@ jobs:
         # Engines run only inside their Docker images; tests that import an
         # engine library (transformers/vllm/tensorrt-llm) gate themselves
         # via pytest.importorskip and are skipped on the host runner.
+        # Coverage threshold is enforced via fail_under in [tool.coverage.report]
+        # (pytest-cov reads it automatically); no CLI flag needed.
         run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
       - name: Upload coverage to Codecov
         if: always()

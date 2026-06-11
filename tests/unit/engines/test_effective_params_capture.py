@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from llenergymeasure.engines._helpers import extract_observed_params
+from llenergymeasure.engines._observed import extract_observed_params
 
 # ---------------------------------------------------------------------------
 # Dispatch behaviour - one per native-type shape
@@ -87,7 +87,7 @@ class _LeakyDataclass:
 
 class TestPrivateFieldStripping:
     def test_pydantic_private_fields_stripped_by_default(self):
-        obj = _LeakyPydantic(temperature=0.7, _commit_hash="abc", _from_model_config=True)
+        obj = _LeakyPydantic(temperature=0.7, _commit_hash="abc", _from_model_config=True)  # type: ignore[call-arg]  # extra="allow"
         out = extract_observed_params(obj)
         assert out == {"temperature": 0.7}
 
@@ -97,7 +97,7 @@ class TestPrivateFieldStripping:
         assert out == {"temperature": 1.0}
 
     def test_allowlist_preserves_private_field(self):
-        obj = _LeakyPydantic(temperature=0.7, _commit_hash="abc")
+        obj = _LeakyPydantic(temperature=0.7, _commit_hash="abc")  # type: ignore[call-arg]  # extra="allow"
         out = extract_observed_params(obj, private_field_allowlist={"_commit_hash"})
         assert out == {"temperature": 0.7, "_commit_hash": "abc"}
 

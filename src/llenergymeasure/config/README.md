@@ -369,7 +369,6 @@ lem config new --preset benchmark
 |--------------|----------|------|---------|-------------|
 | `config_name` | - | str | Required | Unique identifier |
 | `model_name` | `--model / -m` | str | Required | HuggingFace model path |
-| `adapter` | - | str\|None | None | LoRA adapter (HF Hub ID or local path) |
 | `engine` | `--engine` | str | pytorch | Inference engine (pytorch/vllm/tensorrt) |
 | `max_input_tokens` | - | int | 512 | Max input tokens |
 | `max_output_tokens` | `--max-tokens` | int | 128 | Max generated tokens |
@@ -457,7 +456,6 @@ transformers:
 | `VLLMConfig` | vLLM engine kwargs and sampling params |
 | `VLLMAttentionConfig` | Attention backend selection |
 | `VLLMSpeculativeConfig` | Speculative decoding setup |
-| `VLLMLoRAConfig` | LoRA adapter configuration |
 | `TransformersConfig` | PyTorch/Transformers options |
 | `PyTorchAssistedGenerationConfig` | Assisted generation (speculative) |
 | `TensorRTConfig` | TensorRT-LLM engine and build options |
@@ -716,6 +714,6 @@ Results include `effective_config` and `cli_overrides` fields for full reproduci
 ## Related
 
 - See `../cli/` for CLI commands (`llem run`, `llem config`)
-- See `../harness/__init__.py` for config usage in inference
+- See `../harness/measurement.py` for config usage in inference
 - See `../utils/constants.py` for shared constants
 - See `../domain/experiment.py` for result models with config tracking

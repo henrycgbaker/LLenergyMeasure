@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -39,8 +40,8 @@ def _write_result(exchange_dir: Path, power_w: float = 42.59) -> None:
 def _make_fake_popen(
     lines: list[str],
     returncode: int = 0,
-    on_open: callable | None = None,
-) -> MagicMock:
+    on_open: Callable[[], object] | None = None,
+) -> Callable[..., MagicMock]:
     """Build a MagicMock that quacks like a Popen object for our iterator.
 
     - ``process.stdout`` iterates ``lines`` (must include trailing newlines).

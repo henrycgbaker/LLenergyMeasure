@@ -11,9 +11,7 @@ from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
-    RawProcessResult,
     StudyResult,
-    Timestamps,
 )
 from llenergymeasure.domain.metrics import (
     ComputeMetrics,
@@ -37,7 +35,6 @@ TEST_POWER_W = 200.0
 
 # Derived from model defaults - single source of truth for schema assertions
 EXPERIMENT_SCHEMA_VERSION = ExperimentResult.model_fields["schema_version"].default
-RAW_PROCESS_SCHEMA_VERSION = RawProcessResult.model_fields["schema_version"].default
 
 _EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
@@ -52,7 +49,7 @@ def make_config(**overrides) -> ExperimentConfig:
     (dtype now lives per-engine on TransformersConfig/VLLMConfig/TensorRTConfig).
     """
     _TASK_FIELDS = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
-    _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler"}
+    _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler", "latency_profiling"}
 
     dtype = overrides.pop("dtype", None)
 
@@ -169,29 +166,6 @@ def make_compute_metrics(**overrides) -> ComputeMetrics:
     }
     defaults.update(overrides)
     return ComputeMetrics(**defaults)
-
-
-def make_raw_process_result(**overrides) -> RawProcessResult:
-    """Return a valid RawProcessResult with sensible defaults.
-
-    Builds on make_energy_metrics, make_inference_metrics, and
-    make_compute_metrics factories for nested fields.
-    """
-    defaults: dict = {
-        "experiment_id": TEST_EXPERIMENT_ID,
-        "process_index": 0,
-        "gpu_id": 0,
-        "model_name": TEST_MODEL,
-        "timestamps": Timestamps.from_times(
-            datetime(2026, 2, 26, 14, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 2, 26, 14, 0, 10, tzinfo=timezone.utc),
-        ),
-        "inference_metrics": make_inference_metrics(),
-        "energy_metrics": make_energy_metrics(),
-        "compute_metrics": make_compute_metrics(),
-    }
-    defaults.update(overrides)
-    return RawProcessResult(**defaults)
 
 
 def make_user_config(**overrides):

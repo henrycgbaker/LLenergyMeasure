@@ -109,10 +109,9 @@ Security utilities:
 ### `study/` (Layer 6)
 - `runner.py` - orchestrates multi-experiment sweeps
 - `preflight.py` - study-level pre-flight validation (multi-engine Docker requirements)
-- `_progress.py` - progress display (belongs here, not in cli/)
 
 ### `harness/` and `results/` (Layer 5)
-- `harness/__init__.py` - `MeasurementHarness`, `select_energy_sampler()`
+- `harness/measurement.py` - `MeasurementHarness` measurement lifecycle (re-exported via `harness/__init__.py`)
 - `harness/preflight.py` - experiment-level pre-flight checks (CUDA, engine, model)
 - `harness/environment.py` - environment snapshot collection
 - `harness/warmup.py` - thermal floor wait and warmup utilities
@@ -123,7 +122,9 @@ Security utilities:
 ### `engines/` (Layer 4)
 - `protocol.py` - `EnginePlugin` protocol
 - `transformers.py`, `vllm.py`, `tensorrt.py` - engine implementations
-- `_helpers.py` - shared warmup utilities
+- `_observed.py` - observed-runtime-data extraction (effective params, per-request metrics)
+- `_cuda.py` - CUDA memory and warmup helpers
+- `_errors.py` - OOM and import error helpers
 
 ### `energy/` (Layer 4)
 - `base.py` - `EnergySampler` base class
@@ -138,7 +139,7 @@ Security utilities:
 ### `device/` (Layer 2)
 - `gpu_info.py` - `GPUInfo`, `nvml_context()`, `_resolve_gpu_indices()`
 - `power_thermal.py` - `PowerThermalSampler`, `ThermalThrottleInfo`
-- `environment.py` - hardware metadata collection via NVML
+- `environment.py` - hardware metadata collection via NVML and CUDA version detection
 - Placed above `config/` and `domain/` because `power_thermal.py` returns `ThermalThrottleInfo`
   from `domain/metrics.py` (valid downward import from Layer 2 to Layer 1)
 

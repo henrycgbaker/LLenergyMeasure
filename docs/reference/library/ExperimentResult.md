@@ -13,11 +13,7 @@ from llenergymeasure import ExperimentResult
 
 `ExperimentResult` is the data structure returned by [`run_experiment`](./run_experiment) and
 contained in [`StudyResult.experiments`](./run_study#returns). It is a frozen Pydantic model
-that aggregates measurements across all GPU processes into a single user-facing record.
-
-For single-GPU experiments, the aggregation is trivial. For multi-GPU experiments, energy
-values are summed across processes and throughput values are averaged; the raw per-process
-data is preserved in `process_results` for downstream analysis.
+produced once per measurement run, holding all metrics from that run directly.
 
 `ExperimentResult` mirrors the on-disk `result.json` schema closely - the JSON on disk is
 produced by `model.model_dump(mode="json")` and shares the same field names and units. See
@@ -34,7 +30,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | `str` | Result schema version (current: `"3.0"`). |
+| `schema_version` | `str` | Result schema version (current: `"4.0"`). |
 | `experiment_id` | `str` | Unique identifier for this experiment run. |
 | `measurement_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
 | `llenergymeasure_version` | `str \| None` | Package version that produced this result. |
@@ -52,17 +48,17 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | Field | Type | Description |
 |-------|------|-------------|
 | `measurement_methodology` | `"total" \| "steady_state" \| "windowed"` | What was measured: the full run, the steady-state window after warmup, or an explicit time window. |
-| `steady_state_window` | `tuple[float, float] \| None` | `(start_sec, end_sec)` relative to experiment start. `None` when `methodology="total"`. |
+| `steady_state_window` | `tuple[float, float] \| None` | `(start_sec, end_sec)` relative to inference start. The single-process path sets `(0.0, inference_time_sec)`. `None` only when no inference window was recorded. |
 
 ### Core metrics
 
 | Field | Type | Units | Description |
 |-------|------|-------|-------------|
-| `total_tokens` | `int` | tokens | Total tokens generated across all processes. |
-| `total_energy_j` | `float` | joules | Total GPU energy (summed across processes). |
+| `total_tokens` | `int` | tokens | Total tokens generated during the run. |
+| `total_energy_j` | `float` | joules | Total GPU energy for the run. |
 | `energy_adjusted_j` | `float \| None` | joules | Baseline-subtracted energy attributable to inference. `None` when no baseline was taken. |
 | `total_inference_time_sec` | `float` | seconds | Wall time for the inference phase. |
-| `avg_tokens_per_second` | `float` | tok/s | Throughput (averaged across processes). |
+| `avg_tokens_per_second` | `float` | tok/s | Throughput. |
 | `avg_energy_per_token_j` | `float` | J/tok | Mean energy per token. |
 | `mj_per_tok_total` | `float \| None` | mJ/tok | Millijoules per token from total (unadjusted) energy. |
 | `mj_per_tok_adjusted` | `float \| None` | mJ/tok | Millijoules per token from baseline-adjusted energy. `None` when `energy_adjusted_j` is `None`. |
@@ -89,15 +85,14 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | Field | Type | Description |
 |-------|------|-------------|
 | `multi_gpu` | `MultiGPUMetrics \| None` | Multi-GPU aggregate metrics. `None` for single-GPU experiments. |
-| `process_results` | `list[RawProcessResult]` | Raw per-process measurements (single item for single-GPU). |
-| `aggregation` | `AggregationMetadata \| None` | Aggregation method and quality flags (populated for multi-GPU runs). |
+| `aggregation` | `AggregationMetadata \| None` | Aggregation method and quality flags. |
 
 ### Quality and reproducibility
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `measurement_warnings` | `list[str]` | Quality warnings (e.g. short duration, thermal drift detected). |
-| `warmup_excluded_samples` | `int \| None` | Prompts excluded during warmup. `None` when `methodology="total"`. |
+| `warmup_excluded_samples` | `int \| None` | Warmup iterations run before the measurement window (from `warmup_result.iterations_completed`). `None` when no warmup result is available. |
 | `reproducibility_notes` | `str` | Fixed disclaimer about NVML measurement accuracy (+/- 5%). |
 | `thermal_throttle` | `ThermalThrottleInfo \| None` | GPU thermal and power throttle events during the run. |
 | `warmup_result` | `WarmupResult \| None` | Warmup convergence result (populated when CV convergence detection is enabled). |
@@ -193,7 +188,7 @@ If `measurement.baseline.enabled=False`, neither field is populated. Always guar
 
 **`energy_per_device_j` is only populated by the Zeus sampler.** With `energy_sampler="nvml"`
 or `energy_sampler="codecarbon"` (or `"auto"` resolving to either), `energy_per_device_j`
-is `None`. Use `process_results[i].energy_metrics` for per-process energy when not using Zeus.
+is `None`; only the run-level `total_energy_j` is available.
 
 **`extended_metrics` fields can be `None` within an otherwise-present object.** The
 `ExtendedEfficiencyMetrics` object is always attached but individual sub-fields (e.g. TTFT,
