@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from llenergymeasure.config.harness import HarnessConfig
 from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
@@ -365,6 +366,14 @@ class ExperimentConfig(BaseModel):
     tensorrt: TensorRTConfig | None = Field(
         default=None,
         description="TensorRT-LLM configuration (only used when engine=tensorrt)",
+    )
+
+    # llem-orchestration knobs that have no engine-native API (per-engine residual:
+    # transformers prompt-batching, torch.compile, TF32, autocast). Engine config
+    # proper lives in the engine sections above.
+    harness: HarnessConfig | None = Field(
+        default=None,
+        description="Per-engine llem-orchestration knobs (batching, torch.compile, TF32, autocast).",
     )
 
     # Escape hatch - explicitly declared for extra="forbid" compatibility
