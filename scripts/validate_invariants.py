@@ -693,7 +693,7 @@ _CONSTRUCTION_DRIFT_EXC_NAMES: frozenset[str] = frozenset(
 
 
 def _carried_verdict(
-    invariant: dict[str, Any], pos: CaptureBuffers, neg: CaptureBuffers
+    invariant: dict[str, Any], case: CaseResult, pos: CaptureBuffers, neg: CaptureBuffers
 ) -> tuple[str, str]:
     """Classify one carried entry against the current container.
 
@@ -705,9 +705,13 @@ def _carried_verdict(
       *negative* probe (which should build cleanly) raised a construction-drift
       error. Constructor drift, not necessarily a rule change.
     - ``failed`` - the probe constructs but the rule no longer holds: the
-      positive case stopped firing, the negative case now fires, or a
+      positive case stopped confirming, the negative case now fires, or a
       gate-soundness check (locus / coercion / template / raise) flags.
     - ``confirmed`` - the rule still holds exactly as carried.
+
+    Reuses the ``case``'s ``positive_confirmed`` / ``negative_confirmed`` (already
+    computed by :func:`_validate_invariant_with_captures`) so the confirm
+    definition lives in one place.
     """
     # Resolution failure on the positive probe -> infra_error outright.
     if pos.exception_type == "NativeTypeResolutionError":
@@ -722,22 +726,9 @@ def _carried_verdict(
             f"{neg.exception_message or ''}",
         )
 
-    pos_silent = (
-        diff_input_vs_state(dict(invariant.get("kwargs_positive") or {}), pos.observed_state)
-        if pos.observed_state
-        else {}
-    )
-    neg_silent = (
-        diff_input_vs_state(dict(invariant.get("kwargs_negative") or {}), neg.observed_state)
-        if neg.observed_state
-        else {}
-    )
-    expected = dict(invariant.get("expected_outcome") or {})
-    pos_outcome = classify_outcome(pos, pos_silent)
-
-    if not _positive_confirms(expected, pos_outcome):
-        return VERDICT_FAILED, f"positive no longer fires (outcome={pos_outcome})"
-    if not _negative_confirms(neg, neg_silent):
+    if not case.positive_confirmed:
+        return VERDICT_FAILED, f"positive no longer fires (outcome={case.outcome})"
+    if not case.negative_confirmed:
         return VERDICT_FAILED, "negative now fires"
 
     soundness = compute_gate_soundness_divergences(invariant, pos, neg)
@@ -788,9 +779,7 @@ def regate_carried_catalogue(
     for invariant in corpus.get("invariants", []):
         invariant_id = str(invariant.get("id", "<unknown>"))
         try:
-            _case, pos, neg = _validate_invariant_with_captures(
-                engine, invariant, gpu_mode=gpu_mode
-            )
+            case, pos, neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
         except ValidationError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
@@ -803,7 +792,7 @@ def regate_carried_catalogue(
             # Skipped (hardware-dependent under this gpu_mode); not gated here.
             continue
 
-        verdict, reason = _carried_verdict(invariant, pos, neg)
+        verdict, reason = _carried_verdict(invariant, case, pos, neg)
         entries.append({"id": invariant_id, "verdict": verdict, "reason": reason})
         counts[verdict] += 1
 
