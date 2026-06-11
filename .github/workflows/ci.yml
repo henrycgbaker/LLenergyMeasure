@@ -223,8 +223,6 @@ jobs:
           uv run python scripts/generate_cli_reference.py > /dev/null
           uv run python scripts/generate_invalid_combos_doc.py > /dev/null
           uv run python scripts/generate_curation_doc.py > /dev/null
-      - name: Check Pydantic-discovered schema alignment
-        run: uv run python scripts/check_pydantic_matches_discovered.py > /dev/null
       - name: Check engine corpus shadow matches SSOT
         run: uv run python scripts/engine_producers/regen_engine_corpus.py --check
       - name: Check generated engine config matches schema

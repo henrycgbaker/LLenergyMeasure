@@ -483,8 +483,8 @@ def get_engine_specific_params() -> dict[str, list[str]]:
     """Get params that are only valid for specific engines.
 
     Derived from the Pydantic engine models via ``get_engine_params`` - never
-    hand-maintained. Adding or removing a typed field in
-    ``engine_configs.py`` is automatically reflected here.
+    hand-maintained. A curated field landing in (or leaving) a generated
+    ``engines.<engine>.config`` is automatically reflected here.
 
     Fields reachable only through ``extra="allow"`` passthrough (e.g. dropped
     typed fields still settable in YAML) are not included, since they are not
@@ -723,11 +723,15 @@ def get_capability_matrix_markdown() -> str:
         "|---------|---------|------|----------|",
     ]
 
+    # Fixed column order matching the header. ALL_ENGINES is an unordered
+    # frozenset, so iterating it would scramble the cells against the header.
+    column_engines = ("transformers", "vllm", "tensorrt")
+
     for cap_key, cap_values in capabilities.items():
         display_name = display_names.get(cap_key, cap_key)
         cells = []
 
-        for engine in ALL_ENGINES:
+        for engine in column_engines:
             value = cap_values.get(engine, False)
             if value is True:
                 cells.append("Yes")

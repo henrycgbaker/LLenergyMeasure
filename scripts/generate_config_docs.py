@@ -32,6 +32,16 @@ def _description(prop: dict[str, Any]) -> str:
     return prop.get("description", "")
 
 
+def _short_ref_name(ref_target: str) -> str:
+    """Strip pydantic's module-qualified ``$defs`` prefix to the bare class name.
+
+    Colliding class names (three engines each ship ``Config`` / ``EngineParams`` /
+    ``SamplingParams``) are fully-qualified by pydantic as
+    ``llenergymeasure__engines__vllm__config__Config``; show just ``Config``.
+    """
+    return ref_target.rsplit("__", 1)[-1]
+
+
 # ---------------------------------------------------------------------------
 # Section renderers
 # ---------------------------------------------------------------------------
@@ -43,26 +53,25 @@ _SECTION_ORDER = [
     ("baseline", "Baseline (`baseline:`)"),
     ("transformers_engine", "Transformers Engine (`transformers.engine_params:`)"),
     ("transformers_sampling", "Transformers Sampling (`transformers.sampling_params:`)"),
-    ("vllm_engine", "vLLM Engine (`vllm.engine:`)"),
-    ("vllm_sampling", "vLLM Sampling (`vllm.sampling:`)"),
-    ("vllm_beam_search", "vLLM Beam Search (`vllm.beam_search:`)"),
-    ("vllm_attention", "vLLM Attention (`vllm.engine.attention:`)"),
-    ("tensorrt", "TensorRT-LLM Engine (`tensorrt:`)"),
+    ("vllm_engine", "vLLM Engine (`vllm.engine_params:`)"),
+    ("vllm_sampling", "vLLM Sampling (`vllm.sampling_params:`)"),
+    ("tensorrt_engine", "TensorRT-LLM Engine (`tensorrt.engine_params:`)"),
+    ("tensorrt_sampling", "TensorRT-LLM Sampling (`tensorrt.sampling_params:`)"),
 ]
 
-# Map from JSON schema $defs key to our section key. transformers is the
-# generated nested Config: its $defs are EngineParams / SamplingParams.
+# Map from JSON schema $defs key to our section key. All three engines are the
+# generated nested Config; pydantic fully-qualifies the colliding EngineParams /
+# SamplingParams class names with their module path in $defs.
 _DEF_TO_SECTION: dict[str, str] = {
     "DecoderConfig": "decoder",
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
-    "EngineParams": "transformers_engine",
-    "SamplingParams": "transformers_sampling",
-    "VLLMEngineConfig": "vllm_engine",
-    "VLLMSamplingConfig": "vllm_sampling",
-    "VLLMBeamSearchConfig": "vllm_beam_search",
-    "VLLMAttentionConfig": "vllm_attention",
-    "TensorRTConfig": "tensorrt",
+    "llenergymeasure__engines__transformers__config__EngineParams": "transformers_engine",
+    "llenergymeasure__engines__transformers__config__SamplingParams": "transformers_sampling",
+    "llenergymeasure__engines__vllm__config__EngineParams": "vllm_engine",
+    "llenergymeasure__engines__vllm__config__SamplingParams": "vllm_sampling",
+    "llenergymeasure__engines__tensorrt__config__EngineParams": "tensorrt_engine",
+    "llenergymeasure__engines__tensorrt__config__SamplingParams": "tensorrt_sampling",
 }
 
 
@@ -74,7 +83,7 @@ def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
     for name, prop in props.items():
         # Resolve $ref to get actual property info
         if "$ref" in prop:
-            section_name = prop["$ref"].split("/")[-1]
+            section_name = _short_ref_name(prop["$ref"].split("/")[-1])
             # Use field-level description (from ExperimentConfig.Field) not class docstring
             desc = _description(prop)
             lines.append(f"| `{name}` | {section_name} | *(see section)* | {desc} |")
@@ -84,7 +93,7 @@ def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
         any_of = prop.get("anyOf") or []
         ref_in_anyof = next((p for p in any_of if "$ref" in p), None)
         if ref_in_anyof:
-            section_name = ref_in_anyof["$ref"].split("/")[-1]
+            section_name = _short_ref_name(ref_in_anyof["$ref"].split("/")[-1])
             # Use field-level description (from ExperimentConfig.Field) not class docstring
             desc = _description(prop)
             has_null = any(p.get("type") == "null" for p in any_of)

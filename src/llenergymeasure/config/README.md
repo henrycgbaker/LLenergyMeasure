@@ -127,15 +127,13 @@ config = ExperimentConfig(
 
 **Sub-configurations:**
 - `DatasetConfig` - source, n_prompts, order (nested sub-object)
-- `transformers` - the generated `engines.transformers.Config` (nested
-  `engine_params` / `sampling_params` shape, projected from the mined schema)
-- `VLLMConfig` - vLLM engine options (including `sampling: VLLMSamplingConfig`)
-- `TensorRTConfig` - TensorRT-LLM backend options (including `sampling: TensorRTSamplingConfig`)
+- `transformers` / `vllm` / `tensorrt` - the generated `engines.<engine>.Config`
+  (nested `engine_params` / `sampling_params` shape, projected from each engine's
+  mined schema + `curated.yaml`)
 - `HarnessConfig` - per-engine llem-orchestration knobs (transformers
   `batch_size`, `torch_compile`, `allow_tf32`, `autocast_*`); no engine-native API
 - `sampling_preset: deterministic | standard | creative | factual` - expands
-  preset values into the active engine's sampling section at parse time
-  (`sampling_params` for transformers, `sampling` for vllm/tensorrt)
+  preset values into the active engine's `sampling_params` section at parse time
 
 **Cross-boundary contract:** `ExperimentConfig.model_json_schema()` is the
 canonical host/container contract. Every Docker image is stamped at build time
@@ -424,7 +422,7 @@ lem config new --preset benchmark
 
 ## Engine-Specific Configuration
 
-Each inference engine exposes its own configuration section for advanced optimisation. These are defined in `engine_configs.py` and set via `vllm:` or `pytorch:` blocks in YAML.
+Each inference engine exposes its own configuration section for advanced optimisation. These are the generated `engines.<engine>.Config` classes (nested `engine_params` / `sampling_params`) and set via `vllm:` / `transformers:` / `tensorrt:` blocks in YAML.
 
 **Important:** Engine-specific settings are IN ADDITION to shared config (model, batching, decoder, etc.). Some shared settings map to engine params, others may be overridden:
 
@@ -436,37 +434,37 @@ Each inference engine exposes its own configuration section for advanced optimis
 | `quantization.*` | May be overridden | `vllm.quantization_method` takes precedence |
 
 ```yaml
-# vLLM engine
+# vLLM engine - engine kwargs nest under engine_params, sampling under sampling_params
 engine: vllm
 vllm:
-  gpu_memory_utilization: 0.9   # Most important: controls KV cache size
-  max_num_seqs: 256             # Max concurrent sequences (replaces batch_size)
-  enable_prefix_caching: true   # 30-50% throughput gain for repeated prefixes
-  kv_cache_dtype: fp8           # Memory-efficient KV cache
+  engine_params:
+    gpu_memory_utilization: 0.9   # Most important: controls KV cache size
+    max_num_seqs: 256             # Max concurrent sequences (replaces batch_size)
+    enable_prefix_caching: true   # 30-50% throughput gain for repeated prefixes
+    kv_cache_dtype: fp8           # Memory-efficient KV cache
 
-# PyTorch engine (default)
+# Transformers engine (default)
 engine: transformers
 transformers:
-  attn_implementation: flash_attention_2
-  torch_compile: reduce-overhead
+  engine_params:
+    attn_implementation: flash_attention_2
 ```
 
 **Most users only need:** `gpu_memory_utilization`, `max_num_seqs`, `enable_prefix_caching`
 
-### engine_configs.py
+### Generated engine config classes
 
-| Config Class | Purpose |
-|--------------|---------|
-| `VLLMConfig` | vLLM engine kwargs and sampling params |
-| `VLLMAttentionConfig` | Attention backend selection |
-| `VLLMSpeculativeConfig` | Speculative decoding setup |
-| `TransformersConfig` | PyTorch/Transformers options |
-| `PyTorchAssistedGenerationConfig` | Assisted generation (speculative) |
-| `TensorRTConfig` | TensorRT-LLM engine and build options |
-| `TensorRTQuantizationConfig` | TensorRT quantization (FP8/INT8/INT4) |
-| `TensorRTCalibrationConfig` | INT8 calibration data settings |
+Each engine ships one generated `Config` at
+`src/llenergymeasure/engines/<engine>/config.py`, projected from its mined
+`schema.discovered.json` + `curated.yaml` by
+`scripts/engine_producers/regen_engine_configs.py`. All three share the same
+shape: an `engine_params` sub-model (constructor / loader kwargs) and a
+`sampling_params` sub-model (generation kwargs). Curated discovery-debt
+containers (vLLM `attention` / `speculative_config` / `beam_search`, TensorRT
+`quant_config` / `kv_cache_config` / `scheduler_config`) ship as `Any`-typed
+passthrough fields until the next in-container re-mine types them.
 
-**Full documentation:** See [docs/engines.md](../../../docs/engines.md) for comprehensive parameter reference.
+**Full documentation:** See the generated reference under `docs/reference/engines/`.
 
 ## I/O Configuration
 

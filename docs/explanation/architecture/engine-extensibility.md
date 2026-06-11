@@ -91,11 +91,13 @@ fan-out from this enum automatically.
 
 ### 4. Engine config model
 
-Add a Pydantic config model in
-[`src/llenergymeasure/config/engine_configs.py`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/config/engine_configs.py).
-Existing models (`TransformersConfig`, `VLLMConfig`, `TensorRTConfig`) show the
-shape: a top-level config class that composes sampling, scheduling, and
-engine-specific sub-models.
+Engine config classes are generated, not hand-written: each engine ships a
+`Config` (with nested `engine_params` / `sampling_params` sub-models) at
+[`src/llenergymeasure/engines/<engine>/config.py`](https://github.com/henrycgbaker/llenergymeasure/tree/main/src/llenergymeasure/engines),
+projected from the mined `schema.discovered.json` and the hand-maintained
+`curated.yaml` exposure allowlist by
+`scripts/engine_producers/regen_engine_configs.py`. To expose a new field, add it
+to the engine's `curated.yaml` and regenerate; you do not edit `config.py` by hand.
 
 The model is what users put under the `engine_config:` key in their study YAML.
 Fields should mirror the native engine parameters; the schema discovery
@@ -182,8 +184,9 @@ delivery checklist is:
 2. `docker/Dockerfile.sglang` - base image from SGLang's official release
    container; version pinned via `ARG SGLANG_VERSION`; sources version from
    `engine_versions/sglang/current.yaml`.
-3. `Engine.SGLANG = "sglang"` in `ssot.py` and a `SGLangConfig` Pydantic
-   model in `engine_configs.py`.
+3. `Engine.SGLANG = "sglang"` in `ssot.py` and a generated `Config` at
+   `src/llenergymeasure/engines/sglang/config.py` (from the engine's mined
+   schema + `curated.yaml`).
 
 **Automated after the above:**
 

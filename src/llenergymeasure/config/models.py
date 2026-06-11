@@ -1,7 +1,9 @@
 """Configuration models for LLM efficiency measurement experiments (v2.0 schema).
 
 This module defines the Tier 1 (Universal) configuration that applies identically
-across all engines. Engine-specific parameters live in engine_configs.py.
+across all engines. Engine-specific parameters live in the generated
+``llenergymeasure.engines.<engine>.config`` modules (one ``Config`` per engine,
+projected from the mined schema).
 
 v2.0 field renames from v1.x:
     model_name         -> model
@@ -599,9 +601,11 @@ class ExperimentConfig(BaseModel):
                 )
         return self
 
-    # vLLM fp8 + float32 and TRT FP8 + float32 are rejected by the respective
-    # VLLMConfig.dtype / TensorRTConfig.dtype Literal types at field validation
-    # (neither engine accepts float32). No separate cross-validator needed.
+    # vLLM / TRT-LLM reject float32 inside the engine (neither accepts it). The
+    # hand-written dtype Literals that enforced this at parse were dropped with the
+    # generated configs (the projection ships no enum yet - discovery debt); the
+    # constraint returns as a mined rule when the next in-container re-mine emits
+    # the dtype enum.
 
     @model_validator(mode="after")
     def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:
