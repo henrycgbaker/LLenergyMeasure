@@ -151,7 +151,7 @@ def test_cli_overrides_none_values_ignored(tmp_path):
     """None values in cli_overrides are ignored (unset CLI flags)."""
     path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
     config = load_experiment_config(
-        path, cli_overrides={"task.model": None, "transformers.dtype": None}
+        path, cli_overrides={"task.model": None, "transformers.engine_params.dtype": None}
     )
     assert config.task.model == "gpt2"  # file value retained
 
@@ -171,10 +171,10 @@ def test_cli_override_dotted_key(tmp_path):
     path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
     config = load_experiment_config(
         path,
-        cli_overrides={"transformers.batch_size": 8},
+        cli_overrides={"transformers.engine_params.dtype": "float16"},
     )
     assert config.transformers is not None
-    assert config.transformers.batch_size == 8
+    assert config.transformers.engine_params.dtype == "float16"
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ def test_load_study_config_grid_sweep(tmp_path):
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                     "task.dataset.n_prompts": [50, 100],
                 },
             }
@@ -277,12 +277,12 @@ def test_load_study_config_explicit_experiments(tmp_path):
                     {
                         "task": {"model": "gpt2"},
                         "engine": "transformers",
-                        "transformers": {"dtype": "float16"},
+                        "transformers": {"engine_params": {"dtype": "float16"}},
                     },
                     {
                         "task": {"model": "gpt2"},
                         "engine": "transformers",
-                        "transformers": {"dtype": "bfloat16"},
+                        "transformers": {"engine_params": {"dtype": "bfloat16"}},
                     },
                 ],
             }
@@ -301,7 +301,7 @@ def test_load_study_config_combined_mode(tmp_path):
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
                 "experiments": [
                     {"task": {"model": "gpt2-xl"}, "engine": "transformers"},
@@ -323,7 +323,7 @@ def test_load_study_config_with_execution_block(tmp_path):
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
                 "study_execution": {
                     "n_cycles": 3,
@@ -347,7 +347,7 @@ def test_load_study_config_cli_overrides(tmp_path):
             {
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
-                "sweep": {"transformers.dtype": ["float16", "bfloat16"]},
+                "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
                 "study_execution": {"n_cycles": 1},
             }
         )
@@ -375,7 +375,7 @@ def test_load_study_config_with_base(tmp_path):
             {
                 "base": "experiment.yaml",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
             }
         )
@@ -444,7 +444,7 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     sweep_content = {
         "task": {"model": "gpt2"},
         "engine": "transformers",
-        "sweep": {"transformers.dtype": ["float16", "bfloat16"]},
+        "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
     }
     study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))
     study_yaml_b.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 5}}))
