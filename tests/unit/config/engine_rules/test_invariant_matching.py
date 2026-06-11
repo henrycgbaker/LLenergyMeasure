@@ -359,8 +359,10 @@ def test_render_message_missing_template_returns_fallback() -> None:
     assert "rule_x" in invariant.render_message(match)
 
 
-def test_render_message_with_missing_format_key_falls_back_gracefully() -> None:
-    # Template refers to a field not populated in the match.
+def test_render_message_with_missing_format_key_renders_placeholder_verbatim() -> None:
+    # Template refers to a field not populated in the match. An unknown
+    # placeholder must survive verbatim rather than raising or triggering a
+    # whole-message fallback that would re-prepend the invariant id.
     invariant = _make_invariant(
         match_fields={"transformers.sampling.temperature": {"present": True}},
         message="Field {not_in_match_or_declared}",
@@ -368,6 +370,32 @@ def test_render_message_with_missing_format_key_falls_back_gracefully() -> None:
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
     match = invariant.try_match(config)
     assert match is not None
-    # Should not raise; should fall back to invariant-id + raw template.
-    out = invariant.render_message(match)
-    assert "rule_x" in out
+    # Should not raise; unknown placeholder rendered as-is, no id re-prepended.
+    assert invariant.render_message(match) == "Field {not_in_match_or_declared}"
+
+
+def test_render_message_substitutes_bare_field_leaf_names() -> None:
+    # Transformers (and vLLM) corpus messages mirror the engine's own wording,
+    # which references fields by bare leaf name rather than dotted path. The
+    # actual matched value must render, not the literal placeholder.
+    invariant = _make_invariant(
+        match_fields={"transformers.sampling.temperature": {"present": True}},
+        message="temperature is set to {temperature}",
+    )
+    config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
+    match = invariant.try_match(config)
+    assert match is not None
+    assert invariant.render_message(match) == "temperature is set to 0.7"
+
+
+def test_render_message_unknown_placeholder_survives_alongside_known() -> None:
+    # A stale template mixing a known field with an unknown placeholder must
+    # render the known value and leave the unknown one verbatim (no KeyError).
+    invariant = _make_invariant(
+        match_fields={"transformers.sampling.temperature": {"present": True}},
+        message="temperature {temperature} vs {gone}",
+    )
+    config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
+    match = invariant.try_match(config)
+    assert match is not None
+    assert invariant.render_message(match) == "temperature 0.7 vs {gone}"

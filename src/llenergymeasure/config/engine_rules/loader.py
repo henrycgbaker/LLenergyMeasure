@@ -25,11 +25,41 @@ Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
 
 from __future__ import annotations
 
+import string
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal, get_args
 
 import yaml
+
+
+class _LiteralOnUnknown(dict[str, Any]):
+    """Mapping that returns the literal ``{key}`` placeholder for unknown keys.
+
+    Lets ``str.format_map`` leave unrecognised placeholders verbatim instead of
+    raising ``KeyError`` - a stale corpus template referencing a field the match
+    didn't populate renders the placeholder as-is rather than crashing at the
+    user-facing validation boundary.
+    """
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
+def _safe_format(template: str, values: dict[str, Any]) -> str:
+    """``str.format_map`` that tolerates unknown and non-identifier placeholders.
+
+    Unknown ``{field}`` placeholders render verbatim (see
+    :class:`_LiteralOnUnknown`). Non-identifier placeholders the corpus may
+    carry (e.g. ``{type(self.n)}`` lifted from engine source) are left intact
+    because the format parse raises ``ValueError``/``KeyError`` on them; we fall
+    back to the original template rather than dropping the message.
+    """
+    try:
+        return string.Formatter().vformat(template, (), _LiteralOnUnknown(values))
+    except (ValueError, IndexError, KeyError, AttributeError):
+        return template
+
 
 SUPPORTED_MAJOR_VERSION = 1
 """Major version the loader knows how to parse.
@@ -251,27 +281,37 @@ class Invariant:
             if not evaluate_predicate(actual, resolved_spec):
                 return None
             matched[path] = actual
+            # @field_ref siblings (e.g. ``@max_model_len``) aren't match keys
+            # but the message template renders them by leaf name, so record
+            # their resolved values too.
+            for ref in _collect_field_refs(spec):
+                matched[ref.lstrip(_FIELD_REF_PREFIX).rsplit(".", 1)[-1]] = _resolve_one_ref(
+                    ref, config, path
+                )
             last_value = actual
         return InvariantMatch(invariant=self, declared_value=last_value, matched_fields=matched)
 
     def render_message(self, match: InvariantMatch) -> str:
-        """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
+        """Substitute placeholders in the template against the matched config values.
 
-        Uses ``str.format`` with permissive defaults - templates that reference
-        missing keys fall back to the invariant id + raw template rather than
-        raising at user-facing time.
+        Recognised placeholders: ``{declared_value}``, ``{effective_value}``,
+        ``{invariant_id}``, and each matched field by both its dotted path and
+        its bare leaf name (corpus messages mirror the engine's own wording,
+        which uses bare field names - ``{max_num_batched_tokens}``). Unknown
+        placeholders render harmlessly: they are left verbatim rather than
+        raising, so a stale template never produces a user-facing ``KeyError``.
         """
         if self.message_template is None:
             return f"[{self.id}] <no message template>"
-        try:
-            return self.message_template.format(
-                declared_value=match.declared_value,
-                effective_value=match.effective_value,
-                invariant_id=self.id,
-                **match.matched_fields,
-            )
-        except (KeyError, IndexError):
-            return f"[{self.id}] {self.message_template}"
+        values: dict[str, Any] = {
+            "declared_value": match.declared_value,
+            "effective_value": match.effective_value,
+            "invariant_id": self.id,
+        }
+        for path, value in match.matched_fields.items():
+            values[path] = value
+            values[path.rsplit(".", 1)[-1]] = value
+        return _safe_format(self.message_template, values)
 
 
 @dataclass(frozen=True)
@@ -308,6 +348,23 @@ def _spec_has_field_ref(spec: Any) -> bool:
     if isinstance(spec, (list, tuple)):
         return any(_spec_has_field_ref(v) for v in spec)
     return False
+
+
+def _collect_field_refs(spec: Any) -> list[str]:
+    """Return every ``@field_path`` reference string found anywhere in ``spec``.
+
+    Used by :meth:`Invariant.try_match` to expose referenced sibling fields
+    (the right-hand side of a cross-field predicate, e.g. ``@max_model_len``)
+    to message rendering, since those names appear in corpus templates but are
+    not themselves match keys.
+    """
+    if isinstance(spec, str):
+        return [spec] if spec.startswith(_FIELD_REF_PREFIX) else []
+    if isinstance(spec, dict):
+        return [ref for v in spec.values() for ref in _collect_field_refs(v)]
+    if isinstance(spec, (list, tuple)):
+        return [ref for v in spec for ref in _collect_field_refs(v)]
+    return []
 
 
 def _resolve_field_refs_in_spec(spec: Any, config: Any, predicate_field_path: str) -> Any:
