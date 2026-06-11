@@ -1,0 +1,61 @@
+# Exposure allowlist for vllm 0.7.3 (Move 2: curation as data).
+#
+# Field names llem exposes as first-class typed fields on the generated
+# Config class. Non-curated engine fields stay reachable through the
+# extra="allow" passthrough with soft validation against the full
+# discovered schema. Curation is an exposure-time decision; mining never
+# narrows.
+#
+# Bootstrapped from the hand-written VLLMConfig / VLLMEngineConfig /
+# VLLMSamplingConfig field sets in src/llenergymeasure/config/engine_configs.py.
+# vLLM has no llem-orchestration residual (HarnessConfig is empty for vllm).
+#
+# Each entry is cross-checked against schema.discovered.json for this pin.
+# Fields tagged "discovery debt" are accepted by the engine but missed by
+# signature-based discovery (nested sub-config container names whose leaf
+# fields are individually discovered, or kwargs the walker has not reached);
+# they remain exposed and are tracked for miner deepening.
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.7.3
+exposed_fields:
+  engine_params:
+    - dtype
+    - gpu_memory_utilization
+    - swap_space
+    - cpu_offload_gb
+    - block_size
+    - kv_cache_dtype
+    - enforce_eager
+    - enable_chunked_prefill
+    - max_num_seqs
+    - max_num_batched_tokens
+    - max_model_len
+    - num_scheduler_steps
+    - tensor_parallel_size
+    - pipeline_parallel_size
+    - distributed_executor_backend
+    - enable_prefix_caching
+    - quantization
+    - max_seq_len_to_capture
+    - speculative_config            # discovery debt: nested sub-config container not surfaced as a $defs entry
+    - offload_group_size            # discovery debt: CPU-offload kwargs not in EngineArgs signature
+    - offload_num_in_group          # discovery debt: CPU-offload kwargs not in EngineArgs signature
+    - offload_prefetch_step         # discovery debt: CPU-offload kwargs not in EngineArgs signature
+    - offload_params                # discovery debt: CPU-offload kwargs not in EngineArgs signature
+    - disable_custom_all_reduce
+    - kv_cache_memory_bytes         # discovery debt: absolute KV-cache knob not in discovered schema
+    - compilation_config
+    - attention                     # discovery debt: nested AttentionConfig container not surfaced as a $defs entry
+    - beam_search                   # discovery debt: nested BeamSearchParams container not surfaced as a $defs entry
+  sampling_params:
+    - temperature
+    - top_k
+    - top_p
+    - repetition_penalty
+    - min_p
+    - min_tokens
+    - presence_penalty
+    - frequency_penalty
+    - ignore_eos
+    - n
