@@ -339,12 +339,16 @@ class TestAstHelpers:
         # The important contract is: the call doesn't raise.
         assert isinstance(preds, list)
 
-    def test_literal_args_handles_optional_literal(self) -> None:
-        # ``Literal['auto', 'slow'] | None`` -> ['auto', 'slow'].
-        annotation = ast.parse("x: Literal['auto', 'slow'] | None").body[0].annotation
-        values = _ARCHIVE._literal_args(annotation)
-        assert values == ["auto", "slow"]
+    def test_literal_lift_handles_optional_literal(self) -> None:
+        # The miner's Literal lift now defers to the shared deterministic-floor
+        # walker. ``Literal['auto', 'slow'] | None`` -> ['auto', 'slow'].
+        from scripts.engine_producers._source_walker import _literal_values
 
-    def test_literal_args_returns_none_for_non_literal(self) -> None:
+        annotation = ast.parse("x: Literal['auto', 'slow'] | None").body[0].annotation
+        assert _literal_values(annotation) == ["auto", "slow"]
+
+    def test_literal_lift_returns_none_for_non_literal(self) -> None:
+        from scripts.engine_producers._source_walker import _literal_values
+
         annotation = ast.parse("x: int").body[0].annotation
-        assert _ARCHIVE._literal_args(annotation) is None
+        assert _literal_values(annotation) is None

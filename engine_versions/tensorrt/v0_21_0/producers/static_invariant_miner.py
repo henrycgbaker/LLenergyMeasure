@@ -54,6 +54,7 @@ from scripts.engine_producers._base import (
     find_method,
     first_string_arg,
 )
+from scripts.engine_producers._source_walker import _literal_values
 
 # ---------------------------------------------------------------------------
 # Version-pinned configuration (0.21.0)
@@ -962,7 +963,12 @@ def _walk_literal_fields(
             continue
         field_name = stmt.target.id
         annotation = stmt.annotation
-        values = _literal_args(annotation)
+        # Shared deterministic-floor walker. Byte-identical to the former bespoke
+        # ``_literal_args`` for every shape in the 0.21.0 source (all three
+        # Literal fields are bare ``Literal[...]``); a strict superset for the
+        # ``Optional[Literal[...]]`` / ``Annotated[Literal[...], ...]`` wrappers
+        # this version's source does not yet use.
+        values = _literal_values(annotation)
         if values is None:
             continue
         out.append(
@@ -976,36 +982,6 @@ def _walk_literal_fields(
             )
         )
     return out
-
-
-def _literal_args(annotation: ast.expr) -> list[Any] | None:
-    """Return the literal values from an ``ast`` annotation, or None.
-
-    Handles bare ``Literal['a', 'b']`` and the common ``Optional[Literal[...]]``
-    / ``Literal[...] | None`` shapes.
-    """
-    if (
-        isinstance(annotation, ast.Subscript)
-        and isinstance(annotation.value, ast.Name)
-        and annotation.value.id == "Literal"
-    ):
-        slice_node = annotation.slice
-        elts: list[ast.expr]
-        elts = list(slice_node.elts) if isinstance(slice_node, ast.Tuple) else [slice_node]
-        out: list[Any] = []
-        for elt in elts:
-            ok, v = _literal_value(elt)
-            if not ok:
-                return None
-            out.append(v)
-        return out
-    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
-        # ``Literal[...] | None`` - pull the Literal side.
-        for side in (annotation.left, annotation.right):
-            inner = _literal_args(side)
-            if inner is not None:
-                return inner
-    return None
 
 
 def _make_literal_rule(
