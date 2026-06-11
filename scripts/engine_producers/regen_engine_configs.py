@@ -1,43 +1,27 @@
 """Generate per-engine typed Pydantic config.py from mined schema data.
 
-The mined-corpus SSOT lives at ``engine_versions/<engine>/v<safe>/outputs/``
-(resolved from each engine's ``current.yaml`` pin). This script projects three
-of those files into a vendored, committed, typed config class:
+Projects three files from an engine's active-pin SSOT
+(``engine_versions/<engine>/v<safe>/outputs/``) into a vendored, committed,
+typed ``src/llenergymeasure/engines/<engine>/config.py``:
 
-- ``schema.discovered.json`` - the mined schema envelope (field types,
-  defaults, enums, bounds).
-- ``curated.yaml`` - the exposure allowlist; only ``exposed_fields`` entries
-  become first-class typed fields on the generated sub-models.
-- ``overlay.yaml`` (optional) - hand-authored narrowings (tighten a mined
-  field) and completions (add a field mining missed). Absent on the live pin.
+- ``schema.discovered.json`` - the mined schema envelope (types, defaults,
+  enums, bounds);
+- ``curated.yaml`` - the exposure allowlist (only ``exposed_fields`` entries
+  become first-class typed fields);
+- ``overlay.yaml`` (optional, absent on the live pin) - hand-authored
+  narrowings (tighten a mined field) and completions (add a missed field).
 
-The result is ``src/llenergymeasure/engines/<engine>/config.py`` with three
-classes - ``Config`` (wrapper), ``EngineParams``, ``SamplingParams`` - matching
-the schema's native section split. Generation is delegated to
-``datamodel-code-generator`` (a dev-only dependency); this wrapper owns only
-the llem-specific parts: reshaping the custom envelope into a JSON Schema
-2020-12 document, applying curation + overlay, and normalising the output with
-ruff so byte-comparison is stable across runs.
+Generation is delegated to ``datamodel-code-generator`` (dev-only); this
+wrapper owns the llem-specific parts: reshaping the custom envelope into a
+JSON Schema 2020-12 document, applying curation + overlay, and ruff-normalising
+the output so byte-comparison is stable. The emitted ``Config`` /
+``EngineParams`` / ``SamplingParams`` classes mirror the schema's native
+section split and carry ``extra="allow"`` (the live engine config policy).
 
-Two modes mirror ``regen_engine_corpus.py``:
-
-- ``--check`` (default): regenerate to memory, byte-compare against the
-  committed config.py, exit 1 with a per-file diff on drift. CI parity gate.
-- ``--write``: regenerate and write config.py, reporting what changed.
-
-``--engine <name>`` restricts the run (repeatable); the default is every engine
-with generation enabled. Today that is transformers only (the pilot); vllm and
-tensorrt fan out by adding a row to ``ENGINES``.
-
-Generation policy on the emitted models:
-
-- Curated fields that mining typed carry real types (Literal enums, ge/le
-  bounds where mined). Curated fields absent from the discovered schema (the
-  discovery-debt entries) get permissive ``Any | None`` stubs - curated.yaml
-  carries only the field NAME, so no richer type exists to project; the field
-  stays reachable and an overlay completion can type it later.
-- Both param sub-models carry ``extra="allow"`` (matches the live engine
-  config policy): non-curated engine fields reach the engine via passthrough.
+Two modes mirror ``regen_engine_corpus.py``: ``--check`` (default) regenerates
+in memory and byte-compares against the committed file (exit 1 with a diff on
+drift); ``--write`` regenerates and writes. ``--engine`` restricts the run; the
+default is every engine in ``ENGINES`` (transformers pilot only today).
 """
 
 from __future__ import annotations
