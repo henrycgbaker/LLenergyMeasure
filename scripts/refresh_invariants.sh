@@ -9,14 +9,14 @@
 # artifact. Run this locally to re-validate against the pinned image before
 # opening a PR; CI will re-run inside the same image on the PR branch.
 #
-# Output: src/llenergymeasure/engines/<engine>/invariants.validated.yaml
+# Output: src/llenergymeasure/engines/<engine>/rules.validated.yaml
 # The YAML IS the canonical SSOT - authority comes from `git commit`, not
 # from who ran validation.
 #
 # Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
 #   review the diff, `git add`, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/engines/<engine>/invariants.validated.yaml`
+#   `git checkout src/llenergymeasure/engines/<engine>/rules.validated.yaml`
 set -euo pipefail
 
 usage() {
@@ -66,8 +66,8 @@ case "$ENGINE" in
         ;;
 esac
 
-CORPUS_REL="src/llenergymeasure/engines/${ENGINE}/invariants.proposed.yaml"
-OUTPUT_REL="src/llenergymeasure/engines/${ENGINE}/invariants.validated.yaml"
+CORPUS_REL="src/llenergymeasure/engines/${ENGINE}/rules.proposed.yaml"
+OUTPUT_REL="src/llenergymeasure/engines/${ENGINE}/rules.validated.yaml"
 
 if [[ ! -f "$REPO_ROOT/$CORPUS_REL" ]]; then
     echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the miner first:" >&2

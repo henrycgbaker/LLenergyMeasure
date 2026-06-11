@@ -23,14 +23,14 @@ flowchart TB
         direction TB
         src[Engine library source<br/>transformers, vLLM, TensorRT-LLM]
         miner[Invariant miner pipeline<br/>scripts/engine_producers/<br/>static + dynamic + lift]
-        validated[(validated corpus YAML<br/>engines/&lt;e&gt;/invariants.validated.yaml)]
+        validated[(validated corpus YAML<br/>engines/&lt;e&gt;/rules.validated.yaml)]
         src --> miner --> validated
     end
 
     subgraph runtime["RUNTIME - user submits ExperimentConfig"]
         direction TB
         user[User YAML / Python API]
-        loader[Config validation pipeline<br/>config/engine_invariants/loader.py]
+        loader[Config validation pipeline<br/>config/engine_rules/loader.py]
         rejected[Rejection surfaced BEFORE<br/>engine initialisation<br/>saves GPU + researcher time]
         user --> loader --> rejected
     end
@@ -48,7 +48,7 @@ flowchart TB
 
 **Inputs:** Engine library source code (at a pinned version).
 
-**Outputs:** `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (maintainer-seeded corpus, post-mining) and `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` (CI-validated observed behaviour, post-validate-replay; both ship with the package).
+**Outputs:** `src/llenergymeasure/engines/{engine}/rules.proposed.yaml` (maintainer-seeded corpus, post-mining) and `src/llenergymeasure/engines/{engine}/rules.validated.yaml` (CI-validated observed behaviour, post-validate-replay; both ship with the package).
 
 **Three components:**
 - Static miner - walks Python AST of validator methods; no constructor calls.
@@ -86,7 +86,7 @@ flowchart TD
     L3["Layer 3 - harness/<br/>MeasurementHarness, energy sampling"]
     L2["Layer 2 - engines/<br/>transformers, vLLM, TensorRT-LLM plugins"]
     L1["Layer 1 - infra/<br/>Docker runner, container entrypoint"]
-    L0["Layer 0 - config/ + domain/ + device/ + utils/<br/>config validation pipeline lives here<br/>engine_invariants/loader.py"]
+    L0["Layer 0 - config/ + domain/ + device/ + utils/<br/>config validation pipeline lives here<br/>engine_rules/loader.py"]
 
     L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
 
@@ -94,7 +94,7 @@ flowchart TD
     class L0 target;
 ```
 
-The config-validation pipeline lives in Layer 0 (highlighted). Higher layers build on it: every `ExperimentConfig` constructed by the API or CLI passes through `engine_invariants/loader.py` before reaching the harness.
+The config-validation pipeline lives in Layer 0 (highlighted). Higher layers build on it: every `ExperimentConfig` constructed by the API or CLI passes through `engine_rules/loader.py` before reaching the harness.
 
 The invariant miner pipeline lives in `scripts/engine_producers/` - it is a build-time tool, not a library module. Its output is the validated corpus that ships with the package.
 
@@ -189,11 +189,11 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 
   src/llenergymeasure/engines/
   └── {engine}/                        Per-engine sub-package, ships with the wheel
-      ├── invariants.proposed.yaml     Authoritative corpus post-mine
-      └── invariants.validated.yaml    Validated observations post-replay
+      ├── rules.proposed.yaml     Authoritative corpus post-mine
+      └── rules.validated.yaml    Validated observations post-replay
 
   src/llenergymeasure/config/
-  └── engine_invariants/
+  └── engine_rules/
       ├── loader.py                    Runtime corpus consumer + predicate engine
       └── __init__.py
 

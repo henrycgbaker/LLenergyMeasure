@@ -17,19 +17,19 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.config.engine_invariants import (
+from llenergymeasure.config.engine_rules import (
     VALID_ADDED_BY,
     VALID_EMISSION_CHANNEL,
     VALID_OUTCOME,
     VALID_SEVERITY,
-    EngineInvariantsLoader,
+    EngineRulesLoader,
 )
 
 
 @pytest.fixture(scope="module")
 def transformers_corpus():
-    loader = EngineInvariantsLoader()
-    return loader.load_invariants("transformers")
+    loader = EngineRulesLoader()
+    return loader.load_rules("transformers")
 
 
 def test_corpus_covers_required_invariants(transformers_corpus) -> None:
@@ -221,7 +221,7 @@ def test_corpus_file_is_valid_yaml() -> None:
         / "llenergymeasure"
         / "engines"
         / "transformers"
-        / "invariants.proposed.yaml"
+        / "rules.proposed.yaml"
     )
     assert path.exists()
     doc = yaml.safe_load(path.read_text())

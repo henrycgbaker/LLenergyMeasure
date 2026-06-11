@@ -30,8 +30,8 @@ from scripts.engine_producers import regen_engine_corpus as rec  # noqa: E402
 
 _CORPUS = {
     "schema.discovered.json": '{"engine_version": "1.2.3"}\n',
-    "invariants.proposed.yaml": "invariants: []\n",
-    "invariants.validated.yaml": "invariants: []\n",
+    "rules.proposed.yaml": "invariants: []\n",
+    "rules.validated.yaml": "invariants: []\n",
     "curated.yaml": "engine: demo\nexposed_fields:\n  engine_params: []\n",
 }
 
@@ -87,14 +87,14 @@ def test_drifted_file_fails_check_with_report(
 
 def test_write_resyncs(fake_corpus: tuple[Path, Path], capsys: pytest.CaptureFixture[str]) -> None:
     _outputs, shadow = fake_corpus
-    (shadow / "invariants.proposed.yaml").write_text("invariants: [stale]\n", encoding="utf-8")
+    (shadow / "rules.proposed.yaml").write_text("invariants: [stale]\n", encoding="utf-8")
 
     assert rec.main(["--write"]) == 0
     out = capsys.readouterr().out
-    assert "demo/invariants.proposed.yaml" in out
+    assert "demo/rules.proposed.yaml" in out
     # Shadow now matches the SSOT, so a follow-up check is clean.
-    assert (shadow / "invariants.proposed.yaml").read_text(encoding="utf-8") == _CORPUS[
-        "invariants.proposed.yaml"
+    assert (shadow / "rules.proposed.yaml").read_text(encoding="utf-8") == _CORPUS[
+        "rules.proposed.yaml"
     ]
     assert rec.main(["--check"]) == 0
 

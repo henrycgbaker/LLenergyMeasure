@@ -2,7 +2,7 @@
 
 Covers the three severity paths (error / warn / dormant) plus the
 no-match / missing-corpus fallbacks. Invariant loading is exercised by
-``tests/unit/config/engine_invariants/test_loader.py``; this module focuses on
+``tests/unit/config/engine_rules/test_loader.py``; this module focuses on
 the validator's dispatch and the ``_dormant_observations`` contract.
 """
 
@@ -18,10 +18,10 @@ from llenergymeasure.config.engine_configs import (
     TransformersConfig,
     TransformersSamplingConfig,
 )
-from llenergymeasure.config.engine_invariants.loader import EngineInvariants, Invariant
+from llenergymeasure.config.engine_rules.loader import EngineInvariants, Invariant
 from llenergymeasure.config.models import (
     ExperimentConfig,
-    _reset_invariants_loader_cache,
+    _reset_rules_loader_cache,
 )
 from llenergymeasure.config.probe import DormantField
 from llenergymeasure.config.warnings import ConfigValidationWarning
@@ -59,7 +59,7 @@ class _StubLoader:
     def __init__(self, invariants: list[Invariant]) -> None:
         self._invariants = tuple(invariants)
 
-    def load_invariants(self, engine: str) -> EngineInvariants:
+    def load_rules(self, engine: str) -> EngineInvariants:
         return EngineInvariants(
             engine=engine,
             schema_version="1.0.0",
@@ -69,7 +69,7 @@ class _StubLoader:
 
 
 class _NoCorpusLoader:
-    def load_invariants(self, engine: str) -> EngineInvariants:
+    def load_rules(self, engine: str) -> EngineInvariants:
         raise FileNotFoundError(f"no corpus for {engine}")
 
 
@@ -78,13 +78,13 @@ def _install_test_invariants(monkeypatch: pytest.MonkeyPatch, invariants: list[I
     from llenergymeasure.config import models as models_mod
 
     stub = _StubLoader(invariants)
-    monkeypatch.setattr(models_mod, "_get_invariants_loader", lambda: stub)
+    monkeypatch.setattr(models_mod, "_get_rules_loader", lambda: stub)
 
 
 @pytest.fixture(autouse=True)
 def _reset_cache() -> None:
     """Each test starts with a fresh loader cache so real-corpus tests stay hermetic."""
-    _reset_invariants_loader_cache()
+    _reset_rules_loader_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +211,7 @@ def test_missing_corpus_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
     """FileNotFoundError from the loader is swallowed and logged at debug."""
     from llenergymeasure.config import models as models_mod
 
-    monkeypatch.setattr(models_mod, "_get_invariants_loader", lambda: _NoCorpusLoader())
+    monkeypatch.setattr(models_mod, "_get_rules_loader", lambda: _NoCorpusLoader())
 
     cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     assert cfg._dormant_observations == {}

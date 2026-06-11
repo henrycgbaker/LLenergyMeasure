@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.config.engine_invariants.loader import Invariant
+from llenergymeasure.config.engine_rules.loader import Invariant
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.hashing import build_resolved_view, hash_config
 from llenergymeasure.study.library_resolution import (
@@ -253,10 +253,10 @@ class TestDedupSweep:
         # End-to-end with the actual validated invariants - the original motivating
         # example: do_sample x temperature = [T,F] x [0.5, 1.0, 1.5] -> 6 configs,
         # library-resolution mechanism collapses to 4 (1 greedy canonical + 3 sampling variants).
-        from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+        from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
 
-        loader = EngineInvariantsLoader()
-        invariants = loader.load_invariants("transformers").invariants
+        loader = EngineRulesLoader()
+        invariants = loader.load_rules("transformers").invariants
 
         configs = []
         for do_sample in (True, False):

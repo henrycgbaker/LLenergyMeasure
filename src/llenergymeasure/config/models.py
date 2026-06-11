@@ -41,21 +41,21 @@ if TYPE_CHECKING:
         TransformersConfig,
         VLLMConfig,
     )
-    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+    from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
 
 
 @lru_cache(maxsize=1)
-def _get_invariants_loader() -> EngineInvariantsLoader:
+def _get_rules_loader() -> EngineRulesLoader:
     # Lazy import so module load doesn't read YAML off disk. Tests substitute
-    # via ``monkeypatch.setattr(models, "_get_invariants_loader", ...)``.
-    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+    # via ``monkeypatch.setattr(models, "_get_rules_loader", ...)``.
+    from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
 
-    return EngineInvariantsLoader()
+    return EngineRulesLoader()
 
 
-def _reset_invariants_loader_cache() -> None:
+def _reset_rules_loader_cache() -> None:
     """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
-    _get_invariants_loader.cache_clear()
+    _get_rules_loader.cache_clear()
 
 
 # =============================================================================
@@ -492,7 +492,7 @@ class ExperimentConfig(BaseModel):
 
         dormant_observations: dict[str, DormantField] = {}
         try:
-            invariants = _get_invariants_loader().load_invariants(self.engine.value).invariants
+            invariants = _get_rules_loader().load_rules(self.engine.value).invariants
         except FileNotFoundError:
             logger.debug("No invariants corpus for engine %r; skipping.", self.engine.value)
             invariants = ()

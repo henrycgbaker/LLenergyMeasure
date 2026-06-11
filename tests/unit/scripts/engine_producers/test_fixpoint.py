@@ -210,7 +210,7 @@ class TestCorpusIntegration:
             / "llenergymeasure"
             / "engines"
             / "transformers"
-            / "invariants.proposed.yaml"
+            / "rules.proposed.yaml"
         )
         corpus = yaml.safe_load(corpus_path.read_text())
         # Should not raise.

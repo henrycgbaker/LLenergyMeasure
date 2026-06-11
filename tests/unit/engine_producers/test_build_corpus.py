@@ -2,7 +2,7 @@
 
 The merger orchestrates the per-engine staging extractors, dedups by
 fingerprint with cross-validation provenance, and emits the canonical
-:file:`src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`. These tests exercise each
+:file:`src/llenergymeasure/engines/{engine}/rules.proposed.yaml`. These tests exercise each
 contract behaviour in isolation against synthetic staging files - no live
 extractors, no real library dependencies.
 
@@ -33,7 +33,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from llenergymeasure.config.engine_invariants import EngineInvariantsLoader  # noqa: E402
+from llenergymeasure.config.engine_rules import EngineRulesLoader  # noqa: E402
 from scripts.engine_producers import build_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -490,7 +490,7 @@ class TestEmptyStaging:
     def test_no_staging_does_not_touch_existing_corpus(self, tmp_path: Path) -> None:
         # A pre-existing corpus must NOT be wiped if the merger fails to
         # find staging - the canonical file stays untouched.
-        canonical = tmp_path / "transformers" / "invariants.proposed.yaml"
+        canonical = tmp_path / "transformers" / "rules.proposed.yaml"
         canonical.parent.mkdir(parents=True, exist_ok=True)
         canonical.write_text("schema_version: 1.0.0\nengine: transformers\nrules: []\n")
 
@@ -506,7 +506,7 @@ class TestEmptyStaging:
 
 
 class TestLoaderRoundTrip:
-    def test_merger_output_loads_via_engine_invariants_loader(self, tmp_path: Path) -> None:
+    def test_merger_output_loads_via_engine_rules_loader(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
@@ -515,8 +515,8 @@ class TestLoaderRoundTrip:
 
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
-        loader = EngineInvariantsLoader(corpus_root=tmp_path)
-        parsed = loader.load_invariants("transformers")
+        loader = EngineRulesLoader(corpus_root=tmp_path)
+        parsed = loader.load_rules("transformers")
         assert len(parsed.invariants) == 1
         invariant = parsed.invariants[0]
         assert invariant.added_by == "static_miner"
@@ -527,17 +527,17 @@ class TestLoaderRoundTrip:
         # corpus YAML directly with a bad cross_validated_by entry - the
         # loader must reject it, since the closed-enum guard is the
         # whole point of validating cross-validation provenance.
-        from llenergymeasure.config.engine_invariants import UnknownAddedByError
+        from llenergymeasure.config.engine_rules import UnknownAddedByError
 
         invariant = _ast_rule()
         invariant["cross_validated_by"] = ["NOT_A_REAL_PROVENANCE"]
-        canonical = tmp_path / "transformers" / "invariants.proposed.yaml"
+        canonical = tmp_path / "transformers" / "rules.proposed.yaml"
         canonical.parent.mkdir(parents=True, exist_ok=True)
         canonical.write_text(yaml.safe_dump(_envelope([invariant]), sort_keys=False))
 
-        loader = EngineInvariantsLoader(corpus_root=tmp_path)
+        loader = EngineRulesLoader(corpus_root=tmp_path)
         with pytest.raises(UnknownAddedByError):
-            loader.load_invariants("transformers")
+            loader.load_rules("transformers")
 
 
 # ---------------------------------------------------------------------------
@@ -602,7 +602,7 @@ class TestAddedAtPreservation:
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([first_rule]))
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
-        prior_path = tmp_path / "transformers" / "invariants.proposed.yaml"
+        prior_path = tmp_path / "transformers" / "rules.proposed.yaml"
         prior = yaml.safe_load(prior_path.read_text())
         assert prior["invariants"][0]["added_at"] == "2026-04-01"
 
@@ -680,7 +680,7 @@ class TestVendorValidationGate:
         assert result.invariants_quarantined == 0
         assert result.quarantined_ids == ()
 
-        canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
+        canonical = (tmp_path / "transformers" / "rules.proposed.yaml").read_text()
         assert "rule_kept" in canonical
 
     def test_divergent_invariant_is_quarantined(
@@ -712,7 +712,7 @@ class TestVendorValidationGate:
         assert result.invariants_quarantined == 1
         assert "rule_bad" in result.quarantined_ids
 
-        canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
+        canonical = (tmp_path / "transformers" / "rules.proposed.yaml").read_text()
         assert "rule_kept" in canonical
         assert "rule_bad" not in canonical
 
@@ -747,7 +747,7 @@ class TestVendorValidationGate:
         assert result.invariants_in_canonical == 2
         assert result.invariants_quarantined == 0
 
-        canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
+        canonical = (tmp_path / "transformers" / "rules.proposed.yaml").read_text()
         assert "invariant_a" in canonical
         assert "invariant_b" in canonical
         # No quarantine file when validation is skipped.
@@ -848,7 +848,7 @@ class TestVendorValidationGate:
         # Build with validation: rule_bad gets quarantined and only rule_kept
         # lands in canonical.
         build_corpus.write_corpus("transformers", tmp_path)
-        canonical_path = tmp_path / "transformers" / "invariants.proposed.yaml"
+        canonical_path = tmp_path / "transformers" / "rules.proposed.yaml"
         assert "rule_bad" not in canonical_path.read_text()
 
         # --check should now agree (re-runs validation, observes the same

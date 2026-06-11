@@ -103,8 +103,8 @@ pipeline (item 6 below) will verify alignment.
 
 ### 5. Invariants YAML (auto-generated)
 
-`src/llenergymeasure/engines/<engine>/invariants.proposed.yaml` and
-`invariants.validated.yaml` are produced by the miner pipeline running inside
+`src/llenergymeasure/engines/<engine>/rules.proposed.yaml` and
+`rules.validated.yaml` are produced by the miner pipeline running inside
 the engine container. Do not hand-author these - run the pipeline or let CI
 generate them on the first engine-pipeline PR. See
 [Auto-refresh pipeline](auto-refresh-pipeline.md) and
@@ -129,8 +129,8 @@ Once items 1-4 exist and a PR is opened, the engine-pipeline CI surface
 - **Schema discovery** - runs the engine introspector inside the container,
   writes `schema.discovered.json`.
 - **Invariant mining** - runs the miner inside the container, produces
-  `invariants.proposed.yaml`, validates against the rule corpus to produce
-  `invariants.validated.yaml`.
+  `rules.proposed.yaml`, validates against the rule corpus to produce
+  `rules.validated.yaml`.
 - **Generated documentation** - regenerates `docs/user/generated/invariants-<engine>.md`,
   `curation-<engine>.md`, and `schema-<engine>.md` from the artefact files.
 - **Bot writeback** - `llem-ci-bot` commits the regenerated files to the PR

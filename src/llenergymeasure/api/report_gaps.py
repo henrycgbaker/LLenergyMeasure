@@ -9,12 +9,12 @@ templates the existing invariants corpus does not already match.
 Design:
 
 - **No corpus mutation.** We emit YAML *fragments* to ``--out PATH``; the
-  live ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` is never touched.
+  live ``src/llenergymeasure/engines/{engine}/rules.proposed.yaml`` is never touched.
 - **Severity is mechanical.** ``warn`` for log-channel emissions;
   ``error`` when ``include_exceptions=True`` and the record is an
   exception. Invariant fragments are always ``added_by: runtime_warning``.
 - **Round-trip safe.** Fragments parse through
-  :func:`llenergymeasure.config.engine_invariants.loader._parse_invariant`;
+  :func:`llenergymeasure.config.engine_rules.loader._parse_invariant`;
   placeholders carry ``# TODO: human`` markers.
 - **Sentinel filtering.** ``subprocess_died`` / ``exception`` records
   don't prove "rule didn't fire" - excluded from B always; excluded from
@@ -41,10 +41,10 @@ from typing import Any, Literal
 
 import yaml
 
-from llenergymeasure.config.engine_invariants import (
+from llenergymeasure.config.engine_rules import (
     EmissionChannel,
     EngineInvariants,
-    EngineInvariantsLoader,
+    EngineRulesLoader,
 )
 from llenergymeasure.config.ssot import Engine
 from llenergymeasure.study.message_normalise import build_template_regex, normalise
@@ -54,7 +54,7 @@ __all__ = [
     "GapProposal",
     "ReportGapsError",
     "find_runtime_gaps",
-    "load_engine_invariants",
+    "load_engine_rules",
     "render_yaml_fragment",
 ]
 
@@ -126,14 +126,14 @@ _ALLOWED_ENGINES: frozenset[str] = frozenset(e.value for e in Engine)
 # ---------------------------------------------------------------------------
 
 
-def load_engine_invariants(
+def load_engine_rules(
     engines: list[Engine] | list[str] | None = None,
-    loader: EngineInvariantsLoader | None = None,
+    loader: EngineRulesLoader | None = None,
 ) -> dict[str, EngineInvariants]:
     """Load the engine invariants corpus for each engine we may emit proposals against.
 
     When ``loader`` is omitted, the memoised project-wide loader from
-    :func:`llenergymeasure.config.models._get_invariants_loader` is used.
+    :func:`llenergymeasure.config.models._get_rules_loader` is used.
     Tests inject a throwaway loader to sidestep the cache.
 
     Engines without a YAML corpus are skipped silently - a user scanning
@@ -144,14 +144,14 @@ def load_engine_invariants(
         # Lazy import keeps this module free of a hard ``config.models``
         # dependency at import time and matches that module's documented
         # monkeypatch-via-setattr pattern.
-        from llenergymeasure.config.models import _get_invariants_loader
+        from llenergymeasure.config.models import _get_rules_loader
 
-        loader = _get_invariants_loader()
+        loader = _get_rules_loader()
     wanted = [e.value for e in Engine] if engines is None else [str(e) for e in engines]
     out: dict[str, EngineInvariants] = {}
     for engine in wanted:
         try:
-            out[engine] = loader.load_invariants(engine)
+            out[engine] = loader.load_rules(engine)
         except FileNotFoundError:
             logger.debug("No invariants corpus for engine=%s; skipping match lookup.", engine)
     return out
@@ -209,16 +209,16 @@ def _build_regex_index(
 
 def find_runtime_gaps(
     study_dirs: list[Path],
-    engine_invariants: dict[str, EngineInvariants] | None = None,
+    engine_rules: dict[str, EngineInvariants] | None = None,
     engine: Engine | str | None = None,
     include_exceptions: bool = False,
-    loader: EngineInvariantsLoader | None = None,
+    loader: EngineRulesLoader | None = None,
 ) -> list[GapProposal]:
     """Scan one or more study directories and return unmatched-template proposals.
 
     Order sorts by (engine, normalised_template). ``engine`` accepts an
     :class:`Engine` enum or its string value. ``loader`` is only consulted
-    when ``engine_invariants`` is ``None``.
+    when ``engine_rules`` is ``None``.
     """
     if not study_dirs:
         raise ReportGapsError("No study directories provided. Pass at least one --study-dir.")
@@ -247,11 +247,7 @@ def find_runtime_gaps(
     if not records:
         return []
 
-    corpus = (
-        engine_invariants
-        if engine_invariants is not None
-        else load_engine_invariants(loader=loader)
-    )
+    corpus = engine_rules if engine_rules is not None else load_engine_rules(loader=loader)
     observed_index = _build_observed_template_index(corpus)
     regex_index = _build_regex_index(corpus)
 
@@ -656,7 +652,7 @@ def _field_value_distribution(
 
 _BANNER = (
     "# Invariant fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
-    "# src/llenergymeasure/engines/{engine}/invariants.proposed.yaml under the 'rules:' key.\n"
+    "# src/llenergymeasure/engines/{engine}/rules.proposed.yaml under the 'rules:' key.\n"
     "# ----------------------------------------------------------------------\n"
     "# added_by: runtime_warning - always, for runtime-derived rules.\n"
     "# needs_generalisation_review: set when the predicate is narrow or\n"
@@ -669,7 +665,7 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
     """Render one :class:`GapProposal` as a YAML document.
 
     The output always parses through
-    :func:`llenergymeasure.config.engine_invariants.loader._parse_invariant` -
+    :func:`llenergymeasure.config.engine_rules.loader._parse_invariant` -
     placeholder fields are enum-valid so the round-trip test passes while
     the ``# TODO: human`` markers make stubs obvious to reviewers.
     """

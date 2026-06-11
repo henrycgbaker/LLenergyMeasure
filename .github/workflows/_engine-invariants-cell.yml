@@ -286,7 +286,7 @@ jobs:
         run: |
           mkdir -p /tmp/engine-invariants-diff
           for KIND in proposed validated; do
-            OLD_YAML="${ENGINES_DIR}/${ENGINE}/invariants.${KIND}.yaml"
+            OLD_YAML="${ENGINES_DIR}/${ENGINE}/rules.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/${ENGINE}.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
               cp "$OLD_YAML" "$DEST"
@@ -336,8 +336,8 @@ jobs:
               python3 -m scripts.engine_producers.build_corpus --engine ${ENGINE}
               python3 scripts/validate_invariants.py \
                 --engine ${ENGINE} \
-                --corpus '${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml' \
-                --out '${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml' \
+                --corpus '${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml' \
+                --out '${ENGINES_DIR}/${ENGINE}/rules.validated.yaml' \
                 --validation-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
@@ -372,7 +372,7 @@ jobs:
           set +e
           uv run python scripts/diff_engine_invariants.py \
             "/tmp/engine-invariants-diff/${ENGINE}.validated.old.yaml" \
-            "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" \
+            "${ENGINES_DIR}/${ENGINE}/rules.validated.yaml" \
             --out "/tmp/engine-invariants-diff/${ENGINE}.validated.md" \
             --title "${ENGINE^} validated invariants diff"
           VENDORED_EXIT=$?
@@ -380,13 +380,13 @@ jobs:
 
           PROPOSED_CHANGED=true
           if diff -q "/tmp/engine-invariants-diff/${ENGINE}.proposed.old.yaml" \
-                    "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml" >/dev/null 2>&1; then
             PROPOSED_CHANGED=false
           fi
 
           VENDORED_CHANGED=true
           if diff -q "/tmp/engine-invariants-diff/${ENGINE}.validated.old.yaml" \
-                    "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/${ENGINE}/rules.validated.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -411,7 +411,7 @@ jobs:
                 echo '```diff'
                 diff -u --label "${ENGINE}.proposed.yaml" --label "${ENGINE}.proposed.yaml" \
                         "/tmp/engine-invariants-diff/${ENGINE}.proposed.old.yaml" \
-                        "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" | head -n 200 || true
+                        "${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
               fi
@@ -442,8 +442,8 @@ jobs:
           fi
           ARCHIVE_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
           mkdir -p "${ARCHIVE_DIR}"
-          cp "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" "${ARCHIVE_DIR}/invariants.proposed.yaml"
-          cp "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" "${ARCHIVE_DIR}/invariants.validated.yaml"
+          cp "${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml" "${ARCHIVE_DIR}/rules.proposed.yaml"
+          cp "${ENGINES_DIR}/${ENGINE}/rules.validated.yaml" "${ARCHIVE_DIR}/rules.validated.yaml"
 
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
@@ -512,10 +512,10 @@ jobs:
         with:
           name: invariants-writeback-${{ inputs.engine }}
           path: |
-            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.proposed.yaml
-            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.validated.yaml
-            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.proposed.yaml
-            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.validated.yaml
+            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/rules.proposed.yaml
+            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/rules.validated.yaml
+            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/rules.proposed.yaml
+            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/rules.validated.yaml
             docs/user/generated/invariants-${{ inputs.engine }}.md
           # ``warn`` rather than ``error``: canonical paths always exist by
           # the time this step runs (mining produced them), but the archive

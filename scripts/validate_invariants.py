@@ -3,7 +3,7 @@
 
 The validation step is the **observe half** of the "observe, don't re-encode"
 design in :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`.
-The YAML corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` declares each
+The YAML corpus at ``src/llenergymeasure/engines/{engine}/rules.proposed.yaml`` declares each
 invariant's ``expected_outcome``; this script executes the invariant through the
 library and records what *actually* happened. Divergence between declared and
 observed fails CI.
@@ -12,8 +12,8 @@ Usage (inside the engine's Docker container)::
 
     python scripts/validate_invariants.py \\
         --engine transformers \\
-        --corpus src/llenergymeasure/engines/transformers/invariants.proposed.yaml \\
-        --out src/llenergymeasure/engines/transformers/invariants.validated.yaml
+        --corpus src/llenergymeasure/engines/transformers/rules.proposed.yaml \\
+        --out src/llenergymeasure/engines/transformers/rules.validated.yaml
 
 Exit codes:
 
@@ -755,7 +755,7 @@ def regate_carried_catalogue(
           "schema_version": "1.0.0",
           "engine": "vllm",
           "engine_version": "0.21.0",          # current (in-container) version
-          "carried_corpus": "engine_versions/vllm/v0_19_1/.../invariants.proposed.yaml",
+          "carried_corpus": "engine_versions/vllm/v0_19_1/.../rules.proposed.yaml",
           "total": 41,
           "counts": {"confirmed": 37, "failed": 2, "infra_error": 2},
           "acceptance_rate": 0.902,            # confirmed / total

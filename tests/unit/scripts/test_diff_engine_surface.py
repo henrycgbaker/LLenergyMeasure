@@ -47,11 +47,11 @@ def _write_pin(
         schema["$defs"] = defs
     (pin / "schema.discovered.json").write_text(json.dumps(schema))
     if invariants is not None:
-        (pin / "invariants.proposed.yaml").write_text(
+        (pin / "rules.proposed.yaml").write_text(
             yaml.safe_dump({"engine": engine, "invariants": invariants})
         )
     if cases is not None:
-        (pin / "invariants.validated.yaml").write_text(
+        (pin / "rules.validated.yaml").write_text(
             yaml.safe_dump({"engine": engine, "cases": cases})
         )
     return pin

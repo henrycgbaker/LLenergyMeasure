@@ -25,8 +25,8 @@ measure encoding churn, not surface churn. This script never inspects enum
 Inputs are two directories, each holding (any subset of)::
 
     schema.discovered.json        schema envelope (engine_params, sampling_params, $defs)
-    invariants.proposed.yaml      mined invariant candidates
-    invariants.validated.yaml     gate-confirmed corpus
+    rules.proposed.yaml      mined invariant candidates
+    rules.validated.yaml     gate-confirmed corpus
 
 Usage::
 
@@ -53,8 +53,8 @@ from typing import Any
 import yaml
 
 _SCHEMA_FILE = "schema.discovered.json"
-_PROPOSED_FILE = "invariants.proposed.yaml"
-_VALIDATED_FILE = "invariants.validated.yaml"
+_PROPOSED_FILE = "rules.proposed.yaml"
+_VALIDATED_FILE = "rules.validated.yaml"
 
 _SCHEMA_SECTIONS = ("engine_params", "sampling_params")
 

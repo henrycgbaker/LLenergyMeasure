@@ -533,7 +533,7 @@ Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `Field
 
 **Mitigation: the proposed-vs-validated YAML pair (the trust seam).**
 
-The engine-invariants pipeline (`engine-pipeline.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
+The engine-invariants pipeline (`engine-pipeline.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/rules.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/rules.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
 
 Because the proposed-corpus diff is emitted alongside the validated diff, a miner refactor that silently drops 18 invariants shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the validation gate's verdict on the surviving invariants is green.
 

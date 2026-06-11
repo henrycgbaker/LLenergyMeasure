@@ -15,15 +15,15 @@ see [parameter discovery](/explanation/architecture/parameter-discovery).
 
 ```
   src/llenergymeasure/engines/{engine}/
-  ├── invariants.proposed.yaml    Maintainer-seeded corpus, post-mining
-  └── invariants.validated.yaml   CI-validated overlay, post-validate-replay
+  ├── rules.proposed.yaml    Maintainer-seeded corpus, post-mining
+  └── rules.validated.yaml   CI-validated overlay, post-validate-replay
 
   src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
   ├── {engine}_static_miner.yaml   Per-miner staging output (not committed)
   ├── {engine}_dynamic_miner.yaml
   └── _failed_validation_{engine}.yaml   Quarantined rules
 
-  src/llenergymeasure/config/engine_invariants/
+  src/llenergymeasure/config/engine_rules/
   └── loader.py                   Runtime consumer
 ```
 

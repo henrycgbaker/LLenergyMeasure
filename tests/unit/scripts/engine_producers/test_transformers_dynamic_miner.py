@@ -42,7 +42,7 @@ from scripts.engine_producers import transformers_dynamic_invariant_miner as int
 pytest.importorskip("transformers")
 
 
-_CORPUS_PATH = _PROJECT_ROOT / "configs" / "engine_invariants" / "transformers.proposed.yaml"
+_CORPUS_PATH = _PROJECT_ROOT / "configs" / "engine_rules" / "transformers.proposed.yaml"
 
 
 @pytest.fixture(scope="module")

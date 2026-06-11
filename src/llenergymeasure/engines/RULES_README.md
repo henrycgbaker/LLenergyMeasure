@@ -14,15 +14,15 @@ Design doc: [`.product/designs/config-deduplication-dormancy/runtime-config-vali
 
 Each engine is a sub-package containing its validation invariants and discovered schema:
 
-- `{engine}/invariants.proposed.yaml` - post-mine corpus from `scripts/engine_producers/{engine}_miner.py`
-- `{engine}/invariants.validated.yaml` - post-validation envelope from `scripts/validate_invariants.py`
+- `{engine}/rules.proposed.yaml` - post-mine corpus from `scripts/engine_producers/{engine}_miner.py`
+- `{engine}/rules.validated.yaml` - post-validation envelope from `scripts/validate_invariants.py`
 - `{engine}/schema.discovered.json` - discovered parameters from `scripts/refresh_discovered_schemas.sh`
 - `{engine}/_staging/` - gitignored scratch directory for intermediate artefacts
 
 The `.proposed.yaml` is the post-mine corpus - declared expectations only. The
 `.validated.yaml` is the post-validation envelope capturing observed outcomes plus any
 divergences from the proposed expectations. The runtime
-`EngineInvariantsLoader` reads the `.validated.yaml` when present and overlays
+`EngineRulesLoader` reads the `.validated.yaml` when present and overlays
 its observations onto the proposed YAML, falling back to the proposed YAML
 alone for local development without a validation run.
 
@@ -40,7 +40,7 @@ invariants:
 
 - `schema_version` - semver. Loader supports major 1; mismatches raise
   `UnsupportedSchemaVersionError` (see
-  `src/llenergymeasure/config/engine_invariants/loader.py`).
+  `src/llenergymeasure/config/engine_rules/loader.py`).
 - `engine_version` - the library version the corpus was seeded against.
   Informational; the validation-CI pipeline will revalidate against each
   Dockerfile-pinned version.
@@ -184,7 +184,7 @@ encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 
 ### Corpus invariants
 
-These are enforced via `tests/unit/config/engine_invariants/test_corpus_invariants.py`
+These are enforced via `tests/unit/config/engine_rules/test_corpus_invariants.py`
 and extended by the validation-CI gate (`scripts/validate_invariants.py`).
 
 1. Every invariant has a unique `id` within the engine.
@@ -201,7 +201,7 @@ and extended by the validation-CI gate (`scripts/validate_invariants.py`).
 ### Via miner (preferred)
 
 1. Rerun the miner for the engine:
-   `python -m scripts.engine_producers.{engine}_miner --out src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`
+   `python -m scripts.engine_producers.{engine}_miner --out src/llenergymeasure/engines/{engine}/rules.proposed.yaml`
    (optionally with `LLENERGY_MINER_FROZEN_AT=<iso-utc>` for reproducibility).
 2. Inspect the diff against the previous corpus file. Review the predicate
    shape and verify it matches the library source before merging.
@@ -230,7 +230,7 @@ warning capture (`runtime_warning`) and observed-collision detection
 
 When reviewing a corpus PR:
 
-- [ ] Invariants pass (`pytest tests/unit/config/engine_invariants/test_corpus_invariants.py`).
+- [ ] Invariants pass (`pytest tests/unit/config/engine_rules/test_corpus_invariants.py`).
 - [ ] Each new invariant's `message_template` reads correctly when substituted.
 - [ ] `kwargs_positive` genuinely triggers the invariant in the target library.
 - [ ] `kwargs_negative` genuinely does NOT trigger it.

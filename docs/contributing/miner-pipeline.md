@@ -22,8 +22,8 @@ see [extending miners](/contributing/extending-miners).
 
 ```
 src/llenergymeasure/engines/{engine}/
-├── invariants.proposed.yaml          Maintainer-seeded corpus, post-mining
-└── invariants.validated.yaml         CI-validated overlay, post-validate-replay
+├── rules.proposed.yaml          Maintainer-seeded corpus, post-mining
+└── rules.validated.yaml         CI-validated overlay, post-validate-replay
 
 src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
 ├── {engine}_static_invariant_miner.yaml      Per-miner staging output (not committed)
@@ -95,7 +95,7 @@ under the bumped library while `vllm/schemas` does not, or vice versa.
 |---|---|
 | Miner produces no rules for a new engine | `engine_versions/{engine}/v<safe>/producers/{static,dynamic}_invariant_miner.py` (does the file exist? imports succeed?); the dispatcher (`engine_versions/_dispatcher.py`) error message names the path to create when no exact-match archive AND no fallback is present at or below the SSOT-pinned version |
 | `MinerLandmarkMissingError` raised at import time | `engine_versions/{engine}/v<safe>/producers/*.py LANDMARKS` tuple (which dotted path is missing in the live library? `scripts/_drift.py --engine {engine} --producer invariants` will surface it) |
-| Validation gate fails on a previously-passing rule | `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (locate the rule by id) and `_staging/_failed_validation_{engine}.yaml` (which check failed: `positive_raises`, `message_template_match`, or `negative_does_not_raise`) |
+| Validation gate fails on a previously-passing rule | `src/llenergymeasure/engines/{engine}/rules.proposed.yaml` (locate the rule by id) and `_staging/_failed_validation_{engine}.yaml` (which check failed: `positive_raises`, `message_template_match`, or `negative_does_not_raise`) |
 | Rule duplication or merge surprises | `scripts/engine_producers/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
 | Static miner missed a predicate | `scripts/engine_producers/_base.py` (shared detectors) and `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` (per-version surface) |
 | Dynamic miner inferred wrong template | `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` (predicate-inference logic); the seven templates live in the per-version module or `_base.py` depending on engine |

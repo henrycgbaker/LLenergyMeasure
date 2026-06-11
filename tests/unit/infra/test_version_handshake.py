@@ -264,10 +264,10 @@ class TestReadBundledEngineVersion:
         """Bundled artefact disagreement is a build-time bundling bug; raise loud."""
         from dataclasses import replace
 
-        from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+        from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
         from llenergymeasure.config.schema_loader import SchemaLoader
 
-        original_load_invariants = EngineInvariantsLoader.load_invariants
+        original_load_invariants = EngineRulesLoader.load_rules
         original_load_schema = SchemaLoader.load_schema
 
         def fake_load_invariants(self, engine):  # type: ignore[no-untyped-def]
@@ -278,7 +278,7 @@ class TestReadBundledEngineVersion:
             real = original_load_schema(self, engine)
             return replace(real, engine_version="9.9.9")
 
-        monkeypatch.setattr(EngineInvariantsLoader, "load_invariants", fake_load_invariants)
+        monkeypatch.setattr(EngineRulesLoader, "load_rules", fake_load_invariants)
         monkeypatch.setattr(SchemaLoader, "load_schema", fake_load_schema)
 
         with pytest.raises(BundledEngineVersionMismatchError, match=r"1\.2\.3.*9\.9\.9"):

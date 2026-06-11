@@ -57,7 +57,7 @@ Per-stage comparison:
 | Probe | Landmark check (engine + class symbols importable) | Landmark check (engine + class symbols importable) |
 | Producer | Inspect typed APIs: `inspect.signature`, Pydantic `model_json_schema()`, `dataclasses.fields()`, `msgspec.json.schema()` | AST walk of validator methods + dynamic Cartesian probing + type-system lifting |
 | Validate | Deterministic by construction; no validate stage | Replay each rule against the live library inside the engine container; classify outcomes |
-| Output (per-engine) | `engines/<engine>/schema.discovered.json` | `engines/<engine>/invariants.proposed.yaml` + `engines/<engine>/invariants.validated.yaml` |
+| Output (per-engine) | `engines/<engine>/schema.discovered.json` | `engines/<engine>/rules.proposed.yaml` + `engines/<engine>/rules.validated.yaml` |
 | Format spec (reference) | [Schema discovered format](/reference/schema-discovered-format) | [Invariants corpus format](/reference/invariants-corpus-format) |
 | Per-engine digest (auto-generated) | `reference/engines/schema-<engine>.md`, `reference/engines/curation-<engine>.md` | `reference/engines/invariants-<engine>.md` |
 
@@ -222,7 +222,7 @@ flowchart TD
     staging[(staging files<br/>src/llenergymeasure/engines/_staging/)]
     build[build_corpus.py<br/>merge + dedup + fingerprint]
     replay[validate_invariants.py<br/>replay against live library]
-    confirmed[(confirmed rules<br/>engines/&lt;e&gt;/invariants.proposed.yaml<br/>engines/&lt;e&gt;/invariants.validated.yaml)]
+    confirmed[(confirmed rules<br/>engines/&lt;e&gt;/rules.proposed.yaml<br/>engines/&lt;e&gt;/rules.validated.yaml)]
     quarantined[(quarantined rules<br/>engines/&lt;e&gt;/_staging/_failed_*.yaml)]
 
     static --> staging
@@ -482,7 +482,7 @@ sequenceDiagram
     Inv->>Inv: probe -> mine -> validate-replay -> diff
     Schema-->>CI: schema.discovered.json + comment + label
     deactivate Schema
-    Inv-->>CI: invariants.proposed.yaml + invariants.validated.yaml + comment + label
+    Inv-->>CI: rules.proposed.yaml + rules.validated.yaml + comment + label
     deactivate Inv
     CI->>Bot: writeback (atomic; one push)
     deactivate CI

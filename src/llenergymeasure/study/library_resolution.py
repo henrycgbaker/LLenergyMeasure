@@ -24,8 +24,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from llenergymeasure.config.engine_invariants.loader import (
-    EngineInvariantsLoader,
+from llenergymeasure.config.engine_rules.loader import (
+    EngineRulesLoader,
     Invariant,
     resolve_field_path,
 )
@@ -77,7 +77,7 @@ def _apply_invariants_fixpoint(
     Args:
         config: A validated ``ExperimentConfig``.
         invariants: The invariant list for the config's engine (typically from
-            ``EngineInvariantsLoader.load_invariants(engine).invariants``).
+            ``EngineRulesLoader.load_rules(engine).invariants``).
 
     Raises:
         LibraryResolutionCycleError: If the fixpoint loop exceeds
@@ -224,7 +224,7 @@ def resolve_library_effective(
     configs: list[ExperimentConfig],
     *,
     invariants: list[Invariant] | tuple[Invariant, ...] | None = None,
-    loader: EngineInvariantsLoader | None = None,
+    loader: EngineRulesLoader | None = None,
     deduplicate: bool = True,
 ) -> DedupResult:
     """Canonicalise then (optionally) resolved-config-hash dedup ``configs``.
@@ -238,7 +238,7 @@ def resolve_library_effective(
         configs: Sweep-expanded declared configs.
         invariants: Optional explicit invariant list. Overrides the loader when the
             sweep is single-engine and the caller has a invariants handle.
-        loader: Optional ``EngineInvariantsLoader``. Defaults to a fresh one
+        loader: Optional ``EngineRulesLoader``. Defaults to a fresh one
             (per-process cache is internal to each instance).
         deduplicate: When ``False``, every declared config still runs -
             groups are computed for the equivalence-groups sidecar but the
@@ -250,7 +250,7 @@ def resolve_library_effective(
     if not configs:
         return DedupResult(canonical_configs=[])
 
-    resolved_loader = loader or EngineInvariantsLoader()
+    resolved_loader = loader or EngineRulesLoader()
     explicit_rules = tuple(invariants) if invariants is not None else None
 
     def _invariants_for(cfg: ExperimentConfig) -> tuple[Invariant, ...]:
@@ -258,7 +258,7 @@ def resolve_library_effective(
             return explicit_rules
         engine = cfg.engine.value if hasattr(cfg.engine, "value") else str(cfg.engine)
         try:
-            return resolved_loader.load_invariants(engine).invariants
+            return resolved_loader.load_rules(engine).invariants
         except FileNotFoundError:
             return ()
 

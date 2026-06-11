@@ -377,8 +377,8 @@ different workloads.
 ### Validated corpus
 
 The engine-invariants corpus after the validation-CI gate has replayed each
-invariant against the live library. Stored as `invariants.validated.yaml`. Not
-to be confused with the proposed corpus (`invariants.proposed.yaml`), which
+invariant against the live library. Stored as `rules.validated.yaml`. Not
+to be confused with the proposed corpus (`rules.proposed.yaml`), which
 contains declared expectations before CI observation. See
 [Reference: invariants corpus format](/reference/invariants-corpus-format)
 for the full format specification.

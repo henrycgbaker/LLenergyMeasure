@@ -25,8 +25,8 @@ engines/
   transformers/
     __init__.py        # Re-exports TransformersEngine from plugin
     plugin.py          # HuggingFace Transformers engine
-    invariants.proposed.yaml    # Mined proposed invariants
-    invariants.validated.yaml   # Validation-confirmed observations
+    rules.proposed.yaml    # Mined proposed invariants
+    rules.validated.yaml   # Validation-confirmed observations
     schema.discovered.json      # Introspected parameter schema
     _staging/          # Per-engine miner staging (gitkeep'd)
 
@@ -35,10 +35,10 @@ engines/
 ```
 
 The runtime data files (`invariants.*.yaml`, `schema.discovered.json`) are
-loaded by `llenergymeasure.config.engine_invariants.EngineInvariantsLoader` and
+loaded by `llenergymeasure.config.engine_rules.EngineRulesLoader` and
 `llenergymeasure.config.SchemaLoader` respectively. CI workflows
 (`update-engine-{invariants,schemas}.yml`) regenerate them via Renovate-driven
-library bumps and commit-back. See `INVARIANTS_README.md` for the corpus
+library bumps and commit-back. See `RULES_README.md` for the corpus
 schema specification.
 
 ## EnginePlugin protocol

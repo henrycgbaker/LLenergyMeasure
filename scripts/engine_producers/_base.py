@@ -7,7 +7,7 @@ library source. No concrete miner ships today; they land as independent
 PRs per engine.
 
 - :class:`InvariantCandidate` - the miner output type, serialised to the YAML
-  corpus entry shape in :mod:`llenergymeasure.config.engine_invariants.loader`.
+  corpus entry shape in :mod:`llenergymeasure.config.engine_rules.loader`.
 - :class:`MinerLandmarkMissingError` - fail-loud exception CI treats as fatal
   when the producer's AST landmarks no longer resolve under the live library.
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
@@ -53,7 +53,7 @@ class MinerSource:
 class InvariantCandidate:
     """One extracted invariant candidate.
 
-    Serialised verbatim into ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
+    Serialised verbatim into ``src/llenergymeasure/engines/{engine}/rules.proposed.yaml``
     after human review. Field names match the corpus schema so no
     translation step is needed between miner output and corpus entry.
     """

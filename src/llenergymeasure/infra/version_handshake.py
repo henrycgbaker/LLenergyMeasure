@@ -236,7 +236,7 @@ def read_bundled_engine_version(engine: str) -> str | None:
 
     The wheel ships per-engine machine artefacts whose envelope carries the
     engine_version they were mined for. This function reads through
-    :class:`EngineInvariantsLoader` and :class:`SchemaLoader` (so the
+    :class:`EngineRulesLoader` and :class:`SchemaLoader` (so the
     primary read goes via the same mechanism the runtime experiment path
     uses), cross-checks that both bundled artefacts agree on
     engine_version, and returns the version string.
@@ -255,11 +255,11 @@ def read_bundled_engine_version(engine: str) -> str | None:
     experiment time - the SSOT version describes the build's INTENT;
     the bundled envelope describes what shipped.
     """
-    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+    from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
     from llenergymeasure.config.schema_loader import SchemaLoader
 
     try:
-        invariants = EngineInvariantsLoader().load_invariants(engine)
+        invariants = EngineRulesLoader().load_rules(engine)
     except FileNotFoundError as exc:
         logger.debug("Bundled invariants read failed for %s: %s", engine, exc)
         return None

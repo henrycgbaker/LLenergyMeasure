@@ -86,8 +86,8 @@ def _group_by_added_by(invariants: list[dict[str, Any]]) -> dict[str, list[dict[
 def _render(engine: str) -> str:
     """Build the digest Markdown for ``engine``."""
     engine_dir = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine
-    proposed = _load_yaml(engine_dir / "invariants.proposed.yaml")
-    validated = _load_yaml(engine_dir / "invariants.validated.yaml")
+    proposed = _load_yaml(engine_dir / "rules.proposed.yaml")
+    validated = _load_yaml(engine_dir / "rules.validated.yaml")
     ssot = _load_yaml(_PROJECT_ROOT / "engine_versions" / engine / "current.yaml")
 
     library = ssot.get("library") if isinstance(ssot.get("library"), dict) else {}

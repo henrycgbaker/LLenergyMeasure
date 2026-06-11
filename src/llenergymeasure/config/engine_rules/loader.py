@@ -1,6 +1,6 @@
 """Load, match, and render validation invariants from the YAML corpus.
 
-The corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
+The corpus at ``src/llenergymeasure/engines/{engine}/rules.proposed.yaml``
 is parsed here into typed :class:`Invariant` entries. Each invariant carries a match
 predicate (operators defined in :func:`evaluate_predicate`) and a message
 template. The generic ``@model_validator`` in ``config/models.py`` calls
@@ -16,7 +16,7 @@ Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
   The proposed YAML carries each invariant's declared ``expected_outcome``. The
   ``engine-invariants`` (validation gate) CI pipeline (see
   ``scripts/validate_invariants.py``) runs every invariant through the real library
-  and emits ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml``
+  and emits ``src/llenergymeasure/engines/{engine}/rules.validated.yaml``
   - this YAML captures observed outcomes. When present, the loader overlays
   the validated observations onto the corpus so downstream consumers see
   CI-validated truth; absent, the loader falls back to the proposed YAML so
@@ -188,7 +188,7 @@ class Invariant:
     """One validation invariant parsed from the corpus.
 
     Field names mirror the YAML schema documented in
-    ``src/llenergymeasure/engines/INVARIANTS_README.md``. Construction goes through
+    ``src/llenergymeasure/engines/RULES_README.md``. Construction goes through
     :func:`_parse_invariant`; tests can instantiate directly for unit coverage.
     """
 
@@ -636,16 +636,16 @@ def _parse_envelope(engine: str, raw_text: str) -> EngineInvariants:
 _DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[2] / "engines"
 
 
-class EngineInvariantsLoader:
+class EngineRulesLoader:
     """Load, cache, and serve :class:`EngineInvariants` per engine.
 
     Per-instance cache (rather than module-level LRU) - tests can instantiate
     a loader and monkeypatch ``corpus_root`` without polluting other tests.
 
     Load order (picked up automatically; per-engine sub-package layout):
-      1. **Proposed YAML** under ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` -
+      1. **Proposed YAML** under ``src/llenergymeasure/engines/{engine}/rules.proposed.yaml`` -
          the maintainer-seeded source of truth; always present in-repo.
-      2. **Validated YAML** under ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` -
+      2. **Validated YAML** under ``src/llenergymeasure/engines/{engine}/rules.validated.yaml`` -
          CI-validated observed behaviour, overlaid onto the corpus's invariants
          when present. Written by ``scripts/validate_invariants.py`` under the
          engine-invariants CI.
@@ -655,7 +655,7 @@ class EngineInvariantsLoader:
         self.corpus_root: Path = corpus_root or _DEFAULT_CORPUS_ROOT
         self._cache: dict[str, EngineInvariants] = {}
 
-    def load_invariants(self, engine: str) -> EngineInvariants:
+    def load_rules(self, engine: str) -> EngineInvariants:
         """Return the parsed corpus for ``engine``, parsing once per engine.
 
         When a CI-validated validated YAML envelope exists at the configured
@@ -667,7 +667,7 @@ class EngineInvariantsLoader:
         if cached is not None:
             return cached
 
-        yaml_path = self.corpus_root / engine / "invariants.proposed.yaml"
+        yaml_path = self.corpus_root / engine / "rules.proposed.yaml"
         try:
             yaml_text = yaml_path.read_text()
         except FileNotFoundError as exc:
@@ -702,12 +702,12 @@ class EngineInvariantsLoader:
 def _try_load_validated_yaml(corpus_root: Path, engine: str) -> dict[str, Any] | None:
     """Return parsed validated-invariants YAML for ``engine`` or ``None`` if absent.
 
-    Reads from ``{corpus_root}/{engine}/invariants.validated.yaml``. Swallows YAML parse
+    Reads from ``{corpus_root}/{engine}/rules.validated.yaml``. Swallows YAML parse
     errors and rejects unsupported envelope versions to avoid breaking
     startup on a corrupt or future-schema commit-back - the validation CI job
     will resurface the issue.
     """
-    path = corpus_root / engine / "invariants.validated.yaml"
+    path = corpus_root / engine / "rules.validated.yaml"
     try:
         raw = path.read_text()
     except FileNotFoundError:

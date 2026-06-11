@@ -17,11 +17,11 @@ from typing import Any
 
 import pytest
 
-from llenergymeasure.config.engine_invariants import (
+from llenergymeasure.config.engine_rules import (
     Invariant,
     evaluate_predicate,
 )
-from llenergymeasure.config.engine_invariants.loader import (
+from llenergymeasure.config.engine_rules.loader import (
     _is_int_pair,
     _resolve_field_refs_in_spec,
 )

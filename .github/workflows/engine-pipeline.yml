@@ -478,8 +478,8 @@ jobs:
           CONTRIBUTORS=()
           for ENGINE in transformers vllm tensorrt; do
             INV_FILES=(
-              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/invariants.proposed.yaml"
-              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/invariants.validated.yaml"
+              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/rules.proposed.yaml"
+              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/rules.validated.yaml"
             )
             SCH_FILES=(
               "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/schema.discovered.json"
@@ -499,8 +499,8 @@ jobs:
 
           # Stage only the paths writeback artefacts may produce.
           git add \
-            'src/llenergymeasure/engines/*/invariants.proposed.yaml' \
-            'src/llenergymeasure/engines/*/invariants.validated.yaml' \
+            'src/llenergymeasure/engines/*/rules.proposed.yaml' \
+            'src/llenergymeasure/engines/*/rules.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
             'engine_versions/*/current.yaml' \
             'docs/reference/engines/invariants-*.md' \

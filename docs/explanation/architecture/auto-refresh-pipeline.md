@@ -85,8 +85,8 @@ four tracked artefacts:
 | File | Produced by | Contents |
 |---|---|---|
 | `schema.discovered.json` | Schema introspector | Full JSON Schema of all engine config parameters, with types, defaults, and docstrings |
-| `invariants.proposed.yaml` | Invariant miner | Raw mined rules before validation |
-| `invariants.validated.yaml` | Validation pass | Rules that passed the corpus validation check; used at runtime by the config validator |
+| `rules.proposed.yaml` | Invariant miner | Raw mined rules before validation |
+| `rules.validated.yaml` | Validation pass | Rules that passed the corpus validation check; used at runtime by the config validator |
 | `docs/user/generated/invariants-<engine>.md` | `generate_invariants_doc.py` | Human-readable invariant reference, regenerated from the validated YAML |
 
 The curation and schema docs (`docs/user/generated/curation-<engine>.md`,
@@ -116,7 +116,7 @@ library version, the same artefacts are produced on every run.
 Researchers running studies that span engine releases need to trust that the
 tool's parameter handling tracks upstream. With the auto-refresh loop:
 
-- A vLLM 0.8 PR includes an updated `invariants.validated.yaml` reflecting
+- A vLLM 0.8 PR includes an updated `rules.validated.yaml` reflecting
   parameters introduced in 0.8. The reviewer sees exactly what changed.
 - A `default_value` that shifts between releases is visible in the invariant
   diff comment on the Renovate PR before it reaches `main`.

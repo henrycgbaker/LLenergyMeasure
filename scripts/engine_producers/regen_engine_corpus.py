@@ -6,8 +6,8 @@ The mined-corpus SSOT lives at
 ``src/llenergymeasure/engines/<engine>/`` - the data shadow that ships in
 the wheel. This script copies SSOT -> shadow.
 
-Files synced (per pin): schema.discovered.json, invariants.proposed.yaml,
-invariants.validated.yaml, curated.yaml, and overlay.yaml when the SSOT
+Files synced (per pin): schema.discovered.json, rules.proposed.yaml,
+rules.validated.yaml, curated.yaml, and overlay.yaml when the SSOT
 carries one (optional hand-authored narrowings/completions).
 
 Two modes:
@@ -43,8 +43,8 @@ ENGINES: tuple[str, ...] = ("transformers", "vllm", "tensorrt")
 # and only synced when the SSOT carries one.
 CORPUS_FILES: tuple[str, ...] = (
     "schema.discovered.json",
-    "invariants.proposed.yaml",
-    "invariants.validated.yaml",
+    "rules.proposed.yaml",
+    "rules.validated.yaml",
     "curated.yaml",
 )
 OPTIONAL_FILES: tuple[str, ...] = ("overlay.yaml",)

@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from llenergymeasure.config.engine_invariants import (
+from llenergymeasure.config.engine_rules import (
     Invariant,
     evaluate_predicate,
     resolve_field_path,

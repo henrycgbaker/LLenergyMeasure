@@ -4,8 +4,8 @@ The validation-invariants pipeline is split into independent miners (dynamic min
 static miner, future runtime-warning miner) that each write to a staging file
 under ``src/llenergymeasure/engines/{engine}/_staging/{engine}_{name}.yaml``. This
 module is the single canonical entry point that runs them, merges their outputs
-into one :class:`~llenergymeasure.config.engine_invariants.loader.EngineInvariants`-shaped
-document, and writes ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``.
+into one :class:`~llenergymeasure.config.engine_rules.loader.EngineInvariants`-shaped
+document, and writes ``src/llenergymeasure/engines/{engine}/rules.proposed.yaml``.
 
 Pipeline: miners → staging → merge → **validation-gate** → write canonical corpus.
 
@@ -204,7 +204,7 @@ def _staging_dir(corpus_root: Path, engine: str) -> Path:
 
 
 def _canonical_path(corpus_root: Path, engine: str) -> Path:
-    return corpus_root / engine / "invariants.proposed.yaml"
+    return corpus_root / engine / "rules.proposed.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -716,7 +716,7 @@ def _validate_candidates(
     as a side effect - that file is the input to :func:`validate_engine`. The
     YAML envelope ``validate_engine`` writes goes to a sibling temp path
     (``_staging/_validation_envelope_{engine}.yaml``) so the canonical
-    ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` (the
+    ``src/llenergymeasure/engines/{engine}/rules.validated.yaml`` (the
     runtime-loaded sidecar) is never overwritten by this build step. The
     leading-underscore prefix keeps the temp file out of the
     ``{engine}_*.yaml`` glob that ``discover_staging_files`` walks.

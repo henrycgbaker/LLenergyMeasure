@@ -85,8 +85,8 @@ flowchart TD
 Layers over: invariant-miner + invalidity-miner + lift modules + validation-CI gate.
 
 1. **PROBE** - inline `python -m scripts._drift --producer invariants`; verdict `pass` or `fail`.
-2. **MINE** (only if probe passes) - `build_corpus.py` writes `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`.
-3. **VALIDATE-REPLAY** - `validate_invariants.py` plus the `compare_expected_vs_observed` contract from `_invariant_validation_common.py`. Replays `kwargs_positive` + `kwargs_negative` against the live library; classifies outcomes (`positive_confirmed`, `negative_confirmed`, `divergence`). Writes `src/llenergymeasure/engines/{engine}/invariants.validated.yaml`.
+2. **MINE** (only if probe passes) - `build_corpus.py` writes `src/llenergymeasure/engines/{engine}/rules.proposed.yaml`.
+3. **VALIDATE-REPLAY** - `validate_invariants.py` plus the `compare_expected_vs_observed` contract from `_invariant_validation_common.py`. Replays `kwargs_positive` + `kwargs_negative` against the live library; classifies outcomes (`positive_confirmed`, `negative_confirmed`, `divergence`). Writes `src/llenergymeasure/engines/{engine}/rules.validated.yaml`.
 4. **DIFF vs HEAD** for both `proposed.yaml` and `validated.yaml` artefacts.
 5. **REGENERATE** `docs/reference/engines/invariants-{engine}.md` (Invariants section - fact base, encompasses dormancy + invalidity + miner output + introspection + runtime catch-all).
 6. **COMMENT + LABEL** (suppress on empty).
@@ -117,8 +117,8 @@ Each cell:
 The last-finishing workflow performs an in-line atomic writeback:
 
 ```
-git add src/llenergymeasure/engines/{engine}/invariants.proposed.yaml
-        src/llenergymeasure/engines/{engine}/invariants.validated.yaml
+git add src/llenergymeasure/engines/{engine}/rules.proposed.yaml
+        src/llenergymeasure/engines/{engine}/rules.validated.yaml
         src/llenergymeasure/engines/{engine}/schema.discovered.json
         docs/reference/engines/curation-{engine}.md
         docs/reference/engines/invariants-{engine}.md
