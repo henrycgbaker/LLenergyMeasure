@@ -42,6 +42,7 @@ dev = [
     "types-pyyaml>=6.0.12",
     "import-linter>=2.9",
     "msgspec",
+    "datamodel-code-generator==0.62.0",
 ]
 
 [project.scripts]

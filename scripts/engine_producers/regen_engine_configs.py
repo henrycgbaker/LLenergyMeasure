@@ -1,0 +1,500 @@
+"""Generate per-engine typed Pydantic config.py from mined schema data.
+
+The mined-corpus SSOT lives at ``engine_versions/<engine>/v<safe>/outputs/``
+(resolved from each engine's ``current.yaml`` pin). This script projects three
+of those files into a vendored, committed, typed config class:
+
+- ``schema.discovered.json`` - the mined schema envelope (field types,
+  defaults, enums, bounds).
+- ``curated.yaml`` - the exposure allowlist; only ``exposed_fields`` entries
+  become first-class typed fields on the generated sub-models.
+- ``overlay.yaml`` (optional) - hand-authored narrowings (tighten a mined
+  field) and completions (add a field mining missed). Absent on the live pin.
+
+The result is ``src/llenergymeasure/engines/<engine>/config.py`` with three
+classes - ``Config`` (wrapper), ``EngineParams``, ``SamplingParams`` - matching
+the schema's native section split. Generation is delegated to
+``datamodel-code-generator`` (a dev-only dependency); this wrapper owns only
+the llem-specific parts: reshaping the custom envelope into a JSON Schema
+2020-12 document, applying curation + overlay, and normalising the output with
+ruff so byte-comparison is stable across runs.
+
+Two modes mirror ``regen_engine_corpus.py``:
+
+- ``--check`` (default): regenerate to memory, byte-compare against the
+  committed config.py, exit 1 with a per-file diff on drift. CI parity gate.
+- ``--write``: regenerate and write config.py, reporting what changed.
+
+``--engine <name>`` restricts the run (repeatable); the default is every engine
+with generation enabled. Today that is transformers only (the pilot); vllm and
+tensorrt fan out by adding a row to ``ENGINES``.
+
+Generation policy on the emitted models:
+
+- Curated fields that mining typed carry real types (Literal enums, ge/le
+  bounds where mined). Curated fields absent from the discovered schema (the
+  discovery-debt entries) get permissive ``Any | None`` stubs - curated.yaml
+  carries only the field NAME, so no richer type exists to project; the field
+  stays reachable and an overlay completion can type it later.
+- Both param sub-models carry ``extra="allow"`` (matches the live engine
+  config policy): non-curated engine fields reach the engine via passthrough.
+"""
+
+from __future__ import annotations
+
+import argparse
+import difflib
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
+
+# Engines with config generation enabled. C8 fans vllm + tensorrt out by
+# adding their names here once their schema shadows are pilot-validated.
+ENGINES: tuple[str, ...] = ("transformers",)
+
+# Native schema sections, projected into same-named sub-models.
+SECTIONS: tuple[str, ...] = ("engine_params", "sampling_params")
+
+# Verified flag combo from
+# .product/research/datamodel-codegen-spike-2026-05-23.md, re-checked against
+# the pinned datamodel-code-generator 0.62.0 (every flag still present).
+# --disable-timestamp is mandatory for --check (the banner timestamp would
+# otherwise change every run).
+_DMCG_FLAGS: tuple[str, ...] = (
+    "--input-file-type",
+    "jsonschema",
+    "--output-model-type",
+    "pydantic_v2.BaseModel",
+    "--target-python-version",
+    "3.10",
+    "--use-annotated",
+    "--enum-field-as-literal",
+    "all",
+    "--use-union-operator",
+    "--use-attribute-docstrings",
+    "--use-field-description",
+    # Preserve x-source / x-source-ref provenance as json_schema_extra on
+    # Field(). The bare --field-extra-keys form (literal key names including
+    # the "x-" prefix) is what works empirically; --field-extra-keys-without-
+    # x-prefix does not (noted during the 2026-05-24 spike audit).
+    "--field-extra-keys",
+    "x-source",
+    "x-source-ref",
+    "x-narrowing-applied",
+    "x-completion-applied",
+    "--disable-timestamp",
+)
+
+
+def _shadow_config_path(engine: str) -> Path:
+    """Return ``src/llenergymeasure/engines/<engine>/config.py``."""
+    return _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine / "config.py"
+
+
+# ---------------------------------------------------------------------------
+# Envelope -> JSON Schema 2020-12 pre-step
+# ---------------------------------------------------------------------------
+
+# Legacy Python-string types in the envelope mapped to a JSON Schema scalar.
+# (PR-0.7 envelope canonicalisation, which would make this a no-op, has not
+# landed on this branch; the envelope still records types as Python strings.)
+_SCALAR_TYPES: dict[str, str] = {
+    "str": "string",
+    "bool": "boolean",
+    "int": "integer",
+    "float": "number",
+}
+
+
+def _python_type_to_json_schema(type_str: str | None) -> dict[str, Any]:
+    """Translate one envelope ``type`` string into JSON Schema keys.
+
+    Handles the live envelope's vocabulary:
+
+    - canonical scalars (``"str"`` -> ``{"type": "string"}``, etc.);
+    - the ``"unknown"`` / ``None`` sentinel (GenerationConfig fields with no
+      annotation) -> ``{}`` (datamodel-codegen renders ``Any | None``);
+    - Python union strings (``"str | bool | None"``,
+      ``"PretrainedConfig | str | PathLike | None"``). The scalar members map
+      to a JSON Schema ``anyOf``; non-scalar members (engine classes, PathLike)
+      and a trailing ``None`` collapse to permissive ``Any | None``, since the
+      generated class only validates SHAPE and the engine owns the rest.
+
+    A single recognised scalar returns ``{"type": <scalar>}`` directly; an
+    unrecognised single token returns ``{}`` (permissive).
+    """
+    if not type_str or type_str == "unknown":
+        return {}
+
+    members = [m.strip() for m in type_str.split("|")]
+    scalars = [_SCALAR_TYPES[m] for m in members if m in _SCALAR_TYPES]
+    has_unmappable = any(m not in _SCALAR_TYPES and m != "None" for m in members)
+
+    # Any non-scalar member (engine class, PathLike, ...) makes the whole
+    # field permissive: we cannot express it as JSON Schema and the engine
+    # validates it anyway.
+    if has_unmappable or not scalars:
+        return {}
+    if len(scalars) == 1:
+        return {"type": scalars[0]}
+    return {"anyOf": [{"type": s} for s in scalars]}
+
+
+# JSON-Schema-native keys passed through from a mined field shape unchanged.
+_PASSTHROUGH_KEYS: tuple[str, ...] = (
+    "default",
+    "description",
+    "enum",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "x-source",
+    "x-source-ref",
+)
+
+
+def _field_shape_to_property(shape: dict[str, Any]) -> dict[str, Any]:
+    """Translate one ``schema.discovered.json`` field shape to a JSON Schema property."""
+    prop = _python_type_to_json_schema(shape.get("type"))
+    for key in _PASSTHROUGH_KEYS:
+        if key in shape:
+            prop[key] = shape[key]
+    return prop
+
+
+# ---------------------------------------------------------------------------
+# Curation + overlay
+# ---------------------------------------------------------------------------
+
+
+def _load_curated(outputs: Path) -> dict[str, list[str]]:
+    """Read curated.yaml; return per-section exposure allowlists.
+
+    Missing curated.yaml or section -> empty list (nothing exposed).
+    """
+    path = outputs / "curated.yaml"
+    if not path.is_file():
+        return {section: [] for section in SECTIONS}
+    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    exposed = raw.get("exposed_fields", {})
+    if not isinstance(exposed, dict):
+        raise ValueError(
+            f"{path}: 'exposed_fields' must be a mapping, got {type(exposed).__name__}"
+        )
+    return {section: list(exposed.get(section, []) or []) for section in SECTIONS}
+
+
+# Keys an overlay narrowing may TIGHTEN on a mined field.
+_NARROWING_KEYS: tuple[str, ...] = (
+    "type",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "enum",
+    "description",
+)
+
+
+def _load_overlay(outputs: Path) -> dict[str, dict[str, dict[str, Any]]]:
+    """Read overlay.yaml; return narrowings + completions per section.
+
+    Missing overlay.yaml -> empty (the live path on this branch). Shape::
+
+        {"narrowings": {<section>: {<field>: {...}}},
+         "completions": {<section>: {<field>: {...}}}}
+    """
+    empty: dict[str, dict[str, dict[str, Any]]] = {
+        "narrowings": {section: {} for section in SECTIONS},
+        "completions": {section: {} for section in SECTIONS},
+    }
+    path = outputs / "overlay.yaml"
+    if not path.is_file():
+        return empty
+    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    for top in ("narrowings", "completions"):
+        block = raw.get(top)
+        if block is None:
+            continue
+        if not isinstance(block, dict):
+            raise ValueError(f"{path}: '{top}' must be a mapping, got {type(block).__name__}")
+        for section in SECTIONS:
+            section_block = block.get(section) or {}
+            if not isinstance(section_block, dict):
+                raise ValueError(f"{path}: '{top}.{section}' must be a mapping.")
+            empty[top][section] = section_block
+    return empty
+
+
+# JSON Schema "type" subtype relations the overlay may tighten TO. A narrowing
+# may replace a broader mined type with a strictly narrower one; anything else
+# is a contradiction and errors loudly.
+_TYPE_NARROWINGS: dict[str, frozenset[str]] = {
+    "number": frozenset({"number", "integer"}),
+    "integer": frozenset({"integer"}),
+    "string": frozenset({"string"}),
+    "boolean": frozenset({"boolean"}),
+}
+
+
+def _apply_narrowing(
+    field: str, mined: dict[str, Any], narrowing: dict[str, Any]
+) -> dict[str, Any]:
+    """Tighten a mined property with an overlay narrowing.
+
+    Tighten-only: a ``type`` narrowing must be a subtype of the mined type
+    (integer narrows number; like narrows like). A contradiction
+    (``string`` mined, ``integer`` overlay) raises with both shapes. Other
+    narrowing keys (bounds, enum, description) layer on additively.
+    """
+    out = dict(mined)
+    new_type = narrowing.get("type")
+    mined_type = mined.get("type")
+    if new_type is not None and mined_type is not None:
+        allowed = _TYPE_NARROWINGS.get(mined_type, frozenset({mined_type}))
+        if new_type not in allowed:
+            raise ValueError(
+                f"overlay narrowing on {field!r} contradicts mined type: "
+                f"mined {mined_type!r}, overlay {new_type!r} (narrowings may only tighten)."
+            )
+    for key in _NARROWING_KEYS:
+        if key in narrowing:
+            out[key] = narrowing[key]
+    reason = narrowing.get("x-narrowing-reason")
+    if reason is not None:
+        out["x-narrowing-applied"] = str(reason).strip()
+    return out
+
+
+def _completion_to_property(completion: dict[str, Any]) -> dict[str, Any]:
+    """Translate an overlay completion (a brand-new field) to a JSON Schema property."""
+    drop = {"x-completion-reason"}
+    out = {k: v for k, v in completion.items() if k not in drop}
+    out.setdefault("x-source", "engine_overlay")
+    reason = completion.get("x-completion-reason")
+    if reason is not None:
+        out["x-completion-applied"] = str(reason).strip()
+    return out
+
+
+def compose_synthetic_schema(
+    discovered: dict[str, Any],
+    curated: dict[str, list[str]],
+    overlay: dict[str, dict[str, dict[str, Any]]],
+) -> dict[str, Any]:
+    """Compose a JSON Schema 2020-12 doc from envelope + curation + overlay.
+
+    Per section, in order:
+
+    1. Filter the discovered schema through the curated allowlist. A curated
+       field is resolved against the UNION of discovered sections (the curated
+       split does not line up with the discovered split - e.g. ``use_cache`` is
+       curated under engine_params but discovered under sampling_params), then
+       placed in the curated section. A field absent from discovery entirely is
+       a discovery-debt stub: a permissive ``Any | None`` field.
+    2. Apply overlay narrowings (tighten mined fields).
+    3. Apply overlay completions (add fields mining missed).
+
+    Each section becomes a named ``$defs`` entry with ``additionalProperties:
+    true`` (the ``extra="allow"`` policy) so datamodel-codegen emits a named
+    sub-class. The root ``Config`` references them by ``$ref``.
+    """
+    narrowings = overlay["narrowings"]
+    completions = overlay["completions"]
+    # Resolve curated fields against the union of discovered sections.
+    discovered_fields: dict[str, Any] = {}
+    for section in SECTIONS:
+        discovered_fields.update(discovered.get(section, {}) or {})
+
+    defs: dict[str, Any] = {}
+    properties: dict[str, Any] = {}
+    for section in SECTIONS:
+        section_props: dict[str, Any] = {}
+        for name in curated.get(section, []):
+            mined_shape = discovered_fields.get(name)
+            # Absent from discovery -> permissive debt stub ({} -> Any | None).
+            prop = _field_shape_to_property(mined_shape) if mined_shape is not None else {}
+            if name in narrowings[section]:
+                prop = _apply_narrowing(name, prop, narrowings[section][name])
+            section_props[name] = prop
+        for name, completion in completions[section].items():
+            if name in section_props:
+                raise ValueError(
+                    f"overlay completion {section}.{name!r} shadows a curated field; "
+                    "use a narrowing to modify a field mining already surfaced."
+                )
+            section_props[name] = _completion_to_property(completion)
+
+        title = "".join(part.capitalize() for part in section.split("_"))
+        defs[title] = {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": section_props,
+        }
+        properties[section] = {"$ref": f"#/$defs/{title}"}
+
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Config",
+        "type": "object",
+        "additionalProperties": True,
+        "properties": properties,
+        "$defs": defs,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Generation
+# ---------------------------------------------------------------------------
+
+
+def _custom_header(engine: str, safe_version: str) -> str:
+    """Per-engine 'DO NOT EDIT' header passed via --custom-file-header."""
+    return (
+        "# DO NOT EDIT - regenerated from "
+        f"engine_versions/{engine}/{safe_version}/outputs/"
+        "{curated.yaml,schema.discovered.json}\n"
+        "# Edit those upstream and run "
+        "`uv run python scripts/engine_producers/regen_engine_configs.py --write`."
+    )
+
+
+def _ruff_normalise(path: Path) -> None:
+    """Apply repo ruff style to a generated file in place.
+
+    Load-bearing: datamodel-codegen emits single-quoted strings and its own
+    import order, both of which differ from repo ruff style. Without this the
+    --check byte-compare goes forever-red on cosmetic quote/import drift.
+    """
+    for cmd in (
+        ["ruff", "check", "--fix", "--quiet", str(path)],
+        ["ruff", "format", "--quiet", str(path)],
+    ):
+        subprocess.run(["uv", "run", *cmd], check=True, cwd=_PROJECT_ROOT, capture_output=True)
+
+
+def generate_config(engine: str, outputs: Path) -> bytes:
+    """Generate one engine's config.py bytes (ruff-normalised). No disk writes to the shadow."""
+    discovered = json.loads((outputs / "schema.discovered.json").read_text(encoding="utf-8"))
+    curated = _load_curated(outputs)
+    overlay = _load_overlay(outputs)
+    synthetic = compose_synthetic_schema(discovered, curated, overlay)
+    safe_version = "v" + str(discovered.get("engine_version", "unknown")).replace(".", "_")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        in_path = Path(tmpdir) / "schema.json"
+        out_path = Path(tmpdir) / "config.py"
+        in_path.write_text(json.dumps(synthetic, indent=2), encoding="utf-8")
+        cmd = [
+            "uv",
+            "run",
+            "datamodel-codegen",
+            "--input",
+            str(in_path),
+            "--output",
+            str(out_path),
+            "--custom-file-header",
+            _custom_header(engine, safe_version),
+            *_DMCG_FLAGS,
+        ]
+        proc = subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=_PROJECT_ROOT)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"datamodel-codegen failed for {engine}:\n{proc.stdout}\n{proc.stderr}"
+            )
+        _ruff_normalise(out_path)
+        return out_path.read_bytes()
+
+
+def _file_diff(generated: bytes, on_disk: Path) -> str:
+    """Unified diff (committed vs generated); empty when byte-identical."""
+    old = on_disk.read_text(encoding="utf-8").splitlines(keepends=True) if on_disk.exists() else []
+    new = generated.decode("utf-8").splitlines(keepends=True)
+    return "".join(
+        difflib.unified_diff(old, new, fromfile=str(on_disk), tofile=f"{on_disk} (regenerated)")
+    )
+
+
+def sync_engine(engine: str, *, write: bool) -> list[str]:
+    """Generate (or check) one engine's config.py. Returns drift reports (--check)."""
+    outputs = current_outputs_dir(engine)
+    if not outputs.is_dir():
+        raise FileNotFoundError(
+            f"{engine}: SSOT outputs dir not found ({outputs}). "
+            f"Check engine_versions/{engine}/current.yaml and the vendored pin."
+        )
+
+    generated = generate_config(engine, outputs)
+    target = _shadow_config_path(engine)
+    if write:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(generated)
+        return []
+    if generated == (target.read_bytes() if target.exists() else b""):
+        return []
+    return [f"{engine}/config.py drift:\n{_file_diff(generated, target)}"]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate per-engine Pydantic config.py from schema.discovered.json "
+            "+ curated.yaml (+ optional overlay.yaml) via datamodel-code-generator."
+        ),
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify generated/committed config.py parity; exit 1 with a diff. Default mode.",
+    )
+    mode.add_argument(
+        "--write",
+        action="store_true",
+        help="Regenerate config.py (mutates the working tree) and report what changed.",
+    )
+    parser.add_argument(
+        "--engine",
+        action="append",
+        choices=ENGINES,
+        help="Restrict to one or more engines (repeatable). Default: all enabled.",
+    )
+    args = parser.parse_args(argv)
+
+    engines = tuple(args.engine) if args.engine else ENGINES
+    all_drift: list[str] = []
+    for engine in engines:
+        drift = sync_engine(engine, write=args.write)
+        all_drift.extend(drift)
+        if args.write:
+            print(f"[regen-configs] wrote: {engine}/config.py")
+
+    if args.write:
+        return 0
+    if all_drift:
+        for entry in all_drift:
+            print(entry, file=sys.stderr)
+        print(
+            "\nDrift between generated config.py and the committed shadow.\n"
+            "Regenerate:\n"
+            "  uv run python scripts/engine_producers/regen_engine_configs.py --write",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
