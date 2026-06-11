@@ -460,17 +460,21 @@ class TransformersEngine:
 
     @staticmethod
     def _engine_params(config: ExperimentConfig) -> Any:
-        """Return the transformers engine_params block, or None."""
-        return config.transformers.engine_params if config.transformers is not None else None
+        """Return the active engine's engine_params block, or None."""
+        return config.active_engine_params()
 
     @staticmethod
     def _sampling_params(config: ExperimentConfig) -> Any:
-        """Return the transformers sampling_params block, or None."""
-        return config.transformers.sampling_params if config.transformers is not None else None
+        """Return the active engine's sampling_params block, or None."""
+        return config.active_sampling_params()
 
     @staticmethod
     def _harness(config: ExperimentConfig) -> Any:
-        """Return the transformers HarnessConfig block (llem-orchestration knobs), or None."""
+        """Return the transformers HarnessConfig block (llem-orchestration knobs), or None.
+
+        Stays a plugin-local accessor: the harness residual is transformers-specific
+        (vllm/tensorrt ship empty HarnessConfigs), so it has no config-layer accessor.
+        """
         return config.harness.transformers if config.harness is not None else None
 
     # -------------------------------------------------------------------------

@@ -464,7 +464,7 @@ class TensorRTEngine:
                 f"TensorRT-LLM requires SM >= 7.5 (Turing). This GPU has SM {major}.{minor}."
             )
 
-        quant_config = TensorRTEngine._quant_config(config)
+        quant_config = config.engine_sub_dict("quant_config")
         if quant_config is not None:
             if quant_config.get("quant_algo") == "FP8" and sm_float < 8.9:
                 errors.append(
@@ -486,25 +486,11 @@ class TensorRTEngine:
     # -------------------------------------------------------------------------
     # Private: model loading helpers
     # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-    # Private: nested-config accessors (engine_params sub-config dicts)
-    # -------------------------------------------------------------------------
     #
     # quant_config / kv_cache_config / scheduler_config are Any-typed
     # discovery-debt engine_params fields on this pin (curated but not surfaced
-    # as typed sub-models), so they arrive as plain dicts.
-
-    @staticmethod
-    def _sub_dict(config: ExperimentConfig, name: str) -> dict[str, Any] | None:
-        """Return a non-empty engine_params sub-config dict by name, or None."""
-        engine_params = config.active_engine_params()
-        value = getattr(engine_params, name, None) if engine_params is not None else None
-        return value if isinstance(value, dict) and value else None
-
-    @staticmethod
-    def _quant_config(config: ExperimentConfig) -> dict[str, Any] | None:
-        return TensorRTEngine._sub_dict(config, "quant_config")
+    # as typed sub-models), so they arrive as plain dicts and are read through
+    # ``config.engine_sub_dict(name)``.
 
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build kwargs dict for tensorrt_llm.LLM() constructor.

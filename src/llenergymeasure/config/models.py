@@ -455,6 +455,19 @@ class ExperimentConfig(BaseModel):
         section = getattr(self, self.engine.value, None)
         return getattr(section, "sampling_params", None) if section is not None else None
 
+    def engine_sub_dict(self, name: str) -> dict[str, Any] | None:
+        """Return a non-empty ``engine_params`` sub-config dict by name, or None.
+
+        The curated discovery-debt containers (vllm ``attention`` /
+        ``speculative_config`` / ``beam_search``, tensorrt ``quant_config`` /
+        ``kv_cache_config`` / ``scheduler_config``) are Any-typed on the current
+        pins, so they arrive as plain dicts; this is the shared accessor the
+        engine plugins read them through.
+        """
+        engine_params = self.active_engine_params()
+        value = getattr(engine_params, name, None) if engine_params is not None else None
+        return value if isinstance(value, dict) and value else None
+
     # -------------------------------------------------------------------------
     # Pre-validators (run before field parsing)
     # -------------------------------------------------------------------------

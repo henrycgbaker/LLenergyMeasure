@@ -724,7 +724,7 @@ class TestBeamSearchParams:
         assert config.vllm is not None
         assert config.vllm.engine_params is not None
         assert config.vllm.engine_params.beam_search == {"beam_width": 4}
-        assert VLLMEngine._beam_search(config) == {"beam_width": 4}
+        assert config.engine_sub_dict("beam_search") == {"beam_width": 4}
 
     def test_beam_search_config_accepts_all_fields(self):
         """The beam_search engine_params dict round-trips its native fields verbatim."""

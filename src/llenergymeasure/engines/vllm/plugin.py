@@ -160,7 +160,7 @@ class VLLMEngine:
         logger.debug("vLLM model loaded successfully")
 
         # Build SamplingParams or BeamSearchParams depending on config
-        beam_search = self._beam_search(config)
+        beam_search = config.engine_sub_dict("beam_search")
         if beam_search is not None:
             sampling_params = self._build_beam_search_params(config, beam_search)
         else:
@@ -439,18 +439,6 @@ class VLLMEngine:
     # Private: model loading helpers
     # -------------------------------------------------------------------------
 
-    @staticmethod
-    def _beam_search(config: ExperimentConfig) -> dict[str, Any] | None:
-        """Return the vllm beam_search sub-dict, or None.
-
-        ``beam_search`` is an Any-typed discovery-debt engine_params field
-        (curated but not surfaced as a typed sub-model on this pin), so it
-        arrives as a plain dict.
-        """
-        engine_params = config.active_engine_params()
-        beam = getattr(engine_params, "beam_search", None) if engine_params is not None else None
-        return beam if isinstance(beam, dict) and beam else None
-
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build kwargs dict for vllm.LLM() constructor.
 
@@ -501,7 +489,7 @@ class VLLMEngine:
         Returns ``{}`` when beam search is active (sampling path preempted);
         the caller dispatches to :meth:`_build_beam_search_params` in that case.
         """
-        if VLLMEngine._beam_search(config) is not None:
+        if config.engine_sub_dict("beam_search") is not None:
             return {}
 
         sampling = config.active_sampling_params()
@@ -520,7 +508,7 @@ class VLLMEngine:
         mean "use vLLM's default", so we forward only explicit values. User
         writes top_k=-1 directly to disable (vLLM convention). No translation.
         """
-        beam_search = VLLMEngine._beam_search(config)
+        beam_search = config.engine_sub_dict("beam_search")
         if beam_search is not None:
             return VLLMEngine._build_beam_search_params(config, beam_search)
         kwargs = VLLMEngine._build_sampling_kwargs(config)
