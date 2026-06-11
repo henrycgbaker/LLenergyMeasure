@@ -19,7 +19,38 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import dataclasses  # noqa: E402
+
+from pydantic import BaseModel  # noqa: E402
+
 from scripts.engine_producers import _common  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Module-scope fixtures for the dataclass-into-pydantic recursion tests.
+# Defined at module scope (not inside the test functions) so
+# ``typing.get_type_hints`` can resolve the forward-referenced names.
+# ---------------------------------------------------------------------------
+
+
+class _NestedModel(BaseModel):
+    depth: int = 2
+
+
+class _SubConfig(BaseModel):
+    x: int = 1
+    nested: _NestedModel = _NestedModel()
+
+
+@dataclasses.dataclass
+class _EngineArgsLike:
+    sub: _SubConfig | None = None
+    plain: int = 0
+
+
+@dataclasses.dataclass
+class _ListOfPydanticArgs:
+    subs: list[_SubConfig] = dataclasses.field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # annotation_to_type_str
@@ -190,6 +221,98 @@ def test_make_envelope_fills_required_keys() -> None:
 def test_schema_version_is_semver_with_major_one() -> None:
     major = int(_common.SCHEMA_VERSION.split(".")[0])
     assert major == 1, "ships schema_version 1.x; bumping major requires loader update"
+
+
+def test_make_envelope_omits_defs_when_empty() -> None:
+    env = _common.make_envelope(
+        engine="vllm",
+        engine_version="0.7.3",
+        engine_commit_sha=None,
+        image_ref="foo:1",
+        base_image_ref="foo:1",
+        discovery_method="unit test",
+        discovery_limitations=[],
+        engine_params={},
+        sampling_params={},
+    )
+    assert "$defs" not in env
+    # Explicit empty dict is also treated as "nothing to emit".
+    env_empty = _common.make_envelope(
+        engine="vllm",
+        engine_version="0.7.3",
+        engine_commit_sha=None,
+        image_ref="foo:1",
+        base_image_ref="foo:1",
+        discovery_method="unit test",
+        discovery_limitations=[],
+        engine_params={},
+        sampling_params={},
+        defs={},
+    )
+    assert "$defs" not in env_empty
+
+
+def test_make_envelope_emits_and_jsonifies_defs() -> None:
+    env = _common.make_envelope(
+        engine="tensorrt",
+        engine_version="1.2.1",
+        engine_commit_sha=None,
+        image_ref="foo:1",
+        base_image_ref="foo:1",
+        discovery_method="unit test",
+        discovery_limitations=[],
+        engine_params={"kv_cache_config": {"$ref": "#/$defs/KvCacheConfig", "default": None}},
+        sampling_params={},
+        defs={
+            "KvCacheConfig": {
+                "type": "object",
+                "properties": {"max_tokens": {"type": "integer"}},
+                "required": {"max_tokens"},  # set -> jsonable should sort to a list
+            }
+        },
+    )
+    assert "$defs" in env
+    kv = env["$defs"]["KvCacheConfig"]
+    assert kv["properties"]["max_tokens"]["type"] == "integer"
+    # ``jsonable`` coerces the set to a sorted list so json.dumps stays clean.
+    assert kv["required"] == ["max_tokens"]
+
+
+# ---------------------------------------------------------------------------
+# dataclass_fields_to_specs - Pydantic-into-dataclass recursion ($defs)
+# ---------------------------------------------------------------------------
+
+
+def test_dataclass_specs_without_defs_flatten_pydantic_to_type_str() -> None:
+    """Without a ``defs`` accumulator the walker keeps the legacy flat shape."""
+    specs = _common.dataclass_fields_to_specs(_EngineArgsLike)
+    # No $ref emitted; nested pydantic flattens to a readable type string.
+    assert "$ref" not in specs["sub"]
+    assert specs["plain"]["type"] == "int"
+
+
+def test_dataclass_specs_recurse_into_pydantic_field_emitting_ref_and_defs() -> None:
+    defs: dict = {}
+    specs = _common.dataclass_fields_to_specs(_EngineArgsLike, defs=defs)
+
+    # Pydantic-typed field becomes a $ref into $defs; default still recorded.
+    assert specs["sub"]["$ref"] == "#/$defs/_SubConfig"
+    # Plain field is untouched.
+    assert specs["plain"]["type"] == "int"
+    # The sub-model AND its transitively-referenced nested model are folded in,
+    # so every $ref in the envelope resolves.
+    assert "_SubConfig" in defs and "_NestedModel" in defs
+    assert defs["_SubConfig"]["properties"]["x"]["default"] == 1
+    # The nested model is reachable via the standard #/$defs/ ref template.
+    assert defs["_SubConfig"]["properties"]["nested"]["$ref"] == "#/$defs/_NestedModel"
+
+
+def test_dataclass_specs_list_of_pydantic_stays_object_not_ref() -> None:
+    """``list[SubConfig]`` has no single class to $ref - stays a type string."""
+    defs: dict = {}
+    specs = _common.dataclass_fields_to_specs(_ListOfPydanticArgs, defs=defs)
+    assert "$ref" not in specs["subs"]
+    assert defs == {}
 
 
 # ---------------------------------------------------------------------------

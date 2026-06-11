@@ -21,6 +21,7 @@ import inspect
 import os
 import re
 import types
+import typing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Union, get_args, get_origin
@@ -145,16 +146,53 @@ def jsonable(value: Any) -> Any:
     return str(value)
 
 
+def _resolve_pydantic_type(annotation: Any) -> type | None:
+    """Return the Pydantic model in ``annotation`` (unwrapping ``X | None``), else None.
+
+    Handles the common ``SubConfig`` and ``SubConfig | None`` / ``Optional[SubConfig]``
+    shapes the dataclass walker meets on engine-args classes; nested generics
+    (``list[SubConfig]``) are left as ``type: object`` since there is no single
+    sub-config to ``$ref``. Recognises both ``pydantic.BaseModel`` subclasses and
+    ``pydantic.dataclasses``-decorated classes (both expose ``model_json_schema``).
+    """
+    candidates: tuple[Any, ...]
+    origin = get_origin(annotation)
+    if origin is Union or origin is types.UnionType:
+        candidates = tuple(a for a in get_args(annotation) if a is not type(None))
+    elif origin is None:
+        candidates = (annotation,)
+    else:
+        return None
+    if len(candidates) != 1:
+        return None
+    candidate = candidates[0]
+    if isinstance(candidate, type) and hasattr(candidate, "model_json_schema"):
+        return candidate
+    return None
+
+
 def dataclass_fields_to_specs(
-    cls: type, *, skip_private: bool = False
+    cls: type,
+    *,
+    skip_private: bool = False,
+    defs: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Extract ``{name: {type, default}}`` specs from a dataclass.
 
     Resolves ``default_factory`` by calling it (swallowing errors to ``None``)
     so downstream JSON stays concrete. Types are rendered via
     ``annotation_to_type_str``.
+
+    When a field's resolved type is a Pydantic model and a ``defs`` accumulator
+    is supplied, the field is emitted as a JSON Schema ``$ref`` and the model's
+    own ``model_json_schema()`` (its ``$defs`` plus its root definition) is
+    folded into ``defs``. This surfaces the Pydantic sub-configs nested inside
+    stdlib-dataclass engine-args (e.g. vllm ``EngineArgs``) that would otherwise
+    flatten to ``type: object`` - the 2026-05-24 ``$defs`` resolution. Pass the
+    same ``defs`` dict to :func:`make_envelope` to ship it.
     """
     specs: dict[str, dict[str, Any]] = {}
+    hints = _safe_type_hints(cls)
     for fld in dataclasses.fields(cls):
         if skip_private and fld.name.startswith("_"):
             continue
@@ -166,11 +204,52 @@ def dataclass_fields_to_specs(
                 default = fld.default_factory()
             except Exception:
                 default = None
+        annotation = hints.get(fld.name, fld.type)
+        nested = _resolve_pydantic_type(annotation) if defs is not None else None
+        if nested is not None and defs is not None:
+            _fold_model_defs(nested, defs)
+            specs[fld.name] = {
+                "$ref": f"#/$defs/{nested.__name__}",
+                "default": jsonable(default),
+            }
+            continue
         specs[fld.name] = {
-            "type": annotation_to_type_str(fld.type),
+            "type": annotation_to_type_str(annotation),
             "default": jsonable(default),
         }
     return specs
+
+
+def _safe_type_hints(cls: type) -> dict[str, Any]:
+    """Resolve string annotations to real types, falling back to raw ``field.type``.
+
+    ``from __future__ import annotations`` makes ``field.type`` a string, which
+    cannot be introspected for nested Pydantic models. ``get_type_hints`` evaluates
+    them; resolution can fail on TYPE_CHECKING-only forward refs, so fall back to
+    the raw annotations rather than raising during discovery.
+    """
+    try:
+        return typing.get_type_hints(cls)
+    except Exception:
+        return {f.name: f.type for f in dataclasses.fields(cls)}
+
+
+def _fold_model_defs(model: type, defs: dict[str, Any]) -> None:
+    """Fold ``model``'s root definition and its own ``$defs`` into ``defs``.
+
+    ``model_json_schema(ref_template=...)`` returns ``{$defs: {...}, ...root...}``
+    keyed under the standard ``#/$defs/<Name>`` namespace. We lift the root
+    body under the model name and merge any transitively-referenced sub-models,
+    so the envelope's ``$defs`` is self-contained (every ``$ref`` resolves).
+    """
+    try:
+        schema = model.model_json_schema(ref_template="#/$defs/{model}")
+    except Exception:
+        return
+    for name, body in schema.pop("$defs", {}).items():
+        defs.setdefault(name, body)
+    # The root schema body (title/properties/...) becomes this model's own def.
+    defs.setdefault(model.__name__, schema)
 
 
 def make_envelope(
@@ -184,6 +263,7 @@ def make_envelope(
     discovery_limitations: list[dict[str, Any]],
     engine_params: dict[str, Any],
     sampling_params: dict[str, Any],
+    defs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     # Honour LLENERGY_DISCOVERY_FROZEN_AT when the caller (CI) wants the
     # envelope pinned to a stable anchor - typically the author date of the
@@ -195,7 +275,7 @@ def make_envelope(
     discovered_at = (
         os.environ.get("LLENERGY_DISCOVERY_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
     )
-    return {
+    envelope: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "engine": engine,
         "engine_version": engine_version,
@@ -208,3 +288,13 @@ def make_envelope(
         "engine_params": engine_params,
         "sampling_params": sampling_params,
     }
+    # Nested-class definitions are canonical JSON Schema 2020-12 ``$defs`` -
+    # exactly the shape ``model_json_schema()`` / ``msgspec.json.schema()``
+    # already emit and that ``$ref`` entries in engine_params/sampling_params
+    # point at. Preserve them rather than dropping at envelope assembly (the
+    # 2026-05-24 ``$defs`` resolution); ``jsonable`` keeps the block free of
+    # object-repr noise without re-flattening the canonical structure. Only
+    # emitted when non-empty so additive-schema loaders stay simple.
+    if defs:
+        envelope["$defs"] = jsonable(defs)
+    return envelope

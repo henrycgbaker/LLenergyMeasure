@@ -73,6 +73,12 @@ class DiscoveredSchema:
     discovery_limitations: list[DiscoveryLimitation] = field(default_factory=list)
     engine_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     sampling_params: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Canonical JSON Schema ``$defs`` for nested config classes that
+    # ``engine_params``/``sampling_params`` ``$ref`` entries point at (TRT-LLM
+    # KvCacheConfig/SchedulerConfig, vllm EngineArgs sub-configs). Empty when the
+    # engine's discovery surface has no nested classes. Additive envelope key
+    # (no schema major bump); pre-``$defs`` schemas parse with an empty dict.
+    defs: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class SchemaLoader:
@@ -177,6 +183,7 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
         discovery_limitations=limitations,
         engine_params=data.get("engine_params", {}),
         sampling_params=data.get("sampling_params", {}),
+        defs=data.get("$defs", {}),
     )
 
 

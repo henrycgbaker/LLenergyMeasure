@@ -39,18 +39,27 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     from vllm.engine.arg_utils import EngineArgs  # type: ignore[import-not-found]
 
     limitations: list[dict[str, Any]] = []
-    engine_params = dataclass_fields_to_specs(EngineArgs)
+    # Shared ``$defs`` accumulator: EngineArgs' Pydantic-typed sub-configs and
+    # SamplingParams' nested msgspec definitions both land here so every ``$ref``
+    # in the envelope resolves (2026-05-24 ``$defs`` resolution).
+    defs: dict[str, Any] = {}
+    engine_params = dataclass_fields_to_specs(EngineArgs, defs=defs)
 
     sampling_params: dict[str, Any] = {}
     try:
         import msgspec  # type: ignore[import-not-found]
 
         raw_schema = msgspec.json.schema(vllm.SamplingParams)
+        raw_defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
         props = raw_schema.get("properties")
         if not props:
-            defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
-            sp_def: Any = defs.get("SamplingParams") or next(iter(defs.values()), {})
+            sp_def: Any = raw_defs.get("SamplingParams") or next(iter(raw_defs.values()), {})
             props = sp_def.get("properties", {}) if isinstance(sp_def, dict) else {}
+        # Carry the nested sub-definitions (SamplingParams' own root is flattened
+        # into ``sampling_params`` above, so skip it to avoid a redundant def).
+        for def_name, def_body in raw_defs.items():
+            if def_name != "SamplingParams":
+                defs.setdefault(def_name, def_body)
         for name, spec in (props or {}).items():
             type_repr: Any = spec.get("type", "unknown")
             if isinstance(type_repr, list):
@@ -94,4 +103,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        defs=defs,
     )

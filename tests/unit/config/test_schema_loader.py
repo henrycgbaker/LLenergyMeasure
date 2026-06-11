@@ -122,6 +122,26 @@ def test_base_image_ref_null_falls_back_to_image_ref() -> None:
     assert parsed.base_image_ref == parsed.image_ref
 
 
+def test_defs_absent_parses_to_empty_dict() -> None:
+    """Pre-``$defs`` envelopes (no ``$defs`` key) parse with an empty defs map."""
+    envelope = _minimal_envelope()
+    assert "$defs" not in envelope
+    parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
+    assert parsed.defs == {}
+
+
+def test_defs_present_exposed_on_discovered_schema() -> None:
+    envelope = _minimal_envelope()
+    envelope["$defs"] = {
+        "KvCacheConfig": {
+            "type": "object",
+            "properties": {"max_tokens": {"type": "integer"}},
+        }
+    }
+    parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
+    assert parsed.defs["KvCacheConfig"]["properties"]["max_tokens"]["type"] == "integer"
+
+
 def test_discovery_limitations_parsed_into_dataclass() -> None:
     envelope = _minimal_envelope()
     envelope["discovery_limitations"] = [

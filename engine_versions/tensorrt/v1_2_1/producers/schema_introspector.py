@@ -112,4 +112,8 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        # ``model_json_schema()`` returns the nested-class definitions
+        # (KvCacheConfig / SchedulerConfig / ...) that ``$ref`` entries point
+        # at; preserve them rather than dropping at envelope assembly.
+        defs=raw_schema.get("$defs"),
     )
