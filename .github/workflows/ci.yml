@@ -60,11 +60,14 @@ jobs:
               # Inputs to the docs-freshness job: Pydantic models the
               # generators introspect, anything under scripts/ (generators
               # plus their transitive helpers like engine_producers/_ssot.py),
-              # and this workflow file (self-test). pyproject/uv.lock
-              # excluded: env-break would surface in lint / type-check /
-              # test / package-validation before docs-freshness anyway.
+              # the engine-corpus SSOT + its data shadow (the corpus drift
+              # check compares the two), and this workflow file (self-test).
+              # pyproject/uv.lock excluded: env-break would surface in lint /
+              # type-check / test / package-validation before docs-freshness
+              # anyway.
               - 'src/**'
               - 'scripts/**'
+              - 'engine_versions/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -222,6 +225,8 @@ jobs:
           uv run python scripts/generate_curation_doc.py > /dev/null
       - name: Check Pydantic-discovered schema alignment
         run: uv run python scripts/check_pydantic_matches_discovered.py > /dev/null
+      - name: Check engine corpus shadow matches SSOT
+        run: uv run python scripts/engine_producers/regen_engine_corpus.py --check
 
   actionlint:
     needs: filter

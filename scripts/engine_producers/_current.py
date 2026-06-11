@@ -6,6 +6,8 @@ This module exposes the lookup helpers that read it:
 - :func:`current_path` - absolute path to the engine's current.yaml.
 - :func:`load_current` - parse the YAML to a dict.
 - :func:`safe_version` - identifier-safe mangling of a PEP 440 version.
+- :func:`current_version` - the pinned version string for an engine.
+- :func:`current_outputs_dir` - the SSOT outputs/ directory for the active pin.
 
 The current-state path is resolved by walking up from this file until a
 ``pyproject.toml`` marker is found - the canonical project-root marker
@@ -50,6 +52,35 @@ def load_current(engine: str) -> dict[str, object]:
     if not isinstance(data, dict):
         raise ValueError(f"current.yaml at {path} did not parse to a mapping.")
     return data
+
+
+def current_version(engine: str) -> str:
+    """Return the pinned version string from ``engine_versions/{engine}/current.yaml``.
+
+    Reads ``library.current_version``. Raises :class:`ValueError` if the key
+    is missing or is not a string (a malformed pin must fail loud, not
+    silently resolve to a default path).
+    """
+    data = load_current(engine)
+    library = data.get("library")
+    version = library.get("current_version") if isinstance(library, dict) else None
+    if not isinstance(version, str):
+        raise ValueError(
+            f"current.yaml for {engine!r} has no string library.current_version (got {version!r})."
+        )
+    return version
+
+
+def current_outputs_dir(engine: str) -> Path:
+    """Return the SSOT outputs/ directory for the engine's active pin.
+
+    ``engine_versions/{engine}/v<safe>/outputs/`` where ``<safe>`` is the
+    identifier-safe form of ``library.current_version``. This is the canonical
+    locus the sync script copies into the ``src/`` data shadow.
+    """
+    root = _find_repo_root(Path(__file__).resolve())
+    safe = safe_version(current_version(engine))
+    return root / "engine_versions" / engine / safe / "outputs"
 
 
 def safe_version(version: str) -> str:
