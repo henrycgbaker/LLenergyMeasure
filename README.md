@@ -1,5 +1,16 @@
 # LLenergyMeasure
 
+> [!WARNING]
+> **This branch (`spike/engine-knowledge-as-data`) is a quick-and-dirty proof of concept. Do NOT merge it to `main` as is.**
+>
+> It explores generating the per-engine config classes from mined schema data
+> (replacing the hand-written `config/engine_configs.py`) and carries a large
+> mining-substrate research study under `research/`. The generated-config
+> approach deliberately relaxes the typed validation that `main` hand-maintains,
+> so it is an architectural experiment, not production-ready work. A real
+> v0.10.0 reconciliation should be redone cleanly against current `main`.
+> The pre-merge snapshot is preserved at tag `archive/eka-spike-pre-main-merge-2026-06-11`.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
