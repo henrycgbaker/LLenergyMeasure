@@ -28,16 +28,17 @@ def _mk_rule(
     match_fields: dict,
     normalised_fields: list[str] | None = None,
     severity: str = "dormant",
+    engine: str = "transformers",
 ) -> Invariant:
     """Construct a minimal ``Invariant`` for library-resolution mechanism tests."""
     return Invariant(
         id=invariant_id,
-        engine="transformers",
-        library="transformers",
+        engine=engine,
+        library=engine,
         invariant_under_test="",
         severity=severity,
-        native_type="transformers.GenerationConfig",
-        match_engine="transformers",
+        native_type=f"{engine}.NativeConfig",
+        match_engine=engine,
         match_fields=match_fields,
         kwargs_positive={},
         kwargs_negative={},
@@ -174,6 +175,36 @@ class TestCanonicalise:
         result = _apply_invariants_fixpoint(cfg, [invariant])
         # warn severity must not trigger normalisation.
         assert result.transformers.sampling_params.temperature == 0.5
+
+    def test_vllm_dormant_rule_strips_dotted_normalised_field(self):
+        """A vllm dormant rule strips its (dotted) normalised field in the fixpoint.
+
+        The corpus carries bare names; the loader rewrites them to dotted paths at
+        load (residual a). This exercises the canonicaliser end of that contract:
+        a dotted normalised_field on a vllm config resolves and strips.
+        """
+        cfg = _mk_config(engine="vllm", vllm={"engine_params": {"seed": -1}})
+        invariant = _mk_rule(
+            invariant_id="vllm_seed_dormant",
+            engine="vllm",
+            match_fields={"vllm.engine_params.seed": {"present": True, "not_equal": 0}},
+            normalised_fields=["vllm.engine_params.seed"],
+        )
+        result = _apply_invariants_fixpoint(cfg, [invariant])
+        # The dormant field is stripped to None (the universal "strip" sentinel).
+        assert result.vllm.engine_params.seed is None
+
+    def test_tensorrt_dormant_rule_strips_dotted_normalised_field(self):
+        """A tensorrt dormant rule strips its dotted normalised field in the fixpoint."""
+        cfg = _mk_config(engine="tensorrt", tensorrt={"sampling_params": {"top_k": 5}})
+        invariant = _mk_rule(
+            invariant_id="tensorrt_top_k_dormant",
+            engine="tensorrt",
+            match_fields={"tensorrt.sampling_params.top_k": {"present": True, "not_equal": 0}},
+            normalised_fields=["tensorrt.sampling_params.top_k"],
+        )
+        result = _apply_invariants_fixpoint(cfg, [invariant])
+        assert result.tensorrt.sampling_params.top_k is None
 
 
 # ---------------------------------------------------------------------------

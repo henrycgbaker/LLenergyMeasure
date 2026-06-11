@@ -148,6 +148,66 @@ invariants: []
     assert result.invariants == ()
 
 
+_CORPUS_BARE_NORMALISED = """\
+schema_version: "1.0.0"
+engine: vllm
+engine_version: "0.7.3"
+invariants:
+  - id: vllm_seed_dormant
+    engine: vllm
+    library: vllm
+    invariant_under_test: "seed dormant at -1"
+    severity: dormant
+    native_type: vllm.SamplingParams
+    miner_source:
+      path: sampling_params.py
+      method: __post_init__
+      line_at_scan: 311
+    match:
+      engine: vllm
+      fields:
+        vllm.sampling_params.seed: -1
+    kwargs_positive:
+      seed: -1
+    kwargs_negative:
+      seed: 0
+    expected_outcome:
+      outcome: dormant_silent
+      emission_channel: none
+      normalised_fields:
+        - seed
+    message_template: null
+    references:
+      - "sampling_params.py:311"
+    added_by: static_miner
+    added_at: "2026-04-27"
+"""
+
+
+def test_bare_normalised_field_normalised_to_dotted_path_at_load(tmp_path: Path) -> None:
+    """A bare ``normalised_fields`` name is rewritten to the dotted config path.
+
+    The corpus records bare engine field names; the dedup canonicaliser's
+    fixpoint assigns them via ``resolve_field_path`` which needs the full dotted
+    path. The loader derives the section prefix from the rule's own match-field
+    key (``vllm.sampling_params.seed``) and rewrites ``seed`` -> that path, so the
+    fixpoint can strip it. One load-time fix, no edit to the committed corpus.
+    """
+    _write_corpus(tmp_path, "vllm", _CORPUS_BARE_NORMALISED)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    (rule,) = loader.load_rules("vllm").invariants
+    assert rule.expected_outcome["normalised_fields"] == ["vllm.sampling_params.seed"]
+
+
+def test_dotted_normalised_field_passes_through_unchanged(tmp_path: Path) -> None:
+    """An already-dotted ``normalised_fields`` entry is left untouched."""
+    text = _CORPUS_BARE_NORMALISED.replace("        - seed", "        - vllm.sampling_params.seed")
+    _write_corpus(tmp_path, "vllm", text)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    (rule,) = loader.load_rules("vllm").invariants
+    assert rule.expected_outcome["normalised_fields"] == ["vllm.sampling_params.seed"]
+
+
 def test_default_corpus_root_resolves_to_engines(tmp_path: Path) -> None:
     # Constructing without corpus_root uses the repo's src/llenergymeasure/engines/.
     loader = EngineRulesLoader()

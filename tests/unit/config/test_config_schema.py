@@ -650,3 +650,78 @@ def test_v3_bnb_4bit_without_load_in_4bit_parses_with_warning(recwarn) -> None:
     assert any("bnb_4bit_quant_type" in str(w.message) for w in dormant_warnings), (
         "expected a dormant-field warning naming bnb_4bit_quant_type"
     )
+
+
+# ---------------------------------------------------------------------------
+# V-row parity: vllm cross-field rules.
+# V7 = mined error rule (enforced at parse via the proposed-fallback - vllm has
+# no validated YAML, so the loader serves rules.proposed.yaml directly).
+# V6 / V8 = conscious drops.
+# ---------------------------------------------------------------------------
+
+
+def test_v7_max_num_batched_tokens_lt_max_model_len_errors_at_parse() -> None:
+    """V7: max_num_batched_tokens < max_model_len raises at parse (mined error rule).
+
+    vllm's SchedulerConfig._verify_args (config.py:1575) raises this. The rule is
+    statically mined into rules.proposed.yaml; vllm ships no rules.validated.yaml
+    (the validation gate is GPU-blocked, #445), so the loader serves the proposed
+    corpus and _apply_invariants enforces V7 at config parse - proving the
+    proposed-fallback the design asserts.
+    """
+    with pytest.raises(ValidationError, match="smaller than"):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {"max_num_batched_tokens": 1024, "max_model_len": 2048}},
+        )
+
+
+def test_v7_max_num_batched_tokens_ge_max_model_len_is_accepted() -> None:
+    """V7 negative: a batched-token budget >= max_model_len constructs cleanly."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"max_num_batched_tokens": 4096, "max_model_len": 2048}},
+    )
+    assert cfg.vllm.engine_params.max_num_batched_tokens == 4096
+
+
+def test_v8_beam_search_and_sampling_coexist_at_parse() -> None:
+    """V8 conscious drop: beam_search + sampling_params coexist without a parse error.
+
+    The hand-written VLLMConfig.validate_beam_search_exclusive was deleted. The
+    exclusivity is a multi-entry-point structural choice (vllm dispatches to
+    BeamSearchParams vs SamplingParams from two different call sites and raises at
+    dispatch), so it is not a construction-time corpus rule. Both nest as
+    Any-typed engine_params / sampling_params and parse.
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={
+            "engine_params": {"beam_search": {"beam_width": 4}},
+            "sampling_params": {"temperature": 0.7},
+        },
+    )
+    assert cfg.vllm.engine_params.beam_search == {"beam_width": 4}
+    assert cfg.vllm.sampling_params.temperature == 0.7
+
+
+def test_v6_kv_cache_memory_bytes_with_gpu_util_coexist_at_parse() -> None:
+    """V6 conscious drop (version-honest): the field does not exist in vllm 0.7.3.
+
+    The hand-written VLLMEngineConfig.validate_kv_cache_memory guarded
+    kv_cache_memory_bytes XOR gpu_memory_utilization, but kv_cache_memory_bytes is
+    absent from vllm 0.7.3 (a curated discovery-debt stub that lands in a later
+    vllm). With no field and no constraint in the pinned source there is no honest
+    static_miner source to cite, so V6 is dropped for this pin; the re-mine at the
+    bump that introduces the field will surface the real constraint. Both keys
+    parse today (kv_cache_memory_bytes via extra="allow").
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"kv_cache_memory_bytes": 1024, "gpu_memory_utilization": 0.8}},
+    )
+    assert cfg.vllm.engine_params.gpu_memory_utilization == 0.8

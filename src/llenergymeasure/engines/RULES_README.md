@@ -244,3 +244,21 @@ When reviewing a corpus PR:
 - The corpus is not consumed at runtime yet (phase 50.2c wires the generic
   `@model_validator`). Today the loader parses the corpus so tests and validation
   tooling have a stable entry point.
+
+## Parity drops
+
+When the hand-written engine config classes were replaced by the generated
+nested configs, each of their cross-field validators either became a mined rule
+or was consciously dropped. A drop means the constraint is not encoded as a
+parse-time rule because the engine enforces it itself at a point the corpus
+cannot model construction-only:
+
+- **vllm beam_search XOR sampling** (former `VLLMConfig.validate_beam_search_exclusive`):
+  dropped. The exclusivity is a multi-entry-point structural choice - vllm
+  dispatches to `BeamSearchParams` vs `SamplingParams` from two different call
+  sites, and the engine raises at dispatch when both are requested. There is no
+  single construction predicate to gate, so it is not a corpus rule. Both
+  `beam_search` and `sampling_params` are now Any-typed engine_params fields; a
+  config carrying both parses, and the engine raises when it dispatches.
+- **transformers tp_plan XOR device_map** (V5): dropped - enforced inside
+  `from_pretrained` (execution grain); the engine raises at model load.

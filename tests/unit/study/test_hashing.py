@@ -115,6 +115,39 @@ class TestBuildResolvedView:
         assert view.observed_sampling_params["temperature"] == 0.7
         assert "sampling" not in view.observed_engine_params
 
+    def test_vllm_sampling_lifted_into_sampling_bucket(self):
+        """vllm's nested sampling_params lifts into the sampling hash bucket.
+
+        sampling_params is pulled out of the engine dump into its own bucket
+        (separating "how the engine constructs" from "what it generates with");
+        engine_params stays in the engine bucket.
+        """
+        cfg = _mk_config(
+            engine="vllm",
+            vllm={
+                "engine_params": {"gpu_memory_utilization": 0.8},
+                "sampling_params": {"temperature": 0.7},
+            },
+        )
+        view = build_resolved_view(cfg)
+        assert view.observed_sampling_params["temperature"] == 0.7
+        assert view.observed_engine_params["engine_params"]["gpu_memory_utilization"] == 0.8
+        assert "sampling_params" not in view.observed_engine_params
+
+    def test_tensorrt_sampling_lifted_into_sampling_bucket(self):
+        """tensorrt's nested sampling_params lifts into the sampling hash bucket."""
+        cfg = _mk_config(
+            engine="tensorrt",
+            tensorrt={
+                "engine_params": {"tensor_parallel_size": 2},
+                "sampling_params": {"n": 2},
+            },
+        )
+        view = build_resolved_view(cfg)
+        assert view.observed_sampling_params["n"] == 2
+        assert view.observed_engine_params["engine_params"]["tensor_parallel_size"] == 2
+        assert "sampling_params" not in view.observed_engine_params
+
     def test_passthrough_kwargs_propagated(self):
         cfg = _mk_config(passthrough_kwargs={"my_key": "my_val"})
         view = build_resolved_view(cfg)
