@@ -789,11 +789,18 @@ jobs:
           PR_NUMBER: ${{ inputs.pr-number }}
           CLASSIFICATION: ${{ steps.diff.outputs.classification }}
         run: |
-          if [[ "$CLASSIFICATION" != "breaking" ]]; then
-            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
-          else
-            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
-          fi
+          # A no-changes re-run carries no fresh classification signal: it must
+          # not overwrite the verdict an earlier run of the same PR set. Skip
+          # relabelling so a final no-op pipeline cannot downgrade an existing
+          # "breaking" (safe-bump removed) back to "safe-bump". Only a run that
+          # actually classified the diff (breaking / safe) ever touches the
+          # rollup label, mirroring the per-pipeline label step's no-changes
+          # no-op.
+          case "$CLASSIFICATION" in
+            breaking)  gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true ;;
+            safe)      gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true ;;
+            no-changes) ;;
+          esac
 
       - name: Probe-fail gate (red CI)
         # Probe-fail must show as a red CI check: PRs cannot merge with a
