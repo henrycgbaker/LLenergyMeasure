@@ -1170,7 +1170,8 @@ def test_reconcile_unit_template_drift_and_morph(tmp_path: Path) -> None:
         fresh_validated_ids={"drifted", "new_name"},
         fresh_proposed_path=fresh_proposed,
     )
-    assert recon["counts"] == {"healed": 2, "residual": 1}
+    # `gone` is severity=error, so it stays residual (not reclassified).
+    assert recon["counts"] == {"healed": 2, "reclassified": 0, "residual": 1}
     by_id = {h["id"]: h for h in recon["healed"]}
     assert by_id["drifted"]["kind"] == validate_rules.HEALED_TEMPLATE_DRIFT
     assert by_id["drifted"]["old_template"] == "old wording for `a`"
@@ -1189,7 +1190,9 @@ _TF_V5 = _PROJECT_ROOT / "engine_versions" / "transformers" / "v5_7_0" / "output
 # carried v4.57.3 catalogue re-gated against the v5.7.0 container. Four are
 # same-id rules whose v5.7.0 message wording moved (the gate's template
 # soundness check fails) but the rule still gate-confirms - template drift. The
-# other three are bnb dormant rules the v5.7.0 re-mine dropped - genuine decay.
+# other three are bnb DORMANT rules whose announcement decayed at 5.7.0 (the
+# field stays ignored, the warning was dropped) - reclassified to dormant_silent
+# and carried forward, not genuine decay.
 # (A faithful full re-gate also flags an 8th, transformers_raises_num_beams_eq_1,
 # which morphed into transformers_num_return_vs_beams_do_sample_eq_false_and_
 # num_beams_eq_1; the review's manual count missed that the renamed rule still
@@ -1202,25 +1205,26 @@ _BUMP1_TEMPLATE_DRIFT_FAILURES = (
     "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1",
     "transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig",
 )
-_BUMP1_DECAY_FAILURES = (
+_BUMP1_DORMANT_DECAY_FAILURES = (
     "transformers_bnb_4bit_compute_dtype_dormant_without_load_in_4bit",
     "transformers_bnb_4bit_quant_type_dormant_without_load_in_4bit",
     "transformers_bnb_4bit_use_double_quant_dormant_without_load_in_4bit",
 )
 
 
-def test_reconcile_bump1_yields_four_healed_three_residual() -> None:
-    """Replay bump-1 (carried v4.57.3 vs fresh v5.7.0): exactly 4 healed + 3 residual.
+def test_reconcile_bump1_yields_four_healed_three_reclassified() -> None:
+    """Replay bump-1 (carried v4.57.3 vs fresh v5.7.0): 4 healed + 3 reclassified.
 
     The evidence target from the three-lens review: the deterministic
-    reconciliation join turns the decay alarm's "7 failed" into "4 healed +
-    3 decay candidates" with zero tokens. The 7 failed ids are the documented
-    review record; the corpora they join against are the committed v5.7.0
-    validated + proposed files, so this asserts the real join, not a fixture.
-    The 4 healers are same-id rules the v5.7.0 gate re-confirmed under a drifted
-    template; the 3 residual are the bnb dormant rules the re-mine dropped.
+    reconciliation join turns the decay alarm's "7 failed" into self-healed +
+    carried with zero tokens. The 7 failed ids are the documented review record;
+    the corpora they join against are the committed v5.7.0 validated + proposed
+    files, so this asserts the real join, not a fixture. The 4 healers are
+    same-id rules the v5.7.0 gate re-confirmed under a drifted template; the 3
+    bnb dormant rules whose announcement decayed reclassify to dormant_silent
+    and carry forward (R3: they must not silently vanish). Residual is empty.
     """
-    failed_ids = [*_BUMP1_TEMPLATE_DRIFT_FAILURES, *_BUMP1_DECAY_FAILURES]
+    failed_ids = [*_BUMP1_TEMPLATE_DRIFT_FAILURES, *_BUMP1_DORMANT_DECAY_FAILURES]
     assert len(failed_ids) == 7
 
     # Sanity-check the documented failure ids against the committed corpora: the
@@ -1239,14 +1243,15 @@ def test_reconcile_bump1_yields_four_healed_three_residual() -> None:
         fragment = message_template_to_substring(carried[rule_id].get("message_template") or "")
         new_template = fresh[rule_id].get("message_template") or ""
         assert fragment and fragment.lower() not in new_template.lower(), rule_id
-    for rule_id in _BUMP1_DECAY_FAILURES:
+    for rule_id in _BUMP1_DORMANT_DECAY_FAILURES:
         assert rule_id not in fresh, rule_id
 
     report = {
+        "engine_version": "5.7.0",
         "entries": [
             {"id": rule_id, "verdict": "failed", "reason": "gate-soundness check(s) failed"}
             for rule_id in failed_ids
-        ]
+        ],
     }
     fresh_validated_ids = validate_rules._fresh_validated_ids(_TF_V5 / "rules.validated.yaml")
     recon = validate_rules.reconcile_regate_report(
@@ -1256,15 +1261,26 @@ def test_reconcile_bump1_yields_four_healed_three_residual() -> None:
         fresh_proposed_path=_TF_V5 / "rules.proposed.yaml",
     )
 
-    assert recon["counts"] == {"healed": 4, "residual": 3}
+    # 4 template-drift heals; the 3 bnb dormant rules reclassify to silent (they
+    # are dormant carried rules whose announcement decayed, not genuine decay).
+    assert recon["counts"] == {"healed": 4, "reclassified": 3, "residual": 0}
     assert all(h["kind"] == validate_rules.HEALED_TEMPLATE_DRIFT for h in recon["healed"])
     # Each healer shows a real old -> new template move.
     assert all(
         h["old_template"] and h["new_template"] and h["old_template"] != h["new_template"]
         for h in recon["healed"]
     )
-    # The residual are the dropped bnb dormant rules.
-    assert all("bnb_4bit" in r["id"] for r in recon["residual"])
+    # The reclassified are the bnb dormant rules, carried forward as proposed
+    # dormant_silent entries (not residual, not vanished).
+    assert all("bnb_4bit" in r["id"] for r in recon["reclassified"])
+    for entry in recon["reclassified"]:
+        inv = entry["invariant"]
+        assert inv["id"] == entry["id"]
+        assert inv["severity"] == "dormant"
+        assert inv["expected_outcome"]["outcome"] == "dormant_silent"
+        assert inv["expected_outcome"]["emission_channel"] == "none"
+        assert inv["added_by"] == validate_rules.RECLASSIFIED_DECAYED_ANNOUNCEMENT
+        assert any("announcement decayed at 5.7.0" in r for r in inv["references"])
 
 
 def test_reconcile_heals_renamed_morph_target() -> None:
@@ -1288,9 +1304,71 @@ def test_reconcile_heals_renamed_morph_target() -> None:
         fresh_validated_ids=fresh_validated_ids,
         fresh_proposed_path=_TF_V5 / "rules.proposed.yaml",
     )
-    assert recon["counts"] == {"healed": 1, "residual": 0}
+    assert recon["counts"] == {"healed": 1, "reclassified": 0, "residual": 0}
     healed = recon["healed"][0]
     assert healed["kind"] == validate_rules.HEALED_RULE_MORPHED
     assert (
         healed["new_id"] == "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1"
     )
+
+
+def test_reconcile_reclassifies_only_dormant_failures(tmp_path: Path) -> None:
+    """A failed DORMANT carried rule reclassifies; a failed error rule stays residual.
+
+    The reclassification path is severity-gated: only dormant equivalence rules
+    carry forward (the announcement decayed, the field is still ignored). A
+    failed error rule with no id/morph recovery is genuine decay and stays
+    residual. The reclassified entry is a proposed-shape dormant_silent invariant.
+    """
+    carried = _write_corpus(
+        tmp_path / "carried.yaml",
+        [
+            {
+                "id": "dormant_decayed",
+                "severity": "dormant",
+                "native_type": "test.X",
+                "match": {"fields": {"e.a": 1}},
+                "expected_outcome": {
+                    "outcome": "dormant_announced",
+                    "emission_channel": "logger_warning_once",
+                    "normalised_fields": ["a"],
+                },
+                "kwargs_positive": {"a": 1},
+                "kwargs_negative": {"a": 2},
+                "added_by": "manual_seed",
+            },
+            {
+                "id": "error_gone",
+                "severity": "error",
+                "native_type": "test.Y",
+                "match": {"fields": {"e.b": 1}},
+                "expected_outcome": {"outcome": "error"},
+            },
+        ],
+    )
+    fresh_proposed = _write_corpus(tmp_path / "fresh.proposed.yaml", [])
+    report = {
+        "engine_version": "9.9.9",
+        "entries": [
+            {"id": "dormant_decayed", "verdict": "failed", "reason": "positive no longer fires"},
+            {"id": "error_gone", "verdict": "failed", "reason": "positive no longer fires"},
+        ],
+    }
+    recon = validate_rules.reconcile_regate_report(
+        report,
+        carried_corpus_path=carried,
+        fresh_validated_ids=set(),
+        fresh_proposed_path=fresh_proposed,
+    )
+    assert recon["counts"] == {"healed": 0, "reclassified": 1, "residual": 1}
+    assert recon["residual"][0]["id"] == "error_gone"
+    reclass = recon["reclassified"][0]
+    assert reclass["id"] == "dormant_decayed"
+    inv = reclass["invariant"]
+    assert inv["severity"] == "dormant"
+    assert inv["expected_outcome"]["outcome"] == "dormant_silent"
+    assert inv["expected_outcome"]["emission_channel"] == "none"
+    # The probe kwargs survive so the carried entry stays gateable for the
+    # construction-observable half (constructs clean, no error, no warning).
+    assert inv["kwargs_positive"] == {"a": 1}
+    assert inv["added_by"] == validate_rules.RECLASSIFIED_DECAYED_ANNOUNCEMENT

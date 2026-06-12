@@ -641,10 +641,11 @@ jobs:
               # Rung 0: split the raw failures into self-healed (the same run's
               # re-mine already re-encoded the rule) vs genuine decay residual.
               HEALED=$(jq -r '.reconciliation.counts.healed // 0' "$REGATE")
+              RECLASSIFIED=$(jq -r '.reconciliation.counts.reclassified // 0' "$REGATE")
               RESIDUAL=$(jq -r '.reconciliation.counts.residual // 0' "$REGATE")
               if jq -e '.reconciliation' "$REGATE" >/dev/null 2>&1; then
                 echo
-                echo "Rung 0 reconciliation: **${HEALED} healed**, **${RESIDUAL} residual** (decay candidates)."
+                echo "Rung 0 reconciliation: **${HEALED} healed**, **${RECLASSIFIED} reclassified** (dormant_silent carry), **${RESIDUAL} residual** (decay candidates)."
                 if [[ "$HEALED" -gt 0 ]]; then
                   echo
                   echo "<details><summary>Healed (gate re-confirmed in the same re-mine)</summary>"
@@ -654,6 +655,14 @@ jobs:
                       then "- `" + .id + "` template drift: `" + .old_template + "` -> `" + .new_template + "`"
                       else "- `" + .id + "` morphed -> `" + .new_id + "`"
                       end' "$REGATE"
+                  echo
+                  echo "</details>"
+                fi
+                if [[ "$RECLASSIFIED" -gt 0 ]]; then
+                  echo
+                  echo "<details><summary>Reclassified (dormant announcement decayed -> dormant_silent, carried into proposed)</summary>"
+                  echo
+                  jq -r '.reconciliation.reclassified[] | "- `" + .id + "` announcement dropped upstream; field still ignored, carried forward as silent dormancy"' "$REGATE"
                   echo
                   echo "</details>"
                 fi

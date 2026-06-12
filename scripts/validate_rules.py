@@ -801,6 +801,12 @@ HEALED_TEMPLATE_DRIFT = "healed_template_drift"
 HEALED_RULE_MORPHED = "healed_rule_morphed"
 RECONCILE_REPORT_SCHEMA_VERSION = "1.0.0"
 
+# Provenance tag for a dormant rule reclassified announced -> silent because its
+# positive announcement no longer fires at the new pin (the upstream removed the
+# warning while the field stays ignored). Distinct from manual_seed so the
+# carry's origin is auditable.
+RECLASSIFIED_DECAYED_ANNOUNCEMENT = "reclassified_decayed_announcement"
+
 
 def _index_by_id(corpus: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Index a proposed-shape corpus by rule id."""
@@ -847,6 +853,39 @@ def _find_morph_target(
     return matches[0] if len(matches) == 1 else None
 
 
+def _reclassify_dormant_to_silent(carried: dict[str, Any], new_version: str) -> dict[str, Any]:
+    """Reshape a carried dormant rule into a dormant_silent proposed entry.
+
+    Used when a carried dormant rule's positive announcement no longer fires at
+    the new pin (upstream removed the warning while the field stays ignored).
+    The equivalence fact almost certainly still holds, so the rule must not
+    vanish from the corpus - it carries forward reclassified as silent dormancy,
+    construction-observable (the field is accepted, ignored, no error) but no
+    longer announced. The original severity/outcome and the bump at which the
+    announcement decayed are recorded in provenance for audit. A silent-dormant
+    rule is NOT construction-confirmable as a positive emission, so this never
+    enters the validated envelope - it lands in proposed only.
+    """
+    out = dict(carried)
+    old_outcome = str((carried.get("expected_outcome") or {}).get("outcome", ""))
+    out["severity"] = "dormant"
+    expected = dict(carried.get("expected_outcome") or {})
+    expected["outcome"] = "dormant_silent"
+    expected["emission_channel"] = "none"
+    out["expected_outcome"] = expected
+    out["added_by"] = RECLASSIFIED_DECAYED_ANNOUNCEMENT
+    out.pop("cross_validated_by", None)
+    note = (
+        f"announcement decayed at {new_version}: was {old_outcome or 'dormant_announced'}; "
+        "the positive probe no longer fires (upstream dropped the warning) while the field "
+        "stays ignored, so the equivalence carries forward as silent dormancy"
+    )
+    references = list(carried.get("references") or [])
+    references.append(note)
+    out["references"] = references
+    return out
+
+
 def reconcile_regate_report(
     report: dict[str, Any],
     *,
@@ -872,17 +911,28 @@ def reconcile_regate_report(
              "old_template": "...", "new_template": "..."},
             {"id": "...", "kind": "healed_rule_morphed", "new_id": "..."}
           ],
+          "reclassified": [{"id": "...", "invariant": {<dormant_silent proposed entry>}}],
           "residual": [{"id": "...", "reason": "..."}],
-          "counts": {"healed": 4, "residual": 3}
+          "counts": {"healed": 4, "reclassified": 3, "residual": 0}
         }
+
+    A carried dormant rule whose positive announcement no longer fires (upstream
+    dropped the warning while the field stays ignored) is NOT genuine decay: the
+    equivalence still holds, just silently. Such rules are reclassified to
+    ``dormant_silent`` and carried into ``rules.proposed.yaml`` (the ``invariant``
+    payload) so they do not silently vanish - the bnb-trio case. They do not
+    enter the validated envelope (silent dormancy is not construction-confirmable
+    as an emission). Everything else with no id/morph recovery is residual.
 
     Only ``failed`` entries are reconciled; ``infra_error`` (probe broke) is a
     distinct signal and stays out of the join.
     """
     carried_by_id = _index_by_id(_load_corpus(carried_corpus_path))
     fresh_by_id = _index_by_id(_load_corpus(fresh_proposed_path))
+    new_version = str(report.get("engine_version") or "")
 
     healed: list[dict[str, str]] = []
+    reclassified: list[dict[str, Any]] = []
     residual: list[dict[str, str]] = []
 
     failed_entries = [e for e in report.get("entries", []) if e.get("verdict") == VERDICT_FAILED]
@@ -918,14 +968,32 @@ def reconcile_regate_report(
             healed.append({"id": rule_id, "kind": HEALED_RULE_MORPHED, "new_id": morph_id})
             continue
 
-        # Residual: neither id nor morph recovered - a genuine decay candidate.
+        # Third pass: a carried DORMANT rule whose announcement decayed. The
+        # field is still ignored upstream, only the warning was dropped, so the
+        # equivalence carries forward reclassified as silent dormancy rather than
+        # vanishing as a false decay candidate.
+        if carried is not None and str(carried.get("severity", "")).lower() == "dormant":
+            reclassified.append(
+                {
+                    "id": rule_id,
+                    "invariant": _reclassify_dormant_to_silent(carried, new_version),
+                }
+            )
+            continue
+
+        # Residual: nothing recovered - a genuine decay candidate.
         residual.append({"id": rule_id, "reason": str(entry.get("reason", ""))})
 
     return {
         "schema_version": RECONCILE_REPORT_SCHEMA_VERSION,
         "healed": healed,
+        "reclassified": reclassified,
         "residual": residual,
-        "counts": {"healed": len(healed), "residual": len(residual)},
+        "counts": {
+            "healed": len(healed),
+            "reclassified": len(reclassified),
+            "residual": len(residual),
+        },
     }
 
 
@@ -1154,6 +1222,7 @@ def _run_carried_mode(args: argparse.Namespace) -> int:
         rc = recon["counts"]
         print(
             f"[{args.engine}] reconciliation: {rc['healed']} healed, "
+            f"{rc.get('reclassified', 0)} reclassified (dormant_silent carry), "
             f"{rc['residual']} residual (decay candidates)",
             file=sys.stderr,
         )
