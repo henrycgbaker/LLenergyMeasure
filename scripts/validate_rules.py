@@ -560,14 +560,29 @@ def compute_gate_soundness_divergences(
                 )
             )
 
-    # 3. Negative must not raise.
-    if neg.exception_type is not None:
+    # 3. Negative must not fire at all - not raise AND not emit. A negative that
+    #    starts warning/dormant-announcing (without raising) is a dead negative
+    #    case just as much as one that raises; classify_outcome != no_op covers
+    #    both, preserving the old _negative_confirms semantics now that the
+    #    standalone negative_confirmed divergence is folded into this check.
+    neg_silent = (
+        diff_input_vs_state(dict(invariant.get("kwargs_negative") or {}), neg.observed_state)
+        if neg.observed_state
+        else {}
+    )
+    neg_outcome = classify_outcome(neg, neg_silent)
+    if neg_outcome != "no_op":
+        observed: Any = (
+            {"type": neg.exception_type, "message": neg.exception_message or ""}
+            if neg.exception_type is not None
+            else neg_outcome
+        )
         divergences.append(
             Divergence(
                 invariant_id=invariant_id,
                 field="kwargs_negative",
-                expected="does_not_raise",
-                observed={"type": neg.exception_type, "message": neg.exception_message or ""},
+                expected="does_not_fire",
+                observed=observed,
                 check_failed=CHECK_NEGATIVE_DOES_NOT_RAISE,
             )
         )
@@ -787,32 +802,49 @@ HEALED_RULE_MORPHED = "healed_rule_morphed"
 RECONCILE_REPORT_SCHEMA_VERSION = "1.0.0"
 
 
-def _signature(invariant: dict[str, Any]) -> tuple[str, frozenset[str], str]:
-    """Structural identity of a rule: (native_type, claimed bare fields, severity).
-
-    The second-pass join key. Bare field names (last dotted segment) match the
-    grain :func:`invariant_claimed_fields` uses, so a rule that survives a bump
-    under a renamed id but the same construction surface still joins.
-    """
-    native_type = str(invariant.get("native_type", ""))
-    fields = invariant_claimed_fields(invariant)
-    severity = str(invariant.get("severity", "")).lower()
-    return native_type, fields, severity
-
-
-def _index_corpus(corpus: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[Any, list[str]]]:
-    """Index a proposed-shape corpus by id and by structural signature."""
+def _index_by_id(corpus: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index a proposed-shape corpus by rule id."""
     by_id: dict[str, dict[str, Any]] = {}
-    by_signature: dict[Any, list[str]] = {}
     for invariant in corpus.get("invariants", []):
         if not isinstance(invariant, dict):
             continue
         rule_id = str(invariant.get("id", ""))
-        if not rule_id:
-            continue
-        by_id[rule_id] = invariant
-        by_signature.setdefault(_signature(invariant), []).append(rule_id)
-    return by_id, by_signature
+        if rule_id:
+            by_id[rule_id] = invariant
+    return by_id
+
+
+def _find_morph_target(
+    carried: dict[str, Any],
+    fresh_by_id: dict[str, dict[str, Any]],
+    fresh_validated_ids: set[str],
+) -> str | None:
+    """Find the renamed rule a carried failure morphed into, or None.
+
+    A morph is a gate-confirmed fresh rule that re-encodes the same check under
+    a new id: same native_type and severity, with the carried rule's claimed
+    fields a SUBSET of the fresh rule's (a bump may add a co-condition - e.g.
+    a num_beams rule gaining a do_sample qualifier). The match must be UNIQUE:
+    (native_type, claimed_fields, severity) collides for ~17% of real
+    signatures (several distinct rules guard the same field), so an ambiguous
+    match is left as residual rather than risk masking real decay with a
+    false heal.
+    """
+    native_type = str(carried.get("native_type", ""))
+    severity = str(carried.get("severity", "")).lower()
+    carried_fields = invariant_claimed_fields(carried)
+    carried_id = str(carried.get("id", ""))
+
+    matches = [
+        fid
+        for fid in fresh_validated_ids
+        if fid != carried_id
+        and (fresh := fresh_by_id.get(fid)) is not None
+        and str(fresh.get("native_type", "")) == native_type
+        and str(fresh.get("severity", "")).lower() == severity
+        and carried_fields <= invariant_claimed_fields(fresh)
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def reconcile_regate_report(
@@ -847,8 +879,8 @@ def reconcile_regate_report(
     Only ``failed`` entries are reconciled; ``infra_error`` (probe broke) is a
     distinct signal and stays out of the join.
     """
-    carried_by_id, _ = _index_corpus(_load_corpus(carried_corpus_path))
-    fresh_by_id, fresh_by_signature = _index_corpus(_load_corpus(fresh_proposed_path))
+    carried_by_id = _index_by_id(_load_corpus(carried_corpus_path))
+    fresh_by_id = _index_by_id(_load_corpus(fresh_proposed_path))
 
     healed: list[dict[str, str]] = []
     residual: list[dict[str, str]] = []
@@ -874,20 +906,19 @@ def reconcile_regate_report(
             )
             continue
 
-        # Second pass: the rule re-appears under a new id with the same
-        # structural signature (native_type, claimed fields, severity) and that
-        # new id is gate-confirmed. The walker renamed it; the check survived.
-        morph_id = None
-        if carried is not None:
-            for candidate in fresh_by_signature.get(_signature(carried), []):
-                if candidate != rule_id and candidate in fresh_validated_ids:
-                    morph_id = candidate
-                    break
+        # Second pass: the rule re-appears under a renamed, gate-confirmed id
+        # with the same construction surface. The walker renamed it; the check
+        # survived.
+        morph_id = (
+            _find_morph_target(carried, fresh_by_id, fresh_validated_ids)
+            if carried is not None
+            else None
+        )
         if morph_id is not None:
             healed.append({"id": rule_id, "kind": HEALED_RULE_MORPHED, "new_id": morph_id})
             continue
 
-        # Residual: neither id nor signature recovered - a genuine decay candidate.
+        # Residual: neither id nor morph recovered - a genuine decay candidate.
         residual.append({"id": rule_id, "reason": str(entry.get("reason", ""))})
 
     return {

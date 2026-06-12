@@ -1185,38 +1185,28 @@ def test_reconcile_unit_template_drift_and_morph(tmp_path: Path) -> None:
 _TF_V4 = _PROJECT_ROOT / "engine_versions" / "transformers" / "v4_57_3" / "outputs"
 _TF_V5 = _PROJECT_ROOT / "engine_versions" / "transformers" / "v5_7_0" / "outputs"
 
-
-def _bump1_failed_ids() -> list[str]:
-    """Derive bump-1's 7 decay-alarm failures from the committed corpora.
-
-    The carried v4.57.3 catalogue is re-gated against the v5.7.0 container; the
-    failures are (a) same-id rules whose carried message-template fragment no
-    longer appears in the v5.7.0 wording (the gate's message-template soundness
-    check fails - template drift), and (b) the carried-only bnb dormant rules
-    that the v5.7.0 re-mine dropped entirely (genuine decay). Reconstructed from
-    the committed YAML so the test tracks the real corpora, not a frozen literal.
-    """
-    carried = yaml.safe_load((_TF_V4 / "rules.proposed.yaml").read_text())
-    fresh = yaml.safe_load((_TF_V5 / "rules.proposed.yaml").read_text())
-    carried_by_id = {i["id"]: i for i in carried["invariants"]}
-    fresh_by_id = {i["id"]: i for i in fresh["invariants"]}
-
-    drift_failures = []
-    for rule_id in sorted(set(carried_by_id) & set(fresh_by_id)):
-        old_t = carried_by_id[rule_id].get("message_template") or ""
-        new_t = fresh_by_id[rule_id].get("message_template") or ""
-        if old_t == new_t:
-            continue
-        fragment = message_template_to_substring(old_t)
-        if fragment and fragment.lower() not in new_t.lower():
-            drift_failures.append(rule_id)
-
-    bnb_failures = [
-        rule_id
-        for rule_id in (set(carried_by_id) - set(fresh_by_id))
-        if "bnb_4bit" in rule_id and "dormant_without_load_in_4bit" in rule_id
-    ]
-    return drift_failures + sorted(bnb_failures)
+# The 7 decay-alarm failures the bump-1 three-lens review recorded for the
+# carried v4.57.3 catalogue re-gated against the v5.7.0 container. Four are
+# same-id rules whose v5.7.0 message wording moved (the gate's template
+# soundness check fails) but the rule still gate-confirms - template drift. The
+# other three are bnb dormant rules the v5.7.0 re-mine dropped - genuine decay.
+# (A faithful full re-gate also flags an 8th, transformers_raises_num_beams_eq_1,
+# which morphed into transformers_num_return_vs_beams_do_sample_eq_false_and_
+# num_beams_eq_1; the review's manual count missed that the renamed rule still
+# fires. The reconciliation heals it as a morph - see
+# test_reconcile_heals_renamed_morph_target - which is exactly the human-missed
+# heal Rung 0 mechanises.)
+_BUMP1_TEMPLATE_DRIFT_FAILURES = (
+    "transformers_cache_choice_cache_implementation_not_in_allowlist",
+    "transformers_cache_choice_use_cache_eq_false",
+    "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1",
+    "transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig",
+)
+_BUMP1_DECAY_FAILURES = (
+    "transformers_bnb_4bit_compute_dtype_dormant_without_load_in_4bit",
+    "transformers_bnb_4bit_quant_type_dormant_without_load_in_4bit",
+    "transformers_bnb_4bit_use_double_quant_dormant_without_load_in_4bit",
+)
 
 
 def test_reconcile_bump1_yields_four_healed_three_residual() -> None:
@@ -1224,12 +1214,33 @@ def test_reconcile_bump1_yields_four_healed_three_residual() -> None:
 
     The evidence target from the three-lens review: the deterministic
     reconciliation join turns the decay alarm's "7 failed" into "4 healed +
-    3 decay candidates" with zero tokens. The 4 healers are same-id rules the
-    v5.7.0 gate re-confirmed under a drifted template; the 3 residual are the
-    bnb dormant rules the re-mine genuinely dropped.
+    3 decay candidates" with zero tokens. The 7 failed ids are the documented
+    review record; the corpora they join against are the committed v5.7.0
+    validated + proposed files, so this asserts the real join, not a fixture.
+    The 4 healers are same-id rules the v5.7.0 gate re-confirmed under a drifted
+    template; the 3 residual are the bnb dormant rules the re-mine dropped.
     """
-    failed_ids = _bump1_failed_ids()
-    assert len(failed_ids) == 7, failed_ids
+    failed_ids = [*_BUMP1_TEMPLATE_DRIFT_FAILURES, *_BUMP1_DECAY_FAILURES]
+    assert len(failed_ids) == 7
+
+    # Sanity-check the documented failure ids against the committed corpora: the
+    # 4 drift failures' carried template fragment must genuinely be absent from
+    # the v5.7.0 wording, and the 3 decay failures must genuinely be gone from
+    # the fresh corpus. Ties the constants to the real data, not a frozen guess.
+    carried = {
+        i["id"]: i
+        for i in yaml.safe_load((_TF_V4 / "rules.proposed.yaml").read_text())["invariants"]
+    }
+    fresh = {
+        i["id"]: i
+        for i in yaml.safe_load((_TF_V5 / "rules.proposed.yaml").read_text())["invariants"]
+    }
+    for rule_id in _BUMP1_TEMPLATE_DRIFT_FAILURES:
+        fragment = message_template_to_substring(carried[rule_id].get("message_template") or "")
+        new_template = fresh[rule_id].get("message_template") or ""
+        assert fragment and fragment.lower() not in new_template.lower(), rule_id
+    for rule_id in _BUMP1_DECAY_FAILURES:
+        assert rule_id not in fresh, rule_id
 
     report = {
         "entries": [
@@ -1254,3 +1265,32 @@ def test_reconcile_bump1_yields_four_healed_three_residual() -> None:
     )
     # The residual are the dropped bnb dormant rules.
     assert all("bnb_4bit" in r["id"] for r in recon["residual"])
+
+
+def test_reconcile_heals_renamed_morph_target() -> None:
+    """The 8th bump-1 failure morphed (renamed + gained a co-condition), so it heals.
+
+    transformers_raises_num_beams_eq_1 is carried-only at v5.7.0: its check
+    survives under transformers_num_return_vs_beams_do_sample_eq_false_and_
+    num_beams_eq_1, which adds a do_sample qualifier (carried fields are a
+    subset of the fresh rule's). The morph pass heals it - the human triage
+    missed this because the id changed.
+    """
+    report = {
+        "entries": [
+            {"id": "transformers_raises_num_beams_eq_1", "verdict": "failed", "reason": "x"}
+        ]
+    }
+    fresh_validated_ids = validate_rules._fresh_validated_ids(_TF_V5 / "rules.validated.yaml")
+    recon = validate_rules.reconcile_regate_report(
+        report,
+        carried_corpus_path=_TF_V4 / "rules.proposed.yaml",
+        fresh_validated_ids=fresh_validated_ids,
+        fresh_proposed_path=_TF_V5 / "rules.proposed.yaml",
+    )
+    assert recon["counts"] == {"healed": 1, "residual": 0}
+    healed = recon["healed"][0]
+    assert healed["kind"] == validate_rules.HEALED_RULE_MORPHED
+    assert (
+        healed["new_id"] == "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1"
+    )
