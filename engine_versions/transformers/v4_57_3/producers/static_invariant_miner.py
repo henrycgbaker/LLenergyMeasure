@@ -78,8 +78,8 @@ from scripts.engine_producers._base import (  # noqa: E402  (late import after s
     render_binop_concat_template,
 )
 from scripts.engine_producers._section_classifier import (  # noqa: E402
-    field_path,
     load_curated_sections,
+    relabel_match_fields,
 )
 
 # Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
@@ -832,7 +832,6 @@ def walk_function(
     *,
     native_type: str,
     method_name: str,
-    curated_sections: dict[str, str],
     rel_source_path: str,
     today: str,
     library: str = LIBRARY,
@@ -840,9 +839,7 @@ def walk_function(
 ) -> list[InvariantCandidate]:
     """Walk a single function body and return invariant candidates.
 
-    ``curated_sections`` is the ``{field: section}`` map the D2 classifier uses
-    to route each field's rule path. ``library`` is recorded on each emitted
-    invariant (BNB invariants use
+    ``library`` is recorded on each emitted invariant (BNB invariants use
     ``bitsandbytes`` rather than ``transformers``). ``class_short_name`` is
     used in human-readable invariant descriptions; defaults to the bare class
     suffix of ``native_type``.
@@ -931,7 +928,6 @@ def walk_function(
                 detected=detected,
                 native_type=native_type,
                 method_name=method_name,
-                curated_sections=curated_sections,
                 rel_source_path=rel_source_path,
                 line_at_scan=getattr(stmt, "lineno", line_at_scan),
                 today=today,
@@ -951,7 +947,6 @@ def _build_rule(
     detected: DetectedBody,
     native_type: str,
     method_name: str,
-    curated_sections: dict[str, str],
     rel_source_path: str,
     line_at_scan: int,
     today: str,
@@ -984,9 +979,7 @@ def _build_rule(
                 )
             )
 
-    match_fields = _build_match_fields(
-        preds, native_type=native_type, curated_sections=curated_sections
-    )
+    match_fields = _build_match_fields(preds)
     kwargs_pos = _synthesise_kwargs(preds, sense="positive")
     kwargs_neg = _synthesise_kwargs(negate_predicates(preds), sense="negative")
 
@@ -1040,23 +1033,17 @@ def _build_rule(
     )
 
 
-def _build_match_fields(
-    preds: list[FieldPredicate],
-    *,
-    native_type: str,
-    curated_sections: dict[str, str],
-) -> dict[str, Any]:
-    """Group predicates by field path and combine multi-key specs.
+def _build_match_fields(preds: list[FieldPredicate]) -> dict[str, Any]:
+    """Group predicates by bare field name and combine multi-key specs.
 
-    Paths are ``{engine}.{section}.{field}``; the section is decided per field by
-    the D2 classifier (curated.yaml first, native-class origin as fallback). The
-    ``@<name>`` cross-field rhs refs stay bare - the loader resolves them as a
-    sibling of the predicate field within the same section.
+    Keys are bare field names; the D2 classifier re-keys them onto
+    ``{engine}.{section}.{field}`` rule paths at serialisation
+    (:func:`_candidate_to_dict`). The ``@<name>`` cross-field rhs refs stay bare -
+    the loader resolves them as a sibling of the predicate field.
     """
     grouped: dict[str, dict[str, Any]] = {}
     for p in preds:
-        path = field_path(ENGINE, native_type, p.field, curated_sections)
-        spec = grouped.setdefault(path, {})
+        spec = grouped.setdefault(p.field, {})
         # Two predicates with the same operator on the same field collapse to
         # last-wins (the corpus invariant shape cannot represent both).
         spec[p.op] = p.rhs
@@ -1383,8 +1370,15 @@ def _site_packages_relative(abs_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(invariant: InvariantCandidate, rel_path: str) -> dict[str, Any]:
-    """Render a InvariantCandidate in canonical corpus YAML shape."""
+def _candidate_to_dict(
+    invariant: InvariantCandidate, rel_path: str, curated_sections: dict[str, str]
+) -> dict[str, Any]:
+    """Render a InvariantCandidate in canonical corpus YAML shape.
+
+    Re-keys ``match.fields`` onto classified ``{engine}.{section}.{field}`` paths
+    at serialisation (D2): curation first, then native-class origin
+    (BitsAndBytesConfig -> engine_params; GenerationConfig -> sampling_params).
+    """
     expected_outcome: dict[str, Any] = {
         "outcome": invariant.outcome,
         "emission_channel": invariant.emission_channel,
@@ -1404,7 +1398,12 @@ def _candidate_to_dict(invariant: InvariantCandidate, rel_path: str) -> dict[str
         },
         "match": {
             "engine": ENGINE,
-            "fields": invariant.match_fields,
+            "fields": relabel_match_fields(
+                invariant.match_fields,
+                engine=ENGINE,
+                native_type=invariant.native_type,
+                curated_sections=curated_sections,
+            ),
         },
         "kwargs_positive": invariant.kwargs_positive,
         "kwargs_negative": invariant.kwargs_negative,
@@ -1429,13 +1428,16 @@ def emit_yaml(
 
     # Sort for deterministic byte-stable output.
     candidates_sorted = sorted(candidates, key=lambda c: (c.method, c.id))
+    curated_sections = load_curated_sections(ENGINE)
     doc: dict[str, Any] = {
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
         "miner": "transformers_static_miner",
         "mined_at": dt.date(2026, 4, 25).isoformat(),
-        "invariants": [_candidate_to_dict(r, rel_path) for r in candidates_sorted],
+        "invariants": [
+            _candidate_to_dict(r, rel_path, curated_sections) for r in candidates_sorted
+        ],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 
@@ -1463,7 +1465,6 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
 
     candidates: list[InvariantCandidate] = []
     today = dt.date(2026, 4, 25).isoformat()
-    curated_sections = load_curated_sections(ENGINE)
 
     # 1) GenerationConfig.validate
     gen_cls = find_class(module_ast, "GenerationConfig")
@@ -1477,7 +1478,6 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
             validate_fn,
             native_type=NATIVE_TYPE_GEN,
             method_name="validate",
-            curated_sections=curated_sections,
             rel_source_path=rel_path,
             today=today,
         )
@@ -1493,7 +1493,6 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
                     wmk_validate,
                     native_type=NATIVE_TYPE_WMK,
                     method_name="validate",
-                    curated_sections=curated_sections,
                     rel_source_path=rel_path,
                     today=today,
                 )
@@ -1509,7 +1508,6 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
                     synth_validate,
                     native_type=NATIVE_TYPE_SYNTH,
                     method_name="validate",
-                    curated_sections=curated_sections,
                     rel_source_path=rel_path,
                     today=today,
                 )
@@ -1520,12 +1518,12 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
     # without importing ``bitsandbytes`` itself (that would touch CUDA on
     # GPU hosts). The class lives in transformers.utils.quantization_config,
     # a separate source module from GenerationConfig.
-    candidates.extend(_walk_bnb_post_init(today, curated_sections))
+    candidates.extend(_walk_bnb_post_init(today))
 
     return candidates, engine_version, rel_path
 
 
-def _walk_bnb_post_init(today: str, curated_sections: dict[str, str]) -> list[InvariantCandidate]:
+def _walk_bnb_post_init(today: str) -> list[InvariantCandidate]:
     """Walk ``BitsAndBytesConfig.post_init`` for type-check raises.
 
     Returns an empty list if the quantization_config module isn't importable
@@ -1556,7 +1554,6 @@ def _walk_bnb_post_init(today: str, curated_sections: dict[str, str]) -> list[In
         post_init_fn,
         native_type=NATIVE_TYPE_BNB,
         method_name="post_init",
-        curated_sections=curated_sections,
         rel_source_path=rel_path,
         today=today,
         library=LIBRARY_BNB,
