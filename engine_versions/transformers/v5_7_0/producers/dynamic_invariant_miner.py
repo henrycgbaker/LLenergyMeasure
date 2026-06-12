@@ -126,6 +126,12 @@ if str(_WALKERS_DIR) in sys.path:
 
 from scripts.engine_producers._base import InvariantCandidate, MinerSource  # noqa: E402
 from scripts.engine_producers._dataclass_lift import lift as _dataclass_lift  # noqa: E402
+from scripts.engine_producers._section_classifier import (  # noqa: E402
+    load_curated_sections,
+    relabel_match_fields,
+)
+
+ENGINE = "transformers"
 
 # ---------------------------------------------------------------------------
 # Probe contract
@@ -254,6 +260,21 @@ def _synthesise_probe_value(default: Any) -> Any | None:
     return None
 
 
+def _probe_candidates(default: Any) -> tuple[Any, ...]:
+    """Probe values to try in order for one field.
+
+    Typed defaults synthesise a single probe. ``None`` defaults carry no
+    type information (transformers 5.x moved GenerationConfig to lazy
+    ``None`` defaults), so try ``True`` first - the 5.x dormancy checks
+    for the boolean output_* flags test ``is True`` and a numeric probe
+    no longer trips them - then fall back to the legacy numeric probe.
+    """
+    if default is None:
+        return (True, 0.5)
+    probe = _synthesise_probe_value(default)
+    return () if probe is None else (probe,)
+
+
 # ---------------------------------------------------------------------------
 # Library-message parsing
 # ---------------------------------------------------------------------------
@@ -367,26 +388,28 @@ def _enumerate_dormancy_candidates_inner(
             continue
         if field_name in _DORMANCY_SKIP_FIELDS:
             continue
-        probe = _synthesise_probe_value(default)
-        if probe is None:
+        candidates = _probe_candidates(default)
+        if not candidates:
             continue
 
         for trigger in TRIGGERS:
-            kwargs = {
-                **trigger.isolation_kwargs,
-                trigger.trigger_field: trigger.trigger_positive,
-                field_name: probe,
-            }
-            try:
-                gc = GenerationConfig(**kwargs)
-            except Exception:
-                continue
-            try:
-                gc.validate(strict=True)
-            except ValueError as exc:
-                issues = _parse_strict_raise(str(exc))
-                if field_name in issues:
-                    discovered.append((trigger, field_name, default, probe, issues[field_name]))
+            for probe in candidates:
+                kwargs = {
+                    **trigger.isolation_kwargs,
+                    trigger.trigger_field: trigger.trigger_positive,
+                    field_name: probe,
+                }
+                try:
+                    gc = GenerationConfig(**kwargs)
+                except Exception:
+                    continue
+                try:
+                    gc.validate(strict=True)
+                except ValueError as exc:
+                    issues = _parse_strict_raise(str(exc))
+                    if field_name in issues:
+                        discovered.append((trigger, field_name, default, probe, issues[field_name]))
+                        break
 
     return discovered
 
@@ -1760,8 +1783,14 @@ def _relative_source_path(abs_path: str) -> str:
     return Path(abs_path).name
 
 
-def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
-    """Render a :class:`InvariantCandidate` into the YAML corpus entry shape."""
+def _candidate_to_dict(c: InvariantCandidate, curated_sections: dict[str, str]) -> dict[str, Any]:
+    """Render a :class:`InvariantCandidate` into the YAML corpus entry shape.
+
+    ``match.fields`` keys are relabelled from the miner's internal namespaces
+    onto canonical ``{engine}.{section}.{field}`` rule paths (curation-first,
+    then native-class origin) - the section split is what runtime resolution
+    and the required-invariants floor key on.
+    """
     return {
         "id": c.id,
         "engine": c.engine,
@@ -1776,7 +1805,12 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         },
         "match": {
             "engine": c.engine,
-            "fields": c.match_fields,
+            "fields": relabel_match_fields(
+                c.match_fields,
+                engine=ENGINE,
+                native_type=c.native_type,
+                curated_sections=curated_sections,
+            ),
         },
         "kwargs_positive": c.kwargs_positive,
         "kwargs_negative": c.kwargs_negative,
@@ -1848,13 +1882,14 @@ def main(argv: list[str] | None = None) -> int:
         dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     )
 
+    curated_sections = load_curated_sections(ENGINE)
     doc = {
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": version,
         "mined_at": mined_at,
         "extractor": "transformers_dynamic_miner",
-        "invariants": [_candidate_to_dict(c) for c in candidates_sorted],
+        "invariants": [_candidate_to_dict(c, curated_sections) for c in candidates_sorted],
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))

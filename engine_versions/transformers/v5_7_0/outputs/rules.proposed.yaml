@@ -16,7 +16,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.num_beams: 1
+      transformers.engine_params.num_beams: 1
   kwargs_positive:
     num_beams: 1
     num_beam_groups: 1
@@ -52,7 +52,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.cache_implementation:
+      transformers.engine_params.cache_implementation:
         present: true
         not_in:
         - dynamic
@@ -87,7 +87,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.use_cache: false
+      transformers.engine_params.use_cache: false
   kwargs_positive:
     cache_implementation: static
     use_cache: false
@@ -117,7 +117,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.compile_config:
+      transformers.sampling_params.compile_config:
         '>': 0
   kwargs_positive:
     compile_config: 42
@@ -143,7 +143,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.compile_config:
+      transformers.sampling_params.compile_config:
         present: true
         type_is_not:
         - CompileConfig
@@ -173,7 +173,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         present: true
   kwargs_positive:
     early_stopping: true
@@ -206,7 +206,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.epsilon_cutoff:
+      transformers.sampling_params.epsilon_cutoff:
         '!=': 0.0
         present: true
   kwargs_positive:
@@ -240,7 +240,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.eta_cutoff:
+      transformers.sampling_params.eta_cutoff:
         '!=': 0.0
         present: true
   kwargs_positive:
@@ -271,7 +271,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         '>': 0
   kwargs_positive:
     early_stopping: 1.5
@@ -298,7 +298,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         present: true
         not_in:
         - false
@@ -330,7 +330,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         present: true
         type_is_not:
         - bool
@@ -362,15 +362,15 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.epsilon_cutoff:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.epsilon_cutoff:
         present: true
   kwargs_positive:
     do_sample: false
-    epsilon_cutoff: 0.5
+    epsilon_cutoff: true
   kwargs_negative:
     do_sample: true
-    epsilon_cutoff: 0.5
+    epsilon_cutoff: true
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
@@ -396,15 +396,15 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.eta_cutoff:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.eta_cutoff:
         present: true
   kwargs_positive:
     do_sample: false
-    eta_cutoff: 0.5
+    eta_cutoff: true
   kwargs_negative:
     do_sample: true
-    eta_cutoff: 0.5
+    eta_cutoff: true
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
@@ -430,15 +430,15 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.min_p:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.min_p:
         present: true
   kwargs_positive:
     do_sample: false
-    min_p: 0.5
+    min_p: true
   kwargs_negative:
     do_sample: true
-    min_p: 0.5
+    min_p: true
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
@@ -464,8 +464,8 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.temperature:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.temperature:
         present: true
   kwargs_positive:
     do_sample: false
@@ -498,15 +498,15 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.top_h:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.top_h:
         present: true
   kwargs_positive:
     do_sample: false
-    top_h: 0.5
+    top_h: true
   kwargs_negative:
     do_sample: true
-    top_h: 0.5
+    top_h: true
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
@@ -532,15 +532,15 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.top_k:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.top_k:
         present: true
   kwargs_positive:
     do_sample: false
-    top_k: 0.5
+    top_k: true
   kwargs_negative:
     do_sample: true
-    top_k: 0.5
+    top_k: true
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
@@ -566,8 +566,8 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.top_p:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.top_p:
         present: true
   kwargs_positive:
     do_sample: false
@@ -600,8 +600,8 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.typical_p:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.typical_p:
         present: true
   kwargs_positive:
     do_sample: false
@@ -633,7 +633,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.pad_token_id:
+      transformers.sampling_params.pad_token_id:
         <: 0
   kwargs_positive:
     pad_token_id: -1
@@ -651,6 +651,138 @@ invariants:
   added_by: dynamic_miner
   added_at: '2026-06-12'
   conflict_note: 'id: dynamic_miner -> ''transformers_negative_pad_token_id''; dynamic_miner -> ''transformers_output_token_ids_pad_token_id_lt_zero'''
+- id: transformers_no_return_dict_strips_output_attentions
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate() records dormant `output_attentions` when return_dict_in_generate=False
+    and `output_attentions` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 424
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_attentions:
+        present: true
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_attentions: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_attentions: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_attentions` is. When
+    `return_dict_in_generate` is not `True`, `output_attentions` is ignored.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~424)
+  added_by: dynamic_miner
+  added_at: '2026-06-12'
+- id: transformers_no_return_dict_strips_output_hidden_states
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate() records dormant `output_hidden_states` when return_dict_in_generate=False
+    and `output_hidden_states` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 425
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_hidden_states:
+        present: true
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_hidden_states: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_hidden_states: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states` is. When
+    `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~425)
+  added_by: dynamic_miner
+  added_at: '2026-06-12'
+- id: transformers_no_return_dict_strips_output_logits
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate() records dormant `output_logits` when return_dict_in_generate=False
+    and `output_logits` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 427
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_logits:
+        present: true
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_logits: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_logits: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_logits` is. When `return_dict_in_generate`
+    is not `True`, `output_logits` is ignored.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~427)
+  added_by: dynamic_miner
+  added_at: '2026-06-12'
+- id: transformers_no_return_dict_strips_output_scores
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate() records dormant `output_scores` when return_dict_in_generate=False
+    and `output_scores` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 426
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_scores:
+        present: true
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_scores: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_scores: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_scores` is. When `return_dict_in_generate`
+    is not `True`, `output_scores` is ignored.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~426)
+  added_by: dynamic_miner
+  added_at: '2026-06-12'
 - id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
   engine: transformers
   library: transformers
@@ -665,10 +797,10 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.num_return_sequences:
+      transformers.engine_params.num_beams: 1
+      transformers.sampling_params.num_return_sequences:
         '>': 1
-      transformers.sampling.do_sample: false
+      transformers.sampling_params.do_sample: false
   kwargs_positive:
     num_beams: 1
     num_return_sequences: 2
@@ -697,7 +829,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.num_beams:
+      transformers.engine_params.num_beams:
         <: '@num_return_sequences'
   kwargs_positive:
     num_beams: 2
@@ -727,7 +859,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.num_beams:
+      transformers.engine_params.num_beams:
         not_divisible_by: '@num_return_sequences'
   kwargs_positive:
     num_beams: 2
@@ -756,7 +888,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.max_new_tokens:
+      transformers.sampling_params.max_new_tokens:
         <=: 0
   kwargs_positive:
     max_new_tokens: -1
@@ -785,7 +917,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.max_new_tokens:
+      transformers.sampling_params.max_new_tokens:
         present: true
         not_in:
         - 1
@@ -817,7 +949,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.pad_token_id:
+      transformers.sampling_params.pad_token_id:
         present: true
         not_in:
         - 0
@@ -852,7 +984,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.bnb_4bit_quant_type:
+      transformers.engine_params.bnb_4bit_quant_type:
         type_is_not: str
   kwargs_positive:
     bnb_4bit_quant_type: 1
@@ -881,7 +1013,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.bnb_4bit_use_double_quant:
+      transformers.engine_params.bnb_4bit_use_double_quant:
         type_is_not: bool
   kwargs_positive:
     bnb_4bit_use_double_quant: 1
@@ -910,7 +1042,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.compile_config:
+      transformers.sampling_params.compile_config:
         type_is_not: CompileConfig
         present: true
   kwargs_positive:
@@ -941,7 +1073,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         not_in:
         - null
         - true
@@ -974,7 +1106,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.llm_int8_enable_fp32_cpu_offload:
+      transformers.engine_params.llm_int8_enable_fp32_cpu_offload:
         type_is_not: bool
   kwargs_positive:
     llm_int8_enable_fp32_cpu_offload: 1
@@ -1003,7 +1135,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.llm_int8_has_fp16_weight:
+      transformers.engine_params.llm_int8_has_fp16_weight:
         type_is_not: bool
   kwargs_positive:
     llm_int8_has_fp16_weight: 1
@@ -1032,7 +1164,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.llm_int8_skip_modules:
+      transformers.engine_params.llm_int8_skip_modules:
         type_is_not: list
         present: true
   kwargs_positive:
@@ -1062,7 +1194,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.llm_int8_threshold:
+      transformers.engine_params.llm_int8_threshold:
         type_is_not: float
   kwargs_positive:
     llm_int8_threshold: x
@@ -1090,7 +1222,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.load_in_4bit:
+      transformers.engine_params.load_in_4bit:
         type_is_not: bool
   kwargs_positive:
     load_in_4bit: 1
@@ -1118,7 +1250,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.load_in_8bit:
+      transformers.engine_params.load_in_8bit:
         type_is_not: bool
   kwargs_positive:
     load_in_8bit: 1
@@ -1133,6 +1265,39 @@ invariants:
   - transformers/utils/quantization_config.py:528 (transformers.BitsAndBytesConfig.post_init)
   added_by: static_miner
   added_at: '2026-04-25'
+- id: transformers_single_beam_strips_early_stopping
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate() records dormant `early_stopping` when num_beams=1
+    and `early_stopping` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 380
+  match:
+    engine: transformers
+    fields:
+      transformers.engine_params.num_beams: 1
+      transformers.engine_params.early_stopping:
+        present: true
+  kwargs_positive:
+    num_beams: 1
+    early_stopping: true
+  kwargs_negative:
+    num_beams: 4
+    early_stopping: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `{declared_value}` --
+    this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~380)
+  added_by: dynamic_miner
+  added_at: '2026-06-12'
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
   library: transformers
@@ -1147,8 +1312,8 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.length_penalty:
+      transformers.engine_params.num_beams: 1
+      transformers.engine_params.length_penalty:
         present: true
   kwargs_positive:
     num_beams: 1
@@ -1180,7 +1345,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.watermarking_config:
+      transformers.sampling_params.watermarking_config:
         '>': 0
   kwargs_positive:
     watermarking_config: 42
@@ -1206,7 +1371,7 @@ invariants:
   match:
     engine: transformers
     fields:
-      transformers.sampling.watermarking_config:
+      transformers.sampling_params.watermarking_config:
         present: true
         type_is_not:
         - WatermarkingConfig

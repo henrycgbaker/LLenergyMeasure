@@ -77,6 +77,10 @@ from scripts.engine_producers._base import (  # noqa: E402  (late import after s
     format_call_template,
     render_binop_concat_template,
 )
+from scripts.engine_producers._section_classifier import (  # noqa: E402
+    load_curated_sections,
+    relabel_match_fields,
+)
 
 # Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
 # ConditionalSelfAssignDetector, etc.) and instead define parallel
@@ -1388,8 +1392,16 @@ def _site_packages_relative(abs_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(invariant: InvariantCandidate, rel_path: str) -> dict[str, Any]:
-    """Render a InvariantCandidate in canonical corpus YAML shape."""
+def _candidate_to_dict(
+    invariant: InvariantCandidate, rel_path: str, curated_sections: dict[str, str]
+) -> dict[str, Any]:
+    """Render a InvariantCandidate in canonical corpus YAML shape.
+
+    ``match.fields`` keys are relabelled from the miner's internal namespaces
+    onto canonical ``{engine}.{section}.{field}`` rule paths (curation-first,
+    then native-class origin) - the section split is what runtime resolution
+    and the required-invariants floor key on.
+    """
     expected_outcome: dict[str, Any] = {
         "outcome": invariant.outcome,
         "emission_channel": invariant.emission_channel,
@@ -1409,7 +1421,12 @@ def _candidate_to_dict(invariant: InvariantCandidate, rel_path: str) -> dict[str
         },
         "match": {
             "engine": ENGINE,
-            "fields": invariant.match_fields,
+            "fields": relabel_match_fields(
+                invariant.match_fields,
+                engine=ENGINE,
+                native_type=invariant.native_type,
+                curated_sections=curated_sections,
+            ),
         },
         "kwargs_positive": invariant.kwargs_positive,
         "kwargs_negative": invariant.kwargs_negative,
@@ -1434,13 +1451,16 @@ def emit_yaml(
 
     # Sort for deterministic byte-stable output.
     candidates_sorted = sorted(candidates, key=lambda c: (c.method, c.id))
+    curated_sections = load_curated_sections(ENGINE)
     doc: dict[str, Any] = {
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
         "miner": "transformers_static_miner",
         "mined_at": dt.date(2026, 4, 25).isoformat(),
-        "invariants": [_candidate_to_dict(r, rel_path) for r in candidates_sorted],
+        "invariants": [
+            _candidate_to_dict(r, rel_path, curated_sections) for r in candidates_sorted
+        ],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 

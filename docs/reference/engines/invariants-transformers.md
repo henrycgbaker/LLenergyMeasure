@@ -5,7 +5,7 @@
 Library version: **5.7.0**  
 Anchor frozen at: 2026-06-12T10:04:46+02:00
 
-**Summary:** 39 proposed invariants, 39 validation-confirmed cases.
+**Summary:** 44 proposed invariants, 44 validation-confirmed cases.
 
 ## Invariants by extraction source
 
@@ -25,7 +25,7 @@ Anchor frozen at: 2026-06-12T10:04:46+02:00
 - `transformers_raises_load_in_4bit_not_type_bool` [error] - BitsAndBytesConfig.raise_TypeError: raises when load_in_4bit type_is_not bool
 - `transformers_raises_load_in_8bit_not_type_bool` [error] - BitsAndBytesConfig.raise_TypeError: raises when load_in_8bit type_is_not bool
 
-### Dynamic miner (constructor probing) (26)
+### Dynamic miner (constructor probing) (31)
 
 - `transformers_beam_search_num_beams_eq_1` [dormant] - GenerationConfig.validate flags `num_beams` (num beams eq 1)
 - `transformers_cache_choice_cache_implementation_not_in_allowlist` [error] - GenerationConfig.__init__ flags `cache_implementation` (cache implementation not in allowlist)
@@ -44,12 +44,17 @@ Anchor frozen at: 2026-06-12T10:04:46+02:00
 - `transformers_greedy_strips_top_p` [dormant] - GenerationConfig.validate() records dormant `top_p` when do_sample=False and `top_p` is set to a ...
 - `transformers_greedy_strips_typical_p` [dormant] - GenerationConfig.validate() records dormant `typical_p` when do_sample=False and `typical_p` is s...
 - `transformers_negative_pad_token_id` [dormant] - GenerationConfig.validate() records dormant pad_token_id < 0
+- `transformers_no_return_dict_strips_output_attentions` [dormant] - GenerationConfig.validate() records dormant `output_attentions` when return_dict_in_generate=Fals...
+- `transformers_no_return_dict_strips_output_hidden_states` [dormant] - GenerationConfig.validate() records dormant `output_hidden_states` when return_dict_in_generate=F...
+- `transformers_no_return_dict_strips_output_logits` [dormant] - GenerationConfig.validate() records dormant `output_logits` when return_dict_in_generate=False an...
+- `transformers_no_return_dict_strips_output_scores` [dormant] - GenerationConfig.validate() records dormant `output_scores` when return_dict_in_generate=False an...
 - `transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1` [error] - GenerationConfig.__init__ flags `num_beams` (do sample eq false and num beams eq 1)
 - `transformers_num_return_vs_beams_num_beams_lt_num_return_sequences` [error] - GenerationConfig.__init__ flags `num_beams` (num beams lt num return sequences)
 - `transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences` [error] - GenerationConfig.__init__ flags `num_beams` (num beams not divisible by num return sequences)
 - `transformers_output_token_ids_max_new_tokens_le_zero` [error] - GenerationConfig.__init__ flags `max_new_tokens` (max new tokens le zero)
 - `transformers_output_token_ids_max_new_tokens_not_in_allowlist` [error] - GenerationConfig.__init__ flags `max_new_tokens` (max new tokens not in allowlist)
 - `transformers_output_token_ids_pad_token_id_not_in_allowlist` [dormant] - GenerationConfig.validate flags `pad_token_id` (pad token id not in allowlist)
+- `transformers_single_beam_strips_early_stopping` [dormant] - GenerationConfig.validate() records dormant `early_stopping` when num_beams=1 and `early_stopping...
 - `transformers_single_beam_strips_length_penalty` [dormant] - GenerationConfig.validate() records dormant `length_penalty` when num_beams=1 and `length_penalty...
 - `transformers_watermarking_type_watermarking_config_exceeds_zero` [error] - GenerationConfig.__init__ flags `watermarking_config` (watermarking config exceeds zero)
 - `transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig` [error] - GenerationConfig.__init__ flags `watermarking_config` (watermarking config type not in Watermarki...
