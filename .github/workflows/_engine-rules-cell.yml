@@ -117,6 +117,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Pull engine image and tag locally
+        id: image
         env:
           IMAGE_TAG: ${{ steps.version.outputs.image }}
           VER: ${{ steps.version.outputs.version }}
@@ -145,6 +146,12 @@ jobs:
             echo "Image $UPSTREAM already cached locally; skipping pull."
           fi
           docker tag "$UPSTREAM" "$IMAGE_TAG"
+          # Resolve the immutable digest for provenance in the mined envelope.
+          # RepoDigests is empty for locally-built images; degrade to "" then.
+          DIGEST=$(docker image inspect "$UPSTREAM" \
+            --format '{{ range .RepoDigests }}{{ println . }}{{ end }}' \
+            | head -n1 | sed -n 's/.*@\(sha256:[0-9a-f]*\).*/\1/p')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch tensorrt-llm source tarball (host)
         if: inputs.engine == 'tensorrt'
@@ -242,23 +249,8 @@ jobs:
           RUNNER: ${{ inputs.runner }}
         run: |
           mkdir -p /tmp/llem-probe-out
-          DOCKER_FLAGS=()
-          if [[ "$RUNNER" == "self-hosted" ]]; then
-            DOCKER_FLAGS+=(
-              --gpus all
-              --user "$(id -u):$(id -g)"
-              -v /tmp/llem-passwd-synth:/etc/passwd:ro
-              -v /tmp/llem-group-synth:/etc/group:ro
-              -e LD_LIBRARY_PATH
-            )
-          fi
-          ENTRYPOINT_FLAG=(--entrypoint python3)
-          CMD_PREFIX=()
-          if [[ "$ENGINE" == "tensorrt" ]]; then
-            DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
-            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
-            CMD_PREFIX=(python3)
-          fi
+          # shellcheck source=scripts/ci/run_in_engine_container.sh
+          source scripts/ci/run_in_engine_container.sh python3
           set +e
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -v "${GITHUB_WORKSPACE}:/repo" \
@@ -299,29 +291,15 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         env:
           IMAGE: ${{ steps.version.outputs.image }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           ENGINE: ${{ inputs.engine }}
           VER: ${{ steps.version.outputs.version }}
           ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
           RUNNER: ${{ inputs.runner }}
         run: |
-          DOCKER_FLAGS=()
-          if [[ "$RUNNER" == "self-hosted" ]]; then
-            DOCKER_FLAGS+=(
-              --gpus all
-              --user "$(id -u):$(id -g)"
-              -v /tmp/llem-passwd-synth:/etc/passwd:ro
-              -v /tmp/llem-group-synth:/etc/group:ro
-              -e LD_LIBRARY_PATH
-            )
-          fi
-          ENTRYPOINT_FLAG=(--entrypoint bash)
-          CMD_PREFIX=()
-          if [[ "$ENGINE" == "tensorrt" ]]; then
-            DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
-            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
-            CMD_PREFIX=(bash)
-          fi
+          # shellcheck source=scripts/ci/run_in_engine_container.sh
+          source scripts/ci/run_in_engine_container.sh bash
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
@@ -339,6 +317,9 @@ jobs:
                 --corpus '${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml' \
                 --out '${ENGINES_DIR}/${ENGINE}/rules.validated.yaml' \
                 --validation-commit '${ANCHOR_SHA}' \
+                --image-ref '${IMAGE}' \
+                --image-digest '${IMAGE_DIGEST}' \
+                --engine-commit '${VER}' \
                 --fail-on-divergence
             "
 
@@ -394,23 +375,8 @@ jobs:
           PREV_OUTPUTS: ${{ steps.prior.outputs.prev_outputs }}
         run: |
           mkdir -p /tmp/engine-rules-alarms
-          DOCKER_FLAGS=()
-          if [[ "$RUNNER" == "self-hosted" ]]; then
-            DOCKER_FLAGS+=(
-              --gpus all
-              --user "$(id -u):$(id -g)"
-              -v /tmp/llem-passwd-synth:/etc/passwd:ro
-              -v /tmp/llem-group-synth:/etc/group:ro
-              -e LD_LIBRARY_PATH
-            )
-          fi
-          ENTRYPOINT_FLAG=(--entrypoint bash)
-          CMD_PREFIX=()
-          if [[ "$ENGINE" == "tensorrt" ]]; then
-            DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
-            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
-            CMD_PREFIX=(bash)
-          fi
+          # shellcheck source=scripts/ci/run_in_engine_container.sh
+          source scripts/ci/run_in_engine_container.sh bash
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
@@ -823,19 +789,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr-number }}
           CLASSIFICATION: ${{ steps.diff.outputs.classification }}
-        run: |
-          # A no-changes re-run carries no fresh classification signal: it must
-          # not overwrite the verdict an earlier run of the same PR set. Skip
-          # relabelling so a final no-op pipeline cannot downgrade an existing
-          # "breaking" (safe-bump removed) back to "safe-bump". Only a run that
-          # actually classified the diff (breaking / safe) ever touches the
-          # rollup label, mirroring the per-pipeline label step's no-changes
-          # no-op.
-          case "$CLASSIFICATION" in
-            breaking)  gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true ;;
-            safe)      gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true ;;
-            no-changes) ;;
-          esac
+        run: scripts/ci/apply_rollup_label.sh
 
       - name: Probe-fail gate (red CI)
         # Probe-fail must show as a red CI check: PRs cannot merge with a
