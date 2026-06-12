@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: vllm
 engine_version: 0.7.3
-mined_at: '2026-05-14T13:25:05+02:00'
+mined_at: '2026-06-11T21:56:11+02:00'
 invariants:
 - id: vllm_samplingparams_dormant_seed_eq_neg1
   engine: vllm
@@ -293,40 +293,3 @@ invariants:
   - config.py:1598 (vllm.config.SchedulerConfig._verify_args)
   added_by: static_miner
   added_at: '2026-05-13T22:55:33+02:00'
-- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_max_model_len
-  engine: vllm
-  library: vllm
-  invariant_under_test: 'SchedulerConfig._verify_args: raises when max_num_batched_tokens
-    present True AND max_num_batched_tokens < @max_model_len (chunked prefill disabled;
-    V7 parity row)'
-  severity: error
-  native_type: vllm.config.SchedulerConfig
-  miner_source:
-    path: config.py
-    method: _verify_args
-    line_at_scan: 1575
-  match:
-    engine: vllm
-    fields:
-      vllm.engine_params.max_num_batched_tokens:
-        present: true
-        <: '@max_model_len'
-  kwargs_positive:
-    max_num_batched_tokens: 1024
-    max_model_len: 2048
-  kwargs_negative:
-    max_num_batched_tokens: 4096
-    max_model_len: 2048
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: max_num_batched_tokens ({max_num_batched_tokens}) is smaller than
-    max_model_len ({max_model_len}). This effectively limits the maximum sequence
-    length to max_num_batched_tokens and makes vLLM reject longer sequences. Please
-    increase max_num_batched_tokens or decrease max_model_len. (Exempt when chunked
-    prefill is enabled.)
-  references:
-  - config.py:1575 (vllm.config.SchedulerConfig._verify_args, vllm 0.7.3)
-  added_by: static_miner
-  added_at: '2026-06-11'
