@@ -768,6 +768,137 @@ def regate_carried_catalogue(
 
 
 # ---------------------------------------------------------------------------
+# Rung 0: deterministic reconciliation join (decay-alarm triage)
+# ---------------------------------------------------------------------------
+#
+# A re-gate "failed" verdict means the carried rule did not re-confirm against
+# the new container. But the SAME bump's fresh deterministic re-mine often
+# already re-encoded that rule - with an updated message template (the engine
+# reworded the same check) or under a renamed id (the walker named it
+# differently). Those are not decay: they are the workflow adopting gate-truth,
+# and the Opus triage that re-derived them by hand was redundant. This join
+# reclassifies such failures against the fresh VALIDATED corpus produced in the
+# same run - by id first, then by structural signature - leaving only the
+# genuine residual as decay candidates. No tokens, no LLM: healing is adoption
+# of gate-truth, not generation.
+
+HEALED_TEMPLATE_DRIFT = "healed_template_drift"
+HEALED_RULE_MORPHED = "healed_rule_morphed"
+RECONCILE_REPORT_SCHEMA_VERSION = "1.0.0"
+
+
+def _signature(invariant: dict[str, Any]) -> tuple[str, frozenset[str], str]:
+    """Structural identity of a rule: (native_type, claimed bare fields, severity).
+
+    The second-pass join key. Bare field names (last dotted segment) match the
+    grain :func:`invariant_claimed_fields` uses, so a rule that survives a bump
+    under a renamed id but the same construction surface still joins.
+    """
+    native_type = str(invariant.get("native_type", ""))
+    fields = invariant_claimed_fields(invariant)
+    severity = str(invariant.get("severity", "")).lower()
+    return native_type, fields, severity
+
+
+def _index_corpus(corpus: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[Any, list[str]]]:
+    """Index a proposed-shape corpus by id and by structural signature."""
+    by_id: dict[str, dict[str, Any]] = {}
+    by_signature: dict[Any, list[str]] = {}
+    for invariant in corpus.get("invariants", []):
+        if not isinstance(invariant, dict):
+            continue
+        rule_id = str(invariant.get("id", ""))
+        if not rule_id:
+            continue
+        by_id[rule_id] = invariant
+        by_signature.setdefault(_signature(invariant), []).append(rule_id)
+    return by_id, by_signature
+
+
+def reconcile_regate_report(
+    report: dict[str, Any],
+    *,
+    carried_corpus_path: Path,
+    fresh_validated_ids: set[str],
+    fresh_proposed_path: Path,
+) -> dict[str, Any]:
+    """Join the re-gate report's ``failed`` entries against the fresh corpus.
+
+    ``fresh_validated_ids`` is the set of ids the same run's gate confirmed
+    (the cases in the new pin's ``rules.validated.yaml``). ``fresh_proposed_path``
+    is the new pin's ``rules.proposed.yaml`` - it carries the structural shape
+    (native_type / match.fields / severity / message_template) the validated
+    cases lack, so the second-pass signature join and the template diff read
+    from it. Both are byte-committed in the same writeback.
+
+    Returns a ``reconciliation`` block:
+
+        {
+          "schema_version": "1.0.0",
+          "healed": [
+            {"id": "...", "kind": "healed_template_drift",
+             "old_template": "...", "new_template": "..."},
+            {"id": "...", "kind": "healed_rule_morphed", "new_id": "..."}
+          ],
+          "residual": [{"id": "...", "reason": "..."}],
+          "counts": {"healed": 4, "residual": 3}
+        }
+
+    Only ``failed`` entries are reconciled; ``infra_error`` (probe broke) is a
+    distinct signal and stays out of the join.
+    """
+    carried_by_id, _ = _index_corpus(_load_corpus(carried_corpus_path))
+    fresh_by_id, fresh_by_signature = _index_corpus(_load_corpus(fresh_proposed_path))
+
+    healed: list[dict[str, str]] = []
+    residual: list[dict[str, str]] = []
+
+    failed_entries = [e for e in report.get("entries", []) if e.get("verdict") == VERDICT_FAILED]
+    for entry in failed_entries:
+        rule_id = str(entry.get("id", ""))
+        carried = carried_by_id.get(rule_id)
+
+        # First pass: same id still gate-confirmed at the new pin. The rule
+        # holds; the carried probe failed only because the engine reworded the
+        # message (template drift). Show the old -> new template move.
+        if rule_id in fresh_validated_ids:
+            healed.append(
+                {
+                    "id": rule_id,
+                    "kind": HEALED_TEMPLATE_DRIFT,
+                    "old_template": str((carried or {}).get("message_template") or ""),
+                    "new_template": str(
+                        (fresh_by_id.get(rule_id) or {}).get("message_template") or ""
+                    ),
+                }
+            )
+            continue
+
+        # Second pass: the rule re-appears under a new id with the same
+        # structural signature (native_type, claimed fields, severity) and that
+        # new id is gate-confirmed. The walker renamed it; the check survived.
+        morph_id = None
+        if carried is not None:
+            for candidate in fresh_by_signature.get(_signature(carried), []):
+                if candidate != rule_id and candidate in fresh_validated_ids:
+                    morph_id = candidate
+                    break
+        if morph_id is not None:
+            healed.append({"id": rule_id, "kind": HEALED_RULE_MORPHED, "new_id": morph_id})
+            continue
+
+        # Residual: neither id nor signature recovered - a genuine decay candidate.
+        residual.append({"id": rule_id, "reason": str(entry.get("reason", ""))})
+
+    return {
+        "schema_version": RECONCILE_REPORT_SCHEMA_VERSION,
+        "healed": healed,
+        "residual": residual,
+        "counts": {"healed": len(healed), "residual": len(residual)},
+    }
+
+
+# ---------------------------------------------------------------------------
 # Envelope assembly
 # ---------------------------------------------------------------------------
 
@@ -854,6 +985,15 @@ def validate_engine(
             )
         cases.append(case)
 
+        # One underlying failure must surface as ONE finding. The two divergence
+        # vocabularies overlap (a positive that stopped firing reads as both an
+        # expected-vs-observed outcome mismatch AND a gate-soundness
+        # positive_raises miss), so they are layered, not summed: the coarse
+        # expected-vs-observed comparison runs first; the finer gate-soundness
+        # checks (locus attribution, coercion-artefact, message-template, and
+        # the positive/negative confirm) only run when that comparison is clean,
+        # refining a confirm rather than re-reporting a failure the coarse check
+        # already named.
         rule_divergences = compare_expected_vs_observed(
             invariant_id=invariant["id"],
             expected=invariant.get("expected_outcome") or {},
@@ -861,28 +1001,8 @@ def validate_engine(
             observed_emission=case.emission_channel,
             silent_normalisations=case.observed_silent_normalisations,
         )
-        if not case.positive_confirmed:
-            rule_divergences.append(
-                Divergence(
-                    invariant_id=invariant["id"],
-                    field="positive_confirmed",
-                    expected=True,
-                    observed=False,
-                )
-            )
-        if not case.negative_confirmed:
-            rule_divergences.append(
-                Divergence(
-                    invariant_id=invariant["id"],
-                    field="negative_confirmed",
-                    expected=True,
-                    observed=False,
-                )
-            )
-        # Gate-soundness checks (Decision #12). Only run when both captures
-        # are available - defensive guard for the bare-except fallback above.
-        if pos is not None and neg is not None:
-            rule_divergences.extend(compute_gate_soundness_divergences(invariant, pos, neg))
+        if not rule_divergences and pos is not None and neg is not None:
+            rule_divergences = compute_gate_soundness_divergences(invariant, pos, neg)
         divergences.extend(rule_divergences)
 
     envelope = assemble_envelope(
@@ -930,6 +1050,14 @@ def _resolve_engine_version(engine: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _fresh_validated_ids(validated_path: Path) -> set[str]:
+    """Read the case ids out of a fresh validated envelope (rules.validated.yaml)."""
+    data = yaml.safe_load(validated_path.read_text())
+    if not isinstance(data, dict):
+        return set()
+    return {str(c["id"]) for c in data.get("cases", []) if isinstance(c, dict) and "id" in c}
+
+
 def _run_carried_mode(args: argparse.Namespace) -> int:
     """Run the carried-catalogue re-gate and emit the JSON report. Returns exit code."""
     try:
@@ -947,6 +1075,15 @@ def _run_carried_mode(args: argparse.Namespace) -> int:
         print(f"[{args.engine}] validation error: {exc}", file=sys.stderr)
         return 2
 
+    # Rung 0: reconcile carried-failed against the same run's fresh corpus.
+    if args.fresh_validated is not None and args.fresh_proposed is not None:
+        report["reconciliation"] = reconcile_regate_report(
+            report,
+            carried_corpus_path=args.carried,
+            fresh_validated_ids=_fresh_validated_ids(args.fresh_validated),
+            fresh_proposed_path=args.fresh_proposed,
+        )
+
     payload = json.dumps(report, indent=2)
     if args.regate_out is not None:
         args.regate_out.parent.mkdir(parents=True, exist_ok=True)
@@ -963,6 +1100,14 @@ def _run_carried_mode(args: argparse.Namespace) -> int:
         f"failed={counts[VERDICT_FAILED]} infra_error={counts[VERDICT_INFRA_ERROR]})",
         file=sys.stderr,
     )
+    recon = report.get("reconciliation")
+    if recon is not None:
+        rc = recon["counts"]
+        print(
+            f"[{args.engine}] reconciliation: {rc['healed']} healed, "
+            f"{rc['residual']} residual (decay candidates)",
+            file=sys.stderr,
+        )
     # The decay alarm is informational (design § 6: no auto-blocking thresholds
     # in v0.10.0); always exit 0 so the CI step that consumes the report decides.
     return 0
@@ -1004,6 +1149,27 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help="Path to write the carried re-gate JSON report (default: stdout).",
+    )
+    parser.add_argument(
+        "--fresh-validated",
+        type=Path,
+        default=None,
+        help=(
+            "Rung 0 reconciliation (carried mode): the SAME run's fresh "
+            "rules.validated.yaml. Failed carried entries whose id (or "
+            "structural signature) re-confirms here are reclassified as healed "
+            "rather than decay. Requires --fresh-proposed."
+        ),
+    )
+    parser.add_argument(
+        "--fresh-proposed",
+        type=Path,
+        default=None,
+        help=(
+            "Rung 0 reconciliation (carried mode): the SAME run's fresh "
+            "rules.proposed.yaml (carries the structural shape + templates the "
+            "validated envelope lacks). Requires --fresh-validated."
+        ),
     )
     parser.add_argument(
         "--image-ref",

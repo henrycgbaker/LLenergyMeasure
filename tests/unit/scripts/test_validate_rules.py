@@ -1078,3 +1078,161 @@ class TestCarriedRegate:
                     str(tmp_path / "o.yaml"),
                 ]
             )
+
+
+# ---------------------------------------------------------------------------
+# Rung 0 reconciliation join (decay-alarm triage) - chunk R1
+# ---------------------------------------------------------------------------
+
+
+def _write_corpus(path: Path, invariants: list[dict[str, Any]]) -> Path:
+    path.write_text(yaml.safe_dump({"invariants": invariants}, sort_keys=False))
+    return path
+
+
+def test_reconcile_unit_template_drift_and_morph(tmp_path: Path) -> None:
+    """Unit join: one same-id template-drift heal, one signature-morph heal, one residual."""
+    carried = _write_corpus(
+        tmp_path / "carried.yaml",
+        [
+            {
+                "id": "drifted",
+                "severity": "error",
+                "native_type": "test.X",
+                "match": {"fields": {"e.a": 1}},
+                "message_template": "old wording for `a`",
+            },
+            {
+                "id": "old_name",
+                "severity": "error",
+                "native_type": "test.Y",
+                "match": {"fields": {"e.b": 1}},
+                "message_template": "`b` rule",
+            },
+            {
+                "id": "gone",
+                "severity": "error",
+                "native_type": "test.Z",
+                "match": {"fields": {"e.c": 1}},
+                "message_template": "`c` rule",
+            },
+        ],
+    )
+    fresh_proposed = _write_corpus(
+        tmp_path / "fresh.proposed.yaml",
+        [
+            {
+                "id": "drifted",
+                "severity": "error",
+                "native_type": "test.X",
+                "match": {"fields": {"e.a": 1}},
+                "message_template": "new wording for `a`",
+            },
+            # Same signature as carried `old_name`, renamed.
+            {
+                "id": "new_name",
+                "severity": "error",
+                "native_type": "test.Y",
+                "match": {"fields": {"e.b": 1}},
+                "message_template": "`b` rule reworded",
+            },
+        ],
+    )
+    report = {
+        "entries": [
+            {"id": "drifted", "verdict": "failed", "reason": "template"},
+            {"id": "old_name", "verdict": "failed", "reason": "template"},
+            {"id": "gone", "verdict": "failed", "reason": "positive no longer fires"},
+            {"id": "stable", "verdict": "confirmed", "reason": ""},
+        ]
+    }
+    recon = validate_rules.reconcile_regate_report(
+        report,
+        carried_corpus_path=carried,
+        fresh_validated_ids={"drifted", "new_name"},
+        fresh_proposed_path=fresh_proposed,
+    )
+    assert recon["counts"] == {"healed": 2, "residual": 1}
+    by_id = {h["id"]: h for h in recon["healed"]}
+    assert by_id["drifted"]["kind"] == validate_rules.HEALED_TEMPLATE_DRIFT
+    assert by_id["drifted"]["old_template"] == "old wording for `a`"
+    assert by_id["drifted"]["new_template"] == "new wording for `a`"
+    assert by_id["old_name"]["kind"] == validate_rules.HEALED_RULE_MORPHED
+    assert by_id["old_name"]["new_id"] == "new_name"
+    assert recon["residual"][0]["id"] == "gone"
+
+
+# The bump-1 corpora live in the repo as committed evidence: the carried
+# v4.57.3 proposed catalogue and the fresh v5.7.0 proposed + validated corpora.
+_TF_V4 = _PROJECT_ROOT / "engine_versions" / "transformers" / "v4_57_3" / "outputs"
+_TF_V5 = _PROJECT_ROOT / "engine_versions" / "transformers" / "v5_7_0" / "outputs"
+
+
+def _bump1_failed_ids() -> list[str]:
+    """Derive bump-1's 7 decay-alarm failures from the committed corpora.
+
+    The carried v4.57.3 catalogue is re-gated against the v5.7.0 container; the
+    failures are (a) same-id rules whose carried message-template fragment no
+    longer appears in the v5.7.0 wording (the gate's message-template soundness
+    check fails - template drift), and (b) the carried-only bnb dormant rules
+    that the v5.7.0 re-mine dropped entirely (genuine decay). Reconstructed from
+    the committed YAML so the test tracks the real corpora, not a frozen literal.
+    """
+    carried = yaml.safe_load((_TF_V4 / "rules.proposed.yaml").read_text())
+    fresh = yaml.safe_load((_TF_V5 / "rules.proposed.yaml").read_text())
+    carried_by_id = {i["id"]: i for i in carried["invariants"]}
+    fresh_by_id = {i["id"]: i for i in fresh["invariants"]}
+
+    drift_failures = []
+    for rule_id in sorted(set(carried_by_id) & set(fresh_by_id)):
+        old_t = carried_by_id[rule_id].get("message_template") or ""
+        new_t = fresh_by_id[rule_id].get("message_template") or ""
+        if old_t == new_t:
+            continue
+        fragment = message_template_to_substring(old_t)
+        if fragment and fragment.lower() not in new_t.lower():
+            drift_failures.append(rule_id)
+
+    bnb_failures = [
+        rule_id
+        for rule_id in (set(carried_by_id) - set(fresh_by_id))
+        if "bnb_4bit" in rule_id and "dormant_without_load_in_4bit" in rule_id
+    ]
+    return drift_failures + sorted(bnb_failures)
+
+
+def test_reconcile_bump1_yields_four_healed_three_residual() -> None:
+    """Replay bump-1 (carried v4.57.3 vs fresh v5.7.0): exactly 4 healed + 3 residual.
+
+    The evidence target from the three-lens review: the deterministic
+    reconciliation join turns the decay alarm's "7 failed" into "4 healed +
+    3 decay candidates" with zero tokens. The 4 healers are same-id rules the
+    v5.7.0 gate re-confirmed under a drifted template; the 3 residual are the
+    bnb dormant rules the re-mine genuinely dropped.
+    """
+    failed_ids = _bump1_failed_ids()
+    assert len(failed_ids) == 7, failed_ids
+
+    report = {
+        "entries": [
+            {"id": rule_id, "verdict": "failed", "reason": "gate-soundness check(s) failed"}
+            for rule_id in failed_ids
+        ]
+    }
+    fresh_validated_ids = validate_rules._fresh_validated_ids(_TF_V5 / "rules.validated.yaml")
+    recon = validate_rules.reconcile_regate_report(
+        report,
+        carried_corpus_path=_TF_V4 / "rules.proposed.yaml",
+        fresh_validated_ids=fresh_validated_ids,
+        fresh_proposed_path=_TF_V5 / "rules.proposed.yaml",
+    )
+
+    assert recon["counts"] == {"healed": 4, "residual": 3}
+    assert all(h["kind"] == validate_rules.HEALED_TEMPLATE_DRIFT for h in recon["healed"])
+    # Each healer shows a real old -> new template move.
+    assert all(
+        h["old_template"] and h["new_template"] and h["old_template"] != h["new_template"]
+        for h in recon["healed"]
+    )
+    # The residual are the dropped bnb dormant rules.
+    assert all("bnb_4bit" in r["id"] for r in recon["residual"])
