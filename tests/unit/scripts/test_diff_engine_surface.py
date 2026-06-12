@@ -34,6 +34,7 @@ def _write_pin(
     invariants: list[dict[str, Any]] | None = None,
     cases: list[dict[str, Any]] | None = None,
     curated: dict[str, list[str]] | None = None,
+    overlay: dict[str, Any] | None = None,
 ) -> Path:
     """Write a synthetic pin outputs/ directory and return its path."""
     pin = base / name
@@ -57,6 +58,8 @@ def _write_pin(
         )
     if curated is not None:
         (pin / "curated.yaml").write_text(yaml.safe_dump({"exposed_fields": curated}))
+    if overlay is not None:
+        (pin / "overlay.yaml").write_text(yaml.safe_dump(overlay))
     return pin
 
 
@@ -245,6 +248,41 @@ class TestDiffSurface:
         census = des.census_pin(pin)
         assert census.curated_fields == 1
         assert census.curated_untyped_fields == 1
+
+    def test_overlay_narrowing_lifts_debt_stub_to_typed(self, tmp_path: Path) -> None:
+        # An overlay narrowing that gives a discovery-debt stub a concrete type
+        # (or an enum) is exactly the R3 constraint backfill: the codegen lifts
+        # the field from Any | None, so the typed-fraction metric must move with
+        # it. Same curated surface, before/after the overlay.
+        before = _write_pin(
+            tmp_path,
+            name="before",
+            engine_params={"present": {"type": "str"}},  # absent_int, debt_enum not discovered
+            curated={"engine_params": ["present", "absent_int", "debt_enum"]},
+        )
+        census_before = des.census_pin(before)
+        assert census_before.curated_fields == 3
+        # present -> str (typed); absent_int, debt_enum absent -> Any | None.
+        assert census_before.curated_untyped_fields == 2
+
+        after = _write_pin(
+            tmp_path,
+            name="after",
+            engine_params={"present": {"type": "str"}},
+            curated={"engine_params": ["present", "absent_int", "debt_enum"]},
+            overlay={
+                "narrowings": {
+                    "engine_params": {
+                        "absent_int": {"type": "integer", "minimum": 1},
+                        "debt_enum": {"enum": ["mp", "ray"]},
+                    }
+                }
+            },
+        )
+        census_after = des.census_pin(after)
+        assert census_after.curated_fields == 3
+        # Both debt stubs lifted to concrete (int / Literal) by the overlay.
+        assert census_after.curated_untyped_fields == 0
 
     def test_typed_fraction_absent_when_no_curated(self, tmp_path: Path) -> None:
         old = _write_pin(tmp_path, name="old", engine_params={"a": {"type": "int"}})

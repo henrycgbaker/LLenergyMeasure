@@ -1,0 +1,121 @@
+# Hand-authored overlay for vllm 0.7.3 (Move 2 narrowings channel).
+#
+# Recovers the field-level bounds + Literal sets the pre-v0.10 hand-written
+# VLLMEngineConfig / VLLMSamplingConfig enforced at parse and the
+# engine_configs.py migration dropped. The codegen projects each narrowing
+# onto the generated Config class as a Field(ge/le/...) bound or a Literal.
+#
+# Scope (judgement, per the R3 backfill rubric): vllm's current pin (0.7.3) is
+# the same release era the hand-written classes were authored against, so both
+# the numeric bounds and the Literal sets are carried with high confidence -
+# they were genuinely enforced against exactly this engine version. The
+# numeric bounds also appear in the deleted introspection.py custom-test-values
+# block (e.g. gpu_memory_utilization 1.5 violates lt=1.0), which is direct
+# evidence they fired at parse.
+#
+# Debt-stub fields (kv_cache_memory_bytes, offload_*) are absent from the
+# signature-mined schema; their narrowings carry a `type` so the generated
+# field lifts from `Any | None` to a typed int with its bound.
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.7.3
+
+_narrowing_reason: &reason "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+
+narrowings:
+  engine_params:
+    gpu_memory_utilization:
+      minimum: 0.0
+      exclusiveMaximum: 1.0
+      x-narrowing-reason: *reason
+    swap_space:
+      minimum: 0.0
+      x-narrowing-reason: *reason
+    cpu_offload_gb:
+      minimum: 0.0
+      x-narrowing-reason: *reason
+    block_size:
+      enum: [8, 16, 32]
+      x-narrowing-reason: *reason
+    kv_cache_dtype:
+      enum: ["auto", "fp8", "fp8_e5m2", "fp8_e4m3"]
+      x-narrowing-reason: *reason
+    max_num_seqs:
+      minimum: 1
+      x-narrowing-reason: *reason
+    max_num_batched_tokens:
+      minimum: 1
+      x-narrowing-reason: *reason
+    max_model_len:
+      minimum: 1
+      x-narrowing-reason: *reason
+    num_scheduler_steps:
+      minimum: 1
+      x-narrowing-reason: *reason
+    tensor_parallel_size:
+      minimum: 1
+      x-narrowing-reason: *reason
+    pipeline_parallel_size:
+      minimum: 1
+      x-narrowing-reason: *reason
+    distributed_executor_backend:
+      enum: ["mp", "ray"]
+      x-narrowing-reason: *reason
+    quantization:
+      enum: ["awq", "gptq", "fp8", "fp8_e5m2", "fp8_e4m3", "marlin", "bitsandbytes"]
+      x-narrowing-reason: *reason
+    max_seq_len_to_capture:
+      minimum: 1
+      x-narrowing-reason: *reason
+    kv_cache_memory_bytes:
+      type: integer
+      minimum: 1
+      x-narrowing-reason: *reason
+    offload_group_size:
+      type: integer
+      minimum: 0
+      x-narrowing-reason: *reason
+    offload_num_in_group:
+      type: integer
+      minimum: 1
+      x-narrowing-reason: *reason
+    offload_prefetch_step:
+      type: integer
+      minimum: 0
+      x-narrowing-reason: *reason
+  sampling_params:
+    temperature:
+      minimum: 0.0
+      maximum: 2.0
+      x-narrowing-reason: *reason
+    top_p:
+      minimum: 0.0
+      maximum: 1.0
+      x-narrowing-reason: *reason
+    repetition_penalty:
+      minimum: 0.1
+      maximum: 10.0
+      x-narrowing-reason: *reason
+    min_p:
+      minimum: 0.0
+      maximum: 1.0
+      x-narrowing-reason: *reason
+    min_tokens:
+      minimum: 0
+      x-narrowing-reason: *reason
+    presence_penalty:
+      minimum: -2.0
+      maximum: 2.0
+      x-narrowing-reason: *reason
+    frequency_penalty:
+      minimum: -2.0
+      maximum: 2.0
+      x-narrowing-reason: *reason
+    n:
+      minimum: 1
+      x-narrowing-reason: *reason
+
+# Deliberately NOT narrowed:
+# - top_k: the hand-written class carried no bound (vLLM's -1-for-disabled
+#   convention means a ge=0 would reject the disabled sentinel). Correctly
+#   left unbounded on main; left unbounded here.

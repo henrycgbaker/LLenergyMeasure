@@ -392,6 +392,31 @@ def test_vllm_dtype_float32_parses():
     assert cfg.vllm.engine_params.dtype == "float32"
 
 
+def test_vllm_gpu_memory_utilization_above_one_rejected():
+    """gpu_memory_utilization=1.5 errors at parse via the backfilled lt=1.0 bound.
+
+    The R3 overlay restores the pre-v0.10 ge=0.0, lt=1.0 bound (a GPU memory
+    fraction cannot reach or exceed 1.0). The generated config now refuses the
+    out-of-range value at ExperimentConfig construction.
+    """
+    with pytest.raises(ValidationError):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {"gpu_memory_utilization": 1.5}},
+        )
+
+
+def test_vllm_gpu_memory_utilization_in_range_accepted():
+    """A valid gpu_memory_utilization fraction still parses after the backfill."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"gpu_memory_utilization": 0.85}},
+    )
+    assert cfg.vllm.engine_params.gpu_memory_utilization == 0.85
+
+
 def test_vllm_fp8_float16_accepted():
     """fp8 quantization with dtype=float16 is accepted."""
     cfg = ExperimentConfig(
@@ -542,19 +567,20 @@ def test_pytorch_no_attn_impl_float32_accepted():
 # ---------------------------------------------------------------------------
 
 
-def test_trt_dtype_float32_parses() -> None:
-    """tensorrt dtype is an Any passthrough now (no Literal), so float32 parses.
+def test_trt_dtype_float32_rejected() -> None:
+    """tensorrt dtype rejects float32 at parse via the backfilled Literal.
 
-    The generated config does not restrict dtype; TRT-LLM itself rejects fp32 at
-    runtime. This asserts the nested config accepts the value rather than the
-    deleted Literal validator.
+    The R3 overlay restores the pre-v0.10 dtype Literal['float16', 'bfloat16']
+    (TRT-LLM is optimised for fp16/bf16; fp32 unsupported), so the generated
+    config refuses float32 at parse rather than deferring to TRT-LLM's runtime
+    rejection. float16/bfloat16 still parse (see test_trt_fp8_accepts_*).
     """
-    cfg = ExperimentConfig(
-        task={"model": "gpt2"},
-        engine="tensorrt",
-        tensorrt={"engine_params": {"dtype": "float32"}},
-    )
-    assert cfg.tensorrt.engine_params.dtype == "float32"
+    with pytest.raises(ValidationError):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="tensorrt",
+            tensorrt={"engine_params": {"dtype": "float32"}},
+        )
 
 
 def test_trt_fp8_accepts_float16() -> None:

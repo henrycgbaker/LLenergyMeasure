@@ -57,15 +57,16 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-# The codegen's single source of truth for whether a mined type projects to a
-# concrete annotation or collapses to ``Any | None``. Importing it (rather than
-# re-deriving the scalar-set + union rule) keeps this metric honest against the
-# config.py the codegen actually emits - the whole point of the metric is to
-# track that projection across bumps. The helper is pure string-munging over a
-# scalar table; it pulls in no engine modules, so the script's "runs anywhere"
-# constraint holds.
+# The codegen's curation+overlay composition - the single source of truth for
+# the property shapes datamodel-codegen turns into config.py. The typed-fraction
+# metric routes through it (rather than re-deriving the scalar/union/overlay
+# rules) so it stays honest against the config.py actually emitted - the whole
+# point of the metric is to track that projection across bumps. These helpers
+# are pure dict/string munging; they pull in no engine modules, so the script's
+# "runs anywhere" constraint holds.
 from scripts.engine_producers.regen_engine_configs import (  # noqa: E402
-    _python_type_to_json_schema,
+    _load_overlay,
+    compose_synthetic_schema,
 )
 
 _SCHEMA_FILE = "schema.discovered.json"
@@ -149,22 +150,6 @@ def _field_carries_bound(field_schema: dict[str, Any]) -> bool:
     return any(key in field_schema for key in _BOUND_KEYS)
 
 
-def _field_renders_untyped(field_schema: dict[str, Any]) -> bool:
-    """True iff this mined field would render as ``Any | None`` in config.py.
-
-    Mirrors the codegen exactly: a field is concrete iff
-    :func:`_python_type_to_json_schema` projects its ``type`` to a non-empty
-    JSON-Schema shape (a scalar or scalar ``anyOf``) OR it carries a real
-    ``enum`` key (the codegen's ``_PASSTHROUGH_KEYS`` route, which renders a
-    ``Literal``). A ``Literal[...]`` *type string* with no ``enum`` key is
-    unmappable to the codegen and renders ``Any | None`` - so the enum check
-    keys on the ``enum`` field, not on the type string.
-    """
-    if isinstance(field_schema.get("enum"), list) and field_schema["enum"]:
-        return False
-    return _python_type_to_json_schema(field_schema.get("type")) == {}
-
-
 # ---------------------------------------------------------------------------
 # Per-artefact census
 # ---------------------------------------------------------------------------
@@ -234,33 +219,51 @@ def census_validated(envelope: dict[str, Any]) -> tuple[int, dict[str, int]]:
     return len(cases) if isinstance(cases, list) else 0, by_outcome
 
 
-def census_curated_typing(schema: dict[str, Any], curated: dict[str, Any]) -> tuple[int, int]:
+def _property_renders_untyped(prop: dict[str, Any]) -> bool:
+    """True iff a composed JSON-Schema property emits as ``Any | None``.
+
+    Operates on the post-curation+overlay property the codegen feeds
+    datamodel-codegen (not the raw mined shape): a field is concrete iff the
+    property carries a ``type``, an ``enum``, or an ``anyOf`` of scalar members.
+    An empty property (``{}``, or one carrying only provenance ``x-*`` keys)
+    renders ``Any | None``.
+    """
+    if isinstance(prop.get("enum"), list) and prop["enum"]:
+        return False
+    return not ({"type", "anyOf"} & prop.keys())
+
+
+def census_curated_typing(
+    schema: dict[str, Any],
+    curated: dict[str, Any],
+    overlay: dict[str, dict[str, dict[str, Any]]] | None = None,
+) -> tuple[int, int]:
     """Count curated (exposed) fields and how many render as ``Any | None``.
 
-    Resolves each ``exposed_fields`` entry against the discovered schema
-    sections (a field may be curated under one section but discovered under
-    another, mirroring the codegen's union resolution). A field absent from
-    discovery, or whose mined type does not project to a concrete scalar/enum,
-    is an untyped ``Any | None`` field.
+    Composes the curated allowlist + optional overlay against the discovered
+    schema exactly as the codegen does (:func:`compose_synthetic_schema`), then
+    counts how many emitted properties stay ``Any | None``. Routing through the
+    codegen keeps the metric honest about the ``config.py`` actually emitted:
+    an overlay narrowing that lifts a discovery-debt stub to a typed/enum field
+    (the R3 constraint backfill) moves the count, because the codegen lifts it
+    too. Without ``overlay`` the result reflects curation alone.
     """
     exposed = curated.get("exposed_fields")
     if not isinstance(exposed, dict):
         return 0, 0
-    discovered: dict[str, dict[str, Any]] = {}
-    for section in _SCHEMA_SECTIONS:
-        params = schema.get(section)
-        if isinstance(params, dict):
-            for name, shape in params.items():
-                if isinstance(shape, dict):
-                    discovered.setdefault(name, shape)
+    curated_sections = {section: list(exposed.get(section) or []) for section in _SCHEMA_SECTIONS}
+    overlay = overlay or {
+        top: {section: {} for section in _SCHEMA_SECTIONS} for top in ("narrowings", "completions")
+    }
+    synthetic = compose_synthetic_schema(schema, curated_sections, overlay)
+    defs = synthetic.get("$defs", {})
 
     total = 0
     untyped = 0
-    for names in exposed.values():
-        for name in names or []:
+    for class_def in defs.values():
+        for prop in (class_def.get("properties") or {}).values():
             total += 1
-            shape = discovered.get(name)
-            if shape is None or _field_renders_untyped(shape):
+            if _property_renders_untyped(prop):
                 untyped += 1
     return total, untyped
 
@@ -324,8 +327,9 @@ def census_pin(outputs_dir: Path) -> PinCensus:
     curated_path = outputs_dir / _CURATED_FILE
     if curated_path.is_file() and schema:
         curated = _load_yaml(curated_path)
+        overlay = _load_overlay(outputs_dir)
         census.curated_fields, census.curated_untyped_fields = census_curated_typing(
-            schema, curated
+            schema, curated, overlay
         )
 
     return census
