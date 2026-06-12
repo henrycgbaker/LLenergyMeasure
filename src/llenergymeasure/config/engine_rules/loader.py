@@ -131,10 +131,11 @@ AddedBy = Literal[
     "manual_seed",
     "runtime_warning",
     "observed_collision",
+    "reclassified_decayed_announcement",
 ]
 """Provenance of a invariant in the corpus.
 
-Eight discovery paths with distinct trust/verifiability profiles:
+Nine discovery paths with distinct trust/verifiability profiles:
 
 - ``static_miner`` - invariant extracted by parsing Python source AST
   (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
@@ -155,6 +156,10 @@ Eight discovery paths with distinct trust/verifiability profiles:
   landing).
 - ``observed_collision`` - proposed by the feedback loop from observed-config-hash
   collision detection (needs human generalisation before landing).
+- ``reclassified_decayed_announcement`` - a dormant rule whose positive
+  announcement no longer fires at the new pin (upstream dropped the warning
+  while the field stays ignored); the decay-alarm reconciliation carries it
+  forward reclassified as ``dormant_silent`` so the equivalence does not vanish.
 """
 
 VALID_SEVERITY: frozenset[str] = frozenset(get_args(Severity))
