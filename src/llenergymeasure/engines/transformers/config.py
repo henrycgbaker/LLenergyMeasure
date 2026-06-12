@@ -20,13 +20,13 @@ class EngineParams(BaseModel):
     bnb_4bit_compute_dtype: Any | None = None
     bnb_4bit_quant_type: Any | None = None
     bnb_4bit_use_double_quant: Any | None = None
-    use_cache: Any | None = None
-    cache_implementation: Any | None = None
-    num_beams: Any | None = None
-    early_stopping: Any | None = None
-    length_penalty: Any | None = None
-    no_repeat_ngram_size: Any | None = None
-    prompt_lookup_num_tokens: Any | None = None
+    use_cache: bool | None = None
+    cache_implementation: str | None = None
+    num_beams: int | None = None
+    early_stopping: bool | None = None
+    length_penalty: float | None = None
+    no_repeat_ngram_size: int | None = None
+    prompt_lookup_num_tokens: int | None = None
     device_map: Any | None = None
     max_memory: Any | None = None
     low_cpu_mem_usage: Any | None = None
@@ -39,13 +39,13 @@ class SamplingParams(BaseModel):
         extra="allow",
         use_attribute_docstrings=True,
     )
-    temperature: Any | None = None
-    do_sample: Any | None = None
-    top_k: Any | None = None
-    top_p: Any | None = None
-    repetition_penalty: Any | None = None
-    min_p: Any | None = None
-    min_new_tokens: Any | None = None
+    temperature: float | None = None
+    do_sample: bool | None = None
+    top_k: int | None = None
+    top_p: float | None = None
+    repetition_penalty: float | None = None
+    min_p: float | None = None
+    min_new_tokens: int | None = None
 
 
 class Config(BaseModel):

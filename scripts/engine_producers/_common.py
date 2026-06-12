@@ -95,6 +95,48 @@ def annotation_to_type_str(annotation: Any) -> str:
     return f"{origin_name}[{arg_strs}]"
 
 
+# A HuggingFace-style docstring ``Args:`` entry: ``name (`type`, *optional*, ...):``.
+# The first backticked token after the field name is the documented type. HF uses
+# this convention universally; for classes that ship no real field annotations
+# (GenerationConfig is ``__init__(self, **kwargs)`` with every default ``None``),
+# the docstring is the only machine-readable type source. ``or`` unions
+# (``bool` or `str``) take the first member, matching the value-inference baseline
+# the older pins produced when defaults were still concrete.
+_DOCSTRING_ARG_TYPE = re.compile(r"^\s*(\w+)\s*\(\s*`([A-Za-z_][\w.]*)`")
+
+# Documented docstring type tokens mapped to the introspector's scalar vocabulary
+# (the same surface ``type(value).__name__`` emits for concrete defaults). Tokens
+# outside this set (``torch.dtype``, ``Dict``, ...) are left unmapped so the
+# field falls through to default-inference rather than inventing a scalar type.
+_DOC_TYPE_TO_SCALAR: dict[str, str] = {
+    "bool": "bool",
+    "int": "int",
+    "float": "float",
+    "str": "str",
+}
+
+
+def docstring_arg_types(obj: Any) -> dict[str, str]:
+    """Map ``{field: scalar_type}`` from an object's docstring ``Args:`` block.
+
+    Reads HuggingFace's documented-arg convention as a type-annotation source for
+    classes that carry no real field annotations. Only scalar tokens in
+    :data:`_DOC_TYPE_TO_SCALAR` are returned; non-scalar or undocumented fields are
+    omitted so the caller can fall back to default-value inference. Returns an empty
+    dict when the object has no docstring.
+    """
+    doc = inspect.getdoc(obj) or ""
+    out: dict[str, str] = {}
+    for line in doc.splitlines():
+        match = _DOCSTRING_ARG_TYPE.match(line)
+        if match is None:
+            continue
+        scalar = _DOC_TYPE_TO_SCALAR.get(match.group(2))
+        if scalar is not None:
+            out.setdefault(match.group(1), scalar)
+    return out
+
+
 def read_dockerfile_from(dockerfile: Path) -> str:
     """Extract the FROM tag from a Dockerfile, expanding the default ARG value.
 

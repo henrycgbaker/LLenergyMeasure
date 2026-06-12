@@ -105,6 +105,58 @@ def test_type_str_empty_means_unknown() -> None:
 
 
 # ---------------------------------------------------------------------------
+# docstring_arg_types
+# ---------------------------------------------------------------------------
+
+
+class _DocStyleConfig:
+    """A HuggingFace-style configurable.
+
+    Args:
+        num_beams (`int`, *optional*, defaults to 1):
+            Number of beams for beam search.
+        temperature (`float`, *optional*):
+            The sampling temperature.
+        do_sample (`bool`, *optional*, defaults to `False`):
+            Whether to sample.
+        early_stopping (`bool` or `str`, *optional*):
+            Beam-search stopping condition.
+        cache_config (`Dict`, *optional*):
+            Arguments used in the key/value cache.
+        not_a_field:
+            A line with no parenthesised type.
+    """
+
+
+def test_docstring_arg_types_recovers_scalar_types() -> None:
+    types = _common.docstring_arg_types(_DocStyleConfig)
+    assert types["num_beams"] == "int"
+    assert types["temperature"] == "float"
+    assert types["do_sample"] == "bool"
+
+
+def test_docstring_arg_types_takes_first_member_of_or_union() -> None:
+    # ``bool` or `str`` documents a union; the first member matches the
+    # value-inference baseline the older pins produced.
+    assert _common.docstring_arg_types(_DocStyleConfig)["early_stopping"] == "bool"
+
+
+def test_docstring_arg_types_omits_non_scalar_and_untyped() -> None:
+    types = _common.docstring_arg_types(_DocStyleConfig)
+    # Non-scalar documented type (Dict) is dropped so the caller falls back to
+    # default-inference; an untyped arg line is never captured.
+    assert "cache_config" not in types
+    assert "not_a_field" not in types
+
+
+def test_docstring_arg_types_empty_when_no_docstring() -> None:
+    class _NoDoc:
+        pass
+
+    assert _common.docstring_arg_types(_NoDoc) == {}
+
+
+# ---------------------------------------------------------------------------
 # read_dockerfile_from
 # ---------------------------------------------------------------------------
 

@@ -20,6 +20,7 @@ from typing import Any
 from scripts.engine_producers._common import (
     TRANSFORMERS_DOCKERFILE,
     annotation_to_type_str,
+    docstring_arg_types,
     jsonable,
     make_envelope,
     read_dockerfile_from,
@@ -48,7 +49,9 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
 
     engine_params:   best-effort inspect.signature(from_pretrained) scrape;
                      **kwargs are opaque and recorded as a limitation
-    sampling_params: GenerationConfig().to_dict() (~69 fields); None defaults
+    sampling_params: GenerationConfig().to_dict() (~69 fields); type comes from
+                     the docstring Args block (annotation surface) then the
+                     runtime value's type; None-defaulted + undocumented fields
                      get type='unknown' and are listed in discovery_limitations
     """
     import transformers  # type: ignore[import-not-found]
@@ -102,13 +105,24 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             }
         )
 
+    # Type source priority: documented type (GenerationConfig's docstring Args
+    # block - the only machine-readable annotation surface, since the class is
+    # __init__(self, **kwargs) with no field annotations) THEN the runtime value's
+    # type. transformers 5.x moved most GenerationConfig defaults to None, so
+    # value-inference alone regresses previously-typed scalars (num_beams,
+    # temperature, ...) to type='unknown'; reading the docstring type first keeps
+    # them typed across the None-default bump.
     sampling_params: dict[str, Any] = {}
-    none_default_fields: list[str] = []
+    unknown_fields: list[str] = []
+    doc_types = docstring_arg_types(GenerationConfig)
     gc = GenerationConfig()
     for name, value in gc.to_dict().items():
-        if value is None:
+        documented = doc_types.get(name)
+        if documented is not None:
+            sampling_params[name] = {"type": documented, "default": jsonable(value)}
+        elif value is None:
             sampling_params[name] = {"type": "unknown", "default": None}
-            none_default_fields.append(name)
+            unknown_fields.append(name)
         elif isinstance(value, (list, tuple)):
             sampling_params[name] = {"type": type(value).__name__, "default": jsonable(value)}
         elif isinstance(value, dict):
@@ -119,12 +133,13 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 "default": jsonable(value),
             }
 
-    if none_default_fields:
+    if unknown_fields:
         limitations.append(
             {
                 "section": "sampling_params",
-                "fields": none_default_fields,
-                "reason": "GenerationConfig has no type annotations; None defaults yield type='unknown'",
+                "fields": unknown_fields,
+                "reason": "GenerationConfig field is None-defaulted and undocumented in the "
+                "docstring Args block; type='unknown'",
             }
         )
 
@@ -135,7 +150,8 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         engine_commit_sha=getattr(transformers, "__commit__", None),
         image_ref=image_ref or base_image_ref,
         base_image_ref=base_image_ref,
-        discovery_method="inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
+        discovery_method="inspect.signature(from_pretrained) + GenerationConfig().to_dict() "
+        "with docstring-Args type recovery",
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,

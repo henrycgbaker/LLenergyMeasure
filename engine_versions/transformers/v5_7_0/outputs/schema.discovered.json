@@ -6,7 +6,7 @@
   "image_ref": "llenergymeasure:transformers-5.7.0",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
   "discovered_at": "2026-06-12T10:04:46+02:00",
-  "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
+  "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict() with docstring-Args type recovery",
   "discovery_limitations": [
     {
       "section": "engine_params",
@@ -21,64 +21,16 @@
     {
       "section": "sampling_params",
       "fields": [
-        "max_length",
-        "max_new_tokens",
-        "min_length",
-        "min_new_tokens",
-        "early_stopping",
-        "max_time",
         "stop_strings",
-        "do_sample",
-        "num_beams",
-        "use_cache",
-        "cache_implementation",
         "cache_config",
-        "temperature",
-        "top_k",
-        "top_p",
-        "min_p",
-        "top_h",
-        "typical_p",
-        "epsilon_cutoff",
-        "eta_cutoff",
-        "repetition_penalty",
-        "encoder_repetition_penalty",
-        "length_penalty",
-        "no_repeat_ngram_size",
         "bad_words_ids",
-        "renormalize_logits",
-        "forced_bos_token_id",
-        "forced_eos_token_id",
-        "remove_invalid_values",
         "exponential_decay_length_penalty",
         "suppress_tokens",
         "begin_suppress_tokens",
         "sequence_bias",
-        "token_healing",
-        "guidance_scale",
         "watermarking_config",
-        "num_return_sequences",
-        "output_attentions",
-        "output_hidden_states",
-        "output_scores",
-        "output_logits",
-        "return_dict_in_generate",
-        "pad_token_id",
-        "bos_token_id",
         "eos_token_id",
-        "encoder_no_repeat_ngram_size",
-        "decoder_start_token_id",
-        "is_assistant",
-        "num_assistant_tokens",
-        "num_assistant_tokens_schedule",
-        "assistant_confidence_threshold",
-        "prompt_lookup_num_tokens",
-        "max_matching_ngram_size",
-        "assistant_early_exit",
-        "assistant_lookbehind",
-        "target_lookbehind",
         "compile_config",
-        "disable_compile",
         "continuous_batching_config",
         "low_memory",
         "penalty_alpha",
@@ -90,7 +42,7 @@
         "prefill_chunk_size",
         "_from_model_config"
       ],
-      "reason": "GenerationConfig has no type annotations; None defaults yield type='unknown'"
+      "reason": "GenerationConfig field is None-defaulted and undocumented in the docstring Args block; type='unknown'"
     }
   ],
   "engine_params": {
@@ -141,27 +93,27 @@
   },
   "sampling_params": {
     "max_length": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "max_new_tokens": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "min_length": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "min_new_tokens": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "early_stopping": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "max_time": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "stop_strings": {
@@ -169,19 +121,19 @@
       "default": null
     },
     "do_sample": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "num_beams": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "use_cache": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "cache_implementation": {
-      "type": "unknown",
+      "type": "str",
       "default": null
     },
     "cache_config": {
@@ -189,51 +141,51 @@
       "default": null
     },
     "temperature": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "top_k": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "top_p": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "min_p": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "top_h": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "typical_p": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "epsilon_cutoff": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "eta_cutoff": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "repetition_penalty": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "encoder_repetition_penalty": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "length_penalty": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "no_repeat_ngram_size": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "bad_words_ids": {
@@ -241,19 +193,19 @@
       "default": null
     },
     "renormalize_logits": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "forced_bos_token_id": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "forced_eos_token_id": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "remove_invalid_values": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "exponential_decay_length_penalty": {
@@ -273,11 +225,11 @@
       "default": null
     },
     "token_healing": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "guidance_scale": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "watermarking_config": {
@@ -285,35 +237,35 @@
       "default": null
     },
     "num_return_sequences": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "output_attentions": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "output_hidden_states": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "output_scores": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "output_logits": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "return_dict_in_generate": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "pad_token_id": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "bos_token_id": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "eos_token_id": {
@@ -321,47 +273,47 @@
       "default": null
     },
     "encoder_no_repeat_ngram_size": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "decoder_start_token_id": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "is_assistant": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "num_assistant_tokens": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "num_assistant_tokens_schedule": {
-      "type": "unknown",
+      "type": "str",
       "default": null
     },
     "assistant_confidence_threshold": {
-      "type": "unknown",
+      "type": "float",
       "default": null
     },
     "prompt_lookup_num_tokens": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "max_matching_ngram_size": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "assistant_early_exit": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "assistant_lookbehind": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "target_lookbehind": {
-      "type": "unknown",
+      "type": "int",
       "default": null
     },
     "compile_config": {
@@ -369,7 +321,7 @@
       "default": null
     },
     "disable_compile": {
-      "type": "unknown",
+      "type": "bool",
       "default": null
     },
     "continuous_batching_config": {
