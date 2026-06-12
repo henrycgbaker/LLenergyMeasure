@@ -542,6 +542,25 @@ jobs:
             exit 0
           fi
 
+          # Writeback loop circuit-breaker. The bot pushes a writeback commit on
+          # every successful run; if the miner is non-idempotent the commit
+          # re-triggers the pipeline, which re-mines, which writes back again -
+          # an infinite ping-pong (already hit once before the anchor filter).
+          # Count the bot's own trailing commits on the head branch; at >=3 in a
+          # row, abort loudly instead of pushing a 4th so a human can break the
+          # cycle. The anchor filter normally prevents this; the guard is the
+          # backstop every SOTA writeback bot has.
+          BOT_AUTHOR="llem-ci-bot[bot]"
+          TRAILING_BOT=0
+          while IFS= read -r author; do
+            [[ "$author" == "$BOT_AUTHOR" ]] || break
+            TRAILING_BOT=$((TRAILING_BOT + 1))
+          done < <(git log -10 --format='%an' HEAD)
+          if [[ "$TRAILING_BOT" -ge 3 ]]; then
+            echo "::error::Writeback loop guard: ${TRAILING_BOT} consecutive ${BOT_AUTHOR} commits on the head branch. Refusing to push another - the miner is likely non-idempotent. A human must inspect the trailing writeback diffs and break the cycle."
+            exit 1
+          fi
+
           # Pull in any rebased PR head (e.g., human pushed concurrently).
           git pull --rebase --autostash || {
             echo "::warning::rebase failed; aborting writeback to avoid corrupt history."
