@@ -2,7 +2,7 @@ schema_version: 1.0.0
 engine: transformers
 engine_version: 5.8.1
 image_ref: llenergymeasure:transformers-5.8.1
-image_digest: sha256:df28c143095ed9d1348b98b7cb763433aa59e73e061654b9de7540ac286a0b56
+image_digest: sha256:165fbd2f257991e32a7d5481a93792afc34f51c1d27a68f09d353ad688168562
 engine_commit: 5.8.1
 base_image_ref: llenergymeasure:transformers
 validated_at: '2026-06-12T22:02:12+02:00'
