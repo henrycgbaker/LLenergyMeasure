@@ -405,6 +405,24 @@ class TestEnvelope:
         assert "validated_at" in envelope
         assert envelope["cases"] == []
         assert envelope["divergences"] == []
+        # Provenance fields are omitted when not supplied (additive, no schema bump).
+        assert "image_digest" not in envelope
+        assert "engine_commit" not in envelope
+
+    def test_assemble_records_digest_provenance_when_supplied(self) -> None:
+        envelope = validate_rules.assemble_envelope(
+            engine="transformers",
+            engine_version="5.7.0",
+            image_ref="llenergymeasure:transformers-5.7.0",
+            base_image_ref="pytorch/pytorch:2.5.1",
+            validation_commit="abc",
+            cases=[],
+            divergences=[],
+            image_digest="sha256:deadbeef",
+            engine_commit="5.7.0",
+        )
+        assert envelope["image_digest"] == "sha256:deadbeef"
+        assert envelope["engine_commit"] == "5.7.0"
 
     def test_validate_engine_writes_envelope(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

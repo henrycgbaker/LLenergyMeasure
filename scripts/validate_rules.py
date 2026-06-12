@@ -912,20 +912,38 @@ def assemble_envelope(
     validation_commit: str,
     cases: list[CaseResult],
     divergences: list[Divergence],
+    image_digest: str | None = None,
+    engine_commit: str | None = None,
 ) -> dict[str, Any]:
-    """Build the validated invariants envelope (parallel to the parameter-discovery envelope)."""
+    """Build the validated invariants envelope (parallel to the parameter-discovery envelope).
+
+    ``image_digest`` (the resolved ``@sha256:...`` of the engine image) and
+    ``engine_commit`` (the upstream engine source SHA the version handshake
+    confirmed) are recorded as provenance alongside ``image_ref`` when known.
+    Both are additive and omitted when unset, so the envelope schema is
+    unchanged for runs that do not supply them.
+    """
     now = os.environ.get("LLENERGY_VALIDATION_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
-    return {
+    envelope: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "engine": engine,
         "engine_version": engine_version,
         "image_ref": image_ref,
-        "base_image_ref": base_image_ref,
-        "validated_at": now,
-        "validation_commit": validation_commit,
-        "cases": [_case_to_dict(c) for c in cases],
-        "divergences": [d.as_dict() for d in divergences],
     }
+    if image_digest:
+        envelope["image_digest"] = image_digest
+    if engine_commit:
+        envelope["engine_commit"] = engine_commit
+    envelope.update(
+        {
+            "base_image_ref": base_image_ref,
+            "validated_at": now,
+            "validation_commit": validation_commit,
+            "cases": [_case_to_dict(c) for c in cases],
+            "divergences": [d.as_dict() for d in divergences],
+        }
+    )
+    return envelope
 
 
 def _case_to_dict(case: CaseResult) -> dict[str, Any]:
@@ -953,6 +971,8 @@ def validate_engine(
     image_ref: str | None = None,
     base_image_ref: str | None = None,
     validation_commit: str = "unknown",
+    image_digest: str | None = None,
+    engine_commit: str | None = None,
 ) -> tuple[dict[str, Any], list[Divergence]]:
     """Run the full validation loop for one engine; write YAML envelope to ``out_path``.
 
@@ -1013,6 +1033,8 @@ def validate_engine(
         validation_commit=validation_commit,
         cases=cases,
         divergences=divergences,
+        image_digest=image_digest,
+        engine_commit=engine_commit,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1182,6 +1204,22 @@ def main(argv: list[str] | None = None) -> int:
         help="Base image reference to record in envelope.base_image_ref.",
     )
     parser.add_argument(
+        "--image-digest",
+        default=None,
+        help=(
+            "Resolved image digest (@sha256:...) to record in envelope.image_digest "
+            "as provenance. Additive; omitted from the envelope when unset."
+        ),
+    )
+    parser.add_argument(
+        "--engine-commit",
+        default=None,
+        help=(
+            "Upstream engine source commit/version the handshake confirmed, "
+            "recorded in envelope.engine_commit. Additive; omitted when unset."
+        ),
+    )
+    parser.add_argument(
         "--validation-commit",
         default=os.environ.get("GITHUB_SHA", "unknown"),
         help=(
@@ -1219,6 +1257,8 @@ def main(argv: list[str] | None = None) -> int:
             image_ref=args.image_ref,
             base_image_ref=args.base_image_ref,
             validation_commit=args.validation_commit,
+            image_digest=args.image_digest,
+            engine_commit=args.engine_commit,
         )
     except ValidationCorpusError as exc:
         print(f"[{args.engine}] corpus error: {exc}", file=sys.stderr)
