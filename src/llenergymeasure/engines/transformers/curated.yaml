@@ -1,5 +1,5 @@
-# Exposure allowlist for transformers 5.7.0 (Move 2: curation as data).
-# Curation carried forward unchanged from the 4.57.3 pin; curation is a
+# Exposure allowlist for transformers 5.8.1 (Move 2: curation as data).
+# Curation carried forward unchanged from the 5.7.0 pin; curation is a
 # human exposure-time decision and survives version bumps until revised.
 #
 # Field names llem exposes as first-class typed fields on the generated
@@ -22,7 +22,7 @@
 # based discovery; they remain exposed and are tracked for miner deepening.
 schema_version: 1.0.0
 engine: transformers
-engine_version: 5.7.0
+engine_version: 5.8.1
 exposed_fields:
   engine_params:
     - dtype                        # discovery debt: HF-native, passed via from_pretrained **kwargs
