@@ -501,6 +501,72 @@ class TestEmptyStaging:
 
 
 # ---------------------------------------------------------------------------
+# canonical_out override (SSOT redirection): the canonical corpus is read +
+# written at an explicit path while staging stays under corpus_root.
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalOutOverride:
+    def test_write_targets_canonical_out_not_corpus_root(self, tmp_path: Path) -> None:
+        """``canonical_out`` redirects the written corpus; staging stays under
+        ``corpus_root``. This is the SSOT redirection the CI cell uses."""
+        staging = tmp_path / "transformers" / "_staging"
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+
+        ssot = tmp_path / "ssot_outputs" / "rules.proposed.yaml"
+        build_corpus.write_corpus(
+            "transformers", tmp_path, skip_validation=True, canonical_out=ssot
+        )
+
+        # Written to the override, NOT the corpus_root default.
+        assert ssot.exists()
+        assert not (tmp_path / "transformers" / "rules.proposed.yaml").exists()
+        # Staging still lives under corpus_root.
+        assert (staging / "transformers_static_miner.yaml").exists()
+
+    def test_check_compares_against_canonical_out(self, tmp_path: Path) -> None:
+        staging = tmp_path / "transformers" / "_staging"
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+        ssot = tmp_path / "ssot_outputs" / "rules.proposed.yaml"
+
+        build_corpus.write_corpus(
+            "transformers", tmp_path, skip_validation=True, canonical_out=ssot
+        )
+        # check against the same override path passes; against the (absent)
+        # default path it reports the corpus missing.
+        code_ok, _ = build_corpus.check_drift(
+            "transformers", tmp_path, skip_validation=True, canonical_out=ssot
+        )
+        assert code_ok == 0
+        code_missing, msg = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
+        assert code_missing == 2
+        assert "not found" in msg
+
+    def test_prior_carry_reads_from_canonical_out(self, tmp_path: Path) -> None:
+        """added_at preservation reads the prior from ``canonical_out``, not the
+        corpus_root default - so a re-mine to the SSOT keeps discovery dates."""
+        staging = tmp_path / "transformers" / "_staging"
+        ssot = tmp_path / "ssot_outputs" / "rules.proposed.yaml"
+
+        first = _ast_rule()
+        first["added_at"] = "2026-04-01"
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([first]))
+        build_corpus.write_corpus(
+            "transformers", tmp_path, skip_validation=True, canonical_out=ssot
+        )
+
+        second = _ast_rule()
+        second["added_at"] = "2026-05-09"
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([second]))
+        build_corpus.write_corpus(
+            "transformers", tmp_path, skip_validation=True, canonical_out=ssot
+        )
+
+        rebuilt = yaml.safe_load(ssot.read_text())
+        assert rebuilt["invariants"][0]["added_at"] == "2026-04-01"
+
+
+# ---------------------------------------------------------------------------
 # Loader round-trip - cross_validated_by parses correctly
 # ---------------------------------------------------------------------------
 

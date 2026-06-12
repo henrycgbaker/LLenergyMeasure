@@ -943,6 +943,7 @@ def build_corpus_text_and_outcome(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    canonical_out: Path | None = None,
 ) -> _BuildResult:
     """Discover staging files, merge, validation-gate, return canonical YAML.
 
@@ -950,6 +951,12 @@ def build_corpus_text_and_outcome(
     pre-populating the staging directory. When ``skip_validation`` is true,
     all merged candidates land in the canonical YAML regardless of validation
     outcomes - useful for fast local iteration but never appropriate in CI.
+
+    ``canonical_out`` overrides where the canonical corpus is read (as the
+    prior, for added_at + manual-seed carry) and later written; staging always
+    lives under ``corpus_root``. Defaults to ``corpus_root/<engine>/rules.proposed.yaml``.
+    In CI the cell points it at the SSOT (``engine_versions/<e>/v<pin>/outputs/``)
+    so knowledge is produced there and derived into the ``src/`` shadow.
     """
     paths = discover_staging_files(engine, corpus_root)
     if not paths:
@@ -966,7 +973,7 @@ def build_corpus_text_and_outcome(
     # (registry wins on collision) BEFORE the validation gate. Carried entries
     # then face the same gate as registry entries - a stale seed is dropped, not
     # blindly trusted.
-    prior_corpus_path = _canonical_path(corpus_root, engine)
+    prior_corpus_path = canonical_out or _canonical_path(corpus_root, engine)
     carried_seeds = _load_carried_manual_seeds(prior_corpus_path)
     candidates = _merge_carried_manual_seeds(candidates, carried_seeds)
     candidates_count = len(candidates)
@@ -1019,10 +1026,11 @@ def build_corpus_text(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    canonical_out: Path | None = None,
 ) -> str:
     """Return the canonical YAML text for ``engine``."""
     return build_corpus_text_and_outcome(
-        engine, corpus_root, skip_validation=skip_validation
+        engine, corpus_root, skip_validation=skip_validation, canonical_out=canonical_out
     ).canonical_text
 
 
@@ -1031,13 +1039,17 @@ def write_corpus(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    canonical_out: Path | None = None,
 ) -> _BuildResult:
     """Build and write the canonical corpus.
 
-    Returns the :class:`_BuildResult` so the CLI can report counts.
+    Returns the :class:`_BuildResult` so the CLI can report counts. ``canonical_out``
+    overrides the write target (default ``corpus_root/<engine>/rules.proposed.yaml``).
     """
-    result = build_corpus_text_and_outcome(engine, corpus_root, skip_validation=skip_validation)
-    out_path = _canonical_path(corpus_root, engine)
+    result = build_corpus_text_and_outcome(
+        engine, corpus_root, skip_validation=skip_validation, canonical_out=canonical_out
+    )
+    out_path = canonical_out or _canonical_path(corpus_root, engine)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(result.canonical_text)
     return result
@@ -1048,6 +1060,7 @@ def check_drift(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    canonical_out: Path | None = None,
 ) -> tuple[int, str]:
     """Re-run merger (with validation); compare against checked-in corpus.
 
@@ -1061,12 +1074,17 @@ def check_drift(
     validated checked-in corpus against an unvalidated rebuild and surface
     spurious "drift" for every quarantined candidate. ``skip_validation``
     here exists for parity with the build path but should not be used in CI.
+
+    ``canonical_out`` overrides which committed corpus is compared (default
+    ``corpus_root/<engine>/rules.proposed.yaml``).
     """
-    canonical_path = _canonical_path(corpus_root, engine)
+    canonical_path = canonical_out or _canonical_path(corpus_root, engine)
     if not canonical_path.exists():
         return 2, f"Canonical corpus not found at {canonical_path}"
     try:
-        rebuilt = build_corpus_text(engine, corpus_root, skip_validation=skip_validation)
+        rebuilt = build_corpus_text(
+            engine, corpus_root, skip_validation=skip_validation, canonical_out=canonical_out
+        )
     except FileNotFoundError as exc:
         return 2, str(exc)
     actual = canonical_path.read_text()
@@ -1102,7 +1120,17 @@ def main(argv: list[str] | None = None) -> int:
         "--corpus-root",
         type=Path,
         default=Path(_PROJECT_ROOT) / "src" / "llenergymeasure" / "engines",
-        help="Engines root; each engine's corpus + _staging/ live under <engines>/<engine>/.",
+        help="Engines root; the _staging/ scratch + (by default) the canonical corpus "
+        "live under <engines>/<engine>/.",
+    )
+    parser.add_argument(
+        "--canonical-out",
+        type=Path,
+        default=None,
+        help="Override the canonical rules.proposed.yaml path (read as prior + written). "
+        "Staging always stays under --corpus-root. CI points this at the SSOT "
+        "(engine_versions/<engine>/v<pin>/outputs/rules.proposed.yaml) so knowledge is "
+        "produced there; the src/ shadow is then derived by regen_engine_corpus.py.",
     )
     parser.add_argument(
         "--skip-extract",
@@ -1139,13 +1167,23 @@ def main(argv: list[str] | None = None) -> int:
             return 3
 
     if args.check:
-        code, diff = check_drift(args.engine, corpus_root, skip_validation=args.skip_validation)
+        code, diff = check_drift(
+            args.engine,
+            corpus_root,
+            skip_validation=args.skip_validation,
+            canonical_out=args.canonical_out,
+        )
         if code != 0:
             print(diff, file=sys.stdout)
         return code
 
-    result = write_corpus(args.engine, corpus_root, skip_validation=args.skip_validation)
-    out_path = _canonical_path(corpus_root, args.engine)
+    result = write_corpus(
+        args.engine,
+        corpus_root,
+        skip_validation=args.skip_validation,
+        canonical_out=args.canonical_out,
+    )
+    out_path = args.canonical_out or _canonical_path(corpus_root, args.engine)
     print(f"[build_corpus] wrote {out_path}", file=sys.stderr)
     if result.validation_skipped:
         print(
