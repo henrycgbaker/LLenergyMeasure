@@ -633,9 +633,6 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
     return out
 
 
-_MANUAL_SEED_ADDED_BY = "manual_seed"
-
-
 def _load_carried_manual_seeds(corpus_path: Path) -> list[dict[str, Any]]:
     """Read ``added_by: manual_seed`` invariants from the prior committed corpus.
 
@@ -668,7 +665,7 @@ def _load_carried_manual_seeds(corpus_path: Path) -> list[dict[str, Any]]:
         return []
     carried: list[dict[str, Any]] = []
     for invariant in prior.get("invariants") or []:
-        if isinstance(invariant, dict) and invariant.get("added_by") == _MANUAL_SEED_ADDED_BY:
+        if isinstance(invariant, dict) and invariant.get("added_by") == "manual_seed":
             carried.append(dict(invariant))
     return carried
 
