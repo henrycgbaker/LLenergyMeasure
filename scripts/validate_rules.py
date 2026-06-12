@@ -30,6 +30,7 @@ human-readable format).
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import re
@@ -370,59 +371,20 @@ def get_native_type_runner(engine: str):
 # ---------------------------------------------------------------------------
 
 
-def validate_invariant(engine: str, invariant: dict[str, Any], *, gpu_mode: str) -> CaseResult:
-    """Run one invariant's positive + negative kwargs and assemble the case result.
-
-    ``gpu_mode`` is ``"all" | "skip" | "only"`` - hardware-dependent invariants
-    are skipped unless ``gpu_mode`` permits them.
-    """
-    case, _pos, _neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
-    return case
-
-
 def _validate_invariant_with_captures(
-    engine: str, invariant: dict[str, Any], *, gpu_mode: str
-) -> tuple[CaseResult, CaptureBuffers | None, CaptureBuffers | None]:
+    engine: str, invariant: dict[str, Any]
+) -> tuple[CaseResult, CaptureBuffers, CaptureBuffers]:
     """Run one invariant and return the case plus the raw positive/negative captures.
 
     The captures are needed by the gate-soundness checks added per
     Decision #12 of the invariant-miner adversarial review - they look at
     severity-specific behaviour (positive must raise for ``severity=error``)
     and the raised exception's message text, neither of which fit the
-    public ``CaseResult`` shape. ``validate_invariant`` keeps its existing return
-    type for backward compatibility with downstream tests; this internal
-    helper exposes what the gate needs.
+    public ``CaseResult`` shape.
 
-    Returns ``(case, pos, neg)``. ``pos`` / ``neg`` are ``None`` when the
-    invariant was skipped.
+    Returns ``(case, pos, neg)``.
     """
     invariant_id = invariant["id"]
-    requires_gpu = bool(invariant.get("requires_gpu", False))
-    hardware_dependent = bool(invariant.get("hardware_dependent", False))
-
-    if gpu_mode == "skip" and (requires_gpu or hardware_dependent):
-        return (
-            CaseResult(
-                id=invariant_id,
-                outcome="skipped_hardware_dependent",
-                emission_channel="none",
-                skipped_reason="requires_gpu_and_gpu_mode_skip",
-            ),
-            None,
-            None,
-        )
-    if gpu_mode == "only" and not requires_gpu:
-        return (
-            CaseResult(
-                id=invariant_id,
-                outcome="skipped_hardware_dependent",
-                emission_channel="none",
-                skipped_reason="cpu_rule_and_gpu_mode_only",
-            ),
-            None,
-            None,
-        )
-
     native_type = invariant["native_type"]
     runner = get_native_type_runner(engine)
     severity = str(invariant.get("severity", "")).lower()
@@ -743,7 +705,6 @@ def regate_carried_catalogue(
     *,
     engine: str,
     carried_corpus_path: Path,
-    gpu_mode: str = "all",
 ) -> dict[str, Any]:
     """Re-gate a previous pin's carried catalogue against the current container.
 
@@ -779,17 +740,13 @@ def regate_carried_catalogue(
     for invariant in corpus.get("invariants", []):
         invariant_id = str(invariant.get("id", "<unknown>"))
         try:
-            case, pos, neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
+            case, pos, neg = _validate_invariant_with_captures(engine, invariant)
         except ValidationError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
             verdict, reason = VERDICT_INFRA_ERROR, f"{type(exc).__name__}: {exc}"
             entries.append({"id": invariant_id, "verdict": verdict, "reason": reason})
             counts[verdict] += 1
-            continue
-
-        if pos is None or neg is None:
-            # Skipped (hardware-dependent under this gpu_mode); not gated here.
             continue
 
         verdict, reason = _carried_verdict(invariant, case, pos, neg)
@@ -843,9 +800,8 @@ def assemble_envelope(
 def _case_to_dict(case: CaseResult) -> dict[str, Any]:
     d = asdict(case)
     # Drop nullable optional fields when unset for a quieter envelope.
-    for optional_key in ("observed_exception", "skipped_reason"):
-        if d.get(optional_key) is None:
-            d.pop(optional_key, None)
+    if d.get("observed_exception") is None:
+        d.pop("observed_exception", None)
     # duration_ms is wall-clock noise (±1 ms run-to-run); excluding it from
     # the envelope keeps successive validation runs on unchanged source byte-
     # identical, which breaks the commit-back re-trigger loop.
@@ -863,7 +819,6 @@ def validate_engine(
     engine: str,
     corpus_path: Path,
     out_path: Path,
-    gpu_mode: str = "all",
     image_ref: str | None = None,
     base_image_ref: str | None = None,
     validation_commit: str = "unknown",
@@ -887,7 +842,7 @@ def validate_engine(
         pos: CaptureBuffers | None = None
         neg: CaptureBuffers | None = None
         try:
-            case, pos, neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
+            case, pos, neg = _validate_invariant_with_captures(engine, invariant)
         except ValidationError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
@@ -898,9 +853,6 @@ def validate_engine(
                 observed_exception={"type": type(exc).__name__, "message": str(exc)},
             )
         cases.append(case)
-
-        if case.skipped_reason is not None:
-            continue
 
         rule_divergences = compare_expected_vs_observed(
             invariant_id=invariant["id"],
@@ -949,38 +901,28 @@ def validate_engine(
     return envelope, divergences
 
 
+# Engine name -> importable distribution module. tensorrt's PyPI/import name
+# is ``tensorrt_llm``; the other two match the engine label.
+_ENGINE_IMPORT_NAMES = {
+    "transformers": "transformers",
+    "tensorrt": "tensorrt_llm",
+    "vllm": "vllm",
+}
+
+
 def _resolve_engine_version(engine: str) -> str:
     """Best-effort: return the installed library's version or ``"unknown"``."""
-    if engine == "transformers":
-        try:
-            import transformers  # type: ignore
-
-            return transformers.__version__
-        except ImportError as exc:
-            raise ValidationEngineNotImportable(
-                "transformers is not importable in this environment"
-            ) from exc
-    if engine == "tensorrt":
-        try:
-            import tensorrt_llm  # type: ignore
-
-            return tensorrt_llm.__version__
-        except ImportError as exc:
-            raise ValidationEngineNotImportable(
-                "tensorrt_llm is not importable in this environment "
-                "(expected when running outside the llenergymeasure:tensorrt "
-                "Docker image on a GPU host)"
-            ) from exc
-    if engine == "vllm":
-        try:
-            import vllm  # type: ignore
-
-            return vllm.__version__
-        except ImportError as exc:
-            raise ValidationEngineNotImportable(
-                "vllm is not importable in this environment"
-            ) from exc
-    return "unknown"
+    module_name = _ENGINE_IMPORT_NAMES.get(engine)
+    if module_name is None:
+        return "unknown"
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as exc:
+        raise ValidationEngineNotImportable(
+            f"{module_name} is not importable in this environment "
+            f"(expected when running outside the llenergymeasure:{engine} container)"
+        ) from exc
+    return str(module.__version__)
 
 
 # ---------------------------------------------------------------------------
@@ -994,7 +936,6 @@ def _run_carried_mode(args: argparse.Namespace) -> int:
         report = regate_carried_catalogue(
             engine=args.engine,
             carried_corpus_path=args.carried,
-            gpu_mode=args.gpu_cases,
         )
     except ValidationCorpusError as exc:
         print(f"[{args.engine}] carried corpus error: {exc}", file=sys.stderr)
@@ -1065,16 +1006,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to write the carried re-gate JSON report (default: stdout).",
     )
     parser.add_argument(
-        "--gpu-cases",
-        choices=("all", "skip", "only"),
-        default="all",
-        help=(
-            "Which invariants to run. 'skip' drops invariants with requires_gpu=true "
-            "(for GH-hosted CPU jobs); 'only' runs only those (for self-hosted "
-            "GPU jobs); 'all' runs everything (default, useful locally)."
-        ),
-    )
-    parser.add_argument(
         "--image-ref",
         default=None,
         help="Image reference to record in envelope.image_ref.",
@@ -1119,7 +1050,6 @@ def main(argv: list[str] | None = None) -> int:
             engine=args.engine,
             corpus_path=args.corpus,
             out_path=args.out,
-            gpu_mode=args.gpu_cases,
             image_ref=args.image_ref,
             base_image_ref=args.base_image_ref,
             validation_commit=args.validation_commit,

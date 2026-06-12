@@ -322,15 +322,15 @@ class TestCompareExpectedVsObserved:
 
 
 # ---------------------------------------------------------------------------
-# validate_invariant - end-to-end on a synthetic corpus
+# _validate_invariant_with_captures - end-to-end on a synthetic corpus
 # ---------------------------------------------------------------------------
 
 
 class TestVendorRuleSynthetic:
-    """Exercise ``validate_invariant`` via a synthetic engine runner.
+    """Exercise ``_validate_invariant_with_captures`` via a synthetic engine runner.
 
     We monkeypatch the transformers runner to point at our synthetic configs.
-    This covers the full validate_invariant loop without needing transformers installed.
+    This covers the full validation loop without needing transformers installed.
     """
 
     @pytest.fixture
@@ -356,7 +356,9 @@ class TestVendorRuleSynthetic:
             "kwargs_negative": {},
             "expected_outcome": {"outcome": "error", "emission_channel": "none"},
         }
-        result = validate_rules.validate_invariant("transformers", invariant, gpu_mode="all")
+        result, _pos, _neg = validate_rules._validate_invariant_with_captures(
+            "transformers", invariant
+        )
         assert result.outcome == "error"
         assert result.positive_confirmed is True
         assert result.observed_exception is not None
@@ -375,23 +377,11 @@ class TestVendorRuleSynthetic:
                 "normalised_fields": ["temperature"],
             },
         }
-        result = validate_rules.validate_invariant("transformers", invariant, gpu_mode="all")
+        result, _pos, _neg = validate_rules._validate_invariant_with_captures(
+            "transformers", invariant
+        )
         assert result.outcome == "dormant_silent"
         assert "temperature" in result.observed_silent_normalisations
-
-    def test_gpu_mode_skip_skips_gpu_rule(self, patched_runner: Any) -> None:
-        invariant = {
-            "id": "test_gpu",
-            "severity": "error",
-            "native_type": "test.raises",
-            "requires_gpu": True,
-            "kwargs_positive": {},
-            "kwargs_negative": {},
-            "expected_outcome": {"outcome": "error"},
-        }
-        result = validate_rules.validate_invariant("transformers", invariant, gpu_mode="skip")
-        assert result.outcome == "skipped_hardware_dependent"
-        assert result.skipped_reason == "requires_gpu_and_gpu_mode_skip"
 
 
 # ---------------------------------------------------------------------------
@@ -705,7 +695,7 @@ class TestComputeGateSoundnessDivergences:
 
 
 # ---------------------------------------------------------------------------
-# extract_error_details - pydantic / msgspec / plain (chunk C4)
+# extract_error_details - pydantic / plain (chunk C4)
 # ---------------------------------------------------------------------------
 
 
@@ -723,20 +713,6 @@ class TestExtractErrorDetails:
         assert len(details) == 1
         assert details[0].loc == ("x",)
         assert details[0].error_type == "int_parsing"
-
-    def test_msgspec_validation_error_parsed_from_message(self) -> None:
-        msgspec = pytest.importorskip("msgspec")
-
-        class S(msgspec.Struct):
-            n: int
-
-        try:
-            msgspec.convert({"n": "x"}, S)
-        except msgspec.ValidationError as exc:
-            details = extract_error_details(exc)
-        assert len(details) == 1
-        assert details[0].loc == ("n",)
-        assert details[0].error_type == "msgspec_parsing"
 
     def test_plain_raise_backtick_field_locus(self) -> None:
         details = extract_error_details(ValueError("`num_beams` is greater than 1"))
@@ -812,10 +788,6 @@ class TestLocusConfirms:
 class TestIsTypeCoercionArtifact:
     def test_int_parsing_is_artifact(self) -> None:
         details = (ErrorDetail(loc=("a",), error_type="int_parsing"),)
-        assert is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
-
-    def test_msgspec_parsing_is_artifact(self) -> None:
-        details = (ErrorDetail(loc=("a",), error_type="msgspec_parsing"),)
         assert is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
 
     def test_type_check_invariant_exempt(self) -> None:

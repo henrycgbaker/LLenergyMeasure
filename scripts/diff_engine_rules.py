@@ -59,7 +59,6 @@ BREAKING_KINDS = frozenset(
 
 # Severity ordering; escalations move from less to more severe.
 _SEVERITY_RANK = {
-    "skipped_hardware_dependent": 0,
     "no_op": 1,
     "dormant_silent": 2,
     "dormant_announced": 3,

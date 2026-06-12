@@ -12,23 +12,18 @@ differently from what the corpus claims, CI fails. See
 :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`
 §4.3 for the full contract.
 
-Type-coercion-artefact guard - msgspec coverage status
-------------------------------------------------------
-:func:`is_type_coercion_artifact` covers both pydantic and msgspec validation
-errors (:func:`extract_error_details` reads pydantic's structured ``.errors()``
-and parses msgspec's ``Expected X, got Y - at `$.field``` message shape). The
-spike's version was pydantic-only; this closes that gap for the case where a
-msgspec ValidationError actually surfaces.
-
-One residual, documented rather than over-engineered: the gate constructs
-probes by *direct* ``Struct(**kwargs)`` construction, and a msgspec ``Struct``
-does NOT validate types or constraints on direct construction (it validates
-only on ``decode`` / ``convert``). vllm's ``SamplingParams`` is a msgspec
-Struct, but its value rules fire in ``__post_init__`` / ``_verify_args`` as
-plain ``ValueError``s, not msgspec errors. So on the live construction path a
-msgspec *parse* artefact is not reachable in the first place; the msgspec branch
-here is a correctness backstop for any path that does surface one (e.g. a future
-decode-based probe), not a hot path today.
+Type-coercion-artefact guard - error sources
+---------------------------------------------
+:func:`is_type_coercion_artifact` reads the structured ``error_details``
+extracted by :func:`extract_error_details` from two sources: pydantic's
+structured ``.errors()`` list, and backtick-quoted field names in plain-raise
+messages. There is deliberately no msgspec branch: the gate constructs probes
+by *direct* ``Struct(**kwargs)`` construction, and a msgspec ``Struct`` does
+NOT validate types or constraints on direct construction (it validates only on
+``decode`` / ``convert``). vllm's ``SamplingParams`` is a msgspec Struct, but
+its value rules fire in ``__post_init__`` / ``_verify_args`` as plain
+``ValueError``s, not msgspec errors - so a msgspec parse artefact is not
+reachable on the live construction path.
 """
 
 from __future__ import annotations
@@ -97,7 +92,7 @@ class ErrorDetail:
     ``loc`` is the (possibly nested) field path the error concerns; the last
     element is the field name. ``error_type`` is the validator's machine code
     (pydantic's ``int_parsing`` / ``literal_error`` / ``greater_than`` / ...;
-    for msgspec and plain raises a synthesised label, see
+    for plain raises a synthesised ``plain`` label, see
     :func:`extract_error_details`). These two together let the gate attribute a
     confirm to the rule whose field(s) the error actually concerns and reject
     type-coercion artefacts - without bare substring matching on the message.
@@ -133,7 +128,6 @@ class CaseResult:
     positive_confirmed: bool = False
     negative_confirmed: bool = False
     duration_ms: int = 0
-    skipped_reason: str | None = None
 
 
 @dataclass
@@ -327,41 +321,29 @@ def _patch_warning_once() -> Callable[[], None]:
 # than whole-message substring matching.
 _BACKTICK_FIELD_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
 
-# msgspec encodes the failing field as a trailing JSON-pointer-ish locus,
-# e.g. "Expected `int`, got `str` - at `$.temperature`". The leading `$.`
-# is msgspec's document-root marker.
-_MSGSPEC_LOC_RE = re.compile(r"at `\$\.([A-Za-z_][A-Za-z0-9_.\[\]]*)`")
-
-# msgspec parse-error shape: "Expected `<type>`, got `<type>`" with no
-# constraint operator. A constraint failure instead reads "Expected `int` >= 0".
-_MSGSPEC_PARSE_RE = re.compile(r"Expected `[^`]+`, got `[^`]+`")
-
 
 def extract_error_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
     """Extract structured ``(loc, error_type)`` pairs from a raised exception.
 
-    Three sources, in priority order:
+    Two sources, in priority order:
 
     1. **pydantic ``ValidationError``** - the structured ``.errors()`` list is
        authoritative: each entry carries a ``loc`` tuple and a machine
        ``type`` (``int_parsing``, ``literal_error``, ``greater_than``, ...).
-    2. **msgspec ``ValidationError``** - no ``.errors()`` API; the locus and a
-       coarse type are parsed from the message (``... - at `$.field```; the
-       ``Expected X, got Y`` shape marks a parse/coercion artefact, surfaced as
-       error_type ``msgspec_parsing``, else ``msgspec_validation``).
-    3. **plain exceptions** (``ValueError`` from ``__post_init__`` /
+    2. **plain exceptions** (``ValueError`` from ``__post_init__`` /
        ``_verify_args`` / ``GenerationConfig.validate``) - backtick-quoted
        field names in the message are the locus; error_type is
        ``plain`` (no machine code available).
+
+    msgspec parse errors are deliberately not handled: the gate constructs
+    Structs directly, which do not validate on construction (see module
+    docstring), so a msgspec parse artefact never reaches this function.
 
     Returns ``()`` when no field locus can be recovered (the caller then falls
     back to permissive behaviour - it never *blocks* a confirm on absence of a
     locus, only refines attribution when one is present).
     """
     details = _extract_pydantic_details(exc)
-    if details:
-        return details
-    details = _extract_msgspec_details(exc)
     if details:
         return details
     return _extract_plain_details(exc)
@@ -387,20 +369,6 @@ def _extract_pydantic_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
         loc = tuple(str(part) for part in err["loc"])
         collected.append(ErrorDetail(loc=loc, error_type=str(err["type"])))
     return tuple(collected)
-
-
-def _extract_msgspec_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
-    # msgspec.ValidationError is a subclass of ValueError; identify it by class
-    # name to avoid a hard import dependency on msgspec.
-    if type(exc).__name__ != "ValidationError" or type(exc).__module__.split(".")[0] != "msgspec":
-        return ()
-    message = str(exc)
-    loc_match = _MSGSPEC_LOC_RE.search(message)
-    if not loc_match:
-        return ()
-    loc = tuple(loc_match.group(1).split("."))
-    error_type = "msgspec_parsing" if _MSGSPEC_PARSE_RE.search(message) else "msgspec_validation"
-    return (ErrorDetail(loc=loc, error_type=error_type),)
 
 
 def _extract_plain_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
@@ -723,8 +691,6 @@ _PARSING_ERROR_TYPES: frozenset[str] = frozenset(
         "float_parsing",
         "bool_parsing",
         "decimal_parsing",
-        # msgspec's synthesised parse label (see extract_error_details).
-        "msgspec_parsing",
     }
 )
 
@@ -830,9 +796,9 @@ def is_type_coercion_artifact(
 
     Decision (audit D2 pitfall 2): reject a lenient/recall-mode confirm whose
     positive probe raised a pydantic PARSING error (int/float/bool/decimal
-    parsing, or msgspec's parse equivalent), or a ``literal_error`` on a
-    numeric-labelled predicate - UNLESS the invariant under test is itself a
-    type-check rule (then the parse error is the intended behaviour).
+    parsing), or a ``literal_error`` on a numeric-labelled predicate - UNLESS
+    the invariant under test is itself a type-check rule (then the parse error
+    is the intended behaviour).
 
     ``numeric_predicate`` distinguishes a ``literal_error`` that fired because a
     numeric value missed a numeric Literal allowlist (a coercion artefact) from

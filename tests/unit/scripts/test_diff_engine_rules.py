@@ -95,14 +95,13 @@ class TestDiffInvariants:
         assert any(c.kind == "severity_relaxed" for c in result.safe)
 
     def test_outcome_changed_same_rank_is_breaking(self) -> None:
-        # no_op vs skipped_hardware_dependent - sibling categories, not a
-        # monotonic change - flagged as outcome_changed (breaking).
-        old = _envelope([_case("r1", outcome="no_op")])
-        new = _envelope([_case("r1", outcome="no_op")])
-        # tweak outcome that has same rank to force outcome_changed
-        new["cases"][0]["outcome"] = "skipped_hardware_dependent"
+        # Two outcomes that share a rank (both unranked -> -1) are sibling
+        # categories, not a monotonic change - flagged as outcome_changed
+        # (breaking) rather than escalated/relaxed.
+        old = _envelope([_case("r1", outcome="unknown_a")])
+        new = _envelope([_case("r1", outcome="unknown_b")])
         result = diff_rules.diff_invariants(old, new)
-        assert result.is_breaking or len(result.safe) >= 1
+        assert any(c.kind == "outcome_changed" for c in result.breaking)
 
     def test_emission_channel_widened_is_safe(self) -> None:
         old = _envelope([_case("r1", emission_channel="none")])
