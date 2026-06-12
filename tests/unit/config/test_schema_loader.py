@@ -164,13 +164,21 @@ def test_load_all_schemas_returns_all_known() -> None:
 @pytest.mark.parametrize("engine", KNOWN_ENGINES)
 def test_discovered_schema_has_expected_shape(engine: str) -> None:
     schema = SchemaLoader().load_schema(engine)
-    # Every param entry must be a dict with a 'type' key (common contract)
+
+    # Every param entry must be a dict carrying either a 'type' key OR a '$ref'.
+    # The shared $defs machinery (2026-05-24 resolution) emits nested Pydantic
+    # sub-configs (e.g. vllm engine_params.compilation_config) as a JSON Schema
+    # '$ref' to a $defs entry instead of an inline 'type' - both are valid field
+    # shapes; only a bare dict with neither is a discovery bug.
+    def _has_shape(spec: dict[str, object]) -> bool:
+        return "type" in spec or "$ref" in spec
+
     for name, spec in schema.engine_params.items():
         assert isinstance(spec, dict), f"{engine}.engine_params[{name}] is not a dict"
-        assert "type" in spec, f"{engine}.engine_params[{name}] has no 'type' key"
+        assert _has_shape(spec), f"{engine}.engine_params[{name}] has no 'type' or '$ref' key"
     for name, spec in schema.sampling_params.items():
         assert isinstance(spec, dict), f"{engine}.sampling_params[{name}] is not a dict"
-        assert "type" in spec, f"{engine}.sampling_params[{name}] has no 'type' key"
+        assert _has_shape(spec), f"{engine}.sampling_params[{name}] has no 'type' or '$ref' key"
 
 
 def test_vllm_has_expected_field_floor() -> None:

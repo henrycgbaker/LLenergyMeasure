@@ -483,11 +483,14 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
     sc = _load_study(study_yaml)
     # Pinned over the full resolved-config surface (config.model_dump). Re-pinned
     # when MeasurementConfig gained latency_profiling, when ExperimentConfig
-    # gained the harness section, and when transformers migrated to the nested
-    # generated shape (the swept paths and resolved surface both moved). A value
-    # change with the dedup counts (6 declared -> 4 unique) intact is a benign
-    # schema-surface shift; a change to the dedup counts is not.
-    assert sc.study_design_hash == "5c22555c069e9540"
+    # gained the harness section, when transformers migrated to the nested
+    # generated shape, and at the transformers 5.7.0 bump when the schema
+    # introspector recovered docstring-Args types: do_sample / temperature are
+    # now bool / float on the generated SamplingParams instead of Any, so their
+    # model_dump serialisation (and thus the hash) shifted. The dedup counts
+    # below are unchanged, so this is a benign schema-surface shift; a change to
+    # the dedup counts (not just the value) would be the real regression.
+    assert sc.study_design_hash == "ddbc22ff54a17dac"
     # 6 declared configs collapse to 4 unique under resolved-config dedup.
     assert len(sc.experiments) == 4
     assert len(sc.declared_resolved_config_hashes) == 6

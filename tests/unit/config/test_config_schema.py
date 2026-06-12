@@ -630,13 +630,16 @@ def test_v1_load_in_4bit_only_is_accepted() -> None:
     assert cfg.transformers.engine_params.load_in_4bit is True
 
 
-def test_v3_bnb_4bit_without_load_in_4bit_parses_with_warning(recwarn) -> None:
-    """V3: bnb_4bit_* set without load_in_4bit parses AND warns (mined dormant rule).
+def test_v3_bnb_4bit_without_load_in_4bit_parses_without_dormancy_warning(recwarn) -> None:
+    """V3 decayed at 5.7.0: bnb_4bit_* without load_in_4bit parses, no dormancy warning.
 
-    The engine silently ignores the bnb_4bit_* fields when 4-bit is off, so the
-    config is valid but a parse-time ConfigValidationWarning names the ignored
-    field - a measurement tool must not silently measure something different from
-    the config.
+    The V3 dormant rule was gate-confirmed at 4.57.3, but transformers 5.7.0
+    construction-confirmed (in-container probe during the C10 bump campaign) that
+    BitsAndBytesConfig now accepts ``bnb_4bit_quant_type`` with ``load_in_4bit=False``
+    silently - no warning emitted. The validation gate therefore quarantines the V3
+    dormant seed and it no longer ships in the corpus, so no parse-time
+    ConfigValidationWarning fires. The config still parses (the field is accepted via
+    extra="allow"). Honest 5.7.0 behaviour: parses cleanly, no dormancy warning.
     """
     from llenergymeasure.config.warnings import ConfigValidationWarning
 
@@ -646,9 +649,15 @@ def test_v3_bnb_4bit_without_load_in_4bit_parses_with_warning(recwarn) -> None:
         transformers={"engine_params": {"bnb_4bit_quant_type": "nf4", "load_in_4bit": False}},
     )
     assert cfg.transformers.engine_params.bnb_4bit_quant_type == "nf4"
-    dormant_warnings = [w for w in recwarn.list if issubclass(w.category, ConfigValidationWarning)]
-    assert any("bnb_4bit_quant_type" in str(w.message) for w in dormant_warnings), (
-        "expected a dormant-field warning naming bnb_4bit_quant_type"
+    dormant_warnings = [
+        w
+        for w in recwarn.list
+        if issubclass(w.category, ConfigValidationWarning)
+        and "bnb_4bit_quant_type" in str(w.message)
+    ]
+    assert not dormant_warnings, (
+        "V3 dormancy decayed at 5.7.0 (no upstream warning; rule quarantined by the gate); "
+        f"expected no dormant-field warning but got: {[str(w.message) for w in dormant_warnings]}"
     )
 
 
