@@ -288,12 +288,18 @@ jobs:
           done
 
       - name: Mine + validate inside container
+        # Knowledge is PRODUCED in the SSOT (engine_versions/<e>/v<pin>/outputs/):
+        # build_corpus writes rules.proposed.yaml there, validate_rules writes
+        # rules.validated.yaml there, then regen_engine_corpus DERIVES the src/
+        # shadow from it (the one derivation; design section 4). Downstream
+        # doc-gen / diff / upload read the derived shadow unchanged.
         if: steps.probe.outputs.verdict == 'pass'
         env:
           IMAGE: ${{ steps.version.outputs.image }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           ENGINE: ${{ inputs.engine }}
           VER: ${{ steps.version.outputs.version }}
+          SAFE_VER: ${{ steps.version.outputs.safe_version }}
           ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
           RUNNER: ${{ inputs.runner }}
@@ -311,16 +317,20 @@ jobs:
             "$IMAGE" \
             "${CMD_PREFIX[@]}" -c "
               set -euo pipefail
-              python3 -m scripts.engine_producers.build_corpus --engine ${ENGINE}
+              SSOT='engine_versions/${ENGINE}/${SAFE_VER}/outputs'
+              python3 -m scripts.engine_producers.build_corpus \
+                --engine ${ENGINE} \
+                --canonical-out \"\${SSOT}/rules.proposed.yaml\"
               python3 scripts/validate_rules.py \
                 --engine ${ENGINE} \
-                --corpus '${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml' \
-                --out '${ENGINES_DIR}/${ENGINE}/rules.validated.yaml' \
+                --corpus \"\${SSOT}/rules.proposed.yaml\" \
+                --out \"\${SSOT}/rules.validated.yaml\" \
                 --validation-commit '${ANCHOR_SHA}' \
                 --image-ref '${IMAGE}' \
                 --image-digest '${IMAGE_DIGEST}' \
                 --engine-commit '${VER}' \
                 --fail-on-divergence
+              python3 scripts/engine_producers/regen_engine_corpus.py --write --engine ${ENGINE}
             "
 
       - name: Set up Python (host) for doc-gen + diff
@@ -406,9 +416,9 @@ jobs:
           PREV_OUTPUTS: ${{ steps.prior.outputs.prev_outputs }}
         run: |
           mkdir -p /tmp/engine-rules-alarms
-          # The freshly-mined shadow under src/ is the current side: it holds
-          # all three artefacts and is always present after mine+validate (the
-          # engine_versions/ archive mirror is a later, vendor-gated derivative).
+          # The derived shadow under src/ is the current side: regen produced it
+          # from this pin's SSOT outputs, so it holds all three artefacts (a
+          # byte-identical projection) and is always present after mine+validate.
           uv run python scripts/diff_engine_surface.py \
             "${PREV_OUTPUTS}" "${ENGINES_DIR}/${ENGINE}" \
             --out "/tmp/engine-rules-alarms/${ENGINE}.surface.json"
@@ -480,30 +490,6 @@ jobs:
             fi
           } > "/tmp/engine-invariants-diff/${ENGINE}.summary.md"
 
-      - name: Mirror canonical invariants to versioned archive (if engine vendored)
-        if: steps.probe.outputs.verdict == 'pass'
-        env:
-          ENGINE: ${{ inputs.engine }}
-          SAFE_VER: ${{ steps.version.outputs.safe_version }}
-        run: |
-          # Derivative dual-write: the archive is always a byte-identical
-          # mirror of the canonical mining outputs. Gated on the engine's
-          # versioned archive being present (i.e. the per-engine vendor PR
-          # has landed). When an engine is not yet vendored at this version,
-          # the archive mirror is a no-op - the producer modules still use
-          # hardcoded LANDMARKS until the engine's vendor PR refactors them.
-          # The per-engine __init__.py is the canonical "engine vendored at
-          # this version" marker.
-          ARCHIVE_INIT="engine_versions/${ENGINE}/${SAFE_VER}/__init__.py"
-          if [[ ! -f "$ARCHIVE_INIT" ]]; then
-            echo "Engine ${ENGINE} not yet vendored at ${SAFE_VER}; skipping archive mirror." >&2
-            exit 0
-          fi
-          ARCHIVE_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
-          mkdir -p "${ARCHIVE_DIR}"
-          cp "${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml" "${ARCHIVE_DIR}/rules.proposed.yaml"
-          cp "${ENGINES_DIR}/${ENGINE}/rules.validated.yaml" "${ARCHIVE_DIR}/rules.validated.yaml"
-
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
         env:
@@ -571,18 +557,16 @@ jobs:
         with:
           name: invariants-writeback-${{ inputs.engine }}
           path: |
-            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/rules.proposed.yaml
-            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/rules.validated.yaml
             engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/rules.proposed.yaml
             engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/rules.validated.yaml
+            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/rules.proposed.yaml
+            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/rules.validated.yaml
             docs/reference/engines/invariants-${{ inputs.engine }}.md
-          # ``warn`` rather than ``error``: canonical paths always exist by
-          # the time this step runs (mining produced them), but the archive
-          # mirror is gated on the engine being vendored at this version.
-          # Until the engine's vendor PR lands, the archive paths under
-          # engine_versions/<engine>/<safe>/outputs/ are absent - the upload should
-          # bundle whatever exists rather than fail. current.yaml is NOT in the
-          # writeback bundle: it is Renovate-writable input only, and the
+          # SSOT paths first (the produced canonical outputs), then the derived
+          # src/ shadow. Both always exist after a passing mine - the SSOT from
+          # the miners, the shadow from regen_engine_corpus - but ``warn`` keeps
+          # a missing optional doc from failing the bundle. current.yaml is NOT
+          # in the writeback bundle: it is Renovate-writable input only, and the
           # dispatcher + probe pair never need to mutate it.
           if-no-files-found: warn
 

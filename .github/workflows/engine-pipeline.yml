@@ -505,12 +505,14 @@ jobs:
           # Apply staging onto the working tree, preserving relative paths.
           rsync -a /tmp/writeback-staging/ ./
 
-          # Regenerate the data shadow + generated config.py from the freshly
-          # applied mined data so they always travel in the SAME commit. The
-          # corpus shadow sync is idempotent (cells already upload it); the
-          # config.py regen is the load-bearing one - config.py is generated,
-          # never uploaded by a cell, so it must be projected from the new
-          # schema here or it drifts against the data.
+          # The cells produce knowledge in the SSOT
+          # (engine_versions/<e>/v<pin>/outputs/) and upload it alongside the
+          # src/ shadow they already derived from it. Re-run the corpus
+          # derivation here so the merged multi-cell tree is consistent SSOT ->
+          # shadow (idempotent - byte-identical to the cells' upload); then
+          # regenerate config.py, the load-bearing step - config.py is
+          # generated, never uploaded by a cell, so it must be projected from
+          # the new schema here or it drifts against the data.
           uv run python scripts/engine_producers/regen_engine_corpus.py --write
           uv run python scripts/engine_producers/regen_engine_configs.py --write
 
@@ -518,12 +520,12 @@ jobs:
           git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"
 
           # Stage only the paths writeback artefacts + regeneration may produce.
-          # engine_versions/*/v*/outputs/* covers the per-version archive
-          # mirrors the cells upload; without it the archive copies rsynced
-          # from artefacts are silently dropped and the vendored pin's
-          # outputs/ goes stale against the canonical shadow. The shadow
-          # curated.yaml is written by the corpus sync when the SSOT copy
-          # changes (e.g. a carried-forward curation header on a new pin).
+          # engine_versions/*/v*/outputs/* covers the produced SSOT outputs the
+          # cells upload; without it the SSOT copies rsynced from artefacts are
+          # silently dropped and the committed pin's outputs/ goes stale against
+          # the derived shadow. The shadow curated.yaml is written by the corpus
+          # derivation when the SSOT copy changes (e.g. a carried-forward
+          # curation header on a new pin).
           git add \
             'src/llenergymeasure/engines/*/rules.proposed.yaml' \
             'src/llenergymeasure/engines/*/rules.validated.yaml' \
