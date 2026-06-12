@@ -186,6 +186,12 @@ def _main(argv: list[str] | None = None) -> int:
     outputs/ directory (empty when no prior exists) and whether the current
     pin is a major bump over it. The shell skips both alarm steps gracefully
     on an empty ``prev_outputs``.
+
+    ``prev_outputs`` is printed REPO-RELATIVE, not absolute: the decay-alarm
+    re-gate consumes it inside the engine container where the checkout mounts
+    at ``/repo`` (``-w /repo``), so an absolute runner path would dangle. The
+    host-side consumers (surface trend, gate-report comment) run from the
+    checkout root, where the relative form resolves identically.
     """
     import argparse
 
@@ -194,6 +200,8 @@ def _main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     prev = previous_pin_outputs_dir(args.engine)
+    if prev is not None:
+        prev = prev.relative_to(_find_repo_root(Path(__file__).resolve()))
     print(f"prev_outputs={prev if prev is not None else ''}")
     print(f"major_bump={'true' if is_major_bump(args.engine) else 'false'}")
     return 0

@@ -518,11 +518,19 @@ jobs:
           git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"
 
           # Stage only the paths writeback artefacts + regeneration may produce.
+          # engine_versions/*/v*/outputs/* covers the per-version archive
+          # mirrors the cells upload; without it the archive copies rsynced
+          # from artefacts are silently dropped and the vendored pin's
+          # outputs/ goes stale against the canonical shadow. The shadow
+          # curated.yaml is written by the corpus sync when the SSOT copy
+          # changes (e.g. a carried-forward curation header on a new pin).
           git add \
             'src/llenergymeasure/engines/*/rules.proposed.yaml' \
             'src/llenergymeasure/engines/*/rules.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
             'src/llenergymeasure/engines/*/config.py' \
+            'src/llenergymeasure/engines/*/curated.yaml' \
+            'engine_versions/*/v*/outputs/*' \
             'engine_versions/*/current.yaml' \
             'docs/reference/engines/invariants-*.md' \
             'docs/reference/engines/curation-*.md' \
