@@ -1,4 +1,4 @@
-"""AST miner for the transformers library - vendored for v4.57.3.
+"""AST miner for the transformers library - vendored for v5.8.1.
 
 Recall-first invariant extraction.
 
@@ -50,7 +50,7 @@ from pathlib import Path
 from typing import Any
 
 # Vendored copy: repo root is six parents up
-# (``machinery/`` / ``v4_57_3/`` / ``transformers/`` / ``engine_versions/`` /
+# (``machinery/`` / ``v5_8_1/`` / ``transformers/`` / ``engine_versions/`` /
 # ``llenergymeasure/`` / ``src/`` / repo root). The dispatcher's caller in
 # ``scripts/engine_producers/`` already inserts the repo root before importing
 # this module; the defensive insert below keeps direct ``python -m``
@@ -100,7 +100,7 @@ from scripts.engine_producers._section_classifier import (  # noqa: E402
 # Probe contract
 # ---------------------------------------------------------------------------
 
-# Static-miner LANDMARKS for Transformers 4.57.3.
+# Static-miner LANDMARKS for Transformers 5.8.1.
 #
 # Read by the probe before the invariants miner orchestrator
 # (``scripts.engine_producers.transformers_miner``) runs. Covers the symbols
@@ -126,10 +126,24 @@ NATIVE_TYPE_WMK = "transformers.WatermarkingConfig"
 NATIVE_TYPE_SYNTH = "transformers.SynthIDTextWatermarkingConfig"
 NATIVE_TYPE_BNB = "transformers.BitsAndBytesConfig"
 
-# Rule-path sections (engine_params / sampling_params) are decided per field by
-# the D2 classifier (scripts.engine_producers._section_classifier): curated.yaml
-# first, then native-class origin (BitsAndBytesConfig -> engine_params;
-# GenerationConfig / CompileConfig / watermarking configs -> sampling_params).
+# Field-path namespace for GenerationConfig fields. The corpus convention
+# (see existing transformers.yaml entries) puts every GenerationConfig
+# attribute under transformers.sampling.<field>, even those that aren't
+# strictly "sampling" parameters - that namespace is how the project's
+# Pydantic config model exposes them.
+GENCONFIG_NAMESPACE = "transformers.sampling"
+
+# BitsAndBytesConfig fields are exposed at the top level of the
+# project's TransformersConfig Pydantic model (e.g. config.transformers.load_in_4bit),
+# NOT nested under a quant sub-model. See src/llenergymeasure/config/engine_configs.py
+# class TransformersConfig where load_in_4bit / bnb_4bit_* / llm_int8_* are direct fields.
+BNB_NAMESPACE = "transformers"
+
+# A small allowlist of decoder-config field paths used by the project's
+# Pydantic models. Most generation-config fields live under .sampling.
+# Some (max_new_tokens, etc.) live under .decoder. The miner emits paths
+# under sampling. by default; if validation CI flags a path mismatch we can
+# refine. Recall first.
 
 # Default values used to synthesise positive / negative kwargs when the
 # miner cannot infer better ones from the predicate.
@@ -832,6 +846,7 @@ def walk_function(
     *,
     native_type: str,
     method_name: str,
+    namespace: str,
     rel_source_path: str,
     today: str,
     library: str = LIBRARY,
@@ -928,6 +943,7 @@ def walk_function(
                 detected=detected,
                 native_type=native_type,
                 method_name=method_name,
+                namespace=namespace,
                 rel_source_path=rel_source_path,
                 line_at_scan=getattr(stmt, "lineno", line_at_scan),
                 today=today,
@@ -947,6 +963,7 @@ def _build_rule(
     detected: DetectedBody,
     native_type: str,
     method_name: str,
+    namespace: str,
     rel_source_path: str,
     line_at_scan: int,
     today: str,
@@ -979,7 +996,7 @@ def _build_rule(
                 )
             )
 
-    match_fields = _build_match_fields(preds)
+    match_fields = _build_match_fields(preds, namespace)
     kwargs_pos = _synthesise_kwargs(preds, sense="positive")
     kwargs_neg = _synthesise_kwargs(negate_predicates(preds), sense="negative")
 
@@ -1033,20 +1050,25 @@ def _build_rule(
     )
 
 
-def _build_match_fields(preds: list[FieldPredicate]) -> dict[str, Any]:
-    """Group predicates by bare field name and combine multi-key specs.
-
-    Keys are bare field names; the D2 classifier re-keys them onto
-    ``{engine}.{section}.{field}`` rule paths at serialisation
-    (:func:`_candidate_to_dict`). The ``@<name>`` cross-field rhs refs stay bare -
-    the loader resolves them as a sibling of the predicate field.
-    """
+def _build_match_fields(preds: list[FieldPredicate], namespace: str) -> dict[str, Any]:
+    """Group predicates by field path and combine multi-key specs."""
     grouped: dict[str, dict[str, Any]] = {}
     for p in preds:
-        spec = grouped.setdefault(p.field, {})
-        # Two predicates with the same operator on the same field collapse to
-        # last-wins (the corpus invariant shape cannot represent both).
-        spec[p.op] = p.rhs
+        path = f"{namespace}.{p.field}"
+        spec = grouped.setdefault(path, {})
+        # Translate @<name> field refs into namespace-qualified bare-sibling form.
+        rhs = p.rhs
+        if isinstance(rhs, str) and rhs.startswith("@") and "." not in rhs:
+            # Bare reference: corpus loader resolves it as a sibling of the
+            # predicate field, which is exactly what we want - no rewrite needed.
+            pass
+        if p.op in spec:
+            # Two predicates with the same operator on the same field -
+            # corpus invariant shape can't represent that natively. Keep the
+            # last one wins.
+            spec[p.op] = rhs
+        else:
+            spec[p.op] = rhs
     # Collapse single-spec fields with sole == operator into bare value form.
     out: dict[str, Any] = {}
     for path, spec in grouped.items():
@@ -1375,9 +1397,10 @@ def _candidate_to_dict(
 ) -> dict[str, Any]:
     """Render a InvariantCandidate in canonical corpus YAML shape.
 
-    Re-keys ``match.fields`` onto classified ``{engine}.{section}.{field}`` paths
-    at serialisation (D2): curation first, then native-class origin
-    (BitsAndBytesConfig -> engine_params; GenerationConfig -> sampling_params).
+    ``match.fields`` keys are relabelled from the miner's internal namespaces
+    onto canonical ``{engine}.{section}.{field}`` rule paths (curation-first,
+    then native-class origin) - the section split is what runtime resolution
+    and the required-invariants floor key on.
     """
     expected_outcome: dict[str, Any] = {
         "outcome": invariant.outcome,
@@ -1478,6 +1501,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
             validate_fn,
             native_type=NATIVE_TYPE_GEN,
             method_name="validate",
+            namespace=GENCONFIG_NAMESPACE,
             rel_source_path=rel_path,
             today=today,
         )
@@ -1493,6 +1517,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
                     wmk_validate,
                     native_type=NATIVE_TYPE_WMK,
                     method_name="validate",
+                    namespace="transformers.sampling.watermarking_config",
                     rel_source_path=rel_path,
                     today=today,
                 )
@@ -1508,6 +1533,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
                     synth_validate,
                     native_type=NATIVE_TYPE_SYNTH,
                     method_name="validate",
+                    namespace="transformers.sampling.watermarking_config",
                     rel_source_path=rel_path,
                     today=today,
                 )
@@ -1554,6 +1580,7 @@ def _walk_bnb_post_init(today: str) -> list[InvariantCandidate]:
         post_init_fn,
         native_type=NATIVE_TYPE_BNB,
         method_name="post_init",
+        namespace=BNB_NAMESPACE,
         rel_source_path=rel_path,
         today=today,
         library=LIBRARY_BNB,

@@ -1,4 +1,4 @@
-"""Transformers library-API introspection miner - vendored for v4.57.3.
+"""Transformers library-API introspection miner - vendored for v5.8.1.
 
 Combinatorial-probe edition.
 
@@ -104,7 +104,7 @@ from typing import Any
 import yaml
 
 # Vendored copy: this file sits at
-# ``src/llenergymeasure/engine_versions/transformers/v4_57_3/machinery/dynamic.py``;
+# ``src/llenergymeasure/engine_versions/transformers/v5_8_1/machinery/dynamic.py``;
 # the repo root is six parents up. The dispatcher's caller (a stub in
 # ``scripts/engine_producers/``) already inserts the repo root onto sys.path
 # before importing this module, but we keep the defensive insert below so
@@ -137,7 +137,7 @@ ENGINE = "transformers"
 # Probe contract
 # ---------------------------------------------------------------------------
 
-# Dynamic-miner LANDMARKS for Transformers 4.57.3.
+# Dynamic-miner LANDMARKS for Transformers 5.8.1.
 #
 # The dynamic miner imports GenerationConfig + BitsAndBytesConfig at run
 # time and probes their validate / post_init contracts. LANDMARKS mirror
@@ -260,6 +260,21 @@ def _synthesise_probe_value(default: Any) -> Any | None:
     return None
 
 
+def _probe_candidates(default: Any) -> tuple[Any, ...]:
+    """Probe values to try in order for one field.
+
+    Typed defaults synthesise a single probe. ``None`` defaults carry no
+    type information (transformers 5.x moved GenerationConfig to lazy
+    ``None`` defaults), so try ``True`` first - the 5.x dormancy checks
+    for the boolean output_* flags test ``is True`` and a numeric probe
+    no longer trips them - then fall back to the legacy numeric probe.
+    """
+    if default is None:
+        return (True, 0.5)
+    probe = _synthesise_probe_value(default)
+    return () if probe is None else (probe,)
+
+
 # ---------------------------------------------------------------------------
 # Library-message parsing
 # ---------------------------------------------------------------------------
@@ -373,26 +388,28 @@ def _enumerate_dormancy_candidates_inner(
             continue
         if field_name in _DORMANCY_SKIP_FIELDS:
             continue
-        probe = _synthesise_probe_value(default)
-        if probe is None:
+        candidates = _probe_candidates(default)
+        if not candidates:
             continue
 
         for trigger in TRIGGERS:
-            kwargs = {
-                **trigger.isolation_kwargs,
-                trigger.trigger_field: trigger.trigger_positive,
-                field_name: probe,
-            }
-            try:
-                gc = GenerationConfig(**kwargs)
-            except Exception:
-                continue
-            try:
-                gc.validate(strict=True)
-            except ValueError as exc:
-                issues = _parse_strict_raise(str(exc))
-                if field_name in issues:
-                    discovered.append((trigger, field_name, default, probe, issues[field_name]))
+            for probe in candidates:
+                kwargs = {
+                    **trigger.isolation_kwargs,
+                    trigger.trigger_field: trigger.trigger_positive,
+                    field_name: probe,
+                }
+                try:
+                    gc = GenerationConfig(**kwargs)
+                except Exception:
+                    continue
+                try:
+                    gc.validate(strict=True)
+                except ValueError as exc:
+                    issues = _parse_strict_raise(str(exc))
+                    if field_name in issues:
+                        discovered.append((trigger, field_name, default, probe, issues[field_name]))
+                        break
 
     return discovered
 
@@ -1769,10 +1786,10 @@ def _relative_source_path(abs_path: str) -> str:
 def _candidate_to_dict(c: InvariantCandidate, curated_sections: dict[str, str]) -> dict[str, Any]:
     """Render a :class:`InvariantCandidate` into the YAML corpus entry shape.
 
-    Re-keys ``match.fields`` onto classified ``{engine}.{section}.{field}`` paths
-    at serialisation (D2): the section is decided by curation + native-class
-    origin, so the dynamic miner's per-cluster namespace becomes the authoritative
-    per-field section.
+    ``match.fields`` keys are relabelled from the miner's internal namespaces
+    onto canonical ``{engine}.{section}.{field}`` rule paths (curation-first,
+    then native-class origin) - the section split is what runtime resolution
+    and the required-invariants floor key on.
     """
     return {
         "id": c.id,

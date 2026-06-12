@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class EngineParams(BaseModel):
@@ -22,35 +22,11 @@ class EngineParams(BaseModel):
     bnb_4bit_use_double_quant: Any | None = None
     use_cache: bool | None = None
     cache_implementation: str | None = None
-    num_beams: Annotated[
-        int | None,
-        Field(
-            ge=1,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-        ),
-    ] = None
+    num_beams: int | None = None
     early_stopping: bool | None = None
     length_penalty: float | None = None
-    no_repeat_ngram_size: Annotated[
-        int | None,
-        Field(
-            ge=0,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-        ),
-    ] = None
-    prompt_lookup_num_tokens: Annotated[
-        int | None,
-        Field(
-            ge=1,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-        ),
-    ] = None
+    no_repeat_ngram_size: int | None = None
+    prompt_lookup_num_tokens: int | None = None
     device_map: Any | None = None
     max_memory: Any | None = None
     low_cpu_mem_usage: Any | None = None
@@ -63,65 +39,13 @@ class SamplingParams(BaseModel):
         extra="allow",
         use_attribute_docstrings=True,
     )
-    temperature: Annotated[
-        float | None,
-        Field(
-            ge=0.0,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-            le=2.0,
-        ),
-    ] = None
+    temperature: float | None = None
     do_sample: bool | None = None
-    top_k: Annotated[
-        int | None,
-        Field(
-            ge=0,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-        ),
-    ] = None
-    top_p: Annotated[
-        float | None,
-        Field(
-            ge=0.0,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-            le=1.0,
-        ),
-    ] = None
-    repetition_penalty: Annotated[
-        float | None,
-        Field(
-            ge=0.1,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-            le=10.0,
-        ),
-    ] = None
-    min_p: Annotated[
-        float | None,
-        Field(
-            ge=0.0,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-            le=1.0,
-        ),
-    ] = None
-    min_new_tokens: Annotated[
-        int | None,
-        Field(
-            ge=1,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-        ),
-    ] = None
+    top_k: int | None = None
+    top_p: float | None = None
+    repetition_penalty: float | None = None
+    min_p: float | None = None
+    min_new_tokens: int | None = None
 
 
 class Config(BaseModel):
