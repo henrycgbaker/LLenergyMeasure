@@ -203,19 +203,20 @@ class TestDiffSurface:
         assert report["validated_cases"] == {"old": 0, "new": 0, "delta": 0}
 
     def test_typed_fraction_metric_counts_any_none_fields(self, tmp_path: Path) -> None:
-        # Old pin: 2 curated fields, both concretely typed.
+        # Old pin: 2 curated fields, both concretely typed - a scalar and a
+        # field carrying a real ``enum`` key (the codegen renders it Literal).
         old = _write_pin(
             tmp_path,
             name="old",
             engine_params={
                 "a": {"type": "int"},
-                "device_map": {"type": "Literal['auto', 'balanced']"},
+                "device_map": {"type": "str", "enum": ["auto", "balanced"]},
             },
             curated={"engine_params": ["a", "device_map"]},
         )
-        # New pin: the same 2 curated fields, but device_map lost its enum (now
-        # a bare engine-class union -> Any | None) and a third curated field
-        # (dtype) is absent from discovery entirely (debt stub -> Any | None).
+        # New pin: device_map lost its enum (now a bare engine-class union ->
+        # Any | None) and a third curated field (dtype) is absent from discovery
+        # entirely (debt stub -> Any | None).
         new = _write_pin(
             tmp_path,
             name="new",
@@ -230,6 +231,20 @@ class TestDiffSurface:
         assert typing["fields"] == {"old": 2, "new": 3, "delta": 1}
         assert typing["untyped_fields"] == {"old": 0, "new": 2, "delta": 2}
         assert any("untyped" in flag for flag in report["shrinkage_flags"])
+
+    def test_literal_type_string_without_enum_key_is_untyped(self, tmp_path: Path) -> None:
+        # A ``Literal[...]`` *type string* with no ``enum`` key is unmappable to
+        # the codegen and renders Any | None - the metric must agree with the
+        # generated config.py, not treat the Literal string as "typed".
+        pin = _write_pin(
+            tmp_path,
+            name="p",
+            engine_params={"mode": {"type": "Literal['auto', 'slow']"}},
+            curated={"engine_params": ["mode"]},
+        )
+        census = des.census_pin(pin)
+        assert census.curated_fields == 1
+        assert census.curated_untyped_fields == 1
 
     def test_typed_fraction_absent_when_no_curated(self, tmp_path: Path) -> None:
         old = _write_pin(tmp_path, name="old", engine_params={"a": {"type": "int"}})

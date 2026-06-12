@@ -52,6 +52,22 @@ from typing import Any
 
 import yaml
 
+# Ensure the project root is importable when run via ``python scripts/...``.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+# The codegen's single source of truth for whether a mined type projects to a
+# concrete annotation or collapses to ``Any | None``. Importing it (rather than
+# re-deriving the scalar-set + union rule) keeps this metric honest against the
+# config.py the codegen actually emits - the whole point of the metric is to
+# track that projection across bumps. The helper is pure string-munging over a
+# scalar table; it pulls in no engine modules, so the script's "runs anywhere"
+# constraint holds.
+from scripts.engine_producers.regen_engine_configs import (  # noqa: E402
+    _python_type_to_json_schema,
+)
+
 _SCHEMA_FILE = "schema.discovered.json"
 _PROPOSED_FILE = "rules.proposed.yaml"
 _VALIDATED_FILE = "rules.validated.yaml"
@@ -133,24 +149,20 @@ def _field_carries_bound(field_schema: dict[str, Any]) -> bool:
     return any(key in field_schema for key in _BOUND_KEYS)
 
 
-# A curated field renders as ``Any | None`` in the generated config.py (the
-# weakest possible type) unless its mined schema projects to a concrete scalar
-# or an enum. This mirrors regen_engine_configs._python_type_to_json_schema: a
-# type is concrete only when every union member is a scalar or ``None``.
-_SCALAR_TYPE_NAMES = frozenset({"str", "bool", "int", "float"})
-
-
 def _field_renders_untyped(field_schema: dict[str, Any]) -> bool:
-    """True iff this mined field would render as ``Any | None`` in config.py."""
-    if _field_carries_enum(field_schema):
+    """True iff this mined field would render as ``Any | None`` in config.py.
+
+    Mirrors the codegen exactly: a field is concrete iff
+    :func:`_python_type_to_json_schema` projects its ``type`` to a non-empty
+    JSON-Schema shape (a scalar or scalar ``anyOf``) OR it carries a real
+    ``enum`` key (the codegen's ``_PASSTHROUGH_KEYS`` route, which renders a
+    ``Literal``). A ``Literal[...]`` *type string* with no ``enum`` key is
+    unmappable to the codegen and renders ``Any | None`` - so the enum check
+    keys on the ``enum`` field, not on the type string.
+    """
+    if isinstance(field_schema.get("enum"), list) and field_schema["enum"]:
         return False
-    type_str = str(field_schema.get("type") or "").strip()
-    if not type_str or type_str == "unknown":
-        return True
-    members = [m.strip() for m in type_str.split("|")]
-    scalars = [m for m in members if m in _SCALAR_TYPE_NAMES]
-    has_unmappable = any(m not in _SCALAR_TYPE_NAMES and m != "None" for m in members)
-    return has_unmappable or not scalars
+    return _python_type_to_json_schema(field_schema.get("type")) == {}
 
 
 # ---------------------------------------------------------------------------

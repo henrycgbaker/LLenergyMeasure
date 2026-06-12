@@ -955,26 +955,22 @@ def assemble_envelope(
     unchanged for runs that do not supply them.
     """
     now = os.environ.get("LLENERGY_VALIDATION_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
-    envelope: dict[str, Any] = {
+    # One literal, key order load-bearing: the optional provenance keys sit
+    # after image_ref so unchanged-source re-runs stay byte-identical under
+    # sort_keys=False (see _case_to_dict).
+    return {
         "schema_version": SCHEMA_VERSION,
         "engine": engine,
         "engine_version": engine_version,
         "image_ref": image_ref,
+        **({"image_digest": image_digest} if image_digest else {}),
+        **({"engine_commit": engine_commit} if engine_commit else {}),
+        "base_image_ref": base_image_ref,
+        "validated_at": now,
+        "validation_commit": validation_commit,
+        "cases": [_case_to_dict(c) for c in cases],
+        "divergences": [d.as_dict() for d in divergences],
     }
-    if image_digest:
-        envelope["image_digest"] = image_digest
-    if engine_commit:
-        envelope["engine_commit"] = engine_commit
-    envelope.update(
-        {
-            "base_image_ref": base_image_ref,
-            "validated_at": now,
-            "validation_commit": validation_commit,
-            "cases": [_case_to_dict(c) for c in cases],
-            "divergences": [d.as_dict() for d in divergences],
-        }
-    )
-    return envelope
 
 
 def _case_to_dict(case: CaseResult) -> dict[str, Any]:
