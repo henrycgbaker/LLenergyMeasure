@@ -23,6 +23,7 @@ from scripts.engine_producers._common import (
     docstring_arg_types,
     jsonable,
     make_envelope,
+    merge_source_constraints,
     read_dockerfile_from,
 )
 
@@ -142,6 +143,17 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 "docstring Args block; type='unknown'",
             }
         )
+
+    # C9: fold source-text Field(...) bounds + Literal[...] membership onto the
+    # discovered GenerationConfig sampling fields (mirrors the v4_57_3 cut). The
+    # newest producer cut silently lost this call; without it a re-mine cannot
+    # surface declarative constraints the walker reads from class source. Near-
+    # zero on a pin whose GenerationConfig stuffs fields via **kwargs self-
+    # assigns, but the plumbing is load-bearing once a pin moves to class-body
+    # Field()/Literal declarations.
+    gen_source = inspect.getsourcefile(GenerationConfig)
+    if gen_source is not None:
+        merge_source_constraints(sampling_params, [Path(gen_source)])
 
     base_image_ref = read_dockerfile_from(repo_root / TRANSFORMERS_DOCKERFILE)
     return make_envelope(
