@@ -14,4 +14,4 @@ schema_version: 1
 engine: transformers
 library:
   pep503_name: transformers
-  current_version: "4.57.3"
+  current_version: "5.7.0"

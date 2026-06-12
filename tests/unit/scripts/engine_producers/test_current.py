@@ -16,7 +16,7 @@ from scripts.engine_producers import _current  # noqa: E402
 
 @pytest.mark.parametrize(
     ("engine", "expected"),
-    [("transformers", "4.57.3"), ("vllm", "0.7.3"), ("tensorrt", "0.21.0")],
+    [("transformers", "5.7.0"), ("vllm", "0.7.3"), ("tensorrt", "0.21.0")],
 )
 def test_current_version_reads_the_pin(engine: str, expected: str) -> None:
     assert _current.current_version(engine) == expected
@@ -25,7 +25,7 @@ def test_current_version_reads_the_pin(engine: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("engine", "tail"),
     [
-        ("transformers", "engine_versions/transformers/v4_57_3/outputs"),
+        ("transformers", "engine_versions/transformers/v5_7_0/outputs"),
         ("vllm", "engine_versions/vllm/v0_7_3/outputs"),
         ("tensorrt", "engine_versions/tensorrt/v0_21_0/outputs"),
     ],
@@ -172,3 +172,47 @@ def test_is_major_bump_true_on_major_crossing(
         versions_with_outputs=["0.21.0", "1.2.1"],
     )
     assert _current.is_major_bump("tensorrt") is True
+
+
+# ---------------------------------------------------------------------------
+# _main (GITHUB_OUTPUT emission)
+# ---------------------------------------------------------------------------
+
+
+def test_main_emits_repo_relative_prev_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The decay-alarm re-gate consumes prev_outputs INSIDE the engine
+    # container, where the checkout mounts at /repo - an absolute runner
+    # path dangles there. The emitted form must be repo-relative (it also
+    # resolves host-side, where consumers run from the checkout root).
+    _fake_engine_tree(
+        monkeypatch,
+        tmp_path,
+        engine="vllm",
+        current="0.21.0",
+        versions_with_outputs=["0.19.1", "0.21.0"],
+    )
+    assert _current._main(["--engine", "vllm"]) == 0
+    out = capsys.readouterr().out
+    assert "prev_outputs=engine_versions/vllm/v0_19_1/outputs\n" in out
+    assert "major_bump=false\n" in out
+
+
+def test_main_emits_empty_prev_outputs_when_no_prior(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _fake_engine_tree(
+        monkeypatch,
+        tmp_path,
+        engine="vllm",
+        current="0.7.3",
+        versions_with_outputs=["0.7.3"],
+    )
+    assert _current._main(["--engine", "vllm"]) == 0
+    out = capsys.readouterr().out
+    assert "prev_outputs=\n" in out

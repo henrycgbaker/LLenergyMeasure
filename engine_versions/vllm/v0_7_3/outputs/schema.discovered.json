@@ -5,7 +5,7 @@
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:vllm-0.7.3",
   "base_image_ref": null,
-  "discovered_at": "2026-05-14T20:31:21+02:00",
+  "discovered_at": "2026-06-12T01:49:06+02:00",
   "discovery_method": "dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
   "discovery_limitations": [
     {
@@ -401,7 +401,7 @@
       "default": null
     },
     "compilation_config": {
-      "type": "CompilationConfig | None",
+      "$ref": "#/$defs/CompilationConfig",
       "default": null
     },
     "worker_cls": {
@@ -409,7 +409,7 @@
       "default": "auto"
     },
     "kv_transfer_config": {
-      "type": "KVTransferConfig | None",
+      "$ref": "#/$defs/KVTransferConfig",
       "default": null
     },
     "generation_config": {
@@ -536,7 +536,8 @@
     },
     "truncate_prompt_tokens": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "minimum": 1
     },
     "output_kind": {
       "type": "unknown",
@@ -561,6 +562,370 @@
     "allowed_token_ids": {
       "type": "unknown",
       "default": null
+    }
+  },
+  "$defs": {
+    "PassConfig": {
+      "description": "Configuration for custom Inductor passes.\nThis is separate from general CompilationConfig so that inductor passes\ndon't all have access to full configuration - that would create a cycle\nas the PassManager is set as a property of config.\n- dump_graph_stages: list of stages for which we want to dump the graph.\n    Each pass defines its own stages (before, after, maybe in-between).\n- dump_graph_dir: directory to dump the graphs. Default is .\n- enable_fusion: whether to enable the custom fusion pass.\n- enable_reshape: whether to enable the custom reshape elimination pass.\n    TODO better pass enabling system.",
+      "properties": {
+        "dump_graph_stages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dump Graph Stages",
+          "type": "array"
+        },
+        "dump_graph_dir": {
+          "default": ".",
+          "format": "path",
+          "title": "Dump Graph Dir",
+          "type": "string"
+        },
+        "enable_fusion": {
+          "default": true,
+          "title": "Enable Fusion",
+          "type": "boolean"
+        },
+        "enable_reshape": {
+          "default": true,
+          "title": "Enable Reshape",
+          "type": "boolean"
+        }
+      },
+      "title": "PassConfig",
+      "type": "object"
+    },
+    "CompilationConfig": {
+      "description": "Configuration for compilation.\nIt has three parts:\n- Top-level Compilation control:\n    - level: the level of compilation.\n        - 0: no compilation.\n        - 1: dynamo as is.\n        - 2: dynamo once.\n        - 3: piecewise compilation.\n    - debug_dump_path: the path to dump the debug information.\n    - cache_dir: the directory to store the compiled graph, to\n        accelerate Inductor compilation. By default, it will use\n        model-related information to generate a cache directory.\n    - backend: the backend for compilation. It needs to be a string.\n        - \"\" (empty string): use the default backend.\n        - \"eager\"/\"openxla\"/...: use the specified backend registered in PyTorch.\n        - \"full.module.name\": a qualified name which can be used to import the backend function.\n        We use string to avoid serialization issues when using compilation in a distributed setting.\n        When the compilation level is 1 or 2, the backend is used for the compilation directly (it sees the whole graph).\n        When the compilation level is 3, the backend is used for the piecewise compilation (it sees a part of the graph).\n    - custom_ops: fine-grained control over which custom ops to enable/disable.\n        Use 'all' to enable all, 'none' to disable all.\n        Also specify a list of custom op names to enable (prefixed with a '+'),\n        or disable (prefixed with a '-').\n        Examples:\n            - 'all,-op1' to enable all except op1\n            - 'none,+op1,+op2' to enable only op1 and op2\n        By default, all custom ops are enabled when running without Inductor\n            and disabled when running with Inductor (compile_level >= Inductor).\n    - splitting_ops: a list of ops to split the full graph into subgraphs, used in piecewise compilation.\n- CudaGraph capture:\n    - use_cudagraph: whether to use cudagraph inside compilation.\n        - False: cudagraph inside compilation is not used.\n        - True: cudagraph inside compilation is used. It requires\n            that all input buffers have fixed addresses, and all\n            splitting ops write their outputs to input buffers.\n        Note that this is orthogonal to the cudagraph capture logic\n        outside of compilation.\n        TODO: move outside cudagraph logic into compilation.\n        torch.compile will handle cudagraph capture logic in the future.\n    - cudagraph_capture_sizes: sizes to capture cudagraph.\n        - None (default): capture sizes are inferred from vllm config.\n        - List[int]: capture sizes are specified as given.\n    - cudagraph_num_of_warmups: number of warmup runs for cudagraph.\n        It means the first several runs will be treated as warmup runs.\n        Only after that, the execution will be recorded, and the recorded\n        cudagraph will be used for subsequent runs.\n    - cudagraph_copy_inputs: whether to copy input tensors for\n        cudagraph. If the caller can guarantee that the same input buffers\n        are always used, it can set this to False. Otherwise, it should\n        set this to True, and the compiler will copy the input to an\n        internally managed buffer. Default is False.\n- Inductor compilation:\n    - use_inductor: whether to use inductor compilation.\n        - False: inductor compilation is not used. graph runs in eager.\n        - True: inductor compilation is used. one graph for symbolic shape\n            is compiled. In addition, compile for compile_sizes,\n            using configurations in inductor_compile_config.\n    - compile_sizes: sizes to compile for inductor. In addition\n        to integers, it also supports \"cudagraph_capture_sizes\" to\n        specify the sizes for cudagraph capture.\n    - inductor_compile_config: additional configurations for inductor.\n        - None: use default configurations.\n    - inductor_passes: additional passes for inductor. It is a dictionary\n        from pass name to pass function qualified name. We use function\n        name because the config uses json format. If we pass the config\n        from Python, functions can also be passed directly via Python object\n        constructor, e.g. `CompilationConfig(inductor_passes={\"a\": func})`\n    - custom inductor passes: see PassConfig for more details\n\nWhy we have different sizes for cudagraph and inductor:\n- cudagraph: a cudagraph captured for a specific size can only be used\n    for the same size. We need to capture all the sizes we want to use.\n- inductor: a graph compiled by inductor for a general shape can be used\n    for different sizes. Inductor can also compile for specific sizes,\n    where it can have more information to optimize the graph with fully\n    static shapes. However, we find the general shape compilation is\n    sufficient for most cases. It might be beneficial to compile for\n    certain small batchsizes, where inductor is good at optimizing.",
+      "properties": {
+        "level": {
+          "default": 0,
+          "title": "Level",
+          "type": "integer"
+        },
+        "debug_dump_path": {
+          "default": "",
+          "title": "Debug Dump Path",
+          "type": "string"
+        },
+        "cache_dir": {
+          "default": "",
+          "title": "Cache Dir",
+          "type": "string"
+        },
+        "backend": {
+          "default": "",
+          "title": "Backend",
+          "type": "string"
+        },
+        "custom_ops": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Custom Ops",
+          "type": "array"
+        },
+        "splitting_ops": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "title": "Splitting Ops",
+          "type": "array"
+        },
+        "use_inductor": {
+          "default": true,
+          "title": "Use Inductor",
+          "type": "boolean"
+        },
+        "compile_sizes": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compile Sizes"
+        },
+        "inductor_compile_config": {
+          "title": "Inductor Compile Config",
+          "type": "object"
+        },
+        "inductor_passes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Inductor Passes",
+          "type": "object"
+        },
+        "use_cudagraph": {
+          "default": false,
+          "title": "Use Cudagraph",
+          "type": "boolean"
+        },
+        "cudagraph_num_of_warmups": {
+          "default": 0,
+          "title": "Cudagraph Num Of Warmups",
+          "type": "integer"
+        },
+        "cudagraph_capture_sizes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cudagraph Capture Sizes"
+        },
+        "cudagraph_copy_inputs": {
+          "default": false,
+          "title": "Cudagraph Copy Inputs",
+          "type": "boolean"
+        },
+        "pass_config": {
+          "$ref": "#/$defs/PassConfig"
+        },
+        "max_capture_size": {
+          "title": "Max Capture Size",
+          "type": "integer"
+        },
+        "local_cache_dir": {
+          "title": "Local Cache Dir",
+          "type": "string"
+        },
+        "bs_to_padded_graph_size": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Bs To Padded Graph Size",
+          "type": "array"
+        },
+        "enabled_custom_ops": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Enabled Custom Ops",
+          "type": "object"
+        },
+        "disabled_custom_ops": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Disabled Custom Ops",
+          "type": "object"
+        },
+        "traced_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Traced Files",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "compilation_time": {
+          "title": "Compilation Time",
+          "type": "number"
+        },
+        "static_forward_context": {
+          "title": "Static Forward Context",
+          "type": "object"
+        }
+      },
+      "title": "CompilationConfig",
+      "type": "object"
+    },
+    "KVTransferConfig": {
+      "description": "Configuration for distributed KV cache transfer.",
+      "properties": {
+        "kv_connector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kv Connector"
+        },
+        "kv_buffer_device": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "cuda",
+          "title": "Kv Buffer Device"
+        },
+        "kv_buffer_size": {
+          "default": 1000000000.0,
+          "title": "Kv Buffer Size",
+          "type": "number"
+        },
+        "kv_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kv Role"
+        },
+        "kv_rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kv Rank"
+        },
+        "kv_parallel_size": {
+          "default": 1,
+          "title": "Kv Parallel Size",
+          "type": "integer"
+        },
+        "kv_ip": {
+          "default": "127.0.0.1",
+          "title": "Kv Ip",
+          "type": "string"
+        },
+        "kv_port": {
+          "default": 14579,
+          "title": "Kv Port",
+          "type": "integer"
+        }
+      },
+      "title": "KVTransferConfig",
+      "type": "object"
+    },
+    "RequestOutputKind": {
+      "title": "RequestOutputKind",
+      "enum": [
+        0,
+        1,
+        2
+      ]
+    },
+    "GuidedDecodingParams": {
+      "title": "GuidedDecodingParams",
+      "description": "One of these fields will be used to build a logit processor.",
+      "type": "object",
+      "properties": {
+        "json": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "regex": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "choice": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "grammar": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "json_object": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "whitespace_pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": []
     }
   }
 }

@@ -766,7 +766,11 @@ jobs:
         # A semver MAJOR crossing over the previous pin gets a label so the
         # mandatory-review policy (design section 5) is visible at a glance;
         # the gate-report comment leads with the expected-churn warning.
-        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        # Only an engine that RESOLVED a prior pin may touch the label: cells
+        # fan out per engine on one PR, and an engine with no prior
+        # (prev_outputs empty, major_bump vacuously false) must not clobber
+        # the label another engine's genuine major crossing just applied.
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != '' && steps.prior.outputs.prev_outputs != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr-number }}

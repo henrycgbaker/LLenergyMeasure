@@ -3,8 +3,8 @@ engine: vllm
 engine_version: 0.7.3
 image_ref: llenergymeasure:vllm
 base_image_ref: llenergymeasure:vllm
-validated_at: '2026-05-14T13:25:05+02:00'
-validation_commit: fc4e8826c94c7597cf76321b42e5af54ee038e17
+validated_at: '2026-06-11T21:56:11+02:00'
+validation_commit: 0b8c07ac40bb1716a747f6d2df459d3e8492b3df
 cases:
 - id: vllm_samplingparams_dormant_seed_eq_neg1
   outcome: dormant_silent
