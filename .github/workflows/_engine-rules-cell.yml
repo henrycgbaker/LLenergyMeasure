@@ -425,6 +425,8 @@ jobs:
               python3 scripts/validate_rules.py \
                 --engine ${ENGINE} \
                 --carried '${PREV_OUTPUTS}/rules.proposed.yaml' \
+                --fresh-validated '${ENGINES_DIR}/${ENGINE}/rules.validated.yaml' \
+                --fresh-proposed '${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml' \
                 --regate-out /tmp/engine-rules-alarms/${ENGINE}.regate.json
             "
 
@@ -618,46 +620,14 @@ jobs:
           # dispatcher + probe pair never need to mutate it.
           if-no-files-found: warn
 
-      - name: Post per-pipeline comment
-        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          PR: ${{ inputs.pr-number }}
-          MARKER: "bot-id: invariants-${{ inputs.engine }}-diff"
-          REPO: ${{ github.repository }}
-          ENGINE: ${{ inputs.engine }}
-          VER: ${{ steps.version.outputs.version }}
-        run: |
-          REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
-          DRIFT_COUNT=$(jq -r '.fingerprint_drift | length' "$REPORT")
-          ALIAS_COUNT=$(jq -r '.landmarks_aliased | length' "$REPORT")
-          {
-            echo "<!-- ${MARKER} -->"
-            cat "/tmp/engine-invariants-diff/${ENGINE}.summary.md"
-            if [[ "$DRIFT_COUNT" -gt 0 || "$ALIAS_COUNT" -gt 0 ]]; then
-              echo
-              echo "<details><summary>Probe diagnostics</summary>"
-              echo
-              if [[ "$DRIFT_COUNT" -gt 0 ]]; then
-                echo "- Fingerprint drift: ${DRIFT_COUNT} landmarks moved between versions"
-              fi
-              if [[ "$ALIAS_COUNT" -gt 0 ]]; then
-                echo "- Aliased landmarks: ${ALIAS_COUNT} resolve via re-export (canonical paths shifted upstream; harmless)"
-              fi
-              echo
-              echo "Full per-landmark detail in the DriftReport JSON artefact and \`engine_versions/${ENGINE}.compat.json\`."
-              echo
-              echo "</details>"
-            fi
-          } | scripts/ci/upsert_pr_comment.sh
-
-      - name: Post gate report comment (decay alarm + surface trend)
+      - name: Post gate report comment (decay alarm + surface trend + diff)
         # ONE upserted comment per engine carrying the per-bump gate report
         # (design section 5 step 6): proposed/validated counts, the carried-
-        # catalogue re-gate acceptance + failed/infra splits, and the surface
-        # trend - the latter two present only when a prior pin exists. A major
-        # bump leads with the expected-churn warning. Today no prior exists,
-        # so the body is just the counts (+ a "no prior" note).
+        # catalogue re-gate acceptance with the Rung-0 healed/residual split,
+        # the surface trend, and the proposed/validated diff summary - the
+        # alarm sections present only when a prior pin exists. A major bump
+        # leads with the expected-churn warning. Today no prior exists, so the
+        # body is the counts + diff (+ a "no prior" note).
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
@@ -675,6 +645,9 @@ jobs:
           VALIDATED_N=$(yq '.cases | length' "$VALIDATED")
           REGATE="/tmp/engine-rules-alarms/${ENGINE}.regate.json"
           SURFACE="/tmp/engine-rules-alarms/${ENGINE}.surface.json"
+          PROBE_REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
+          DRIFT_COUNT=$(jq -r '.fingerprint_drift | length' "$PROBE_REPORT")
+          ALIAS_COUNT=$(jq -r '.landmarks_aliased | length' "$PROBE_REPORT")
           {
             echo "<!-- ${MARKER} -->"
             echo "## Engine rules gate report - ${ENGINE} (${VER})"
@@ -699,7 +672,34 @@ jobs:
               echo "Carried from \`${PREV_OUTPUTS}/rules.proposed.yaml\`."
               echo
               echo "Acceptance \`${ACC}\` - ${CONFIRMED}/${TOTAL} confirmed, ${FAILED} failed, ${INFRA} infra-error."
-              if [[ "$FAILED" -gt 0 ]]; then
+              # Rung 0: split the raw failures into self-healed (the same run's
+              # re-mine already re-encoded the rule) vs genuine decay residual.
+              HEALED=$(jq -r '.reconciliation.counts.healed // 0' "$REGATE")
+              RESIDUAL=$(jq -r '.reconciliation.counts.residual // 0' "$REGATE")
+              if jq -e '.reconciliation' "$REGATE" >/dev/null 2>&1; then
+                echo
+                echo "Rung 0 reconciliation: **${HEALED} healed**, **${RESIDUAL} residual** (decay candidates)."
+                if [[ "$HEALED" -gt 0 ]]; then
+                  echo
+                  echo "<details><summary>Healed (gate re-confirmed in the same re-mine)</summary>"
+                  echo
+                  jq -r '.reconciliation.healed[]
+                    | if .kind == "healed_template_drift"
+                      then "- `" + .id + "` template drift: `" + .old_template + "` -> `" + .new_template + "`"
+                      else "- `" + .id + "` morphed -> `" + .new_id + "`"
+                      end' "$REGATE"
+                  echo
+                  echo "</details>"
+                fi
+                if [[ "$RESIDUAL" -gt 0 ]]; then
+                  echo
+                  echo "<details><summary>Residual (decay candidates - rule genuinely gone)</summary>"
+                  echo
+                  jq -r '.reconciliation.residual[] | "- `" + .id + "` - " + .reason' "$REGATE"
+                  echo
+                  echo "</details>"
+                fi
+              elif [[ "$FAILED" -gt 0 ]]; then
                 echo
                 echo "<details><summary>Failed (rule no longer holds)</summary>"
                 echo
@@ -733,6 +733,28 @@ jobs:
             if [[ ! -f "$REGATE" && ! -f "$SURFACE" ]]; then
               echo "_No prior vendored pin: decay alarm + surface trend skipped"
               echo "(populated once the version window backfills)._"
+              echo
+            fi
+            # Proposed/validated diff summary (formerly the separate
+            # invariants-<engine>-diff comment, now folded in - one comment per
+            # engine).
+            if [[ -f "/tmp/engine-invariants-diff/${ENGINE}.summary.md" ]]; then
+              cat "/tmp/engine-invariants-diff/${ENGINE}.summary.md"
+            fi
+            if [[ "$DRIFT_COUNT" -gt 0 || "$ALIAS_COUNT" -gt 0 ]]; then
+              echo
+              echo "<details><summary>Probe diagnostics</summary>"
+              echo
+              if [[ "$DRIFT_COUNT" -gt 0 ]]; then
+                echo "- Fingerprint drift: ${DRIFT_COUNT} landmarks moved between versions"
+              fi
+              if [[ "$ALIAS_COUNT" -gt 0 ]]; then
+                echo "- Aliased landmarks: ${ALIAS_COUNT} resolve via re-export (canonical paths shifted upstream; harmless)"
+              fi
+              echo
+              echo "Full per-landmark detail in the DriftReport JSON artefact and \`engine_versions/${ENGINE}.compat.json\`."
+              echo
+              echo "</details>"
             fi
           } | scripts/ci/upsert_pr_comment.sh
 
@@ -742,6 +764,19 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR: ${{ inputs.pr-number }}
           MARKER: "bot-id: invariants-${{ inputs.engine }}-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale per-pipeline diff comment (folded into gate report)
+        # The diff summary now rides the rules-<engine> gate-report comment; an
+        # older invariants-<engine>-diff comment from before the fold must be
+        # removed so the PR carries one comment per engine, not two.
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr-number }}
+          MARKER: "bot-id: invariants-${{ inputs.engine }}-diff"
           REPO: ${{ github.repository }}
           MODE: delete
         run: scripts/ci/upsert_pr_comment.sh
