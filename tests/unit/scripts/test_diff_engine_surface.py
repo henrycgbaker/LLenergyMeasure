@@ -33,6 +33,7 @@ def _write_pin(
     defs: dict[str, Any] | None = None,
     invariants: list[dict[str, Any]] | None = None,
     cases: list[dict[str, Any]] | None = None,
+    curated: dict[str, list[str]] | None = None,
 ) -> Path:
     """Write a synthetic pin outputs/ directory and return its path."""
     pin = base / name
@@ -54,6 +55,8 @@ def _write_pin(
         (pin / "rules.validated.yaml").write_text(
             yaml.safe_dump({"engine": engine, "cases": cases})
         )
+    if curated is not None:
+        (pin / "curated.yaml").write_text(yaml.safe_dump({"exposed_fields": curated}))
     return pin
 
 
@@ -187,6 +190,7 @@ class TestDiffSurface:
             "invariants_by_provenance",
             "validated_cases",
             "validated_by_outcome",
+            "curated_typing",
             "shrinkage_flags",
         }
 
@@ -197,6 +201,42 @@ class TestDiffSurface:
         new = _write_pin(tmp_path, name="new", invariants=[])
         report = des.build_report(old, new)
         assert report["validated_cases"] == {"old": 0, "new": 0, "delta": 0}
+
+    def test_typed_fraction_metric_counts_any_none_fields(self, tmp_path: Path) -> None:
+        # Old pin: 2 curated fields, both concretely typed.
+        old = _write_pin(
+            tmp_path,
+            name="old",
+            engine_params={
+                "a": {"type": "int"},
+                "device_map": {"type": "Literal['auto', 'balanced']"},
+            },
+            curated={"engine_params": ["a", "device_map"]},
+        )
+        # New pin: the same 2 curated fields, but device_map lost its enum (now
+        # a bare engine-class union -> Any | None) and a third curated field
+        # (dtype) is absent from discovery entirely (debt stub -> Any | None).
+        new = _write_pin(
+            tmp_path,
+            name="new",
+            engine_params={
+                "a": {"type": "int"},
+                "device_map": {"type": "str | DeviceMap | None"},
+            },
+            curated={"engine_params": ["a", "device_map", "dtype"]},
+        )
+        report = des.build_report(old, new)
+        typing = report["curated_typing"]
+        assert typing["fields"] == {"old": 2, "new": 3, "delta": 1}
+        assert typing["untyped_fields"] == {"old": 0, "new": 2, "delta": 2}
+        assert any("untyped" in flag for flag in report["shrinkage_flags"])
+
+    def test_typed_fraction_absent_when_no_curated(self, tmp_path: Path) -> None:
+        old = _write_pin(tmp_path, name="old", engine_params={"a": {"type": "int"}})
+        new = _write_pin(tmp_path, name="new", engine_params={"a": {"type": "int"}})
+        report = des.build_report(old, new)
+        # No curated.yaml -> zero counts, no spurious shrinkage flag.
+        assert report["curated_typing"]["fields"] == {"old": 0, "new": 0, "delta": 0}
 
 
 class TestCli:

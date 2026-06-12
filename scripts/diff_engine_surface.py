@@ -55,6 +55,7 @@ import yaml
 _SCHEMA_FILE = "schema.discovered.json"
 _PROPOSED_FILE = "rules.proposed.yaml"
 _VALIDATED_FILE = "rules.validated.yaml"
+_CURATED_FILE = "curated.yaml"
 
 _SCHEMA_SECTIONS = ("engine_params", "sampling_params")
 
@@ -95,6 +96,12 @@ class PinCensus:
     proposed_by_provenance: dict[str, int] = field(default_factory=dict)
     validated_cases: int = 0
     validated_by_outcome: dict[str, int] = field(default_factory=dict)
+    # Typed-fraction of the curated (exposed) surface: how many curated fields
+    # render as the weakest ``Any | None`` in the generated config.py vs total.
+    # A rise in the untyped count across a bump means the codegen lost concrete
+    # types - the 26 -> 12 regression this metric would have caught mechanically.
+    curated_fields: int = 0
+    curated_untyped_fields: int = 0
 
 
 @dataclass
@@ -124,6 +131,26 @@ def _field_carries_enum(field_schema: dict[str, Any]) -> bool:
 
 def _field_carries_bound(field_schema: dict[str, Any]) -> bool:
     return any(key in field_schema for key in _BOUND_KEYS)
+
+
+# A curated field renders as ``Any | None`` in the generated config.py (the
+# weakest possible type) unless its mined schema projects to a concrete scalar
+# or an enum. This mirrors regen_engine_configs._python_type_to_json_schema: a
+# type is concrete only when every union member is a scalar or ``None``.
+_SCALAR_TYPE_NAMES = frozenset({"str", "bool", "int", "float"})
+
+
+def _field_renders_untyped(field_schema: dict[str, Any]) -> bool:
+    """True iff this mined field would render as ``Any | None`` in config.py."""
+    if _field_carries_enum(field_schema):
+        return False
+    type_str = str(field_schema.get("type") or "").strip()
+    if not type_str or type_str == "unknown":
+        return True
+    members = [m.strip() for m in type_str.split("|")]
+    scalars = [m for m in members if m in _SCALAR_TYPE_NAMES]
+    has_unmappable = any(m not in _SCALAR_TYPE_NAMES and m != "None" for m in members)
+    return has_unmappable or not scalars
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +222,37 @@ def census_validated(envelope: dict[str, Any]) -> tuple[int, dict[str, int]]:
     return len(cases) if isinstance(cases, list) else 0, by_outcome
 
 
+def census_curated_typing(schema: dict[str, Any], curated: dict[str, Any]) -> tuple[int, int]:
+    """Count curated (exposed) fields and how many render as ``Any | None``.
+
+    Resolves each ``exposed_fields`` entry against the discovered schema
+    sections (a field may be curated under one section but discovered under
+    another, mirroring the codegen's union resolution). A field absent from
+    discovery, or whose mined type does not project to a concrete scalar/enum,
+    is an untyped ``Any | None`` field.
+    """
+    exposed = curated.get("exposed_fields")
+    if not isinstance(exposed, dict):
+        return 0, 0
+    discovered: dict[str, dict[str, Any]] = {}
+    for section in _SCHEMA_SECTIONS:
+        params = schema.get(section)
+        if isinstance(params, dict):
+            for name, shape in params.items():
+                if isinstance(shape, dict):
+                    discovered.setdefault(name, shape)
+
+    total = 0
+    untyped = 0
+    for names in exposed.values():
+        for name in names or []:
+            total += 1
+            shape = discovered.get(name)
+            if shape is None or _field_renders_untyped(shape):
+                untyped += 1
+    return total, untyped
+
+
 # ---------------------------------------------------------------------------
 # Loading + directory census
 # ---------------------------------------------------------------------------
@@ -231,6 +289,7 @@ def census_pin(outputs_dir: Path) -> PinCensus:
 
     census = PinCensus()
 
+    schema: dict[str, Any] = {}
     schema_path = outputs_dir / _SCHEMA_FILE
     if schema_path.is_file():
         schema = _load_json(schema_path)
@@ -249,6 +308,13 @@ def census_pin(outputs_dir: Path) -> PinCensus:
     if validated_path.is_file():
         validated = _load_yaml(validated_path)
         census.validated_cases, census.validated_by_outcome = census_validated(validated)
+
+    curated_path = outputs_dir / _CURATED_FILE
+    if curated_path.is_file() and schema:
+        curated = _load_yaml(curated_path)
+        census.curated_fields, census.curated_untyped_fields = census_curated_typing(
+            schema, curated
+        )
 
     return census
 
@@ -298,6 +364,12 @@ def diff_surface(old: PinCensus, new: PinCensus) -> dict[str, Any]:
         ),
         "validated_cases": CountDelta(old.validated_cases, new.validated_cases).as_dict(),
         "validated_by_outcome": _bucket_delta(old.validated_by_outcome, new.validated_by_outcome),
+        "curated_typing": {
+            "fields": CountDelta(old.curated_fields, new.curated_fields).as_dict(),
+            "untyped_fields": CountDelta(
+                old.curated_untyped_fields, new.curated_untyped_fields
+            ).as_dict(),
+        },
         "shrinkage_flags": _shrinkage_flags(old, new),
     }
 
@@ -330,6 +402,13 @@ def _shrinkage_flags(old: PinCensus, new: PinCensus) -> list[str]:
         flags.append(f"invariants total shrank {old_total} -> {new_total}")
     if len(new.defs_classes) < len(old.defs_classes):
         flags.append(f"$defs classes shrank {len(old.defs_classes)} -> {len(new.defs_classes)}")
+    # A rise in curated fields rendering as ``Any | None`` is a config.py type
+    # regression - the codegen lost concrete types the old pin had.
+    if new.curated_untyped_fields > old.curated_untyped_fields:
+        flags.append(
+            f"curated untyped (Any | None) fields grew "
+            f"{old.curated_untyped_fields} -> {new.curated_untyped_fields}"
+        )
     return flags
 
 
@@ -389,6 +468,13 @@ def render_text(report: dict[str, Any]) -> str:
     lines.append(
         f"Validated cases: {_fmt_delta(report.get('validated_cases', {'old': 0, 'new': 0, 'delta': 0}))}"
     )
+
+    typing = report.get("curated_typing")
+    if typing:
+        lines.append(
+            f"Curated fields: {_fmt_delta(typing['fields'])}; "
+            f"untyped (Any | None): {_fmt_delta(typing['untyped_fields'])}"
+        )
 
     return "\n".join(lines)
 
