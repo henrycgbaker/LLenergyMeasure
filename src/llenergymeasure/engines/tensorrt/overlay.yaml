@@ -45,7 +45,12 @@ narrowings:
       minimum: 1
       x-narrowing-reason: *reason
     dtype:
-      enum: ["float16", "bfloat16"]
+      # main's pre-v0.10 Literal was ["float16", "bfloat16"], but the discovered
+      # schema shows the engine's own default is "auto" - so the old set omitted a
+      # value the engine accepts (a main-side oversight; vllm's equivalent Literal
+      # did include "auto"). Restore the real intent (reject float32; TRT-LLM is
+      # fp16/bf16-only) WITHOUT excluding the engine default.
+      enum: ["auto", "float16", "bfloat16"]
       x-narrowing-reason: *reason
     backend:
       enum: ["trt", "pytorch", "_autodeploy"]

@@ -86,7 +86,7 @@ class EngineParams(BaseModel):
     The maximum number of tokens.
     """
     dtype: Annotated[
-        Literal["float16", "bfloat16"] | None,
+        Literal["auto", "float16", "bfloat16"] | None,
         Field(
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
