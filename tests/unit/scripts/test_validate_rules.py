@@ -668,8 +668,7 @@ class TestComputeGateSoundnessDivergences:
         neg = _capture(observed_state={"a": 0})
         divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
-            d.check_failed == validate_rules.CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC
-            for d in divergences
+            d.check_failed == validate_rules.CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC for d in divergences
         )
 
     def test_negative_raised_unexpectedly(self) -> None:

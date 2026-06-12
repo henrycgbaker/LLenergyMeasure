@@ -152,9 +152,7 @@ class TestDiffInvariants:
 class TestRenderMarkdown:
     def test_well_formed_for_no_changes(self) -> None:
         env = _envelope([_case("r1")])
-        md = diff_rules.render_markdown(
-            diff_rules.diff_invariants(env, env), title="Test"
-        )
+        md = diff_rules.render_markdown(diff_rules.diff_invariants(env, env), title="Test")
         assert "## Test" in md
         assert "No changes detected" in md
 
