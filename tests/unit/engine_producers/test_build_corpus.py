@@ -886,3 +886,109 @@ class TestVendorValidationGate:
         discovered = build_corpus.discover_staging_files("transformers", tmp_path)
         assert merged_candidates not in discovered
         assert (staging / "transformers_static_miner.yaml") in discovered
+
+
+# ---------------------------------------------------------------------------
+# Manual-seed carry across re-mines
+# ---------------------------------------------------------------------------
+
+
+def _manual_seed_rule(
+    *,
+    invariant_id: str = "transformers_bnb_load_in_4bit_xor_load_in_8bit",
+    fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A hand-shaped manual_seed invariant the miners cannot reach."""
+    rule = _ast_rule(invariant_id=invariant_id, fields=fields or {"f_seed": True})
+    rule["added_by"] = "manual_seed"
+    return rule
+
+
+class TestManualSeedCarry:
+    """The merger carries ``added_by: manual_seed`` invariants forward from the
+    prior committed corpus so a re-mine does not clobber hand-shaped,
+    runtime-proven rules the registry never re-emits."""
+
+    def test_load_carried_manual_seeds_filters_to_manual_only(self, tmp_path: Path) -> None:
+        path = tmp_path / "prior.yaml"
+        path.write_text(
+            yaml.safe_dump(
+                _envelope([_ast_rule(invariant_id="mined"), _manual_seed_rule()]),
+                sort_keys=False,
+            )
+        )
+        carried = build_corpus._load_carried_manual_seeds(path)
+        assert [c["id"] for c in carried] == ["transformers_bnb_load_in_4bit_xor_load_in_8bit"]
+
+    def test_load_carried_manual_seeds_missing_corpus(self, tmp_path: Path) -> None:
+        assert build_corpus._load_carried_manual_seeds(tmp_path / "absent.yaml") == []
+
+    def test_load_carried_manual_seeds_invalid_yaml(self, tmp_path: Path) -> None:
+        path = tmp_path / "broken.yaml"
+        path.write_text("not: valid: yaml: [")
+        assert build_corpus._load_carried_manual_seeds(path) == []
+
+    def test_carried_seed_preserved_when_registry_omits_it(self) -> None:
+        registry = [_ast_rule(invariant_id="mined", fields={"f1": 1})]
+        carried = [_manual_seed_rule()]
+        merged = build_corpus._merge_carried_manual_seeds(registry, carried)
+        ids = {r["id"] for r in merged}
+        assert "transformers_bnb_load_in_4bit_xor_load_in_8bit" in ids
+        assert "mined" in ids
+
+    def test_registry_wins_on_id_collision(self) -> None:
+        # The miners learned to extract the seed's id: the machine-extracted
+        # version must win and the carried copy must NOT be appended.
+        registry = [_ast_rule(invariant_id="collide", message="machine-extracted")]
+        carried = [_manual_seed_rule(invariant_id="collide")]
+        merged = build_corpus._merge_carried_manual_seeds(registry, carried)
+        collide = [r for r in merged if r["id"] == "collide"]
+        assert len(collide) == 1
+        assert collide[0]["added_by"] == "static_miner"
+        assert collide[0]["message_template"] == "machine-extracted"
+
+    def test_no_carried_seeds_is_identity(self) -> None:
+        registry = [_ast_rule(invariant_id="mined")]
+        assert build_corpus._merge_carried_manual_seeds(registry, []) is registry
+
+    def test_carried_seed_passes_through_validation_gate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A carried seed that validates is kept; a carried seed the gate rejects
+        is dropped - the gate adjudicates carried entries exactly as registry ones."""
+        import scripts.validate_rules as vr
+
+        # Stub the gate to reject one carried seed and accept the other.
+        monkeypatch.setattr(
+            vr,
+            "validate_engine",
+            _stub_validate_engine(divergent_rule_ids=("seed_stale",)),
+        )
+
+        staging = tmp_path / "transformers" / "_staging"
+        _write_staging(
+            staging,
+            "transformers_static_miner.yaml",
+            _envelope([_ast_rule(invariant_id="mined", fields={"f_mined": 1})]),
+        )
+        # Seed the prior committed corpus with two manual seeds.
+        prior = tmp_path / "transformers" / "rules.proposed.yaml"
+        prior.write_text(
+            yaml.safe_dump(
+                _envelope(
+                    [
+                        _manual_seed_rule(invariant_id="seed_good", fields={"f_good": True}),
+                        _manual_seed_rule(invariant_id="seed_stale", fields={"f_stale": True}),
+                    ]
+                ),
+                sort_keys=False,
+            )
+        )
+
+        result = build_corpus.write_corpus("transformers", tmp_path)
+        canonical = prior.read_text()
+        # Good seed carried + gate-confirmed; stale seed dropped by the gate.
+        assert "seed_good" in canonical
+        assert "seed_stale" not in canonical
+        assert "mined" in canonical
+        assert "seed_stale" in result.quarantined_ids

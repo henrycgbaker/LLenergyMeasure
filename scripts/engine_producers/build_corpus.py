@@ -633,6 +633,70 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
     return out
 
 
+_MANUAL_SEED_ADDED_BY = "manual_seed"
+
+
+def _load_carried_manual_seeds(corpus_path: Path) -> list[dict[str, Any]]:
+    """Read ``added_by: manual_seed`` invariants from the prior committed corpus.
+
+    The miners emit a registry that the merge step turns into the canonical
+    corpus, but some runtime-proven invariants are cross-field shapes the
+    miners cannot reach yet (e.g. the transformers BNB ``load_in_4bit`` XOR
+    ``load_in_8bit`` rule, the vllm ``max_num_batched_tokens`` budget rule).
+    Those are hand-shaped once and tagged ``manual_seed``; without carrying
+    them forward, every re-mine would clobber them because the registry never
+    re-emits them.
+
+    Returns the carried manual-seed invariant dicts (a copy of each). Empty
+    when the corpus is missing, unparsable, or carries no manual-seed entries.
+    A parse failure warns and falls open rather than silently dropping the
+    carry - the operator must see that a runtime-proven rule may be lost.
+    """
+    if not corpus_path.exists():
+        return []
+    try:
+        prior = yaml.safe_load(corpus_path.read_text())
+    except (yaml.YAMLError, OSError) as exc:
+        _log.warning(
+            "Could not read prior corpus at %s for manual-seed carry: %s. "
+            "Hand-shaped runtime-proven rules may be dropped this build.",
+            corpus_path,
+            exc,
+        )
+        return []
+    if not isinstance(prior, dict):
+        return []
+    carried: list[dict[str, Any]] = []
+    for invariant in prior.get("invariants") or []:
+        if isinstance(invariant, dict) and invariant.get("added_by") == _MANUAL_SEED_ADDED_BY:
+            carried.append(dict(invariant))
+    return carried
+
+
+def _merge_carried_manual_seeds(
+    candidates: list[dict[str, Any]], carried: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Merge carried manual-seed invariants into the registry candidate list by id.
+
+    Registry entries win on id collision: a manual seed that the miners have
+    since learned to extract is superseded by the machine-extracted version (so
+    the seed decays out cleanly once it is redundant). Carried entries that the
+    registry does not re-emit are appended; they then flow through the SAME
+    validation gate as registry entries, so a carried rule that no longer holds
+    upstream is dropped by the gate (and surfaced by the decay alarm), not
+    blindly trusted. Output stays id-sorted for byte-stable ``--check``.
+    """
+    if not carried:
+        return candidates
+    registry_ids = {str(inv.get("id", "")) for inv in candidates}
+    merged = list(candidates)
+    for seed in carried:
+        if str(seed.get("id", "")) not in registry_ids:
+            merged.append(seed)
+    merged.sort(key=lambda r: r.get("id", ""))
+    return merged
+
+
 def _preserve_added_at(invariants: list[dict[str, Any]], prior: dict[bytes, str]) -> None:
     """Restore each invariant's prior ``added_at`` if its fingerprint matches.
 
@@ -898,13 +962,23 @@ def build_corpus_text_and_outcome(
         )
     envelopes = [_load_staging(p) for p in paths]
     candidates, envelope = merge_staging(envelopes)
+
+    # Carry hand-shaped runtime-proven manual-seed invariants from the prior
+    # committed corpus: the miners never re-emit cross-field shapes they cannot
+    # reach (BNB XOR, vllm batched-token budget), so merge them in by id
+    # (registry wins on collision) BEFORE the validation gate. Carried entries
+    # then face the same gate as registry entries - a stale seed is dropped, not
+    # blindly trusted.
+    prior_corpus_path = _canonical_path(corpus_root, engine)
+    carried_seeds = _load_carried_manual_seeds(prior_corpus_path)
+    candidates = _merge_carried_manual_seeds(candidates, carried_seeds)
     candidates_count = len(candidates)
 
     # Preserve added_at across re-mines: invariants whose fingerprint matches a
     # prior canonical-corpus entry keep their original discovery date
     # instead of being stamped with today's anchor. Stops every Renovate-
     # driven rebuild from producing a noise diff on every invariant.
-    prior_added_at = _load_prior_added_at_map(_canonical_path(corpus_root, engine))
+    prior_added_at = _load_prior_added_at_map(prior_corpus_path)
     _preserve_added_at(candidates, prior_added_at)
 
     if skip_validation:

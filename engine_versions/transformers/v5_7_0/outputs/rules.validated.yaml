@@ -31,6 +31,17 @@ cases:
   observed_silent_normalisations: {}
   positive_confirmed: true
   negative_confirmed: true
+- id: transformers_bnb_load_in_4bit_xor_load_in_8bit
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: load_in_4bit and load_in_8bit are both True, but only one can be used
+      at the same time
+  positive_confirmed: true
+  negative_confirmed: true
 - id: transformers_cache_choice_cache_implementation_not_in_allowlist
   outcome: error
   emission_channel: none

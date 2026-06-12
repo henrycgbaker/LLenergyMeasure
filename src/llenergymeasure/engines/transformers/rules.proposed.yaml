@@ -38,6 +38,39 @@ invariants:
   added_by: dynamic_miner
   added_at: '2026-06-12'
   conflict_note: 'id: dynamic_miner -> ''transformers_beam_search_num_beams_eq_1''; dynamic_miner -> ''transformers_early_stopping_type_num_beams_eq_1'''
+- id: transformers_bnb_load_in_4bit_xor_load_in_8bit
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_ValueError: raises when load_in_4bit and load_in_8bit
+    are both True (V1 parity row)'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: transformers/utils/quantization_config.py
+    method: __init__
+    line_at_scan: 0
+  match:
+    engine: transformers
+    fields:
+      transformers.engine_params.load_in_4bit: true
+      transformers.engine_params.load_in_8bit: true
+  kwargs_positive:
+    load_in_4bit: true
+    load_in_8bit: true
+  kwargs_negative:
+    load_in_4bit: true
+    load_in_8bit: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: load_in_4bit and load_in_8bit are both True, but only one can be used at the same
+    time
+  references:
+  - transformers.BitsAndBytesConfig - observed via construction-time ValueError (V1 parity row, in-container
+    probe 4.57.3)
+  added_by: manual_seed
+  added_at: '2026-06-11'
 - id: transformers_cache_choice_cache_implementation_not_in_allowlist
   engine: transformers
   library: transformers
