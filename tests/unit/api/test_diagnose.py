@@ -229,6 +229,54 @@ def test_windowing_flags_a_cited_symbol_missing_from_the_new_pin(tmp_path: Path)
     assert any("VanishedConfig" in note for note in report2.missing)
 
 
+def _write_many_huge_classes(path: Path, *, names: list[str], fields_each: int = 200) -> str:
+    """Write several config classes each far larger than the budget alone.
+
+    Every class carries ``fields_each`` fields plus a long ``validate`` method.
+    Any single class fed whole would already blow a 12K budget, so this fixture
+    proves the surface windower caps per-class and round-robins fairly.
+    """
+    lines: list[str] = ["import os", ""]
+    for name in names:
+        lines.append(f"class {name}Config:")
+        for i in range(fields_each):
+            lines.append(f"    pad_{i}: int = {i}")
+        lines.append("    def validate(self):")
+        for i in range(fields_each):
+            lines.append(f"        _ = {i}")
+        lines.append("")
+    body = "\n".join(lines)
+    path.write_text(body)
+    return body
+
+
+def test_surface_windowing_caps_huge_classes_and_does_not_starve(tmp_path: Path) -> None:
+    names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]
+    body = _write_many_huge_classes(tmp_path / "config.py", names=names)
+    # The surface dwarfs the budget; each class has a 200-field body that, fed
+    # whole, would crowd out the others.
+    assert len(body) > 3 * 12_000
+
+    requests = config_surface_symbol_requests(
+        source_root=tmp_path, config_surface_files=["config.py"]
+    )
+    report = windowed_source(source_root=tmp_path, requests=requests, budget_chars=12_000)
+
+    # Bounded: the assembled surface stays under budget despite many huge classes.
+    assert report.chars <= 12_000
+    # No starvation: round-robin admits each class's bounded window in turn, so
+    # several distinct classes are represented - not one class consuming it all.
+    classes_present = [n for n in names if f"class {n}Config" in report.source]
+    assert len(classes_present) >= 3
+    # Capping is real: no class's whole 200-field body is emitted (each surface
+    # window covers only a bounded leading slice).
+    assert "pad_199: int" not in report.source
+    # Any class that did not fit is REPORTED, never silently dropped.
+    for name in names:
+        if f"class {name}Config" not in report.source:
+            assert any(f"{name}Config" in note for note in report.truncated)
+
+
 def test_carried_symbol_requests_derive_class_and_fields() -> None:
     carried = [_carried_entry("rule_a")]
     requests = carried_symbol_requests(carried=carried, cited_files=["f1.py", "f2.py"])

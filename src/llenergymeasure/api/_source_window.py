@@ -24,7 +24,7 @@ REPORTED, never silently truncated (the design's no-silent-truncation principle)
 from __future__ import annotations
 
 import ast
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,6 +50,12 @@ _CONTEXT_LINES = 3
 # __init__ / validate can be 100+ lines; the proposer only needs the region that
 # touches the cited field, not the whole method (the R7 keyword-window approach).
 _REF_CONTEXT_LINES = 12
+
+# Max body lines a single 1b surface window covers below its class header. A 1b
+# request has no cited field, so it windows a BOUNDED leading slice of each class
+# (declarations the proposer scans for missed rules) rather than the whole body -
+# a class with hundreds of fields must not blow the budget or starve the rest.
+_SURFACE_BODY_LINES = 40
 
 # Default assembled-source budget. The live model runs num_ctx=16384; ~12K chars
 # of source leaves headroom for the instruction template + the residual entries.
@@ -147,13 +153,14 @@ def _windows_for_class(
     file: str,
     fields: tuple[str, ...],
 ) -> tuple[list[_Window], list[str]]:
-    """Bounded windows for a class: its header plus the cited field/member spans.
+    """Bounded windows for a class: its header plus the cited or surface spans.
 
-    Returns ``(windows, missing_notes)``. With no cited fields, the whole class
-    def is one window (1b surface mode). With cited fields, the window is the
+    Returns ``(windows, missing_notes)``. With cited fields the window is the
     class header line plus, per field, the field annotation span and any member
-    (method / validator) whose body references the field - the spans a proposer
-    needs to decide what changed, without the rest of a 100K-char file.
+    (method / validator) whose body references the field. With NO cited fields
+    (1b surface mode) :func:`_surface_windows` returns one bounded leading slice
+    of the class. Either way the windows stay bounded, never the whole (possibly
+    100K-char) class body that would blow the budget and starve the rest.
     """
     header_end = cls.body[0].lineno - 1 if cls.body else cls.lineno
     header = _Window(
@@ -161,18 +168,11 @@ def _windows_for_class(
         label=f"class {cls.name}",
         start=cls.lineno,
         end=max(cls.lineno, header_end),
-        cited=True,
+        cited=bool(fields),
     )
 
     if not fields:
-        whole = _Window(
-            file=file,
-            label=f"class {cls.name}",
-            start=cls.lineno,
-            end=cls.end_lineno or cls.lineno,
-            cited=False,
-        )
-        return [whole], []
+        return _surface_windows(cls, file=file, header=header), []
 
     windows: list[_Window] = [header]
     missing: list[str] = []
@@ -201,6 +201,29 @@ def _windows_for_class(
         if not located:
             missing.append(f"{file}: field '{fname}' not found in class {cls.name}")
     return windows, missing
+
+
+def _surface_windows(cls: ast.ClassDef, *, file: str, header: _Window) -> list[_Window]:
+    """One bounded surface window for a fieldless (1b) request.
+
+    The class header plus a LEADING slice of the body (up to
+    :data:`_SURFACE_BODY_LINES` lines) - the declarations a 1b proposer scans for
+    missed rules - never the whole (possibly hundreds-of-fields) class body. A
+    fixed line cap keeps every class's surface window small so a huge class can
+    neither blow the budget nor starve the rest. Marked uncited so cited-symbol
+    windows keep budget priority over the surface.
+    """
+    body_end = cls.end_lineno or header.end
+    end = min(body_end, header.start + _SURFACE_BODY_LINES)
+    return [
+        _Window(
+            file=file,
+            label=f"class {cls.name}",
+            start=header.start,
+            end=max(header.end, end),
+            cited=False,
+        )
+    ]
 
 
 def _span(file: str, label: str, start: int, end: int) -> _Window:
@@ -311,13 +334,13 @@ def _render_under_budget(
     Overlapping windows within a file are merged so a field span that falls
     inside a referencing method is not duplicated. Cited windows are admitted
     before fieldless surface windows so a tight budget keeps the load-bearing
-    spans. Among cited windows, admission round-robins across files so a large
-    cited file cannot starve a smaller one of the budget (each cited file gets a
-    fair share before any file's later windows are considered).
+    spans. Both groups round-robin by (file, class) so one large class cannot
+    starve the rest: each class contributes its header before any class's later
+    windows are considered.
     """
     merged = _merge_windows(windows)
-    cited = _round_robin_by_file([w for w in merged if w.cited])
-    surface = sorted((w for w in merged if not w.cited), key=lambda w: (w.file, w.start))
+    cited = _round_robin(merged, predicate=lambda w: w.cited)
+    surface = _round_robin(merged, predicate=lambda w: not w.cited)
 
     rendered: list[tuple[_Window, str]] = []
     truncated: list[str] = []
@@ -342,29 +365,49 @@ def _render_under_budget(
     return "\n\n".join(block for _, block in rendered), truncated
 
 
-def _round_robin_by_file(windows: Sequence[_Window]) -> list[_Window]:
-    """Interleave windows so each file contributes one window per pass.
+def _round_robin(
+    windows: Sequence[_Window], *, predicate: Callable[[_Window], bool]
+) -> list[_Window]:
+    """Interleave matching windows so each (file, class) contributes one per pass.
 
-    Preserves source order within a file. With two cited files A and B this
-    yields A0, B0, A1, B1, ... so a tight budget keeps at least the first window
-    of every cited file before spending the rest on any one file.
+    Preserves source order within a group. With classes A and B this yields
+    A0, B0, A1, B1, ... so a tight budget keeps the first window (the header) of
+    every class before spending the rest on any one class - a huge class cannot
+    starve the others. Grouping by class (not just file) matters in 1b mode where
+    one file holds many config classes.
     """
-    per_file: dict[str, list[_Window]] = {}
-    order: list[str] = []
+    groups: dict[tuple[str, str], list[_Window]] = {}
+    order: list[tuple[str, str]] = []
     for window in sorted(windows, key=lambda w: (w.file, w.start)):
-        if window.file not in per_file:
-            per_file[window.file] = []
-            order.append(window.file)
-        per_file[window.file].append(window)
+        if not predicate(window):
+            continue
+        key = (window.file, _window_class(window))
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(window)
 
     out: list[_Window] = []
     idx = 0
-    while any(idx < len(per_file[f]) for f in order):
-        for f in order:
-            if idx < len(per_file[f]):
-                out.append(per_file[f][idx])
+    while any(idx < len(groups[k]) for k in order):
+        for k in order:
+            if idx < len(groups[k]):
+                out.append(groups[k][idx])
         idx += 1
     return out
+
+
+def _window_class(window: _Window) -> str:
+    """Class name owning a window, parsed from its label.
+
+    Labels are ``class X`` / ``X.field`` / ``X.method (references f)``; a merged
+    window's label concatenates constituents with ``; `` and the FIRST is the
+    owner. Returns the class token so round-robin can group windows by class.
+    """
+    head = window.label.split(";", 1)[0].strip()
+    if head.startswith("class "):
+        return head[len("class ") :].strip()
+    return head.split(".", 1)[0].split(" ", 1)[0]
 
 
 def _merge_windows(windows: Sequence[_Window]) -> list[_Window]:
