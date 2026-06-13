@@ -994,6 +994,23 @@ def _reclassified_rule(
     return rule
 
 
+def _diagnose_rule(
+    *,
+    invariant_id: str = "transformers_llm_gap",
+    severity: str = "error",
+    fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A gate-confirmed Stage-1 diagnose proposal (P2b), shaped as `llm_diagnose`.
+
+    Mirrors what `llenergymeasure.api.diagnose.render_proposed_yaml` emits in its
+    `invariants` list: a normal proposed-corpus entry with provenance
+    ``llm_diagnose``. Only gate-confirmed entries ever reach the fold.
+    """
+    rule = _ast_rule(invariant_id=invariant_id, severity=severity, fields=fields or {"f_gap": True})
+    rule["added_by"] = "llm_diagnose"
+    return rule
+
+
 class TestSeededCarry:
     """The merger carries miner-unreachable invariants forward from the prior
     committed corpus so a re-mine does not clobber them: hand-shaped
@@ -1200,3 +1217,82 @@ class TestFoldReclassifiedIntoProposed:
         proposed.write_text(original)
         assert build_corpus.fold_reclassified_into_proposed({}, proposed) == 0
         assert proposed.read_text() == original
+
+
+class TestFoldDiagnoseIntoProposed:
+    """P2b persist: gate-confirmed Stage-1 diagnose proposals are folded into the
+    new pin's rules.proposed.yaml (the SSOT) so they ride the bump-PR data diff
+    for review - nothing auto-merges, the maintainer reviews + merges."""
+
+    def test_folds_diagnose_proposal_by_id(self, tmp_path: Path) -> None:
+        proposed = tmp_path / "rules.proposed.yaml"
+        proposed.write_text(
+            yaml.safe_dump(_envelope([_ast_rule(invariant_id="mined")]), sort_keys=False)
+        )
+        # The fragment shape `llem diagnose-bump --out` writes.
+        fragment = {
+            "schema_version": "1.0.0",
+            "engine": "transformers",
+            "engine_version": "5.7.0",
+            "invariants": [_diagnose_rule(invariant_id="transformers_llm_gap")],
+        }
+        folded = build_corpus.fold_diagnose_into_proposed(fragment, proposed)
+        assert folded == 1
+        doc = yaml.safe_load(proposed.read_text())
+        ids = {inv["id"]: inv for inv in doc["invariants"]}
+        assert "transformers_llm_gap" in ids
+        assert ids["transformers_llm_gap"]["added_by"] == "llm_diagnose"
+        assert "mined" in ids  # untouched
+        # Envelope preserved (the prior pin's, not the fragment's).
+        assert doc["engine"] == "transformers"
+        assert doc["schema_version"] == "1.0.0"
+
+    def test_existing_id_wins_no_clobber(self, tmp_path: Path) -> None:
+        # A deterministic miner already re-emitted the id: it is authoritative
+        # and the diagnose proposal must NOT overwrite it.
+        proposed = tmp_path / "rules.proposed.yaml"
+        proposed.write_text(
+            yaml.safe_dump(
+                _envelope([_ast_rule(invariant_id="transformers_llm_gap", message="from-mine")]),
+                sort_keys=False,
+            )
+        )
+        fragment = {
+            "schema_version": "1.0.0",
+            "engine": "transformers",
+            "engine_version": "5.7.0",
+            "invariants": [_diagnose_rule(invariant_id="transformers_llm_gap")],
+        }
+        folded = build_corpus.fold_diagnose_into_proposed(fragment, proposed)
+        assert folded == 0
+        doc = yaml.safe_load(proposed.read_text())
+        rows = [inv for inv in doc["invariants"] if inv["id"] == "transformers_llm_gap"]
+        assert len(rows) == 1
+        assert rows[0]["message_template"] == "from-mine"
+        assert rows[0]["added_by"] == "static_miner"
+
+    def test_no_invariants_is_noop(self, tmp_path: Path) -> None:
+        # A diagnose run with zero gate-confirmed entries writes no fragment in
+        # production; a fragment with an empty/absent invariants list is a no-op.
+        proposed = tmp_path / "rules.proposed.yaml"
+        original = yaml.safe_dump(_envelope([_ast_rule(invariant_id="mined")]), sort_keys=False)
+        proposed.write_text(original)
+        assert build_corpus.fold_diagnose_into_proposed({"invariants": []}, proposed) == 0
+        assert build_corpus.fold_diagnose_into_proposed({}, proposed) == 0
+        assert proposed.read_text() == original
+
+    def test_folds_multiple_id_sorted(self, tmp_path: Path) -> None:
+        proposed = tmp_path / "rules.proposed.yaml"
+        proposed.write_text(
+            yaml.safe_dump(_envelope([_ast_rule(invariant_id="m_mined")]), sort_keys=False)
+        )
+        fragment = {
+            "invariants": [
+                _diagnose_rule(invariant_id="z_gap", fields={"f_z": 1}),
+                _diagnose_rule(invariant_id="a_gap", fields={"f_a": 1}),
+            ],
+        }
+        folded = build_corpus.fold_diagnose_into_proposed(fragment, proposed)
+        assert folded == 2
+        doc = yaml.safe_load(proposed.read_text())
+        assert [inv["id"] for inv in doc["invariants"]] == ["a_gap", "m_mined", "z_gap"]

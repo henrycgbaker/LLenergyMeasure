@@ -770,6 +770,62 @@ def fold_reclassified_into_proposed(regate_report: dict[str, Any], proposed_path
     return folded
 
 
+def fold_diagnose_into_proposed(diagnose_doc: dict[str, Any], proposed_path: Path) -> int:
+    """Fold gate-confirmed Stage-1 diagnose proposals into a proposed corpus.
+
+    P2b (the diagnose subsystem's writeback): ``llem diagnose-bump`` emits a
+    standalone ``rules.proposed.yaml`` FRAGMENT holding only the gate-confirmed
+    entries (``added_by: llm_diagnose``; see
+    :func:`llenergymeasure.api.diagnose.render_proposed_yaml`). Nothing the
+    diagnose run produced is auto-merged anywhere; this persists those confirmed
+    entries into the new pin's ``rules.proposed.yaml`` (the SSOT) so they ride the
+    bump-PR data diff for the maintainer to review - the same SSOT-then-shadow
+    path the CR1 reclassified fold uses (:func:`fold_reclassified_into_proposed`).
+
+    Merge is by rule id, EXISTING wins on collision (identical to the CR1 fold and
+    the manual-seed merge: a deterministic miner that already re-emitted the id is
+    authoritative; the diagnose proposal is then redundant). The file envelope
+    (schema_version / engine / engine_version / mined_at) is preserved; only the
+    ``invariants`` list grows, id-sorted for byte-stable ``--check``.
+
+    Returns the number of entries folded in (0 when the fragment carries no
+    ``invariants``, or every id already exists).
+    """
+    candidates = diagnose_doc.get("invariants")
+    if not isinstance(candidates, list):
+        return 0
+    payloads = [c for c in candidates if isinstance(c, dict) and c.get("id")]
+    if not payloads:
+        return 0
+
+    doc = yaml.safe_load(proposed_path.read_text())
+    if not isinstance(doc, dict) or not isinstance(doc.get("invariants"), list):
+        raise ValueError(
+            f"Proposed corpus at {proposed_path} must be a mapping with an 'invariants' list."
+        )
+    invariants: list[dict[str, Any]] = doc["invariants"]
+    existing_ids = {str(inv.get("id", "")) for inv in invariants if isinstance(inv, dict)}
+
+    folded = 0
+    for payload in payloads:
+        if str(payload.get("id", "")) in existing_ids:
+            continue
+        invariants.append(dict(payload))
+        existing_ids.add(str(payload.get("id", "")))
+        folded += 1
+
+    if folded == 0:
+        return 0
+
+    doc["invariants"] = [
+        _ordered_rule(r) for r in sorted(invariants, key=lambda r: r.get("id", ""))
+    ]
+    proposed_path.write_text(
+        yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
+    )
+    return folded
+
+
 def _preserve_added_at(invariants: list[dict[str, Any]], prior: dict[bytes, str]) -> None:
     """Restore each invariant's prior ``added_at`` if its fingerprint matches.
 
@@ -1244,6 +1300,19 @@ def main(argv: list[str] | None = None) -> int:
             "(existing wins). Runs no mining; mutually exclusive with --check."
         ),
     )
+    parser.add_argument(
+        "--fold-diagnose",
+        type=Path,
+        default=None,
+        metavar="DIAGNOSE_YAML",
+        help=(
+            "Persist mode (P2b): read the gate-confirmed rules.proposed.yaml "
+            "fragment emitted by `llem diagnose-bump` at this path and fold its "
+            "invariants into the proposed corpus given by --canonical-out (the "
+            "SSOT), by id (existing wins). Runs no mining; mutually exclusive with "
+            "--check."
+        ),
+    )
     args = parser.parse_args(argv)
 
     corpus_root: Path = args.corpus_root
@@ -1262,6 +1331,25 @@ def main(argv: list[str] | None = None) -> int:
         folded = fold_reclassified_into_proposed(report, args.canonical_out)
         print(
             f"[build_corpus] folded {folded} reclassified-dormant rule(s) into "
+            f"{args.canonical_out}",
+            file=sys.stderr,
+        )
+        return 0
+
+    # Persist mode (P2b): fold gate-confirmed Stage-1 diagnose proposals into the
+    # SSOT proposed corpus, then exit. Like --fold-reclassified, this is a
+    # post-diagnose writeback step, not a mine.
+    if args.fold_diagnose is not None:
+        if args.check:
+            parser.error("--fold-diagnose is mutually exclusive with --check")
+        if args.canonical_out is None:
+            parser.error("--fold-diagnose requires --canonical-out (the target proposed.yaml)")
+        diagnose_doc = yaml.safe_load(args.fold_diagnose.read_text())
+        if not isinstance(diagnose_doc, dict):
+            parser.error(f"Diagnose fragment at {args.fold_diagnose} is not a YAML mapping")
+        folded = fold_diagnose_into_proposed(diagnose_doc, args.canonical_out)
+        print(
+            f"[build_corpus] folded {folded} gate-confirmed diagnose proposal(s) into "
             f"{args.canonical_out}",
             file=sys.stderr,
         )
