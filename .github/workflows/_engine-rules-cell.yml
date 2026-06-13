@@ -412,6 +412,36 @@ jobs:
                 --regate-out /tmp/engine-rules-alarms/${ENGINE}.regate.json
             "
 
+      - name: Persist reclassified-dormant rules into the proposed SSOT (host)
+        # CR1: the decay-alarm reconciliation reclassifies a carried dormant
+        # rule whose announcement decayed into a dormant_silent payload
+        # (reconciliation.reclassified[].invariant). That payload is otherwise
+        # only printed in the PR comment and dropped - the silent-knowledge-loss
+        # bug. Fold it into the new pin's SSOT rules.proposed.yaml (existing id
+        # wins) so it persists, then re-derive the src/ shadow so the writeback
+        # bundle and downstream diff/doc/comment all see the carried rule. Pure
+        # YAML, no engine imports; runs host-side. Skips when no prior exists
+        # (no re-gate report) and is a no-op when there is nothing to reclassify.
+        if: steps.probe.outputs.verdict == 'pass' && steps.prior.outputs.prev_outputs != ''
+        env:
+          ENGINE: ${{ inputs.engine }}
+          SAFE_VER: ${{ steps.version.outputs.safe_version }}
+        run: |
+          REGATE="/tmp/engine-rules-alarms/${ENGINE}.regate.json"
+          if [[ ! -f "$REGATE" ]]; then
+            echo "No re-gate report at ${REGATE}; nothing to persist."
+            exit 0
+          fi
+          SSOT="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
+          uv run python -m scripts.engine_producers.build_corpus \
+            --engine "${ENGINE}" \
+            --fold-reclassified "$REGATE" \
+            --canonical-out "${SSOT}/rules.proposed.yaml"
+          # Re-derive the src/ shadow from the now-folded SSOT proposed corpus
+          # (rules only; the schemas cell owns schema.discovered.json sync).
+          uv run python scripts/engine_producers/regen_engine_corpus.py \
+            --write --only rules --engine "${ENGINE}"
+
       - name: Surface trend (blindness heuristic, host)
         # Design section 6 signal 2: a pure-artefact census diff of the prior
         # pin's outputs/ against the current pin's. No engine imports; runs

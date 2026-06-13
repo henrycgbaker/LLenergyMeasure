@@ -970,34 +970,77 @@ def _manual_seed_rule(
     return rule
 
 
-class TestManualSeedCarry:
-    """The merger carries ``added_by: manual_seed`` invariants forward from the
-    prior committed corpus so a re-mine does not clobber hand-shaped,
-    runtime-proven rules the registry never re-emits."""
+def _reclassified_rule(
+    *,
+    invariant_id: str = "transformers_dormant_decayed",
+    fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A dormant rule reclassified to silent dormancy after its announcement decayed.
 
-    def test_load_carried_manual_seeds_filters_to_manual_only(self, tmp_path: Path) -> None:
+    Shaped exactly as the decay-alarm reconciliation persists it: severity
+    ``dormant``, outcome ``dormant_silent``, provenance
+    ``reclassified_decayed_announcement``. The miners never re-emit it, so it
+    must be carried forward across re-mines or the equivalence rots out.
+    """
+    rule = _ast_rule(
+        invariant_id=invariant_id, severity="dormant", fields=fields or {"f_dec": True}
+    )
+    rule["added_by"] = "reclassified_decayed_announcement"
+    rule["expected_outcome"] = {
+        "outcome": "dormant_silent",
+        "emission_channel": "none",
+        "normalised_fields": [],
+    }
+    return rule
+
+
+class TestSeededCarry:
+    """The merger carries miner-unreachable invariants forward from the prior
+    committed corpus so a re-mine does not clobber them: hand-shaped
+    ``manual_seed`` rules and ``reclassified_decayed_announcement`` rules the
+    decay-alarm persisted (the silent-knowledge-loss bug, CR1)."""
+
+    def test_load_carried_seeded_filters_to_carried_provenances(self, tmp_path: Path) -> None:
         path = tmp_path / "prior.yaml"
         path.write_text(
             yaml.safe_dump(
-                _envelope([_ast_rule(invariant_id="mined"), _manual_seed_rule()]),
+                _envelope(
+                    [
+                        _ast_rule(invariant_id="mined"),
+                        _manual_seed_rule(),
+                        _reclassified_rule(),
+                    ]
+                ),
                 sort_keys=False,
             )
         )
-        carried = build_corpus._load_carried_manual_seeds(path)
-        assert [c["id"] for c in carried] == ["transformers_bnb_load_in_4bit_xor_load_in_8bit"]
+        carried = build_corpus._load_carried_seeded(path)
+        assert {c["id"] for c in carried} == {
+            "transformers_bnb_load_in_4bit_xor_load_in_8bit",
+            "transformers_dormant_decayed",
+        }
 
-    def test_load_carried_manual_seeds_missing_corpus(self, tmp_path: Path) -> None:
-        assert build_corpus._load_carried_manual_seeds(tmp_path / "absent.yaml") == []
+    def test_load_carried_seeded_carries_reclassified_dormant(self, tmp_path: Path) -> None:
+        # CR1: a reclassified_decayed_announcement entry must be picked up by the
+        # carry so it survives the next re-mine.
+        path = tmp_path / "prior.yaml"
+        path.write_text(yaml.safe_dump(_envelope([_reclassified_rule()]), sort_keys=False))
+        carried = build_corpus._load_carried_seeded(path)
+        assert [c["id"] for c in carried] == ["transformers_dormant_decayed"]
+        assert carried[0]["added_by"] == "reclassified_decayed_announcement"
 
-    def test_load_carried_manual_seeds_invalid_yaml(self, tmp_path: Path) -> None:
+    def test_load_carried_seeded_missing_corpus(self, tmp_path: Path) -> None:
+        assert build_corpus._load_carried_seeded(tmp_path / "absent.yaml") == []
+
+    def test_load_carried_seeded_invalid_yaml(self, tmp_path: Path) -> None:
         path = tmp_path / "broken.yaml"
         path.write_text("not: valid: yaml: [")
-        assert build_corpus._load_carried_manual_seeds(path) == []
+        assert build_corpus._load_carried_seeded(path) == []
 
     def test_carried_seed_preserved_when_registry_omits_it(self) -> None:
         registry = [_ast_rule(invariant_id="mined", fields={"f1": 1})]
         carried = [_manual_seed_rule()]
-        merged = build_corpus._merge_carried_manual_seeds(registry, carried)
+        merged = build_corpus._merge_carried_seeded(registry, carried)
         ids = {r["id"] for r in merged}
         assert "transformers_bnb_load_in_4bit_xor_load_in_8bit" in ids
         assert "mined" in ids
@@ -1007,7 +1050,7 @@ class TestManualSeedCarry:
         # version must win and the carried copy must NOT be appended.
         registry = [_ast_rule(invariant_id="collide", message="machine-extracted")]
         carried = [_manual_seed_rule(invariant_id="collide")]
-        merged = build_corpus._merge_carried_manual_seeds(registry, carried)
+        merged = build_corpus._merge_carried_seeded(registry, carried)
         collide = [r for r in merged if r["id"] == "collide"]
         assert len(collide) == 1
         assert collide[0]["added_by"] == "static_miner"
@@ -1015,7 +1058,7 @@ class TestManualSeedCarry:
 
     def test_no_carried_seeds_is_identity(self) -> None:
         registry = [_ast_rule(invariant_id="mined")]
-        assert build_corpus._merge_carried_manual_seeds(registry, []) is registry
+        assert build_corpus._merge_carried_seeded(registry, []) is registry
 
     def test_carried_seed_passes_through_validation_gate(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1058,3 +1101,102 @@ class TestManualSeedCarry:
         assert "seed_stale" not in canonical
         assert "mined" in canonical
         assert "seed_stale" in result.quarantined_ids
+
+    def test_reclassified_dormant_survives_a_re_mine(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CR1: a ``reclassified_decayed_announcement`` entry persisted into a
+        pin's rules.proposed.yaml is carried forward by a subsequent re-mine.
+
+        Without the carry the miners never re-emit it and it silently rots out -
+        the cardinal silent-knowledge-loss bug. The gate is stubbed to confirm
+        it (the entry is dormant_silent, so production lands it in proposed)."""
+        import scripts.validate_rules as vr
+
+        monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
+
+        staging = tmp_path / "transformers" / "_staging"
+        _write_staging(
+            staging,
+            "transformers_static_miner.yaml",
+            _envelope([_ast_rule(invariant_id="mined", fields={"f_mined": 1})]),
+        )
+        # The prior pin's committed corpus holds a reclassified-dormant rule the
+        # miners never re-emit (it is not in the fresh staging above).
+        prior = tmp_path / "transformers" / "rules.proposed.yaml"
+        prior.write_text(yaml.safe_dump(_envelope([_reclassified_rule()]), sort_keys=False))
+
+        build_corpus.write_corpus("transformers", tmp_path)
+
+        rebuilt = yaml.safe_load(prior.read_text())
+        ids = {inv["id"]: inv for inv in rebuilt["invariants"]}
+        assert "transformers_dormant_decayed" in ids, "reclassified rule rotted out across re-mine"
+        assert (
+            ids["transformers_dormant_decayed"]["added_by"] == "reclassified_decayed_announcement"
+        )
+        assert "mined" in ids
+
+
+class TestFoldReclassifiedIntoProposed:
+    """CR1 persist: the decay alarm's reclassified-dormant payloads are folded
+    into the new pin's rules.proposed.yaml so they do not vanish after being
+    computed."""
+
+    def test_folds_reclassified_payload_by_id(self, tmp_path: Path) -> None:
+        proposed = tmp_path / "rules.proposed.yaml"
+        proposed.write_text(
+            yaml.safe_dump(_envelope([_ast_rule(invariant_id="mined")]), sort_keys=False)
+        )
+        report = {
+            "reconciliation": {
+                "reclassified": [
+                    {"id": "transformers_dormant_decayed", "invariant": _reclassified_rule()}
+                ]
+            }
+        }
+        folded = build_corpus.fold_reclassified_into_proposed(report, proposed)
+        assert folded == 1
+        doc = yaml.safe_load(proposed.read_text())
+        ids = {inv["id"]: inv for inv in doc["invariants"]}
+        assert "transformers_dormant_decayed" in ids
+        assert (
+            ids["transformers_dormant_decayed"]["added_by"] == "reclassified_decayed_announcement"
+        )
+        assert "mined" in ids  # untouched
+        # Envelope preserved.
+        assert doc["engine"] == "transformers"
+        assert doc["schema_version"] == "1.0.0"
+
+    def test_existing_id_wins_no_clobber(self, tmp_path: Path) -> None:
+        # The new mine already re-emitted the id: the machine-extracted entry is
+        # authoritative and the reclassified payload must NOT overwrite it.
+        proposed = tmp_path / "rules.proposed.yaml"
+        proposed.write_text(
+            yaml.safe_dump(
+                _envelope(
+                    [_ast_rule(invariant_id="transformers_dormant_decayed", message="from-mine")]
+                ),
+                sort_keys=False,
+            )
+        )
+        report = {
+            "reconciliation": {
+                "reclassified": [
+                    {"id": "transformers_dormant_decayed", "invariant": _reclassified_rule()}
+                ]
+            }
+        }
+        folded = build_corpus.fold_reclassified_into_proposed(report, proposed)
+        assert folded == 0
+        doc = yaml.safe_load(proposed.read_text())
+        rows = [inv for inv in doc["invariants"] if inv["id"] == "transformers_dormant_decayed"]
+        assert len(rows) == 1
+        assert rows[0]["message_template"] == "from-mine"
+        assert rows[0]["added_by"] == "static_miner"
+
+    def test_no_reconciliation_is_noop(self, tmp_path: Path) -> None:
+        proposed = tmp_path / "rules.proposed.yaml"
+        original = yaml.safe_dump(_envelope([_ast_rule(invariant_id="mined")]), sort_keys=False)
+        proposed.write_text(original)
+        assert build_corpus.fold_reclassified_into_proposed({}, proposed) == 0
+        assert proposed.read_text() == original

@@ -633,21 +633,38 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
     return out
 
 
-def _load_carried_manual_seeds(corpus_path: Path) -> list[dict[str, Any]]:
-    """Read ``added_by: manual_seed`` invariants from the prior committed corpus.
+# Provenances that the miners never re-emit and so must be carried forward
+# from the prior committed corpus on every re-mine, or they silently rot out:
+# - ``manual_seed`` - hand-shaped cross-field rules the miners cannot reach.
+# - ``reclassified_decayed_announcement`` - dormant rules whose announcement
+#   decayed and were reclassified to ``dormant_silent`` by the decay-alarm
+#   reconciliation (validate_rules.RECLASSIFIED_DECAYED_ANNOUNCEMENT); the
+#   equivalence still holds, so the carry must survive subsequent re-mines.
+_CARRIED_PROVENANCES: frozenset[str] = frozenset(
+    {"manual_seed", "reclassified_decayed_announcement"}
+)
+
+
+def _load_carried_seeded(corpus_path: Path) -> list[dict[str, Any]]:
+    """Read carried-provenance invariants from the prior committed corpus.
 
     The miners emit a registry that the merge step turns into the canonical
-    corpus, but some runtime-proven invariants are cross-field shapes the
-    miners cannot reach yet (e.g. the transformers BNB ``load_in_4bit`` XOR
-    ``load_in_8bit`` rule, the vllm ``max_num_batched_tokens`` budget rule).
-    Those are hand-shaped once and tagged ``manual_seed``; without carrying
-    them forward, every re-mine would clobber them because the registry never
-    re-emits them.
+    corpus, but some invariants are never re-emitted by the miners and would be
+    clobbered by every re-mine without an explicit carry. Two provenances are
+    carried (see ``_CARRIED_PROVENANCES``):
 
-    Returns the carried manual-seed invariant dicts (a copy of each). Empty
-    when the corpus is missing, unparsable, or carries no manual-seed entries.
-    A parse failure warns and falls open rather than silently dropping the
-    carry - the operator must see that a runtime-proven rule may be lost.
+    - ``manual_seed`` - cross-field shapes the miners cannot reach yet (e.g. the
+      transformers BNB ``load_in_4bit`` XOR ``load_in_8bit`` rule, the vllm
+      ``max_num_batched_tokens`` budget rule), hand-shaped once.
+    - ``reclassified_decayed_announcement`` - a carried dormant rule whose
+      positive announcement decayed at a bump and was reclassified to silent
+      dormancy by the decay-alarm reconciliation; the field is still ignored
+      upstream, so the equivalence must persist across re-mines.
+
+    Returns the carried invariant dicts (a copy of each). Empty when the corpus
+    is missing, unparsable, or carries no such entries. A parse failure warns
+    and falls open rather than silently dropping the carry - the operator must
+    see that a runtime-proven rule may be lost.
     """
     if not corpus_path.exists():
         return []
@@ -655,8 +672,8 @@ def _load_carried_manual_seeds(corpus_path: Path) -> list[dict[str, Any]]:
         prior = yaml.safe_load(corpus_path.read_text())
     except (yaml.YAMLError, OSError) as exc:
         _log.warning(
-            "Could not read prior corpus at %s for manual-seed carry: %s. "
-            "Hand-shaped runtime-proven rules may be dropped this build.",
+            "Could not read prior corpus at %s for carried-rule carry: %s. "
+            "Hand-shaped runtime-proven and reclassified-dormant rules may be dropped this build.",
             corpus_path,
             exc,
         )
@@ -665,23 +682,24 @@ def _load_carried_manual_seeds(corpus_path: Path) -> list[dict[str, Any]]:
         return []
     carried: list[dict[str, Any]] = []
     for invariant in prior.get("invariants") or []:
-        if isinstance(invariant, dict) and invariant.get("added_by") == "manual_seed":
+        if isinstance(invariant, dict) and invariant.get("added_by") in _CARRIED_PROVENANCES:
             carried.append(dict(invariant))
     return carried
 
 
-def _merge_carried_manual_seeds(
+def _merge_carried_seeded(
     candidates: list[dict[str, Any]], carried: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Merge carried manual-seed invariants into the registry candidate list by id.
+    """Merge carried-provenance invariants into the registry candidate list by id.
 
-    Registry entries win on id collision: a manual seed that the miners have
-    since learned to extract is superseded by the machine-extracted version (so
-    the seed decays out cleanly once it is redundant). Carried entries that the
-    registry does not re-emit are appended; they then flow through the SAME
-    validation gate as registry entries, so a carried rule that no longer holds
-    upstream is dropped by the gate (and surfaced by the decay alarm), not
-    blindly trusted. Output stays id-sorted for byte-stable ``--check``.
+    Registry entries win on id collision: a manual seed (or reclassified rule)
+    that the miners have since learned to extract is superseded by the
+    machine-extracted version (so the carry decays out cleanly once it is
+    redundant). Carried entries that the registry does not re-emit are appended;
+    they then flow through the SAME validation gate as registry entries, so a
+    carried rule that no longer holds upstream is dropped by the gate (and
+    surfaced by the decay alarm), not blindly trusted. Output stays id-sorted
+    for byte-stable ``--check``.
     """
     if not carried:
         return candidates
@@ -692,6 +710,64 @@ def _merge_carried_manual_seeds(
             merged.append(seed)
     merged.sort(key=lambda r: r.get("id", ""))
     return merged
+
+
+def fold_reclassified_into_proposed(regate_report: dict[str, Any], proposed_path: Path) -> int:
+    """Fold the decay alarm's reclassified-dormant payloads into a proposed corpus.
+
+    CR1 (the silent-knowledge-loss fix): when a carried dormant rule's
+    announcement decays, ``reconcile_regate_report`` builds the correct
+    ``dormant_silent`` carry payload (``reconciliation.reclassified[].invariant``),
+    but that payload is otherwise only printed in the PR comment and discarded.
+    This persists it into the new pin's ``rules.proposed.yaml`` (the SSOT) so it
+    survives - the ``_load_carried_seeded`` carry then keeps it across the next
+    re-mine.
+
+    Merge is by rule id, EXISTING wins on collision (mirrors the manual-seed
+    merge: if the new mine already re-emitted the id, the machine-extracted
+    version is authoritative and the reclassified carry is redundant). The file
+    envelope (schema_version / engine / engine_version / mined_at) is preserved;
+    only the ``invariants`` list grows. Output stays id-sorted for byte-stable
+    ``--check``.
+
+    Returns the number of entries folded in (0 when there is no reconciliation
+    block, no reclassified entries, or every id already exists).
+    """
+    reclassified = (regate_report.get("reconciliation") or {}).get("reclassified") or []
+    payloads = [
+        entry["invariant"]
+        for entry in reclassified
+        if isinstance(entry, dict) and isinstance(entry.get("invariant"), dict)
+    ]
+    if not payloads:
+        return 0
+
+    doc = yaml.safe_load(proposed_path.read_text())
+    if not isinstance(doc, dict) or not isinstance(doc.get("invariants"), list):
+        raise ValueError(
+            f"Proposed corpus at {proposed_path} must be a mapping with an 'invariants' list."
+        )
+    invariants: list[dict[str, Any]] = doc["invariants"]
+    existing_ids = {str(inv.get("id", "")) for inv in invariants if isinstance(inv, dict)}
+
+    folded = 0
+    for payload in payloads:
+        if str(payload.get("id", "")) in existing_ids:
+            continue
+        invariants.append(dict(payload))
+        existing_ids.add(str(payload.get("id", "")))
+        folded += 1
+
+    if folded == 0:
+        return 0
+
+    doc["invariants"] = [
+        _ordered_rule(r) for r in sorted(invariants, key=lambda r: r.get("id", ""))
+    ]
+    proposed_path.write_text(
+        yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
+    )
+    return folded
 
 
 def _preserve_added_at(invariants: list[dict[str, Any]], prior: dict[bytes, str]) -> None:
@@ -967,15 +1043,16 @@ def build_corpus_text_and_outcome(
     envelopes = [_load_staging(p) for p in paths]
     candidates, envelope = merge_staging(envelopes)
 
-    # Carry hand-shaped runtime-proven manual-seed invariants from the prior
-    # committed corpus: the miners never re-emit cross-field shapes they cannot
-    # reach (BNB XOR, vllm batched-token budget), so merge them in by id
-    # (registry wins on collision) BEFORE the validation gate. Carried entries
-    # then face the same gate as registry entries - a stale seed is dropped, not
-    # blindly trusted.
+    # Carry invariants the miners never re-emit from the prior committed corpus:
+    # hand-shaped manual seeds (BNB XOR, vllm batched-token budget) and
+    # reclassified-dormant rules whose announcement decayed (the decay-alarm
+    # persists these into proposed.yaml; without this carry they would rot out
+    # on the next re-mine). Merge them in by id (registry wins on collision)
+    # BEFORE the validation gate. Carried entries then face the same gate as
+    # registry entries - a stale carry is dropped, not blindly trusted.
     prior_corpus_path = canonical_out or _canonical_path(corpus_root, engine)
-    carried_seeds = _load_carried_manual_seeds(prior_corpus_path)
-    candidates = _merge_carried_manual_seeds(candidates, carried_seeds)
+    carried_seeds = _load_carried_seeded(prior_corpus_path)
+    candidates = _merge_carried_seeded(candidates, carried_seeds)
     candidates_count = len(candidates)
 
     # Preserve added_at across re-mines: invariants whose fingerprint matches a
@@ -1155,9 +1232,40 @@ def main(argv: list[str] | None = None) -> int:
             "rebuilt corpus differs from the on-disk canonical YAML."
         ),
     )
+    parser.add_argument(
+        "--fold-reclassified",
+        type=Path,
+        default=None,
+        metavar="REGATE_JSON",
+        help=(
+            "Persist mode (CR1): read the decay-alarm re-gate JSON report at this "
+            "path and fold its reconciliation.reclassified[].invariant payloads "
+            "into the proposed corpus given by --canonical-out (the SSOT), by id "
+            "(existing wins). Runs no mining; mutually exclusive with --check."
+        ),
+    )
     args = parser.parse_args(argv)
 
     corpus_root: Path = args.corpus_root
+
+    # Persist mode (CR1): fold the decay alarm's reclassified-dormant payloads
+    # into the SSOT proposed corpus, then exit. Mining/extraction is skipped -
+    # this is a post-re-gate writeback step, not a mine.
+    if args.fold_reclassified is not None:
+        if args.check:
+            parser.error("--fold-reclassified is mutually exclusive with --check")
+        if args.canonical_out is None:
+            parser.error("--fold-reclassified requires --canonical-out (the target proposed.yaml)")
+        report = yaml.safe_load(args.fold_reclassified.read_text())
+        if not isinstance(report, dict):
+            parser.error(f"Re-gate report at {args.fold_reclassified} is not a JSON object")
+        folded = fold_reclassified_into_proposed(report, args.canonical_out)
+        print(
+            f"[build_corpus] folded {folded} reclassified-dormant rule(s) into "
+            f"{args.canonical_out}",
+            file=sys.stderr,
+        )
+        return 0
 
     if not args.skip_extract:
         try:
