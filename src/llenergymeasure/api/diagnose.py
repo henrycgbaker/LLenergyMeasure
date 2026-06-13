@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import subprocess
 import urllib.request
 from collections.abc import Callable, Sequence
@@ -385,6 +386,108 @@ def config_surface_symbol_requests(
     return requests
 
 
+def _module_from_file(rel: str) -> str:
+    """Dotted module path for a source-relative file path.
+
+    ``vllm/config/scheduler.py`` -> ``vllm.config.scheduler``;
+    ``config.py`` -> ``config``. The leading package segment is the engine root
+    module, so the result is a fully-qualified import path. Even when the class
+    is re-exported at a shorter path, ``resolve_native_type``'s module-probe
+    (strategy 3) falls back to the bare class name across the engine's modules,
+    so a best-effort module prefix only ever helps the first resolution attempt.
+    """
+    stem = rel[:-3] if rel.endswith(".py") else rel
+    return stem.replace("/", ".").strip(".")
+
+
+@dataclass(frozen=True)
+class _ClassSpan:
+    """A config class's 1-based inclusive line span and fully-qualified name."""
+
+    start: int
+    end: int
+    native_type: str
+
+
+def _config_class_index(
+    *, source_root: Path, config_surface_files: Sequence[str]
+) -> dict[str, list[_ClassSpan]]:
+    """Map each config-surface file to its config classes' spans + native types.
+
+    Built from the SAME AST parse the windowing uses, so the line numbers match
+    the windowed source the model cites. Lets a 1b citation (``file:line``) be
+    mapped to the enclosing class WITHOUT trusting the model to spell the import
+    path - the robust route CR3 requires.
+    """
+    index: dict[str, list[_ClassSpan]] = {}
+    for rel in config_surface_files:
+        path = source_root / rel
+        if not path.is_file():
+            continue
+        body = path.read_text()
+        if not body.strip():
+            continue
+        try:
+            module = ast.parse(body)
+        except SyntaxError:
+            continue
+        module_path = _module_from_file(rel)
+        spans = [
+            _ClassSpan(
+                start=cls.lineno,
+                end=cls.end_lineno or cls.lineno,
+                native_type=f"{module_path}.{cls.name}" if module_path else cls.name,
+            )
+            for cls in _iter_config_classes(module)
+        ]
+        if spans:
+            index[rel] = spans
+    return index
+
+
+def _parse_citation(citation: str) -> tuple[str, int] | None:
+    """Extract ``(file, line)`` from a ``file:line`` / ``file:lo-hi`` citation.
+
+    Returns the first cited line (the anchor used to find the enclosing class),
+    or ``None`` when the citation carries no parseable ``file:line``. Tolerant of
+    a trailing line RANGE (``...:274-280`` -> line 274) and surrounding prose.
+    """
+    match = re.search(r"([\w./-]+\.py):(\d+)", citation)
+    if match is None:
+        return None
+    return match.group(1), int(match.group(2))
+
+
+def _native_type_for_citation(citation: str, class_index: dict[str, list[_ClassSpan]]) -> str:
+    """Resolve a 1b diagnosis citation to the enclosing class's native_type.
+
+    Maps the cited ``file:line`` to the config class whose span contains that
+    line. Returns the fully-qualified ``{module}.{class}`` so the gate can
+    construct it; ``""`` when the citation does not resolve (no parseable
+    file:line, file not on the surface, or line outside every class span) - the
+    gate then reports infra_error honestly rather than silently confirming.
+    """
+    parsed = _parse_citation(citation)
+    if parsed is None:
+        return ""
+    cited_file, line = parsed
+    spans = class_index.get(cited_file)
+    if spans is None:
+        # The citation file may be given with a different prefix than the
+        # surface-relative key; match on basename as a fallback.
+        for rel, rel_spans in class_index.items():
+            if rel.endswith(cited_file) or cited_file.endswith(rel):
+                spans = rel_spans
+                break
+    if not spans:
+        return ""
+    enclosing = [s for s in spans if s.start <= line <= s.end]
+    if not enclosing:
+        return ""
+    # Innermost class wins (smallest span) when classes nest.
+    return min(enclosing, key=lambda s: s.end - s.start).native_type
+
+
 def _assemble_source(
     *,
     source_root: Path,
@@ -593,13 +696,21 @@ class ContainerGateRunner:
         return list(json.loads(out_path.read_text()))
 
 
-def _proposal_from_diagnosis(diag: Diagnosis, carried: dict[str, Any] | None) -> dict[str, Any]:
+def _proposal_from_diagnosis(
+    diag: Diagnosis,
+    carried: dict[str, Any] | None,
+    *,
+    fallback_native_type: str = "",
+) -> dict[str, Any]:
     """Assemble a gate proposal dict from a diagnosis + its carried entry (if any).
 
     The carried entry supplies the structural shape the model does not emit
     (``native_type``, ``severity``, ``match``, ``expected_outcome``); the
     diagnosis supplies the (possibly corrected) kwargs probes. For a 1b gap with
-    no carried counterpart, the model's classification routes severity.
+    no carried counterpart, the model's classification routes severity and
+    ``fallback_native_type`` (the windowed class identity the citation resolves
+    to) supplies the native_type the gate needs to construct - without it a 1b
+    proposal always gates infra_error (CR3).
     """
     carried = carried or {}
     severity = str(carried.get("severity", "")).lower()
@@ -608,7 +719,7 @@ def _proposal_from_diagnosis(diag: Diagnosis, carried: dict[str, Any] | None) ->
     return {
         "rule_id": diag.rule_id,
         "classification": diag.classification,
-        "native_type": carried.get("native_type") or "",
+        "native_type": carried.get("native_type") or fallback_native_type,
         "severity": severity,
         "match": carried.get("match") or {"fields": {}},
         "expected_outcome": carried.get("expected_outcome"),
@@ -713,8 +824,14 @@ def _gate_and_split(
     diagnoses: list[Diagnosis],
     carried_by_id: dict[str, dict[str, Any]],
     gate_runner: GateRunner,
+    native_type_for: Callable[[Diagnosis], str] | None = None,
 ) -> DiagnoseResult:
-    """Gate the well-formed diagnoses and split into confirmed / not / unconfirmed."""
+    """Gate the well-formed diagnoses and split into confirmed / not / unconfirmed.
+
+    ``native_type_for`` supplies a fallback native_type for a diagnosis that has
+    no carried counterpart (1b gap-diagnose), resolved from the cited windowed
+    class so the gate can construct the probe (CR3).
+    """
     result = DiagnoseResult(engine=engine, engine_version=engine_version, mode=mode)
 
     gateable: list[Diagnosis] = []
@@ -735,7 +852,12 @@ def _gate_and_split(
         return result
 
     proposals = [
-        _proposal_from_diagnosis(diag, carried_by_id.get(diag.rule_id)) for diag in gateable
+        _proposal_from_diagnosis(
+            diag,
+            carried_by_id.get(diag.rule_id),
+            fallback_native_type=native_type_for(diag) if native_type_for is not None else "",
+        )
+        for diag in gateable
     ]
     proposal_by_id = {p["rule_id"]: p for p in proposals}
     verdicts = gate_runner(engine, proposals)
@@ -866,6 +988,13 @@ def diagnose_gaps(
         engine=engine, new_version=new_version, schema=schema, source=window.source
     )
     diagnoses = parse_diagnoses(model.complete(prompt))
+    # Thread the windowed class identity into each gap proposal: 1b has no
+    # carried entry, so without this the proposal's native_type is empty and the
+    # gate can never construct it (always infra_error). The citation file:line
+    # maps to the enclosing config class's fully-qualified name (CR3).
+    class_index = _config_class_index(
+        source_root=source_root, config_surface_files=config_surface_files
+    )
     result = _gate_and_split(
         engine=engine,
         engine_version=new_version,
@@ -873,6 +1002,7 @@ def diagnose_gaps(
         diagnoses=diagnoses,
         carried_by_id={},
         gate_runner=gate_runner,
+        native_type_for=lambda diag: _native_type_for_citation(diag.citation, class_index),
     )
     result.source_truncated = window.truncated
     result.source_missing = window.missing

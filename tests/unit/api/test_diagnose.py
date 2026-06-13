@@ -588,3 +588,106 @@ def test_emitted_yaml_loads_with_llm_diagnose_provenance(tmp_path: Path) -> None
     invariants = loader.load_rules("transformers").invariants
     assert len(invariants) == 1
     assert invariants[0].added_by == "llm_diagnose"
+
+
+# ---------------------------------------------------------------------------
+# CR3: 1b gap proposals carry a resolvable native_type
+# ---------------------------------------------------------------------------
+
+
+def test_native_type_for_citation_maps_to_fully_qualified_class(tmp_path: Path) -> None:
+    from llenergymeasure.api.diagnose import (
+        _config_class_index,
+        _native_type_for_citation,
+    )
+
+    (tmp_path / "vllm").mkdir()
+    (tmp_path / "vllm" / "config.py").write_text(
+        "class SchedulerConfig:\n    max_num_seqs: int = 256\n    def check(self):\n"
+        "        return self.max_num_seqs\n"
+    )
+    index = _config_class_index(source_root=tmp_path, config_surface_files=["vllm/config.py"])
+    # Citation file:line inside the class span resolves to {module}.{class}.
+    assert _native_type_for_citation("vllm/config.py:2", index) == "vllm.config.SchedulerConfig"
+    # A trailing line RANGE is tolerated (anchors on the first line).
+    assert (
+        _native_type_for_citation("see vllm/config.py:2-3", index) == "vllm.config.SchedulerConfig"
+    )
+    # An unparseable / off-surface citation yields empty (gate reports infra_error).
+    assert _native_type_for_citation("somewhere unknown", index) == ""
+    assert _native_type_for_citation("vllm/config.py:999", index) == ""
+
+
+def test_gap_proposal_carries_non_empty_native_type(tmp_path: Path) -> None:
+    """CR3: a 1b diagnosis (no carried entry) yields a gate proposal whose
+    native_type is the cited class's FQN - non-empty, so the gate can construct
+    it instead of reporting infra_error on an empty native_type."""
+    (tmp_path / "config.py").write_text(
+        "class Config:\n    n: int = 1\n    def validate(self):\n        return self.n\n"
+    )
+    raw = json.dumps(
+        {
+            "diagnoses": [
+                {
+                    "rule_id": "transformers_gap_bound",
+                    "classification": "rule_morphed",
+                    "reason": "constraint only in docstring",
+                    "citation": "config.py:3",
+                    "kwargs_positive": {"n": -1},
+                    "kwargs_negative": {"n": 1},
+                }
+            ]
+        }
+    )
+
+    seen_native_types: list[str] = []
+
+    def asserting_gate(engine: str, proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out = []
+        for p in proposals:
+            seen_native_types.append(p["native_type"])
+            out.append({"rule_id": p["rule_id"], "verdict": "confirmed"})
+        return out
+
+    result = diagnose_gaps(
+        engine="transformers",
+        new_version="5.7.0",
+        schema={"engine": "transformers", "engine_params": {"n": {}}},
+        source_root=tmp_path,
+        config_surface_files=["config.py"],
+        model=_StubModel(raw),
+        gate_runner=asserting_gate,
+    )
+    # The gate saw a non-empty, fully-qualified native_type (not the old "").
+    assert seen_native_types == ["config.Config"]
+    assert result.confirmed[0]["native_type"] == "config.Config"
+
+
+def test_gap_native_type_resolves_via_constructor_resolver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The native_type a 1b citation produces is accepted by the constructor
+    resolver (stubbed) - proving the threaded identity is resolver-shaped, the
+    exact gap that made every 1b proposal infra_error."""
+    import scripts._engine_constructors as constructors
+    from llenergymeasure.api.diagnose import _config_class_index, _native_type_for_citation
+
+    (tmp_path / "config.py").write_text(
+        "class Config:\n    n: int = 1\n    def validate(self):\n        return self.n\n"
+    )
+    index = _config_class_index(source_root=tmp_path, config_surface_files=["config.py"])
+    native_type = _native_type_for_citation("config.py:3", index)
+    assert native_type == "config.Config"
+
+    resolved: list[str] = []
+
+    class _FakeConfig:  # what the resolver would hand back
+        pass
+
+    def _stub_resolve(engine: str, nt: str) -> Any:
+        resolved.append(nt)
+        return _FakeConfig
+
+    monkeypatch.setattr(constructors, "resolve_native_type", _stub_resolve)
+    assert constructors.resolve_native_type("transformers", native_type) is _FakeConfig
+    assert resolved == ["config.Config"]
