@@ -406,7 +406,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                         if self._interrupt_event.is_set():
                             break
 
-                result = self._run_one(config, mp_ctx, index=i + 1, total=len(ordered))
+                result = self._run_one(config, mp_ctx, index=i + 1)
                 results.append(result)
 
                 # Circuit breaker integration: update state based on result.
@@ -607,7 +607,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             # Fall back to terminal countdown
             run_gap(seconds, label, self._interrupt_event)
 
-    def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int, total: int) -> Any:
+    def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int) -> Any:
         """Dispatch one experiment via Docker or subprocess, collect result or failure dict.
 
         Checks runner_specs for this experiment's engine first. If a Docker spec is

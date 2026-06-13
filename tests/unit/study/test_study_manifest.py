@@ -5,7 +5,6 @@ Tests for:
 - StudyManifest model (distinct from StudyResult)
 - ManifestWriter with atomic writes
 - create_study_dir output directory helper
-- experiment_result_filename flat-file naming
 - build_config_summary helper
 """
 
@@ -26,7 +25,6 @@ from llenergymeasure.study.manifest import (
     StudyManifest,
     build_config_summary,
     create_study_dir,
-    experiment_result_filename,
 )
 from tests.conftest import TEST_CONFIG_HASH
 
@@ -331,30 +329,6 @@ def test_create_study_dir_raises_study_error_on_failure(tmp_path: Path) -> None:
         pytest.raises(StudyError),
     ):
         create_study_dir(name="sweep", output_dir=tmp_path)
-
-
-# ---------------------------------------------------------------------------
-# experiment_result_filename tests
-# ---------------------------------------------------------------------------
-
-
-def test_experiment_result_filename() -> None:
-    result = experiment_result_filename(
-        model="meta-llama/Llama-3.1-8B",
-        engine="transformers",
-        config_hash="abcdef1234567890",
-    )
-    assert result == "Llama-3.1-8B-transformers_abcdef12.json"
-
-
-def test_experiment_result_filename_parquet() -> None:
-    result = experiment_result_filename(
-        model="meta-llama/Llama-3.1-8B",
-        engine="transformers",
-        config_hash="abcdef1234567890",
-        extension=".parquet",
-    )
-    assert result == "Llama-3.1-8B-transformers_abcdef12.parquet"
 
 
 # ---------------------------------------------------------------------------

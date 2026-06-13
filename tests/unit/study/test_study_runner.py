@@ -446,10 +446,10 @@ def test_sigint_first_ctrl_c_marks_manifest_interrupted() -> None:
 
     original_run_one = runner._run_one
 
-    def sigint_during_run_one(config, mp_ctx, index=1, total=1):
+    def sigint_during_run_one(config, mp_ctx, index=1):
         """Call original _run_one, then simulate SIGINT having fired."""
         # Run the real experiment dispatch (mocked below)
-        result = original_run_one(config, mp_ctx, index=index, total=total)
+        result = original_run_one(config, mp_ctx, index=index)
         # Simulate first Ctrl+C arriving after experiment completes
         runner._interrupt_event.set()
         runner._interrupt_count = 1
@@ -1333,9 +1333,9 @@ def test_grace_period_uses_killpg(study_config: StudyConfig) -> None:
         # Patch run() to skip the experiment loop and go directly to grace period
         original_run_one = runner._run_one
 
-        def run_one_with_interrupt(config, mp_ctx, index=1, total=1):
+        def run_one_with_interrupt(config, mp_ctx, index=1):
             # Start the process, then let the grace period logic fire
-            result = original_run_one(config, mp_ctx, index=index, total=total)
+            result = original_run_one(config, mp_ctx, index=index)
             return result
 
         with (
