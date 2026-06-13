@@ -1,10 +1,10 @@
 """Trimmed tensorrt-1.2-style ``plugin/plugin.py`` excerpt for walker fixtures.
 
 Reproduces the PluginConfig shape the study GT found entirely invisible to flat
-entry-point introspection: ~20 ``Optional[Literal[...]]`` membership fields plus
-a module-level ``Literal`` alias (``DefaultPluginDtype``) that several fields are
-typed against. The alias resolution is what turns those aliased fields from
-"membership unknown" into a probeable allowlist (the plugin-literal fold).
+entry-point introspection: ~20 membership fields. The 10 inline ``Literal[...]``
+fields surface a closed membership set; the 10 fields typed against a
+module-level ``Literal`` alias (``DefaultPluginDtype``) do NOT, since the
+declarative walker only resolves Literals written inline at the annotation.
 
 NOT importable tensorrt_llm source - a hand-trimmed structural excerpt. No
 engine install required. The plugin/ directory layout exercises the
@@ -17,16 +17,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-# Module-level Literal alias: many plugin fields are typed Optional[<alias>].
+# Module-level Literal alias: several plugin fields are typed Optional[<alias>].
 DefaultPluginDtype = Literal["float16", "bfloat16", "float32"]
-
-# A module-level lookup-map allowlist (keys are the accepted string values).
-STR_DTYPE_TO_BINDING = {
-    "float16": 0,
-    "bfloat16": 1,
-    "float32": 2,
-    "int8": 3,
-}
 
 
 class PluginConfig(BaseModel):

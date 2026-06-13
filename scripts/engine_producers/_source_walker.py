@@ -18,12 +18,11 @@ the study found citation pinning survives none of the observed bumps):
    ``maximum`` / ...) are returned as canonical JSON Schema fragments for the
    schema; the per-engine miner routes them.
 
-2. **Class-surface enumeration** (carry-forward P5 + P7 + P8). A generalised
-   subpackage glob, an AST ``ClassDef`` walk discovering config classes beyond
-   entry-point reachability (sibling and nested classes), and module-level
-   collection lifts (module-scope ``Literal`` aliases, enum globals, lookup-map
-   allowlists). These surface the 20-80+ extra config classes per cell the
-   study's ground truth found beyond flat entry-point introspection.
+2. **Class-surface enumeration** (carry-forward P5 + P7). A generalised
+   subpackage glob and an AST ``ClassDef`` walk discovering config classes beyond
+   entry-point reachability (sibling and nested classes). These surface the
+   20-80+ extra config classes per cell the study's ground truth found beyond
+   flat entry-point introspection.
 
 All functions are pure (AST + text in, data out): no probing, no imports of the
 target engine, no time-based seeds. Suitable for CI floors that must stay
@@ -90,95 +89,6 @@ def iter_config_classes(
 
 
 # ---------------------------------------------------------------------------
-# Module-level collection lifts (P8)
-# ---------------------------------------------------------------------------
-
-
-def module_literal_aliases(module: ast.Module) -> dict[str, list[Any]]:
-    """Module-scope ``Name = Literal[...]`` aliases mapped to their VALUES.
-
-    TRT-LLM's plugin config declares e.g. ``DefaultPluginDtype = Literal[...]``
-    and types many fields ``Optional[DefaultPluginDtype]``; resolving the alias
-    to its values lets those fields emit a probeable membership allowlist (the
-    plugin-literal fold). Only closed (all-constant) Literals are captured -
-    an alias with a non-constant member yields no entry.
-    """
-    aliases: dict[str, list[Any]] = {}
-    for stmt in module.body:
-        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
-            continue
-        target = stmt.targets[0]
-        if not isinstance(target, ast.Name):
-            continue
-        # The RHS must itself be a ``Literal[...]`` subscript - not merely contain
-        # one buried in a larger expression - to count as a type alias.
-        values = _literal_subscript_values(stmt.value)
-        if values is not None:
-            aliases[target.id] = values
-    return aliases
-
-
-def module_enum_globals(module: ast.Module) -> dict[str, list[Any]]:
-    """Module-scope ``enum.Enum`` subclasses mapped to their member VALUES.
-
-    Matches a ``ClassDef`` whose bases name an ``Enum`` family
-    (``Enum`` / ``IntEnum`` / ``StrEnum`` / ``Flag`` / ``IntFlag``). Members are
-    ``NAME = <constant>`` class-body assignments; the constant values become the
-    membership allowlist. Auto-valued members (``auto()``) and non-constant
-    members are skipped, so a partially-dynamic enum surfaces only its constants.
-    """
-    enum_bases = {"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag"}
-    enums: dict[str, list[Any]] = {}
-    for node in ast.walk(module):
-        if not isinstance(node, ast.ClassDef):
-            continue
-        base_names = {_base_name(b) for b in node.bases}
-        if not (base_names & enum_bases):
-            continue
-        values: list[Any] = []
-        for stmt in node.body:
-            if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
-                continue
-            tgt = stmt.targets[0]
-            if not isinstance(tgt, ast.Name) or tgt.id.startswith("_"):
-                continue
-            if isinstance(stmt.value, ast.Constant):
-                values.append(stmt.value.value)
-        if values:
-            enums[node.name] = values
-    return enums
-
-
-def module_lookup_maps(module: ast.Module) -> dict[str, list[Any]]:
-    """Module-scope dict-literal lookup maps mapped to their KEY sets.
-
-    Captures allowlist-style constants such as vllm's
-    ``STR_DTYPE_TO_TORCH_DTYPE = {"float16": ..., "bfloat16": ...}`` - the keys
-    are the accepted string values for the field the map gates. Only string-keyed
-    dict literals with at least two constant keys are captured (avoids flagging
-    small config dicts); values are ignored (often opaque torch/runtime objects).
-    """
-    maps: dict[str, list[Any]] = {}
-    for stmt in module.body:
-        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
-            continue
-        target = stmt.targets[0]
-        if not isinstance(target, ast.Name) or not isinstance(stmt.value, ast.Dict):
-            continue
-        keys: list[Any] = []
-        ok = True
-        for key in stmt.value.keys:
-            if isinstance(key, ast.Constant) and isinstance(key.value, str):
-                keys.append(key.value)
-            else:
-                ok = False
-                break
-        if ok and len(keys) >= 2:
-            maps[target.id] = keys
-    return maps
-
-
-# ---------------------------------------------------------------------------
 # Declarative-constraint walker (P3 + P4, study Primitive 8)
 # ---------------------------------------------------------------------------
 
@@ -202,7 +112,6 @@ _FIELD_LIKE_CALLS = {"Field", "Meta", "conint", "confloat", "PositiveInt", "Posi
 def walk_declarative_constraints(
     module: ast.Module,
     *,
-    literal_aliases: dict[str, list[Any]] | None = None,
     suffixes: tuple[str, ...] = ("Config", "Params", "Args"),
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """Extract per-class, per-field declarative constraints as JSON Schema fragments.
@@ -211,8 +120,7 @@ def walk_declarative_constraints(
     field fragment may carry numeric bounds (``minimum`` / ``maximum`` /
     ``exclusiveMinimum`` / ``exclusiveMaximum`` / ``multipleOf`` / length / items
     bounds) lifted from a ``Field(...)`` / ``Meta(...)`` / ``conint(...)`` call,
-    and/or an ``enum`` membership list lifted from a ``Literal[...]`` annotation,
-    a module-level Literal alias, or - resolved by the caller - an enum global.
+    and/or an ``enum`` membership list lifted from a ``Literal[...]`` annotation.
 
     These are *field-level* facts; the per-engine miner merges them onto the
     matching schema field. Cross-field facts (one field constrains another) are
@@ -221,18 +129,15 @@ def walk_declarative_constraints(
     proposals. This keeps the declarative walker's output schema-shaped, matching
     how the live ``_pydantic_lift`` splits its work.
     """
-    aliases = literal_aliases or {}
     out: dict[str, dict[str, dict[str, Any]]] = {}
     for cls in iter_config_classes(module, suffixes=suffixes):
-        fields = _class_field_constraints(cls, aliases)
+        fields = _class_field_constraints(cls)
         if fields:
             out[cls.name] = fields
     return out
 
 
-def _class_field_constraints(
-    cls: ast.ClassDef, aliases: dict[str, list[Any]]
-) -> dict[str, dict[str, Any]]:
+def _class_field_constraints(cls: ast.ClassDef) -> dict[str, dict[str, Any]]:
     fields: dict[str, dict[str, Any]] = {}
     for stmt in cls.body:
         if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.target, ast.Name):
@@ -247,8 +152,8 @@ def _class_field_constraints(
             bounds.update(_bounds_in_call(stmt.value))
         for key, value in bounds.items():
             fragment.setdefault(key, value)
-        # Membership: Literal[...] / alias / enum-typed annotation.
-        members = _membership_values(stmt.annotation, aliases)
+        # Membership: Literal[...] / Optional[Literal[...]] annotation.
+        members = _membership_values(stmt.annotation)
         if members:
             fragment["enum"] = members
         if fragment:
@@ -284,20 +189,13 @@ def _bounds_in_annotation(annotation: ast.expr) -> dict[str, Any]:
     return bounds
 
 
-def _membership_values(annotation: ast.expr, aliases: dict[str, list[Any]]) -> list[Any] | None:
-    """Allowed values when the annotation is a Literal / Literal-alias.
+def _membership_values(annotation: ast.expr) -> list[Any] | None:
+    """Allowed values when the annotation is (or wraps) a ``Literal[...]``.
 
     Unwraps ``Optional[...]`` / ``X | None`` wrappers. Returns the value list,
-    or ``None`` when the annotation is not a closed membership set. A
-    module-level Literal alias (``DefaultPluginDtype``) resolves to its values.
+    or ``None`` when the annotation is not a closed membership set.
     """
-    direct = _literal_values(annotation)
-    if direct is not None:
-        return direct
-    for node in ast.walk(annotation):
-        if isinstance(node, ast.Name) and node.id in aliases:
-            return list(aliases[node.id])
-    return None
+    return _literal_values(annotation)
 
 
 # ---------------------------------------------------------------------------
@@ -325,8 +223,8 @@ def _literal_subscript_values(node: ast.expr) -> list[Any] | None:
     """Closed value set if ``node`` is *directly* a ``Literal[...]`` subscript.
 
     Unlike :func:`_literal_values` this does not descend into wrappers - the node
-    itself must be the ``Literal`` subscript (used for module-level alias RHS
-    matching). ``None`` if not a Literal or any member is non-constant.
+    itself must be the ``Literal`` subscript. ``None`` if not a Literal or any
+    member is non-constant.
     """
     if not (
         isinstance(node, ast.Subscript)
@@ -358,20 +256,8 @@ def _call_head(call: ast.Call) -> str:
     return ""
 
 
-def _base_name(node: ast.expr) -> str:
-    """Rightmost name of a class base (``enum.IntEnum`` -> ``"IntEnum"``)."""
-    if isinstance(node, ast.Attribute):
-        return node.attr
-    if isinstance(node, ast.Name):
-        return node.id
-    return ""
-
-
 __all__ = [
     "expand_files",
     "iter_config_classes",
-    "module_enum_globals",
-    "module_literal_aliases",
-    "module_lookup_maps",
     "walk_declarative_constraints",
 ]

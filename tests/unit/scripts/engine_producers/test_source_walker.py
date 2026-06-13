@@ -9,8 +9,7 @@ Two fixture cells mirror the study cells the design names:
 - ``fixtures/vllm_019/`` - a ``config/*.py`` subpackage with pydantic ``Field``
   bounds, ``Literal`` membership, and a nested pydantic sub-config.
 - ``fixtures/tensorrt_12/`` - a ``plugin/plugin.py`` PluginConfig-like class with
-  ~20 ``Literal`` constraints (many aliased to a module-level ``Literal``) plus a
-  module-level lookup map.
+  inline ``Literal`` membership fields.
 
 The assertions pin the class / field / constraint inventories the walkers must
 surface, so a regression in any walker fails here rather than silently shrinking
@@ -83,40 +82,6 @@ def test_iter_config_classes_matches_params_and_args_suffixes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Module-level collection lifts (P8)
-# ---------------------------------------------------------------------------
-
-
-def test_module_literal_alias_resolved_to_values() -> None:
-    module = _parse(_TRT_ROOT / "plugin" / "plugin.py")
-    aliases = sw.module_literal_aliases(module)
-    assert aliases["DefaultPluginDtype"] == ["float16", "bfloat16", "float32"]
-
-
-def test_module_lookup_map_keys_lifted() -> None:
-    module = _parse(_TRT_ROOT / "plugin" / "plugin.py")
-    maps = sw.module_lookup_maps(module)
-    assert maps["STR_DTYPE_TO_BINDING"] == ["float16", "bfloat16", "float32", "int8"]
-
-
-def test_module_enum_globals_lifts_member_values() -> None:
-    src = (
-        "import enum\n"
-        "class Mode(enum.IntEnum):\n"
-        "    EAGER = 0\n"
-        "    GRAPH = 1\n"
-        "class Color(str, enum.Enum):\n"
-        "    RED = 'red'\n"
-        "    BLUE = 'blue'\n"
-        "class NotAnEnum:\n"
-        "    X = 1\n"
-    )
-    module = ast.parse(src)
-    enums = sw.module_enum_globals(module)
-    assert enums == {"Mode": [0, 1], "Color": ["red", "blue"]}
-
-
-# ---------------------------------------------------------------------------
 # Declarative-constraint walker (P3 + P4, study Primitive 8) - vllm cell
 # ---------------------------------------------------------------------------
 
@@ -159,33 +124,18 @@ def test_vllm_annotated_field_bounds_lifted_from_annotation() -> None:
 
 def test_tensorrt_plugin_literal_membership_inventory() -> None:
     module = _parse(_TRT_ROOT / "plugin" / "plugin.py")
-    aliases = sw.module_literal_aliases(module)
-    plugin = sw.walk_declarative_constraints(module, literal_aliases=aliases)["PluginConfig"]
+    plugin = sw.walk_declarative_constraints(module)["PluginConfig"]
 
-    # Aliased Optional[DefaultPluginDtype] fields resolve to the alias values.
-    assert plugin["gpt_attention_plugin"]["enum"] == ["float16", "bfloat16", "float32"]
-    assert plugin["moe_plugin"]["enum"] == ["float16", "bfloat16", "float32"]
     # Inline Literal fields surface their own value sets (incl. an int Literal).
     assert plugin["context_fmha"]["enum"] == ["enabled", "disabled"]
     assert plugin["tokens_per_block"]["enum"] == [32, 64, 128]
 
-    # The PluginConfig membership surface is broad (the study's 20ish-constraint
-    # plugin class). Every field but the plain int and the private one carries a
-    # membership set.
+    # The 10 inline Literal fields each carry a membership set. Fields typed
+    # against a module-level Literal alias (``DefaultPluginDtype``) are NOT
+    # closed without alias resolution, so they do not surface an enum.
     membership_fields = {f for f, frag in plugin.items() if "enum" in frag}
-    assert len(membership_fields) == 20
+    assert len(membership_fields) == 10
+    assert "enum" not in plugin.get("gpt_attention_plugin", {})
+    assert "enum" not in plugin.get("moe_plugin", {})
     assert "max_lora_rank" not in plugin  # plain int, no constraint
     assert "_internal" not in plugin
-
-
-def test_tensorrt_plugin_alias_unresolved_without_alias_map() -> None:
-    """Without the alias map, aliased fields are NOT closed memberships.
-
-    Confirms the module-level lift is load-bearing: the plugin fold only becomes
-    probeable once ``module_literal_aliases`` feeds the walker.
-    """
-    module = _parse(_TRT_ROOT / "plugin" / "plugin.py")
-    plugin = sw.walk_declarative_constraints(module)["PluginConfig"]
-    assert "enum" not in plugin.get("gpt_attention_plugin", {})
-    # Inline Literals still resolve without the alias map.
-    assert plugin["context_fmha"]["enum"] == ["enabled", "disabled"]
