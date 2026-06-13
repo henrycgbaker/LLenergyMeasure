@@ -535,20 +535,29 @@ def _proposal_from_diagnosis(diag: Diagnosis, carried: dict[str, Any] | None) ->
     }
 
 
-def _validated_entry(proposal: dict[str, Any], engine: str, new_version: str) -> dict[str, Any]:
-    """Shape a gate-confirmed proposal into a committed rules.proposed.yaml entry."""
+def _validated_entry(proposal: dict[str, Any], engine: str) -> dict[str, Any]:
+    """Shape a gate-confirmed proposal into a committed rules.proposed.yaml entry.
+
+    The emitted ``expected_outcome`` is normalised to carry both ``outcome`` and
+    a valid ``emission_channel`` (the loader rejects a missing/empty channel);
+    the conservative default mirrors the committed corpus (``none`` - no
+    user-visible emission for an error raise / silent equivalence).
+    """
+    severity = proposal["severity"]
+    expected = dict(proposal.get("expected_outcome") or {})
+    expected.setdefault("outcome", "error" if severity == "error" else "dormant_announced")
+    expected.setdefault("emission_channel", "none")
     entry: dict[str, Any] = {
         "id": proposal["rule_id"],
         "engine": engine,
         "library": engine,
         "invariant_under_test": proposal.get("invariant_under_test") or "",
-        "severity": proposal["severity"],
+        "severity": severity,
         "native_type": proposal["native_type"],
         "match": proposal.get("match") or {"fields": {}},
         "kwargs_positive": proposal.get("kwargs_positive") or {},
         "kwargs_negative": proposal.get("kwargs_negative") or {},
-        "expected_outcome": proposal.get("expected_outcome")
-        or {"outcome": "error" if proposal["severity"] == "error" else "dormant_announced"},
+        "expected_outcome": expected,
         "references": proposal.get("references") or [],
         "added_by": "llm_diagnose",
     }
@@ -651,7 +660,7 @@ def _gate_and_split(
             "gate": verdict,
         }
         if outcome == "confirmed":
-            result.confirmed.append(_validated_entry(proposal, engine, engine_version))
+            result.confirmed.append(_validated_entry(proposal, engine))
         elif outcome == "not_construction_confirmable":
             result.not_construction_confirmable.append(record)
         else:

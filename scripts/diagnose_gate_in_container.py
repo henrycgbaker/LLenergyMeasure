@@ -73,7 +73,7 @@ def gate_one(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
         not case.positive_confirmed
         and severity == "dormant"
         and proposal.get("classification") == "dormancy_now_silent"
-        and case.outcome in {"pass", "dormant_silent"}
+        and case.outcome in {"pass", "no_op", "dormant_silent"}
     )
     if confirmed:
         verdict = "confirmed"
