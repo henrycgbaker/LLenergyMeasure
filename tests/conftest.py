@@ -14,7 +14,6 @@ from llenergymeasure.domain.experiment import (
     StudyResult,
 )
 from llenergymeasure.domain.metrics import (
-    ComputeMetrics,
     EnergyMetrics,
     InferenceMetrics,
 )
@@ -158,15 +157,6 @@ def make_inference_metrics(**overrides) -> InferenceMetrics:
     }
     defaults.update(overrides)
     return InferenceMetrics(**defaults)
-
-
-def make_compute_metrics(**overrides) -> ComputeMetrics:
-    """Return a valid ComputeMetrics with sensible defaults."""
-    defaults: dict = {
-        "flops_total": 5e11,
-    }
-    defaults.update(overrides)
-    return ComputeMetrics(**defaults)
 
 
 def make_user_config(**overrides):

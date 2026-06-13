@@ -103,33 +103,6 @@ Experiment result models.
 **ExperimentResult** - The user-visible output of a single-process measurement
 run. Holds the final metrics (energy, throughput, FLOPs, latency) directly.
 
-### model_info.py
-Model metadata. These classes are not re-exported from the `domain` package;
-import them from `llenergymeasure.domain.model_info` directly.
-
-**ModelInfo** - Model characteristics:
-```python
-from llenergymeasure.domain.model_info import ModelInfo
-
-ModelInfo(
-    name="meta-llama/Llama-2-7b-hf",
-    num_parameters=7_000_000_000,
-    architecture="LlamaForCausalLM",
-    context_length=4096,
-)
-```
-
-**QuantizationSpec** - Quantization details:
-```python
-from llenergymeasure.domain.model_info import QuantizationSpec
-
-QuantizationSpec(
-    enabled=True,
-    bits=4,
-    quant_type="nf4",
-)
-```
-
 ## Schema Version
 
 Results include `schema_version` (currently "2.0.0") for forward compatibility:

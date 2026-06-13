@@ -5,60 +5,13 @@ from __future__ import annotations
 import pytest
 
 from llenergymeasure.domain.metrics import (
-    CombinedMetrics,
-    EnergyMetrics,
     FlopsResult,
     LatencyMeasurementMode,
     LatencyMeasurements,
-    PrecisionMetadata,
     collect_itl_measurements,
     compute_latency_statistics,
 )
-from tests.conftest import make_compute_metrics, make_energy_metrics, make_inference_metrics
-
-# ---------------------------------------------------------------------------
-# TestPrecisionMetadata
-# ---------------------------------------------------------------------------
-
-
-class TestPrecisionMetadata:
-    """Precision factor mapping for all compute types."""
-
-    @pytest.mark.parametrize(
-        ("compute", "expected"),
-        [
-            ("fp32", 1.0),
-            ("fp16", 1.0),
-            ("bf16", 1.0),
-            ("tf32", 1.0),
-            ("fp8", 0.5),
-            ("int8", 0.5),
-        ],
-    )
-    def test_precision_factor_known(self, compute: str, expected: float):
-        pm = PrecisionMetadata(compute=compute)
-        assert pm.precision_factor == expected
-
-    def test_precision_factor_mixed(self):
-        pm = PrecisionMetadata(weights="mixed", compute="fp16")
-        # compute controls precision_factor, not weights
-        assert pm.precision_factor == 1.0
-
-    def test_precision_factor_mixed_compute(self):
-        """mixed as a weights value doesn't affect precision_factor directly.
-
-        But PrecisionMetadata's compute field doesn't accept 'mixed' - only
-        weights does. Test through the property with known fallback.
-        """
-        pm = PrecisionMetadata(weights="mixed")
-        # Default compute is fp16
-        assert pm.precision_factor == 1.0
-
-    def test_precision_factor_default(self):
-        pm = PrecisionMetadata()
-        # Default compute is fp16 -> 1.0
-        assert pm.precision_factor == 1.0
-
+from tests.conftest import make_energy_metrics, make_inference_metrics
 
 # ---------------------------------------------------------------------------
 # TestFlopsResult
@@ -89,19 +42,7 @@ class TestFlopsResult:
 
 
 class TestEnergyMetrics:
-    """placeholder() and total_power_w property."""
-
-    def test_placeholder_defaults(self):
-        em = EnergyMetrics.placeholder()
-        assert em.total_energy_j == 0.0
-        assert em.gpu_energy_j == 0.0
-        assert em.cpu_energy_j == 0.0
-        assert em.duration_sec == 0.0
-
-    def test_placeholder_custom_duration(self):
-        em = EnergyMetrics.placeholder(duration_sec=7.5)
-        assert em.duration_sec == 7.5
-        assert em.total_energy_j == 0.0
+    """total_power_w property."""
 
     def test_total_power_w(self):
         em = make_energy_metrics(gpu_power_w=100.0, cpu_power_w=25.0)
@@ -119,40 +60,6 @@ class TestInferenceMetrics:
     def test_throughput_alias(self):
         im = make_inference_metrics(tokens_per_second=42.5)
         assert im.throughput == im.tokens_per_second == 42.5
-
-
-# ---------------------------------------------------------------------------
-# TestCombinedMetrics
-# ---------------------------------------------------------------------------
-
-
-class TestCombinedMetrics:
-    """efficiency_tokens_per_joule and efficiency_flops_per_watt properties."""
-
-    def _make(self, **energy_overrides) -> CombinedMetrics:
-        return CombinedMetrics(
-            inference=make_inference_metrics(),
-            energy=make_energy_metrics(**energy_overrides),
-            compute=make_compute_metrics(flops_per_second=1e10),
-        )
-
-    def test_efficiency_tokens_per_joule(self):
-        cm = self._make(total_energy_j=10.0)
-        # 500 tokens / 10 J = 50.0
-        assert cm.efficiency_tokens_per_joule == pytest.approx(50.0)
-
-    def test_efficiency_tokens_per_joule_zero_energy(self):
-        cm = self._make(total_energy_j=0.0)
-        assert cm.efficiency_tokens_per_joule == 0.0
-
-    def test_efficiency_flops_per_watt(self):
-        cm = self._make(gpu_power_w=100.0, cpu_power_w=0.0)
-        # 1e10 / 100 = 1e8
-        assert cm.efficiency_flops_per_watt == pytest.approx(1e8)
-
-    def test_efficiency_flops_per_watt_zero_power(self):
-        cm = self._make(gpu_power_w=0.0, cpu_power_w=0.0)
-        assert cm.efficiency_flops_per_watt == 0.0
 
 
 # ---------------------------------------------------------------------------
