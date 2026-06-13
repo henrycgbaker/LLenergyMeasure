@@ -625,6 +625,14 @@ def compute_gate_soundness_divergences(
                 )
             )
 
+    # A5 (known gap, not yet closed): a DORMANT confirm via a captured warning
+    # (no exception) gets no locus check - the locus/coercion checks above are
+    # raise-only because warnings carry no structured ErrorDetail loc, only
+    # free-text logger messages. The message-template substring check already
+    # guards the warning text when a template is set; a field-name locus check
+    # would be a fragile substring match prone to false negatives, so it is
+    # deferred until a real false dormant-confirm is observed.
+
     return divergences
 
 
@@ -831,14 +839,16 @@ def _find_morph_target(
 ) -> str | None:
     """Find the renamed rule a carried failure morphed into, or None.
 
-    A morph is a gate-confirmed fresh rule that re-encodes the same check under
-    a new id: same native_type and severity, with the carried rule's claimed
-    fields a SUBSET of the fresh rule's (a bump may add a co-condition - e.g.
-    a num_beams rule gaining a do_sample qualifier). The match must be UNIQUE:
-    (native_type, claimed_fields, severity) collides for ~17% of real
-    signatures (several distinct rules guard the same field), so an ambiguous
-    match is left as residual rather than risk masking real decay with a
-    false heal.
+    A morph is a gate-confirmed fresh rule that re-encodes the SAME check under a
+    new id: same native_type, same severity, and the SAME claimed-field set
+    (A4). Field-set equality, not subset: a superset fresh rule (one that added a
+    co-condition) is a DIFFERENT, narrower constraint, and auto-healing the
+    carried rule into it would silently absorb a deleted rule and mask the decay.
+    A non-equal match therefore stays residual - surfaced as a decay candidate -
+    rather than being silently healed. The match must also be UNIQUE:
+    (native_type, claimed_fields, severity) collides for ~17% of real signatures
+    (several distinct rules guard the same field), so an ambiguous match is left
+    as residual rather than risk masking real decay with a false heal.
     """
     native_type = str(carried.get("native_type", ""))
     severity = str(carried.get("severity", "")).lower()
@@ -852,7 +862,7 @@ def _find_morph_target(
         and (fresh := fresh_by_id.get(fid)) is not None
         and str(fresh.get("native_type", "")) == native_type
         and str(fresh.get("severity", "")).lower() == severity
-        and carried_fields <= invariant_claimed_fields(fresh)
+        and carried_fields == invariant_claimed_fields(fresh)
     ]
     return matches[0] if len(matches) == 1 else None
 

@@ -1286,12 +1286,12 @@ _TF_V5 = _PROJECT_ROOT / "engine_versions" / "transformers" / "v5_7_0" / "output
 # other three are bnb DORMANT rules whose announcement decayed at 5.7.0 (the
 # field stays ignored, the warning was dropped) - reclassified to dormant_silent
 # and carried forward, not genuine decay.
-# (A faithful full re-gate also flags an 8th, transformers_raises_num_beams_eq_1,
-# which morphed into transformers_num_return_vs_beams_do_sample_eq_false_and_
-# num_beams_eq_1; the review's manual count missed that the renamed rule still
-# fires. The reconciliation heals it as a morph - see
-# test_reconcile_heals_renamed_morph_target - which is exactly the human-missed
-# heal Rung 0 mechanises.)
+# (A faithful full re-gate also flags an 8th, transformers_raises_num_beams_eq_1.
+# A fresh rule transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_
+# eq_1 has the carried fields as a strict SUBSET - it added a do_sample
+# co-condition, so it is a narrower, different constraint. Morph heal requires
+# field-set EQUALITY (A4), so this superset-only match is NOT auto-healed; it
+# stays a surfaced decay candidate - see test_reconcile_superset_morph_stays_residual.)
 _BUMP1_TEMPLATE_DRIFT_FAILURES = (
     "transformers_cache_choice_cache_implementation_not_in_allowlist",
     "transformers_cache_choice_use_cache_eq_false",
@@ -1376,14 +1376,16 @@ def test_reconcile_bump1_yields_four_healed_three_reclassified() -> None:
         assert any("announcement decayed at 5.7.0" in r for r in inv["references"])
 
 
-def test_reconcile_heals_renamed_morph_target() -> None:
-    """The 8th bump-1 failure morphed (renamed + gained a co-condition), so it heals.
+def test_reconcile_superset_morph_stays_residual() -> None:
+    """A superset-only fresh rule does NOT auto-heal a carried failure (A4).
 
-    transformers_raises_num_beams_eq_1 is carried-only at v5.7.0: its check
-    survives under transformers_num_return_vs_beams_do_sample_eq_false_and_
-    num_beams_eq_1, which adds a do_sample qualifier (carried fields are a
-    subset of the fresh rule's). The morph pass heals it - the human triage
-    missed this because the id changed.
+    transformers_raises_num_beams_eq_1 is carried-only at v5.7.0: a fresh rule
+    transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1 has
+    the carried fields ({num_return_sequences, num_beams}) as a strict SUBSET -
+    it added a do_sample co-condition, so it is a DIFFERENT, narrower constraint.
+    Auto-healing the carried rule into it would silently absorb a deleted rule
+    and mask the decay; field-set equality is required for a morph heal, so this
+    superset-only match stays residual (a surfaced decay candidate), not healed.
     """
     report = {
         "entries": [
@@ -1397,12 +1399,69 @@ def test_reconcile_heals_renamed_morph_target() -> None:
         fresh_validated_ids=fresh_validated_ids,
         fresh_proposed_path=_TF_V5 / "rules.proposed.yaml",
     )
-    assert recon["counts"] == {"healed": 1, "reclassified": 0, "residual": 0}
-    healed = recon["healed"][0]
-    assert healed["kind"] == validate_rules.HEALED_RULE_MORPHED
-    assert (
-        healed["new_id"] == "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1"
+    assert recon["counts"] == {"healed": 0, "reclassified": 0, "residual": 1}
+    assert recon["residual"][0]["id"] == "transformers_raises_num_beams_eq_1"
+
+
+def test_reconcile_morph_heals_only_on_field_set_equality(tmp_path: Path) -> None:
+    """A renamed fresh rule with the SAME field set heals; a superset does not (A4)."""
+    carried = _write_corpus(
+        tmp_path / "carried.yaml",
+        [
+            {
+                "id": "carried_equal",
+                "severity": "error",
+                "native_type": "test.Y",
+                "match": {"fields": {"e.b": 1}},
+                "message_template": "`b` rule",
+            },
+            {
+                "id": "carried_subset",
+                "severity": "error",
+                "native_type": "test.Z",
+                "match": {"fields": {"e.c": 1}},
+                "message_template": "`c` rule",
+            },
+        ],
     )
+    fresh_proposed = _write_corpus(
+        tmp_path / "fresh.proposed.yaml",
+        [
+            # Same field set as carried_equal, renamed -> heals.
+            {
+                "id": "fresh_equal",
+                "severity": "error",
+                "native_type": "test.Y",
+                "match": {"fields": {"e.b": 1}},
+                "message_template": "`b` reworded",
+            },
+            # SUPERSET of carried_subset (added co-condition d) -> must NOT heal.
+            {
+                "id": "fresh_superset",
+                "severity": "error",
+                "native_type": "test.Z",
+                "match": {"fields": {"e.c": 1, "e.d": 1}},
+                "message_template": "`c` and `d` rule",
+            },
+        ],
+    )
+    report = {
+        "entries": [
+            {"id": "carried_equal", "verdict": "failed", "reason": "template"},
+            {"id": "carried_subset", "verdict": "failed", "reason": "template"},
+        ]
+    }
+    recon = validate_rules.reconcile_regate_report(
+        report,
+        carried_corpus_path=carried,
+        fresh_validated_ids={"fresh_equal", "fresh_superset"},
+        fresh_proposed_path=fresh_proposed,
+    )
+    assert recon["counts"] == {"healed": 1, "reclassified": 0, "residual": 1}
+    assert recon["healed"][0]["id"] == "carried_equal"
+    assert recon["healed"][0]["new_id"] == "fresh_equal"
+    # The superset match is left as a surfaced decay candidate, not silently healed.
+    assert recon["residual"][0]["id"] == "carried_subset"
 
 
 def test_reconcile_reclassifies_only_dormant_failures(tmp_path: Path) -> None:
