@@ -390,12 +390,6 @@ class TestCLIE2EStudy:
 
         monkeypatch.setattr(llenergymeasure, "run_study", lambda config, **kw: mock_study_result)
 
-        # Also patch format_preflight_summary to avoid the real preflight display path
-        monkeypatch.setattr(
-            "llenergymeasure.cli._preflight_display.format_preflight_summary",
-            lambda study_config: "Preflight: 2 experiments",
-        )
-
         runner = CliRunner()
         result = runner.invoke(app, ["run", str(yaml_path)])
 
