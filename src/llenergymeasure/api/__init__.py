@@ -1,6 +1,12 @@
 """Public library API for llenergymeasure."""
 
 from llenergymeasure.api._impl import load_study, run_experiment, run_study
+from llenergymeasure.api.diagnose import (
+    DiagnoseError,
+    DiagnoseResult,
+    diagnose_carried_failures,
+    diagnose_gaps,
+)
 from llenergymeasure.api.report_gaps import (
     ReportGapsError,
     find_runtime_gaps,
@@ -12,7 +18,11 @@ from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.study.resume import find_resumable_study, load_resume_state
 
 __all__ = [
+    "DiagnoseError",
+    "DiagnoseResult",
     "ReportGapsError",
+    "diagnose_carried_failures",
+    "diagnose_gaps",
     "find_resumable_study",
     "find_runtime_gaps",
     "load_resume_state",
