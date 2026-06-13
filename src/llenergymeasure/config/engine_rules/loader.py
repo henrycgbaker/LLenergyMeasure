@@ -132,10 +132,11 @@ AddedBy = Literal[
     "runtime_warning",
     "observed_collision",
     "reclassified_decayed_announcement",
+    "llm_diagnose",
 ]
 """Provenance of a invariant in the corpus.
 
-Nine discovery paths with distinct trust/verifiability profiles:
+Ten discovery paths with distinct trust/verifiability profiles:
 
 - ``static_miner`` - invariant extracted by parsing Python source AST
   (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
@@ -160,6 +161,12 @@ Nine discovery paths with distinct trust/verifiability profiles:
   announcement no longer fires at the new pin (upstream dropped the warning
   while the field stays ignored); the decay-alarm reconciliation carries it
   forward reclassified as ``dormant_silent`` so the equivalence does not vanish.
+- ``llm_diagnose`` - proposed by the Stage-1 LLM diagnose proposer (a local
+  code-tuned model reading the bump's source diff) and then GATE-CONFIRMED in
+  the engine container; only the gate-confirmed entries carry this provenance.
+  The LLM is a recall-maximising proposer, never an adjudicator: nothing tagged
+  ``llm_diagnose`` reaches the corpus without the deterministic gate confirming
+  the claimed behaviour reconstructs.
 """
 
 VALID_SEVERITY: frozenset[str] = frozenset(get_args(Severity))

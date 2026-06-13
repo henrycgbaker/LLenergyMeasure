@@ -233,6 +233,7 @@ def test_valid_added_by_set_has_all_provenance_classes() -> None:
                 "runtime_warning",
                 "observed_collision",
                 "reclassified_decayed_announcement",
+                "llm_diagnose",
             }
         )
         == VALID_ADDED_BY
@@ -251,6 +252,7 @@ def test_valid_added_by_set_has_all_provenance_classes() -> None:
         "runtime_warning",
         "observed_collision",
         "reclassified_decayed_announcement",
+        "llm_diagnose",
     ],
 )
 def test_all_added_by_values_round_trip(tmp_path: Path, provenance: str) -> None:
