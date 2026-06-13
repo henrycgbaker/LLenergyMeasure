@@ -38,6 +38,7 @@ Architecture (load-bearing):
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import urllib.request
@@ -48,10 +49,18 @@ from typing import Any, Protocol
 
 import yaml
 
+from llenergymeasure.api._source_window import (
+    DEFAULT_BUDGET_CHARS,
+    SymbolRequest,
+    WindowReport,
+    _iter_config_classes,
+    windowed_source,
+)
 from llenergymeasure.config.engine_rules import VALID_SEVERITY
 
 __all__ = [
     "CLASSIFICATIONS",
+    "DEFAULT_BUDGET_CHARS",
     "RESPONSE_SCHEMA",
     "DiagnoseError",
     "DiagnoseModel",
@@ -60,9 +69,10 @@ __all__ = [
     "OllamaDiagnoseModel",
     "build_carried_triage_prompt",
     "build_gap_diagnose_prompt",
+    "carried_symbol_requests",
+    "config_surface_symbol_requests",
     "diagnose_carried_failures",
     "diagnose_gaps",
-    "diff_scoped_source",
     "parse_diagnoses",
     "render_proposed_yaml",
 ]
@@ -285,42 +295,117 @@ class OllamaDiagnoseModel:
 
 
 # ---------------------------------------------------------------------------
-# Diff-scoping
+# Source windowing (per-symbol, within the diff-scoped files)
 # ---------------------------------------------------------------------------
+#
+# The diff-scoping FILE selector (the files a residual rule cites, or the
+# config-surface glob) is the caller's; this layer narrows WITHIN those files to
+# the cited class + field/validator spans. Feeding the files whole overflows the
+# 16K model context and drives invented rule_ids (R7 trial); per-symbol windows
+# fixed that. See :mod:`llenergymeasure.api._source_window`.
 
 
-def diff_scoped_source(
+def _class_name(native_type: str) -> str:
+    """The bare class name (last dotted component of a rule's native_type)."""
+    return native_type.rsplit(".", 1)[-1] if native_type else ""
+
+
+def _cited_fields(rule: dict[str, Any]) -> tuple[str, ...]:
+    """Field names a carried rule cites: its kwargs probe keys + match-field tails.
+
+    The kwargs_positive / kwargs_negative keys are the real constructor field
+    names (``cache_implementation``, ``load_in_4bit``); the ``match.fields`` keys
+    are dotted paths whose tail is the same field name. De-duped, order-preserving.
+    """
+    names: list[str] = []
+    seen: set[str] = set()
+    for probe in ("kwargs_positive", "kwargs_negative"):
+        for key in rule.get(probe) or {}:
+            if key not in seen:
+                seen.add(key)
+                names.append(key)
+    match = rule.get("match") or {}
+    for dotted in match.get("fields") or {}:
+        tail = str(dotted).rsplit(".", 1)[-1]
+        if tail and tail not in seen:
+            seen.add(tail)
+            names.append(tail)
+    return tuple(names)
+
+
+def carried_symbol_requests(
+    *,
+    carried: Sequence[dict[str, Any]],
+    cited_files: Sequence[str],
+) -> list[SymbolRequest]:
+    """Per-residual windowing requests for mode 1a.
+
+    Each residual rule contributes one request per cited file: its class
+    (``native_type`` tail) plus the cited field names. The file selector stays
+    the caller's diff-scoping; windowing narrows within those files to the class
+    + field/validator spans the proposer needs.
+    """
+    requests: list[SymbolRequest] = []
+    for rule in carried:
+        class_name = _class_name(str(rule.get("native_type", "")))
+        if not class_name:
+            continue
+        fields = _cited_fields(rule)
+        for rel in cited_files:
+            requests.append(SymbolRequest(file=rel, class_name=class_name, fields=fields))
+    return requests
+
+
+def config_surface_symbol_requests(
     *,
     source_root: Path,
-    files: Sequence[str],
-) -> str:
-    """Assemble the file-path-scoped source the prompt embeds.
+    config_surface_files: Sequence[str],
+) -> list[SymbolRequest]:
+    """Per-class windowing requests for mode 1b (gap-diagnose).
 
-    Per design section 8, the prompt scope is the source DIFF region by FILE
-    PATH (not whole tree, not line-pinned): the files the carried residual rules
-    cite (1a) or the walkers' config-surface glob (1b). Each file is rendered
-    with 1-based line numbers so the model can emit real ``file:line`` citations.
-
-    Raises :class:`DiagnoseError` if no requested file resolves to non-empty
-    content - the trial's empty-input guard, hoisted before the model call so a
-    silent empty prompt can never reach the proposer.
+    With no carried rules to cite specific fields, window each config-like class
+    on the config surface whole (the AST walker enumerates them). This keeps the
+    surface narrowed to config classes - not every helper / import in a large
+    config module - while staying field-agnostic.
     """
-    parts: list[str] = []
-    for rel in files:
+    requests: list[SymbolRequest] = []
+    for rel in config_surface_files:
         path = source_root / rel
         if not path.is_file():
             continue
         body = path.read_text()
         if not body.strip():
             continue
-        numbered = "\n".join(f"{i + 1:5d}: {line}" for i, line in enumerate(body.splitlines()))
-        parts.append(f"### FILE: {rel}\n{numbered}")
-    if not parts:
+        try:
+            module = ast.parse(body)
+        except SyntaxError:
+            continue
+        for cls in _iter_config_classes(module):
+            requests.append(SymbolRequest(file=rel, class_name=cls.name))
+    return requests
+
+
+def _assemble_source(
+    *,
+    source_root: Path,
+    requests: Sequence[SymbolRequest],
+    budget_chars: int,
+    files: Sequence[str],
+) -> WindowReport:
+    """Window the requests and guard the empty-source failure mode.
+
+    Raises :class:`DiagnoseError` if windowing produced no source at all (no
+    cited symbol resolved in any file) - the trial's empty-input guard, hoisted
+    before the model call so a silent empty prompt can never reach the proposer.
+    """
+    report = windowed_source(source_root=source_root, requests=requests, budget_chars=budget_chars)
+    if not report.source.strip():
+        detail = "; ".join(report.missing) or "no config classes located"
         raise DiagnoseError(
-            f"diff-scoped source is empty (no non-empty file among {list(files)} "
-            f"under {source_root})"
+            f"windowed source is empty (no cited symbol resolved among {list(files)} "
+            f"under {source_root}): {detail}"
         )
-    return "\n\n".join(parts)
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +687,10 @@ class DiagnoseResult:
       positive-confirm at construction grain; cited proposals for review.
     - ``dropped_malformed`` - diagnoses dropped before gating for type-malformed
       kwargs (the 12B failure mode).
+    - ``source_truncated`` - per-symbol windows dropped to stay under the source
+      budget (reported, never silently dropped).
+    - ``source_missing`` - cited symbols absent from the new pin's source (a
+      class / field that no longer exists); flagged for the maintainer.
     """
 
     engine: str
@@ -611,6 +700,8 @@ class DiagnoseResult:
     unconfirmed: list[dict[str, Any]] = field(default_factory=list)
     not_construction_confirmable: list[dict[str, Any]] = field(default_factory=list)
     dropped_malformed: list[dict[str, Any]] = field(default_factory=list)
+    source_truncated: list[str] = field(default_factory=list)
+    source_missing: list[str] = field(default_factory=list)
     proposed_yaml: str | None = None
 
 
@@ -684,13 +775,17 @@ def diagnose_carried_failures(
     cited_files: Sequence[str],
     model: DiagnoseModel,
     gate_runner: GateRunner,
+    budget_chars: int = DEFAULT_BUDGET_CHARS,
 ) -> DiagnoseResult:
     """Mode 1a: triage the decay alarm's post-Rung-0 residual failures.
 
     ``carried_corpus`` is the previous pin's proposed-shape corpus (the
     executable carried catalogue with kwargs); ``residual_ids`` are the ids the
     reconciliation left unresolved (``reconcile_regate_report``'s ``residual``).
-    Returns a :class:`DiagnoseResult`; only ``confirmed`` is emitted as YAML.
+    The cited source is WINDOWED per-symbol (each residual's class + cited
+    field/validator spans) under ``budget_chars`` so a large cited file cannot
+    overflow the model context. Returns a :class:`DiagnoseResult`; only
+    ``confirmed`` is emitted as YAML.
     """
     by_id = {
         str(inv.get("id", "")): inv
@@ -704,13 +799,19 @@ def diagnose_carried_failures(
     if not residual:
         raise DiagnoseError("no residual rules to diagnose (empty residual)")
 
-    source = diff_scoped_source(source_root=source_root, files=cited_files)
+    requests = carried_symbol_requests(carried=residual, cited_files=cited_files)
+    window = _assemble_source(
+        source_root=source_root,
+        requests=requests,
+        budget_chars=budget_chars,
+        files=cited_files,
+    )
     prompt = build_carried_triage_prompt(
         engine=engine,
         old_version=old_version,
         new_version=new_version,
         carried=residual,
-        source=source,
+        source=window.source,
     )
     diagnoses = parse_diagnoses(model.complete(prompt))
     # Triage only the rules we asked about - ignore any fabricated extra ids.
@@ -719,7 +820,7 @@ def diagnose_carried_failures(
     if not diagnoses:
         raise DiagnoseError("model returned no diagnoses for the residual rules")
 
-    return _gate_and_split(
+    result = _gate_and_split(
         engine=engine,
         engine_version=new_version,
         mode="carried_failure_triage",
@@ -727,6 +828,9 @@ def diagnose_carried_failures(
         carried_by_id=by_id,
         gate_runner=gate_runner,
     )
+    result.source_truncated = window.truncated
+    result.source_missing = window.missing
+    return result
 
 
 def diagnose_gaps(
@@ -738,20 +842,31 @@ def diagnose_gaps(
     config_surface_files: Sequence[str],
     model: DiagnoseModel,
     gate_runner: GateRunner,
+    budget_chars: int = DEFAULT_BUDGET_CHARS,
 ) -> DiagnoseResult:
     """Mode 1b: flag what deterministic mining missed on the new pin.
 
     ``schema`` is the fresh ``schema.discovered.json`` (summarised in-prompt);
     ``config_surface_files`` is the walkers' config-surface glob, resolved to
-    paths under ``source_root``. The model proposes missed rules; the gate
-    confirms which actually reconstruct. Only ``confirmed`` is emitted.
+    paths under ``source_root``. The source is WINDOWED to the config-like
+    classes on that surface under ``budget_chars`` (not the whole files). The
+    model proposes missed rules; the gate confirms which actually reconstruct.
+    Only ``confirmed`` is emitted.
     """
-    source = diff_scoped_source(source_root=source_root, files=config_surface_files)
+    requests = config_surface_symbol_requests(
+        source_root=source_root, config_surface_files=config_surface_files
+    )
+    window = _assemble_source(
+        source_root=source_root,
+        requests=requests,
+        budget_chars=budget_chars,
+        files=config_surface_files,
+    )
     prompt = build_gap_diagnose_prompt(
-        engine=engine, new_version=new_version, schema=schema, source=source
+        engine=engine, new_version=new_version, schema=schema, source=window.source
     )
     diagnoses = parse_diagnoses(model.complete(prompt))
-    return _gate_and_split(
+    result = _gate_and_split(
         engine=engine,
         engine_version=new_version,
         mode="gap_diagnose",
@@ -759,3 +874,6 @@ def diagnose_gaps(
         carried_by_id={},
         gate_runner=gate_runner,
     )
+    result.source_truncated = window.truncated
+    result.source_missing = window.missing
+    return result

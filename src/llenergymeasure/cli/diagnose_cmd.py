@@ -74,6 +74,10 @@ def _print_report(result: DiagnoseResult, out: Path | None) -> None:
         print(f"  review (silent dormancy): {rec['rule_id']}", file=sys.stderr)
     for rec in result.dropped_malformed:
         print(f"  dropped (malformed kwargs): {rec['rule_id']} {rec['malformed']}", file=sys.stderr)
+    for note in result.source_missing:
+        print(f"  source window (cited symbol absent): {note}", file=sys.stderr)
+    for note in result.source_truncated:
+        print(f"  source window (truncated for budget): {note}", file=sys.stderr)
 
     if result.confirmed and result.proposed_yaml is not None:
         if out is not None:
