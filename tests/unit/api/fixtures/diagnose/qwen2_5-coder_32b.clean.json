@@ -1,0 +1,60 @@
+{
+  "diagnoses": [
+    {
+      "rule_id": "transformers_cache_choice_cache_implementation_not_in_allowlist",
+      "classification": "decayed_announcement",
+      "reason": "The allowed values for `cache_implementation` have changed, and the error message has been updated to reflect these changes.",
+      "citation": "configuration_utils.py lines 165-172",
+      "kwargs_positive": {"cache_implementation": "nonsense", "use_cache": true},
+      "kwargs_negative": {"cache_implementation": "dynamic", "use_cache": true}
+    },
+    {
+      "rule_id": "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1",
+      "classification": "still_holds",
+      "reason": "The rule still checks the same condition and raises an error with a similar message.",
+      "citation": "configuration_utils.py lines 273-280",
+      "kwargs_positive": {"num_beams": 1, "num_return_sequences": 2, "do_sample": false},
+      "kwargs_negative": {"num_beams": 1, "num_return_sequences": 1, "do_sample": false}
+    },
+    {
+      "rule_id": "transformers_raises_num_beams_eq_1",
+      "classification": "still_holds",
+      "reason": "The rule still checks the same condition and raises an error with a similar message.",
+      "citation": "configuration_utils.py lines 273-280",
+      "kwargs_positive": {"num_return_sequences": 2, "num_beams": 1},
+      "kwargs_negative": {"num_return_sequences": 2, "num_beams": 2}
+    },
+    {
+      "rule_id": "transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig",
+      "classification": "still_holds",
+      "reason": "The rule still checks the same condition and raises an error with a similar message.",
+      "citation": "configuration_utils.py lines 267-269",
+      "kwargs_positive": {"watermarking_config": 42},
+      "kwargs_negative": {"watermarking_config": null}
+    },
+    {
+      "rule_id": "transformers_bnb_4bit_quant_type_dormant_without_load_in_4bit",
+      "classification": "dormancy_now_silent",
+      "reason": "The rule still describes a field that is silently ignored under the condition, but there is no warning emitted at construction in the new source.",
+      "citation": "quantization_config.py lines 427-430",
+      "kwargs_positive": {"load_in_4bit": false, "bnb_4bit_quant_type": "nf4"},
+      "kwargs_negative": {"load_in_4bit": true, "bnb_4bit_quant_type": "nf4"}
+    },
+    {
+      "rule_id": "transformers_bnb_4bit_compute_dtype_dormant_without_load_in_4bit",
+      "classification": "dormancy_now_silent",
+      "reason": "The rule still describes a field that is silently ignored under the condition, but there is no warning emitted at construction in the new source.",
+      "citation": "quantization_config.py lines 425-430",
+      "kwargs_positive": {"load_in_4bit": false, "bnb_4bit_compute_dtype": "bfloat16"},
+      "kwargs_negative": {"load_in_4bit": true, "bnb_4bit_compute_dtype": "bfloat16"}
+    },
+    {
+      "rule_id": "transformers_bnb_4bit_use_double_quant_dormant_without_load_in_4bit",
+      "classification": "dormancy_now_silent",
+      "reason": "The rule still describes a field that is silently ignored under the condition, but there is no warning emitted at construction in the new source.",
+      "citation": "quantization_config.py lines 430-432",
+      "kwargs_positive": {"load_in_4bit": false, "bnb_4bit_use_double_quant": true},
+      "kwargs_negative": {"load_in_4bit": true, "bnb_4bit_use_double_quant": true}
+    }
+  ]
+}

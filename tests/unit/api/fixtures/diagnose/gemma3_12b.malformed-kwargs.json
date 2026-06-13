@@ -1,0 +1,60 @@
+{
+  "diagnoses": [
+    {
+      "rule_id": "transformers_cache_choice_cache_implementation_not_in_allowlist",
+      "classification": "decayed_announcement",
+      "reason": "The `cache_implementation` parameter is still present and validated in `GenerationConfig`, but the error message has been updated. The allowed values are still checked, so the core constraint remains. The message template is no longer valid.",
+      "citation": "transformers/utils/quantization_config.py:164-173",
+      "kwargs_positive": {"cache_implementation": "nonsense", "use_cache": "True"},
+      "kwargs_negative": {"cache_implementation": "static", "use_cache": "True"}
+    },
+    {
+      "rule_id": "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1",
+      "classification": "still_holds",
+      "reason": "The constraint regarding `num_beams` and `num_return_sequences` when `do_sample` is False remains. The error message has been updated, but the underlying logic is unchanged.",
+      "citation": "transformers/generation/configuration_utils.py:274-280",
+      "kwargs_positive": {"num_beams": 1, "num_return_sequences": 2, "do_sample": "False"},
+      "kwargs_negative": {"num_beams": 1, "num_return_sequences": 1, "do_sample": "False"}
+    },
+    {
+      "rule_id": "transformers_raises_num_beams_eq_1",
+      "classification": "still_holds",
+      "reason": "The invariant regarding `num_return_sequences` and `num_beams` when `do_sample` is False still holds. The error message has been updated, but the underlying logic is unchanged.",
+      "citation": "transformers/generation/configuration_utils.py:274-280",
+      "kwargs_positive": {"num_return_sequences": 2, "num_beams": 1},
+      "kwargs_negative": {"num_return_sequences": 2, "num_beams": 2}
+    },
+    {
+      "rule_id": "transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig",
+      "classification": "still_holds",
+      "reason": "The constraint regarding the type of `watermarking_config` still holds. The error message has been updated, but the underlying logic is unchanged.",
+      "citation": "transformers/generation/configuration_utils.py:266-270",
+      "kwargs_positive": {"watermarking_config": 42},
+      "kwargs_negative": {"watermarking_config": "None"}
+    },
+    {
+      "rule_id": "transformers_bnb_4bit_quant_type_dormant_without_load_in_4bit",
+      "classification": "dormancy_now_silent",
+      "reason": "The rule describes a scenario where `bnb_4bit_quant_type` is ignored when `load_in_4bit` is False. This behavior remains unchanged, but the old error message is no longer emitted. The rule is now silent.",
+      "citation": "transformers/utils/quantization_config.py:427-433",
+      "kwargs_positive": {"load_in_4bit": "False", "bnb_4bit_quant_type": "nf4"},
+      "kwargs_negative": {"load_in_4bit": "True", "bnb_4bit_quant_type": "nf4"}
+    },
+    {
+      "rule_id": "transformers_bnb_4bit_compute_dtype_dormant_without_load_in_4bit",
+      "classification": "dormancy_now_silent",
+      "reason": "The rule describes a scenario where `bnb_4bit_compute_dtype` is ignored when `load_in_4bit` is False. This behavior remains unchanged, but the old error message is no longer emitted. The rule is now silent.",
+      "citation": "transformers/utils/quantization_config.py:467-475",
+      "kwargs_positive": {"load_in_4bit": "False", "bnb_4bit_compute_dtype": "bfloat16"},
+      "kwargs_negative": {"load_in_4bit": "True", "bnb_4bit_compute_dtype": "bfloat16"}
+    },
+    {
+      "rule_id": "transformers_bnb_4bit_use_double_quant_dormant_without_load_in_4bit",
+      "classification": "dormancy_now_silent",
+      "reason": "The rule describes a scenario where `bnb_4bit_use_double_quant` is ignored when `load_in_4bit` is False. This behavior remains unchanged, but the old error message is no longer emitted. The rule is now silent.",
+      "citation": "transformers/utils/quantization_config.py:476-487",
+      "kwargs_positive": {"load_in_4bit": "False", "bnb_4bit_use_double_quant": "True"},
+      "kwargs_negative": {"load_in_4bit": "True", "bnb_4bit_use_double_quant": "True"}
+    }
+  ]
+}
