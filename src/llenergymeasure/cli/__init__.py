@@ -109,6 +109,13 @@ app.command(
     help="Propose invariants corpus entries from runtime observations",
 )(_report_gaps_cmd)
 
+from llenergymeasure.cli.diagnose_cmd import diagnose_bump_cmd as _diagnose_bump_cmd  # noqa: E402
+
+app.command(
+    name="diagnose-bump",
+    help="Propose gate-confirmed rule entries from an upstream engine bump (local GPU)",
+)(_diagnose_bump_cmd)
+
 __all__ = ["app"]
 
 if __name__ == "__main__":
