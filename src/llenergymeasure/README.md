@@ -71,8 +71,7 @@ Exception hierarchy rooted at `LLEMError`:
 
 ### utils/security.py
 Security utilities:
-- `sanitize_experiment_id()` - sanitise IDs for filesystem
-- `is_safe_path()` - prevent path traversal
+- `trust_remote_code_enabled()` - read the `LLEM_TRUST_REMOTE_CODE` opt-in
 
 ## Submodules
 
