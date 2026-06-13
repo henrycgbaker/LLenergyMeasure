@@ -23,15 +23,17 @@ from typing import Any
 
 import pytest
 
+from llenergymeasure.api._source_window import SymbolRequest, windowed_source
 from llenergymeasure.api.diagnose import (
     CLASSIFICATIONS,
     DiagnoseError,
     Diagnosis,
     build_carried_triage_prompt,
     build_gap_diagnose_prompt,
+    carried_symbol_requests,
+    config_surface_symbol_requests,
     diagnose_carried_failures,
     diagnose_gaps,
-    diff_scoped_source,
     parse_diagnoses,
     render_proposed_yaml,
 )
@@ -86,33 +88,170 @@ def _carried_corpus() -> dict[str, Any]:
     return {"schema_version": "1.0.0", "engine": "transformers", "invariants": invs}
 
 
+# A multi-class source file whose total length far exceeds the windowing budget.
+# Only the trailing GenerationConfig is cited; the fillers exist to prove the
+# windower does not feed the whole file. The cited fields below match the kwargs
+# the residual carried entries probe (``x``), plus a real-shaped field/validator.
+_FILLER_LINE = "    pad_{i}: int = {i}  # " + "y" * 80
+
+
+def _write_large_config_file(path: Path, *, classes: int = 60, fields_each: int = 25) -> str:
+    """Write a synthetic config module >> the windowing budget; return its text.
+
+    Ends with a ``GenerationConfig`` class carrying field ``x`` (the test rules'
+    cited kwargs key) and a ``validate`` method that references it - the cited
+    symbol the windower must locate inside a multi-class file.
+    """
+    lines: list[str] = ["import os", ""]
+    for c in range(classes):
+        lines.append(f"class Filler{c}Config:")
+        for i in range(fields_each):
+            lines.append(_FILLER_LINE.format(i=i))
+        lines.append("")
+    lines += [
+        "class GenerationConfig:",
+        "    x: int = 0",
+        "    def validate(self):",
+        "        if self.x < 0:",
+        '            raise ValueError("bad x")',
+        "",
+    ]
+    body = "\n".join(lines)
+    path.write_text(body)
+    return body
+
+
 # ---------------------------------------------------------------------------
-# Diff-scoping
+# Per-symbol source windowing
 # ---------------------------------------------------------------------------
 
 
-def test_diff_scoped_source_numbers_lines_and_labels_files(tmp_path: Path) -> None:
-    (tmp_path / "a.py").write_text("first\nsecond\n")
-    (tmp_path / "b.py").write_text("only\n")
-    src = diff_scoped_source(source_root=tmp_path, files=["a.py", "b.py"])
-    assert "### FILE: a.py" in src
-    assert "### FILE: b.py" in src
-    assert "    1: first" in src
-    assert "    2: second" in src
+def test_windowing_bounds_a_large_file_and_contains_the_cited_symbol(tmp_path: Path) -> None:
+    body = _write_large_config_file(tmp_path / "configuration_utils.py")
+    assert len(body) > 20_000, "fixture must dwarf the budget for this test to mean anything"
+
+    report = windowed_source(
+        source_root=tmp_path,
+        requests=[
+            SymbolRequest(
+                file="configuration_utils.py", class_name="GenerationConfig", fields=("x",)
+            )
+        ],
+        budget_chars=12_000,
+    )
+    # Bounded: the window is a tiny fraction of the whole file, and under budget.
+    assert report.chars < 12_000
+    assert report.chars < len(body) // 10
+    # Contains the cited class + field + the validator that references it.
+    assert "class GenerationConfig" in report.source
+    assert "x: int = 0" in report.source
+    assert "def validate" in report.source
+    # Real 1-based line numbers from the new pin (so the model can cite them).
+    assert "### FILE: configuration_utils.py" in report.source
+    assert not report.truncated and not report.missing
 
 
-def test_diff_scoped_source_skips_missing_and_empty(tmp_path: Path) -> None:
-    (tmp_path / "real.py").write_text("content\n")
-    (tmp_path / "blank.py").write_text("   \n")
-    src = diff_scoped_source(source_root=tmp_path, files=["real.py", "blank.py", "absent.py"])
-    assert "### FILE: real.py" in src
-    assert "blank.py" not in src
-    assert "absent.py" not in src
+def test_windowing_multi_file_residual_windows_per_file_within_budget(tmp_path: Path) -> None:
+    (tmp_path / "a.py").write_text(
+        "class GenerationConfig:\n    cache_implementation: str = 'd'\n"
+        "    def validate(self):\n        return self.cache_implementation\n"
+    )
+    (tmp_path / "b.py").write_text(
+        "class BitsAndBytesConfig:\n    load_in_4bit: bool = False\n"
+        "    def post_init(self):\n        return self.load_in_4bit\n"
+    )
+    report = windowed_source(
+        source_root=tmp_path,
+        requests=[
+            SymbolRequest(
+                file="a.py", class_name="GenerationConfig", fields=("cache_implementation",)
+            ),
+            SymbolRequest(file="b.py", class_name="BitsAndBytesConfig", fields=("load_in_4bit",)),
+        ],
+        budget_chars=12_000,
+    )
+    assert "### FILE: a.py" in report.source
+    assert "### FILE: b.py" in report.source
+    assert "cache_implementation" in report.source
+    assert "load_in_4bit" in report.source
+    assert report.chars < 12_000
+    assert not report.truncated and not report.missing
 
 
-def test_diff_scoped_source_empty_raises(tmp_path: Path) -> None:
-    with pytest.raises(DiagnoseError, match="diff-scoped source is empty"):
-        diff_scoped_source(source_root=tmp_path, files=["nope.py"])
+def test_windowing_reports_truncation_never_silent(tmp_path: Path) -> None:
+    (tmp_path / "a.py").write_text(
+        "class GenerationConfig:\n    aa: int = 1\n    def m(self):\n        return self.aa\n"
+    )
+    (tmp_path / "b.py").write_text(
+        "class BitsAndBytesConfig:\n    bb: int = 1\n    def m(self):\n        return self.bb\n"
+    )
+    report = windowed_source(
+        source_root=tmp_path,
+        requests=[
+            SymbolRequest(file="a.py", class_name="GenerationConfig", fields=("aa",)),
+            SymbolRequest(file="b.py", class_name="BitsAndBytesConfig", fields=("bb",)),
+        ],
+        budget_chars=120,  # only room for one window
+    )
+    # One window kept; the other dropped and REPORTED (not silently dropped).
+    assert "### FILE" in report.source
+    assert report.truncated, "over-budget windows must be reported"
+    assert any("budget" in note for note in report.truncated)
+
+
+def test_windowing_flags_a_cited_symbol_missing_from_the_new_pin(tmp_path: Path) -> None:
+    (tmp_path / "configuration_utils.py").write_text(
+        "class GenerationConfig:\n    other: int = 1\n"
+    )
+    # Field that no longer exists -> header still emitted, field flagged missing.
+    report = windowed_source(
+        source_root=tmp_path,
+        requests=[
+            SymbolRequest(
+                file="configuration_utils.py", class_name="GenerationConfig", fields=("gone",)
+            )
+        ],
+        budget_chars=12_000,
+    )
+    assert report.missing, "a vanished cited field must be flagged"
+    assert any("gone" in note for note in report.missing)
+    assert "class GenerationConfig" in report.source  # header window survives
+
+    # Class that no longer exists -> empty window + flagged note, no crash.
+    report2 = windowed_source(
+        source_root=tmp_path,
+        requests=[
+            SymbolRequest(file="configuration_utils.py", class_name="VanishedConfig", fields=("x",))
+        ],
+        budget_chars=12_000,
+    )
+    assert not report2.source.strip()
+    assert any("VanishedConfig" in note for note in report2.missing)
+
+
+def test_carried_symbol_requests_derive_class_and_fields() -> None:
+    carried = [_carried_entry("rule_a")]
+    requests = carried_symbol_requests(carried=carried, cited_files=["f1.py", "f2.py"])
+    # One request per cited file; class is the native_type tail.
+    assert {r.file for r in requests} == {"f1.py", "f2.py"}
+    assert all(r.class_name == "GenerationConfig" for r in requests)
+    # Fields come from the kwargs probe keys and the match-field tails.
+    assert all("x" in r.fields for r in requests)
+    assert all("rule_a" in r.fields for r in requests)
+
+
+def test_config_surface_symbol_requests_enumerate_config_classes(tmp_path: Path) -> None:
+    (tmp_path / "config.py").write_text(
+        "class FooConfig:\n    a: int = 1\n\nclass BarParams:\n    b: int = 2\n\n"
+        "def helper():\n    pass\n"
+    )
+    requests = config_surface_symbol_requests(
+        source_root=tmp_path, config_surface_files=["config.py"]
+    )
+    names = {r.class_name for r in requests}
+    assert names == {"FooConfig", "BarParams"}
+    # Surface requests are field-agnostic (whole-class windows).
+    assert all(r.fields == () for r in requests)
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +387,7 @@ def _gate_stub(verdicts_by_id: dict[str, str]):
 
 
 def test_carried_failures_end_to_end_emits_only_confirmed(tmp_path: Path) -> None:
-    (tmp_path / "configuration_utils.py").write_text("source line\n" * 10)
+    _write_large_config_file(tmp_path / "configuration_utils.py")
     model = _StubModel(CLEAN_RAW.read_text())
 
     # Confirm 3 of the 4 error rules; leave one unconfirmed; bnb trio not
@@ -305,7 +444,7 @@ def test_carried_failures_end_to_end_emits_only_confirmed(tmp_path: Path) -> Non
 
 
 def test_malformed_kwargs_dropped_before_gating(tmp_path: Path) -> None:
-    (tmp_path / "configuration_utils.py").write_text("src\n" * 5)
+    _write_large_config_file(tmp_path / "configuration_utils.py")
     model = _StubModel(MALFORMED_RAW.read_text())
 
     gated_ids: list[str] = []
@@ -332,7 +471,7 @@ def test_malformed_kwargs_dropped_before_gating(tmp_path: Path) -> None:
 
 
 def test_carried_failures_no_confirmed_writes_nothing(tmp_path: Path) -> None:
-    (tmp_path / "x.py").write_text("src\n")
+    _write_large_config_file(tmp_path / "configuration_utils.py")
     model = _StubModel(CLEAN_RAW.read_text())
     result = diagnose_carried_failures(
         engine="transformers",
@@ -341,7 +480,7 @@ def test_carried_failures_no_confirmed_writes_nothing(tmp_path: Path) -> None:
         residual_ids=_RESIDUAL_IDS,
         carried_corpus=_carried_corpus(),
         source_root=tmp_path,
-        cited_files=["x.py"],
+        cited_files=["configuration_utils.py"],
         model=model,
         gate_runner=_gate_stub(dict.fromkeys(_RESIDUAL_IDS, "not_confirmed")),
     )
@@ -350,7 +489,7 @@ def test_carried_failures_no_confirmed_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_carried_failures_rejects_unknown_residual_id(tmp_path: Path) -> None:
-    (tmp_path / "x.py").write_text("src\n")
+    _write_large_config_file(tmp_path / "configuration_utils.py")
     with pytest.raises(DiagnoseError, match="absent from carried corpus"):
         diagnose_carried_failures(
             engine="transformers",
@@ -359,14 +498,33 @@ def test_carried_failures_rejects_unknown_residual_id(tmp_path: Path) -> None:
             residual_ids=["not_a_real_rule"],
             carried_corpus=_carried_corpus(),
             source_root=tmp_path,
-            cited_files=["x.py"],
+            cited_files=["configuration_utils.py"],
+            model=_StubModel(CLEAN_RAW.read_text()),
+            gate_runner=_gate_stub({}),
+        )
+
+
+def test_carried_failures_empty_window_raises(tmp_path: Path) -> None:
+    # A file with no matching class -> windowing resolves nothing -> guarded.
+    (tmp_path / "configuration_utils.py").write_text("def unrelated():\n    return 1\n")
+    with pytest.raises(DiagnoseError, match="windowed source is empty"):
+        diagnose_carried_failures(
+            engine="transformers",
+            old_version="4.57.3",
+            new_version="5.7.0",
+            residual_ids=_RESIDUAL_IDS,
+            carried_corpus=_carried_corpus(),
+            source_root=tmp_path,
+            cited_files=["configuration_utils.py"],
             model=_StubModel(CLEAN_RAW.read_text()),
             gate_runner=_gate_stub({}),
         )
 
 
 def test_gap_diagnose_end_to_end(tmp_path: Path) -> None:
-    (tmp_path / "config.py").write_text("class Config:\n    pass\n" * 5)
+    (tmp_path / "config.py").write_text(
+        "class Config:\n    n: int = 1\n    def validate(self):\n        return self.n\n"
+    )
     raw = json.dumps(
         {
             "diagnoses": [
