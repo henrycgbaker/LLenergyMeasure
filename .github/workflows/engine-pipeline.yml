@@ -505,14 +505,30 @@ jobs:
           # Apply staging onto the working tree, preserving relative paths.
           rsync -a /tmp/writeback-staging/ ./
 
+          # Carry the maintainer-owned inputs forward onto the bumped pin. A
+          # real Renovate bump touches only current.yaml, so the new pin's SSOT
+          # outputs/ arrives here with the cells' mined schema + rules but no
+          # curated.yaml (the exposure allowlist the codegen needs) and no
+          # overlay.yaml (hand-authored narrowings). Seed them from the prior
+          # pin before deriving (idempotent + never clobbers maintainer edits);
+          # they then land in the bump PR diff as the maintainer's review
+          # starting point (design section 5 step 5 / step 7). No-op for the
+          # engines this PR did not bump (their curated.yaml is already on the
+          # current pin).
+          for ENGINE in transformers vllm tensorrt; do
+            uv run python -m scripts.engine_producers._current \
+              --engine "${ENGINE}" --carry-forward
+          done
+
           # The cells produce knowledge in the SSOT
           # (engine_versions/<e>/v<pin>/outputs/) and upload it alongside the
           # src/ shadow they already derived from it. Re-run the corpus
           # derivation here so the merged multi-cell tree is consistent SSOT ->
-          # shadow (idempotent - byte-identical to the cells' upload); then
-          # regenerate config.py, the load-bearing step - config.py is
-          # generated, never uploaded by a cell, so it must be projected from
-          # the new schema here or it drifts against the data.
+          # shadow (idempotent - byte-identical to the cells' upload, plus the
+          # carried-forward curated.yaml/overlay.yaml); then regenerate
+          # config.py, the load-bearing step - config.py is generated, never
+          # uploaded by a cell, so it must be projected from the new schema +
+          # the carried curation here or it drifts against the data.
           uv run python scripts/engine_producers/regen_engine_corpus.py --write
           uv run python scripts/engine_producers/regen_engine_configs.py --write
 

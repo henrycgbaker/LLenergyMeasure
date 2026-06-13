@@ -11,6 +11,11 @@ This module exposes the lookup helpers that read it:
 - :func:`previous_pin_outputs_dir` - the most-recent prior pin's outputs/
   directory (the carried-input source for the decay alarm + surface trend),
   or ``None`` when no prior vendored pin exists yet.
+- :func:`carry_forward_inputs` - seed the current pin's outputs/ with the
+  maintainer-owned input files (curated.yaml always; overlay.yaml when the
+  prior pin had one) from the most-recent prior pin, so a Renovate bump that
+  only touches current.yaml still produces a complete SSOT for the pipeline
+  to mine + derive against.
 - :func:`is_major_bump` - whether the current pin crosses a semver MAJOR
   over the previous pin (drives the major-bump label + churn warning).
 
@@ -22,10 +27,17 @@ loud (no silent fallback to a hard-coded default).
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import yaml
 from packaging.version import InvalidVersion, Version
+
+# Maintainer-owned input files (design section 4). curated.yaml is required:
+# it is the exposure allowlist every derivation needs. overlay.yaml is
+# optional: hand-authored narrowings that only some pins carry.
+REQUIRED_INPUT_FILES: tuple[str, ...] = ("curated.yaml",)
+OPTIONAL_INPUT_FILES: tuple[str, ...] = ("overlay.yaml",)
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -147,6 +159,65 @@ def previous_pin_outputs_dir(engine: str) -> Path | None:
     return max(candidates, key=lambda item: item[0])[1]
 
 
+def carry_forward_inputs(engine: str) -> list[str]:
+    """Seed the current pin's outputs/ with the maintainer-owned input files.
+
+    A real Renovate bump edits only ``engine_versions/{engine}/current.yaml``,
+    so the new pin's ``outputs/`` directory starts empty - it has no
+    ``curated.yaml`` (the exposure allowlist every derivation needs) and no
+    ``overlay.yaml`` (hand-authored narrowings). These are maintainer-owned
+    inputs that "carry forward unchanged" across a bump (design section 5
+    step 5), so the pipeline copies them from the most-recent prior pin's
+    outputs/ before any mining/derivation step reads them. They then appear in
+    the bump PR diff as the starting point the maintainer reviews/edits
+    (design step 7).
+
+    Carry rules:
+
+    - ``curated.yaml`` is REQUIRED. If the current pin already has one, it is
+      left untouched (never clobber maintainer edits). If it is missing, it is
+      copied from the prior pin. If neither the current pin nor any prior pin
+      has one, raise ``FileNotFoundError`` - a brand-new engine needs a
+      bootstrap curated.yaml, which is out of scope for the per-bump loop.
+    - ``overlay.yaml`` is OPTIONAL. Carried only when the current pin lacks one
+      and the prior pin has one; its absence everywhere is fine, not an error.
+
+    Returns the list of file names (e.g. ``["curated.yaml"]``) actually copied,
+    for the caller to log. Idempotent: a second call is a no-op (returns
+    ``[]``) because the files now exist on the current pin.
+    """
+    current = current_outputs_dir(engine)
+    current.mkdir(parents=True, exist_ok=True)
+    prior = previous_pin_outputs_dir(engine)
+    copied: list[str] = []
+
+    for name in REQUIRED_INPUT_FILES:
+        dst = current / name
+        if dst.exists():
+            continue
+        src = (prior / name) if prior is not None else None
+        if src is None or not src.exists():
+            raise FileNotFoundError(
+                f"{engine}: required input {name} missing from the current pin "
+                f"({current}) and no prior pin carries one to forward. A brand-new "
+                f"engine needs a bootstrap {name} (out of scope for the per-bump loop)."
+            )
+        shutil.copy2(src, dst)
+        copied.append(name)
+
+    for name in OPTIONAL_INPUT_FILES:
+        dst = current / name
+        if dst.exists() or prior is None:
+            continue
+        src = prior / name
+        if not src.exists():
+            continue
+        shutil.copy2(src, dst)
+        copied.append(name)
+
+    return copied
+
+
 def _dir_version(version_dir_name: str) -> Version | None:
     """Recover the semver from a ``v<safe>`` version-directory name.
 
@@ -192,12 +263,36 @@ def _main(argv: list[str] | None = None) -> int:
     at ``/repo`` (``-w /repo``), so an absolute runner path would dangle. The
     host-side consumers (surface trend, gate-report comment) run from the
     checkout root, where the relative form resolves identically.
+
+    With ``--carry-forward`` the command instead seeds the current pin's
+    maintainer-owned input files from the prior pin (see
+    :func:`carry_forward_inputs`) and prints what it copied; this is the
+    pipeline's pre-mine step on a fresh-version bump.
     """
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", required=True, help="Engine name")
+    parser.add_argument(
+        "--carry-forward",
+        action="store_true",
+        help=(
+            "Seed the current pin's outputs/ with curated.yaml (always) and "
+            "overlay.yaml (when the prior pin had one) from the most-recent "
+            "prior pin, then exit. Idempotent."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.carry_forward:
+        copied = carry_forward_inputs(args.engine)
+        if copied:
+            print(f"[carry-forward] {args.engine}: seeded {', '.join(copied)} from the prior pin.")
+        else:
+            print(
+                f"[carry-forward] {args.engine}: maintainer inputs already present; nothing carried."
+            )
+        return 0
 
     prev = previous_pin_outputs_dir(args.engine)
     if prev is not None:

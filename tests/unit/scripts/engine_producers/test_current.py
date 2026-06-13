@@ -131,6 +131,165 @@ def test_previous_pin_none_for_unknown_engine(
 
 
 # ---------------------------------------------------------------------------
+# carry_forward_inputs
+# ---------------------------------------------------------------------------
+
+
+def _carry_tree(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    engine: str,
+    current: str,
+    prior: str | None,
+    prior_files: dict[str, str] | None = None,
+    current_files: dict[str, str] | None = None,
+) -> Path:
+    """Lay out a synthetic engine tree for carry-forward tests.
+
+    ``prior_files`` populates the prior pin's outputs/; ``current_files``
+    pre-seeds the current pin's outputs/ (to test the no-clobber path).
+    Wires the module's repo-root + current-version resolvers at the tree.
+    Returns the current pin's outputs/ directory.
+    """
+    engine_dir = tmp_path / "engine_versions" / engine
+    if prior is not None:
+        prior_out = engine_dir / _current.safe_version(prior) / "outputs"
+        prior_out.mkdir(parents=True)
+        # A prior pin must carry rules to qualify as previous_pin_outputs_dir.
+        (prior_out / "rules.proposed.yaml").write_text("invariants: []\n")
+        for name, body in (prior_files or {}).items():
+            (prior_out / name).write_text(body, encoding="utf-8")
+    current_out = engine_dir / _current.safe_version(current) / "outputs"
+    current_out.mkdir(parents=True)
+    for name, body in (current_files or {}).items():
+        (current_out / name).write_text(body, encoding="utf-8")
+    monkeypatch.setattr(_current, "_find_repo_root", lambda start: tmp_path)
+    monkeypatch.setattr(_current, "current_version", lambda e: current)
+    return current_out
+
+
+def test_carry_forward_seeds_curated_and_overlay(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Fresh new pin, prior carries both maintainer inputs -> both forwarded.
+    current_out = _carry_tree(
+        monkeypatch,
+        tmp_path,
+        engine="transformers",
+        current="5.8.1",
+        prior="5.7.0",
+        prior_files={
+            "curated.yaml": "engine: transformers\n",
+            "overlay.yaml": "narrowings: {temperature: {le: 2.0}}\n",
+        },
+    )
+    copied = _current.carry_forward_inputs("transformers")
+    assert set(copied) == {"curated.yaml", "overlay.yaml"}
+    assert (current_out / "curated.yaml").read_text() == "engine: transformers\n"
+    assert "temperature" in (current_out / "overlay.yaml").read_text()
+
+
+def test_carry_forward_curated_only_when_prior_has_no_overlay(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Prior carries curated but no overlay -> curated forwarded, no overlay,
+    # no error (overlay is optional).
+    current_out = _carry_tree(
+        monkeypatch,
+        tmp_path,
+        engine="transformers",
+        current="5.0.0",
+        prior="4.57.3",
+        prior_files={"curated.yaml": "engine: transformers\n"},
+    )
+    copied = _current.carry_forward_inputs("transformers")
+    assert copied == ["curated.yaml"]
+    assert (current_out / "curated.yaml").exists()
+    assert not (current_out / "overlay.yaml").exists()
+
+
+def test_carry_forward_is_noop_when_current_already_has_inputs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The current pin already carries the maintainer files (e.g. a re-run, or a
+    # maintainer edit). Carry must NOT clobber them.
+    current_out = _carry_tree(
+        monkeypatch,
+        tmp_path,
+        engine="transformers",
+        current="5.8.1",
+        prior="5.7.0",
+        prior_files={
+            "curated.yaml": "engine: transformers\nfrom: prior\n",
+            "overlay.yaml": "from: prior\n",
+        },
+        current_files={
+            "curated.yaml": "engine: transformers\nfrom: maintainer-edit\n",
+            "overlay.yaml": "from: maintainer-edit\n",
+        },
+    )
+    copied = _current.carry_forward_inputs("transformers")
+    assert copied == []
+    assert "maintainer-edit" in (current_out / "curated.yaml").read_text()
+    assert "maintainer-edit" in (current_out / "overlay.yaml").read_text()
+
+
+def test_carry_forward_raises_when_no_curated_anywhere(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Brand-new engine: neither the current pin nor any prior carries a
+    # curated.yaml. That needs a bootstrap, out of scope for the per-bump loop.
+    _carry_tree(
+        monkeypatch,
+        tmp_path,
+        engine="newengine",
+        current="1.0.0",
+        prior=None,
+    )
+    with pytest.raises(FileNotFoundError, match=r"required input curated\.yaml missing"):
+        _current.carry_forward_inputs("newengine")
+
+
+def test_carry_forward_raises_when_prior_lacks_curated(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A prior pin exists but somehow has no curated.yaml (corrupt window): the
+    # required input cannot be forwarded -> hard error, not a silent gap.
+    _carry_tree(
+        monkeypatch,
+        tmp_path,
+        engine="transformers",
+        current="5.8.1",
+        prior="5.7.0",
+        prior_files={"overlay.yaml": "narrowings: {}\n"},
+    )
+    with pytest.raises(FileNotFoundError, match=r"required input curated\.yaml missing"):
+        _current.carry_forward_inputs("transformers")
+
+
+def test_carry_forward_main_emits_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _carry_tree(
+        monkeypatch,
+        tmp_path,
+        engine="transformers",
+        current="5.8.1",
+        prior="5.7.0",
+        prior_files={"curated.yaml": "engine: transformers\n"},
+    )
+    assert _current._main(["--engine", "transformers", "--carry-forward"]) == 0
+    out = capsys.readouterr().out
+    assert "seeded curated.yaml" in out
+    # A second pass is a no-op.
+    assert _current._main(["--engine", "transformers", "--carry-forward"]) == 0
+    assert "nothing carried" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
 # is_major_bump
 # ---------------------------------------------------------------------------
 
