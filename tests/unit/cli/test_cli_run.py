@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-import llenergymeasure.cli._display as cli_display_mod
 import llenergymeasure.cli.run as cli_run_mod
 from llenergymeasure.cli import app
 
@@ -385,45 +384,6 @@ def test_cli_flags_present():
     assert "--no-gaps" in plain
 
 
-def test_print_study_summary_basic():
-    """print_study_summary runs without error on a minimal StudyResult."""
-    from io import StringIO
-    from unittest.mock import MagicMock, patch
-
-    from llenergymeasure.cli._display import print_study_summary
-    from llenergymeasure.domain.experiment import StudyResult, StudySummary
-
-    # Use model_construct to bypass Pydantic validation for the container -
-    # experiments list contains a MagicMock, which is not a valid ExperimentResult.
-    exp = MagicMock()
-    exp.model_name = "test/model"
-    exp.engine = "transformers"
-    exp.duration_sec = 45.2
-    exp.total_energy_j = 123.4
-    exp.avg_tokens_per_second = 42.5
-    exp.total_inference_time_sec = 40.0
-    exp.energy_adjusted_j = None
-    exp.mj_per_tok_adjusted = None
-    exp.mj_per_tok_total = None
-
-    result = StudyResult.model_construct(
-        experiments=[exp],
-        study_name="test-study",
-        study_design_hash="abcd1234",
-        summary=StudySummary(
-            total_experiments=1, completed=1, failed=0, total_wall_time_s=50.0, total_energy_j=123.4
-        ),
-        result_files=["results/exp1/result.json"],
-        measurement_protocol={},
-    )
-
-    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-        print_study_summary(result)
-    output = mock_stdout.getvalue()
-    assert "test-study" in output
-    assert "abcd1234" in output
-
-
 # ---------------------------------------------------------------------------
 # Study routing tests - verify CLI actually invokes run_study for study YAMLs
 # ---------------------------------------------------------------------------
@@ -445,7 +405,6 @@ def test_run_study_routing_sweep_yaml(tmp_path):
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.api.load_study") as mock_load,
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         mock_config = MagicMock()
         mock_config.experiments = [MagicMock(), MagicMock()]
@@ -474,7 +433,6 @@ def test_run_study_routing_experiments_yaml(tmp_path):
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.api.load_study") as mock_load,
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         mock_config = MagicMock()
         mock_config.experiments = [MagicMock(), MagicMock()]
@@ -526,7 +484,6 @@ def test_run_study_cli_defaults_applied(tmp_path):
         patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml)])
 
@@ -594,7 +551,6 @@ def test_fail_fast_sets_max_consecutive_failures(tmp_path):
         patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--fail-fast"])
 
@@ -615,7 +571,6 @@ def test_no_circuit_breaker_sets_max_failures_zero(tmp_path):
         patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--no-circuit-breaker"])
 
@@ -635,7 +590,6 @@ def test_timeout_flag_sets_wall_clock_timeout(tmp_path):
         patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "24"])
 
@@ -655,7 +609,6 @@ def test_timeout_flag_fractional(tmp_path):
         patch("llenergymeasure.api.load_study", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "1.5"])
 
@@ -680,7 +633,6 @@ def test_resume_flag_passes_resume_to_api(tmp_path):
         patch("llenergymeasure.api.load_study", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
         patch(
             "llenergymeasure.api.find_resumable_study",
             return_value=tmp_path / "fake-study",
@@ -713,7 +665,6 @@ def test_resume_dir_flag_passes_path_to_api(tmp_path):
         patch("llenergymeasure.api.load_study", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--resume-dir", str(explicit_dir)])
 

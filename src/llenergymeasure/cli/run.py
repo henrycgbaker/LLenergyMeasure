@@ -739,7 +739,3 @@ def _run_study_impl(
     if study_display is not None:
         save_path = str(result.result_files[0]) if result.result_files else None
         study_display.finish(save_path=save_path, total_elapsed=_study_elapsed)
-    elif effective_mode != "quiet":
-        from llenergymeasure.cli._display import print_study_summary
-
-        print_study_summary(result)

@@ -1,7 +1,7 @@
 """Unit tests for the CLI pre-flight display (panel + text summary).
 
-GPU-free: exercises format_preflight_summary and build_preflight_panel by
-rendering against StudyConfig fixtures and asserting on the rendered text.
+GPU-free: exercises build_preflight_panel by rendering against StudyConfig
+fixtures and asserting on the rendered text.
 """
 
 from __future__ import annotations
@@ -10,137 +10,12 @@ from io import StringIO
 
 from rich.console import Console
 
-from llenergymeasure.cli._preflight_display import (
-    build_preflight_panel,
-    format_preflight_summary,
-)
-from llenergymeasure.config.grid import SkippedConfig
+from llenergymeasure.cli._preflight_display import build_preflight_panel
 from llenergymeasure.config.models import (
-    DatasetConfig,
     ExecutionConfig,
     ExperimentConfig,
     StudyConfig,
 )
-from llenergymeasure.config.ssot import Engine
-
-# =============================================================================
-# format_preflight_summary() tests
-# =============================================================================
-
-
-def _make_study_config(
-    n_configs: int = 4,
-    n_cycles: int = 3,
-    experiment_order: str = "interleave",
-    study_hash: str = "abc123def456abcd",
-    skipped_configs: list | None = None,
-) -> StudyConfig:
-    """Helper: build a StudyConfig with the given parameters."""
-    experiments = [
-        ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i + 1)})
-        for i in range(n_configs * n_cycles)
-    ]
-    return StudyConfig(
-        experiments=experiments,
-        study_execution=ExecutionConfig(n_cycles=n_cycles, experiment_order=experiment_order),
-        study_design_hash=study_hash,
-        skipped_configs=skipped_configs or [],
-    )
-
-
-class TestFormatPreflightSummary:
-    def test_basic_format(self):
-        """Pre-flight string shows config count, cycle count, total runs, order."""
-        sc = _make_study_config(n_configs=4, n_cycles=3, experiment_order="interleave")
-        summary = format_preflight_summary(sc)
-        assert "4 configs x 3 cycles = 12 runs" in summary
-        assert "Order: interleave" in summary
-
-    def test_hash_displayed(self):
-        """study_design_hash appears in the summary line."""
-        sc = _make_study_config(study_hash="deadbeef01234567")
-        summary = format_preflight_summary(sc)
-        assert "deadbeef01234567" in summary
-
-    def test_no_skipped_no_warning(self):
-        """Summary with no skipped configs has no Skipping or WARNING lines."""
-        sc = _make_study_config()
-        summary = format_preflight_summary(sc)
-        assert "Skipping" not in summary
-        assert "WARNING" not in summary
-
-    def test_with_skipped_shows_skip_line(self):
-        """When skipped_configs populated, Skipping line with reasons appears."""
-        skipped = [
-            {
-                "raw_config": {"engine": "transformers", "transformers": {"dtype": "float32"}},
-                "reason": "cross-validation failed",
-                "short_label": f"{Engine.TRANSFORMERS}, float32",
-                "errors": [],
-            }
-        ]
-        sc = _make_study_config(n_configs=3, n_cycles=1, skipped_configs=skipped)
-        summary = format_preflight_summary(sc)
-        assert "Skipping 1/" in summary
-        assert f"{Engine.TRANSFORMERS}, float32" in summary
-        assert "cross-validation failed" in summary
-
-    def test_high_skip_rate_warning(self):
-        """WARNING shown when >50% of generated configs were skipped."""
-        # 1 valid config, 2 skipped → 67% skip rate
-        skipped = [
-            {
-                "raw_config": {"engine": "vllm", "vllm": {"dtype": "float16"}},
-                "reason": "error A",
-                "short_label": "vllm, float16",
-                "errors": [],
-            },
-            {
-                "raw_config": {"engine": "vllm", "vllm": {"dtype": "bfloat16"}},
-                "reason": "error B",
-                "short_label": "vllm, bfloat16",
-                "errors": [],
-            },
-        ]
-        sc = _make_study_config(n_configs=1, n_cycles=1, skipped_configs=skipped)
-        summary = format_preflight_summary(sc)
-        assert "WARNING" in summary
-        assert "67%" in summary or "sweep" in summary.lower()
-
-    def test_low_skip_rate_no_warning(self):
-        """No WARNING when <50% of generated configs were skipped."""
-        # 4 valid, 1 skipped → 20% skip rate
-        skipped = [
-            {
-                "raw_config": {"engine": "transformers", "transformers": {"dtype": "float32"}},
-                "reason": "validation error",
-                "short_label": f"{Engine.TRANSFORMERS}, float32",
-                "errors": [],
-            }
-        ]
-        sc = _make_study_config(n_configs=4, n_cycles=1, skipped_configs=skipped)
-        summary = format_preflight_summary(sc)
-        assert "Skipping 1/" in summary
-        assert "WARNING" not in summary
-
-    def test_skipped_list_argument_takes_precedence(self):
-        """If skipped list of SkippedConfig passed, uses it instead of skipped_configs."""
-        skipped_obj = SkippedConfig(
-            raw_config={"engine": "transformers", "transformers": {"dtype": "float16"}},
-            reason="via argument",
-        )
-        # StudyConfig has empty skipped_configs
-        sc = _make_study_config(n_configs=2, n_cycles=1)
-        summary = format_preflight_summary(sc, skipped=[skipped_obj])
-        assert "via argument" in summary
-
-    def test_single_cycle_format(self):
-        """1 config x 1 cycle = 1 run shown correctly."""
-        sc = _make_study_config(n_configs=1, n_cycles=1, experiment_order="sequential")
-        summary = format_preflight_summary(sc)
-        assert "1 configs x 1 cycles = 1 runs" in summary
-        assert "Order: sequential" in summary
-
 
 # =============================================================================
 # build_preflight_panel() tests
