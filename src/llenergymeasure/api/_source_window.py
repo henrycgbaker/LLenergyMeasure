@@ -24,7 +24,7 @@ REPORTED, never silently truncated (the design's no-silent-truncation principle)
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -334,13 +334,17 @@ def _render_under_budget(
     Overlapping windows within a file are merged so a field span that falls
     inside a referencing method is not duplicated. Cited windows are admitted
     before fieldless surface windows so a tight budget keeps the load-bearing
-    spans. Both groups round-robin by (file, class) so one large class cannot
-    starve the rest: each class contributes its header before any class's later
-    windows are considered.
+    spans. Cited windows round-robin across files (a large cited file cannot
+    starve a smaller one); surface windows are one bounded slice per class, so
+    source order already fairly interleaves classes (a huge class cannot starve
+    the rest because its slice is capped, not its whole body).
     """
     merged = _merge_windows(windows)
-    cited = _round_robin(merged, predicate=lambda w: w.cited)
-    surface = _round_robin(merged, predicate=lambda w: not w.cited)
+    cited = _round_robin_by_file([w for w in merged if w.cited])
+    # Surface mode emits exactly one bounded window per class, so plain source
+    # order already interleaves classes fairly (each class's single window is
+    # admitted in turn until the budget fills) - no per-class round-robin needed.
+    surface = sorted((w for w in merged if not w.cited), key=lambda w: (w.file, w.start))
 
     rendered: list[tuple[_Window, str]] = []
     truncated: list[str] = []
@@ -365,49 +369,29 @@ def _render_under_budget(
     return "\n\n".join(block for _, block in rendered), truncated
 
 
-def _round_robin(
-    windows: Sequence[_Window], *, predicate: Callable[[_Window], bool]
-) -> list[_Window]:
-    """Interleave matching windows so each (file, class) contributes one per pass.
+def _round_robin_by_file(windows: Sequence[_Window]) -> list[_Window]:
+    """Interleave windows so each file contributes one window per pass.
 
-    Preserves source order within a group. With classes A and B this yields
-    A0, B0, A1, B1, ... so a tight budget keeps the first window (the header) of
-    every class before spending the rest on any one class - a huge class cannot
-    starve the others. Grouping by class (not just file) matters in 1b mode where
-    one file holds many config classes.
+    Preserves source order within a file. With two cited files A and B this
+    yields A0, B0, A1, B1, ... so a tight budget keeps at least the first window
+    of every cited file before spending the rest on any one file.
     """
-    groups: dict[tuple[str, str], list[_Window]] = {}
-    order: list[tuple[str, str]] = []
+    per_file: dict[str, list[_Window]] = {}
+    order: list[str] = []
     for window in sorted(windows, key=lambda w: (w.file, w.start)):
-        if not predicate(window):
-            continue
-        key = (window.file, _window_class(window))
-        if key not in groups:
-            groups[key] = []
-            order.append(key)
-        groups[key].append(window)
+        if window.file not in per_file:
+            per_file[window.file] = []
+            order.append(window.file)
+        per_file[window.file].append(window)
 
     out: list[_Window] = []
     idx = 0
-    while any(idx < len(groups[k]) for k in order):
-        for k in order:
-            if idx < len(groups[k]):
-                out.append(groups[k][idx])
+    while any(idx < len(per_file[f]) for f in order):
+        for f in order:
+            if idx < len(per_file[f]):
+                out.append(per_file[f][idx])
         idx += 1
     return out
-
-
-def _window_class(window: _Window) -> str:
-    """Class name owning a window, parsed from its label.
-
-    Labels are ``class X`` / ``X.field`` / ``X.method (references f)``; a merged
-    window's label concatenates constituents with ``; `` and the FIRST is the
-    owner. Returns the class token so round-robin can group windows by class.
-    """
-    head = window.label.split(";", 1)[0].strip()
-    if head.startswith("class "):
-        return head[len("class ") :].strip()
-    return head.split(".", 1)[0].split(" ", 1)[0]
 
 
 def _merge_windows(windows: Sequence[_Window]) -> list[_Window]:
