@@ -30,6 +30,16 @@ on:
         description: PR head repo full_name; used to gate writeback contributions on same-repo PRs only
         required: true
         type: string
+      run-gap-diagnose:
+        description: >-
+          Run the Stage-1 LLM gap-diagnose (1b) every-bump pass. Default false:
+          1b is unconditional-per-bump and costs a GPU-minute, so it is opt-in
+          (typically reserved for major bumps). The 1a carried-failure triage is
+          NOT gated by this - it is alarm-conditional (fires on a decay residual).
+          Both run only on a self-hosted GPU runner; dormant on hosted CI.
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   cell:
@@ -442,6 +452,194 @@ jobs:
           uv run python scripts/engine_producers/regen_engine_corpus.py \
             --write --only rules --engine "${ENGINE}"
 
+      - name: Stage-1 LLM diagnose (GPU runner only)
+        # Design section 8 / P2b: invoke the diagnose subsystem (llem
+        # diagnose-bump) as a GATED proposer and fold its gate-confirmed entries
+        # into the SSOT proposed corpus (the CR1 fold path, --fold-diagnose).
+        #
+        # VENUE (honest): the diagnose call needs a local GPU + the ollama
+        # server (qwen2.5-coder:32b), which only the self-hosted GPU runner has.
+        # GitHub-hosted runners have NO GPU, so this step is GATED on
+        # `inputs.runner == 'self-hosted'` - the same way engine-pipeline already
+        # routes GPU-requiring cells (vllm/tensorrt -> self-hosted). On hosted CI
+        # (transformers cell, ubuntu-latest) and when no self-hosted GPU runner is
+        # present at all (PR #690 - the gpu job SKIPS), the step DOES NOT RUN and
+        # the bump proceeds without the LLM diagnosis. The maintainer can run
+        # `llem diagnose-bump` locally and the gate-confirmed proposals feed this
+        # SAME --fold-diagnose path. This is dormant-until-a-GPU-runner-exists.
+        #
+        # 1a (carried triage) is alarm-conditional: it runs only when the decay
+        # re-gate left a non-empty post-Rung-0 residual. 1b (gap-diagnose) runs
+        # only when run-gap-diagnose is set (off by default - 1b is every-bump and
+        # costs a GPU-minute). The proposer's output goes through the EXISTING gate
+        # in the engine container; only gate-confirmed entries fold into proposed.
+        # Nothing auto-merges - the folded entries ride the bump-PR data diff.
+        id: diagnose
+        if: steps.probe.outputs.verdict == 'pass' && inputs.runner == 'self-hosted'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
+          SAFE_VER: ${{ steps.version.outputs.safe_version }}
+          PREV_OUTPUTS: ${{ steps.prior.outputs.prev_outputs }}
+          RUN_GAP: ${{ inputs.run-gap-diagnose }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/engine-rules-diagnose
+          # The old (previous-pin) version, derived from the prev_outputs path
+          # (engine_versions/<e>/v<safe>/outputs -> <safe> -> dotted). Empty when
+          # no prior exists - 1a is then skipped anyway.
+          OLD_VER=""
+          if [[ -n "$PREV_OUTPUTS" ]]; then
+            SAFE_PREV=$(basename "$(dirname "$PREV_OUTPUTS")")
+            OLD_VER="${SAFE_PREV#v}"
+            OLD_VER="${OLD_VER//_/.}"
+          fi
+          OUT_CARRIED="/tmp/engine-rules-diagnose/${ENGINE}.carried.proposed.yaml"
+          OUT_GAP="/tmp/engine-rules-diagnose/${ENGINE}.gap.proposed.yaml"
+          REGATE="/tmp/engine-rules-alarms/${ENGINE}.regate.json"
+          SSOT="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
+          PROPOSED="${SSOT}/rules.proposed.yaml"
+
+          CONFIRMED_TOTAL=0
+          REVIEW_TOTAL=0
+          UNCONFIRMED_TOTAL=0
+
+          # Extract the new pin's engine source tree from the container so the
+          # proposer can read it on the host. tensorrt's source is already on the
+          # host (fetched as a tarball); transformers/vllm live in the image's
+          # site-packages. The cited/surface file paths are package-relative
+          # (e.g. transformers/generation/configuration_utils.py), so --source-root
+          # is the parent that holds the engine package dir.
+          SRC_ROOT="/tmp/engine-rules-diagnose/${ENGINE}-src"
+          rm -rf "$SRC_ROOT"
+          mkdir -p "$SRC_ROOT"
+          if [[ "$ENGINE" == "tensorrt" ]]; then
+            cp -r "/tmp/trt-llm-${VER}/." "$SRC_ROOT/"
+          else
+            PKG_PARENT=$(docker run --rm --entrypoint python3 "$IMAGE" -c \
+              "import ${ENGINE}, pathlib; print(pathlib.Path(${ENGINE}.__file__).parent.parent)")
+            docker run --rm --entrypoint bash "$IMAGE" -c \
+              "cd '${PKG_PARENT}' && tar -cf - ${ENGINE}" | tar -xf - -C "$SRC_ROOT"
+          fi
+
+          run_diagnose() {
+            # $1 = mode label for logs; remaining args = llem diagnose-bump opts.
+            local label="$1"; shift
+            local logf="/tmp/engine-rules-diagnose/${ENGINE}.${label}.log"
+            echo "::group::diagnose (${label})"
+            set +e
+            uv run llem diagnose-bump \
+              --engine "$ENGINE" \
+              --image "$IMAGE" \
+              --new-version "$VER" \
+              --source-root "$SRC_ROOT" \
+              "$@" 2>"$logf"
+            local rc=$?
+            set -e
+            cat "$logf" >&2
+            echo "::endgroup::"
+            # Tally the for-review / unconfirmed counts the CLI logs to stderr so
+            # the gate-report comment can surface them. The diagnose CLI exits 2
+            # only on a hard DiagnoseError (bad input / model / gate); a clean run
+            # with zero confirmed entries exits 0 and writes nothing.
+            if [[ $rc -ne 0 && $rc -ne 2 ]]; then
+              echo "::error::diagnose (${label}) exited ${rc}"
+              return "$rc"
+            fi
+            local review unconf
+            review=$(sed -n 's/.* \([0-9]\+\) for review (silent dormancy).*/\1/p' "$logf" | tail -n1)
+            unconf=$(sed -n 's/.* \([0-9]\+\) unconfirmed (not written).*/\1/p' "$logf" | tail -n1)
+            REVIEW_TOTAL=$((REVIEW_TOTAL + ${review:-0}))
+            UNCONFIRMED_TOTAL=$((UNCONFIRMED_TOTAL + ${unconf:-0}))
+          }
+
+          fold_fragment() {
+            # $1 = the diagnose --out fragment. Fold its gate-confirmed entries
+            # into the SSOT proposed corpus (existing id wins; CR1 fold twin).
+            local frag="$1"
+            [[ -f "$frag" ]] || return 0
+            local n
+            n=$(yq '.invariants | length' "$frag" 2>/dev/null || echo 0)
+            [[ "${n:-0}" -gt 0 ]] || return 0
+            uv run python -m scripts.engine_producers.build_corpus \
+              --engine "$ENGINE" \
+              --fold-diagnose "$frag" \
+              --canonical-out "$PROPOSED"
+            CONFIRMED_TOTAL=$((CONFIRMED_TOTAL + n))
+          }
+
+          # 1a carried-failure triage: alarm-conditional. Only when the decay
+          # re-gate left a non-empty post-Rung-0 residual (and a prior pin exists).
+          RESIDUAL=0
+          if [[ -f "$REGATE" ]]; then
+            RESIDUAL=$(jq -r '.reconciliation.counts.residual // 0' "$REGATE")
+          fi
+          if [[ -n "$PREV_OUTPUTS" && "${RESIDUAL:-0}" -gt 0 ]]; then
+            # Map each residual rule id to the source file it cites
+            # (miner_source.path in the carried corpus) for diff-scoping.
+            CARRIED="${PREV_OUTPUTS}/rules.proposed.yaml"
+            CITED_ARGS=()
+            while IFS= read -r f; do
+              [[ -n "$f" && "$f" != "null" ]] && CITED_ARGS+=(--cited-file "$f")
+            done < <(
+              jq -r '.reconciliation.residual[].id' "$REGATE" | while read -r rid; do
+                yq -r ".invariants[] | select(.id == \"${rid}\") | .miner_source.path" "$CARRIED"
+              done | sort -u
+            )
+            if [[ ${#CITED_ARGS[@]} -gt 0 ]]; then
+              run_diagnose carried \
+                --mode carried \
+                --regate-report "$REGATE" \
+                --carried-corpus "$CARRIED" \
+                --old-version "$OLD_VER" \
+                "${CITED_ARGS[@]}" \
+                --out "$OUT_CARRIED"
+              fold_fragment "$OUT_CARRIED"
+            else
+              echo "1a: residual rules cite no resolvable source path; skipping carried triage."
+            fi
+          else
+            echo "1a carried triage skipped: residual=${RESIDUAL:-0}, prev_outputs='${PREV_OUTPUTS}' (no decay residual to triage)."
+          fi
+
+          # 1b gap-diagnose: configurable (default off; opt-in per run because it
+          # is every-bump and costs a GPU-minute). Surface = the mined config
+          # surface; we feed the engine package's config module(s) as the glob.
+          if [[ "$RUN_GAP" == "true" ]]; then
+            SCHEMA="${ENGINES_DIR}/${ENGINE}/schema.discovered.json"
+            SURFACE_ARGS=()
+            while IFS= read -r f; do
+              rel="${f#${SRC_ROOT}/}"
+              SURFACE_ARGS+=(--surface-file "$rel")
+            done < <(find "${SRC_ROOT}/${ENGINE}" -path "*config*.py" -type f 2>/dev/null | sort)
+            if [[ -f "$SCHEMA" && ${#SURFACE_ARGS[@]} -gt 0 ]]; then
+              run_diagnose gap \
+                --mode gap \
+                --schema "$SCHEMA" \
+                "${SURFACE_ARGS[@]}" \
+                --out "$OUT_GAP"
+              fold_fragment "$OUT_GAP"
+            else
+              echo "1b gap-diagnose skipped: schema present=$([[ -f "$SCHEMA" ]] && echo yes || echo no), surface files=${#SURFACE_ARGS[@]}."
+            fi
+          else
+            echo "1b gap-diagnose skipped: run-gap-diagnose input is '${RUN_GAP}' (opt-in; off by default)."
+          fi
+
+          # If anything folded, re-derive the src/ shadow so the diagnosed
+          # proposals ride the diff/doc/comment/writeback (CR1 fold twin).
+          if [[ "$CONFIRMED_TOTAL" -gt 0 ]]; then
+            uv run python scripts/engine_producers/regen_engine_corpus.py \
+              --write --only rules --engine "${ENGINE}"
+          fi
+
+          {
+            echo "confirmed=${CONFIRMED_TOTAL}"
+            echo "for_review=${REVIEW_TOTAL}"
+            echo "unconfirmed=${UNCONFIRMED_TOTAL}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Surface trend (blindness heuristic, host)
         # Design section 6 signal 2: a pure-artefact census diff of the prior
         # pin's outputs/ against the current pin's. No engine imports; runs
@@ -624,6 +822,9 @@ jobs:
           VER: ${{ steps.version.outputs.version }}
           MAJOR_BUMP: ${{ steps.prior.outputs.major_bump }}
           PREV_OUTPUTS: ${{ steps.prior.outputs.prev_outputs }}
+          DIAGNOSE_CONFIRMED: ${{ steps.diagnose.outputs.confirmed }}
+          DIAGNOSE_REVIEW: ${{ steps.diagnose.outputs.for_review }}
+          DIAGNOSE_UNCONFIRMED: ${{ steps.diagnose.outputs.unconfirmed }}
         run: |
           PROPOSED="${ENGINES_DIR}/${ENGINE}/rules.proposed.yaml"
           VALIDATED="${ENGINES_DIR}/${ENGINE}/rules.validated.yaml"
@@ -723,6 +924,21 @@ jobs:
               else
                 echo "No shrinkage flags."
               fi
+              echo
+            fi
+            # Stage-1 LLM diagnose proposals (P2b). The diagnose step only runs on
+            # a self-hosted GPU runner; on hosted CI it is skipped, so these env
+            # values are empty and the subsection is omitted (no misleading
+            # "0 confirmed" on a bump that never ran the diagnose).
+            if [[ -n "${DIAGNOSE_CONFIRMED}${DIAGNOSE_REVIEW}${DIAGNOSE_UNCONFIRMED}" ]]; then
+              echo "### Stage-1 LLM diagnose proposals"
+              echo
+              echo "Gate-confirmed entries folded into \`rules.proposed.yaml\` (provenance"
+              echo "\`llm_diagnose\`) - review them in the data diff; nothing auto-merges."
+              echo
+              echo "- Gate-confirmed (folded): \`${DIAGNOSE_CONFIRMED:-0}\`"
+              echo "- For review (silent dormancy, not construction-confirmable): \`${DIAGNOSE_REVIEW:-0}\`"
+              echo "- Unconfirmed (gate rejected, not written): \`${DIAGNOSE_UNCONFIRMED:-0}\`"
               echo
             fi
             if [[ ! -f "$REGATE" && ! -f "$SURFACE" ]]; then

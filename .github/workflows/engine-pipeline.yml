@@ -80,6 +80,16 @@ on:
         required: false
         type: boolean
         default: false
+      run_gap_diagnose:
+        description: >-
+          Run the Stage-1 LLM gap-diagnose (1b) every-bump pass in the rules
+          cells. Off by default: 1b is unconditional-per-bump and costs a
+          GPU-minute, so it is opt-in (reserve for major bumps). Only takes
+          effect on a self-hosted GPU runner; the 1a carried-failure triage is
+          alarm-conditional and runs regardless of this input.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -360,6 +370,7 @@ jobs:
       image-source: ghcr-cache
       pr-number: ${{ needs.filter.outputs.pr_number }}
       pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
+      run-gap-diagnose: ${{ inputs.run_gap_diagnose == true }}
     secrets: inherit
 
   invariants-others:
@@ -379,6 +390,7 @@ jobs:
       image-source: ${{ matrix.cell.image-source }}
       pr-number: ${{ needs.filter.outputs.pr_number }}
       pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
+      run-gap-diagnose: ${{ inputs.run_gap_diagnose == true }}
     secrets: inherit
 
   schemas-transformers:
