@@ -1,8 +1,6 @@
 .PHONY: help setup docker-setup dev install clean pre-pr
 .PHONY: format lint lint-fix typecheck check
 .PHONY: test test-unit test-integration test-all
-.PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
-.PHONY: test-runtime-quick test-runtime-check test-runtime-list test-runtime-docker
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
 .PHONY: package-check
@@ -90,36 +88,6 @@ test-integration: ## Integration tests with verbose output
 
 test-all: ## All tests (excludes tests/runtime/)
 	uv run pytest tests/ -v --ignore=tests/runtime/
-
-# =============================================================================
-# Runtime tests with Docker container dispatch
-#   Uses SSOT introspection to discover ALL params and dispatch each test to
-#   the matching engine container. Valid engines: transformers, vllm, tensorrt.
-# =============================================================================
-
-test-runtime: ## Runtime tests on the transformers engine container
-	uv run python scripts/runtime-test-orchestrator.py --engine transformers
-
-test-runtime-vllm: ## Runtime tests on the vLLM engine container
-	uv run python scripts/runtime-test-orchestrator.py --engine vllm
-
-test-runtime-tensorrt: ## Runtime tests on the TensorRT-LLM engine container
-	uv run python scripts/runtime-test-orchestrator.py --engine tensorrt
-
-test-runtime-all: ## Runtime tests across all engines
-	uv run python scripts/runtime-test-orchestrator.py --engine all
-
-test-runtime-quick: ## Quick smoke pass of runtime tests (transformers)
-	uv run python scripts/runtime-test-orchestrator.py --engine transformers --quick
-
-test-runtime-check: ## Check Docker setup; list params without running
-	uv run python scripts/runtime-test-orchestrator.py --check-docker
-
-test-runtime-list: ## List the params runtime tests would dispatch over
-	uv run python scripts/runtime-test-orchestrator.py --list-params
-
-test-runtime-docker: ## Build missing engine images then run runtime tests (transformers)
-	uv run python scripts/runtime-test-orchestrator.py --engine transformers --build
 
 install: ## uv sync (runtime deps only, no dev tooling)
 	uv sync
