@@ -9,9 +9,15 @@ VERBATIM - the same code that adjudicates the live decay alarm - so
 "gate-confirmed" here means exactly what it means in production. No gate logic
 is reimplemented.
 
-A proposal is GATE-CONFIRMED iff positive_confirmed AND negative_confirmed: the
-positive probe reproduces the claimed behaviour (raise for severity=error;
-emit / normalise for severity=dormant) and the negative probe does not.
+A proposal is GATE-CONFIRMED iff positive_confirmed AND negative_confirmed AND
+the production gate-soundness checks pass: the positive probe reproduces the
+claimed behaviour (raise for severity=error; emit / normalise for
+severity=dormant), the negative probe does not, and the raise is attributable
+to the claimed rule (no type-coercion artefact, correct error locus, template
+match). This is the SAME bar as the two production gate paths
+(``validate_rules.py``): ``compute_gate_soundness_divergences`` must come back
+empty, and ``warm_up_engine_observation`` is fired once before the loop so the
+diagnose gate observes the engine in the same warmed state as production.
 
 Silent-dormancy claims (severity=dormant where the positive constructs as a
 no-op) CANNOT positive-confirm as an emission at construction grain - that is
@@ -60,12 +66,20 @@ def gate_one(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
     }
     out: dict[str, Any] = {"rule_id": proposal["rule_id"], "severity": severity}
     try:
-        case, pos, _neg = V._validate_invariant_with_captures(engine, inv)
+        case, pos, neg = V._validate_invariant_with_captures(engine, inv)
     except Exception as exc:  # construction blew up before observe
         out.update({"verdict": "infra_error", "error": f"{type(exc).__name__}: {exc}"})
         return out
 
-    confirmed = bool(case.positive_confirmed and case.negative_confirmed)
+    # Production gate-soundness checks (validate_rules.py:712,1129): a positive
+    # that raises for the wrong reason (type-coercion artefact, sibling-Literal
+    # locus, template mismatch) or a negative that fires is rejected by the
+    # production alarm. Run the SAME checks here so the diagnose gate cannot
+    # confirm what production would reject; record the failed check names.
+    soundness = V.compute_gate_soundness_divergences(inv, pos, neg)
+    soundness_failed = [d.check_failed for d in soundness if d.check_failed is not None]
+
+    confirmed = bool(case.positive_confirmed and case.negative_confirmed) and not soundness
     # Silent-dormancy claim that constructs as a no-op: cannot positive-confirm at
     # construction grain. Distinguish from a real failure so the caller routes it
     # to review rather than discard.
@@ -91,6 +105,8 @@ def gate_one(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
             "verdict": verdict,
         }
     )
+    if soundness_failed:
+        out["soundness_failed"] = soundness_failed
     return out
 
 
@@ -99,6 +115,10 @@ def main() -> int:
     in_path = Path(sys.argv[2])
     out_path = Path(sys.argv[3])
     proposals = json.loads(in_path.read_text())
+    # Flush process-once import-side-effect logging before the gate loop, exactly
+    # as the production paths do (validate_rules.py:754,1088). Without it the first
+    # proposal absorbs vLLM's one-time platform-detection burst and misclassifies.
+    V.warm_up_engine_observation(engine)
     verdicts = [gate_one(engine, p) for p in proposals]
     out_path.write_text(json.dumps(verdicts, indent=2))
     confirmed = sum(1 for v in verdicts if v.get("verdict") == "confirmed")
