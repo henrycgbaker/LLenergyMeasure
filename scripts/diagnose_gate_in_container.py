@@ -44,12 +44,16 @@ import scripts.validate_rules as V
 
 
 def _severity_for(proposal: dict[str, Any]) -> str:
-    """Gate severity for routing strictness: trust the carried severity, else
-    derive from the classification (silent dormancy -> dormant, else error)."""
+    """Gate severity for routing strictness.
+
+    The host (``diagnose._proposal_from_diagnosis``) ALWAYS populates a valid
+    ``severity`` (carried, or derived from the classification when there is no
+    carried entry), so the container trusts it. The fallback to ``error`` (the
+    strictest routing) only fires defensively if the field is genuinely absent -
+    it does NOT re-derive the host's classification routing (that drifts).
+    """
     sev = str(proposal.get("severity", "")).lower()
-    if sev in {"error", "dormant", "warn"}:
-        return sev
-    return "dormant" if proposal.get("classification") == "dormancy_now_silent" else "error"
+    return sev if sev in {"error", "dormant", "warn"} else "error"
 
 
 def gate_one(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
