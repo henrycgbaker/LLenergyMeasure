@@ -127,6 +127,77 @@ def test_missing_ssot_dir_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 # ---------------------------------------------------------------------------
+# --only scoping (parallel-cell bootstrap ordering)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fresh_schema_only_ssot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """A fresh-version SSOT carrying ONLY schema.discovered.json + curated.yaml.
+
+    Mirrors the schemas cell's state on a fresh-version bump: the rules cell
+    runs in parallel and has not written rules.*.yaml yet. Returns
+    ``(outputs_dir, shadow_dir)`` with an empty shadow.
+    """
+    outputs = tmp_path / "engine_versions" / "demo" / "v9_0_0" / "outputs"
+    shadow = tmp_path / "src" / "llenergymeasure" / "engines" / "demo"
+    outputs.mkdir(parents=True)
+    shadow.mkdir(parents=True)
+    (outputs / "schema.discovered.json").write_text(
+        _CORPUS["schema.discovered.json"], encoding="utf-8"
+    )
+    (outputs / "curated.yaml").write_text(_CORPUS["curated.yaml"], encoding="utf-8")
+    monkeypatch.setattr(rec, "ENGINES", ("demo",))
+    monkeypatch.setattr(rec, "current_outputs_dir", lambda engine: outputs)
+    monkeypatch.setattr(rec, "_shadow_dir", lambda engine: shadow)
+    return outputs, shadow
+
+
+def test_only_schema_derives_schema_without_rules_ssot(
+    fresh_schema_only_ssot: tuple[Path, Path],
+) -> None:
+    """--only schema succeeds on a dir lacking the rules SSOT, syncs just schema."""
+    outputs, shadow = fresh_schema_only_ssot
+    assert not (outputs / "rules.proposed.yaml").exists()
+    assert rec.main(["--write", "--only", "schema"]) == 0
+    assert (shadow / "schema.discovered.json").read_text(encoding="utf-8") == _CORPUS[
+        "schema.discovered.json"
+    ]
+    # Out-of-scope files are not pulled into the shadow.
+    assert not (shadow / "rules.proposed.yaml").exists()
+    assert not (shadow / "curated.yaml").exists()
+
+
+def test_only_rules_derives_rules_without_schema_ssot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--only rules succeeds on a dir lacking the schema SSOT, syncs just rules."""
+    outputs = tmp_path / "engine_versions" / "demo" / "v9_0_0" / "outputs"
+    shadow = tmp_path / "src" / "llenergymeasure" / "engines" / "demo"
+    outputs.mkdir(parents=True)
+    shadow.mkdir(parents=True)
+    (outputs / "rules.proposed.yaml").write_text(_CORPUS["rules.proposed.yaml"], encoding="utf-8")
+    (outputs / "rules.validated.yaml").write_text(_CORPUS["rules.validated.yaml"], encoding="utf-8")
+    monkeypatch.setattr(rec, "ENGINES", ("demo",))
+    monkeypatch.setattr(rec, "current_outputs_dir", lambda engine: outputs)
+    monkeypatch.setattr(rec, "_shadow_dir", lambda engine: shadow)
+
+    assert not (outputs / "schema.discovered.json").exists()
+    assert rec.main(["--write", "--only", "rules"]) == 0
+    assert (shadow / "rules.proposed.yaml").exists()
+    assert (shadow / "rules.validated.yaml").exists()
+    # Out-of-scope files are not pulled in (would FileNotFoundError on a full sync).
+    assert not (shadow / "schema.discovered.json").exists()
+
+
+def test_full_check_unchanged_by_scope_addition(fake_corpus: tuple[Path, Path]) -> None:
+    """The unscoped full --check/--write still covers the whole corpus."""
+    assert rec.main(["--check"]) == 0
+    assert rec.main(["--check", "--only", "schema"]) == 0
+    assert rec.main(["--check", "--only", "rules"]) == 0
+
+
+# ---------------------------------------------------------------------------
 # Curated.yaml integrity (real repo artefacts)
 # ---------------------------------------------------------------------------
 

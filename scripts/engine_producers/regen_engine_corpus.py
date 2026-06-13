@@ -19,6 +19,16 @@ Two modes:
 ``--engine <name>`` restricts the run to one engine (repeatable); the
 default is all engines.
 
+``--only {schema,rules}`` restricts the run to one cell's produced file(s):
+``schema`` -> schema.discovered.json only; ``rules`` -> rules.proposed.yaml
++ rules.validated.yaml only. The schemas and rules cells run in PARALLEL on
+separate runners, so each cell's SSOT carries only the file(s) it just
+produced - a bare full sync would hard-fail on the sibling cell's
+not-yet-written output. Scoping each cell to its own file lets it derive its
+shadow without waiting for the sibling. The writeback's full ``--write``
+(after both cells, with both SSOTs rsynced) stays the authoritative sync of
+the complete corpus, including the maintainer-owned curated.yaml/overlay.yaml.
+
 This is deliberately small: file comparison + copy. The heavy lifting lives
 in the per-engine miners that produce the SSOT.
 """
@@ -49,6 +59,15 @@ CORPUS_FILES: tuple[str, ...] = (
 )
 OPTIONAL_FILES: tuple[str, ...] = ("overlay.yaml",)
 
+# Per-cell scopes for ``--only``: the file(s) each parallel cell produces and
+# may therefore derive on its own without the sibling cell's SSOT output
+# existing yet. The maintainer-owned curated.yaml/overlay.yaml are deliberately
+# in NEITHER scope - they are not cell-produced; the full sync owns them.
+SCOPES: dict[str, tuple[str, ...]] = {
+    "schema": ("schema.discovered.json",),
+    "rules": ("rules.proposed.yaml", "rules.validated.yaml"),
+}
+
 
 def _shadow_dir(engine: str) -> Path:
     """Return ``src/llenergymeasure/engines/<engine>/``."""
@@ -62,7 +81,9 @@ def _file_diff(src: Path, dst: Path) -> str:
     return "".join(difflib.unified_diff(dst_lines, src_lines, fromfile=str(dst), tofile=str(src)))
 
 
-def sync_engine(engine: str, *, write: bool) -> tuple[list[str], list[str]]:
+def sync_engine(
+    engine: str, *, write: bool, only: str | None = None
+) -> tuple[list[str], list[str]]:
     """Sync (or check) one engine's corpus files.
 
     Returns ``(drift, changed)``:
@@ -71,9 +92,11 @@ def sync_engine(engine: str, *, write: bool) -> tuple[list[str], list[str]]:
       means the caller must exit non-zero.
     - ``changed``: in ``--write`` mode, the files that were (re)written.
 
-    A missing SSOT outputs dir or source file raises ``FileNotFoundError`` -
-    every current pin is expected to carry a full corpus, so a gap is a real
-    error, not a silently-tolerated state.
+    ``only`` restricts the sync to one cell's produced file(s) (a key in
+    :data:`SCOPES`); ``None`` syncs the full corpus (the writeback's
+    authoritative sync). A missing SSOT outputs dir or in-scope source file
+    raises ``FileNotFoundError`` - every current pin is expected to carry the
+    files in scope, so a gap is a real error, not a silently-tolerated state.
     """
     outputs = current_outputs_dir(engine)
     if not outputs.is_dir():
@@ -82,9 +105,14 @@ def sync_engine(engine: str, *, write: bool) -> tuple[list[str], list[str]]:
             f"Check engine_versions/{engine}/current.yaml and the vendored pin."
         )
 
-    # Optional files are synced only when the SSOT carries one, so their
-    # absence is never reported as drift.
-    names = [*CORPUS_FILES, *(n for n in OPTIONAL_FILES if (outputs / n).exists())]
+    if only is not None:
+        # Scoped: just this cell's file(s). Optional files are never cell-
+        # produced, so a scope never pulls one in.
+        names = list(SCOPES[only])
+    else:
+        # Full corpus. Optional files are synced only when the SSOT carries
+        # one, so their absence is never reported as drift.
+        names = [*CORPUS_FILES, *(n for n in OPTIONAL_FILES if (outputs / n).exists())]
 
     shadow = _shadow_dir(engine)
     drift: list[str] = []
@@ -133,13 +161,23 @@ def main(argv: list[str] | None = None) -> int:
         choices=ENGINES,
         help="Restrict to one or more engines (repeatable). Default: all engines.",
     )
+    parser.add_argument(
+        "--only",
+        choices=tuple(SCOPES),
+        help=(
+            "Restrict the sync to one cell's produced file(s): 'schema' "
+            "(schema.discovered.json) or 'rules' (rules.proposed/validated). "
+            "Lets a parallel cell derive its own shadow without the sibling "
+            "cell's SSOT output existing yet. Default: full corpus."
+        ),
+    )
     args = parser.parse_args(argv)
 
     engines = tuple(args.engine) if args.engine else ENGINES
     all_drift: list[str] = []
     all_changed: list[str] = []
     for engine in engines:
-        drift, changed = sync_engine(engine, write=args.write)
+        drift, changed = sync_engine(engine, write=args.write, only=args.only)
         all_drift.extend(drift)
         all_changed.extend(changed)
 

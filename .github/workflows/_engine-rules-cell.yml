@@ -330,7 +330,13 @@ jobs:
                 --image-digest '${IMAGE_DIGEST}' \
                 --engine-commit '${VER}' \
                 --fail-on-divergence
-              python3 scripts/engine_producers/regen_engine_corpus.py --write --engine ${ENGINE}
+              # Derive the src/ shadow scoped to --only rules: this cell runs in
+              # PARALLEL with the schemas cell, so on a fresh-version bump the
+              # SSOT has no schema.discovered.json yet (the sibling cell writes
+              # it on its own runner). A full sync would hard-fail on the
+              # missing sibling; the writeback's full --write owns the complete
+              # sync once both cells' SSOTs are rsynced together.
+              python3 scripts/engine_producers/regen_engine_corpus.py --write --only rules --engine ${ENGINE}
             "
 
       - name: Set up Python (host) for doc-gen + diff

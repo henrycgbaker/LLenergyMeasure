@@ -315,10 +315,15 @@ jobs:
         # The introspector produced schema.discovered.json in the SSOT
         # (engine_versions/<e>/v<pin>/outputs/); derive the src/ shadow the
         # downstream doc-gen + diff read (design section 4: the one derivation).
+        # Scoped to --only schema: this cell runs in PARALLEL with the rules
+        # cell, so on a fresh-version bump the SSOT has no rules.*.yaml yet
+        # (the sibling cell writes them on its own runner). A full sync would
+        # hard-fail on the missing siblings; the writeback's full --write owns
+        # the complete sync once both cells' SSOTs are rsynced together.
         if: steps.probe.outputs.verdict == 'pass'
         env:
           ENGINE: ${{ inputs.engine }}
-        run: uv run python scripts/engine_producers/regen_engine_corpus.py --write --engine "${ENGINE}"
+        run: uv run python scripts/engine_producers/regen_engine_corpus.py --write --only schema --engine "${ENGINE}"
 
       - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
