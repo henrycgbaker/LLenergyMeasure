@@ -32,6 +32,7 @@ import dataclasses
 import io
 import logging
 import re
+import sys
 import time
 import warnings
 from collections.abc import Callable, Iterable
@@ -227,6 +228,45 @@ def diff_input_vs_state(
 
 
 # ---------------------------------------------------------------------------
+# Process-once emission warm-up
+# ---------------------------------------------------------------------------
+
+
+def warm_up_engine_observation(engine: str) -> None:
+    """Flush an engine's one-time import-side-effect logging before observation.
+
+    Some engines emit process-once log lines on first config access, not on
+    every construction. vLLM is the clear case: the first time a config class is
+    reached it lazily resolves ``current_platform``, which logs a burst (``Checking
+    if CUDA platform is available``, ``Automatically detected platform cuda`` ...)
+    exactly once per process. Whichever invariant happens to trigger that first
+    access absorbs the whole burst onto the attached engine logger and is
+    misclassified ``dormant_announced``; every later invariant sees nothing.
+
+    The two gate paths trigger this first access at different points - the
+    in-process gate (``build_corpus``) has already imported the engine while
+    mining, so its first invariant sees a quiet logger, whereas the standalone
+    gate (``validate_rules``) triggers it from inside the first invariant's
+    probe - so they classify that invariant differently and
+    ``--fail-on-divergence`` trips. Firing the burst here, once, before any
+    logger handler is attached, makes both paths observe an already-warm engine.
+
+    Guarded as a no-op when the engine is unknown or not importable (the gate
+    runs one engine per container), so it never crashes another engine's run.
+    """
+    if engine != "vllm":
+        return
+    try:
+        import vllm.platforms as _vllm_platforms  # type: ignore
+
+        # Touching the lazy attribute is what fires the one-time detection burst.
+        _ = _vllm_platforms.current_platform
+    except Exception:
+        # Warm-up is best-effort; a failure here must never block the gate.
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Capture primitives
 # ---------------------------------------------------------------------------
 
@@ -266,41 +306,91 @@ def _detach_loggers(handler: logging.Handler, restore: list[tuple[logging.Logger
         logger.setLevel(prev)
 
 
-def _patch_warning_once() -> Callable[[], None]:
-    """Install a sentinel-tagging spy over ``Logger.warning_once``.
+def reset_warning_dedup() -> None:
+    """Clear every process-level warning-dedup cache the gate can observe through.
 
-    Returns a restore callable the caller must run in ``finally``. No-op when
-    HF isn't importable (the attribute is attached at ``transformers.utils.logging``
-    import time; outside the HF container the method is absent and there is
-    nothing to patch).
+    The gate classifies a dormancy invariant by whether the library *announces*
+    it (``dormant_announced``) or stays *silent* (``dormant_silent``). Both
+    classifications must be independent of what ran earlier in the process - the
+    in-process gate (``build_corpus``) and the standalone gate
+    (``validate_rules``) prime these caches differently, so an unreset cache lets
+    the two paths disagree (one observes the warning, the other sees it
+    suppressed) and ``--fail-on-divergence`` trips on the difference.
 
-    HF's ``warning_once`` is ``@functools.lru_cache``-wrapped at the module
-    level - the cache survives across ``run_case`` calls in the same process.
-    Without clearing it, a dormancy invariant that fires its message on invariant N
-    would silently no-op on invariant N+1 reusing the same template, and the
-    validation classifier would observe ``logger_warning`` (the underlying
-    ``warning`` channel) instead of ``logger_warning_once`` for every invariant
-    after the first hit. Clear the cache on every spy installation so each
-    invariant sees a clean slate.
+    Three dedup channels are cleared, each guarded so an absent channel is a
+    no-op (the gate runs one engine per container; the other engines' channels
+    are simply not importable there):
+
+    1. **Python's ``warnings`` registry** - ``warnings.warn(..., once)`` and any
+       filter set to ``"once"``/``"default"`` record fired warnings in per-module
+       ``__warningregistry__`` dicts. ``resetwarnings`` plus a registry sweep
+       restores a clean slate so a ``warnings.warn`` fires on every observation.
+    2. **HF's ``warning_once`` / ``info_once``** - ``@functools.lru_cache``-wrapped
+       at ``transformers.utils.logging`` module level.
+    3. **vLLM's ``_print_warning_once`` / ``_print_info_once`` / ``_print_debug_once``**
+       - ``@lru_cache``-wrapped at ``vllm.logger`` module level (the ``*_once``
+       Logger methods delegate to these). Cleared only when ``vllm.logger`` is
+       already imported - we never import it for the side effect.
     """
-    original = getattr(logging.Logger, "warning_once", None)
-    if original is None:
-        return lambda: None
+    # 1. Python warnings registry. resetwarnings() drops user filters; we then
+    #    sweep every module's __warningregistry__ so a previously-fired "once"
+    #    warning can fire again on the next observation. Read the registry from
+    #    the module's real __dict__ rather than getattr() - some packages (HF)
+    #    proxy attribute access through a lazy __getattr__ that itself warns when
+    #    probed, which would both spam the log and pollute the very channel we
+    #    are trying to clear.
+    warnings.resetwarnings()
+    for module in list(sys.modules.values()):
+        module_dict = getattr(module, "__dict__", None)
+        if not isinstance(module_dict, dict):
+            continue
+        registry = module_dict.get("__warningregistry__")
+        if isinstance(registry, dict):
+            registry.clear()
 
-    # Best-effort: clear HF's process-level lru_cache on warning_once / info_once
-    # so successive run_case calls in one process don't trip the dedup wrapper.
-    # The wrappers live on ``transformers.utils.logging``; if HF isn't importable
-    # we already returned no-op above, so this branch is safe.
+    # 2 + 3. Per-engine logger dedup lru_caches. Only the engine present in this
+    #        container is importable; the rest fall through their ImportError.
     try:
         from transformers.utils import logging as _hf_logging  # type: ignore
 
         for attr in ("warning_once", "info_once"):
-            cached = getattr(_hf_logging, attr, None)
-            cache_clear = getattr(cached, "cache_clear", None)
-            if callable(cache_clear):
-                cache_clear()
+            _clear_lru_cache(getattr(_hf_logging, attr, None))
     except ImportError:
         pass
+    try:
+        from vllm import logger as _vllm_logger  # type: ignore
+
+        for attr in ("_print_warning_once", "_print_info_once", "_print_debug_once"):
+            _clear_lru_cache(getattr(_vllm_logger, attr, None))
+    except ImportError:
+        pass
+
+
+def _clear_lru_cache(obj: Any) -> None:
+    """Call ``obj.cache_clear()`` if present; no-op otherwise."""
+    cache_clear = getattr(obj, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
+
+
+def _patch_warning_once() -> Callable[[], None]:
+    """Reset warning-dedup state, then install a sentinel-tagging spy over ``Logger.warning_once``.
+
+    Returns a restore callable the caller must run in ``finally``. The dedup
+    reset (:func:`reset_warning_dedup`) always runs so each ``run_case`` observes
+    a clean slate; the sentinel spy is only installed when HF's ``warning_once``
+    is present (the attribute is attached at ``transformers.utils.logging`` import
+    time; outside the HF container the method is absent and there is nothing to
+    spy on, but the dedup reset still applies to the other channels).
+
+    The sentinel lets the classifier distinguish HF's ``logger.warning_once``
+    records from plain ``logger.warning`` at the stdlib-record level.
+    """
+    reset_warning_dedup()
+
+    original = getattr(logging.Logger, "warning_once", None)
+    if original is None:
+        return lambda: None
 
     def spy(self: logging.Logger, msg: Any, *args: Any, **kwargs: Any) -> Any:
         tagged = f"{_WARNING_ONCE_SENTINEL}{msg}" if isinstance(msg, str) else msg

@@ -68,6 +68,7 @@ from scripts._rules_validation_common import (  # noqa: E402  (late import after
     message_matches_template,
     run_case,
     strip_warning_once_sentinel,
+    warm_up_engine_observation,
 )
 
 SCHEMA_VERSION = "1.0.0"
@@ -748,6 +749,9 @@ def regate_carried_catalogue(
     """
     corpus = _load_corpus(carried_corpus_path)
     engine_version = _resolve_engine_version(engine)
+    # Same process-once warm-up as validate_engine: the carried re-gate runs the
+    # identical observation path, so it must warm the engine identically.
+    warm_up_engine_observation(engine)
 
     entries: list[dict[str, str]] = []
     counts = {VERDICT_CONFIRMED: 0, VERDICT_FAILED: 0, VERDICT_INFRA_ERROR: 0}
@@ -1077,6 +1081,11 @@ def validate_engine(
     """
     corpus = _load_corpus(corpus_path)
     engine_version = _resolve_engine_version(engine)
+    # Flush process-once import-side-effect logging before the loop so no single
+    # invariant absorbs it and gets misclassified dormant_announced. This makes
+    # the in-process gate (build_corpus) and the standalone gate observe the
+    # engine in the same warmed state - see warm_up_engine_observation.
+    warm_up_engine_observation(engine)
 
     cases: list[CaseResult] = []
     divergences: list[Divergence] = []

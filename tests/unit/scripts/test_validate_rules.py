@@ -37,7 +37,9 @@ from scripts._rules_validation_common import (  # noqa: E402
     locus_confirms_invariant,
     message_matches_template,
     message_template_to_substring,
+    reset_warning_dedup,
     run_case,
+    warm_up_engine_observation,
 )
 
 # ---------------------------------------------------------------------------
@@ -194,6 +196,97 @@ class TestRunCase:
         assert buf.exception_type == "ValueError"
         assert buf.exception_message == "strict mode"
         assert any("about to fail" in str(w) for w in buf.warnings_captured)
+
+
+# ---------------------------------------------------------------------------
+# reset_warning_dedup / warm_up_engine_observation
+# ---------------------------------------------------------------------------
+
+
+class TestResetWarningDedup:
+    def test_clears_lru_cache_dedup_so_second_call_re_emits(self) -> None:
+        """A warn-once wrapper must re-fire after reset_warning_dedup().
+
+        Simulates an engine logger's ``warning_once`` dedup with a module-level
+        ``@lru_cache`` (exactly vLLM's ``_print_warning_once`` shape and HF's
+        ``warning_once``). Without a reset the second call is suppressed; the
+        reset must clear the cache so the warning is observable again.
+        """
+        import functools
+        import sys as _sys
+
+        emissions: list[str] = []
+
+        @functools.cache
+        def _print_warning_once(msg: str) -> None:
+            emissions.append(msg)
+
+        # Register the stub on a fake ``vllm.logger`` so reset_warning_dedup's
+        # vLLM branch finds and clears it (the real branch imports vllm.logger
+        # and clears _print_warning_once / _print_info_once / _print_debug_once).
+        stub_logger = type(_sys)("vllm.logger")
+        stub_logger._print_warning_once = _print_warning_once  # type: ignore[attr-defined]
+        stub_logger._print_info_once = _print_warning_once  # type: ignore[attr-defined]
+        stub_logger._print_debug_once = _print_warning_once  # type: ignore[attr-defined]
+        stub_vllm = _sys.modules.get("vllm") or type(_sys)("vllm")
+        prev_vllm = _sys.modules.get("vllm")
+        prev_logger = _sys.modules.get("vllm.logger")
+        _sys.modules["vllm"] = stub_vllm
+        stub_vllm.logger = stub_logger  # type: ignore[attr-defined]
+        _sys.modules["vllm.logger"] = stub_logger
+        try:
+            _print_warning_once("dormant rule X")
+            _print_warning_once("dormant rule X")  # deduped - suppressed
+            assert emissions == ["dormant rule X"]
+
+            reset_warning_dedup()
+
+            _print_warning_once("dormant rule X")  # re-emits after reset
+            assert emissions == ["dormant rule X", "dormant rule X"]
+        finally:
+            if prev_logger is None:
+                _sys.modules.pop("vllm.logger", None)
+            else:
+                _sys.modules["vllm.logger"] = prev_logger
+            if prev_vllm is None:
+                _sys.modules.pop("vllm", None)
+            else:
+                _sys.modules["vllm"] = prev_vllm
+
+    def test_clears_python_warnings_registry_so_once_warning_re_fires(self) -> None:
+        """A ``warnings.warn`` under a ``once`` filter must re-fire post-reset."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as first:
+            warnings.simplefilter("once")
+            warnings.warn("registry-test-msg", UserWarning, stacklevel=1)
+            warnings.warn("registry-test-msg", UserWarning, stacklevel=1)
+        # The "once" filter suppressed the duplicate.
+        assert len([w for w in first if "registry-test-msg" in str(w.message)]) == 1
+
+        reset_warning_dedup()
+
+        with warnings.catch_warnings(record=True) as second:
+            warnings.simplefilter("once")
+            warnings.warn("registry-test-msg", UserWarning, stacklevel=1)
+        # After the reset the previously-fired warning is no longer recorded as
+        # seen, so it fires again.
+        assert any("registry-test-msg" in str(w.message) for w in second)
+
+    def test_no_op_when_engine_caches_absent(self) -> None:
+        """With no HF/vLLM importable, the reset is a harmless no-op (no raise)."""
+        reset_warning_dedup()  # must not raise
+
+
+class TestWarmUpEngineObservation:
+    def test_non_vllm_engine_is_no_op(self) -> None:
+        # transformers / tensorrt take the early-return branch; nothing imported.
+        warm_up_engine_observation("transformers")
+        warm_up_engine_observation("tensorrt")
+
+    def test_vllm_warm_up_is_guarded_when_unimportable(self) -> None:
+        # Outside the vLLM container the import fails; the warm-up swallows it.
+        warm_up_engine_observation("vllm")  # must not raise
 
 
 # ---------------------------------------------------------------------------
