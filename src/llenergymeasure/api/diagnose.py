@@ -692,7 +692,22 @@ class ContainerGateRunner:
             "/gateout/diagnose_proposals.json",
             "/gateout/diagnose_gate_verdicts.json",
         ]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            # check=True + capture_output hides the container's stderr; the CLI
+            # only catches DiagnoseError, so surface the failure with the
+            # container's diagnostics instead of an opaque traceback.
+            raise DiagnoseError(
+                f"diagnose gate container exited {exc.returncode}.\n"
+                f"stderr:\n{exc.stderr or '<empty>'}\n"
+                f"stdout:\n{exc.stdout or '<empty>'}"
+            ) from exc
+        if not out_path.exists():
+            raise DiagnoseError(
+                f"diagnose gate produced no verdicts file at {out_path} "
+                "(container exited 0 but wrote nothing)"
+            )
         return list(json.loads(out_path.read_text()))
 
 

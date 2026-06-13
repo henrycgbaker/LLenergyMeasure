@@ -691,3 +691,55 @@ def test_gap_native_type_resolves_via_constructor_resolver(
     monkeypatch.setattr(constructors, "resolve_native_type", _stub_resolve)
     assert constructors.resolve_native_type("transformers", native_type) is _FakeConfig
     assert resolved == ["config.Config"]
+
+
+# ---------------------------------------------------------------------------
+# CR4: gate-runner container failure surfaces as DiagnoseError with stderr
+# ---------------------------------------------------------------------------
+
+
+def test_container_gate_failure_raises_diagnose_error_with_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-zero container exit must raise DiagnoseError carrying the hidden
+    container stderr/stdout - not an opaque CalledProcessError the CLI cannot
+    catch."""
+    import subprocess
+
+    from llenergymeasure.api.diagnose import ContainerGateRunner
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=args[0] if args else ["docker"],
+            output="some stdout",
+            stderr="ImportError: scripts.validate_rules not found",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _boom)
+    runner = ContainerGateRunner(
+        image="llenergymeasure:transformers", repo=tmp_path, workdir=tmp_path / "wd"
+    )
+    with pytest.raises(DiagnoseError) as excinfo:
+        runner("transformers", [{"rule_id": "r", "native_type": "X"}])
+    msg = str(excinfo.value)
+    assert "ImportError: scripts.validate_rules not found" in msg
+    assert "some stdout" in msg
+    assert "exited 1" in msg
+
+
+def test_container_gate_missing_output_raises_diagnose_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Container exits 0 but writes no verdicts file -> DiagnoseError, not a
+    bare FileNotFoundError on the read."""
+    import subprocess
+
+    from llenergymeasure.api.diagnose import ContainerGateRunner
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: None)
+    runner = ContainerGateRunner(
+        image="llenergymeasure:transformers", repo=tmp_path, workdir=tmp_path / "wd"
+    )
+    with pytest.raises(DiagnoseError, match="no verdicts file"):
+        runner("transformers", [{"rule_id": "r", "native_type": "X"}])
