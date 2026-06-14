@@ -84,6 +84,12 @@ _NATIVE_ORIGIN: dict[str, dict[str, str]] = {
         "BatchingType": ENGINE_PARAMS,
         "CapacitySchedulerPolicy": ENGINE_PARAMS,
         "ContextChunkingPolicy": ENGINE_PARAMS,
+        # 1.0.0 additions: the pytorch-backend config classes the C++ -> pydantic
+        # migration moved into Python (TorchLlmArgs + its nested CudaGraphConfig /
+        # TorchCompileConfig). All engine-side; purely additive for the 0.21.0 pin.
+        "TorchLlmArgs": ENGINE_PARAMS,
+        "CudaGraphConfig": ENGINE_PARAMS,
+        "TorchCompileConfig": ENGINE_PARAMS,
         "SamplingParams": SAMPLING_PARAMS,
     },
 }
