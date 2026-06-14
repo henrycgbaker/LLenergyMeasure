@@ -105,7 +105,15 @@ jobs:
     # Per-engine + per-pipeline change detection. Skipped on schedule
     # (no PR to filter against). On workflow_dispatch, emits "all
     # engines" so a manual run exercises the full pipeline.
-    if: github.event_name != 'schedule'
+    #
+    # Actor guard: the writeback job commits as llem-ci-bot[bot] via a
+    # GitHub App token, and App-token pushes DO re-fire pull_request
+    # synchronize (unlike the default GITHUB_TOKEN). Skipping filter on a
+    # bot-authored event makes every needs-filter cell skip too, so a bot
+    # writeback commit cannot re-mine + rewrite the non-reproducible
+    # image_digest and trigger an infinite writeback loop. Human pin-edit
+    # pull_request events and the weekly schedule are unaffected.
+    if: github.event_name != 'schedule' && github.actor != 'llem-ci-bot[bot]'
     runs-on: ubuntu-latest
     outputs:
       pr_number: ${{ steps.context.outputs.pr_number }}
@@ -439,8 +447,13 @@ jobs:
     # is unviable: GitHub redacts secret-derived job outputs to empty
     # when crossing job boundaries.
     needs: [filter, invariants-transformers, invariants-others, schemas-transformers, schemas-others]
+    # Actor guard mirrored from filter: writeback uses `always()`, so it can
+    # fire even when upstream cells skipped. Skip on a bot-authored event so
+    # the bot's own writeback push cannot trigger a second writeback (the
+    # image_digest non-idempotency loop).
     if: |
       always()
+      && github.actor != 'llem-ci-bot[bot]'
       && github.event_name == 'pull_request'
       && needs.filter.outputs.pr_number != ''
       && needs.filter.outputs.pr_head_repo == github.repository
