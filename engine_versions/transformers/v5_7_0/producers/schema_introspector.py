@@ -35,11 +35,18 @@ from scripts.engine_producers._common import (
 # probe (``scripts/_probe.py``) reads this tuple via the dispatcher and
 # resolves each dotted path under the installed library before discovery
 # runs; a missing landmark flips the probe verdict to ``fail``.
+# ``PreTrainedModel`` is declared at its canonical home
+# ``transformers.modeling_utils`` rather than the top-level ``transformers``
+# namespace: the top-level name is a lazy re-export whose materialisation
+# depends on backend (torch) import state at access time, while the canonical
+# module path imports directly and resolves stably across the 4.57 / 5.7-5.10
+# line. The other landmarks re-export reliably and stay on their top-level
+# paths (they surface only as aliased diagnostics).
 LANDMARKS: tuple[str, ...] = (
     "transformers.AutoModelForCausalLM",
     "transformers.AutoModelForCausalLM.from_pretrained",
-    "transformers.PreTrainedModel",
-    "transformers.PreTrainedModel.from_pretrained",
+    "transformers.modeling_utils.PreTrainedModel",
+    "transformers.modeling_utils.PreTrainedModel.from_pretrained",
     "transformers.GenerationConfig",
     "transformers.GenerationConfig.to_dict",
 )
@@ -59,6 +66,11 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     from transformers import (  # type: ignore[import-not-found]
         AutoModelForCausalLM,
         GenerationConfig,
+    )
+
+    # Import from the canonical home; the top-level re-export is lazy and can
+    # fail to materialise at access time depending on backend import state.
+    from transformers.modeling_utils import (  # type: ignore[import-not-found]
         PreTrainedModel,
     )
 
