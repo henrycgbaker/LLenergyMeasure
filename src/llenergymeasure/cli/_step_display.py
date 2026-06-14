@@ -64,6 +64,24 @@ class _ImagePrepFailure(NamedTuple):
     error: str
 
 
+class _CompletedRow(NamedTuple):
+    """One completed or historical experiment row in the study results table.
+
+    The first field is ``idx`` (not ``index``) because NamedTuple inherits the
+    ``tuple.index`` method and a same-named field would shadow it.
+    """
+
+    idx: int
+    status: str
+    config: str
+    elapsed: float
+    inference_sec: float | None
+    energy_j: float | None
+    adj_energy_j: float | None
+    throughput: float | None
+    mj_per_tok: float | None
+
+
 class _DynamicRenderable:
     """Proxy that calls a render function on every Rich auto-refresh.
 
@@ -680,21 +698,7 @@ class StudyStepDisplay:
         self._is_tty = self._console.is_terminal and not force_plain
         self._lock = threading.Lock()
 
-        # Completed experiment rows:
-        # (index, status, config, elapsed, inference_sec, energy_j, adj_energy_j, throughput, mj_per_tok)
-        self._completed_rows: list[
-            tuple[
-                int,
-                str,
-                str,
-                float,
-                float | None,
-                float | None,
-                float | None,
-                float | None,
-                float | None,
-            ]
-        ] = []
+        self._completed_rows: list[_CompletedRow] = []
 
         # Active experiment state
         self._active_index: int = 0
@@ -777,7 +781,7 @@ class StudyStepDisplay:
             for idx, status, config, elapsed, infer, energy, adj_e, tput, mj in rows:
                 hist_status = f"PREV_{status}"
                 self._completed_rows.append(
-                    (idx, hist_status, config, elapsed, infer, energy, adj_e, tput, mj)
+                    _CompletedRow(idx, hist_status, config, elapsed, infer, energy, adj_e, tput, mj)
                 )
 
     def stop(self) -> None:
@@ -830,21 +834,7 @@ class StudyStepDisplay:
 
         with self._lock:
             self._inner_active = None
-            self._completed_rows.append(
-                (
-                    index,
-                    "OK",
-                    self._active_header,
-                    elapsed,
-                    inference_time_sec,
-                    energy_j,
-                    adj_energy_j,
-                    throughput_tok_s,
-                    mj_tok,
-                )
-            )
-        if not self._is_tty:
-            self._print_completed_row(
+            row = _CompletedRow(
                 index,
                 "OK",
                 self._active_header,
@@ -855,19 +845,21 @@ class StudyStepDisplay:
                 throughput_tok_s,
                 mj_tok,
             )
+            self._completed_rows.append(row)
+        if not self._is_tty:
+            self._print_completed_row(*row)
         self._refresh()
 
     def end_experiment_fail(self, index: int, elapsed: float, error: str = "") -> None:
         """Mark experiment as failed."""
         with self._lock:
             self._inner_active = None
-            self._completed_rows.append(
-                (index, "FAIL", self._active_header, elapsed, None, None, None, None, None)
-            )
-        if not self._is_tty:
-            self._print_completed_row(
+            row = _CompletedRow(
                 index, "FAIL", self._active_header, elapsed, None, None, None, None, None
             )
+            self._completed_rows.append(row)
+        if not self._is_tty:
+            self._print_completed_row(*row)
             if error:
                 self._console.print(f"         {error}", highlight=False)
         self._refresh()
