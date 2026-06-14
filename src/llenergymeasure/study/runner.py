@@ -297,49 +297,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         self._active_process = None
         self._cycle_counters = {}
 
-        def _sigint_handler(signum: int, frame: Any) -> None:
-            self._interrupt_count += 1
-            self._interrupt_event.set()
-            if self._interrupt_count == 1:
-                print(
-                    "\nInterrupt received. Waiting for experiment to finish cleanly "
-                    "(Ctrl+C again to force)..."
-                )
-                if self._active_process is not None and self._active_process.is_alive():
-                    _kill_process_group(
-                        self._active_process.pid, signal.SIGTERM
-                    )  # SIGTERM - gentle first attempt
-            else:
-                print("\nForce-killing experiment subprocess...")
-                if self._active_process is not None and self._active_process.is_alive():
-                    _kill_process_group(self._active_process.pid, signal.SIGKILL)  # SIGKILL
-
-        original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
-
-        # Acquire per-GPU advisory locks before image preparation.
-        # Sorted acquisition prevents deadlocks when multiple studies share GPUs.
-        gpu_locks: list[Any] = []
-        if not self._no_lock and ordered:
-            from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-            from llenergymeasure.study.gpu_locks import acquire_gpu_locks
-
-            gpu_indices = _resolve_gpu_indices(ordered[0])
-            gpu_locks = acquire_gpu_locks(gpu_indices)
-
-        # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
-        # Only activated for studies that use Docker runners.
-        original_sigterm: signal.Handlers | None = None
-        if self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values()):
-            from llenergymeasure.study.container_lifecycle import (
-                install_sigterm_bridge,
-                reap_orphaned_containers,
-                register_container_cleanup,
-            )
-
-            study_id = self.study.study_design_hash or "unknown"
-            reap_orphaned_containers()
-            register_container_cleanup(study_id)
-            original_sigterm = install_sigterm_bridge()
+        original_sigint, original_sigterm, gpu_locks = self._install_run_handlers(ordered)
 
         self._prepare_images()
 
@@ -367,17 +325,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                     break
 
                 # Resume skip-set: skip experiments that completed in a previous run.
-                if self._skip_set:
-                    config_hash_pre = compute_declared_config_hash(config)
-                    next_cycle = self._cycle_counters.get(config_hash_pre, 0) + 1
-                    if (config_hash_pre, next_cycle) in self._skip_set:
-                        self._cycle_counters[config_hash_pre] = next_cycle
-                        logger.info(
-                            "Skipping completed experiment %d/%d (resumed)",
-                            i + 1,
-                            len(ordered),
-                        )
-                        continue
+                if self._resume_should_skip(config, i, len(ordered)):
+                    continue
 
                 # Wall-clock timeout check: mark remaining experiments skipped.
                 if deadline is not None and time.monotonic() > deadline:
@@ -390,52 +339,17 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                     _aborted = True
                     break
 
-                # Config gap: between every consecutive experiment pair
-                if i > 0:
-                    gap_secs = float(self.study.study_execution.experiment_gap_seconds or 0)
-                    if gap_secs > 0:
-                        self._run_gap(gap_secs, "Experiment gap")
-                        if self._interrupt_event.is_set():
-                            break
-
-                # Cycle gap: after every complete round of N unique configs
-                if n_unique > 0 and i > 0 and i % n_unique == 0:
-                    cycle_gap_secs = float(self.study.study_execution.cycle_gap_seconds or 0)
-                    if cycle_gap_secs > 0:
-                        self._run_gap(cycle_gap_secs, "Cycle gap")
-                        if self._interrupt_event.is_set():
-                            break
+                # Inter-experiment + per-cycle gaps (break if interrupted during a gap)
+                if self._run_inter_experiment_gaps(i, n_unique):
+                    break
 
                 result = self._run_one(config, mp_ctx, index=i + 1)
                 results.append(result)
 
                 # Circuit breaker integration: update state based on result.
-                if isinstance(result, dict) and "type" in result:
-                    error_type = result.get("type", "UnknownError")
-                    error_msg = result.get("message", "")
-                    action = breaker.record_failure(error_type, error_msg)
-
-                    if action == "tripped":
-                        for line in breaker.get_failure_summary():
-                            logger.warning("Circuit breaker: %s", line)
-                        if breaker.cooldown_seconds > 0:
-                            logger.info("Circuit breaker cooldown: %.0fs", breaker.cooldown_seconds)
-                            time.sleep(breaker.cooldown_seconds)
-                        breaker.start_probe()
-                        # Next loop iteration is the probe experiment.
-
-                    elif action == "abort":
-                        # Probe failed - abort the study immediately.
-                        self._mark_remaining_skipped(ordered, i + 1, compute_declared_config_hash)
-                        self.manifest.mark_study_circuit_breaker()
-                        logger.error("Circuit breaker: probe experiment failed, aborting study")
-                        _aborted = True
-                        break
-
-                else:
-                    # Success path: reset circuit breaker (if not disabled).
-                    if not breaker.is_disabled:
-                        breaker.record_success()
+                if self._apply_circuit_breaker(breaker, result, ordered, i):
+                    _aborted = True
+                    break
 
             # Mark study completed on clean exit (no interrupt, timeout, or circuit break).
             if not self._interrupt_event.is_set() and not _aborted:
@@ -444,13 +358,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 self._write_equivalence_groups_sidecar()
 
         finally:
-            signal.signal(signal.SIGINT, original_sigint)
-            if original_sigterm is not None:
-                signal.signal(signal.SIGTERM, original_sigterm)
-            if gpu_locks:
-                from llenergymeasure.study.gpu_locks import release_gpu_locks
-
-                release_gpu_locks(gpu_locks)
+            self._restore_run_handlers(original_sigint, original_sigterm, gpu_locks)
 
         if self._interrupt_event.is_set():
             completed = sum(1 for r in results if not isinstance(r, dict))
@@ -463,6 +371,163 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             sys.exit(130)
 
         return results
+
+    def _handle_sigint(self, signum: int, frame: Any) -> None:
+        """SIGINT handler installed for the duration of run().
+
+        First Ctrl+C sets the interrupt event and sends SIGTERM to the active
+        subprocess group; a second sends SIGKILL.
+        """
+        self._interrupt_count += 1
+        self._interrupt_event.set()
+        if self._interrupt_count == 1:
+            print(
+                "\nInterrupt received. Waiting for experiment to finish cleanly "
+                "(Ctrl+C again to force)..."
+            )
+            if self._active_process is not None and self._active_process.is_alive():
+                _kill_process_group(
+                    self._active_process.pid, signal.SIGTERM
+                )  # SIGTERM - gentle first attempt
+        else:
+            print("\nForce-killing experiment subprocess...")
+            if self._active_process is not None and self._active_process.is_alive():
+                _kill_process_group(self._active_process.pid, signal.SIGKILL)  # SIGKILL
+
+    def _install_run_handlers(
+        self, ordered: list[Any]
+    ) -> tuple[Any, signal.Handlers | None, list[Any]]:
+        """Install the SIGINT handler, acquire per-GPU advisory locks, and wire the
+        Docker container lifecycle + SIGTERM bridge.
+
+        Returns ``(original_sigint, original_sigterm, gpu_locks)`` for restoration in
+        run()'s finally block via _restore_run_handlers.
+        """
+        original_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
+
+        # Acquire per-GPU advisory locks before image preparation.
+        # Sorted acquisition prevents deadlocks when multiple studies share GPUs.
+        gpu_locks: list[Any] = []
+        if not self._no_lock and ordered:
+            from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+            from llenergymeasure.study.gpu_locks import acquire_gpu_locks
+
+            gpu_indices = _resolve_gpu_indices(ordered[0])
+            gpu_locks = acquire_gpu_locks(gpu_indices)
+
+        # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
+        # Only activated for studies that use Docker runners.
+        original_sigterm: signal.Handlers | None = None
+        if self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values()):
+            from llenergymeasure.study.container_lifecycle import (
+                install_sigterm_bridge,
+                reap_orphaned_containers,
+                register_container_cleanup,
+            )
+
+            study_id = self.study.study_design_hash or "unknown"
+            reap_orphaned_containers()
+            register_container_cleanup(study_id)
+            original_sigterm = install_sigterm_bridge()
+
+        return original_sigint, original_sigterm, gpu_locks
+
+    def _restore_run_handlers(
+        self,
+        original_sigint: Any,
+        original_sigterm: signal.Handlers | None,
+        gpu_locks: list[Any],
+    ) -> None:
+        """Restore signal handlers and release GPU locks acquired by _install_run_handlers."""
+        signal.signal(signal.SIGINT, original_sigint)
+        if original_sigterm is not None:
+            signal.signal(signal.SIGTERM, original_sigterm)
+        if gpu_locks:
+            from llenergymeasure.study.gpu_locks import release_gpu_locks
+
+            release_gpu_locks(gpu_locks)
+
+    def _resume_should_skip(self, config: Any, index: int, total: int) -> bool:
+        """Return True when ``config`` already completed in a prior run (resume skip-set).
+
+        Advances the per-config-hash cycle counter as a side effect when skipping, so the
+        skip-set stays aligned with the cycle the runner would otherwise execute next.
+        """
+        if not self._skip_set:
+            return False
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
+
+        config_hash_pre = compute_declared_config_hash(config)
+        next_cycle = self._cycle_counters.get(config_hash_pre, 0) + 1
+        if (config_hash_pre, next_cycle) in self._skip_set:
+            self._cycle_counters[config_hash_pre] = next_cycle
+            logger.info(
+                "Skipping completed experiment %d/%d (resumed)",
+                index + 1,
+                total,
+            )
+            return True
+        return False
+
+    def _run_inter_experiment_gaps(self, index: int, n_unique: int) -> bool:
+        """Run the inter-experiment gap and, on cycle boundaries, the per-cycle gap.
+
+        Returns True if an interrupt arrived during a gap (caller should break).
+        """
+        # Config gap: between every consecutive experiment pair
+        if index > 0:
+            gap_secs = float(self.study.study_execution.experiment_gap_seconds or 0)
+            if gap_secs > 0:
+                self._run_gap(gap_secs, "Experiment gap")
+                if self._interrupt_event.is_set():
+                    return True
+
+        # Cycle gap: after every complete round of N unique configs
+        if n_unique > 0 and index > 0 and index % n_unique == 0:
+            cycle_gap_secs = float(self.study.study_execution.cycle_gap_seconds or 0)
+            if cycle_gap_secs > 0:
+                self._run_gap(cycle_gap_secs, "Cycle gap")
+                if self._interrupt_event.is_set():
+                    return True
+        return False
+
+    def _apply_circuit_breaker(
+        self, breaker: Any, result: Any, ordered: list[Any], index: int
+    ) -> bool:
+        """Update the circuit breaker from an experiment result.
+
+        Records failure/success, applies cooldown + probe on a trip, and on a failed
+        probe marks the remaining experiments skipped. Returns True when the study must
+        abort (caller sets _aborted and breaks).
+        """
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
+
+        if isinstance(result, dict) and "type" in result:
+            error_type = result.get("type", "UnknownError")
+            error_msg = result.get("message", "")
+            action = breaker.record_failure(error_type, error_msg)
+
+            if action == "tripped":
+                for line in breaker.get_failure_summary():
+                    logger.warning("Circuit breaker: %s", line)
+                if breaker.cooldown_seconds > 0:
+                    logger.info("Circuit breaker cooldown: %.0fs", breaker.cooldown_seconds)
+                    time.sleep(breaker.cooldown_seconds)
+                breaker.start_probe()
+                # Next loop iteration is the probe experiment.
+
+            elif action == "abort":
+                # Probe failed - abort the study immediately.
+                self._mark_remaining_skipped(ordered, index + 1, compute_declared_config_hash)
+                self.manifest.mark_study_circuit_breaker()
+                logger.error("Circuit breaker: probe experiment failed, aborting study")
+                return True
+
+        else:
+            # Success path: reset circuit breaker (if not disabled).
+            if not breaker.is_disabled:
+                breaker.record_success()
+        return False
 
     def _write_equivalence_groups_sidecar(self) -> None:
         """Write ``equivalence_groups.json`` to the study directory after run completion.
