@@ -83,6 +83,38 @@ class _BaselineMixin:
 
         cache_key = self._baseline_cache_key(config)
         location = "host" if cache_key == "local" else "baseline container"
+        cached = self._resolve_cached_baseline(config, cache_key, strategy)
+
+        # In-memory hit → emit "Reusing" and return
+        if cached is not None:
+            if self._progress is not None:
+                self._progress.on_step_start(
+                    STEP_BASELINE,
+                    "Reusing",
+                    f"cached {cached.power_w:.1f}W · {location}",
+                )
+                self._emit_baseline_result_substeps(cached, elapsed=0.0, mode="cached")
+                self._progress.on_step_done(STEP_BASELINE, 0.0)
+            return cached
+
+        # Try loading from disk first (handles mid-study restarts)
+        disk_path = self._get_baseline_cache_path(cache_key)
+        loaded = self._load_disk_baseline(config, cache_key, location, strategy, disk_path)
+        if loaded is not None:
+            return loaded
+
+        # Measure fresh baseline (in-container for Docker targets)
+        return self._measure_fresh_baseline(config, cache_key, strategy, disk_path)
+
+    def _resolve_cached_baseline(
+        self, config: ExperimentConfig, cache_key: str, strategy: str
+    ) -> Any:
+        """Return the in-memory cached baseline for ``cache_key`` if still usable.
+
+        Drops the cache on TTL expiry and, for the ``validated`` strategy, runs a
+        periodic drift spot-check (which may re-measure). Returns None when no valid
+        in-memory baseline is available.
+        """
         cached = self._baselines.get(cache_key)
 
         # TTL expiry check
@@ -108,49 +140,54 @@ class _BaselineMixin:
             ):
                 self._validate_baseline(config, cache_key)
                 cached = self._baselines.get(cache_key)  # may have been re-measured
+        return cached
 
-        # In-memory hit → emit "Reusing" and return
-        if cached is not None:
-            if self._progress is not None:
-                self._progress.on_step_start(
-                    STEP_BASELINE,
-                    "Reusing",
-                    f"cached {cached.power_w:.1f}W · {location}",
-                )
-                self._emit_baseline_result_substeps(cached, elapsed=0.0, mode="cached")
-                self._progress.on_step_done(STEP_BASELINE, 0.0)
-            return cached
+    def _load_disk_baseline(
+        self,
+        config: ExperimentConfig,
+        cache_key: str,
+        location: str,
+        strategy: str,
+        disk_path: Path,
+    ) -> Any:
+        """Load a persisted baseline from ``disk_path`` (mid-study restart path).
 
-        # Try loading from disk first (handles mid-study restarts)
-        disk_path = self._get_baseline_cache_path(cache_key)
-        if disk_path.exists():
-            from llenergymeasure.harness.baseline import load_baseline_cache
+        Emits Loading progress, registers a valid load in memory, and returns it, or
+        None when the file is absent or its on-disk cache is no longer valid.
+        """
+        if not disk_path.exists():
+            return None
+        from llenergymeasure.harness.baseline import load_baseline_cache
 
-            if self._progress is not None:
-                self._progress.on_step_start(
-                    STEP_BASELINE, "Loading", f"baseline cache · {location}"
-                )
-                t0_load = time.perf_counter()
+        if self._progress is not None:
+            self._progress.on_step_start(STEP_BASELINE, "Loading", f"baseline cache · {location}")
+            t0_load = time.perf_counter()
 
-            loaded = load_baseline_cache(
-                disk_path, ttl=config.measurement.baseline.cache_ttl_seconds
-            )
+        loaded = load_baseline_cache(disk_path, ttl=config.measurement.baseline.cache_ttl_seconds)
 
-            if self._progress is not None:
-                load_elapsed = time.perf_counter() - t0_load
-                if loaded is not None:
-                    self._emit_baseline_result_substeps(loaded, elapsed=load_elapsed, mode="disk")
-                self._progress.on_step_done(STEP_BASELINE, load_elapsed)
-
+        if self._progress is not None:
+            load_elapsed = time.perf_counter() - t0_load
             if loaded is not None:
-                if loaded.method is None:
-                    loaded.method = strategy
-                self._baselines[cache_key] = loaded
-                self._experiments_since_validation.setdefault(cache_key, 0)
-                logger.debug("Loaded baseline from disk cache: %.1fW", loaded.power_w)
-                return loaded
+                self._emit_baseline_result_substeps(loaded, elapsed=load_elapsed, mode="disk")
+            self._progress.on_step_done(STEP_BASELINE, load_elapsed)
 
-        # Measure fresh baseline (in-container for Docker targets)
+        if loaded is not None:
+            if loaded.method is None:
+                loaded.method = strategy
+            self._baselines[cache_key] = loaded
+            self._experiments_since_validation.setdefault(cache_key, 0)
+            logger.debug("Loaded baseline from disk cache: %.1fW", loaded.power_w)
+            return loaded
+        return None
+
+    def _measure_fresh_baseline(
+        self, config: ExperimentConfig, cache_key: str, strategy: str, disk_path: Path
+    ) -> Any:
+        """Measure a fresh baseline (in-container for Docker targets), persist it to
+        ``disk_path``, and emit Calibrating progress.
+
+        Returns the measured baseline, or None on measurement failure.
+        """
         dur = config.measurement.baseline.duration_seconds
         # Prefer the image tag over engine name so users see which container
         # is running in multi-engine studies.
