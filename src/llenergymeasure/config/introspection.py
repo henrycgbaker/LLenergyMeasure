@@ -8,17 +8,11 @@ maintaining separate parameter lists.
 Usage:
     from llenergymeasure.config.introspection import (
         get_engine_params,
-        get_shared_params,
-        get_all_params,
-        get_param_test_values,
         get_experiment_config_schema,
     )
 
     # Get all params for an engine
     transformers_params = get_engine_params("transformers")
-
-    # Get test values for a param
-    values = get_param_test_values("transformers.batch_size")
 
     # Get full JSON schema
     schema = get_experiment_config_schema()
@@ -32,9 +26,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-from llenergymeasure.config.ssot import ALL_ENGINES, Engine
-
-_ALL_ENGINES_LIST: list[Engine] = list(ALL_ENGINES)
+from llenergymeasure.config.ssot import ALL_ENGINES
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
@@ -331,89 +323,6 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     return params
 
 
-def get_shared_params() -> dict[str, dict[str, Any]]:
-    """Get shared/universal parameters from ExperimentConfig sub-models.
-
-    Returns params that are universal across all engines:
-    - Top-level: n, max_input_tokens, max_output_tokens, random_seed
-    - Dataset: source, n_prompts, order
-
-    Note: dtype and sampling params (temperature, top_k, top_p, etc.) are not
-    shared - they live per-engine on each engine's config section and are
-    discovered via :func:`get_engine_params`.
-    """
-    shared: dict[str, dict[str, Any]] = {}
-
-    shared["dataset.source"] = {
-        "path": "dataset.source",
-        "name": "source",
-        "type_str": "str",
-        "default": "aienergyscore",
-        "description": "Dataset source: built-in alias or .jsonl file path",
-        "options": None,
-        "test_values": ["aienergyscore"],
-        "constraints": {"min_length": 1},
-        "optional": False,
-        "engine_support": _ALL_ENGINES_LIST,
-    }
-    shared["dataset.n_prompts"] = {
-        "path": "dataset.n_prompts",
-        "name": "n_prompts",
-        "type_str": "int",
-        "default": 100,
-        "description": "Number of prompts to load",
-        "options": None,
-        "test_values": [10, 100, 500],
-        "constraints": {"ge": 1},
-        "optional": False,
-        "engine_support": _ALL_ENGINES_LIST,
-    }
-    shared["dataset.order"] = {
-        "path": "dataset.order",
-        "name": "order",
-        "type_str": "str",
-        "default": "interleaved",
-        "description": "Prompt ordering: interleaved, grouped, or shuffled",
-        "options": ["interleaved", "grouped", "shuffled"],
-        "test_values": ["interleaved", "grouped", "shuffled"],
-        "constraints": {},
-        "optional": False,
-        "engine_support": _ALL_ENGINES_LIST,
-    }
-    shared["max_input_tokens"] = {
-        "path": "max_input_tokens",
-        "name": "max_input_tokens",
-        "type_str": "int | None",
-        "default": 256,
-        "description": (
-            "Max input token length for truncation. Keeps computation workload "
-            "constant across experiments for fair comparison. None = no truncation."
-        ),
-        "options": None,
-        "test_values": [64, 128, 256, None],
-        "constraints": {"ge": 1},
-        "optional": True,
-        "engine_support": _ALL_ENGINES_LIST,
-    }
-    shared["max_output_tokens"] = {
-        "path": "max_output_tokens",
-        "name": "max_output_tokens",
-        "type_str": "int | None",
-        "default": 256,
-        "description": (
-            "Max output tokens (max_new_tokens for generation). "
-            "None = generate until EOS or model context limit."
-        ),
-        "options": None,
-        "test_values": [32, 128, 256, None],
-        "constraints": {"ge": 1},
-        "optional": True,
-        "engine_support": _ALL_ENGINES_LIST,
-    }
-
-    return shared
-
-
 def get_experiment_config_schema() -> dict[str, Any]:
     """Return the full ExperimentConfig JSON schema (Pydantic v2 schema).
 
@@ -426,178 +335,6 @@ def get_experiment_config_schema() -> dict[str, Any]:
     from llenergymeasure.config.models import ExperimentConfig
 
     return ExperimentConfig.model_json_schema()
-
-
-def get_all_params() -> dict[str, dict[str, dict[str, Any]]]:
-    """Get all parameters organised by engine + shared.
-
-    Returns:
-        {
-            "shared": {...},
-            "transformers": {...},
-            "vllm": {...},
-            "tensorrt": {...},
-        }
-    """
-    return {"shared": get_shared_params(), **{e: get_engine_params(e) for e in ALL_ENGINES}}
-
-
-def get_param_test_values(param_path: str) -> list[Any]:
-    """Get test values for a specific parameter.
-
-    Args:
-        param_path: Full param path, e.g., "transformers.batch_size" or "transformers.sampling.temperature".
-
-    Returns:
-        List of test values.
-    """
-    all_params = get_all_params()
-
-    for section in all_params.values():
-        if param_path in section:
-            test_values: list[Any] = section[param_path].get("test_values", [])
-            return test_values
-
-    return []
-
-
-def get_param_options(param_path: str) -> list[Any] | None:
-    """Get valid options for a Literal-typed parameter.
-
-    Args:
-        param_path: Full param path.
-
-    Returns:
-        List of options for Literal types, None otherwise.
-    """
-    all_params = get_all_params()
-
-    for section in all_params.values():
-        if param_path in section:
-            return section[param_path].get("options")
-
-    return None
-
-
-def list_all_param_paths(engine: str | None = None) -> list[str]:
-    """List all parameter paths, optionally filtered by engine.
-
-    Args:
-        engine: Optional engine filter ("transformers", "vllm", "tensorrt", "shared").
-
-    Returns:
-        Sorted list of param paths.
-    """
-    all_params = get_all_params()
-
-    if engine:
-        if engine not in all_params:
-            raise ValueError(f"Unknown engine: {engine}")
-        return sorted(all_params[engine].keys())
-
-    paths: list[str] = []
-    for section in all_params.values():
-        paths.extend(section.keys())
-    return sorted(set(paths))
-
-
-def get_engine_specific_params() -> dict[str, list[str]]:
-    """Get params that are only valid for specific engines.
-
-    Derived from the Pydantic engine models via ``get_engine_params`` - never
-    hand-maintained. Adding or removing a typed field in
-    ``engine_configs.py`` is automatically reflected here.
-
-    Fields reachable only through ``extra="allow"`` passthrough (e.g. dropped
-    typed fields still settable in YAML) are not included, since they are not
-    part of the typed contract this function describes.
-
-    Returns:
-        Dict mapping engine name to list of dotted param paths exclusive to
-        that engine.
-    """
-    return {engine: sorted(get_engine_params(engine).keys()) for engine in _ALL_ENGINES_LIST}
-
-
-def get_special_test_models() -> dict[str, str]:
-    """Get parameters that require special pre-quantized test models.
-
-    Some parameters (like AWQ/GPTQ quantization) require models that have
-    been pre-quantized with that method. Using a non-quantized model will fail.
-
-    Returns:
-        Dict mapping param value patterns to appropriate test model names.
-    """
-    return {
-        # vLLM quantization methods requiring pre-quantized models
-        "vllm.engine.quantization=awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
-        "vllm.engine.quantization=gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
-        # TensorRT quantisation methods requiring pre-quantized models
-        "tensorrt.quant_config.quant_algo=W4A16_AWQ": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
-        "tensorrt.quant_config.quant_algo=W4A16_GPTQ": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
-    }
-
-
-def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> list[str]:
-    """Get params that require specific GPU compute capabilities.
-
-    Args:
-        min_compute_capability: Minimum compute capability (default 8.0 = Ampere).
-
-    Returns:
-        List of param paths that require the specified compute capability.
-    """
-    # These features require Ampere (8.0) or newer GPUs
-    ampere_required = [
-        "vllm.engine.quantization=fp8",
-        "tensorrt.quant_config.quant_algo=FP8",
-        "transformers.attn_implementation=flash_attention_2",
-        "transformers.attn_implementation=flash_attention_3",
-    ]
-
-    # These features require Hopper (9.0) or newer GPUs
-    hopper_required: list[str] = []
-
-    if min_compute_capability >= 9.0:
-        return ampere_required + hopper_required
-    return ampere_required
-
-
-def get_param_skip_conditions() -> dict[str, str]:
-    """Get conditions under which params should be skipped during testing.
-
-    Returns:
-        Dict mapping param paths to skip reasons for documentation/logging.
-    """
-    return {
-        # Multi-GPU params - skip if single GPU
-        "vllm.engine.tensor_parallel_size>1": "Requires 2+ GPUs",
-        "tensorrt.tensor_parallel_size>1": "Requires 2+ GPUs",
-        # Flash Attention 2 - requires flash-attn package
-        "transformers.attn_implementation=flash_attention_2": "Requires flash-attn package",
-        # Flash Attention 3 - requires flash_attn_3 package (built from flash-attn hopper/)
-        "transformers.attn_implementation=flash_attention_3": "Requires flash_attn_3 package (Ampere+ GPU, compute capability 8.0+)",
-        # torch.compile - may not work on all model architectures
-        "transformers.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
-        # FP8 - Ampere or newer
-        "vllm.engine.quantization=fp8": "Requires Ampere+ GPU",
-        "tensorrt.quant_config.quant_algo=FP8": "Requires Ada Lovelace+ GPU (SM >= 8.9)",
-        # TensorRT quantisation - requires pre-quantized models
-        "tensorrt.quant_config.quant_algo=W4A16_AWQ": "Requires AWQ-quantized model",
-        "tensorrt.quant_config.quant_algo=W4A16_GPTQ": "Requires GPTQ-quantized model",
-        # Quantization - requires pre-quantized models (see get_special_test_models)
-        "vllm.engine.quantization=awq": "Requires AWQ-quantized model",
-        "vllm.engine.quantization=gptq": "Requires GPTQ-quantized model",
-        # Transformers optional dependencies
-        "transformers.load_in_4bit": "Requires compatible bitsandbytes version",
-        "transformers.load_in_8bit": "Requires compatible bitsandbytes version",
-        # BitsAndBytes 4-bit sub-options
-        "transformers.bnb_4bit_compute_dtype": "Requires load_in_4bit=True and bitsandbytes package",
-        "transformers.bnb_4bit_quant_type": "Requires load_in_4bit=True and bitsandbytes package",
-        "transformers.bnb_4bit_use_double_quant": "Requires load_in_4bit=True and bitsandbytes package",
-        # Prompt lookup speculative decoding
-        "transformers.prompt_lookup_num_tokens": "Requires compatible model and sufficient prompt overlap",
-    }
 
 
 # =============================================================================

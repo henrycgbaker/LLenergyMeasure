@@ -10,16 +10,12 @@ from __future__ import annotations
 import pytest
 
 from llenergymeasure.config.introspection import (
-    get_all_params,
     get_display_label,
     get_engine_params,
     get_experiment_config_schema,
     get_field_role,
-    get_param_test_values,
-    get_shared_params,
     get_swept_field_paths,
     get_validation_rules,
-    list_all_param_paths,
 )
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import DTYPE_SUPPORT
@@ -77,50 +73,6 @@ def test_get_engine_params_unknown_engine_raises():
 
 
 # ---------------------------------------------------------------------------
-# get_shared_params
-# ---------------------------------------------------------------------------
-
-
-def test_get_shared_params_returns_model_field():
-    """get_shared_params() returns dataset and decoder params.
-
-    dtype lives per-engine, not in the shared bucket. Shared now means
-    decoder.* params and dataset.* params.
-    """
-    params = get_shared_params()
-    assert isinstance(params, dict)
-    # Dataset params are shared
-    assert "dataset.n_prompts" in params
-
-
-def test_get_shared_params_does_not_contain_dtype():
-    """get_shared_params() does not expose 'dtype' - it's per-engine."""
-    params = get_shared_params()
-    assert "dtype" not in params
-
-
-def test_get_shared_params_contains_n():
-    """get_shared_params() contains 'dataset.n_prompts' (prompt count)."""
-    params = get_shared_params()
-    assert "dataset.n_prompts" in params
-
-
-def test_get_shared_params_no_longer_contains_decoder():
-    """Sampling params live per-engine - they're not in get_shared_params()."""
-    params = get_shared_params()
-    assert "decoder.temperature" not in params
-    assert "decoder.top_k" not in params
-
-
-def test_get_shared_params_all_have_engine_support():
-    """Every shared param has engine_support list."""
-    params = get_shared_params()
-    for param_path, meta in params.items():
-        assert "engine_support" in meta, f"Missing engine_support on {param_path}"
-        assert isinstance(meta["engine_support"], list)
-
-
-# ---------------------------------------------------------------------------
 # get_experiment_config_schema
 # ---------------------------------------------------------------------------
 
@@ -148,101 +100,6 @@ def test_get_experiment_config_schema_contains_engine_field():
 
 
 # ---------------------------------------------------------------------------
-# get_param_test_values (INF-11: SSOT-driven test value generation)
-# ---------------------------------------------------------------------------
-
-
-def test_get_param_test_values_pytorch_batch_size_returns_list():
-    """get_param_test_values('transformers.batch_size') returns a list containing 1."""
-    values = get_param_test_values("transformers.batch_size")
-    assert isinstance(values, list)
-    assert 1 in values
-
-
-def test_get_param_test_values_dtype_returns_all_options():
-    """get_param_test_values('transformers.dtype') returns all 3 dtype options."""
-    values = get_param_test_values("transformers.dtype")
-    assert set(values) == {"float32", "float16", "bfloat16"}
-
-
-def test_get_param_test_values_decoder_temperature_returns_floats():
-    """get_param_test_values('decoder.temperature') returns a list of floats."""
-    values = get_param_test_values("decoder.temperature")
-    assert isinstance(values, list)
-    assert all(isinstance(v, int | float) for v in values)
-
-
-def test_get_param_test_values_unknown_param_returns_empty():
-    """get_param_test_values for unknown param path returns empty list."""
-    values = get_param_test_values("nonexistent.param.path")
-    assert values == []
-
-
-# ---------------------------------------------------------------------------
-# get_all_params
-# ---------------------------------------------------------------------------
-
-
-def test_get_all_params_covers_all_engines():
-    """get_all_params() returns dict with 'transformers', 'vllm', 'tensorrt' keys."""
-    all_params = get_all_params()
-    assert "transformers" in all_params
-    assert "vllm" in all_params
-    assert "tensorrt" in all_params
-
-
-def test_get_all_params_has_shared_key():
-    """get_all_params() includes a 'shared' section."""
-    all_params = get_all_params()
-    assert "shared" in all_params
-
-
-def test_get_all_params_pytorch_section_contains_batch_size():
-    """get_all_params()['transformers'] contains the batch_size param."""
-    all_params = get_all_params()
-    assert "transformers.batch_size" in all_params["transformers"]
-
-
-# ---------------------------------------------------------------------------
-# list_all_param_paths
-# ---------------------------------------------------------------------------
-
-
-def test_list_all_param_paths_contains_expected_paths():
-    """list_all_param_paths() returns a sorted list containing known param paths."""
-    paths = list_all_param_paths()
-    assert isinstance(paths, list)
-    assert "transformers.batch_size" in paths
-    assert "transformers.dtype" in paths
-
-
-def test_list_all_param_paths_contains_known_paths():
-    """list_all_param_paths() contains expected well-known param paths."""
-    paths = list_all_param_paths()
-    assert "transformers.batch_size" in paths
-    # Sampling params live per-engine, not on a universal decoder
-    assert "transformers.sampling.temperature" in paths
-    assert "vllm.sampling.temperature" in paths
-    assert "tensorrt.sampling.temperature" in paths
-    # dtype also lives per-engine
-    assert "transformers.dtype" in paths
-    assert "vllm.dtype" in paths
-    assert "tensorrt.dtype" in paths
-
-
-def test_list_all_param_paths_filtered_by_engine():
-    """list_all_param_paths(engine='transformers') returns only pytorch paths."""
-    paths = list_all_param_paths(engine="transformers")
-    assert all(p.startswith("transformers.") for p in paths)
-
-
-def test_list_all_param_paths_unknown_engine_raises():
-    """list_all_param_paths with unknown engine raises ValueError."""
-    with pytest.raises(ValueError, match="Unknown engine"):
-        list_all_param_paths(engine="nonexistent")
-
-
-# ---------------------------------------------------------------------------
 # SSOT schema-driven test generation (INF-11)
 # ---------------------------------------------------------------------------
 
@@ -252,14 +109,6 @@ def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
     config = make_config(dtype=dt)
     assert config.transformers.dtype == dt
-
-
-def test_ssot_dtype_values_match_param_test_values():
-    """DTYPE_SUPPORT['transformers'] values match get_param_test_values('transformers.dtype')."""
-    from_ssot = set(DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
-    from_introspection = set(get_param_test_values("transformers.dtype"))
-    # The test values from introspection should cover all SSOT dtype values
-    assert from_ssot == from_introspection
 
 
 # ---------------------------------------------------------------------------
