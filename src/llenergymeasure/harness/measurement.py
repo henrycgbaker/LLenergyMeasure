@@ -14,6 +14,7 @@ import importlib.util
 import logging
 import time
 from concurrent.futures import Future
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.device.power_thermal import PowerThermalSample
     from llenergymeasure.domain.environment import EnvironmentSnapshot
-    from llenergymeasure.domain.metrics import FlopsResult
+    from llenergymeasure.domain.metrics import FlopsResult, WarmupResult
     from llenergymeasure.domain.progress import ProgressCallback
     from llenergymeasure.energy import EnergySampler as EnergySampler
     from llenergymeasure.harness.baseline import BaselineCache
@@ -215,6 +216,27 @@ class PowerThermalSampler:  # pragma: no cover
     def __exit__(self, *args: Any) -> None: ...  # type: ignore[empty-body]
 
 
+def _emit_substep(
+    progress: ProgressCallback | None, step: str, text: str, elapsed: float = 0.0
+) -> None:
+    """Emit a substep event to the progress callback when one is registered."""
+    if progress:
+        progress.on_substep(step, text, elapsed)
+
+
+@dataclass
+class _MeasuredWindow:
+    """Outputs of the measured inference window (steps 7-13 of the run lifecycle)."""
+
+    output: InferenceOutput
+    thermal_info: Any
+    timeseries_samples: list[PowerThermalSample]
+    energy_measurement: Any
+    flops_result: Any
+    start_time: datetime
+    end_time: datetime
+
+
 # ---------------------------------------------------------------------------
 # MeasurementHarness
 # ---------------------------------------------------------------------------
@@ -266,13 +288,6 @@ class MeasurementHarness:
             EngineError: If model loading or inference fails.
             PreFlightError: If pre-flight checks fail before GPU allocation.
         """
-        _p = progress  # short alias
-
-        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            """Emit a substep event to the progress callback."""
-            if _p:
-                _p.on_substep(step, text, elapsed)
-
         # 1. Environment snapshot - start background thread (before model loading)
         snapshot_future: Future[EnvironmentSnapshot] | None = None
         if snapshot is None:
@@ -280,6 +295,66 @@ class MeasurementHarness:
             snapshot_future = collect_environment_snapshot_async()
 
         # 2. Baseline power measurement (before model load)
+        baseline = self._measure_or_reuse_baseline(config, baseline, gpu_indices, progress)
+
+        # 3-4. Load model, join env snapshot, capture model memory baseline
+        model, snapshot, model_memory_mb = self._load_model_and_snapshot(
+            engine, config, snapshot, snapshot_future, gpu_indices, progress
+        )
+
+        # 4b. Load prompts - BEFORE the measurement window (methodology fix)
+        prompts = self._load_prompts(config, progress)
+
+        try:
+            # 5-6. Warmup convergence + thermal floor wait
+            warmup_result = self._run_warmup(engine, config, model, prompts, progress)
+
+            # 7-13. Measured inference window (energy, timing, FLOPs)
+            window = self._run_measured_inference(
+                engine, config, model, prompts, gpu_indices, progress
+            )
+
+        finally:
+            # Always release model from memory even on exception
+            engine.cleanup(model)
+
+        # 14-17. Persist sidecars + assemble the ExperimentResult
+        return self._persist_and_assemble(
+            engine=engine,
+            config=config,
+            snapshot=snapshot,
+            baseline=baseline,
+            warmup_result=warmup_result,
+            model_memory_mb=model_memory_mb,
+            prompt_count=len(prompts),
+            gpu_indices=gpu_indices,
+            window=window,
+            output_dir=output_dir,
+            save_timeseries=save_timeseries,
+            progress=progress,
+        )
+
+    # -------------------------------------------------------------------------
+    # Run lifecycle phases (extracted from run())
+    # -------------------------------------------------------------------------
+
+    def _measure_or_reuse_baseline(
+        self,
+        config: ExperimentConfig,
+        baseline: BaselineCache | None,
+        gpu_indices: list[int] | None,
+        progress: ProgressCallback | None,
+    ) -> BaselineCache | None:
+        """Measure baseline idle power, or mark a study-supplied baseline as cached.
+
+        Returns the baseline to thread into the energy breakdown (None when baseline
+        measurement is disabled or unavailable).
+        """
+        _p = progress
+
+        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
+            _emit_substep(_p, step, text, elapsed)
+
         if baseline is not None and config.measurement.baseline.enabled:
             # For cached/validated strategies, progress events are emitted by
             # study/runner.py::_get_baseline. Here we only mark from_cache for
@@ -312,6 +387,27 @@ class MeasurementHarness:
                 _p.on_step_done(STEP_BASELINE, time.perf_counter() - t0)
         elif _p:
             _p.on_step_skip(STEP_BASELINE, "disabled")
+        return baseline
+
+    def _load_model_and_snapshot(
+        self,
+        engine: EnginePlugin,
+        config: ExperimentConfig,
+        snapshot: EnvironmentSnapshot | None,
+        snapshot_future: Future[EnvironmentSnapshot] | None,
+        gpu_indices: list[int] | None,
+        progress: ProgressCallback | None,
+    ) -> tuple[Any, EnvironmentSnapshot | None, float]:
+        """Load the model, join the background environment snapshot, and capture the
+        post-load GPU memory baseline.
+
+        Returns (model, snapshot, model_memory_mb). The memory baseline must be
+        captured here - before warmup allocates KV cache.
+        """
+        _p = progress
+
+        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
+            _emit_substep(_p, step, text, elapsed)
 
         # 3. Load model via engine plugin
         if _p:
@@ -337,7 +433,19 @@ class MeasurementHarness:
         if model_memory_mb > 0:
             _substep("model", f"model memory: {model_memory_mb:.0f}MB")
 
-        # 4b. Load prompts - BEFORE measurement window (methodology fix)
+        return model, snapshot, model_memory_mb
+
+    def _load_prompts(
+        self,
+        config: ExperimentConfig,
+        progress: ProgressCallback | None,
+    ) -> list[str]:
+        """Load and tokenise prompts before the measurement window (methodology fix)."""
+        _p = progress
+
+        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
+            _emit_substep(_p, step, text, elapsed)
+
         if _p:
             _p.on_step_start(
                 "prompts",
@@ -350,158 +458,223 @@ class MeasurementHarness:
         _substep("prompts", f"tokenised {len(prompts)} prompts")
         if _p:
             _p.on_step_done("prompts", time.perf_counter() - t0_prompts)
+        return prompts
 
-        try:
-            # 5. Warmup
-            if _p:
-                _p.on_step_start(
-                    "warmup", "Warming up", f"up to {config.measurement.warmup.max_prompts} prompts"
-                )
-                t0_warmup = time.perf_counter()
+    def _run_warmup(
+        self,
+        engine: EnginePlugin,
+        config: ExperimentConfig,
+        model: Any,
+        prompts: list[str],
+        progress: ProgressCallback | None,
+    ) -> WarmupResult:
+        """Run engine warmup to convergence, then wait out the thermal floor.
 
-            # Probe call determines warmup strategy:
-            # > 0.0 → CV-based convergence (Transformers), 0.0 → kernel warmup (vLLM/TRT-LLM)
-            if config.measurement.warmup.enabled:
-                first_latency = engine.run_warmup_prompt(config, model, prompts[0])
-            else:
-                first_latency = 0.0
+        Returns the WarmupResult with thermal_floor_wait_s populated.
+        """
+        _p = progress
 
-            if first_latency > 0.0:
-                warmup_substep = (
-                    (lambda text, elapsed: _p.on_substep("warmup", text, elapsed)) if _p else None
-                )
-                warmup_result = warmup_until_converged(
-                    lambda: engine.run_warmup_prompt(config, model, prompts[0]),
-                    config.measurement.warmup,
-                    on_substep=warmup_substep,
-                )
-            else:
-                from llenergymeasure.domain.metrics import WarmupResult
+        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
+            _emit_substep(_p, step, text, elapsed)
 
-                warmup_result = WarmupResult(
-                    converged=True,
-                    final_cv=0.0,
-                    iterations_completed=1 if config.measurement.warmup.enabled else 0,
-                    target_cv=config.measurement.warmup.cv_threshold,
-                    max_prompts=config.measurement.warmup.max_prompts,
-                )
+        # 5. Warmup
+        if _p:
+            _p.on_step_start(
+                "warmup", "Warming up", f"up to {config.measurement.warmup.max_prompts} prompts"
+            )
+            t0_warmup = time.perf_counter()
 
-            if _p:
-                iters = warmup_result.iterations_completed
-                cv_info = f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""
-                converged = "converged" if warmup_result.converged else "not converged"
-                iters_label = f"{iters} iteration{'s' if iters != 1 else ''}"
-                # Kernel-only warmup (vLLM/TRT-LLM): no CV-based convergence
-                if first_latency == 0.0 and config.measurement.warmup.enabled:
-                    _p.on_step_update("warmup", f"engine kernel warmup ({iters_label})")
-                else:
-                    _p.on_step_update("warmup", f"{iters_label} ({converged}{cv_info})")
-                _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
+        # Probe call determines warmup strategy:
+        # > 0.0 → CV-based convergence (Transformers), 0.0 → kernel warmup (vLLM/TRT-LLM)
+        if config.measurement.warmup.enabled:
+            first_latency = engine.run_warmup_prompt(config, model, prompts[0])
+        else:
+            first_latency = 0.0
+
+        if first_latency > 0.0:
+            warmup_substep = (
+                (lambda text, elapsed: _p.on_substep("warmup", text, elapsed)) if _p else None
+            )
+            warmup_result = warmup_until_converged(
+                lambda: engine.run_warmup_prompt(config, model, prompts[0]),
+                config.measurement.warmup,
+                on_substep=warmup_substep,
+            )
+        else:
+            from llenergymeasure.domain.metrics import WarmupResult
+
+            warmup_result = WarmupResult(
+                converged=True,
+                final_cv=0.0,
+                iterations_completed=1 if config.measurement.warmup.enabled else 0,
+                target_cv=config.measurement.warmup.cv_threshold,
+                max_prompts=config.measurement.warmup.max_prompts,
+            )
+
+        if _p:
             iters = warmup_result.iterations_completed
-            _substep(
-                "warmup",
-                f"{iters} iteration{'s' if iters != 1 else ''}"
-                + (f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""),
+            cv_info = f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""
+            converged = "converged" if warmup_result.converged else "not converged"
+            iters_label = f"{iters} iteration{'s' if iters != 1 else ''}"
+            # Kernel-only warmup (vLLM/TRT-LLM): no CV-based convergence
+            if first_latency == 0.0 and config.measurement.warmup.enabled:
+                _p.on_step_update("warmup", f"engine kernel warmup ({iters_label})")
+            else:
+                _p.on_step_update("warmup", f"{iters_label} ({converged}{cv_info})")
+            _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
+        iters = warmup_result.iterations_completed
+        _substep(
+            "warmup",
+            f"{iters} iteration{'s' if iters != 1 else ''}"
+            + (f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""),
+        )
+
+        # 6. Thermal floor - show step before sleeping
+        floor_secs = (
+            config.measurement.warmup.thermal_floor_seconds
+            if config.measurement.warmup.enabled
+            else 0
+        )
+        if _p:
+            if floor_secs > 0:
+                _p.on_step_start("thermal_floor", "Waiting", f"thermal floor ({floor_secs:.0f}s)")
+            else:
+                _p.on_step_skip("thermal_floor", "wait=0s")
+
+        wait_s = thermal_floor_wait(config)
+        warmup_result.thermal_floor_wait_s = wait_s
+
+        if _p and wait_s > 0:
+            _p.on_step_done("thermal_floor", wait_s)
+
+        return warmup_result
+
+    def _run_measured_inference(
+        self,
+        engine: EnginePlugin,
+        config: ExperimentConfig,
+        model: Any,
+        prompts: list[str],
+        gpu_indices: list[int] | None,
+        progress: ProgressCallback | None,
+    ) -> _MeasuredWindow:
+        """Run the measured inference window: select + start energy tracking, sync
+        CUDA, run inference under the thermal sampler, capture observed params, stop
+        tracking, and estimate FLOPs.
+
+        Returns the window outputs needed to assemble the ExperimentResult.
+        """
+        _p = progress
+
+        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
+            _emit_substep(_p, step, text, elapsed)
+
+        # 7. Select energy sampler
+        if _p:
+            _p.on_step_start("energy_select", "Selecting", "energy sampler")
+            t0_energy = time.perf_counter()
+        energy_sampler = select_energy_sampler(
+            config.measurement.energy_sampler, gpu_indices=gpu_indices
+        )
+        sampler_name = type(energy_sampler).__name__ if energy_sampler else "none"
+        _substep("energy_select", f"selected: {sampler_name}")
+        if _p:
+            _p.on_step_update("energy_select", f"energy sampler ({sampler_name})")
+            _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
+
+        # 8. Start energy tracking (after warmup + thermal floor)
+        energy_tracker = None
+        if energy_sampler is not None:
+            energy_tracker = energy_sampler.start_tracking()
+
+        # 9. CUDA sync before inference (Zeus best practice)
+        _cuda_sync()
+        _substep("measure", "CUDA sync (pre)")
+
+        if _p:
+            _p.on_step_start(
+                "measure", "Measuring", f"inference ({config.task.dataset.n_prompts} prompts)"
             )
+        _substep("measure", "energy tracker started")
 
-            # 6. Thermal floor - show step before sleeping
-            floor_secs = (
-                config.measurement.warmup.thermal_floor_seconds
-                if config.measurement.warmup.enabled
-                else 0
-            )
-            if _p:
-                if floor_secs > 0:
-                    _p.on_step_start(
-                        "thermal_floor", "Waiting", f"thermal floor ({floor_secs:.0f}s)"
-                    )
-                else:
-                    _p.on_step_skip("thermal_floor", "wait=0s")
+        t_inference_start = time.perf_counter()
+        start_time = datetime.now()
 
-            wait_s = thermal_floor_wait(config)
-            warmup_result.thermal_floor_wait_s = wait_s
+        # Start thermal sampler around inference for timeseries + throttle detection
+        with PowerThermalSampler(gpu_indices=gpu_indices) as thermal_sampler:
+            output = engine.run_inference(config, model, prompts)
 
-            if _p and wait_s > 0:
-                _p.on_step_done("thermal_floor", wait_s)
+        t_inference_end = time.perf_counter()
 
-            # 7. Select energy sampler
-            if _p:
-                _p.on_step_start("energy_select", "Selecting", "energy sampler")
-                t0_energy = time.perf_counter()
-            energy_sampler = select_energy_sampler(
-                config.measurement.energy_sampler, gpu_indices=gpu_indices
-            )
-            sampler_name = type(energy_sampler).__name__ if energy_sampler else "none"
-            _substep("energy_select", f"selected: {sampler_name}")
-            if _p:
-                _p.on_step_update("energy_select", f"energy sampler ({sampler_name})")
-                _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
+        # 11. CUDA sync after inference, before stopping energy
+        _cuda_sync()
+        _substep("measure", "CUDA sync (post)")
 
-            # 8. Start energy tracking (after warmup + thermal floor)
-            energy_tracker = None
-            if energy_sampler is not None:
-                energy_tracker = energy_sampler.start_tracking()
+        # 11a. Capture observed params post-window (outside NVML sampling).
+        # Must run here - model is still alive; capture overhead (~5-50 ms pure
+        # Python) must not land inside the PowerThermalSampler context above.
+        _capture_observed_params_into_output(engine, config, model, output)
 
-            # 9. CUDA sync before inference (Zeus best practice)
-            _cuda_sync()
-            _substep("measure", "CUDA sync (pre)")
+        if _p:
+            _p.on_step_done("measure", t_inference_end - t_inference_start)
 
-            if _p:
-                _p.on_step_start(
-                    "measure", "Measuring", f"inference ({config.task.dataset.n_prompts} prompts)"
-                )
-            _substep("measure", "energy tracker started")
+        thermal_info = thermal_sampler.get_thermal_throttle_info()
+        timeseries_samples = thermal_sampler.get_samples()
 
-            t_inference_start = time.perf_counter()
-            start_time = datetime.now()
+        # Harness sets canonical inference timer - overrides engine's elapsed_time_sec
+        output.inference_time_sec = t_inference_end - t_inference_start
 
-            # Start thermal sampler around inference for timeseries + throttle detection
-            with PowerThermalSampler(gpu_indices=gpu_indices) as thermal_sampler:
-                output = engine.run_inference(config, model, prompts)
+        # 12. Stop energy tracking
+        energy_measurement = None
+        if energy_sampler is not None and energy_tracker is not None:
+            energy_measurement = energy_sampler.stop_tracking(energy_tracker)
+            tracker_duration = energy_measurement.duration_sec if energy_measurement else 0.0
+            _substep("measure", f"energy tracker stopped  {tracker_duration:.1f}s")
+        end_time = datetime.now()
 
-            t_inference_end = time.perf_counter()
-
-            # 11. CUDA sync after inference, before stopping energy
-            _cuda_sync()
-            _substep("measure", "CUDA sync (post)")
-
-            # 11a. Capture observed params post-window (outside NVML sampling).
-            # Must run here - model is still alive; capture overhead (~5-50 ms pure
-            # Python) must not land inside the PowerThermalSampler context above.
-            _capture_observed_params_into_output(engine, config, model, output)
-
-            if _p:
-                _p.on_step_done("measure", t_inference_end - t_inference_start)
-
-            thermal_info = thermal_sampler.get_thermal_throttle_info()
-            timeseries_samples = thermal_sampler.get_samples()
-
-            # Harness sets canonical inference timer - overrides engine's elapsed_time_sec
-            output.inference_time_sec = t_inference_end - t_inference_start
-
-            # 12. Stop energy tracking
-            energy_measurement = None
-            if energy_sampler is not None and energy_tracker is not None:
-                energy_measurement = energy_sampler.stop_tracking(energy_tracker)
-                tracker_duration = energy_measurement.duration_sec if energy_measurement else 0.0
-                _substep("measure", f"energy tracker stopped  {tracker_duration:.1f}s")
-            end_time = datetime.now()
-
-            # 13. FLOPs estimation (warmup tokens excluded)
-            if _p:
-                _p.on_step_start("flops", "Estimating", "FLOPs (PaLM formula)")
-                t0_flops = time.perf_counter()
-            flops_result = self._estimate_flops(engine, config, output)
-            if _p:
-                if flops_result is not None:
-                    _p.on_step_update("flops", f"FLOPs: {flops_result.value:.2e}")
-                _p.on_step_done("flops", time.perf_counter() - t0_flops)
+        # 13. FLOPs estimation (warmup tokens excluded)
+        if _p:
+            _p.on_step_start("flops", "Estimating", "FLOPs (PaLM formula)")
+            t0_flops = time.perf_counter()
+        flops_result = self._estimate_flops(engine, config, output)
+        if _p:
             if flops_result is not None:
-                _substep("flops", f"FLOPs: {flops_result.value:.2e}")
+                _p.on_step_update("flops", f"FLOPs: {flops_result.value:.2e}")
+            _p.on_step_done("flops", time.perf_counter() - t0_flops)
+        if flops_result is not None:
+            _substep("flops", f"FLOPs: {flops_result.value:.2e}")
 
-        finally:
-            # Always release model from memory even on exception
-            engine.cleanup(model)
+        return _MeasuredWindow(
+            output=output,
+            thermal_info=thermal_info,
+            timeseries_samples=timeseries_samples,
+            energy_measurement=energy_measurement,
+            flops_result=flops_result,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    def _persist_and_assemble(
+        self,
+        *,
+        engine: EnginePlugin,
+        config: ExperimentConfig,
+        snapshot: EnvironmentSnapshot | None,
+        baseline: BaselineCache | None,
+        warmup_result: WarmupResult,
+        model_memory_mb: float,
+        prompt_count: int,
+        gpu_indices: list[int] | None,
+        window: _MeasuredWindow,
+        output_dir: Path | str | None,
+        save_timeseries: bool,
+        progress: ProgressCallback | None,
+    ) -> ExperimentResult:
+        """Write the timeseries + config sidecars and assemble the ExperimentResult."""
+        _p = progress
+
+        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
+            _emit_substep(_p, step, text, elapsed)
 
         # 14. Write timeseries Parquet sidecar (if output_dir set and save_timeseries enabled)
         resolved_output_dir = Path(output_dir) if output_dir is not None else None
@@ -514,17 +687,19 @@ class MeasurementHarness:
             t0_save = time.perf_counter()
 
         timeseries_path: str | None = None
-        if save_timeseries and resolved_output_dir is not None and timeseries_samples:
+        if save_timeseries and resolved_output_dir is not None and window.timeseries_samples:
             ts_file = write_timeseries_parquet(
-                timeseries_samples,
+                window.timeseries_samples,
                 resolved_output_dir / "timeseries.parquet",
             )
             timeseries_path = ts_file.name  # relative name in result JSON
             _substep("save", "timeseries parquet written")
 
         # 15. Collect measurement quality warnings
-        duration_sec = (end_time - start_time).total_seconds()
-        measurement_warnings = self._collect_warnings(duration_sec, timeseries_samples, gpu_indices)
+        duration_sec = (window.end_time - window.start_time).total_seconds()
+        measurement_warnings = self._collect_warnings(
+            duration_sec, window.timeseries_samples, gpu_indices
+        )
 
         # 16. Assemble ExperimentResult
         engine_version = getattr(engine, "version", None)
@@ -532,21 +707,21 @@ class MeasurementHarness:
             engine_name=engine.name,
             engine_version=engine_version,
             config=config,
-            output=output,
+            output=window.output,
             model_memory_mb=model_memory_mb,
             snapshot=snapshot,
-            start_time=start_time,
-            end_time=end_time,
+            start_time=window.start_time,
+            end_time=window.end_time,
             duration_sec=duration_sec,
-            thermal_info=thermal_info,
-            energy_measurement=energy_measurement,
+            thermal_info=window.thermal_info,
+            energy_measurement=window.energy_measurement,
             baseline=baseline,
-            flops_result=flops_result,
+            flops_result=window.flops_result,
             timeseries_path=timeseries_path,
-            timeseries_samples=timeseries_samples,
+            timeseries_samples=window.timeseries_samples,
             measurement_warnings=measurement_warnings,
             warmup_result=warmup_result,
-            prompt_count=len(prompts),
+            prompt_count=prompt_count,
         )
         _substep("save", "result assembled")
 
@@ -555,7 +730,7 @@ class MeasurementHarness:
         # runner can move it to the per-experiment directory.
         if resolved_output_dir is not None:
             self._write_config_sidecar(
-                output=output,
+                output=window.output,
                 config=config,
                 result=result,
                 output_dir=resolved_output_dir,
