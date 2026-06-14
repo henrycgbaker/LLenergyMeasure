@@ -20,11 +20,14 @@
 #   docker build -f docker/Dockerfile.transformers -t llenergymeasure-transformers .
 #
 # Version pin policy: update PYTORCH_VERSION on each milestone release.
-# Must be compatible with pyproject.toml torch>=2.5 / transformers>=4.49 constraints.
+# Must be compatible with pyproject.toml torch>=2.5 / transformers>=4.49 constraints;
+# torch 2.7.1 satisfies the torch>=2.5 floor. transformers 5.10+ references
+# torch.float8_e8m0fnu (added in torch 2.7), so the torch stack is pinned to
+# 2.7.1-cuda12.6-cudnn9 to clear that import wall.
 # TRANSFORMERS_VERSION comes from engine_versions/transformers.yaml SSOT.
 # ============================================================
-ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
-ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
+ARG PYTORCH_VERSION=2.7.1-cuda12.6-cudnn9-runtime
+ARG PYTORCH_DEVEL_VERSION=2.7.1-cuda12.6-cudnn9-devel
 
 # Source of truth: engine_versions/transformers.yaml `library.current_version`.
 # Renovate authors that file; CI passes the value via
