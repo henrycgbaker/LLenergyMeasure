@@ -328,6 +328,14 @@ jobs:
             "${CMD_PREFIX[@]}" -c "
               set -euo pipefail
               SSOT='engine_versions/${ENGINE}/${SAFE_VER}/outputs'
+              # Seed the new pin's maintainer-owned inputs (curated.yaml always,
+              # overlay.yaml when the prior pin had one) from the prior pin
+              # BEFORE mining reads them. A bare Renovate bump edits only
+              # current.yaml, so the new pin's outputs/ has no curated.yaml,
+              # which build_corpus's section classifier reads (FileNotFoundError
+              # otherwise). Idempotent + never clobbers maintainer edits; the
+              # aggregate writeback re-runs it as the authoritative seed.
+              python3 -m scripts.engine_producers._current --engine ${ENGINE} --carry-forward
               python3 -m scripts.engine_producers.build_corpus \
                 --engine ${ENGINE} \
                 --canonical-out \"\${SSOT}/rules.proposed.yaml\"
