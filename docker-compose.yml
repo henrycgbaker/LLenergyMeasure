@@ -122,18 +122,6 @@ services:
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
 
-  # ==========================================================================
-  # Legacy aliases (backwards compatibility)
-  # ==========================================================================
-  llenergymeasure-app:
-    extends:
-      service: transformers
-
-  llenergymeasure-dev:
-    extends:
-      service: transformers-dev
-    profiles: ["dev"]
-
 # =============================================================================
 # Named Volumes (Docker-managed, persist across container restarts)
 # =============================================================================
