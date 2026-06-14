@@ -5,7 +5,7 @@
 Library version: **5.7.0**  
 Anchor frozen at: 2026-06-12T10:04:46+02:00
 
-**Summary:** 44 proposed invariants, 44 validation-confirmed cases.
+**Summary:** 45 proposed invariants, 45 validation-confirmed cases.
 
 ## Invariants by extraction source
 
@@ -58,4 +58,8 @@ Anchor frozen at: 2026-06-12T10:04:46+02:00
 - `transformers_single_beam_strips_length_penalty` [dormant] - GenerationConfig.validate() records dormant `length_penalty` when num_beams=1 and `length_penalty...
 - `transformers_watermarking_type_watermarking_config_exceeds_zero` [error] - GenerationConfig.__init__ flags `watermarking_config` (watermarking config exceeds zero)
 - `transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig` [error] - GenerationConfig.__init__ flags `watermarking_config` (watermarking config type not in Watermarki...
+
+### Manual seed (1)
+
+- `transformers_bnb_load_in_4bit_xor_load_in_8bit` [error] - BitsAndBytesConfig.raise_ValueError: raises when load_in_4bit and load_in_8bit are both True (V1 ...
 

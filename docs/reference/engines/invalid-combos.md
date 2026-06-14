@@ -1,7 +1,7 @@
 # Invalid Parameter Combinations
 
 > Auto-generated from config validators and test results.
-> Last updated: 2026-06-11 22:13 UTC
+> Last updated: 2026-06-14 11:32 UTC
 
 This document lists parameter combinations that will fail validation or runtime.
 The tool validates these at config load time and provides clear error messages.

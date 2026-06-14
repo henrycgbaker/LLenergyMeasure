@@ -73,3 +73,26 @@ Propose invariants corpus entries from runtime observations
 | `--engine` |  | str |  | Filter: only propose rules for this engine (transformers/vllm/tensorrt). |
 | `--out` |  | path |  | Output path for proposed YAML fragments (one YAML document per gap, separated by '---'). |
 | `--include-exceptions` |  | flag | `false` | Also propose rules from runtime exceptions. Disabled by default; exceptions ship through a different review path. |
+
+### `llem diagnose-bump`
+
+Propose gate-confirmed rule entries from an upstream engine bump (local GPU)
+
+**Options:**
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--engine` |  | str |  | Engine to diagnose (transformers/vllm/tensorrt). |
+| `--image` |  | str |  | Engine cache image to run the gate inside (new pin). |
+| `--new-version` |  | str |  | The new (current) engine version being diagnosed. |
+| `--source-root` |  | path |  | Root of the new pin's engine source tree. |
+| `--mode` |  | str | `carried` | 'carried' (1a residual triage) or 'gap' (1b gap-diagnose). |
+| `--regate-report` |  | path |  | [carried] validate_rules --carried JSON report (with reconciliation block). |
+| `--carried-corpus` |  | path |  | [carried] previous pin's rules.proposed.yaml (the executable carried catalogue). |
+| `--old-version` |  | str |  | [carried] the previous engine version. |
+| `--cited-file` |  | str |  | [carried] source file (relative to --source-root) the residual rules cite. Repeatable. |
+| `--schema` |  | path |  | [gap] the fresh schema.discovered.json. |
+| `--surface-file` |  | str |  | [gap] config-surface source file (relative to --source-root). Repeatable. |
+| `--model` |  | str | `qwen2.5-coder:32b` | Local ollama model to use as the proposer. |
+| `--out` |  | path |  | Where to write gate-confirmed rules.proposed.yaml (else stdout). |
+| `--workdir` |  | path | `/tmp/llem-diagnose` | Scratch dir for gate proposal/verdict JSON. |

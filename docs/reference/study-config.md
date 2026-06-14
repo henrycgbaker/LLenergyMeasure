@@ -65,13 +65,13 @@ All fields except `model` are optional and have sensible defaults.
 | `bnb_4bit_compute_dtype` | any | None | `null` |  |
 | `bnb_4bit_quant_type` | any | None | `null` |  |
 | `bnb_4bit_use_double_quant` | any | None | `null` |  |
-| `use_cache` | boolean | None | `true` |  |
-| `cache_implementation` | any | None | `null` |  |
-| `num_beams` | integer | None | `1` |  |
-| `early_stopping` | boolean | None | `false` |  |
-| `length_penalty` | number | None | `1.0` |  |
-| `no_repeat_ngram_size` | integer | None | `0` |  |
-| `prompt_lookup_num_tokens` | any | None | `null` |  |
+| `use_cache` | boolean | None | `null` |  |
+| `cache_implementation` | string | None | `null` |  |
+| `num_beams` | integer | None | `null` |  |
+| `early_stopping` | boolean | None | `null` |  |
+| `length_penalty` | number | None | `null` |  |
+| `no_repeat_ngram_size` | integer | None | `null` |  |
+| `prompt_lookup_num_tokens` | integer | None | `null` |  |
 | `device_map` | any | None | `null` |  |
 | `max_memory` | any | None | `null` |  |
 | `low_cpu_mem_usage` | any | None | `null` |  |
@@ -82,13 +82,13 @@ All fields except `model` are optional and have sensible defaults.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `temperature` | number | None | `1.0` |  |
-| `do_sample` | boolean | None | `false` |  |
-| `top_k` | integer | None | `50` |  |
-| `top_p` | number | None | `1.0` |  |
-| `repetition_penalty` | number | None | `1.0` |  |
-| `min_p` | any | None | `null` |  |
-| `min_new_tokens` | any | None | `null` |  |
+| `temperature` | number | None | `null` |  |
+| `do_sample` | boolean | None | `null` |  |
+| `top_k` | integer | None | `null` |  |
+| `top_p` | number | None | `null` |  |
+| `repetition_penalty` | number | None | `null` |  |
+| `min_p` | number | None | `null` |  |
+| `min_new_tokens` | integer | None | `null` |  |
 
 ### vLLM Engine (`vllm.engine_params:`)
 
@@ -98,8 +98,8 @@ All fields except `model` are optional and have sensible defaults.
 | `gpu_memory_utilization` | number | None | `0.9` |  |
 | `swap_space` | number | None | `4` |  |
 | `cpu_offload_gb` | number | None | `0` |  |
-| `block_size` | integer | None | `null` |  |
-| `kv_cache_dtype` | string | None | `auto` |  |
+| `block_size` | 8 | 16 | 32 | None | `null` |  |
+| `kv_cache_dtype` | 'auto' | 'fp8' | 'fp8_e5m2' | 'fp8_e4m3' | None | `auto` |  |
 | `enforce_eager` | boolean | None | `null` |  |
 | `enable_chunked_prefill` | boolean | None | `null` |  |
 | `max_num_seqs` | integer | None | `null` |  |
@@ -108,17 +108,17 @@ All fields except `model` are optional and have sensible defaults.
 | `num_scheduler_steps` | integer | None | `1` |  |
 | `tensor_parallel_size` | integer | None | `1` |  |
 | `pipeline_parallel_size` | integer | None | `1` |  |
-| `distributed_executor_backend` | any | None | `null` |  |
+| `distributed_executor_backend` | 'mp' | 'ray' | None | `null` |  |
 | `enable_prefix_caching` | boolean | None | `null` |  |
-| `quantization` | string | None | `null` |  |
+| `quantization` | 'awq' | 'gptq' | 'fp8' | 'fp8_e5m2' | 'fp8_e4m3' | 'marlin' | 'bitsandbytes' | None | `null` |  |
 | `max_seq_len_to_capture` | integer | None | `8192` |  |
 | `speculative_config` | any | None | `null` |  |
-| `offload_group_size` | any | None | `null` |  |
-| `offload_num_in_group` | any | None | `null` |  |
-| `offload_prefetch_step` | any | None | `null` |  |
+| `offload_group_size` | integer | None | `null` |  |
+| `offload_num_in_group` | integer | None | `null` |  |
+| `offload_prefetch_step` | integer | None | `null` |  |
 | `offload_params` | any | None | `null` |  |
 | `disable_custom_all_reduce` | boolean | None | `false` |  |
-| `kv_cache_memory_bytes` | any | None | `null` |  |
+| `kv_cache_memory_bytes` | integer | None | `null` |  |
 | `compilation_config` | any | None | `null` |  |
 | `attention` | any | None | `null` |  |
 | `beam_search` | any | None | `null` |  |
@@ -148,9 +148,9 @@ All fields except `model` are optional and have sensible defaults.
 | `max_input_len` | any | None | `null` | The maximum input length. |
 | `max_seq_len` | any | None | `null` | The maximum sequence length. |
 | `max_num_tokens` | any | None | `null` | The maximum number of tokens. |
-| `dtype` | any | None | `auto` | The data type to use for the model. |
+| `dtype` | 'auto' | 'float16' | 'bfloat16' | None | `auto` | The data type to use for the model. |
 | `fast_build` | any | None | `false` | Enable fast build. |
-| `backend` | any | None | `null` | The backend to use for this LLM instance. |
+| `backend` | 'trt' | 'pytorch' | '_autodeploy' | None | `null` | The backend to use for this LLM instance. |
 | `quant_config` | any | None | `null` | Quantization config. |
 | `kv_cache_config` | any | None | `null` | KV cache config. |
 | `scheduler_config` | any | None | `null` | Scheduler config. |
