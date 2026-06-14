@@ -428,15 +428,12 @@ def _run(
     # Resolve results_dir: resume_dir takes priority, then YAML > user config > built-in default
     if resume_dir is not None:
         study_dir = resume_dir
-        # Resume: load the existing manifest written by prepare_resume_manifest().
-        # ManifestWriter.__new__ avoids re-writing over the prepared manifest.
-        manifest = ManifestWriter.__new__(ManifestWriter)
-        manifest._study_dir = study_dir
-        manifest.path = study_dir / "manifest.json"
+        # Resume: load the existing manifest written by prepare_resume_manifest()
+        # and wrap it without rebuilding or overwriting the prepared manifest.
         from llenergymeasure.study.resume import load_resume_state
 
         loaded_manifest, _ = load_resume_state(study_dir)
-        manifest.manifest = loaded_manifest
+        manifest = ManifestWriter.from_existing(study_dir, loaded_manifest)
     else:
         results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
