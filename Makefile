@@ -141,8 +141,8 @@ clean: ## Remove local caches and build artefacts
 
 docs-all: ## Regenerate every SSOT-derived doc (CLI, config, invariants, schema, curation, invalid combos, API)
 	uv run python scripts/generate_invalid_combos_doc.py
-	uv run python scripts/generate_config_docs.py
-	uv run python scripts/generate_cli_reference.py
+	uv run python scripts/generate_config_docs.py --output docs/reference/study-config.md
+	uv run python scripts/generate_cli_reference.py --output docs/reference/cli.md
 	@for engine in transformers vllm tensorrt; do \
 		uv run python scripts/generate_rules_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md; \
 		uv run python scripts/generate_schema_doc.py --engine $$engine --out docs/reference/engines/schema-$$engine.md; \
@@ -152,8 +152,8 @@ docs-all: ## Regenerate every SSOT-derived doc (CLI, config, invariants, schema,
 	@echo "All generated docs refreshed"
 
 docs-check: ## Verify generated docs are up to date (used by CI)
-	@uv run python scripts/generate_config_docs.py > /dev/null
-	@uv run python scripts/generate_cli_reference.py > /dev/null
+	@uv run python scripts/generate_config_docs.py --output docs/reference/study-config.md > /dev/null
+	@uv run python scripts/generate_cli_reference.py --output docs/reference/cli.md > /dev/null
 	@uv run python scripts/generate_invalid_combos_doc.py > /dev/null
 	@for engine in transformers vllm tensorrt; do \
 		uv run python scripts/generate_rules_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md > /dev/null; \
