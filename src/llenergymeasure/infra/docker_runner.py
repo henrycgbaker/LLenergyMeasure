@@ -615,41 +615,9 @@ class DockerRunner:
 
         try:
             while True:
-                now = time.monotonic()
-                wall_remaining = (
-                    self.timeout - (now - watchdog_start)
-                    if self.timeout is not None
-                    else _NO_DEADLINE
+                wall_remaining, silence_remaining = self._check_watchdog_deadlines(
+                    proc, watchdog_start, last_activity
                 )
-                silence_remaining = (
-                    self.silence_timeout - (now - last_activity)
-                    if self.silence_timeout is not None
-                    else _NO_DEADLINE
-                )
-
-                if wall_remaining <= 0:
-                    self._kill_container_for_watchdog(proc)
-                    raise DockerTimeoutError(
-                        message=f"Container timed out after {self.timeout}s (wall-clock).",
-                        fix_suggestion=(
-                            "Increase study_execution.experiment_timeout_seconds or "
-                            "reduce experiment size."
-                        ),
-                    )
-                if silence_remaining <= 0:
-                    self._kill_container_for_watchdog(proc)
-                    raise DockerStdoutSilenceError(
-                        message=(
-                            f"Container produced no stdout for "
-                            f"{self.silence_timeout}s (likely stuck process)."
-                        ),
-                        fix_suggestion=(
-                            "Increase study_execution.stdout_silence_timeout_seconds "
-                            "if your workload legitimately goes silent for longer "
-                            "(e.g. fresh TRT-LLM engine builds), or investigate the "
-                            "stuck step. Check container logs in the exchange dir."
-                        ),
-                    )
 
                 # Cap the queue wait at the poll interval so a Ctrl-C
                 # interrupt is observed within ~0.5s even with both
@@ -663,58 +631,14 @@ class DockerRunner:
                     break  # stdout pipe closed
                 last_activity = time.monotonic()
 
-                stripped = line.strip()
-                if stripped.startswith('{"event":') and progress is not None:
-                    try:
-                        event = json.loads(stripped)
-                        event_type = event.get("event")
-                        step = event.get("step", "")
-
-                        # End "container_start" on first inner event
-                        if not container_start_done and container_start_time is not None:
-                            container_start_done = True
-                            container_start_done_event.set()
-                            progress.on_step_done(
-                                "container_start",
-                                time.perf_counter() - container_start_time,
-                            )
-
-                        # Translate container's "preflight" to avoid host collision
-                        if step == "preflight":
-                            step = "container_preflight"
-
-                        if event_type == "step_start":
-                            progress.on_step_start(
-                                step,
-                                event.get("description", ""),
-                                event.get("detail", ""),
-                            )
-                        elif event_type == "step_update":
-                            progress.on_step_update(step, event.get("detail", ""))
-                        elif event_type == "step_done":
-                            progress.on_step_done(step, event.get("elapsed_sec", 0.0))
-                        elif event_type == "step_skip":
-                            progress.on_step_skip(step, event.get("reason", ""))
-                        elif event_type == "substep":
-                            progress.on_substep(
-                                step,
-                                event.get("text", ""),
-                                event.get("elapsed_sec", 0.0),
-                            )
-                        elif event_type == "substep_start":
-                            progress.on_substep_start(step, event.get("text", ""))
-                        elif event_type == "substep_done":
-                            progress.on_substep_done(
-                                step,
-                                event.get("text"),
-                                event.get("elapsed_sec"),
-                            )
-                    except (json.JSONDecodeError, KeyError):
-                        logger.debug("Unparseable progress line: %s", stripped)
-                else:
-                    if stripped:
-                        masked = _mask_secrets_fn(stripped) if _mask_secrets_fn else stripped
-                        logger.debug("container stdout: %s", masked)
+                container_start_done = self._handle_stdout_line(
+                    line,
+                    progress,
+                    container_start_done,
+                    container_start_time,
+                    container_start_done_event,
+                    _mask_secrets_fn,
+                )
         finally:
             with suppress(Exception):
                 proc.stdout.close()
@@ -741,6 +665,128 @@ class DockerRunner:
         stderr_text = "".join(stderr_lines)
 
         return proc.returncode, stderr_text
+
+    def _check_watchdog_deadlines(
+        self,
+        proc: subprocess.Popen[str],
+        watchdog_start: float,
+        last_activity: float,
+    ) -> tuple[float, float]:
+        """Compute the remaining wall-clock and stdout-silence budgets.
+
+        Kills the container and raises the matching watchdog error if either budget
+        is exhausted. Returns ``(wall_remaining, silence_remaining)`` so the caller
+        can cap its queue wait.
+        """
+        now = time.monotonic()
+        wall_remaining = (
+            self.timeout - (now - watchdog_start) if self.timeout is not None else _NO_DEADLINE
+        )
+        silence_remaining = (
+            self.silence_timeout - (now - last_activity)
+            if self.silence_timeout is not None
+            else _NO_DEADLINE
+        )
+
+        if wall_remaining <= 0:
+            self._kill_container_for_watchdog(proc)
+            raise DockerTimeoutError(
+                message=f"Container timed out after {self.timeout}s (wall-clock).",
+                fix_suggestion=(
+                    "Increase study_execution.experiment_timeout_seconds or reduce experiment size."
+                ),
+            )
+        if silence_remaining <= 0:
+            self._kill_container_for_watchdog(proc)
+            raise DockerStdoutSilenceError(
+                message=(
+                    f"Container produced no stdout for "
+                    f"{self.silence_timeout}s (likely stuck process)."
+                ),
+                fix_suggestion=(
+                    "Increase study_execution.stdout_silence_timeout_seconds "
+                    "if your workload legitimately goes silent for longer "
+                    "(e.g. fresh TRT-LLM engine builds), or investigate the "
+                    "stuck step. Check container logs in the exchange dir."
+                ),
+            )
+        return wall_remaining, silence_remaining
+
+    def _handle_stdout_line(
+        self,
+        line: str,
+        progress: ProgressCallback | None,
+        container_start_done: bool,
+        container_start_time: float | None,
+        container_start_done_event: threading.Event,
+        mask_secrets_fn: Callable[[str], str] | None,
+    ) -> bool:
+        """Process one container stdout line.
+
+        JSON progress events are forwarded to ``progress``; plain output is logged
+        (secrets masked). Returns the updated ``container_start_done`` flag - set True
+        on the first inner event so the ``container_start`` step is ended exactly once.
+        """
+        stripped = line.strip()
+        if stripped.startswith('{"event":') and progress is not None:
+            try:
+                event = json.loads(stripped)
+                event_type = event.get("event")
+                step = event.get("step", "")
+
+                # End "container_start" on first inner event
+                if not container_start_done and container_start_time is not None:
+                    container_start_done = True
+                    container_start_done_event.set()
+                    progress.on_step_done(
+                        "container_start",
+                        time.perf_counter() - container_start_time,
+                    )
+
+                # Translate container's "preflight" to avoid host collision
+                if step == "preflight":
+                    step = "container_preflight"
+
+                self._dispatch_progress_event(progress, event_type, step, event)
+            except (json.JSONDecodeError, KeyError):
+                logger.debug("Unparseable progress line: %s", stripped)
+        else:
+            if stripped:
+                masked = mask_secrets_fn(stripped) if mask_secrets_fn else stripped
+                logger.debug("container stdout: %s", masked)
+        return container_start_done
+
+    @staticmethod
+    def _dispatch_progress_event(
+        progress: ProgressCallback, event_type: str, step: str, event: dict[str, Any]
+    ) -> None:
+        """Forward a single decoded container progress event to the host callback."""
+        if event_type == "step_start":
+            progress.on_step_start(
+                step,
+                event.get("description", ""),
+                event.get("detail", ""),
+            )
+        elif event_type == "step_update":
+            progress.on_step_update(step, event.get("detail", ""))
+        elif event_type == "step_done":
+            progress.on_step_done(step, event.get("elapsed_sec", 0.0))
+        elif event_type == "step_skip":
+            progress.on_step_skip(step, event.get("reason", ""))
+        elif event_type == "substep":
+            progress.on_substep(
+                step,
+                event.get("text", ""),
+                event.get("elapsed_sec", 0.0),
+            )
+        elif event_type == "substep_start":
+            progress.on_substep_start(step, event.get("text", ""))
+        elif event_type == "substep_done":
+            progress.on_substep_done(
+                step,
+                event.get("text"),
+                event.get("elapsed_sec"),
+            )
 
     @staticmethod
     def _kill_container_for_watchdog(proc: subprocess.Popen[str]) -> None:
