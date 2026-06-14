@@ -8,6 +8,7 @@ vllm.py, and tensorrt.py to reduce duplication while keeping engines thin.
 from __future__ import annotations
 
 import dataclasses
+import logging
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -88,6 +89,43 @@ def assemble_observed_params(
         "sampling": sampling_params,
         "library_version": library_version(module_name),
     }
+
+
+def capture_two_part_observed(
+    module_name: str,
+    *,
+    logger: logging.Logger,
+    sampling_obj: Any = None,
+    engine_obj: Any = None,
+    engine_params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Guarded two-part observed-params capture shared by the engine plugins.
+
+    Every engine captures the same shape: a best-effort ``extract_observed_params``
+    on the sampling native object and on the engine native object, then
+    ``assemble_observed_params``. vLLM and TensorRT-LLM pass their native objects
+    directly via ``engine_obj``; transformers resolves engine params specially (the
+    nested BitsAndBytes key) and passes the built dict via ``engine_params``.
+
+    Both extractions are best-effort: a failure is debug-logged under ``logger`` and
+    leaves that section empty, never aborting the measurement.
+    """
+    sampling: dict[str, Any] = {}
+    if sampling_obj is not None:
+        try:
+            sampling = extract_observed_params(sampling_obj)
+        except Exception as exc:  # pragma: no cover - best-effort capture
+            logger.debug("%s observed sampling-params capture failed: %s", module_name, exc)
+
+    if engine_params is None:
+        engine_params = {}
+        if engine_obj is not None:
+            try:
+                engine_params = extract_observed_params(engine_obj)
+            except Exception as exc:  # pragma: no cover - best-effort capture
+                logger.debug("%s observed engine-params capture failed: %s", module_name, exc)
+
+    return assemble_observed_params(engine_params, sampling, module_name)
 
 
 def _dump_raw(native_obj: Any) -> dict[str, Any]:

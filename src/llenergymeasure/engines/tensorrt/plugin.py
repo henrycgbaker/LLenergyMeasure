@@ -376,26 +376,14 @@ class TensorRTEngine:
         ``_``-prefix allowlist behaviour in
         :func:`extract_observed_params`.
         """
-        from llenergymeasure.engines._observed import (
-            assemble_observed_params,
-            extract_observed_params,
+        from llenergymeasure.engines._observed import capture_two_part_observed
+
+        return capture_two_part_observed(
+            "tensorrt_llm",
+            logger=logger,
+            sampling_obj=sampling_params,
+            engine_obj=getattr(llm, "args", None),
         )
-
-        sampling: dict[str, Any] = {}
-        try:
-            sampling = extract_observed_params(sampling_params)
-        except Exception as e:
-            logger.debug("TRT-LLM sampling param extraction failed: %s", e)
-
-        engine_params: dict[str, Any] = {}
-        try:
-            llm_args = getattr(llm, "args", None)
-            if llm_args is not None:
-                engine_params = extract_observed_params(llm_args)
-        except Exception as e:
-            logger.debug("TRT-LLM engine param extraction failed: %s", e)
-
-        return assemble_observed_params(engine_params, sampling, "tensorrt_llm")
 
     # -------------------------------------------------------------------------
     # EnginePlugin: capture_observed_params (post-measurement-window)
