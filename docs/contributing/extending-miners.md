@@ -378,11 +378,12 @@ def test_landmark_checks_raise_on_missing():
 ## Step 7: Add to CI
 
 1. Decide the engine's CI shape:
-   - **Upstream image consumer** (vllm / tensorrt pattern) - add a per-engine
-     job to `engine-pipeline.yml` and `engine-pipeline.yml` mirroring the
-     existing `invariants-vllm` / `schemas-vllm` (or `*-tensorrt`) jobs. The
-     job pulls the upstream canonical image, then runs probe → mine →
-     validate → doc-gen → atomic-writeback inline.
+   - **Upstream image consumer** (vllm / tensorrt pattern) - add the engine
+     to the `invariants-others` / `schemas-others` matrix in
+     `engine-pipeline.yml`, which fans out the `_engine-rules-cell.yml` and
+     `_engine-schemas-cell.yml` reusable cells per engine. The cell pulls the
+     upstream canonical image, then runs probe → mine → validate → doc-gen →
+     atomic-writeback inline.
    - **First-party image (transformers pattern)** - split the build out into
      a pair of workflows modelled on `engine-pipeline.yml` (build + cache
      export, no runtime push) and `publish-engine-image.yml` (workflow_run-
@@ -394,9 +395,9 @@ def test_landmark_checks_raise_on_missing():
 
 2. Set the runner: every engine miner runs inside its own Docker image
    (no host extras exist - see [development.md](/contributing/development)). For the
-   upstream-image pattern, mirror `invariants-vllm` as the template for
-   engines whose miners need a GPU only for `import`-time reasons; use
-   `invariants-tensorrt` as the template for engines whose Python source
+   upstream-image pattern, mirror the vllm cell configuration as the template
+   for engines whose miners need a GPU only for `import`-time reasons; use
+   the tensorrt cell configuration as the template for engines whose Python source
    layout shifts across image releases, that bundle source in non-
    introspectable ways (NGC-derived bases), or that require CUDA-aware
    imports: the cell downloads the upstream release tarball on the runner
@@ -533,7 +534,7 @@ Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `Field
 
 **Mitigation: the proposed-vs-validated YAML pair (the trust seam).**
 
-The engine-invariants pipeline (`engine-pipeline.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/rules.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/rules.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
+The engine-rules pipeline (`engine-pipeline.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/rules.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/rules.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
 
 Because the proposed-corpus diff is emitted alongside the validated diff, a miner refactor that silently drops 18 invariants shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the validation gate's verdict on the surviving invariants is green.
 

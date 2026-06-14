@@ -176,9 +176,10 @@ fields that introspection could not recover. The full reference is
 
 ### What consumes it
 
-- `scripts/check_pydantic_matches_discovered.py` - the drift checker;
-  flags Pydantic fields in `engine_configs.py` with no corresponding
-  discovered entry.
+- `scripts/engine_producers/regen_engine_configs.py` - the config codegen
+  / drift checker; regenerates each engine's typed `config.py` from the
+  discovered schema plus `curated.yaml` and (in `--check` mode) fails when
+  the committed model has drifted from that source.
 - `scripts/generate_curation_doc.py`, `scripts/generate_schema_doc.py` -
   the doc generators; build the `docs/reference/engines/{schema,curation}-{engine}.md`
   digests from the loaded schema.

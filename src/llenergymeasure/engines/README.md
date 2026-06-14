@@ -110,5 +110,5 @@ pattern. Host imports of these libraries fail by design.
 ## Related
 
 - See `../harness/` for the measurement lifecycle that drives these engines
-- See `../config/README.md` for `TransformersConfig`, `VLLMConfig`, `TensorRTConfig`
+- See `../config/README.md` for the generated per-engine `engines.<engine>.Config` (nested `engine_params` / `sampling_params`)
 - See `../api/preflight.py` for engine pre-flight checks

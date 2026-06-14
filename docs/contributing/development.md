@@ -167,7 +167,7 @@ The principled rationale:
    defaults to `true` and is not overridden in any workflow). Cold builds
    on a brand-new SSOT version still pay the FA3 compile (~30-60 min); warm
    rebuilds reuse the GHA scope cache + the canonical `:latest` registry
-   cache and finish in a few minutes. The previous shape - engine-invariants
+   cache and finish in a few minutes. The previous shape - engine-rules
    and engine-schemas each running their own buildx step against the same
    per-version GHA scope - was prone to cache-write contention and observed
    to deadlock at PR time on multi-GB layer writes.

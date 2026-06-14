@@ -77,9 +77,10 @@ large = base.model_copy(update={"task": base.task.model_copy(update={"model": "g
 | `engine` | `str` | `"transformers"` | Inference engine: `"transformers"`, `"vllm"`, or `"tensorrt"`. |
 | `measurement` | `MeasurementConfig` | `MeasurementConfig()` | How to measure: warmup, baseline, energy sampler. |
 | `sampling_preset` | `"deterministic" \| "standard" \| "creative" \| "factual" \| None` | `None` | When set, preset values are merged into the active engine's sampling section at parse time. Explicit YAML values take precedence. |
-| `transformers` | `TransformersConfig \| None` | `None` | Transformers-specific settings (only used when `engine="transformers"`). |
-| `vllm` | `VLLMConfig \| None` | `None` | vLLM-specific settings (only used when `engine="vllm"`). |
-| `tensorrt` | `TensorRTConfig \| None` | `None` | TensorRT-LLM settings (only used when `engine="tensorrt"`). |
+| `transformers` | `Config \| None` | `None` | Transformers settings (generated `engines.transformers.Config`, nested `engine_params` / `sampling_params`; only used when `engine="transformers"`). |
+| `vllm` | `Config \| None` | `None` | vLLM settings (generated `engines.vllm.Config`; only used when `engine="vllm"`). |
+| `tensorrt` | `Config \| None` | `None` | TensorRT-LLM settings (generated `engines.tensorrt.Config`; only used when `engine="tensorrt"`). |
+| `harness` | `HarnessConfig \| None` | `None` | Per-engine orchestration knobs llem implements itself (transformers `batch_size`, `torch_compile`, TF32, autocast). Not engine config. |
 | `passthrough_kwargs` | `dict[str, Any] \| None` | `None` | Extra kwargs forwarded to the engine at execution time. Keys must not collide with top-level `ExperimentConfig` fields. |
 
 ### `TaskConfig` fields
@@ -141,7 +142,7 @@ field:
 ExperimentConfig(
     task=TaskConfig(model="gpt2"),
     engine="vllm",
-    transformers=TransformersConfig(batch_size=4),  # wrong engine
+    transformers={"engine_params": {"dtype": "bfloat16"}},  # wrong engine
 )
 ```
 

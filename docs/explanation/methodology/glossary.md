@@ -5,7 +5,7 @@ measurement domain (energy, GPU, LLM inference) and the project's own
 terminology (engines, runners, invariants). Cross-references use anchors within
 this page.
 
-For canonical naming decisions internal to the engine-invariants pipeline
+For canonical naming decisions internal to the engine-rules pipeline
 (e.g. "invariant" not "rule", "validated corpus" not "vendored corpus"), see
 [Contributing: miner pipeline](/contributing/miner-pipeline) and
 [Reference: invariants corpus format](/reference/invariants-corpus-format).
@@ -376,7 +376,7 @@ different workloads.
 
 ### Validated corpus
 
-The engine-invariants corpus after the validation-CI gate has replayed each
+The engine-rules corpus after the validation-CI gate has replayed each
 invariant against the live library. Stored as `rules.validated.yaml`. Not
 to be confused with the proposed corpus (`rules.proposed.yaml`), which
 contains declared expectations before CI observation. See

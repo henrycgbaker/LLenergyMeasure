@@ -46,7 +46,7 @@ The diagram below applies to vllm + tensorrt only - `engine-pipeline.yml`'s `inv
 
 ### Pipeline shape: Renovate -> per-concern workflows -> writeback -> human curation
 
-The vllm + tensorrt cycle uses two per-concern workflow cells (engine-invariants + engine-schemas) coordinating via sibling-wait. Each cell runs its own probe -> producer -> diff -> comment + label sequence; the last-finishing cell performs an atomic writeback. Cross-pipeline rollup state lives on PR labels.
+The vllm + tensorrt cycle uses two per-concern workflow cells (engine-rules + engine-schemas) coordinating via sibling-wait. Each cell runs its own probe -> producer -> diff -> comment + label sequence; the last-finishing cell performs an atomic writeback. Cross-pipeline rollup state lives on PR labels.
 
 The diagram captures the high-level flow; per-step detail follows below.
 
@@ -60,7 +60,7 @@ flowchart TD
 
     subgraph parallel["Path-filtered fan-out: two pipelines run in parallel"]
         direction LR
-        inv[engine-invariants cell<br/>per-engine matrix]
+        inv[engine-rules cell<br/>per-engine matrix]
         sch[engine-schemas cell<br/>engines matrix]
     end
 
@@ -69,7 +69,7 @@ flowchart TD
     wait --> summary[PR state after cycle:<br/>2 check statuses + up to 2 comments<br/>+ 1 bot commit + rollup label]
     summary --> human([HUMAN CURATION CHECKPOINT])
     human --> merge[squash-merge]
-    merge --> closed[PR closes;<br/>engine version + validated artefacts +<br/>curated Pydantic pinned at this commit]
+    merge --> closed[PR closes;<br/>engine version + validated artefacts +<br/>curation data + generated Config pinned at this commit]
 
     classDef chk fill:#fffae6,stroke:#b58900,stroke-width:2px;
     class human chk;
@@ -78,9 +78,9 @@ flowchart TD
 #### Trigger contract
 
 - **Renovate.** Scans upstream library releases on the configured schedule. Custom regex manager bumps two file targets together: `engine_versions/{engine}/current.yaml:library.current_version` (the SSOT, canonical) and `docker/Dockerfile.{engine}` ARG (derived, auto-templated from SSOT).
-- **Path-filtered fan-out.** When Renovate's PR opens, paths-filter routes the change to two workflows in parallel: the engine-invariants pipeline and the engine-schemas pipeline.
+- **Path-filtered fan-out.** When Renovate's PR opens, paths-filter routes the change to two workflows in parallel: the engine-rules pipeline and the engine-schemas pipeline.
 
-#### engine-invariants cell (per-engine matrix)
+#### engine-rules cell (per-engine matrix)
 
 Layers over: invariant-miner + invalidity-miner + lift modules + validation-CI gate.
 
@@ -97,7 +97,7 @@ Layers over: invariant-miner + invalidity-miner + lift modules + validation-CI g
 Layers over: parameter-discovery + typed-schema-discovery.
 
 1. **PROBE** - inline `python -m scripts._drift --producer schemas`; verdict `pass` or `fail`.
-2. **DISCOVER** (only if probe passes) - `engine_producers` writes `src/llenergymeasure/config/discovered_schemas/{engine}/schema.discovered.json`.
+2. **DISCOVER** (only if probe passes) - `engine_producers` writes `src/llenergymeasure/engines/{engine}/schema.discovered.json`.
 3. **DIFF vs HEAD**.
 4. **REGENERATE** `docs/reference/engines/curation-{engine}.md` (Parameters section - fact base for the human curator; pre-existing behaviour preserved).
 5. **COMMENT + LABEL** (suppress on empty).
@@ -137,25 +137,24 @@ There is no summariser workflow file and no composite action. Cross-pipeline sta
 #### PR state after a Renovate cycle
 
 - 2 per-concern check statuses.
-- Up to 2 comments per cycle (suppress-on-empty): engine-invariants pipeline and engine-schemas pipeline.
+- Up to 2 comments per cycle (suppress-on-empty): engine-rules pipeline and engine-schemas pipeline.
 - 1 atomic bot commit (all artefacts; written by whichever workflow finished last).
 - Cross-pipeline rollup label (`safe-bump` or `probe-blocked`).
 
 ### Human curation checkpoint
 
-This is the only crossing of the human-as-final-checkpoint boundary (P6) inside the otherwise-automated validated half. Bots **never** edit `src/llenergymeasure/config/engine_configs.py`.
+This is the only crossing of the human-as-final-checkpoint boundary (P6) inside the otherwise-automated validated half. The per-engine `src/llenergymeasure/engines/{engine}/config.py` is **generated** from the curation data, never hand-edited; the maintainer reviews the **data diff** rather than the source.
 
 The dev consumes auto-generated digests:
 
-- `docs/reference/engines/curation-{engine}.md` - **Section 1: Parameters** (discovered fields with Pydantic-curated yes/no, deltas vs previous SSOT version).
+- `docs/reference/engines/curation-{engine}.md` - **Section 1: Parameters** (discovered fields with exposed yes/no, deltas vs previous SSOT version).
 - `docs/reference/engines/invariants-{engine}.md` - **Section 1: Invariants** (corpus rules added/changed/removed, classified by `added_by`; encompasses dormancy + invalidity + miner output + introspection + runtime catch-all).
 
-The dev manually edits `engine_configs.py`:
+The dev edits the curation data (not the generated `config.py`):
 
-- which discovered params to expose in Pydantic;
-- which `Literal` narrowings to pin;
-- which sub-config taxonomy to use;
-- which custom `@model_validator` decorators to add.
+- which discovered params to expose, via `engines/{engine}/curated.yaml` (`exposed_fields`);
+- which numeric bounds or `Literal` narrowings to pin, via `engines/{engine}/overlay.yaml`;
+- the engine `Config` is then regenerated with `regen_engine_configs.py --write`.
 
 A push triggers a re-run of the CI cycle; the updated summary comment supersedes the prior one (edited via comment-id key, no proliferation).
 
@@ -165,12 +164,12 @@ A push triggers a re-run of the CI cycle; the updated summary comment supersedes
 |---|---|
 | `safe-bump` + green CI | squash-merge |
 | `corpus-changed` + mechanical | squash-merge |
-| `invariants-breaking` | edit `engine_configs.py` |
-| `schemas-breaking` | edit `engine_configs.py` |
+| `invariants-breaking` | edit `curated.yaml` / `overlay.yaml`, regenerate |
+| `schemas-breaking` | edit `curated.yaml` / `overlay.yaml`, regenerate |
 | `probe-blocked` | patch LANDMARKS in the fallback producer, or vendor a fresh `engine_versions/{engine}/v<safe(N)>/producers/` directory |
 
 :::note Guided curation UX is deferred
-The guided curation UX (RFC-style YAML decision file + libcst applier) is deferred to [issue #475](https://github.com/henrycgbaker/llenergymeasure/issues/475). The current redesign ships self-serve curation only: devs hand-edit `engine_configs.py` based on the digest. After 2-3 Renovate cycles of operational data, the #475 reactivation will evaluate whether the guided UX pays off.
+The guided curation UX (RFC-style YAML decision file + libcst applier) is deferred to [issue #475](https://github.com/henrycgbaker/llenergymeasure/issues/475). The current redesign ships data-as-curation only: maintainers edit `curated.yaml` / `overlay.yaml` based on the digest and regenerate. After 2-3 Renovate cycles of operational data, the #475 reactivation will evaluate whether the guided UX pays off.
 :::
 
 ### Probe-fail human checkpoint

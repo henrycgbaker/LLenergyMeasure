@@ -23,9 +23,9 @@ provide step-level reuse (currently `synthesize-passwd` and
 ## Engine-pipeline orchestrator
 
 `engine-pipeline.yml` is the load-bearing CI surface for engine-coupling
-work. It collapses the prior `build-engine-image.yml` +
-`update-engine-invariants.yml` + `update-engine-schemas.yml` triplet into a
-single workflow with a coherent dependency graph.
+work. It collapses the prior separate build, rules-refresh, and
+schema-refresh workflows into a single workflow with a coherent
+dependency graph.
 
 ### Topology
 

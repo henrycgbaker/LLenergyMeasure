@@ -1,10 +1,10 @@
 # Parameter Curation
 
-> **Note:** This document covers engine-API-parameter introspection and Pydantic-model curation (what fields each engine accepts, type information, drift detection). For the runtime validation of parameter *values* (how invalid combinations are caught before engine initialisation), see [parameter-discovery.md](/explanation/architecture/parameter-discovery).
+> **Note:** This document covers engine-API-parameter introspection and generated-model curation (what fields each engine accepts, type information, drift detection). For the runtime validation of parameter *values* (how invalid combinations are caught before engine initialisation), see [parameter-discovery.md](/explanation/architecture/parameter-discovery).
 
 ---
 
-llem exposes engine parameters to users through hand-authored Pydantic models. This document explains how those models stay in sync with the underlying engines.
+llem exposes engine parameters to users through per-engine Pydantic models that are **generated** from mined data, not hand-authored. This document explains how those models stay in sync with the underlying engines.
 
 ---
 
@@ -13,19 +13,21 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
 ```mermaid
 flowchart TD
     discovery[programmatic discovery<br/>scripts/engine_producers/]
-    pydantic[Pydantic curation<br/>config/engine_configs.py]
-    drift[drift checker<br/>scripts/check_pydantic_matches_discovered.py]
-    allowlist[LLEM_NATIVE_FIELDS<br/>intentional-divergence allowlist]
+    curated[exposure allowlist<br/>engines/&lt;e&gt;/curated.yaml]
+    overlay[narrowings overlay<br/>engines/&lt;e&gt;/overlay.yaml]
+    codegen[codegen + drift check<br/>regen_engine_configs.py]
+    config[generated model<br/>engines/&lt;e&gt;/config.py]
 
-    discovery --> drift
-    pydantic --> drift
-    drift --> allowlist
+    discovery --> codegen
+    curated --> codegen
+    overlay --> codegen
+    codegen --> config
 ```
 
 - **Programmatic discovery** introspects engine APIs and writes `engines/*/schema.discovered.json` (the ground truth for "what parameters does this engine accept").
-- **Pydantic curation** is the hand-authored set of sub-config models that expose typed, documented fields to users.
-- **Drift checker** flags Pydantic fields with no corresponding discovered entry.
-- **`LLEM_NATIVE_FIELDS`** is the "yes, this divergence is intentional" allowlist - it suppresses known-good exceptions so the drift checker only reports unexpected divergence.
+- **The exposure allowlist** (`engines/<e>/curated.yaml`) names the fields llem exposes as first-class typed fields; everything else stays reachable through the `extra="allow"` passthrough.
+- **The narrowings overlay** (`engines/<e>/overlay.yaml`, optional) hand-tightens individual fields (e.g. numeric bounds) the miner surfaced as bare scalars.
+- **Codegen** (`regen_engine_configs.py`) projects those three inputs into the generated `engines/<e>/config.py`; its `--check` mode is the drift gate.
 
 ---
 
@@ -37,53 +39,68 @@ These JSON files are the ground truth for "what parameters does this engine vers
 
 ---
 
-## Pydantic curation
+## Curation as data
 
-`src/llenergymeasure/config/engine_configs.py` contains hand-authored Pydantic models that llem exposes to users. Curation decisions:
+Curation is an exposure-time decision recorded as data in
+`src/llenergymeasure/engines/<engine>/curated.yaml`. Its `exposed_fields`
+list names the fields that become first-class typed fields on the generated
+`Config` class; everything else stays reachable through the `extra="allow"`
+passthrough with soft validation against the full discovered schema. Mining
+never narrows, so the allowlist is the only place a field is promoted.
+Curation decisions:
 
 - **Field names match native engine names.** A field called `quant_config` maps directly to the engine kwarg `quant_config`. No translation layer, no llem aliases.
-- **Sub-configs group related parameters.** e.g. `TensorRTKvCacheConfig` groups all kv-cache knobs under `tensorrt.kv_cache_config.*`. The sub-config name matches the native engine kwarg name.
-- **Types may be narrowed.** A field typed `str` in discovery might become `Literal["bfloat16", "float16", "float32"]` in curation - this is intentional and allowed by the drift checker.
-- **Descriptions are added.** Pydantic `Field(description=...)` docs are user-facing; discovery has none.
+- **Sub-configs group related parameters.** e.g. the tensorrt `kv_cache_config` entry groups all kv-cache knobs under `tensorrt.engine_params.kv_cache_config.*`. The sub-config name matches the native engine kwarg name.
+- **Types may be narrowed via `overlay.yaml`.** A field surfaced as a bare scalar in discovery can be tightened with hand-authored bounds (e.g. `num_beams >= 1`) or a `Literal` set; the codegen projects these onto the generated `Config` as `Field(ge=..., le=...)` constraints.
+- **Descriptions flow from the mined schema.** The generated `Config` carries `use_attribute_docstrings=True`; per-field descriptions come from the discovered schema, not hand-written prose.
 
 ---
 
-## Drift checker
+## Drift check
 
-`scripts/check_pydantic_matches_discovered.py` compares the set of leaf field names in the Pydantic models against the discovered schemas and reports two kinds of drift:
+`scripts/engine_producers/regen_engine_configs.py` regenerates each engine's
+typed `config.py` from `schema.discovered.json` + `curated.yaml` (+ optional
+`overlay.yaml`) and, in `--check` mode, byte-compares the result against the
+committed file. A mismatch means the committed model has drifted from its
+SSOT inputs:
 
 | Kind | Meaning |
 |------|---------|
-| `pydantic_only` | Pydantic has a field that discovery doesn't - likely a stale field that was removed from the engine, or a kwargs-passed field invisible to signature inspection |
-| `type_mismatch` | Both sides have the field but with different types (beyond intentional narrowing) |
+| stale exposed field | `curated.yaml` exposes a field the latest discovery no longer reports - likely removed from the engine, or a kwargs-passed field invisible to signature inspection (a "discovery debt" entry) |
+| shape change | a field's type, default, or bound changed upstream and the committed model was not regenerated |
 
 Run it locally:
 
 ```bash
-python scripts/check_pydantic_matches_discovered.py
+uv run python scripts/engine_producers/regen_engine_configs.py --check
+# or, to regenerate and write:
+uv run python scripts/engine_producers/regen_engine_configs.py --write
 ```
 
-CI runs it automatically on every PR.
+CI runs the `--check` mode automatically on every PR.
 
 ---
 
-## LLEM_NATIVE_FIELDS
+## Discovery debt
 
-Some Pydantic fields legitimately have no discovered counterpart. Common reasons:
+Some exposed fields legitimately have no signature-based discovered
+counterpart. Common reasons:
 
 | Reason | Example |
 |--------|---------|
 | Passed via `**kwargs`, invisible to `inspect.signature` | `transformers.dtype` - `from_pretrained` accepts it as a kwarg alias |
-| llem surfaces a sub-config field that the engine accepts as a flat kwarg at a different nesting level | `tensorrt.quant_algo` inside `TensorRTQuantConfig` |
-| Beam-search or speculative-decoding params from a separate params class | `vllm.beam_width` (from `BeamSearchParams`, not `LLM.__init__`) |
+| llem exposes a sub-config field the engine accepts at a different nesting level | `tensorrt.quant_config.quant_algo` |
+| Beam-search or speculative-decoding params from a separate params class | `vllm.beam_search.beam_width` (from `BeamSearchParams`, not `LLM.__init__`) |
 
-These are listed in `LLEM_NATIVE_FIELDS` in the drift checker. Each entry suppresses one `pydantic_only` warning for a named `(engine, field_name)` pair.
+These stay in `curated.yaml` tagged as "discovery debt" with an inline
+comment explaining why the field is exposed despite being missed by
+signature-based discovery; they are tracked for miner deepening.
 
-**When to add an entry:** when the drift checker flags a `pydantic_only` field and you have confirmed it is intentionally in the Pydantic model but unreachable by signature-based discovery. Add a comment explaining why.
+**When to add an entry:** when a field is intentionally exposed but unreachable by signature-based discovery. Add it to `exposed_fields` with a "discovery debt" comment.
 
-**When to remove an entry:** when the corresponding Pydantic field is deleted. Stale entries are harmless but misleading - remove them during the same PR that removes the field.
+**When to remove an entry:** when the corresponding field is no longer exposed. Stale entries are misleading - remove them during the same PR that removes the field.
 
-**Never add an entry to paper over a naming divergence.** If a Pydantic field is named differently from the engine kwarg, rename the field instead.
+**Never add an entry to paper over a naming divergence.** If an exposed field is named differently from the engine kwarg, fix the curated name instead.
 
 ---
 

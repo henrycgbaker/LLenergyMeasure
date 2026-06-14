@@ -192,8 +192,10 @@ extracted from the engine's sampling-config class (transformers
 The split between `engine_params` and `sampling_params` reflects the
 two distinct config classes each engine exposes: one for engine
 construction (model loading, parallelism, scheduler), one for per-call
-sampling (temperature, top-k, beams). The runtime config models in
-`src/llenergymeasure/config/engine_configs.py` mirror this split.
+sampling (temperature, top-k, beams). The generated runtime config
+models in `src/llenergymeasure/engines/<engine>/config.py` (one `Config`
+per engine, exposing `EngineParams` and `SamplingParams`) mirror this
+split.
 
 ---
 
@@ -229,9 +231,11 @@ schema.engine_params["dtype"]["default"]  # "auto"
 
 The loader has three direct consumers:
 
-- The drift checker (`scripts/check_pydantic_matches_discovered.py`)
-  flags Pydantic fields in `engine_configs.py` that have no
-  corresponding entry in the discovered schema.
+- The config codegen / drift checker
+  (`scripts/engine_producers/regen_engine_configs.py`) regenerates each
+  engine's typed `config.py` from the discovered schema plus
+  `curated.yaml`; its `--check` mode fails when the committed model has
+  drifted from that source.
 - The doc generators (`scripts/generate_curation_doc.py`,
   `scripts/generate_schema_doc.py`) build the
   `docs/reference/engines/{schema,curation}-{engine}.md` digests from
