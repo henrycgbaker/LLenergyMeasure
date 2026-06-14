@@ -1,0 +1,72 @@
+# Hand-authored overlay for transformers 5.7.0 (Move 2 narrowings channel).
+#
+# Recovers field-level numeric bounds that the pre-v0.10 hand-written
+# TransformersConfig / TransformersSamplingConfig enforced at parse and the
+# engine_configs.py migration dropped. Each narrowing tightens a mined field
+# the walkers surfaced as a bare scalar; the codegen projects them onto the
+# generated Config class as Field(ge/le/...) bounds.
+#
+# Scope (judgement, per the R3 backfill rubric): only numeric bounds are
+# carried here. They encode version-stable semantic invariants (a count cannot
+# be < 1; top_p is a probability in [0,1]; temperature in [0,2]) that held when
+# the hand-written classes guarded transformers 4.x and remain valid at 5.7.0.
+# Literal-set narrowings the hand-written classes also carried
+# (dtype, attn_implementation, bnb_4bit_compute_dtype, bnb_4bit_quant_type,
+# cache_implementation) are deliberately NOT backfilled at this pin - see the
+# skip note at the foot of this file.
+schema_version: 1.0.0
+engine: transformers
+engine_version: 5.7.0
+
+narrowings:
+  engine_params:
+    num_beams:
+      minimum: 1
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+    no_repeat_ngram_size:
+      minimum: 0
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+    prompt_lookup_num_tokens:
+      minimum: 1
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+  sampling_params:
+    temperature:
+      minimum: 0.0
+      maximum: 2.0
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+    top_k:
+      minimum: 0
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+    top_p:
+      minimum: 0.0
+      maximum: 1.0
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+    repetition_penalty:
+      minimum: 0.1
+      maximum: 10.0
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+    min_p:
+      minimum: 0.0
+      maximum: 1.0
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+    min_new_tokens:
+      minimum: 1
+      x-narrowing-reason: "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+
+# SKIPPED at this pin (could not establish validity at transformers 5.7.0):
+# - cache_implementation: the pre-v0.10 Literal ["static", "offloaded_static",
+#   "sliding_window"] is provably too narrow at 5.7.0 - the engine's own
+#   __init__ allowlist (mined into this pin's error rule) is the 12-value set
+#   ('static', 'offloaded_static', 'sliding_window', 'hybrid', 'hybrid_chunked',
+#   'offloaded_hybrid', 'offloaded_hybrid_chunked', 'dynamic', 'dynamic_full',
+#   'offloaded', 'quantized', 'paged'). Backfilling the old set would reject
+#   valid 5.x configs. The engine's allowlist is already enforced as a mined
+#   error rule, so no overlay is needed.
+# - dtype / attn_implementation: 5.x extended both (attn_implementation gained
+#   flash_attention_3; dtype acceptance moved to torch_dtype handling). The
+#   exact 5.7.0 accepted sets cannot be verified from the host, and these are
+#   discovery-debt fields (passed via from_pretrained **kwargs), so an
+#   over-narrow Literal would silently reject valid inputs.
+# - bnb_4bit_compute_dtype / bnb_4bit_quant_type: bitsandbytes enums whose
+#   exact membership at the bnb version paired with transformers 5.7.0 is not
+#   host-verifiable; left as passthrough rather than risk over-narrowing.

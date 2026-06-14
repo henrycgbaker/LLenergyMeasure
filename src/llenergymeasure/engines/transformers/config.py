@@ -1,4 +1,4 @@
-# DO NOT EDIT - regenerated from engine_versions/transformers/v5_11_0/outputs/{curated.yaml,schema.discovered.json}
+# DO NOT EDIT - regenerated from engine_versions/transformers/v5_12_0/outputs/{curated.yaml,schema.discovered.json}
 # Edit those upstream and run `uv run python scripts/engine_producers/regen_engine_configs.py --write`.
 
 from __future__ import annotations
