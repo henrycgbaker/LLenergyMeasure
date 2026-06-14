@@ -866,10 +866,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         Returns:
             ExperimentResult on success, or a failure dict on error.
         """
-        from llenergymeasure.infra.docker_errors import (
-            DockerStdoutSilenceError,
-            DockerTimeoutError,
-        )
+        from llenergymeasure.infra.docker_errors import docker_exc_to_failure
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.study.container_lifecycle import (
@@ -954,40 +951,11 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 save_timeseries=self.study.output.save_timeseries,
                 skip_image_check=self._images_prepared,
             )
-        except DockerStdoutSilenceError as exc:
-            # Distinct error type from the wall-clock timeout so users
-            # can tell stuck-process kills apart in the manifest.
-            result = {
-                "type": "StdoutSilenceTimeoutError",
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            persist_failure_artefacts(exc, self.study_dir, config_hash, cycle, result)
-        except DockerTimeoutError as exc:
-            # Normalise to "TimeoutError" so the circuit breaker sees the same
-            # failure class as the subprocess path (see _collect_result).
-            result = {
-                "type": "TimeoutError",
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            persist_failure_artefacts(exc, self.study_dir, config_hash, cycle, result)
         except DockerError as exc:
-            # Use structured error payload from container entrypoint when available,
-            # falling back to the exception type/message for stderr-based errors.
-            payload = getattr(exc, "error_payload", None)
-            if payload:
-                result = {
-                    "type": payload.get("type", type(exc).__name__),
-                    "message": payload.get("message", str(exc)),
-                    "config_hash": config_hash,
-                }
-            else:
-                result = {
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                    "config_hash": config_hash,
-                }
+            # Translate to a non-fatal failure dict (silence / timeout / structured
+            # payload classification handled in the shared helper) and persist the
+            # container.log + error JSON so the failure is debuggable.
+            result = docker_exc_to_failure(exc, config_hash)
             persist_failure_artefacts(exc, self.study_dir, config_hash, cycle, result)
 
         exp_elapsed = time.monotonic() - exp_start

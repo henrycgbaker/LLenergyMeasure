@@ -10,8 +10,10 @@ from llenergymeasure.infra.docker_errors import (
     DockerImagePullError,
     DockerOOMError,
     DockerPermissionError,
+    DockerStdoutSilenceError,
     DockerTimeoutError,
     capture_stderr_snippet,
+    docker_exc_to_failure,
     translate_docker_error,
 )
 from llenergymeasure.utils.exceptions import DockerError, LLEMError
@@ -238,3 +240,38 @@ class TestTranslateDockerError:
         stderr = "NO SUCH IMAGE: GHCR.IO/LLEM/TEST:LATEST"
         err = translate_docker_error(1, stderr, self.IMAGE)
         assert isinstance(err, DockerImagePullError)
+
+
+# ---------------------------------------------------------------------------
+# docker_exc_to_failure - shared failure-dict classification
+# ---------------------------------------------------------------------------
+
+
+class TestDockerExcToFailure:
+    """Shared translation used by both the runner and single-experiment paths."""
+
+    def test_silence_error_maps_to_silence_type(self):
+        out = docker_exc_to_failure(DockerStdoutSilenceError(message="went quiet"), "hash123")
+        assert out == {
+            "type": "StdoutSilenceTimeoutError",
+            "message": "went quiet",
+            "config_hash": "hash123",
+        }
+
+    def test_timeout_error_normalises_to_timeout_type(self):
+        out = docker_exc_to_failure(DockerTimeoutError(message="too slow"), "h")
+        assert out == {"type": "TimeoutError", "message": "too slow", "config_hash": "h"}
+
+    def test_structured_payload_takes_precedence(self):
+        exc = DockerContainerError(message="boom")
+        exc.error_payload = {"type": "EngineError", "message": "CUDA OOM"}
+        out = docker_exc_to_failure(exc, "h")
+        assert out == {"type": "EngineError", "message": "CUDA OOM", "config_hash": "h"}
+
+    def test_fallback_uses_exception_type_and_message(self):
+        out = docker_exc_to_failure(DockerContainerError(message="generic failure"), "h")
+        assert out == {
+            "type": "DockerContainerError",
+            "message": "generic failure",
+            "config_hash": "h",
+        }
