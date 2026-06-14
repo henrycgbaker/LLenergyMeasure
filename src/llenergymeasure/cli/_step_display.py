@@ -670,7 +670,10 @@ class StudyStepDisplay:
         console: Console | None = None,
         force_plain: bool = False,
     ) -> None:
-        self._console = console or Console(stderr=True)
+        # Study results stream to stdout (the scientific record) so a study run
+        # can be redirected or piped and still capture the results table. Setup
+        # chrome (preflight panel, expansion spinner) stays on stderr in run.py.
+        self._console = console or Console()
         self._total = total_experiments
         self._study_name = study_name
         self._n_cycles = n_cycles
