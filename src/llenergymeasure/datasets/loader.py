@@ -117,7 +117,11 @@ def _load_jsonl(
     Raises:
         ValueError: If fewer than n prompts are available.
     """
-    records: list[dict[str, Any]] = []
+    # Collect (record, prompt) pairs, keeping only records that yield a usable
+    # prompt. Counting usable prompts rather than raw records means interleaved
+    # mode keeps reading past prompt-less records instead of stopping early and
+    # then falsely reporting that the file lacks enough prompts.
+    collected: list[tuple[dict[str, Any], str]] = []
 
     with path.open(encoding="utf-8") as f:
         for raw_line in f:
@@ -133,45 +137,38 @@ def _load_jsonl(
             if any(k.startswith("_") for k in record):
                 continue
 
-            records.append(record)
+            prompt: str | None = None
+            for col in AUTO_DETECT_COLUMNS:
+                value = record.get(col)
+                if isinstance(value, str) and value.strip():
+                    prompt = value.strip()
+                    break
+            if prompt is None:
+                continue
 
-            if order == "interleaved" and len(records) >= n:
+            collected.append((record, prompt))
+
+            if order == "interleaved" and len(collected) >= n:
                 break
 
-    if len(records) < n:
+    if len(collected) < n:
         raise ValueError(
-            f"Dataset {name!r} has only {len(records)} prompts but {n} were requested."
+            f"Dataset {name!r} has only {len(collected)} usable prompts but {n} were requested."
         )
 
     # Apply ordering
     if order == "interleaved":
         # File order is already interleaved (written round-robin by source)
-        ordered = records
+        ordered = collected
     elif order == "grouped":
         # Sort by 'source' field (stable sort preserves intra-group order)
-        ordered = sorted(records, key=lambda r: r.get("source", ""))
+        ordered = sorted(collected, key=lambda rp: rp[0].get("source", ""))
     elif order == "shuffled":
-        ordered = list(records)
+        ordered = list(collected)
         random.Random(seed).shuffle(ordered)
     else:
         raise ValueError(
             f"Unknown dataset.order {order!r}. Expected: interleaved, grouped, shuffled."
         )
 
-    selected = ordered[:n]
-
-    # Extract prompt text from each record
-    prompts: list[str] = []
-    for record in selected:
-        for col in AUTO_DETECT_COLUMNS:
-            if col in record and isinstance(record[col], str) and record[col].strip():
-                prompts.append(record[col].strip())
-                break
-
-    if len(prompts) < n:
-        raise ValueError(
-            f"Could not extract {n} prompts from {name!r}. "
-            f"Only {len(prompts)} records had a recognisable prompt field."
-        )
-
-    return prompts
+    return [prompt for _record, prompt in ordered[:n]]
