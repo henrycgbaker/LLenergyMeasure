@@ -1,8 +1,37 @@
 schema_version: 1.0.0
 engine: tensorrt
-engine_version: 0.21.0
-mined_at: '2026-06-11T21:56:11+02:00'
+engine_version: 1.0.0
+mined_at: '2026-06-15T12:11:33Z'
 invariants:
+- id: tensorrt_raises_max_batch_size_lt_0_cuda_graph_max_batch_size
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: CudaGraphConfig.validate_cuda_graph_max_batch_size raises when max_batch_size
+    < 0 (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.CudaGraphConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_cuda_graph_max_batch_size
+    line_at_scan: 129
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.engine_params.max_batch_size:
+        <: 0
+  kwargs_positive:
+    max_batch_size: -1
+  kwargs_negative:
+    max_batch_size: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: cuda_graph_config.max_batch_size must be non-negative
+  references:
+  - llmapi/llm_args.py:129 (tensorrt_llm.CudaGraphConfig.validate_cuda_graph_max_batch_size)
+  added_by: static_miner
+  added_at: '2026-06-14'
 - id: tensorrt_raises_max_ngram_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
@@ -13,7 +42,7 @@ invariants:
   miner_source:
     path: llmapi/llm_args.py
     method: validate_positive_values
-    line_at_scan: 577
+    line_at_scan: 883
   match:
     engine: tensorrt
     fields:
@@ -29,9 +58,38 @@ invariants:
     normalised_fields: []
   message_template: Value must be positive, got {v}
   references:
-  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  - llmapi/llm_args.py:883 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
   added_by: static_miner
-  added_at: '2026-05-06'
+  added_at: '2026-06-14'
+- id: tensorrt_raises_max_num_streams_lt_1_torch_compile_max_num_streams
+  engine: tensorrt
+  library: tensorrt_llm
+  invariant_under_test: TorchCompileConfig.validate_torch_compile_max_num_streams raises when max_num_streams
+    < 1 (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.TorchCompileConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_torch_compile_max_num_streams
+    line_at_scan: 1975
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.engine_params.max_num_streams:
+        <: 1
+  kwargs_positive:
+    max_num_streams: 0
+  kwargs_negative:
+    max_num_streams: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: torch_compile_config.max_num_streams must be >= 1
+  references:
+  - llmapi/llm_args.py:1975 (tensorrt_llm.TorchCompileConfig.validate_torch_compile_max_num_streams)
+  added_by: static_miner
+  added_at: '2026-06-14'
 - id: tensorrt_raises_max_verification_set_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
@@ -42,7 +100,7 @@ invariants:
   miner_source:
     path: llmapi/llm_args.py
     method: validate_positive_values
-    line_at_scan: 577
+    line_at_scan: 883
   match:
     engine: tensorrt
     fields:
@@ -58,9 +116,9 @@ invariants:
     normalised_fields: []
   message_template: Value must be positive, got {v}
   references:
-  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  - llmapi/llm_args.py:883 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
   added_by: static_miner
-  added_at: '2026-05-06'
+  added_at: '2026-06-14'
 - id: tensorrt_raises_max_window_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
@@ -71,7 +129,7 @@ invariants:
   miner_source:
     path: llmapi/llm_args.py
     method: validate_positive_values
-    line_at_scan: 577
+    line_at_scan: 883
   match:
     engine: tensorrt
     fields:
@@ -87,6 +145,6 @@ invariants:
     normalised_fields: []
   message_template: Value must be positive, got {v}
   references:
-  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  - llmapi/llm_args.py:883 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
   added_by: static_miner
-  added_at: '2026-05-06'
+  added_at: '2026-06-14'
