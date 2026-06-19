@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: tensorrt
 engine_version: 1.0.0
-mined_at: '2026-06-15T12:11:33Z'
+mined_at: '2026-06-15T14:13:08+02:00'
 invariants:
 - id: tensorrt_raises_max_batch_size_lt_0_cuda_graph_max_batch_size
   engine: tensorrt
