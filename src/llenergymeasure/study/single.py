@@ -75,12 +75,10 @@ def run_single_experiment(
 
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
-        from llenergymeasure.infra.docker_errors import (
-            DockerStdoutSilenceError,
-            DockerTimeoutError,
-        )
+        from llenergymeasure.infra.docker_errors import docker_exc_to_failure
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.study.container_lifecycle import persist_failure_artefacts
         from llenergymeasure.utils.exceptions import DockerError
 
         image = spec.image if spec.image is not None else get_default_image(config.engine)
@@ -97,41 +95,15 @@ def run_single_experiment(
             result, docker_ts_dir = docker_runner.run(
                 config, progress=progress, save_timeseries=save_ts
             )
-        except DockerStdoutSilenceError as exc:
-            # Distinct error type so users can tell stuck-process kills
-            # from wall-clock timeouts when reading the manifest.
-            error_payload: dict[str, Any] = {
-                "type": "StdoutSilenceTimeoutError",
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            manifest.mark_failed(
-                config_hash, cycle, error_payload["type"], error_payload["message"]
-            )
-            return [], [None], [error_payload["message"]]
-        except DockerTimeoutError as exc:
-            # Normalise to "TimeoutError" so the circuit breaker sees the same
-            # failure class as the subprocess path.
-            error_payload = {
-                "type": "TimeoutError",
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            manifest.mark_failed(
-                config_hash, cycle, error_payload["type"], error_payload["message"]
-            )
-            return [], [None], [error_payload["message"]]
         except DockerError as exc:
-            # Convert to failure dict - manifest marks failed, study continues
-            error_payload = {
-                "type": type(exc).__name__,
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            manifest.mark_failed(
-                config_hash, cycle, error_payload["type"], error_payload["message"]
-            )
-            return [], [None], [error_payload["message"]]
+            # Same failure classification and artefact persistence as the
+            # multi-experiment runner path, so single- and multi-experiment
+            # Docker failures report identical shapes and both leave a
+            # container.log + error JSON in failed-runs/ for debugging.
+            failure: dict[str, Any] = docker_exc_to_failure(exc, config_hash)
+            persist_failure_artefacts(exc, study_dir, config_hash, cycle, failure)
+            manifest.mark_failed(config_hash, cycle, failure["type"], failure["message"])
+            return [], [None], [failure["message"]]
         # Docker path: ts_tmpdir comes from DockerRunner
         ts_tmpdir = docker_ts_dir
     else:

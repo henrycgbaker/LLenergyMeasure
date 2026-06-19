@@ -18,6 +18,8 @@ Error categories:
 
 from __future__ import annotations
 
+from typing import Any
+
 from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = [
@@ -29,6 +31,7 @@ __all__ = [
     "DockerStdoutSilenceError",
     "DockerTimeoutError",
     "capture_stderr_snippet",
+    "docker_exc_to_failure",
     "translate_docker_error",
 ]
 
@@ -94,6 +97,35 @@ def capture_stderr_snippet(stderr: str, max_lines: int = 20) -> str:
     if len(lines) <= max_lines:
         return stderr
     return "\n".join(lines[-max_lines:])
+
+
+def docker_exc_to_failure(exc: DockerError, config_hash: str) -> dict[str, Any]:
+    """Translate a Docker dispatch exception into a study failure-result dict.
+
+    Used by both the multi-experiment runner and the single-experiment path so
+    they report identical failure shapes:
+    - silence kills -> ``"StdoutSilenceTimeoutError"``
+    - wall-clock kills -> ``"TimeoutError"`` (matches the subprocess path so the
+      circuit breaker sees one failure class)
+    - other DockerErrors -> the structured container ``error_payload`` when the
+      entrypoint provided one, else the exception type and message.
+    """
+    if isinstance(exc, DockerStdoutSilenceError):
+        return {
+            "type": "StdoutSilenceTimeoutError",
+            "message": str(exc),
+            "config_hash": config_hash,
+        }
+    if isinstance(exc, DockerTimeoutError):
+        return {"type": "TimeoutError", "message": str(exc), "config_hash": config_hash}
+    payload = getattr(exc, "error_payload", None)
+    if payload:
+        return {
+            "type": payload.get("type", type(exc).__name__),
+            "message": payload.get("message", str(exc)),
+            "config_hash": config_hash,
+        }
+    return {"type": type(exc).__name__, "message": str(exc), "config_hash": config_hash}
 
 
 # ---------------------------------------------------------------------------

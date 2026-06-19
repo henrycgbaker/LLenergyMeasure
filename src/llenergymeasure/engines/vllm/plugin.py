@@ -375,26 +375,14 @@ class VLLMEngine:
         params derive from ``llm.llm_engine.vllm_config`` when available;
         otherwise we fall back to the declared kwargs dict.
         """
-        from llenergymeasure.engines._observed import (
-            assemble_observed_params,
-            extract_observed_params,
+        from llenergymeasure.engines._observed import capture_two_part_observed
+
+        return capture_two_part_observed(
+            "vllm",
+            logger=logger,
+            sampling_obj=sampling_params,
+            engine_obj=getattr(getattr(llm, "llm_engine", None), "vllm_config", None),
         )
-
-        sampling: dict[str, Any] = {}
-        try:
-            sampling = extract_observed_params(sampling_params)
-        except Exception as exc:  # pragma: no cover - best-effort capture
-            logger.debug("vLLM SamplingParams capture failed: %s", exc)
-
-        engine_params: dict[str, Any] = {}
-        try:
-            vllm_cfg = getattr(llm.llm_engine, "vllm_config", None)
-            if vllm_cfg is not None:
-                engine_params = extract_observed_params(vllm_cfg)
-        except Exception as exc:  # pragma: no cover - best-effort capture
-            logger.debug("vLLM config capture failed: %s", exc)
-
-        return assemble_observed_params(engine_params, sampling, "vllm")
 
     # -------------------------------------------------------------------------
     # EnginePlugin: capture_observed_params (post-measurement-window)

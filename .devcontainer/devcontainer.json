@@ -8,7 +8,7 @@
     "HF_TOKEN": "${localEnv:HF_TOKEN}",
     "PYTHONUNBUFFERED": "1"
   },
-  "initializeCommand": "docker compose build base transformers-dev 2>/dev/null || true",
+  "initializeCommand": "docker compose build transformers-dev 2>/dev/null || true",
   "postCreateCommand": "uv sync --dev && pre-commit install || true",
   "customizations": {
     "vscode": {
@@ -19,7 +19,7 @@
         "tamasfe.even-better-toml"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.defaultInterpreterPath": "/opt/conda/bin/python",
         "python.terminal.activateEnvironment": false,
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff",

@@ -206,3 +206,45 @@ def test_load_prompts_shuffled_deterministic() -> None:
     prompts_diff = load_prompts(config_diff_seed)
     # Seeds 42 and 99 confirmed to produce distinct orderings for n_prompts=50 from aienergyscore
     assert prompts_1 != prompts_diff, "Different seeds should produce different orderings"
+
+
+# ---------------------------------------------------------------------------
+# Test 11: interleaved mode does not under-fill on prompt-less records
+# ---------------------------------------------------------------------------
+
+
+def test_load_jsonl_interleaved_skips_promptless_records(tmp_path: Path) -> None:
+    """Interleaved mode keeps reading past prompt-less records instead of under-filling.
+
+    Regression: the old read loop stopped at n raw records, then dropped any
+    without a recognised prompt column during a separate extraction pass, so a
+    prompt-less record among the first n raised a false "could not extract"
+    error even when the file held plenty more usable prompts.
+    """
+    from llenergymeasure.datasets.loader import _load_jsonl
+
+    records = [
+        {"prompt": "p1"},
+        {"foo": "no recognised prompt column"},
+        {"prompt": "p2"},
+        {"bar": "still no prompt column"},
+        {"prompt": "p3"},
+        {"prompt": "p4"},
+    ]
+    jsonl = tmp_path / "mixed.jsonl"
+    jsonl.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+
+    prompts = _load_jsonl(jsonl, n=3, name="mixed", order="interleaved", seed=0)
+    assert prompts == ["p1", "p2", "p3"]
+
+
+def test_load_jsonl_raises_on_too_few_usable_prompts(tmp_path: Path) -> None:
+    """When the file genuinely lacks enough usable prompts, raise a clear error."""
+    from llenergymeasure.datasets.loader import _load_jsonl
+
+    records = [{"prompt": "only"}, {"foo": "x"}, {"bar": "y"}]
+    jsonl = tmp_path / "sparse.jsonl"
+    jsonl.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="only 1 usable prompts"):
+        _load_jsonl(jsonl, n=3, name="sparse", order="interleaved", seed=0)

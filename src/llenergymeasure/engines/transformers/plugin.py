@@ -383,18 +383,17 @@ class TransformersEngine:
         entries ready for the observed-config hashing pipeline.
         """
         from llenergymeasure.engines._observed import (
-            assemble_observed_params,
+            capture_two_part_observed,
             extract_observed_params,
         )
 
-        sampling: dict[str, Any] = {}
+        gen_cfg = None
         try:
             from transformers import GenerationConfig
 
             gen_cfg = GenerationConfig(**generate_kwargs)
-            sampling = extract_observed_params(gen_cfg)
         except Exception as exc:  # pragma: no cover - best-effort capture
-            logger.debug("transformers GenerationConfig capture failed: %s", exc)
+            logger.debug("transformers GenerationConfig construction failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
         pt = config.transformers
@@ -406,7 +405,12 @@ class TransformersEngine:
             except Exception as exc:  # pragma: no cover - best-effort capture
                 logger.debug("transformers BitsAndBytesConfig capture failed: %s", exc)
 
-        return assemble_observed_params(engine_params, sampling, "transformers")
+        return capture_two_part_observed(
+            "transformers",
+            logger=logger,
+            sampling_obj=gen_cfg,
+            engine_params=engine_params,
+        )
 
     # -------------------------------------------------------------------------
     # EnginePlugin: capture_observed_params (post-measurement-window)
