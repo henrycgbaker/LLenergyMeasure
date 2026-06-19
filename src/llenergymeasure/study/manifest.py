@@ -129,23 +129,6 @@ def create_study_dir(name: str | None, output_dir: Path) -> Path:
     return study_dir
 
 
-def experiment_result_filename(
-    model: str,
-    engine: str,
-    config_hash: str,
-    extension: str = ".json",
-) -> str:
-    """Return flat filename for an experiment result file.
-
-    Format: "{model_short}-{engine}_{hash[:8]}{extension}"
-    model_short: last component after '/' (preserves casing).
-    """
-    from llenergymeasure.utils.formatting import model_short_name
-
-    model_short = model_short_name(model)
-    return f"{model_short}-{engine}_{config_hash[:8]}{extension}"
-
-
 # ---------------------------------------------------------------------------
 # ManifestWriter
 # ---------------------------------------------------------------------------
@@ -166,6 +149,20 @@ class ManifestWriter:
         self.path = study_dir / "manifest.json"
         self.manifest = self._build_manifest(study)
         self._write()
+
+    @classmethod
+    def from_existing(cls, study_dir: Path, manifest: StudyManifest) -> ManifestWriter:
+        """Wrap an existing study dir and manifest without rebuilding it.
+
+        Used by the resume path: unlike __init__, this adopts the provided
+        manifest as-is instead of calling _build_manifest (which would overwrite
+        the on-disk manifest with a fresh one).
+        """
+        writer = cls.__new__(cls)
+        writer._study_dir = study_dir
+        writer.path = study_dir / "manifest.json"
+        writer.manifest = manifest
+        return writer
 
     # ------------------------------------------------------------------
     # Public interface

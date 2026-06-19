@@ -35,18 +35,6 @@ EnergyMetrics(
 )
 ```
 
-**ComputeMetrics** - FLOPs and memory:
-```python
-ComputeMetrics(
-    flops_total=1.5e12,
-    flops_per_token=1.5e9,
-    flops_per_second=6e11,
-    peak_memory_mb=14000,
-    flops_method="calflops",
-    flops_confidence="high",
-)
-```
-
 **FlopsResult** - FLOPs estimation with provenance:
 ```python
 FlopsResult(
@@ -55,18 +43,6 @@ FlopsResult(
     confidence="high",   # high | medium | low
     dtype="float16",
 )
-```
-
-**CombinedMetrics** - All metrics together:
-```python
-combined = CombinedMetrics(
-    inference=inference_metrics,
-    energy=energy_metrics,
-    compute=compute_metrics,
-)
-# Properties:
-# combined.efficiency_tokens_per_joule
-# combined.efficiency_flops_per_watt
 ```
 
 **LatencyMeasurements** - Streaming latency data:

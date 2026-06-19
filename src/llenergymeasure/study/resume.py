@@ -176,11 +176,8 @@ def prepare_resume_manifest(study_dir: Path, manifest: StudyManifest) -> Manifes
         }
     )
 
-    # Build a ManifestWriter that wraps the existing study_dir without creating a new dir
-    writer = ManifestWriter.__new__(ManifestWriter)
-    writer._study_dir = study_dir
-    writer.path = study_dir / "manifest.json"
-    writer.manifest = updated_manifest
+    # Wrap the existing study_dir without creating a new dir or rebuilding the manifest
+    writer = ManifestWriter.from_existing(study_dir, updated_manifest)
     writer._write()
 
     logger.info(
