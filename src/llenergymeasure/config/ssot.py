@@ -152,9 +152,6 @@ TIMEOUT_DOCKER_STOP: Final = 10
 """``docker stop`` graceful shutdown."""
 
 # NVIDIA tool subprocess timeouts
-TIMEOUT_NVCC: Final = 5
-"""``nvcc --version`` subprocess."""
-
 TIMEOUT_NVIDIA_SMI: Final = 10
 """``nvidia-smi`` query subprocess."""
 
@@ -230,7 +227,6 @@ __all__ = [
     "TIMEOUT_DOCKER_STOP",
     "TIMEOUT_ENV_SNAPSHOT",
     "TIMEOUT_INTERRUPT_POLL",
-    "TIMEOUT_NVCC",
     "TIMEOUT_NVIDIA_SMI",
     "TIMEOUT_SIGTERM_GRACE",
     "TIMEOUT_THREAD_JOIN",
