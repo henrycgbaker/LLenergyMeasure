@@ -1,11 +1,12 @@
 schema_version: 1.0.0
 engine: tensorrt
 engine_version: 1.2.0
-image_ref: nvcr.io/nvidia/tensorrt-llm/release:1.2.0
+image_ref: llenergymeasure:tensorrt-1.2.0
+image_digest: sha256:4c120954694e33e9d1bd206b422728f53e65df0d1e9718656de33a995a09c457
 engine_commit: 1.2.0
 base_image_ref: llenergymeasure:tensorrt
-validated_at: '2026-06-19T12:41:02.887597+00:00'
-validation_commit: unknown
+validated_at: '2026-06-19T14:43:45+02:00'
+validation_commit: 977312fa90ffb482e387de31c1b821f8cd9921fc
 cases:
 - id: tensorrt_raises_max_batch_size_lt_0_cuda_graph_max_batch_size
   outcome: error
