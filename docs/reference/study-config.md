@@ -34,9 +34,9 @@ All fields except `model` are optional and have sensible defaults.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable warmup phase |
-| `n_warmup` | integer | `5` | Number of full-length warmup prompts before measurement |
+| `n_prompts` | integer | `5` | Number of full-length warmup prompts in fixed mode |
 | `thermal_floor_seconds` | number | `60.0` | Minimum seconds to wait after warmup before measuring (thermal stabilisation). Minimum 30s enforced. |
-| `convergence_detection` | boolean | `false` | Enable CV-based convergence detection (additive to n_warmup) |
+| `convergence_detection` | boolean | `false` | Enable CV-based adaptive convergence (governed by min_prompts, max_prompts, cv_threshold, window_size) |
 | `cv_threshold` | number | `0.05` | CV target for convergence (only used when convergence_detection=True) |
 | `max_prompts` | integer | `20` | Maximum warmup prompts when CV mode is on (safety cap) |
 | `window_size` | integer | `3` | Sliding window size for CV calculation (3 balances responsiveness and stability) |

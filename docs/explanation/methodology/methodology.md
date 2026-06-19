@@ -21,14 +21,14 @@ LLenergyMeasure has two warmup modes, controlled by `convergence_detection` (def
 
 #### Fixed mode (default)
 
-Runs exactly `n_warmup` prompts (default 5). The coefficient of variation (CV) is
+Runs exactly `n_prompts` prompts (default 5). The coefficient of variation (CV) is
 computed for informational purposes but does not affect iteration count. Always reports
 `converged: true`. Simple, predictable, and sufficient for most use cases.
 
 ```yaml
 warmup:
   enabled: true                    # default: true
-  n_warmup: 5                     # default: 5
+  n_prompts: 5                     # default: 5
   thermal_floor_seconds: 60.0     # default: 60.0
 ```
 
@@ -36,7 +36,7 @@ warmup:
 
 Runs warmup prompts until the **coefficient of variation** (CV = std_dev / mean) of
 recent latencies drops below `cv_threshold`. This mode replaces fixed iteration
-count - `n_warmup` is ignored when convergence detection is active.
+count - `n_prompts` is ignored when convergence detection is active.
 
 ```yaml
 warmup:
@@ -56,7 +56,7 @@ the system never stabilises.
 
 ```mermaid
 flowchart LR
-    A[**Warmup**<br/>heat GPU to steady state<br/>fixed n_warmup OR CV-converged] --> B[**Thermal floor wait**<br/>sleep thermal_floor_seconds<br/>default 60s] --> C[**Measurement**<br/>energy tracking begins<br/>per-prompt power + latency]
+    A[**Warmup**<br/>heat GPU to steady state<br/>fixed n_prompts OR CV-converged] --> B[**Thermal floor wait**<br/>sleep thermal_floor_seconds<br/>default 60s] --> C[**Measurement**<br/>energy tracking begins<br/>per-prompt power + latency]
     style A fill:#fff4e6,stroke:#ff9800
     style B fill:#e3f2fd,stroke:#2196f3
     style C fill:#e8f5e9,stroke:#4caf50
@@ -100,7 +100,7 @@ engines confirms the engine is ready, rather than iterating multiple inference p
 
 ### Default values
 
-- `n_warmup: 5` is consistent with DeepSpeed, Zeus, and AI Energy Score benchmarks
+- `n_prompts: 5` is consistent with DeepSpeed, Zeus, and AI Energy Score benchmarks
   (which use 5-10 warmup rounds)
 - `thermal_floor_seconds: 60.0` meets the MLPerf Power minimum (60s mandatory)
 

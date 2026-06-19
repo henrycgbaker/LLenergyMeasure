@@ -40,7 +40,7 @@ engine: transformers
 measurement:
   warmup:
     enabled: true
-    n_warmup: 5
+    n_prompts: 5
   baseline:
     enabled: true
     duration_seconds: 30.0
@@ -92,14 +92,14 @@ across engines.
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `warmup.enabled` | bool | `true` | Enable warmup phase before measurement | `models.py:79` |
-| `warmup.n_warmup` | int >= 1 | `5` | Number of full-length warmup prompts | `models.py:81-85` |
-| `warmup.thermal_floor_seconds` | float >= 30.0 | `60.0` | Minimum post-warmup wait for thermal stabilisation | `models.py:86-90` |
-| `warmup.convergence_detection` | bool | `false` | Enable adaptive CV-based convergence (additive to `n_warmup`) | `models.py:93-96` |
-| `warmup.cv_threshold` | float [0.01, 0.5] | `0.05` | CV target for convergence | `models.py:97-102` |
-| `warmup.max_prompts` | int >= 5 | `20` | Safety cap for CV mode | `models.py:103-107` |
-| `warmup.window_size` | int >= 3 | `3` | Sliding window size for CV calculation | `models.py:108-112` |
-| `warmup.min_prompts` | int >= 1 | `5` | Minimum prompts before checking convergence | `models.py:113-117` |
+| `warmup.enabled` | bool | `true` | Enable warmup phase before measurement | `models.py:83` |
+| `warmup.n_prompts` | int >= 1 | `5` | Number of full-length warmup prompts in fixed mode | `models.py:85-89` |
+| `warmup.thermal_floor_seconds` | float >= 30.0 | `60.0` | Minimum post-warmup wait for thermal stabilisation | `models.py:90-94` |
+| `warmup.convergence_detection` | bool | `false` | Enable adaptive CV-based convergence (replaces the fixed `n_prompts` count) | `models.py:97-100` |
+| `warmup.cv_threshold` | float [0.01, 0.5] | `0.05` | CV target for convergence | `models.py:101-106` |
+| `warmup.max_prompts` | int >= 5 | `20` | Safety cap for CV mode | `models.py:107-111` |
+| `warmup.window_size` | int >= 3 | `3` | Sliding window size for CV calculation | `models.py:112-116` |
+| `warmup.min_prompts` | int >= 1 | `5` | Minimum prompts before checking convergence | `models.py:117-121` |
 | `baseline.enabled` | bool | `true` | Measure idle GPU power before experiments | `models.py:142` |
 | `baseline.duration_seconds` | float [5.0, 120.0] | `30.0` | Baseline measurement window | `models.py:143-148` |
 | `baseline.strategy` | `cached` \| `validated` \| `fresh` | `validated` | Caching strategy for the baseline measurement | `models.py:149-156` |

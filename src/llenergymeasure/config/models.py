@@ -66,11 +66,14 @@ def _reset_invariants_loader_cache() -> None:
 class WarmupConfig(BaseModel):
     """Warmup configuration for the measurement phase.
 
-    Controls the warmup phase before measurement begins. Default uses fixed
-    iteration count plus a thermal floor wait. Set convergence_detection=True
-    to enable adaptive CV-based convergence (additive to n_warmup).
+    Controls the warmup phase before measurement begins. Fixed mode (the
+    default) runs exactly n_prompts warmup inferences. Set
+    convergence_detection=True for opt-in adaptive convergence: the loop runs
+    until the latency coefficient of variation falls below cv_threshold,
+    governed by min_prompts (warm-start floor), max_prompts (safety cap), and
+    window_size. Either mode is followed by a thermal floor wait.
 
-    # Confidence: n_warmup=5 HIGH (DeepSpeed 5-10, Zeus 10, AIEnergyScore 10)
+    # Confidence: n_prompts=5 HIGH (DeepSpeed 5-10, Zeus 10, AIEnergyScore 10)
     # Confidence: thermal_floor_seconds=60 HIGH (MLPerf Power mandates 60s minimum)
     """
 
@@ -78,10 +81,10 @@ class WarmupConfig(BaseModel):
 
     enabled: bool = Field(default=True, description="Enable warmup phase")
 
-    n_warmup: int = Field(
+    n_prompts: int = Field(
         default=5,
         ge=1,
-        description="Number of full-length warmup prompts before measurement",
+        description="Number of full-length warmup prompts in fixed mode",
     )
     thermal_floor_seconds: float = Field(
         default=60.0,
@@ -89,10 +92,10 @@ class WarmupConfig(BaseModel):
         description="Minimum seconds to wait after warmup before measuring (thermal stabilisation). Minimum 30s enforced.",
     )
 
-    # CV convergence detection (opt-in, additive to n_warmup)
+    # CV convergence detection (opt-in adaptive mode; replaces the fixed n_prompts count)
     convergence_detection: bool = Field(
         default=False,
-        description="Enable CV-based convergence detection (additive to n_warmup)",
+        description="Enable CV-based adaptive convergence (governed by min_prompts, max_prompts, cv_threshold, window_size)",
     )
     cv_threshold: float = Field(
         default=0.05,

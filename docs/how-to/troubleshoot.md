@@ -179,7 +179,7 @@ to NVML. See [energy-measurement.md](/explanation/methodology/energy-measurement
 **Symptom:** Experiments take much longer than expected. Progress stalls for 1-2 minutes
 before measurement begins.
 
-**Cause:** Warmup is enabled by default. It runs `n_warmup=5` warmup inferences, then
+**Cause:** Warmup is enabled by default. It runs `n_prompts=5` warmup inferences, then
 waits `thermal_floor_seconds=60.0` seconds for GPU temperature to stabilise before
 measuring.
 
