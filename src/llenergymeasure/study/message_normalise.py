@@ -30,16 +30,9 @@ class NormalisedMessage:
         template: The normalised, placeholder-substituted template. Stable
             across emissions that only differ by numeric values / paths /
             timestamps.
-        match_regex: Anchored regex that matches the template back against
-            raw messages. Used by the corpus consumer to re-identify the
-            same rule firing later.
-        original: The pre-normalisation message - kept for evidence in draft
-            PR bodies.
     """
 
     template: str
-    match_regex: str
-    original: str
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -87,15 +80,14 @@ def normalise(message: str) -> NormalisedMessage:
 
     ``build_template_regex`` produces the corresponding match regex -
     placeholders become loose character classes so the template matches
-    future raw emissions.
+    future raw emissions. Callers that need the regex build it from
+    ``template`` on demand.
     """
-    original = message
     normalised = message
     for pattern, replacement in _SUBSTITUTIONS:
         normalised = pattern.sub(replacement, normalised)
     template = _WHITESPACE_RE.sub(" ", normalised).strip()
-    match_regex = build_template_regex(template)
-    return NormalisedMessage(template=template, match_regex=match_regex, original=original)
+    return NormalisedMessage(template=template)
 
 
 _PLACEHOLDER_REGEXES: dict[str, str] = {

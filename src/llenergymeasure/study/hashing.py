@@ -4,8 +4,8 @@ The pure hashing primitives live in :mod:`llenergymeasure.domain.hashing`
 (Layer 0).  This module contains only :func:`build_resolved_view`, which
 needs ``ExperimentConfig`` and therefore belongs at Layer 4 (study).
 
-Re-exports the domain primitives so callers that previously imported from
-``study.hashing`` continue to work without changes.
+``hash_config`` is re-exported because the resolved-view path always builds a
+view and then hashes it; production callers take both from here.
 """
 
 from __future__ import annotations
@@ -13,24 +13,10 @@ from __future__ import annotations
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-
-# Re-export domain primitives - study.library_resolution and tests import from here.
-from llenergymeasure.domain.hashing import (
-    _FLOAT_SIG_DIGITS,
-    ConfigHashView,
-    _normalise,
-    build_observed_view,
-    canonical_serialise,
-    hash_config,
-)
+from llenergymeasure.domain.hashing import ConfigHashView, hash_config
 
 __all__ = [
-    "_FLOAT_SIG_DIGITS",
-    "ConfigHashView",
-    "_normalise",
-    "build_observed_view",
     "build_resolved_view",
-    "canonical_serialise",
     "hash_config",
 ]
 

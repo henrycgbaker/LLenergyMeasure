@@ -17,12 +17,10 @@ engine is ready.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import time
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -121,15 +119,12 @@ class TensorRTEngine:
     """TensorRT-LLM inference engine - offline batch mode, thin plugin.
 
     Implements EnginePlugin:
-    - load_model: Compile/load engine via tensorrt_llm.LLM(), record build metadata
+    - load_model: Compile/load engine via tensorrt_llm.LLM()
     - warmup: Minimal 1-prompt warmup with 1-token output
     - run_inference: Single llm.generate() call with ALL prompts, returns InferenceOutput
     - cleanup: Delete LLM instance, gc.collect(), clear CUDA cache
     - check_hardware: Check SM >= 7.5 (Turing) and FP8 requires SM >= 8.9
     """
-
-    def __init__(self) -> None:
-        self._build_metadata: dict[str, Any] | None = None
 
     @property
     def name(self) -> str:
@@ -158,7 +153,6 @@ class TensorRTEngine:
         """Compile/load engine via tensorrt_llm.LLM() and build SamplingParams.
 
         Engine compilation happens here - BEFORE the NVML measurement window.
-        Build metadata is recorded for inclusion in InferenceOutput.extras.
 
         All tensorrt_llm imports are lazy so this module can be imported without TRT-LLM.
 
@@ -179,11 +173,6 @@ class TensorRTEngine:
 
         kwargs = self._build_llm_kwargs(config)
         logger.info("Loading TRT-LLM model %r (kwargs: %s)", config.task.model, list(kwargs.keys()))
-
-        # Collect build metadata before construction (for config_hash)
-        config_hash = hashlib.sha256(
-            json.dumps(kwargs, default=str, sort_keys=True).encode()
-        ).hexdigest()[:16]
 
         from llenergymeasure.device.gpu_info import get_gpu_architecture
 
@@ -213,14 +202,6 @@ class TensorRTEngine:
             gpu_arch,
             trt_version,
         )
-
-        self._build_metadata = {
-            "build_time_sec": build_time_sec,
-            "gpu_architecture": gpu_arch,
-            "trt_llm_version": trt_version,
-            "config_hash": config_hash,
-            "built_at": datetime.now(timezone.utc).isoformat(),
-        }
 
         sampling_params = self._build_sampling_params(config)
         if on_substep is not None:
@@ -270,7 +251,7 @@ class TensorRTEngine:
             prompts: Pre-loaded prompts (loaded by harness before measurement window).
 
         Returns:
-            InferenceOutput with token counts, timing, memory stats, and build_metadata.
+            InferenceOutput with token counts, timing, and memory stats.
 
         Raises:
             EngineError: On OOM or other inference failures.
@@ -328,8 +309,6 @@ class TensorRTEngine:
         )
 
         extras: dict[str, Any] = {}
-        if self._build_metadata is not None:
-            extras["build_metadata"] = self._build_metadata
 
         # TRT-LLM does not expose a per-token timing stream here, so latency
         # profiling is unsupported: signal it so the harness can warn. Latency

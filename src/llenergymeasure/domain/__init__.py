@@ -8,7 +8,6 @@ from llenergymeasure.domain.experiment import (
 from llenergymeasure.domain.metrics import (
     EnergyMetrics,
     FlopsResult,
-    InferenceMetrics,
 )
 from llenergymeasure.domain.progress import ProgressCallback, StudyProgressCallback
 
@@ -17,7 +16,6 @@ __all__ = [
     "EnergyMetrics",
     "ExperimentResult",
     "FlopsResult",
-    "InferenceMetrics",
     "ProgressCallback",
     "StudyProgressCallback",
     "StudyResult",

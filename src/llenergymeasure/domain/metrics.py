@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -36,31 +36,6 @@ class FlopsResult(BaseModel):
     def is_valid(self) -> bool:
         """Check if this is a valid (non-zero) estimate."""
         return self.value > 0
-
-
-class InferenceMetrics(BaseModel):
-    """Metrics from model inference."""
-
-    total_tokens: int = Field(..., description="Total tokens generated")
-    input_tokens: int = Field(..., description="Number of input/prompt tokens")
-    output_tokens: int = Field(..., description="Number of output/generated tokens")
-    inference_time_sec: float = Field(..., description="Total inference time in seconds")
-    tokens_per_second: float = Field(..., description="Throughput in tokens/second")
-    latency_per_token_ms: float = Field(..., description="Average latency per token in ms")
-    time_to_first_token_ms: float | None = Field(
-        default=None, description="Average time to first token in ms (if available)"
-    )
-    # Raw latency measurements for streaming mode (late aggregation)
-    # Forward reference to LatencyMeasurements (defined below in this module)
-    latency_measurements: Any | None = Field(
-        default=None,
-        description="Raw TTFT/ITL samples from streaming inference",
-    )
-
-    @property
-    def throughput(self) -> float:
-        """Alias for tokens_per_second."""
-        return self.tokens_per_second
 
 
 class EnergyMetrics(BaseModel):
@@ -396,43 +371,11 @@ class LatencyMeasurementMode(Enum):
 
 
 @dataclass
-class LatencyMeasurements:
-    """Raw latency measurements for late aggregation.
-
-    Stores raw samples from streaming inference. Statistics are computed
-    at aggregation time, enabling correct multi-process aggregation
-    (concatenate samples first, then compute percentiles).
-
-    Attributes:
-        ttft_ms: Per-request time-to-first-token in milliseconds.
-        itl_full_ms: All inter-token latencies (includes all intervals).
-        itl_trimmed_ms: Trimmed ITL excluding first/last per request
-            (first token is TTFT, last may have EOS anomalies).
-        request_count: Number of requests measured.
-        total_output_tokens: Total tokens generated across all requests.
-        excluded_tokens: Count of first+last tokens excluded from trimmed ITL.
-        streaming_mode: Whether streaming API was used for measurement.
-        warmup_requests_excluded: Number of warmup requests not included.
-        measurement_mode: How latency was measured (see LatencyMeasurementMode).
-    """
-
-    ttft_ms: list[float]
-    itl_full_ms: list[float]
-    itl_trimmed_ms: list[float]
-    request_count: int
-    total_output_tokens: int
-    excluded_tokens: int
-    streaming_mode: bool
-    warmup_requests_excluded: int
-    measurement_mode: LatencyMeasurementMode = LatencyMeasurementMode.TRUE_STREAMING
-
-
-@dataclass
 class LatencyStatistics:
     """Computed statistics from raw latency measurements.
 
-    Created at aggregation time from LatencyMeasurements. This is the final
-    form stored in ExperimentResult and displayed in CLI output.
+    Created at aggregation time from raw TTFT/ITL sample lists. This is the
+    final form stored in ExperimentResult and displayed in CLI output.
 
     Primary metrics use trimmed ITL (excluding first/last tokens per request).
     Full ITL stats are provided for comparison/debugging.

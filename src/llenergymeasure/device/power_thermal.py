@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from llenergymeasure.device.gpu_info import nvml_context
 from llenergymeasure.domain.metrics import ThermalThrottleInfo
@@ -54,7 +54,6 @@ class PowerThermalSampler:
             # ... run inference ...
             pass
         samples = sampler.get_samples()
-        mean_power = sampler.get_mean_power()  # sum of per-GPU means
         throttle_info = sampler.get_thermal_throttle_info()
     """
 
@@ -221,41 +220,6 @@ class PowerThermalSampler:
         """Get all collected samples."""
         return list(self._samples)
 
-    def get_power_samples(self) -> list[float]:
-        """Get power values only (non-None).
-
-        Returns:
-            List of power draw values in Watts (all GPUs interleaved).
-        """
-        return [s.power_w for s in self._samples if s.power_w is not None]
-
-    def get_mean_power(self) -> float | None:
-        """Get mean power draw summed across all monitored GPUs.
-
-        Groups samples by gpu_index, computes the mean per GPU, then sums
-        those per-GPU means. This gives total power draw across all GPUs.
-
-        Returns:
-            Total mean power in Watts across all GPUs, or None if no samples.
-        """
-        if not self._samples:
-            return None
-
-        # Group by gpu_index
-        by_gpu: dict[int, list[float]] = {}
-        for s in self._samples:
-            if s.power_w is not None:
-                by_gpu.setdefault(s.gpu_index, []).append(s.power_w)
-
-        if not by_gpu:
-            return None
-
-        # Sum of per-GPU means
-        total = 0.0
-        for gpu_values in by_gpu.values():
-            total += sum(gpu_values) / len(gpu_values)
-        return total
-
     def get_thermal_throttle_info(self) -> ThermalThrottleInfo:
         """Summarise thermal throttle state from collected samples (all GPUs).
 
@@ -330,28 +294,3 @@ class PowerThermalSampler:
     def is_available(self) -> bool:
         """Whether pynvml sampling is available."""
         return self._pynvml_available
-
-
-@dataclass
-class PowerThermalResult:
-    """Result from power/thermal sampling."""
-
-    power_samples: list[float] = field(default_factory=list)
-    memory_samples: list[float] = field(default_factory=list)
-    temperature_samples: list[float] = field(default_factory=list)
-    thermal_throttle_info: ThermalThrottleInfo = field(default_factory=ThermalThrottleInfo)
-    sample_count: int = 0
-    available: bool = False
-
-    @classmethod
-    def from_sampler(cls, sampler: PowerThermalSampler) -> PowerThermalResult:
-        """Create result from sampler."""
-        samples = sampler.get_samples()
-        return cls(
-            power_samples=sampler.get_power_samples(),
-            memory_samples=[s.memory_used_mb for s in samples if s.memory_used_mb is not None],
-            temperature_samples=[s.temperature_c for s in samples if s.temperature_c is not None],
-            thermal_throttle_info=sampler.get_thermal_throttle_info(),
-            sample_count=sampler.sample_count,
-            available=sampler.is_available,
-        )

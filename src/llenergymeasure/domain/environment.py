@@ -107,30 +107,6 @@ class EnvironmentMetadata(BaseModel):
     )
     collected_at: datetime = Field(..., description="When metadata was collected")
 
-    @property
-    def summary_line(self) -> str:
-        """One-line environment summary for logging.
-
-        Example: "A100 80GB | CUDA 12.4 | Driver 535.104 | 42C | container"
-        """
-        # Extract short GPU name (last part before memory)
-        gpu_short = self.gpu.name.replace("NVIDIA ", "")
-        vram_gb = int(self.gpu.vram_total_mb / 1024)
-
-        parts = [
-            f"{gpu_short} {vram_gb}GB",
-            f"CUDA {self.cuda.version}",
-            f"Driver {self.cuda.driver_version}",
-        ]
-
-        if self.thermal.temperature_c is not None:
-            parts.append(f"{self.thermal.temperature_c:.0f}C")
-
-        if self.container.detected:
-            parts.append("container")
-
-        return " | ".join(parts)
-
 
 # ---------------------------------------------------------------------------
 # EnvironmentSnapshot - full software + hardware context

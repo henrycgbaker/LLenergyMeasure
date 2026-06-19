@@ -4,13 +4,13 @@ GPU hardware detection and real-time power/thermal sampling via NVML. Layer 0 in
 
 ## Purpose
 
-Provides a clean interface over pynvml for GPU topology detection (including MIG), power monitoring, and temperature sampling. All NVML operations go through this layer. Higher layers never call pynvml directly.
+Provides a clean interface over pynvml for GPU detection, power monitoring, and temperature sampling. All NVML operations go through this layer. Higher layers never call pynvml directly.
 
 ## Modules
 
 | Module | Description |
 |--------|-------------|
-| `gpu_info.py` | `GPUInfo` dataclass, MIG detection, `nvml_context()` |
+| `gpu_info.py` | `nvml_context()`, GPU index + architecture detection |
 | `power_thermal.py` | `PowerThermalSampler`, `PowerThermalSample` dataclass |
 | `__init__.py` | Package marker |
 
@@ -32,24 +32,11 @@ with nvml_context():
 # nvmlShutdown() called automatically
 ```
 
-### GPUInfo
+### Architecture detection
 
-Dataclass describing a physical GPU or MIG instance:
-
-```python
-@dataclass
-class GPUInfo:
-    index: int                    # CUDA device index
-    name: str                     # e.g. "NVIDIA A100-PCIE-40GB"
-    uuid: str                     # Unique GPU identifier
-    memory_mb: int                # Total VRAM in MB
-    is_mig_capable: bool          # GPU supports MIG
-    is_mig_enabled: bool          # MIG mode currently active
-    is_mig_instance: bool         # This is a MIG slice (not parent GPU)
-    parent_gpu_index: int | None  # Parent GPU index for MIG slices
-    mig_profile: str | None       # e.g. "1g.10gb", "3g.40gb"
-    compute_capability: str | None  # e.g. "8.0" for A100
-```
+`get_gpu_architecture()` returns the SM string (e.g. `"sm_80"` for A100) and
+`get_compute_capability()` returns the `(major, minor)` tuple via NVML. Both
+return a safe fallback (`"unknown"` / `None`) when no GPU is available.
 
 ## power_thermal.py
 

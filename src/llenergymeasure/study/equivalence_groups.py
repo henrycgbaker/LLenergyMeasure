@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from llenergymeasure.results.persistence import _atomic_write
-from llenergymeasure.study.library_resolution import DedupResult
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -64,44 +63,6 @@ class EquivalenceGroups:
     validated_invariants_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
     observed_collision_groups: list[ObservedCollisionGroup] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Pre-run population - from resolve_library_effective output
-# ---------------------------------------------------------------------------
-
-
-def build_pre_run_groups(
-    dedup: DedupResult,
-    *,
-    experiment_ids: list[str],
-) -> list[PreRunGroup]:
-    """Bind :class:`DedupResult` group indices back to caller-supplied IDs.
-
-    ``experiment_ids`` must be parallel to the declared-configs list passed
-    to :func:`resolve_library_effective`. The runner is the natural source - it already
-    assigns per-experiment IDs before dispatch.
-    """
-    if len(experiment_ids) != len(dedup.declared_resolved_hashes):
-        raise ValueError(
-            f"experiment_ids length {len(experiment_ids)} does not match the "
-            f"declared config count {len(dedup.declared_resolved_hashes)}"
-        )
-    pre: list[PreRunGroup] = []
-    for group in dedup.groups:
-        member_ids = tuple(experiment_ids[i] for i in group.member_indices)
-        pre.append(
-            PreRunGroup(
-                resolved_config_hash=group.resolved_config_hash,
-                canonical_config_excerpt=group.canonical_excerpt,
-                member_experiment_ids=member_ids,
-                member_count=group.member_count,
-                representative_experiment_id=experiment_ids[group.representative_index],
-                would_dedup=group.member_count > 1,
-                deduplicated=dedup.deduplicated and group.member_count > 1,
-            )
-        )
-    return pre
 
 
 # ---------------------------------------------------------------------------
@@ -171,45 +132,3 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(json.dumps(payload, indent=2, default=str), path)
-
-
-def load_equivalence_groups(path: Path) -> EquivalenceGroups:
-    """Load :class:`EquivalenceGroups` from a JSON file on disk."""
-    data = json.loads(path.read_text())
-    raw_mode = str(data.get("dedup_mode", "off"))
-    dedup_mode: Literal["resolved", "off"] = "resolved" if raw_mode == "resolved" else "off"
-    return EquivalenceGroups(
-        study_id=str(data.get("study_id", "")),
-        dedup_mode=dedup_mode,
-        validated_invariants_version=str(
-            data.get("validated_invariants_version", "") or data.get("vendored_rules_version", "")
-        ),
-        groups=[_pre_from_dict(g) for g in data.get("groups", [])],
-        observed_collision_groups=[
-            _post_from_dict(g) for g in data.get("observed_collision_groups", [])
-        ],
-    )
-
-
-def _pre_from_dict(data: dict[str, Any]) -> PreRunGroup:
-    return PreRunGroup(
-        resolved_config_hash=str(data["resolved_config_hash"]),
-        canonical_config_excerpt=dict(data.get("canonical_config_excerpt", {})),
-        member_experiment_ids=tuple(data.get("member_experiment_ids", [])),
-        member_count=int(data.get("member_count", 0)),
-        representative_experiment_id=str(data.get("representative_experiment_id", "")),
-        would_dedup=bool(data.get("would_dedup", False)),
-        deduplicated=bool(data.get("deduplicated", False)),
-    )
-
-
-def _post_from_dict(data: dict[str, Any]) -> ObservedCollisionGroup:
-    return ObservedCollisionGroup(
-        observed_config_hash=str(data["observed_config_hash"]),
-        engine=str(data.get("engine", "")),
-        library_version=str(data.get("library_version", "")),
-        member_resolved_config_hashes=tuple(data.get("member_resolved_config_hashes", [])),
-        member_experiment_ids=tuple(data.get("member_experiment_ids", [])),
-        gap_detected=bool(data.get("gap_detected", False)),
-        proposed_invariant_id=data.get("proposed_invariant_id") or data.get("proposed_rule_id"),
-    )

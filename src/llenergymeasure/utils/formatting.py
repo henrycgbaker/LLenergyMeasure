@@ -55,8 +55,7 @@ def sig3(value: float) -> str:
     magnitude = math.floor(math.log10(abs(value)))
     # Number of decimal places needed for 3 sig figs
     decimal_places = max(0, 2 - magnitude)
-    rounded = round(value, decimal_places - int(magnitude >= 3) * 0)
-    # Recompute for clarity: round to 3 sig figs
+    # Round to 3 sig figs
     factor = 10 ** (magnitude - 2)
     rounded = round(value / factor) * factor
     # Format without trailing zeros

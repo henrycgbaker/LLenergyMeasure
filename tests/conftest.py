@@ -15,7 +15,6 @@ from llenergymeasure.domain.experiment import (
 )
 from llenergymeasure.domain.metrics import (
     EnergyMetrics,
-    InferenceMetrics,
 )
 
 _REPLAY_DIR = Path(__file__).parent / "fixtures" / "replay"
@@ -145,20 +144,6 @@ def make_energy_metrics(**overrides) -> EnergyMetrics:
     return EnergyMetrics(**defaults)
 
 
-def make_inference_metrics(**overrides) -> InferenceMetrics:
-    """Return a valid InferenceMetrics with sensible defaults."""
-    defaults: dict = {
-        "total_tokens": 500,
-        "input_tokens": 100,
-        "output_tokens": 400,
-        "inference_time_sec": 10.0,
-        "tokens_per_second": 50.0,
-        "latency_per_token_ms": 2.0,
-    }
-    defaults.update(overrides)
-    return InferenceMetrics(**defaults)
-
-
 def make_user_config(**overrides):
     """Return a minimal mock UserConfig for tests that need load_user_config.
 
@@ -251,14 +236,6 @@ def reset_lru_caches():
     except ImportError:
         pass
 
-    try:
-        from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-        if hasattr(get_cuda_major_version, "cache_clear"):
-            get_cuda_major_version.cache_clear()
-    except ImportError:
-        pass
-
     yield
 
     try:
@@ -266,13 +243,5 @@ def reset_lru_caches():
 
         if hasattr(is_docker_available, "cache_clear"):
             is_docker_available.cache_clear()
-    except ImportError:
-        pass
-
-    try:
-        from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-        if hasattr(get_cuda_major_version, "cache_clear"):
-            get_cuda_major_version.cache_clear()
     except ImportError:
         pass

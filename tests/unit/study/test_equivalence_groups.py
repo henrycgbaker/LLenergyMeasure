@@ -2,29 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.equivalence_groups import (
     EquivalenceGroups,
     ObservedCollisionGroup,
     PreRunGroup,
-    build_pre_run_groups,
     find_observed_collisions,
-    load_equivalence_groups,
     write_equivalence_groups,
 )
-from llenergymeasure.study.library_resolution import resolve_library_effective
 
 
-def _mk_config(**overrides):
-    base = {"task": {"model": "gpt2"}, "engine": "transformers"}
-    base.update(overrides)
-    return ExperimentConfig(**base)
-
-
-class TestRoundTripSerialisation:
-    def test_write_then_load_preserves_fields(self, tmp_path: Path):
+class TestWriteSerialisation:
+    def test_write_emits_all_fields(self, tmp_path: Path):
         groups = EquivalenceGroups(
             study_id="study_abc",
             dedup_mode="resolved",
@@ -54,49 +45,16 @@ class TestRoundTripSerialisation:
         )
         path = tmp_path / "equivalence_groups.json"
         write_equivalence_groups(groups, path)
-        loaded = load_equivalence_groups(path)
+        loaded = json.loads(path.read_text())
 
-        assert loaded.study_id == "study_abc"
-        assert loaded.dedup_mode == "resolved"
-        assert loaded.validated_invariants_version.startswith("transformers:")
-        assert len(loaded.groups) == 1
-        assert loaded.groups[0].member_count == 2
-        assert loaded.groups[0].would_dedup is True
-        assert len(loaded.observed_collision_groups) == 1
-        assert loaded.observed_collision_groups[0].gap_detected is True
-
-
-class TestBuildPreRunGroups:
-    def test_binds_indices_to_experiment_ids(self):
-        cfg_a = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.7}})
-        result = resolve_library_effective([cfg_a, cfg_b])
-        # Both collapse via the real corpus' greedy invariants.
-        pre = build_pre_run_groups(result, experiment_ids=["exp_a", "exp_b"])
-        assert len(pre) == 1
-        assert pre[0].member_experiment_ids == ("exp_a", "exp_b")
-        assert pre[0].representative_experiment_id == "exp_a"
-        assert pre[0].would_dedup is True
-        assert pre[0].deduplicated is True
-
-    def test_without_dedup_groups_record_would_dedup(self):
-        cfg_a = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.7}})
-        result = resolve_library_effective([cfg_a, cfg_b], deduplicate=False)
-        pre = build_pre_run_groups(result, experiment_ids=["exp_a", "exp_b"])
-        assert len(pre) == 1
-        assert pre[0].would_dedup is True
-        assert pre[0].deduplicated is False
-
-    def test_id_length_mismatch_raises(self):
-        cfg = _mk_config()
-        result = resolve_library_effective([cfg])
-        try:
-            build_pre_run_groups(result, experiment_ids=[])
-        except ValueError as exc:
-            assert "does not match" in str(exc)
-            return
-        raise AssertionError("expected ValueError")
+        assert loaded["study_id"] == "study_abc"
+        assert loaded["dedup_mode"] == "resolved"
+        assert loaded["validated_invariants_version"].startswith("transformers:")
+        assert len(loaded["groups"]) == 1
+        assert loaded["groups"][0]["member_count"] == 2
+        assert loaded["groups"][0]["would_dedup"] is True
+        assert len(loaded["observed_collision_groups"]) == 1
+        assert loaded["observed_collision_groups"][0]["gap_detected"] is True
 
 
 class TestFindObservedCollisions:

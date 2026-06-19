@@ -12,13 +12,13 @@ import math
 import pytest
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.study.hashing import (
+from llenergymeasure.domain.hashing import (
     ConfigHashView,
     build_observed_view,
-    build_resolved_view,
     canonical_serialise,
     hash_config,
 )
+from llenergymeasure.study.hashing import build_resolved_view
 
 
 def _mk_config(**overrides):

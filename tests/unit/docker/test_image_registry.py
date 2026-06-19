@@ -8,17 +8,6 @@ import pytest
 
 from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX, Engine
 
-
-@pytest.fixture(autouse=True)
-def clear_cuda_version_cache():
-    """Ensure lru_cache for get_cuda_major_version is cleared before and after each test."""
-    from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-    get_cuda_major_version.cache_clear()
-    yield
-    get_cuda_major_version.cache_clear()
-
-
 # ---------------------------------------------------------------------------
 # parse_runner_value
 # ---------------------------------------------------------------------------
@@ -250,77 +239,3 @@ class TestResolveImage:
 
         assert image == "llenergymeasure:vllm"
         assert source == "local_build"
-
-
-# ---------------------------------------------------------------------------
-# get_cuda_major_version
-# ---------------------------------------------------------------------------
-
-
-class TestGetCudaMajorVersion:
-    def test_parses_nvcc_output_correctly(self):
-        from llenergymeasure.infra.image_registry import _parse_cuda_major_from_nvcc
-
-        sample = (
-            "nvcc: NVIDIA (R) Cuda compiler driver\n"
-            "Copyright (c) 2005-2023 NVIDIA Corporation\n"
-            "Built on Mon_Apr__3_17:16:06_PDT_2023\n"
-            "Cuda compilation tools, release 12.1, V12.1.105\n"
-            "Build cuda_12.1.r12.1/compiler.32688072_0\n"
-        )
-        assert _parse_cuda_major_from_nvcc(sample) == "12"
-
-    def test_parses_nvcc_cuda_11(self):
-        from llenergymeasure.infra.image_registry import _parse_cuda_major_from_nvcc
-
-        sample = "Cuda compilation tools, release 11.8, V11.8.89\n"
-        assert _parse_cuda_major_from_nvcc(sample) == "11"
-
-    def test_returns_none_for_unrecognised_output(self):
-        from llenergymeasure.infra.image_registry import _parse_cuda_major_from_nvcc
-
-        assert _parse_cuda_major_from_nvcc("not a cuda output") is None
-
-    def test_get_cuda_major_version_uses_nvcc_result(self):
-        """get_cuda_major_version() should return major version from nvcc when available."""
-        from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-        nvcc_output = "Cuda compilation tools, release 12.3, V12.3.107\n"
-        mock_result = type("R", (), {"returncode": 0, "stdout": nvcc_output})()
-
-        with patch("subprocess.run", return_value=mock_result):
-            version = get_cuda_major_version()
-
-        assert version == "12"
-
-    def test_cuda_major_no_nvidia_smi_subprocess(self, monkeypatch):
-        """Verify nvidia-smi subprocess is never called in get_cuda_major_version()."""
-        import subprocess as real_subprocess
-
-        from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-        get_cuda_major_version.cache_clear()
-        original_run = real_subprocess.run
-        calls = []
-
-        def spy_run(cmd, *args, **kwargs):
-            calls.append(cmd)
-            if cmd[0] == "nvidia-smi":
-                raise AssertionError("nvidia-smi should not be called")
-            return original_run(cmd, *args, **kwargs)
-
-        monkeypatch.setattr(real_subprocess, "run", spy_run)
-        get_cuda_major_version()
-        assert not any("nvidia-smi" in str(c) for c in calls)
-        get_cuda_major_version.cache_clear()
-
-    def test_get_cuda_major_version_returns_none_when_nvcc_missing(self):
-        from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-        with (
-            patch("subprocess.run", side_effect=FileNotFoundError),
-            patch.dict("sys.modules", {"pynvml": None}),
-        ):
-            version = get_cuda_major_version()
-
-        assert version is None
