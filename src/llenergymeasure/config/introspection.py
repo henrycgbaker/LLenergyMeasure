@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-from llenergymeasure.config.ssot import ALL_ENGINES
+from llenergymeasure.config.ssot import Engine
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
@@ -499,7 +499,9 @@ def get_capability_matrix_markdown() -> str:
         display_name = display_names.get(cap_key, cap_key)
         cells = []
 
-        for engine in ALL_ENGINES:
+        # Engine definition order matches the header above; ALL_ENGINES (a frozenset)
+        # has no stable order, which reordered/mislabelled the columns.
+        for engine in Engine:
             value = cap_values.get(engine, False)
             if value is True:
                 cells.append("Yes")
