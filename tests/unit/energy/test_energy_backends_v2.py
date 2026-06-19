@@ -435,3 +435,52 @@ def test_nvml_multi_gpu_energy_per_gpu_dict_populated() -> None:
         result.per_gpu_j[0] + result.per_gpu_j[1] + result.per_gpu_j[2],
         abs=1e-9,
     )
+
+
+# ---------------------------------------------------------------------------
+# CodeCarbonSampler - protocol shape (total_j / per_gpu_j)
+# ---------------------------------------------------------------------------
+
+
+def test_codecarbon_backend_name() -> None:
+    """CodeCarbonSampler.name must return 'codecarbon'."""
+    from llenergymeasure.energy.codecarbon import CodeCarbonSampler
+
+    assert CodeCarbonSampler().name == "codecarbon"
+
+
+def test_codecarbon_stop_tracking_returns_energy_measurement() -> None:
+    """stop_tracking() returns an EnergyMeasurement exposing total_j and per_gpu_j.
+
+    The harness reads ``.total_j`` and ``.per_gpu_j``; CodeCarbon must mirror the
+    NVML/Zeus return shape, not the old EnergyMetrics(total_energy_j=...) shape.
+    """
+    from llenergymeasure.energy.codecarbon import CodeCarbonSampler
+
+    # Mock tracker whose _prepare_emissions_data() yields kWh + duration.
+    emissions_data = MagicMock()
+    emissions_data.energy_consumed = 0.003  # kWh -> 10800 J
+    emissions_data.duration = 12.5
+    emissions_data.gpu_power = 200.0
+    emissions_data.cpu_power = 10.0
+    emissions_data.emissions = 0.0001
+    tracker = MagicMock()
+    tracker._prepare_emissions_data.return_value = emissions_data
+
+    result = CodeCarbonSampler().stop_tracking(tracker)
+
+    assert isinstance(result, EnergyMeasurement)
+    # Protocol fields the harness depends on:
+    assert result.total_j == pytest.approx(0.003 * 3.6e6, abs=1e-6)
+    assert result.duration_sec == pytest.approx(12.5)
+    assert result.per_gpu_j is None  # CodeCarbon is process-level, no per-GPU split
+
+
+def test_codecarbon_stop_tracking_none_tracker_is_empty() -> None:
+    """stop_tracking(None) returns a zeroed EnergyMeasurement, not a crash."""
+    from llenergymeasure.energy.codecarbon import CodeCarbonSampler
+
+    result = CodeCarbonSampler().stop_tracking(None)
+    assert isinstance(result, EnergyMeasurement)
+    assert result.total_j == 0.0
+    assert result.per_gpu_j is None

@@ -153,6 +153,66 @@ def test_warmup_cv_mode_converges() -> None:
     assert result.iterations_completed <= config.max_prompts
 
 
+def test_warmup_cv_mode_runs_n_warmup_base_before_converging() -> None:
+    """CV is additive to n_warmup: the base n_warmup prompts run before convergence.
+
+    With constant latency (CV=0) and a non-default n_warmup=4, convergence must
+    not trigger during the base phase. The earliest possible convergence is one
+    iteration into the CV phase, once min_prompts/window_size are also satisfied.
+    """
+    call_count = 0
+
+    def stable_inference() -> float:
+        nonlocal call_count
+        call_count += 1
+        return 10.0  # constant -> CV=0.0
+
+    config = WarmupConfig(
+        n_warmup=4,
+        convergence_detection=True,
+        cv_threshold=0.1,
+        max_prompts=30,
+        window_size=3,
+        min_prompts=3,
+        thermal_floor_seconds=30.0,
+    )
+
+    result = warmup_until_converged(stable_inference, config)
+
+    assert result.converged is True
+    # Base phase (4) must complete before the CV phase can early-break, so the
+    # total must exceed n_warmup. (First CV-phase iteration is the 5th.)
+    assert result.iterations_completed > config.n_warmup
+    assert call_count == result.iterations_completed
+
+
+def test_warmup_cv_mode_budget_is_n_warmup_plus_max_prompts() -> None:
+    """When CV never converges, total iterations = n_warmup + max_prompts (additive)."""
+    call_count = 0
+
+    def noisy_inference() -> float:
+        nonlocal call_count
+        call_count += 1
+        # Alternate widely so CV never drops below threshold.
+        return 10.0 if call_count % 2 == 0 else 1000.0
+
+    config = WarmupConfig(
+        n_warmup=3,
+        convergence_detection=True,
+        cv_threshold=0.01,
+        max_prompts=6,
+        window_size=3,
+        min_prompts=3,
+        thermal_floor_seconds=30.0,
+    )
+
+    result = warmup_until_converged(noisy_inference, config)
+
+    assert result.converged is False
+    assert result.iterations_completed == config.n_warmup + config.max_prompts
+    assert call_count == config.n_warmup + config.max_prompts
+
+
 def test_warmup_disabled_skips() -> None:
     """When enabled=False, warmup returns immediately with converged=True."""
     call_count = 0

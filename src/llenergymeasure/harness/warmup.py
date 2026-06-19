@@ -86,9 +86,11 @@ def warmup_until_converged(
     final_cv: float | None = None
 
     # Fixed mode: run exactly n_warmup prompts without convergence checking.
-    # CV mode: run up to max_prompts with convergence checking after min_prompts.
+    # CV mode: run n_warmup base prompts FIRST (no early-break), then keep going
+    # with convergence checking up to max_prompts ADDITIONAL prompts. CV is
+    # additive to n_warmup, so the total budget is n_warmup + max_prompts.
     fixed_mode = not config.convergence_detection
-    iteration_limit = config.n_warmup if fixed_mode else config.max_prompts
+    iteration_limit = config.n_warmup if fixed_mode else config.n_warmup + config.max_prompts
 
     for i in range(iteration_limit):
         try:
@@ -99,14 +101,18 @@ def warmup_until_converged(
 
         latencies.append(latency_ms)
 
+        # The first n_warmup iterations are the fixed base; convergence checking
+        # only applies to the additive CV phase that follows them.
+        in_cv_phase = not fixed_mode and len(latencies) > config.n_warmup
+
         # Compute CV whenever we have 2+ samples (minimum for meaningful std dev).
-        # In fixed mode this is informational; in convergence mode it drives early-break.
+        # In fixed mode / base phase this is informational; in the CV phase it drives early-break.
         if len(latencies) >= 2:
             recent = latencies[-config.window_size :]
             final_cv = compute_cv(recent)
 
             if (
-                not fixed_mode
+                in_cv_phase
                 and len(latencies) >= max(config.min_prompts, config.window_size)
                 and final_cv < config.cv_threshold
             ):
