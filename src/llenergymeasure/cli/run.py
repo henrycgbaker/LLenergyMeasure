@@ -142,6 +142,7 @@ def run(
     from llenergymeasure.cli import _setup_logging
 
     _setup_logging(verbose)
+    verbose_on = verbose > 0
 
     # Install SIGINT handler so Ctrl-C exits with code 130
     def _handle_sigint(signum: int, frame: Any) -> None:
@@ -160,7 +161,7 @@ def run(
             output=output,
             dry_run=dry_run,
             quiet=quiet,
-            verbose=verbose > 0,
+            verbose=verbose_on,
             cycles=cycles,
             order=order,
             no_gaps=no_gaps,
@@ -174,10 +175,10 @@ def run(
             no_dedup=no_dedup,
         )
     except ConfigError as e:
-        print(format_error(e, verbose=verbose > 0), file=sys.stderr)
+        print(format_error(e, verbose=verbose_on), file=sys.stderr)
         raise typer.Exit(code=2) from None
     except (PreFlightError, ExperimentError, EngineError, StudyError) as e:
-        print(format_error(e, verbose=verbose > 0), file=sys.stderr)
+        print(format_error(e, verbose=verbose_on), file=sys.stderr)
         raise typer.Exit(code=1) from None
     except ValidationError as e:
         print(format_validation_error(e), file=sys.stderr)
@@ -765,9 +766,7 @@ def _run_study_impl(
         study_display.start(print_header=False)
 
     # Track elapsed time around the study run
-    import time as _time
-
-    _study_start = _time.monotonic()
+    _study_start = time.monotonic()
 
     # Run the study with live progress display.
     # skip_preflight=True because we already ran preflight above.
@@ -791,7 +790,7 @@ def _run_study_impl(
         if study_display is not None:
             study_display.stop()
 
-    _study_elapsed = _time.monotonic() - _study_start
+    _study_elapsed = time.monotonic() - _study_start
 
     # Study completion footer
     if study_display is not None:

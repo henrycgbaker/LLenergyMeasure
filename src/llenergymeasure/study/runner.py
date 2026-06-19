@@ -23,6 +23,7 @@ without data corruption.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import multiprocessing
 import os  # noqa: F401 - patch target: tests patch study.runner.os.{killpg,setpgrp}
@@ -65,6 +66,7 @@ from llenergymeasure.study.worker import (
     _kill_process_group,
     _run_experiment_worker,
 )
+from llenergymeasure.utils.io import load_json
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
@@ -152,22 +154,18 @@ def _save_and_record(
         if ts_source_dir is not None:
             config_sidecar_src = ts_source_dir / "config.json"
             if config_sidecar_src.exists():
-                import json as _json
-
                 try:
-                    _payload = _json.loads(config_sidecar_src.read_text())
+                    _payload = load_json(config_sidecar_src)
                     if resolved_config_hash is not None:
                         _payload["resolved_config_hash"] = resolved_config_hash
                     from llenergymeasure.results.persistence import _atomic_write
 
                     _atomic_write(
-                        _json.dumps(_payload, indent=2, default=str),
+                        json.dumps(_payload, indent=2, default=str),
                         result_path.parent / "config.json",
                     )
                 except Exception as exc:  # pragma: no cover - best-effort
-                    import logging as _logging
-
-                    _logging.getLogger(__name__).debug("config.json sidecar move failed: %s", exc)
+                    logger.debug("config.json sidecar move failed: %s", exc)
                 finally:
                     config_sidecar_src.unlink(missing_ok=True)
 
@@ -541,8 +539,6 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         Best-effort - failures are logged at DEBUG to avoid masking study results.
         """
         try:
-            import json as _json
-
             from llenergymeasure.study.equivalence_groups import (
                 EquivalenceGroups,
                 ObservedCollisionGroup,
@@ -578,7 +574,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             sidecars: list[dict[str, Any]] = []
             for config_json in self.study_dir.rglob("config.json"):
                 with contextlib.suppress(Exception):
-                    sidecars.append(_json.loads(config_json.read_text()))
+                    sidecars.append(load_json(config_json))
             post_run_groups: list[ObservedCollisionGroup] = find_observed_collisions(sidecars)
 
             groups = EquivalenceGroups(
@@ -686,9 +682,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         config_hash = compute_declared_config_hash(config)
         # Increment per-config_hash counter: 1st run → cycle=1, 2nd → cycle=2, etc.
-        current = self._cycle_counters.get(config_hash, 0) + 1
-        self._cycle_counters[config_hash] = current
-        cycle = current
+        cycle = self._cycle_counters.get(config_hash, 0) + 1
+        self._cycle_counters[config_hash] = cycle
 
         # Docker dispatch path - check runner spec for this engine
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
@@ -868,10 +863,10 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 resolved_config_hash=self._resolved_hashes.get(config_hash),
             )
             if self._progress:
+                host_path = self.result_files[-1] if self.result_files else None
                 # Emit save paths as substeps BEFORE end_experiment_ok (which clears
                 # inner step display). This makes paths visible inline in TTY mode.
-                if self.result_files:
-                    host_path = self.result_files[-1]
+                if host_path is not None:
                     # Docker experiments: show container path first, then host path.
                     # The original container path is /run/llem; by this point output_dir
                     # has been rewritten to the host temp dir, so use the known constant.
@@ -902,8 +897,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                     mj_per_tok_total=mj_per_tok_total,
                 )
                 # Also store for finish() footer
-                if self.result_files:
-                    host_path = self.result_files[-1]
+                if host_path is not None:
                     self._progress.on_experiment_saved(index, host_path)
 
     def _run_one_docker(

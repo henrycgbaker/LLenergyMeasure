@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from llenergymeasure.utils.exceptions import StudyError
+from llenergymeasure.utils.io import load_json
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
@@ -44,7 +44,7 @@ def find_resumable_study(output_dir: Path) -> Path | None:
         if not manifest_path.exists():
             continue
         try:
-            data = json.loads(manifest_path.read_text())
+            data = load_json(manifest_path)
             status = data.get("status", "")
             if status not in _RESUMABLE_STATUSES:
                 continue
@@ -91,7 +91,7 @@ def load_resume_state(
         )
 
     try:
-        data = json.loads(manifest_path.read_text())
+        data = load_json(manifest_path)
         manifest = StudyManifest.model_validate(data)
     except Exception as exc:
         raise StudyError(

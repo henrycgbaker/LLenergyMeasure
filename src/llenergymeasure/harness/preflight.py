@@ -15,6 +15,7 @@ from pathlib import Path
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine
 from llenergymeasure.utils.exceptions import PreFlightError
+from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ def _check_model_accessible(model_id: str) -> str | None:
     (including when we cannot determine reachability).
     """
     # Local path - starts with /, ./, or ~
-    if model_id.startswith("/") or model_id.startswith("./") or model_id.startswith("~"):
+    if model_id.startswith(("/", "./", "~")):
         path = Path(model_id).expanduser()
         if not path.exists():
             return f"{model_id} not found - path does not exist"
@@ -108,10 +109,10 @@ def _read_model_quant_method(model_id: str) -> str | None:
 
     config_data: dict[str, object] | None = None
 
-    if model_id.startswith("/") or model_id.startswith("./") or model_id.startswith("~"):
+    if model_id.startswith(("/", "./", "~")):
         config_path = Path(model_id).expanduser() / "config.json"
         try:
-            config_data = json.loads(config_path.read_text())
+            config_data = load_json(config_path)
         except (OSError, json.JSONDecodeError) as exc:
             logger.debug("Could not read local config.json for %s: %s", model_id, exc)
             return None
@@ -122,7 +123,7 @@ def _read_model_quant_method(model_id: str) -> str | None:
             from huggingface_hub import hf_hub_download
 
             local = hf_hub_download(repo_id=model_id, filename="config.json")
-            config_data = json.loads(Path(local).read_text())
+            config_data = load_json(local)
         except Exception as exc:
             logger.debug("Could not fetch HF config.json for %s: %s", model_id, exc)
             return None

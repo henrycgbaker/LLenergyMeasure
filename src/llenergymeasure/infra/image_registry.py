@@ -106,18 +106,29 @@ def get_default_image(engine: str) -> str:
     return ghcr_image
 
 
+def inspect_image(image: str, *, timeout: float) -> subprocess.CompletedProcess[bytes] | None:
+    """Run ``docker image inspect <image>``; return the result or None on failure.
+
+    Returns None when docker is missing, the call times out, or the OS rejects
+    it (``FileNotFoundError`` / ``TimeoutExpired`` / ``OSError``). A non-zero
+    return code is NOT a failure here - the ``CompletedProcess`` is returned and
+    the caller inspects ``returncode`` / ``stdout``.
+    """
+    try:
+        return subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True,
+            timeout=timeout,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+
+
 @lru_cache(maxsize=8)
 def _image_exists_locally(image: str) -> bool:
     """Check whether a Docker image tag exists in the local cache."""
-    try:
-        result = subprocess.run(
-            ["docker", "image", "inspect", image],
-            capture_output=True,
-            timeout=TIMEOUT_DOCKER_CLI,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
+    result = inspect_image(image, timeout=TIMEOUT_DOCKER_CLI)
+    return result is not None and result.returncode == 0
 
 
 def resolve_image(

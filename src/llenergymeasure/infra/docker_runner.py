@@ -64,6 +64,7 @@ from llenergymeasure.infra.docker_errors import (
     translate_docker_error,
 )
 from llenergymeasure.utils.exceptions import DockerError
+from llenergymeasure.utils.io import load_json
 
 __all__ = ["DockerRunner"]
 
@@ -392,7 +393,7 @@ class DockerRunner:
                 error_json_path = exchange_dir / f"{config_hash}_error.json"
                 error: DockerError
                 if error_json_path.exists():
-                    payload = json.loads(error_json_path.read_text(encoding="utf-8"))
+                    payload = load_json(error_json_path)
                     error = DockerContainerError(
                         message=f"{payload.get('type', 'UnknownError')}: {payload.get('message', '')}",
                         fix_suggestion="Check the error traceback in the error JSON for details.",
@@ -810,6 +811,19 @@ class DockerRunner:
             except Exception as exc:
                 logger.debug("Watchdog cleanup %s failed: %s", stage, exc)
 
+    def _mount_if_absent(
+        self, cmd: list[str], host: str | Path, container: str, *, extra_env: str | None = None
+    ) -> None:
+        """Append ``-v host:container`` unless the user already mounts ``container``.
+
+        Optionally appends ``-e <extra_env>`` after the mount (e.g. HF_HOME).
+        """
+        if any(cp == container for _, cp in self.extra_mounts):
+            return
+        cmd.extend(["-v", f"{host}:{container}"])
+        if extra_env is not None:
+            cmd.extend(["-e", extra_env])
+
     def _build_docker_cmd(
         self,
         config: Any,
@@ -873,27 +887,26 @@ class DockerRunner:
 
         # TRT-LLM engine cache: persist compiled engines across ephemeral containers
         if config.engine == Engine.TENSORRT:
-            cache_host = str(Path.home() / ".cache" / "trt-llm")
-            cache_container = "/root/.cache/trt-llm"
-            # Only add if not already in extra_mounts (user may override path)
-            if not any(cp == cache_container for _, cp in self.extra_mounts):
-                cmd.extend(["-v", f"{cache_host}:{cache_container}"])
+            self._mount_if_absent(
+                cmd, str(Path.home() / ".cache" / "trt-llm"), "/root/.cache/trt-llm"
+            )
 
         # Auto-mount the host HuggingFace cache so model weights persist across
         # ephemeral containers; otherwise each run re-downloads the full model.
-        hf_cache_host = Path.home() / ".cache" / "huggingface"
         hf_cache_container = "/root/.cache/huggingface"
-        if not any(cp == hf_cache_container for _, cp in self.extra_mounts):
-            cmd.extend(["-v", f"{hf_cache_host}:{hf_cache_container}"])
-            cmd.extend(["-e", f"HF_HOME={hf_cache_container}"])
+        self._mount_if_absent(
+            cmd,
+            Path.home() / ".cache" / "huggingface",
+            hf_cache_container,
+            extra_env=f"HF_HOME={hf_cache_container}",
+        )
 
         # Auto-mount the host flashinfer JIT cache so TRT-LLM warm runs reuse
         # already-compiled per-arch attention kernels (cold compile is minutes).
         if config.engine == Engine.TENSORRT:
-            fi_cache_host = Path.home() / ".cache" / "flashinfer"
-            fi_cache_container = "/root/.cache/flashinfer"
-            if not any(cp == fi_cache_container for _, cp in self.extra_mounts):
-                cmd.extend(["-v", f"{fi_cache_host}:{fi_cache_container}"])
+            self._mount_if_absent(
+                cmd, Path.home() / ".cache" / "flashinfer", "/root/.cache/flashinfer"
+            )
 
         # Forward LLEM_* env vars into the container so framework defaults set
         # on the host (e.g. LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP) reach the
@@ -999,7 +1012,7 @@ class DockerRunner:
                 fix_suggestion="Check container logs for errors during experiment execution.",
             )
 
-        raw = json.loads(result_path.read_text(encoding="utf-8"))
+        raw = load_json(result_path)
 
         # Container may write an error payload even on exit 0 (defensive check).
         # Error payloads have "type" and "traceback" keys (mirror StudyRunner worker format).

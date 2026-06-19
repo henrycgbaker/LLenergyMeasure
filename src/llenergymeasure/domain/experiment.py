@@ -23,6 +23,11 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 
+def engine_str(engine: Any) -> str:
+    """Coerce an Engine enum (or plain string) to its string value."""
+    return engine.value if hasattr(engine, "value") else str(engine)
+
+
 @functools.lru_cache(maxsize=128)
 def _hash_canonical(canonical: str) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]

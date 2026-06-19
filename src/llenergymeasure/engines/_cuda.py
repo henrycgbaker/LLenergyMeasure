@@ -10,6 +10,8 @@ import gc
 import logging
 from typing import Any
 
+from llenergymeasure.utils.formatting import bytes_to_mb
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +38,7 @@ def get_cuda_peak_memory_mb() -> float:
         import torch
 
         if torch.cuda.is_available():
-            return torch.cuda.max_memory_allocated() / (1024 * 1024)  # type: ignore[no-any-return]
+            return bytes_to_mb(torch.cuda.max_memory_allocated())
     except Exception:
         pass
     return 0.0

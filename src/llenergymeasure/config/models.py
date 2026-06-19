@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine
 from llenergymeasure.config.warnings import ConfigValidationWarning
+from llenergymeasure.domain.experiment import engine_str
 
 logger = logging.getLogger(__name__)
 
@@ -393,7 +394,7 @@ class ExperimentConfig(BaseModel):
         if not preset_name or preset_name not in SAMPLING_PRESETS:
             return data
         engine = data.get("engine", Engine.TRANSFORMERS)
-        engine_key = engine.value if hasattr(engine, "value") else str(engine)
+        engine_key = engine_str(engine)
         # Ensure the engine section and its sampling sub-dict exist as dicts
         # (an explicit ``engine: null`` in YAML would otherwise leave None here).
         engine_section = data.get(engine_key)

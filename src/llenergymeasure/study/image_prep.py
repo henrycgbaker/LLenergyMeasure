@@ -26,6 +26,7 @@ from llenergymeasure.config.ssot import (
     RUNNER_DOCKER,
     TIMEOUT_DOCKER_INSPECT,
 )
+from llenergymeasure.infra.image_registry import inspect_image
 from llenergymeasure.infra.version_handshake import (
     ENV_SKIP_IMAGE_CHECK,
     LABEL_SCHEMA_FINGERPRINT,
@@ -156,14 +157,7 @@ class _ImageMixin:
             t0 = time.monotonic()
 
             # Check if image exists locally
-            try:
-                check = subprocess.run(
-                    ["docker", "image", "inspect", image],
-                    capture_output=True,
-                    timeout=TIMEOUT_DOCKER_INSPECT,
-                )
-            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-                check = None
+            check = inspect_image(image, timeout=TIMEOUT_DOCKER_INSPECT)
 
             if check is not None and check.returncode == 0:
                 elapsed = time.monotonic() - t0

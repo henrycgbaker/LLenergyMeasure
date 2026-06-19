@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from functools import cache, lru_cache
 
 from llenergymeasure.config.ssot import ENGINE_PACKAGES, TIMEOUT_DOCKER_INSPECT, Engine
+from llenergymeasure.infra.image_registry import inspect_image
 from llenergymeasure.utils.compat import StrEnum
 
 __all__ = [
@@ -340,14 +341,9 @@ def inspect_image_stamp(image: str, *, timeout: float = TIMEOUT_DOCKER_INSPECT) 
     timeout, JSON parse error, missing labels). The caller decides whether the
     absence of labels is a warning or an error.
     """
-    try:
-        result = subprocess.run(
-            ["docker", "image", "inspect", image],
-            capture_output=True,
-            timeout=timeout,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
-        logger.debug("docker image inspect failed for %s: %s", image, exc)
+    result = inspect_image(image, timeout=timeout)
+    if result is None:
+        logger.debug("docker image inspect failed for %s", image)
         return _EMPTY_STAMP
 
     if result.returncode != 0:

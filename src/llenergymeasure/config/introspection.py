@@ -31,6 +31,24 @@ from llenergymeasure.config.ssot import Engine
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
+
+def _literal_options(field_info: FieldInfo | None) -> list[str]:
+    """Extract the string options from an ``Optional[Literal[...]]`` field.
+
+    Returns an empty list when the field is missing, unannotated, or not a
+    Literal union.
+    """
+    if not field_info or not field_info.annotation:
+        return []
+    for arg in get_args(field_info.annotation):
+        if arg is type(None):
+            continue
+        inner_args = get_args(arg)
+        if inner_args:
+            return [a for a in inner_args if a is not None]
+    return []
+
+
 # =============================================================================
 # Field Metadata Helpers (SSOT display labels and roles)
 # =============================================================================
@@ -367,27 +385,8 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
     tensorrt_fields = set(TensorRTConfig.model_fields.keys())
 
     # Get quantization Literal values for vLLM and TensorRT
-    vllm_quant_field = VLLMEngineConfig.model_fields.get("quantization")
-    vllm_quant_options: list[str] = []
-    if vllm_quant_field and vllm_quant_field.annotation:
-        args = get_args(vllm_quant_field.annotation)
-        # Filter out None from Optional[Literal[...]]
-        for arg in args:
-            if arg is not type(None):
-                inner_args = get_args(arg)
-                if inner_args:
-                    vllm_quant_options = [a for a in inner_args if a is not None]
-
-    trt_quant_field = TensorRTQuantConfig.model_fields.get("quant_algo")
-    trt_quant_options: list[str] = []
-    if trt_quant_field and trt_quant_field.annotation:
-        args = get_args(trt_quant_field.annotation)
-        # Filter out None from Optional[Literal[...]]
-        for arg in args:
-            if arg is not type(None):
-                inner_args = get_args(arg)
-                if inner_args:
-                    trt_quant_options = [a for a in inner_args if a is not None]
+    vllm_quant_options = _literal_options(VLLMEngineConfig.model_fields.get("quantization"))
+    trt_quant_options = _literal_options(TensorRTQuantConfig.model_fields.get("quant_algo"))
 
     return {
         "tensor_parallel": {

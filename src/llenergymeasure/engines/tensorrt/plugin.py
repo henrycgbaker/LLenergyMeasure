@@ -178,13 +178,7 @@ class TensorRTEngine:
 
         gpu_arch = get_gpu_architecture()
 
-        trt_version = "unknown"
-        try:
-            import tensorrt_llm as _trt
-
-            trt_version = getattr(_trt, "__version__", "unknown")
-        except Exception:
-            pass
+        trt_version = getattr(_trt_mod, "__version__", "unknown")
 
         build_start = time.perf_counter()
 
@@ -256,8 +250,6 @@ class TensorRTEngine:
         Raises:
             EngineError: On OOM or other inference failures.
         """
-        import time
-
         llm, sampling_params = model
 
         # Reset peak stats before the measurement loop
