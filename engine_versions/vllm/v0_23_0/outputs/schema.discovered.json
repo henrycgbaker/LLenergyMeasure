@@ -3,9 +3,9 @@
   "engine": "vllm",
   "engine_version": "0.23.0",
   "engine_commit_sha": null,
-  "image_ref": "vllm/vllm-openai:v0.23.0",
+  "image_ref": "llenergymeasure:vllm-0.23.0",
   "base_image_ref": null,
-  "discovered_at": "2026-06-15T12:05:12.510069+00:00",
+  "discovered_at": "2026-06-15T14:05:29+02:00",
   "discovery_method": "dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams) + config/*.py declarative-constraint overlay",
   "discovery_limitations": [
     {
