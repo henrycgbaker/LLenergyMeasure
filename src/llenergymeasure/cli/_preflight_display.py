@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 from rich.panel import Panel
 from rich.text import Text
 
-from llenergymeasure.config.grid import SkippedConfig
 from llenergymeasure.config.introspection import (
     get_display_label,
     get_field_role,
@@ -30,60 +29,6 @@ from llenergymeasure.config.ssot import SOURCE_MULTI_ENGINE_ELEVATION
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
     from llenergymeasure.infra.runner_resolution import RunnerSpec
-
-
-def format_preflight_summary(
-    study_config: StudyConfig,
-    skipped: list[SkippedConfig] | None = None,
-) -> str:
-    """Return pre-flight display string for terminal output.
-
-    Format (CONTEXT.md locked):
-        Study [abc123de]: 4 configs x 3 cycles = 12 runs
-        Order: interleave
-        Skipping 2/6: (per-skip log line with reason)
-          - transformers, fp32: [Pydantic message]
-        WARNING: 67% of sweep configs are invalid - check your sweep dimensions.
-
-    Args:
-        study_config: Resolved StudyConfig (after load_study_config).
-        skipped: Optional list of SkippedConfig from expand_grid.
-            If None, derives skip info from study_config.skipped_configs.
-
-    Returns:
-        Multi-line string for terminal display.
-    """
-    n_cycles = study_config.study_execution.n_cycles
-    n_runs = len(study_config.experiments)
-    # n_configs is the unique config count (before cycle multiplication)
-    n_configs = n_runs // n_cycles if n_cycles > 0 else n_runs
-    hash_display = study_config.study_design_hash or "unknown"
-
-    lines = [
-        f"Study [{hash_display}]: {n_configs} configs x {n_cycles} cycles = {n_runs} runs",
-        f"Order: {study_config.study_execution.experiment_order}",
-    ]
-
-    # Handle skipped configs display
-    skipped_dicts = (
-        study_config.skipped_configs if skipped is None else [s.to_dict() for s in skipped]
-    )
-    if skipped_dicts:
-        total_generated = n_configs + len(skipped_dicts)
-        lines.append(f"Skipping {len(skipped_dicts)}/{total_generated}:")
-        for s in skipped_dicts:
-            label = s.get("short_label", "unknown")
-            reason = s.get("reason", "unknown error")
-            lines.append(f"  - {label}: {reason}")
-
-        skip_rate = len(skipped_dicts) / total_generated if total_generated > 0 else 0
-        if skip_rate > 0.5:
-            lines.append(
-                f"  WARNING: {skip_rate:.0%} of sweep configs are invalid "
-                "-- check your sweep dimensions."
-            )
-
-    return "\n".join(lines)
 
 
 def build_preflight_panel(

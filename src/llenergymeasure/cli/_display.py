@@ -7,8 +7,6 @@ Progress/header output goes to stderr (transient display area).
 from __future__ import annotations
 
 import difflib
-import shutil
-import sys
 import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,10 +17,9 @@ if TYPE_CHECKING:
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
+from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.utils.exceptions import DockerError, LLEMError
 from llenergymeasure.utils.formatting import format_elapsed as _format_duration
-from llenergymeasure.utils.formatting import model_short_name
 from llenergymeasure.utils.formatting import sig3 as _sig3
 
 
@@ -307,114 +304,3 @@ def print_study_dry_run(
     print()
 
     print("Config valid. Run without --dry-run to start.")
-
-
-def print_experiment_header(config: ExperimentConfig) -> None:
-    """Print one-line experiment header to stderr (progress area).
-
-    Uses ``format_experiment_header()`` for consistent formatting across
-    single-experiment and study modes.
-    """
-    from llenergymeasure.utils.formatting import format_experiment_header
-
-    print(f"Experiment: {format_experiment_header(config)}", file=sys.stderr)
-
-
-def print_study_summary(result: StudyResult) -> None:
-    """Print study summary table to stdout.
-
-    Columns: #, Status, Config, Total, Infer, Energy, Adj. E, tok/s, mJ/tok
-    Failed experiments show error type instead of metrics.
-    Footer with totals.
-
-    Args:
-        result: Completed StudyResult.
-    """
-    print()
-    print(f"Study: {result.study_name or 'unnamed'}")
-    if result.study_design_hash:
-        print(f"Hash:  {result.study_design_hash}")
-    print()
-
-    header = (
-        f"{'#':>3}  {'':>2}  {'Config':<40}  {'Total':>8}  {'Infer':>8}"
-        f"  {'Energy':>10}  {'Adj. E':>10}  {'tok/s':>8}  {'mJ/tok':>8}"
-    )
-    print(header)
-    print("-" * len(header))
-
-    # Rolling viewport: show most recent rows that fit in terminal height.
-    terminal_height = shutil.get_terminal_size().lines
-    available_rows = max(10, terminal_height - 15)
-    experiments = result.experiments
-    hidden = max(0, len(experiments) - available_rows)
-    if hidden > 0:
-        print(f"  ({hidden} earlier results not shown)")
-        experiments = experiments[hidden:]
-    start_idx = hidden + 1
-
-    # Table rows
-    for i, exp in enumerate(experiments, start_idx):
-        # Build compact config string: model_short / engine
-        model_short = model_short_name(exp.model_name)
-        if len(model_short) > 20:
-            model_short = "..." + model_short[-17:]
-        engine = exp.engine
-        config_str = f"{model_short} / {engine}"
-        if len(config_str) > 40:
-            config_str = config_str[:37] + "..."
-
-        # Status icon
-        is_ok = exp.total_energy_j is not None and exp.total_energy_j > 0
-        status_icon = "\u2713" if is_ok else "\u2717"
-
-        total_str = _format_duration(exp.duration_sec)
-        infer_str = (
-            _format_duration(exp.total_inference_time_sec)
-            if exp.total_inference_time_sec > 0
-            else "-"
-        )
-        energy_str = f"{_sig3(exp.total_energy_j)} J" if exp.total_energy_j else "-"
-        adj_energy_str = (
-            f"{_sig3(exp.energy_adjusted_j)} J" if exp.energy_adjusted_j is not None else "-"
-        )
-        toks_str = _sig3(exp.avg_tokens_per_second) if exp.avg_tokens_per_second else "-"
-
-        # mJ/tok: prefer adjusted (baseline-subtracted), fall back to total.
-        # No recomputation - show "-" if both null.
-        if exp.mj_per_tok_adjusted is not None:
-            mj_str = _sig3(exp.mj_per_tok_adjusted)
-        elif exp.mj_per_tok_total is not None:
-            mj_str = _sig3(exp.mj_per_tok_total)
-        else:
-            mj_str = "-"
-
-        print(
-            f"{i:>3}  {status_icon:>2}  {config_str:<40}  {total_str:>8}  {infer_str:>8}"
-            f"  {energy_str:>10}  {adj_energy_str:>10}  {toks_str:>8}  {mj_str:>8}"
-        )
-
-    print("-" * len(header))
-
-    # Footer with totals
-    s = result.summary
-    if s.total_experiments > 0:
-        print(
-            f"Total: {s.completed}/{s.total_experiments} completed"
-            f"  |  {_format_duration(s.total_wall_time_s)}"
-            f"  |  {_sig3(s.total_energy_j)} J"
-        )
-        if s.failed > 0:
-            print(f"Failed: {s.failed} experiment(s)")
-        if s.warnings:
-            for w in s.warnings:
-                print(f"  Warning: {w}")
-    print()
-
-    # Output paths
-    if result.result_files:
-        print(f"Results saved: {len(result.result_files)} file(s)")
-        for path in result.result_files[:3]:
-            print(f"  {path}")
-        if len(result.result_files) > 3:
-            print(f"  ... and {len(result.result_files) - 3} more")
