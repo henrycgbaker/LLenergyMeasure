@@ -77,12 +77,6 @@ Raw results and aggregated results both include:
 
 Schema version allows backward-compatible loading of older results.
 
-## Security
-
-- Experiment IDs are sanitized before filesystem operations
-- Path traversal prevented via `is_safe_path()` checks
-- See `../utils/security.py` for implementation
-
 ## CLI Commands
 
 ```bash

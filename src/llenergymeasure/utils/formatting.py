@@ -82,21 +82,6 @@ def short_name(ref: str) -> str:
 model_short_name = short_name
 
 
-def compute_mj_per_tok(
-    energy_j: float, throughput_tok_s: float, duration_sec: float
-) -> float | None:
-    """Compute millijoules per token from energy, throughput, and duration.
-
-    Returns None if any input is missing or zero.
-    """
-    if not energy_j or not throughput_tok_s or not duration_sec:
-        return None
-    total_tokens = throughput_tok_s * duration_sec
-    if total_tokens <= 0:
-        return None
-    return (energy_j / total_tokens) * 1000
-
-
 _HEADER_MAX_LEN = 70
 """Maximum experiment header length before truncation."""
 

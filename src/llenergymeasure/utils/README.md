@@ -55,17 +55,12 @@ from llenergymeasure.utils.constants import (
 ## security.py
 
 ```python
-from llenergymeasure.utils.security import sanitize_experiment_id, is_safe_path, validate_path
+from llenergymeasure.utils.security import trust_remote_code_enabled
 
-# Sanitise experiment IDs for filesystem use (allows alphanumeric, _, -, .)
-safe_id = sanitize_experiment_id("my experiment/2024")  # "my_experiment_2024"
-
-# Prevent path traversal (uses Path.is_relative_to(), handles edge cases)
-if is_safe_path(base_dir=Path("results"), target_path=user_path):
+# Opt-in for HuggingFace trust_remote_code via LLEM_TRUST_REMOTE_CODE.
+# Unset / 0 / false means the HF default (False).
+if trust_remote_code_enabled():
     ...
-
-# Validate and resolve a path
-resolved = validate_path(path, must_exist=True)
 ```
 
 ## Layer constraints

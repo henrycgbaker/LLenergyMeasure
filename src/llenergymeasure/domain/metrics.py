@@ -8,75 +8,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, computed_field
 
 # =============================================================================
-# Precision Metadata - For cross-engine comparisons
-# =============================================================================
-
-
-class PrecisionMetadata(BaseModel):
-    """Precision metadata for cross-engine efficiency comparisons.
-
-    Tracks the actual precision used for weights, activations, and compute
-    operations. This enables normalised efficiency comparisons across engines
-    using different quantization methods.
-
-    Precision factors for effective FLOPs:
-        FP32 = 1.0
-        FP16/BF16 = 1.0 (same effective ops)
-        FP8 = 0.5 (half precision)
-        INT8 = 0.5 (half precision)
-        INT4 = 0.25 (quarter precision)
-    """
-
-    weights: Literal["fp32", "fp16", "bf16", "fp8", "int8", "int4", "mixed"] = Field(
-        default="fp16",
-        description="Weight storage precision",
-    )
-    activations: Literal["fp32", "fp16", "bf16", "fp8", "int8"] = Field(
-        default="fp16",
-        description="Activation precision during inference",
-    )
-    compute: Literal["fp32", "fp16", "bf16", "fp8", "int8", "tf32"] = Field(
-        default="fp16",
-        description="Actual compute precision",
-    )
-
-    # For mixed precision - breakdown by layer type
-    mixed_precision_breakdown: dict[str, float] | None = Field(
-        default=None,
-        description="Breakdown of precision usage by layer type (for mixed precision)",
-    )
-
-    # Quality tracking
-    quantization_method: str | None = Field(
-        default=None,
-        description="Quantization method used (bitsandbytes, gptq, awq, trt_ptq, etc.)",
-    )
-    perplexity_degradation: float | None = Field(
-        default=None,
-        description="Estimated perplexity degradation vs FP16 baseline (0.0 = no degradation)",
-    )
-
-    @property
-    def precision_factor(self) -> float:
-        """Compute effective FLOPs factor based on precision.
-
-        Used to calculate effective_flops = theoretical_flops * precision_factor.
-        Lower precision = lower effective FLOPs (less computational work).
-        """
-        precision_factors = {
-            "fp32": 1.0,
-            "fp16": 1.0,
-            "bf16": 1.0,
-            "tf32": 1.0,
-            "fp8": 0.5,
-            "int8": 0.5,
-            "int4": 0.25,
-            "mixed": 0.75,  # Conservative estimate for mixed
-        }
-        return precision_factors.get(self.compute, 1.0)
-
-
-# =============================================================================
 # FLOPs Result
 # =============================================================================
 
@@ -144,28 +75,6 @@ class EnergyMetrics(BaseModel):
     duration_sec: float = Field(..., description="Measurement duration in seconds")
     emissions_kg_co2: float = Field(0.0, description="Carbon emissions in kg CO2")
     energy_per_token_j: float = Field(0.0, description="Energy per token in Joules")
-
-    @classmethod
-    def placeholder(cls, duration_sec: float = 0.0) -> "EnergyMetrics":
-        """Create placeholder metrics when energy measurement is unavailable.
-
-        Args:
-            duration_sec: Optional duration to record (e.g. from inference time).
-
-        Returns:
-            EnergyMetrics with all values zeroed.
-        """
-        return cls(
-            total_energy_j=0.0,
-            gpu_energy_j=0.0,
-            cpu_energy_j=0.0,
-            ram_energy_j=0.0,
-            gpu_power_w=0.0,
-            cpu_power_w=0.0,
-            duration_sec=duration_sec,
-            emissions_kg_co2=0.0,
-            energy_per_token_j=0.0,
-        )
 
     @property
     def total_power_w(self) -> float:
@@ -289,60 +198,6 @@ class WarmupResult(BaseModel):
     )
 
 
-class ComputeMetrics(BaseModel):
-    """Computational metrics (FLOPs, memory)."""
-
-    flops_total: float = Field(..., description="Total FLOPs for the inference")
-    flops_per_token: float = Field(0.0, description="FLOPs per token")
-    flops_per_second: float = Field(0.0, description="FLOPs throughput")
-    peak_memory_mb: float = Field(
-        0.0,
-        description=(
-            "Peak GPU memory allocated during the inference measurement window (MB). "
-            "Captured via torch.cuda.max_memory_allocated() after resetting stats at "
-            "measurement start (post-warmup). Reflects KV cache + activations + "
-            "batch buffers, NOT model weights. 0.0 = not measured."
-        ),
-    )
-    model_memory_mb: float = Field(
-        0.0,
-        description=(
-            "GPU memory after model load, before inference (MB). "
-            "Represents model weights + framework overhead. "
-            "Captured via torch.cuda.max_memory_allocated() immediately after from_pretrained(). "
-            "0.0 = not measured."
-        ),
-    )
-
-    flops_method: str = Field(
-        "unknown", description="Method used to estimate FLOPs (calflops, architecture, parameter)"
-    )
-    flops_confidence: str = Field("unknown", description="Confidence level (high, medium, low)")
-    compute_precision: str = Field("fp16", description="Compute precision used")
-
-
-class CombinedMetrics(BaseModel):
-    """All metrics combined for a single measurement."""
-
-    inference: InferenceMetrics
-    energy: EnergyMetrics
-    compute: ComputeMetrics
-
-    @property
-    def efficiency_tokens_per_joule(self) -> float:
-        """Tokens generated per Joule of energy."""
-        if self.energy.total_energy_j > 0:
-            return self.inference.total_tokens / self.energy.total_energy_j
-        return 0.0
-
-    @property
-    def efficiency_flops_per_watt(self) -> float:
-        """FLOPs per Watt (computational efficiency)."""
-        if self.energy.total_power_w > 0:
-            return self.compute.flops_per_second / self.energy.total_power_w
-        return 0.0
-
-
 # =============================================================================
 # Extended Efficiency Metrics - Consistent schema with conditional computation
 # =============================================================================
@@ -361,7 +216,8 @@ class MemoryEfficiencyMetrics(BaseModel):
         default=0.0,
         description=(
             "Peak GPU memory during inference measurement window (MB). "
-            "See ComputeMetrics.peak_memory_mb for full semantics. 0.0 = not measured."
+            "Reflects KV cache + activations + batch buffers, not model weights. "
+            "0.0 = not measured."
         ),
     )
     inference_memory_mb: float = Field(
