@@ -1,4 +1,4 @@
-# DO NOT EDIT - regenerated from engine_versions/tensorrt/v1_1_0/outputs/{curated.yaml,schema.discovered.json}
+# DO NOT EDIT - regenerated from engine_versions/tensorrt/v1_2_0/outputs/{curated.yaml,schema.discovered.json}
 # Edit those upstream and run `uv run python scripts/engine_producers/regen_engine_configs.py --write`.
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ class EngineParams(BaseModel):
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
         ),
-    ] = None
+    ] = 8192
     """
     The maximum number of tokens.
     """

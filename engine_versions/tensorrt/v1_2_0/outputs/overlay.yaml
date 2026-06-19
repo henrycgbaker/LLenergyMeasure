@@ -1,0 +1,83 @@
+# Hand-authored overlay for tensorrt-llm 0.21.0 (Move 2 narrowings channel).
+#
+# Recovers the field-level bounds + Literal sets the pre-v0.10 hand-written
+# TensorRTConfig / TensorRTSamplingConfig enforced at parse and the
+# engine_configs.py migration dropped. The codegen projects each narrowing
+# onto the generated Config class as a Field(ge/le/...) bound or a Literal.
+#
+# Scope (judgement, per the R3 backfill rubric): tensorrt's current pin
+# (0.21.0) is the same release era the hand-written classes were authored
+# against, so both the numeric bounds and the top-level Literal sets (dtype,
+# backend) are carried with high confidence. The numeric bounds also appear in
+# the deleted introspection.py custom-test-values block (e.g. max_batch_size 0
+# violates ge=1), direct evidence they fired at parse.
+#
+# Only top-level curated fields are narrowed: the nested sub-config Literals
+# the hand-written classes carried (quant_config.quant_algo,
+# kv_cache_config.free_gpu_memory_fraction, scheduler_config.*) live inside
+# QuantConfig / KvCacheConfig / SchedulerConfig leaves that this pin does not
+# expose as first-class curated fields, so they fall outside the overlay's
+# "fields present in the discovered schema or curated surface" rule.
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 0.21.0
+
+_narrowing_reason: &reason "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
+
+narrowings:
+  engine_params:
+    max_batch_size:
+      minimum: 1
+      x-narrowing-reason: *reason
+    tensor_parallel_size:
+      minimum: 1
+      x-narrowing-reason: *reason
+    pipeline_parallel_size:
+      minimum: 1
+      x-narrowing-reason: *reason
+    max_input_len:
+      minimum: 1
+      x-narrowing-reason: *reason
+    max_seq_len:
+      minimum: 1
+      x-narrowing-reason: *reason
+    max_num_tokens:
+      minimum: 1
+      x-narrowing-reason: *reason
+    dtype:
+      # main's pre-v0.10 Literal was ["float16", "bfloat16"], but the discovered
+      # schema shows the engine's own default is "auto" - so the old set omitted a
+      # value the engine accepts (a main-side oversight; vllm's equivalent Literal
+      # did include "auto"). Restore the real intent (reject float32; TRT-LLM is
+      # fp16/bf16-only) WITHOUT excluding the engine default.
+      enum: ["auto", "float16", "bfloat16"]
+      x-narrowing-reason: *reason
+    backend:
+      enum: ["trt", "pytorch", "_autodeploy"]
+      x-narrowing-reason: *reason
+  sampling_params:
+    temperature:
+      minimum: 0.0
+      maximum: 2.0
+      x-narrowing-reason: *reason
+    top_k:
+      minimum: 0
+      x-narrowing-reason: *reason
+    top_p:
+      minimum: 0.0
+      maximum: 1.0
+      x-narrowing-reason: *reason
+    repetition_penalty:
+      minimum: 0.1
+      maximum: 10.0
+      x-narrowing-reason: *reason
+    min_p:
+      minimum: 0.0
+      maximum: 1.0
+      x-narrowing-reason: *reason
+    min_tokens:
+      minimum: 0
+      x-narrowing-reason: *reason
+    n:
+      minimum: 1
+      x-narrowing-reason: *reason
