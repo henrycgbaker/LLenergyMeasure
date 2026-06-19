@@ -120,8 +120,8 @@ def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCol
 def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
     """Write :class:`EquivalenceGroups` to ``path`` atomically as JSON.
 
-    ``json.dumps`` serialises frozen-dataclass tuples as arrays naturally, so
-    no pre-conversion is needed.
+    Each group dataclass is converted to a dict via ``asdict`` before dumping;
+    the top-level scalar fields are added by hand.
     """
     payload = {
         "study_id": groups.study_id,

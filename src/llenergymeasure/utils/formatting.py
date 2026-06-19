@@ -187,8 +187,7 @@ def _collect_engine_params(
         if hasattr(value, "model_fields"):
             _collect_engine_params(value, params, prefix=field_name + ".", max_depth=max_depth - 1)
             continue
-        # Skip True/False for boolean fields where True is the "interesting" case
-        # and skip values that match field defaults
+        # Skip values that match the field default
         field_info = model_fields[field_name]
         field_default = getattr(field_info, "default", None)
         if value == field_default:

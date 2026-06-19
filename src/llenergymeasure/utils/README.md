@@ -1,18 +1,22 @@
 # utils/ - Cross-cutting Utilities
 
-Shared exceptions and security utilities. Layer 0 in the six-layer architecture.
+Shared foundation helpers. Layer 0 in the six-layer architecture.
 
 ## Purpose
 
-Provides the foundation all other layers import: exception hierarchy and filesystem security helpers.
+Provides the foundation all other layers import: the exception hierarchy,
+environment-variable helpers, formatting/IO utilities, and Python-version shims.
 
 ## Modules
 
 | Module | Description |
 |--------|-------------|
 | `exceptions.py` | Exception hierarchy rooted at `LLEMError` |
-| `security.py` | Path safety and experiment ID sanitisation |
-| `formatting.py` | Number / name formatting helpers |
+| `env_config.py` | Canonical `LLEM_*` env-var constants and their reader helpers |
+| `security.py` | `trust_remote_code_enabled()` env-var gate for HuggingFace `trust_remote_code` |
+| `formatting.py` | Number / name / byte formatting helpers |
+| `io.py` | Filesystem IO helpers (`load_json`) |
+| `compat.py` | Python-version compatibility shims (e.g. `StrEnum` backport) |
 | `__init__.py` | Package marker |
 
 ## exceptions.py
