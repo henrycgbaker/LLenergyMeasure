@@ -748,41 +748,19 @@ class StudyStepDisplay:
             )
             self._live.start()
 
-    def add_historical_rows(
-        self,
-        rows: list[
-            tuple[
-                int,
-                str,
-                str,
-                float,
-                float | None,
-                float | None,
-                float | None,
-                float | None,
-                float | None,
-            ]
-        ],
-    ) -> None:
+    def add_historical_rows(self, rows: list[_CompletedRow]) -> None:
         """Pre-populate the completed table with rows from a previous run.
 
         Used by --resume to show previously completed experiments in the same
         table format as live results. Must be called before start().
 
-        Historical rows use status "PREV_OK" / "PREV_FAIL" to render dimmed
-        with a distinct marker, visually separating them from live results.
-
-        Args:
-            rows: List of (index, status, config_summary, elapsed_seconds,
-                  inference_sec, energy_j, adj_energy_j, throughput, mj_tok).
-                  status is "OK" or "FAIL".
+        Each row's status ("OK" / "FAIL") is prefixed to "PREV_OK" / "PREV_FAIL"
+        so historical rows render dimmed with a distinct marker, visually
+        separating them from live results.
         """
         with self._lock:
-            for idx, status, config, elapsed, infer, energy, adj_e, tput, mj in rows:
-                hist_status = f"PREV_{status}"
-                self._completed_rows.append(
-                    _CompletedRow(idx, hist_status, config, elapsed, infer, energy, adj_e, tput, mj)
-                )
+            for row in rows:
+                self._completed_rows.append(row._replace(status=f"PREV_{row.status}"))
 
     def stop(self) -> None:
         """Stop Rich Live."""

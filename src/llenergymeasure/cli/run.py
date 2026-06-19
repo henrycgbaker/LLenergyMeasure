@@ -6,7 +6,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from pydantic import ValidationError
@@ -32,6 +32,9 @@ from llenergymeasure.utils.exceptions import (
     PreFlightError,
     StudyError,
 )
+
+if TYPE_CHECKING:
+    from llenergymeasure.cli._step_display import _CompletedRow
 
 # ---------------------------------------------------------------------------
 # Command
@@ -396,11 +399,6 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
 # ---------------------------------------------------------------------------
 
 
-_HistoricalRow = tuple[
-    int, str, str, float, float | None, float | None, float | None, float | None, float | None
-]
-
-
 def _resolve_resume_target(
     resume: bool, resume_dir: Path | None, output: str | None
 ) -> tuple[Path | None, Any, bool]:
@@ -548,13 +546,15 @@ def _print_config_summary(
         )
 
 
-def _build_historical_rows(resume_manifest: Any) -> list[_HistoricalRow]:
+def _build_historical_rows(resume_manifest: Any) -> list[_CompletedRow]:
     """Build completed/failed experiment rows from a resume manifest for pre-population.
 
     Uses a sequential display index (1, 2, 3...) for historical rows and derives
     elapsed from started/completed timestamps when the stored value is missing.
     """
-    historical: list[_HistoricalRow] = []
+    from llenergymeasure.cli._step_display import _CompletedRow
+
+    historical: list[_CompletedRow] = []
     hist_idx = 0
     for entry in resume_manifest.experiments:
         if entry.status not in ("completed", "failed"):
@@ -563,18 +563,17 @@ def _build_historical_rows(resume_manifest: Any) -> list[_HistoricalRow]:
         elapsed = entry.elapsed_seconds or 0.0
         if elapsed == 0.0 and entry.started_at and entry.completed_at:
             elapsed = (entry.completed_at - entry.started_at).total_seconds()
-        status = "OK" if entry.status == "completed" else "FAIL"
         historical.append(
-            (
-                hist_idx,
-                status,
-                entry.config_summary,
-                elapsed,
-                entry.inference_seconds,
-                entry.energy_joules,
-                entry.adj_energy_joules,
-                entry.throughput_tok_s,
-                entry.mj_per_tok,
+            _CompletedRow(
+                idx=hist_idx,
+                status="OK" if entry.status == "completed" else "FAIL",
+                config=entry.config_summary,
+                elapsed=elapsed,
+                inference_sec=entry.inference_seconds,
+                energy_j=entry.energy_joules,
+                adj_energy_j=entry.adj_energy_joules,
+                throughput=entry.throughput_tok_s,
+                mj_per_tok=entry.mj_per_tok,
             )
         )
     return historical
