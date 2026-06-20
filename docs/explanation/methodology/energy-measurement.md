@@ -196,6 +196,53 @@ Use `n >= 50` prompts to ensure sufficient measurement duration.
 
 ---
 
+## Measurement Window
+
+By default LLenergyMeasure integrates energy over the **whole** inference run
+(`measurement_methodology: total`). Two opt-in modes restrict the measured region so that
+warm-up transients (kernel autotuning, clock ramp, cache fill) do not bias energy-per-token
+and throughput:
+
+```yaml
+measurement:
+  measurement_methodology: total        # total | windowed | steady_state  (default: total)
+
+  # windowed mode: explicit window relative to inference start
+  measurement_window: [2.0, 8.0]        # (start_sec, end_sec)
+
+  # steady_state mode: discard a warm-up prefix, measure the remainder
+  warmup_discard_fraction: 0.1          # discard first 10% (default)
+  warmup_discard_seconds: 1.5           # OR discard a fixed number of seconds
+  steady_state_auto_detect: false       # opt-in sliding-window stability detector
+```
+
+- **`total`** - whole run, unchanged default. No pre-cleaning or windowing is applied.
+- **`windowed`** - integrate energy and attribute tokens over an explicit
+  `[start_sec, end_sec]` window.
+- **`steady_state`** - discard a deterministic warm-up prefix (a fraction by default, or a
+  fixed number of seconds) and measure the remainder. Setting `steady_state_auto_detect`
+  enables a lightweight sliding-window stability test (coefficient-of-variation /
+  variance-ratio) that finds the steady-state onset; on failure it falls back to the fixed
+  discard and sets the `steady_state_not_detected` flag in the result.
+
+For `windowed` and `steady_state`, energy is **re-integrated** by feeding the trapezoidal
+integrator only the power samples inside the window (after dropping zero / impossible
+samples and median-filtering transient NVML dropouts). The realised window, the
+methodology actually used, the discard fraction, and the `steady_state_not_detected` flag
+are recorded in the result for auditability.
+
+Tokens and throughput are attributed to the sub-window **proportionally by time**: the
+harness captures per-request and inter-token durations but not absolute per-token
+timestamps, so a window covering 60% of the cleaned inference span is credited with 60% of
+the output tokens. A measurement warning records this approximation, and a second warning
+fires when the realised window is too short to be meaningful.
+
+The survey behind this design (MLPerf Power, SPECpower, the VM-warmup steady-state study,
+and the Cao-Rhinehart detector choice) is recorded in
+[`.product/research/steady-state-measurement-methodology.md`](../../../.product/research/steady-state-measurement-methodology.md).
+
+---
+
 ## Baseline Power
 
 Before inference, LLenergyMeasure measures idle GPU power draw. This baseline represents
