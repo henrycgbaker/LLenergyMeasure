@@ -299,43 +299,34 @@ def test_flops_derived_fields_none_when_zero() -> None:
 # =============================================================================
 
 
-def _make_autoconfig_mock(
-    hidden_size: int = 4096,
-    num_hidden_layers: int = 32,
-    intermediate_size: int | None = None,
-) -> MagicMock:
-    """Build a mock AutoConfig object with standard architecture fields."""
-    cfg = MagicMock()
-    cfg.hidden_size = hidden_size
-    cfg.num_hidden_layers = num_hidden_layers
-    if intermediate_size is not None:
-        cfg.intermediate_size = intermediate_size
-    else:
-        # getattr fallback: MagicMock will return a MagicMock for missing attrs,
-        # so we set it explicitly to simulate the fallback default
-        del cfg.intermediate_size  # Remove auto-attribute so getattr uses default
-    return cfg
+def _patch_autoconfig(cfg: object):
+    """Patch transformers.AutoConfig.from_pretrained to return *cfg*."""
+    mock_autoconfig_cls = MagicMock()
+    mock_autoconfig_cls.from_pretrained.return_value = cfg
+    return patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)})
 
 
 def test_count_params_from_config_success() -> None:
-    """_count_params_from_config returns correct count with known config values.
+    """_count_params_from_config returns correct count for an MHA config.
 
-    Formula: attn = 4 * h * h * layers; ffn = 2 * h * intermediate * layers
-    Total = attn + ffn
+    GQA-aware formula reduces to the MHA formula when kv heads == attn heads:
+    attn = (2*h*q_dim + 2*h*kv_dim) * layers == 4 * h * h * layers (MHA),
+    ffn = 2 * h * intermediate * layers.
     """
     hidden = 64
     layers = 4
+    heads = 8
     intermediate = 256  # = hidden * 4
 
-    mock_cfg = MagicMock()
-    mock_cfg.hidden_size = hidden
-    mock_cfg.num_hidden_layers = layers
-    mock_cfg.intermediate_size = intermediate
+    cfg = {
+        "hidden_size": hidden,
+        "num_hidden_layers": layers,
+        "num_attention_heads": heads,
+        "num_key_value_heads": heads,  # MHA: kv heads == attn heads
+        "intermediate_size": intermediate,
+    }
 
-    mock_autoconfig_cls = MagicMock()
-    mock_autoconfig_cls.from_pretrained.return_value = mock_cfg
-
-    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+    with _patch_autoconfig(cfg):
         result = _count_params_from_config("test/model")
 
     expected_attn = 4 * hidden * hidden * layers  # 4 * 64 * 64 * 4 = 65_536
@@ -349,20 +340,76 @@ def test_count_params_from_config_intermediate_size_default() -> None:
     """_count_params_from_config uses hidden * 4 as default for intermediate_size."""
     hidden = 128
     layers = 2
+    heads = 8
 
-    mock_cfg = MagicMock(spec=["hidden_size", "num_hidden_layers"])
-    mock_cfg.hidden_size = hidden
-    mock_cfg.num_hidden_layers = layers
+    cfg = {
+        "hidden_size": hidden,
+        "num_hidden_layers": layers,
+        "num_attention_heads": heads,
+    }
 
-    mock_autoconfig_cls = MagicMock()
-    mock_autoconfig_cls.from_pretrained.return_value = mock_cfg
-
-    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+    with _patch_autoconfig(cfg):
         result = _count_params_from_config("test/model")
 
     intermediate = hidden * 4  # default
+    # No kv heads -> MHA fallback -> 4 * h * h * layers attention.
     expected = 4 * hidden * hidden * layers + 2 * hidden * intermediate * layers
     assert result == expected
+
+
+def test_count_params_from_config_gqa_below_mha() -> None:
+    """GQA config (kv heads < attn heads) yields fewer params than MHA."""
+    hidden = 512
+    layers = 4
+    heads = 8
+    intermediate = 2048
+
+    mha = {
+        "hidden_size": hidden,
+        "num_hidden_layers": layers,
+        "num_attention_heads": heads,
+        "num_key_value_heads": heads,
+        "intermediate_size": intermediate,
+    }
+    gqa = {**mha, "num_key_value_heads": 2}
+
+    with _patch_autoconfig(mha):
+        mha_params = _count_params_from_config("m/mha")
+    with _patch_autoconfig(gqa):
+        gqa_params = _count_params_from_config("m/gqa")
+
+    assert gqa_params is not None and mha_params is not None
+    assert gqa_params < mha_params
+
+    # GQA shrinks only K and V projections (2 of the 4 attention matrices).
+    q_dim = heads * (hidden // heads)
+    kv_dim = 2 * (hidden // heads)
+    expected_attn = (2 * hidden * q_dim + 2 * hidden * kv_dim) * layers
+    expected = expected_attn + 2 * hidden * intermediate * layers
+    assert gqa_params == expected
+
+
+def test_count_params_from_config_mha_fallback_when_kv_absent() -> None:
+    """Absent num_key_value_heads falls back to MHA (kv heads == attn heads)."""
+    hidden = 512
+    layers = 4
+    heads = 8
+    intermediate = 2048
+
+    no_kv = {
+        "hidden_size": hidden,
+        "num_hidden_layers": layers,
+        "num_attention_heads": heads,
+        "intermediate_size": intermediate,
+    }
+    explicit_mha = {**no_kv, "num_key_value_heads": heads}
+
+    with _patch_autoconfig(no_kv):
+        fallback_params = _count_params_from_config("m/nokv")
+    with _patch_autoconfig(explicit_mha):
+        mha_params = _count_params_from_config("m/mha")
+
+    assert fallback_params == mha_params
 
 
 def test_count_params_from_config_failure() -> None:
@@ -388,18 +435,19 @@ def test_estimate_flops_palm_from_config_success() -> None:
     """estimate_flops_palm_from_config returns FlopsResult with confidence='medium'."""
     hidden = 64
     layers = 4
+    heads = 8
     intermediate = 256
     n_input, n_output = 100, 50
 
-    mock_cfg = MagicMock()
-    mock_cfg.hidden_size = hidden
-    mock_cfg.num_hidden_layers = layers
-    mock_cfg.intermediate_size = intermediate
+    cfg = {
+        "hidden_size": hidden,
+        "num_hidden_layers": layers,
+        "num_attention_heads": heads,
+        "num_key_value_heads": heads,
+        "intermediate_size": intermediate,
+    }
 
-    mock_autoconfig_cls = MagicMock()
-    mock_autoconfig_cls.from_pretrained.return_value = mock_cfg
-
-    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+    with _patch_autoconfig(cfg):
         result = estimate_flops_palm_from_config("test/model", n_input, n_output)
 
     assert result is not None
@@ -407,7 +455,7 @@ def test_estimate_flops_palm_from_config_success() -> None:
     assert result.method == "palm_formula"
     assert result.value > 0
 
-    # Verify formula: 2 * n_params * total_tokens
+    # Verify formula: 2 * n_params * total_tokens (MHA -> 4 * h * h * layers attn)
     n_params = 4 * hidden * hidden * layers + 2 * hidden * intermediate * layers
     expected = 2 * n_params * (n_input + n_output)
     assert result.value == float(expected)

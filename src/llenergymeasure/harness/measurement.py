@@ -489,6 +489,10 @@ class MeasurementHarness:
                 config.measurement.warmup,
                 on_substep=warmup_substep,
             )
+            # The probe at line above ran one extra discarded inference that
+            # warmup_until_converged() does not count; fold it into the warmup
+            # total so warmup_excluded_samples reflects every discarded inference.
+            warmup_result.iterations_completed += 1
         else:
             from llenergymeasure.domain.metrics import WarmupResult
 
@@ -811,26 +815,14 @@ class MeasurementHarness:
     ) -> Any:
         """Estimate FLOPs from model and token counts.
 
-        Fallback chain:
-        1. AutoConfig path - uses estimate_flops_palm_from_config(config.task.model).
-           Works for all engines (no model weights needed).
-        2. hf_model path - uses estimate_flops_palm(hf_model) when extras['hf_model'] is set.
-           Higher-confidence since it counts actual loaded parameters.
+        Fallback chain (highest confidence first):
+        1. hf_model path - uses estimate_flops_palm(hf_model) when extras['hf_model']
+           is set. Higher confidence: counts the actual loaded parameters.
+        2. AutoConfig path - uses estimate_flops_palm_from_config(config.task.model).
+           Works for engines that do not expose a model object (vLLM, TensorRT-LLM).
         3. None - FLOPs unavailable.
         """
-        # Step 1: AutoConfig path (works without loaded model weights)
-        try:
-            result = estimate_flops_palm_from_config(
-                model_name=config.task.model,
-                n_input_tokens=output.input_tokens,
-                n_output_tokens=output.output_tokens,
-            )
-            if result is not None:
-                return result
-        except Exception as e:
-            logger.debug("AutoConfig FLOPs estimation failed: %s", e)
-
-        # Step 2: hf_model path (higher confidence - uses actual loaded parameters)
+        # Step 1: hf_model path (higher confidence - uses actual loaded parameters)
         model_obj = output.extras.get("hf_model")
         if model_obj is not None:
             try:
@@ -841,6 +833,18 @@ class MeasurementHarness:
                 )
             except Exception as e:
                 logger.debug("hf_model FLOPs estimation failed: %s", e)
+
+        # Step 2: AutoConfig path (works without a loaded model object)
+        try:
+            result = estimate_flops_palm_from_config(
+                model_name=config.task.model,
+                n_input_tokens=output.input_tokens,
+                n_output_tokens=output.output_tokens,
+            )
+            if result is not None:
+                return result
+        except Exception as e:
+            logger.debug("AutoConfig FLOPs estimation failed: %s", e)
 
         # Step 3: FLOPs unavailable
         return None
@@ -897,9 +901,10 @@ class MeasurementHarness:
         """Map an engine-declared latency mode string to LatencyMeasurementMode.
 
         The engine sets ``output.latency_measurement_mode`` explicitly whenever it
-        emits TTFT. If it is missing while TTFT is present, that is an engine bug:
-        log a warning and fall back to the field's default (TRUE_STREAMING),
-        noting it in measurement_warnings.
+        emits TTFT. If it is missing - or an unrecognised string - that is an engine
+        bug: log a warning and fall back to the field's default (TRUE_STREAMING),
+        noting it in measurement_warnings. A bad engine string must never crash
+        result assembly.
         """
         from llenergymeasure.domain.metrics import LatencyMeasurementMode
 
@@ -913,7 +918,19 @@ class MeasurementHarness:
                 "provenance defaulted to true_streaming (engine should set it explicitly)."
             )
             return LatencyMeasurementMode.TRUE_STREAMING
-        return LatencyMeasurementMode(declared_mode)
+        try:
+            return LatencyMeasurementMode(declared_mode)
+        except ValueError:
+            logger.warning(
+                "Engine emitted unrecognised latency_measurement_mode %r; "
+                "defaulting provenance to TRUE_STREAMING.",
+                declared_mode,
+            )
+            measurement_warnings.append(
+                f"latency_measurement_mode {declared_mode!r} unrecognised; "
+                "provenance defaulted to true_streaming."
+            )
+            return LatencyMeasurementMode.TRUE_STREAMING
 
     @staticmethod
     def _append_latency_profiling_warnings(
@@ -1045,11 +1062,12 @@ class MeasurementHarness:
                     ),
                 )
 
-        # mJ/tok derived fields (energy in millijoules per token)
-        _mj_total = mj_per_token(total_energy_j, output.total_tokens)
+        # mJ/tok derived fields (energy in millijoules per OUTPUT token, matching
+        # avg_energy_per_token_j; input tokens are prefilled, not "generated").
+        _mj_total = mj_per_token(total_energy_j, output_tokens)
         energy_adjusted_j = energy_breakdown.adjusted_j if energy_breakdown else None
         _mj_adjusted = (
-            mj_per_token(energy_adjusted_j, output.total_tokens)
+            mj_per_token(energy_adjusted_j, output_tokens)
             if energy_adjusted_j is not None
             else None
         )
