@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from llenergymeasure.domain.metrics import FlopsResult
+from llenergymeasure.domain.model_info import ModelArchInfo, extract_model_arch
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,25 @@ def estimate_flops_palm(
     )
 
 
+def _count_params_from_arch(arch: ModelArchInfo) -> int:
+    """Non-embedding parameter count from normalised architecture dimensions.
+
+    GQA/MQA aware: Q and O projections scale with the full attention-head
+    width, but K and V projections scale with the (possibly smaller) number
+    of key/value heads. Embeddings are excluded (PaLM formula counts
+    non-embedding params only; they are memory-bound lookups, not MAC ops),
+    so tied vs untied embeddings do not affect this count.
+    """
+    h = arch.hidden_size
+    q_dim = arch.num_attention_heads * arch.head_dim
+    kv_dim = arch.num_key_value_heads * arch.head_dim
+    # Attention per layer: Q (h x q_dim) + K,V (h x kv_dim each) + O (q_dim x h)
+    attn = (2 * h * q_dim + 2 * h * kv_dim) * arch.num_layers
+    # FFN per layer: up (h x intermediate) + down (intermediate x h)
+    ffn = 2 * h * arch.intermediate_size * arch.num_layers
+    return int(attn + ffn)
+
+
 def _count_params_from_config(model_name: str) -> int | None:
     """Extract non-embedding parameter count from HuggingFace model config.
 
@@ -80,13 +100,10 @@ def _count_params_from_config(model_name: str) -> int | None:
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
         cfg = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code_enabled())
-        h = cfg.hidden_size
-        layers = cfg.num_hidden_layers
-        intermediate = getattr(cfg, "intermediate_size", h * 4)
-        # Non-embedding params: attention (Q,K,V,O) + FFN (up,down) per layer
-        attn = 4 * h * h * layers
-        ffn = 2 * h * intermediate * layers
-        return int(attn + ffn)
+        arch = extract_model_arch(cfg)
+        if arch is None:
+            return None
+        return _count_params_from_arch(arch)
     except Exception:
         return None
 
@@ -136,6 +153,7 @@ def estimate_flops_palm_from_config(
 
 __all__ = [
     "_count_non_embedding_params",
+    "_count_params_from_arch",
     "_count_params_from_config",
     "estimate_flops_palm",
     "estimate_flops_palm_from_config",

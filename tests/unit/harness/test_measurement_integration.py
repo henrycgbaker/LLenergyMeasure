@@ -578,3 +578,175 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
     assert result.energy_adjusted_j is not None, (
         "energy_adjusted_j should be populated when baseline is provided"
     )
+
+
+# =============================================================================
+# D1: per-token energy headline divides by OUTPUT tokens only
+# =============================================================================
+
+
+def test_mj_per_tok_uses_output_tokens_only() -> None:
+    """mj_per_tok_total divides energy by OUTPUT tokens, not input+output (D1)."""
+    from llenergymeasure.engines.protocol import InferenceOutput
+    from llenergymeasure.harness import MeasurementHarness
+
+    harness = MeasurementHarness()
+    kwargs = _make_build_result_args()
+    # Asymmetric: 900 input, 100 output. total=1000. energy=100 J.
+    kwargs["output"] = InferenceOutput(
+        elapsed_time_sec=10.0,
+        input_tokens=900,
+        output_tokens=100,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+    )
+
+    result = harness._build_result(**kwargs)
+
+    # 100 J / 100 output tokens * 1000 = 1000.0 mJ/output-token.
+    # Old (buggy) denominator total_tokens=1000 would give 100.0.
+    assert result.mj_per_tok_total == pytest.approx(1000.0)
+    # Consistent with the existing output-token-only headline.
+    assert result.avg_energy_per_token_j == pytest.approx(100.0 / 100)
+
+
+# =============================================================================
+# H1: FLOPs estimator tries the hf_model (actual params) path FIRST
+# =============================================================================
+
+
+def test_estimate_flops_prefers_hf_model_over_autoconfig() -> None:
+    """_estimate_flops uses the actual-param hf_model path before AutoConfig (H1)."""
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.protocol import InferenceOutput
+    from llenergymeasure.harness import MeasurementHarness
+
+    class _StubParam:
+        def __init__(self, n: int) -> None:
+            self._n = n
+
+        def numel(self) -> int:
+            return self._n
+
+    class _StubModel:
+        def named_parameters(self):
+            # Non-embedding param count that is distinctive and would never
+            # coincide with the AutoConfig estimate for the same model.
+            return iter([("decoder.layer.weight", _StubParam(777))])
+
+    harness = MeasurementHarness()
+    config = ExperimentConfig(task={"model": "gpt2"})
+    output = InferenceOutput(
+        elapsed_time_sec=1.0,
+        input_tokens=10,
+        output_tokens=5,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+        extras={"hf_model": _StubModel()},
+    )
+
+    result = harness._estimate_flops(harness_engine := MagicMock(), config, output)
+    del harness_engine
+
+    # PaLM: 2 * 777 * (10 + 5) = 23310. High confidence proves the hf_model
+    # path ran (AutoConfig would be 'medium' and a different value).
+    assert result is not None
+    assert result.confidence == "high"
+    assert result.value == float(2 * 777 * (10 + 5))
+
+
+def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
+    """_estimate_flops falls back to AutoConfig when no hf_model is present (H1)."""
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.protocol import InferenceOutput
+    from llenergymeasure.harness import MeasurementHarness
+
+    harness = MeasurementHarness()
+    config = ExperimentConfig(task={"model": "gpt2"})
+    output = InferenceOutput(
+        elapsed_time_sec=1.0,
+        input_tokens=10,
+        output_tokens=5,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+    )
+
+    fake = MagicMock(value=5e11, confidence="medium")
+    with patch(
+        "llenergymeasure.harness.measurement.estimate_flops_palm_from_config",
+        return_value=fake,
+    ) as mock_cfg:
+        result = harness._estimate_flops(MagicMock(), config, output)
+
+    mock_cfg.assert_called_once()
+    assert result is fake
+
+
+# =============================================================================
+# H6: a bad latency-measurement-mode string must not crash result assembly
+# =============================================================================
+
+
+def test_resolve_measurement_mode_guards_bad_string() -> None:
+    """An unrecognised mode string falls back to TRUE_STREAMING with a warning (H6)."""
+    from llenergymeasure.domain.metrics import LatencyMeasurementMode
+    from llenergymeasure.harness import MeasurementHarness
+
+    warnings: list[str] = []
+    mode = MeasurementHarness._resolve_measurement_mode("not_a_real_mode", warnings)
+
+    assert mode is LatencyMeasurementMode.TRUE_STREAMING
+    assert any("not_a_real_mode" in w for w in warnings)
+
+
+def test_resolve_measurement_mode_accepts_valid_string() -> None:
+    """A valid mode string maps to its enum member (H6 regression guard)."""
+    from llenergymeasure.domain.metrics import LatencyMeasurementMode
+    from llenergymeasure.harness import MeasurementHarness
+
+    warnings: list[str] = []
+    mode = MeasurementHarness._resolve_measurement_mode("proportional", warnings)
+
+    assert mode is LatencyMeasurementMode.PROPORTIONAL_ESTIMATE
+    assert warnings == []
+
+
+# =============================================================================
+# H5: warmup_excluded_samples counts the discarded probe inference
+# =============================================================================
+
+
+def test_warmup_excluded_samples_includes_probe() -> None:
+    """_run_warmup counts the discarded strategy-probe inference (H5).
+
+    Fixed mode runs n_prompts loop inferences; the harness also runs one probe
+    inference up front to pick the warmup strategy. That probe is discarded but
+    must still be counted, so iterations_completed == n_prompts + 1.
+    """
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.harness import MeasurementHarness
+
+    n_prompts = 3
+    config = ExperimentConfig(
+        task={"model": "gpt2"},
+        measurement={
+            "warmup": {
+                "enabled": True,
+                "convergence_detection": False,
+                "n_prompts": n_prompts,
+                "thermal_floor_seconds": 30.0,
+            }
+        },
+    )
+
+    engine = MagicMock()
+    # Positive latency -> CV/fixed branch (the one with the extra probe).
+    engine.run_warmup_prompt.return_value = 12.5
+
+    harness = MeasurementHarness()
+    with patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0):
+        warmup_result = harness._run_warmup(engine, config, MagicMock(), ["p"], None)
+
+    # 1 probe + n_prompts loop inferences all ran and were discarded.
+    assert engine.run_warmup_prompt.call_count == n_prompts + 1
+    assert warmup_result.iterations_completed == n_prompts + 1
