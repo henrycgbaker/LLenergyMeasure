@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.metrics import (
     EnergyBreakdown,
     ExtendedEfficiencyMetrics,
@@ -182,6 +183,15 @@ class ExperimentResult(BaseModel):
     timeseries: str | None = Field(
         default=None,
         description="Relative filename of timeseries sidecar (e.g. 'timeseries.parquet')",
+    )
+
+    # Environment sidecar (loaded from environment.json by load_result; excluded
+    # from result.json serialisation - the sidecar is the on-disk home).
+    environment: EnvironmentSnapshot | None = Field(
+        default=None,
+        exclude=True,
+        description="Hardware/runtime environment loaded from the environment.json sidecar. "
+        "None when no sidecar is present. Not serialised back into result.json.",
     )
 
     # Timestamps
