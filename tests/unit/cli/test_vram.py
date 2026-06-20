@@ -26,8 +26,15 @@ _LLAMA_7B_PARAMS = 6_738_415_616
 _VRAM_DEFAULTS = {"model": "meta-llama/Llama-2-7b-hf"}
 
 
-def _make_model_info(param_count: int | None = _LLAMA_7B_PARAMS, with_config: bool = True):
-    """Build a mock HuggingFace model_info object."""
+def _make_model_info(
+    param_count: int | None = _LLAMA_7B_PARAMS,
+    with_config: bool = True,
+    config: dict | None = None,
+):
+    """Build a mock HuggingFace model_info object.
+
+    Pass ``config`` to override the architecture dict (e.g. to add GQA fields).
+    """
     model_info = MagicMock()
 
     # safetensors metadata
@@ -41,7 +48,7 @@ def _make_model_info(param_count: int | None = _LLAMA_7B_PARAMS, with_config: bo
     # HF Hub's ModelInfo.config is a plain dict in production, so the mock must
     # be a dict too - an attribute-style object would mask the dict-access bug.
     if with_config:
-        model_info.config = {
+        model_info.config = config or {
             "num_hidden_layers": 32,
             "num_attention_heads": 32,
             "hidden_size": 4096,
@@ -217,6 +224,84 @@ def test_estimate_vram_kv_cache_nonzero_with_architecture():
 
     assert result is not None
     assert result["kv_cache_gb"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# estimate_vram - GQA-aware KV cache and batch size (reuses extract_model_arch)
+# ---------------------------------------------------------------------------
+
+# Llama-2-7B style arch but with GQA: 8 kv heads instead of 32 attention heads.
+_GQA_CONFIG = {
+    "num_hidden_layers": 32,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "hidden_size": 4096,
+}
+_MHA_EQUIVALENT_CONFIG = {
+    "num_hidden_layers": 32,
+    "num_attention_heads": 32,
+    "hidden_size": 4096,
+}
+
+
+def test_estimate_vram_kv_cache_is_gqa_aware():
+    """GQA (kv_heads < attention_heads) shrinks the KV term vs the MHA equivalent."""
+    config = make_config(**_VRAM_DEFAULTS, dtype="float16")
+
+    gqa_info = _make_model_info(config=_GQA_CONFIG)
+    ctx_gqa, _ = _patch_hfapi(model_info_return=gqa_info)
+    with ctx_gqa:
+        gqa_result = estimate_vram(config)
+
+    mha_info = _make_model_info(config=_MHA_EQUIVALENT_CONFIG)
+    ctx_mha, _ = _patch_hfapi(model_info_return=mha_info)
+    with ctx_mha:
+        mha_result = estimate_vram(config)
+
+    assert gqa_result is not None and mha_result is not None
+    # 8 kv heads vs 32 attention heads -> KV term is exactly 1/4.
+    assert gqa_result["kv_cache_gb"] < mha_result["kv_cache_gb"]
+    assert gqa_result["kv_cache_gb"] == pytest.approx(mha_result["kv_cache_gb"] / 4, rel=1e-6)
+
+
+def test_estimate_vram_kv_cache_scales_with_batch_size():
+    """KV cache scales linearly with the configured batch size, not a hardcoded 1."""
+    config_b1 = make_config(**_VRAM_DEFAULTS, dtype="float16", transformers={"batch_size": 1})
+    config_b4 = make_config(**_VRAM_DEFAULTS, dtype="float16", transformers={"batch_size": 4})
+
+    ctx1, _ = _patch_hfapi(model_info_return=_make_model_info())
+    with ctx1:
+        result_b1 = estimate_vram(config_b1)
+
+    ctx4, _ = _patch_hfapi(model_info_return=_make_model_info())
+    with ctx4:
+        result_b4 = estimate_vram(config_b4)
+
+    assert result_b1 is not None and result_b4 is not None
+    assert result_b4["kv_cache_gb"] == pytest.approx(result_b1["kv_cache_gb"] * 4, rel=1e-6)
+
+
+def test_estimate_vram_reuses_extract_model_arch():
+    """estimate_vram delegates arch parsing to domain.model_info.extract_model_arch."""
+    config = make_config(**_VRAM_DEFAULTS, dtype="float16")
+    model_info = _make_model_info(config=_GQA_CONFIG)
+
+    ctx, _ = _patch_hfapi(model_info_return=model_info)
+    with (
+        ctx,
+        patch(
+            "llenergymeasure.cli._vram.extract_model_arch",
+            wraps=__import__(
+                "llenergymeasure.domain.model_info", fromlist=["extract_model_arch"]
+            ).extract_model_arch,
+        ) as spy,
+    ):
+        result = estimate_vram(config)
+
+    assert result is not None
+    spy.assert_called_once()
+    # It was handed the raw HF config dict, not a re-parsed shape.
+    assert spy.call_args.args[0] == _GQA_CONFIG
 
 
 # ---------------------------------------------------------------------------

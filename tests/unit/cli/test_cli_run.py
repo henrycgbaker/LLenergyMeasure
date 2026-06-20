@@ -291,6 +291,71 @@ def test_run_dry_run_calls_estimate_vram():
 
 
 # ---------------------------------------------------------------------------
+# Study-only flags ignored on single-experiment runs (C4)
+# ---------------------------------------------------------------------------
+
+
+def test_single_run_warns_on_study_only_flag():
+    """--cycles on a single-experiment run warns that the flag is ignored."""
+    mock_config = _make_mock_config()
+
+    with (
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "estimate_vram", return_value=None),
+        patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None),
+        patch.object(cli_run_mod, "print_dry_run"),
+    ):
+        result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run", "--cycles", "5"])
+
+    assert result.exit_code == 0
+    out = _strip_ansi(result.output).lower()
+    assert "study-only" in out
+    assert "--cycles" in out
+
+
+def test_single_run_no_warning_without_study_flags():
+    """A clean single-experiment run emits no study-only-flag warning."""
+    mock_config = _make_mock_config()
+
+    with (
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "estimate_vram", return_value=None),
+        patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None),
+        patch.object(cli_run_mod, "print_dry_run"),
+    ):
+        result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "study-only" not in _strip_ansi(result.output).lower()
+
+
+def test_study_run_does_not_warn_on_study_flags(tmp_path):
+    """A study run with --cycles does not emit the single-run ignored-flag warning."""
+    from tests.conftest import make_study_result
+
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
+    )
+    mock_study_result = make_study_result()
+
+    with (
+        patch("llenergymeasure.run_study", return_value=mock_study_result),
+        patch("llenergymeasure.api.load_study") as mock_load,
+        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
+    ):
+        mock_config = MagicMock()
+        mock_config.experiments = [MagicMock(), MagicMock()]
+        mock_config.study_execution.n_cycles = 1
+        mock_config.skipped_configs = []
+        mock_load.return_value = mock_config
+        result = runner.invoke(app, ["run", str(study_yaml), "--cycles", "5"])
+
+    assert result.exit_code == 0, f"Output: {result.output}"
+    assert "study-only" not in _strip_ansi(result.output).lower()
+
+
+# ---------------------------------------------------------------------------
 # Quiet flag test
 # ---------------------------------------------------------------------------
 

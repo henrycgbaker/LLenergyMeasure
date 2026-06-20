@@ -231,6 +231,16 @@ def find_runtime_gaps(
             f"Expected one of: {sorted(_ALLOWED_ENGINES)}."
         )
 
+    # Fail loud on a missing / non-directory study dir. A typo'd path would
+    # otherwise yield "No gaps found" with exit 0 - a false all-clear on a
+    # corpus-gating command.
+    for study_dir in study_dirs:
+        path = Path(study_dir)
+        if not path.exists():
+            raise ReportGapsError(f"Study directory does not exist: {path}")
+        if not path.is_dir():
+            raise ReportGapsError(f"Study path is not a directory: {path}")
+
     records: list[_Record] = []
     sidecar_failures = 0
     for study_dir in study_dirs:

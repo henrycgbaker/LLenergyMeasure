@@ -274,12 +274,19 @@ def print_study_dry_run(
         print(f"  {i:>{width}}  {format_experiment_header(exp)}")
     print()
 
-    # VRAM estimate for the peak model (largest weight estimate)
+    # VRAM estimate for the peak model (largest weight estimate).
+    # Memoize on (model, dtype) so a sweep of N experiments over one model does
+    # not make N identical HuggingFace Hub round-trips - only one per unique key.
     gpu_vram_gb = get_gpu_vram_gb()
     peak_vram: dict[str, float] | None = None
     peak_config: ExperimentConfig | None = None
+    vram_cache: dict[tuple[str, str | None], dict[str, float] | None] = {}
     for exp in study_config.experiments:
-        vram = estimate_vram(exp)
+        exp_section = getattr(exp, exp.engine, None)
+        cache_key = (exp.task.model, getattr(exp_section, "dtype", None))
+        if cache_key not in vram_cache:
+            vram_cache[cache_key] = estimate_vram(exp)
+        vram = vram_cache[cache_key]
         if vram is not None and (peak_vram is None or vram["total_gb"] > peak_vram["total_gb"]):
             peak_vram = vram
             peak_config = exp

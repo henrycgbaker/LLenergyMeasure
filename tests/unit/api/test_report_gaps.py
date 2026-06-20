@@ -365,6 +365,25 @@ def test_empty_study_dir_list_raises() -> None:
         find_runtime_gaps([], engine_invariants={})
 
 
+def test_nonexistent_study_dir_raises(tmp_path: Path) -> None:
+    """A typo'd / missing study dir raises instead of a false 'no gaps' all-clear."""
+    from llenergymeasure.api.report_gaps import ReportGapsError
+
+    missing = tmp_path / "does-not-exist"
+    with pytest.raises(ReportGapsError, match="does not exist"):
+        find_runtime_gaps([missing], engine_invariants=_build_empty_invariants())
+
+
+def test_study_path_not_a_directory_raises(tmp_path: Path) -> None:
+    """A --study-dir pointing at a file (not a dir) raises a clear error."""
+    from llenergymeasure.api.report_gaps import ReportGapsError
+
+    not_a_dir = tmp_path / "afile.txt"
+    not_a_dir.write_text("x", encoding="utf-8")
+    with pytest.raises(ReportGapsError, match="not a directory"):
+        find_runtime_gaps([not_a_dir], engine_invariants=_build_empty_invariants())
+
+
 # ---------------------------------------------------------------------------
 # YAML round-trip through loader
 # ---------------------------------------------------------------------------

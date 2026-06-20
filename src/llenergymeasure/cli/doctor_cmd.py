@@ -19,8 +19,9 @@ def doctor_command() -> None:
 
     report = run_doctor_checks()
 
+    # "transformers" is 12 chars; width 13 keeps the column aligned.
     header = (
-        f"{'Engine':<10s}  {'Image':<50s}  "
+        f"{'Engine':<13s}  {'Image':<50s}  "
         f"{'Pkg ver':<10s}  {'Img SHA-256':<14s}  {'Host SHA-256':<14s}  {'Status':<12s}"
     )
     typer.echo(header)
@@ -33,12 +34,12 @@ def doctor_command() -> None:
         img_fp = (row.image_fingerprint or "-")[:12]
         status_text = row.status.value
         line = (
-            f"{row.engine:<10s}  {img:<50s}  "
+            f"{row.engine:<13s}  {img:<50s}  "
             f"{pkg:<10s}  {img_fp:<14s}  {host_fp_short:<14s}  {status_text:<12s}"
         )
         typer.echo(line)
         if row.detail:
-            typer.echo(f"{'':<10s}  └─ {row.detail}")
+            typer.echo(f"{'':<13s}  └─ {row.detail}")
 
     typer.echo("")
     typer.echo(f"Host llenergymeasure version: {report.host_pkg_version}")

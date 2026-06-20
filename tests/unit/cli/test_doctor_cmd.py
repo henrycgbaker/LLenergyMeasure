@@ -115,6 +115,31 @@ def test_skip_check_warning_rendered() -> None:
     assert "LLEM_SKIP_IMAGE_CHECK" in result.output
 
 
+def test_engine_column_aligns_for_transformers() -> None:
+    """The Engine column is wide enough for 'transformers' (12 chars) - no overflow."""
+    report = _report(
+        [
+            EngineDoctorResult(
+                engine="transformers",
+                image="llenergymeasure:pytorch",
+                pkg_version="0.9.0",
+                image_fingerprint="a" * 64,
+                status=SchemaStatus.OK,
+            )
+        ]
+    )
+    with patch("llenergymeasure.api.doctor.run_doctor_checks", return_value=report):
+        result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    header_line = next(line for line in lines if line.startswith("Engine"))
+    data_line = next(line for line in lines if line.startswith("transformers"))
+    # The Image column must start at the same offset in both rows - i.e. the
+    # long engine name did not push its row's columns out of alignment.
+    assert header_line.index("Image") == data_line.index("llenergymeasure:pytorch")
+
+
 def test_host_footer_rendered() -> None:
     report = _report(
         [

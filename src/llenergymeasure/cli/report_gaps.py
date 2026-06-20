@@ -61,8 +61,16 @@ def report_gaps_cmd(
             ),
         ),
     ] = False,
+    verbose: Annotated[
+        int,
+        typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
+    ] = 0,
 ) -> None:
     """Propose rules corpus entries from captured runtime observations."""
+    from llenergymeasure.cli import _setup_logging
+
+    _setup_logging(verbose)
+
     if source != "runtime-warnings":
         raise typer.BadParameter(
             f"Unsupported source {source!r}. Only 'runtime-warnings' is wired in this release.",
