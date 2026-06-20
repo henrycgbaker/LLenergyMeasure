@@ -6,9 +6,8 @@ try/except and return None on any failure. Network errors never block the CLI.
 
 from __future__ import annotations
 
-from typing import Any
-
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.domain.model_info import ModelArchInfo, extract_model_arch
 
 # Bytes per parameter for each dtype.
 DTYPE_BYTES: dict[str, float] = {
@@ -18,6 +17,66 @@ DTYPE_BYTES: dict[str, float] = {
     "int8": 1,
     "int4": 0.5,
 }
+
+# Per-engine field that carries the effective inference batch size. transformers
+# uses a fixed batch; vLLM/tensorrt expose their max concurrency knob, which
+# bounds the KV cache the same way for a worst-case estimate.
+_BATCH_FIELDS: dict[str, str] = {
+    "transformers": "batch_size",
+    "vllm": "max_num_seqs",
+    "tensorrt": "max_batch_size",
+}
+
+
+def _effective_batch_size(config: ExperimentConfig) -> int:
+    """Return the configured batch size for the active engine (defaults to 1)."""
+    engine_section = getattr(config, config.engine, None)
+    field = _BATCH_FIELDS.get(str(config.engine))
+    if engine_section is not None and field is not None:
+        value = getattr(engine_section, field, None)
+        if value is not None:
+            return int(value)
+    return 1
+
+
+def _fetch_model_info(model: str) -> tuple[int | None, ModelArchInfo | None]:
+    """Fetch (param_count, arch) from HuggingFace Hub. Non-blocking.
+
+    Returns (None, None) on any failure (network error, model not found, or
+    HuggingFace Hub unavailable). Applies a short socket timeout so the CLI
+    never blocks on a slow network.
+    """
+    import socket
+
+    param_count: int | None = None
+    arch: ModelArchInfo | None = None
+    try:
+        original_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(5)
+        try:
+            from huggingface_hub import HfApi
+
+            model_info = HfApi().model_info(model)
+
+            # Parameter count from safetensors metadata.
+            safetensors = getattr(model_info, "safetensors", None)
+            total = getattr(safetensors, "total", None) if safetensors is not None else None
+            if total is not None:
+                param_count = int(total)
+
+            # Architecture for KV-cache sizing. HF Hub's ModelInfo.config is the
+            # model's config.json contents (a dict); extract_model_arch handles
+            # both dict and attribute-style configs.
+            cfg = getattr(model_info, "config", None)
+            if cfg is not None:
+                arch = extract_model_arch(cfg)
+        finally:
+            socket.setdefaulttimeout(original_timeout)
+    except Exception:
+        # Non-blocking: network errors, model not found, HF Hub unavailable.
+        return None, None
+
+    return param_count, arch
 
 
 def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
@@ -30,62 +89,7 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
     This function is non-blocking: all network operations have a 5-second timeout
     and are wrapped in try/except.
     """
-    import socket
-
-    # Try to fetch model metadata from HuggingFace Hub
-    param_count: int | None = None
-    n_layers: int | None = None
-    n_heads: int | None = None
-    head_dim: int | None = None
-
-    try:
-        # Apply a short connection timeout to avoid blocking the CLI
-        original_timeout = socket.getdefaulttimeout()
-        socket.setdefaulttimeout(5)
-        try:
-            from huggingface_hub import HfApi
-
-            api = HfApi()
-            model_info = api.model_info(config.task.model)
-
-            # Extract parameter count from safetensors metadata
-            if (
-                hasattr(model_info, "safetensors")
-                and model_info.safetensors is not None
-                and hasattr(model_info.safetensors, "total")
-                and model_info.safetensors.total is not None
-            ):
-                param_count = int(model_info.safetensors.total)
-
-            # Try to extract architecture details for KV cache estimation.
-            # HF Hub's ModelInfo.config is a plain dict (the model's config.json
-            # contents) in production, so read via dict access; tolerate an
-            # attribute-style object too at this external-API edge.
-            if hasattr(model_info, "config") and model_info.config is not None:
-                cfg = model_info.config
-
-                def _cfg_get(*names: str) -> Any:
-                    for name in names:
-                        value = cfg.get(name) if isinstance(cfg, dict) else getattr(cfg, name, None)
-                        if value is not None:
-                            return value
-                    return None
-
-                # Common field names across model families
-                _n_layers = _cfg_get("num_hidden_layers", "n_layer", "num_layers")
-                _n_heads = _cfg_get("num_attention_heads", "n_head", "num_heads")
-                _hidden = _cfg_get("hidden_size", "d_model", "n_embd")
-                n_layers = int(_n_layers) if _n_layers is not None else None
-                n_heads = int(_n_heads) if _n_heads is not None else None
-                if n_heads and _hidden is not None:
-                    head_dim = int(_hidden) // n_heads
-        finally:
-            socket.setdefaulttimeout(original_timeout)
-
-    except Exception:
-        # Non-blocking: network errors, model not found, HF Hub unavailable
-        pass
-
+    param_count, arch = _fetch_model_info(config.task.model)
     if param_count is None:
         return None
 
@@ -95,12 +99,21 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
     bytes_per_param = DTYPE_BYTES.get(dtype or "bfloat16", 2)
     weights_gb = (param_count * bytes_per_param) / 1e9
 
-    # KV cache estimation (sequence length 1 = single inference pass)
+    # KV cache: 2 (key + value) * layers * batch * seq_len * kv_heads * head_dim.
+    # GQA/MQA models size K/V by num_key_value_heads (< num_attention_heads).
     kv_gb = 0.0
-    if n_layers is not None and n_heads is not None and head_dim is not None:
-        # 2 = key + value, 1 = batch size 1
+    if arch is not None:
         seq_len = config.task.max_input_tokens or 512  # fallback for VRAM estimate
-        kv_bytes = 2 * int(n_layers) * 1 * seq_len * int(n_heads) * int(head_dim) * bytes_per_param
+        batch_size = _effective_batch_size(config)
+        kv_bytes = (
+            2
+            * arch.num_layers
+            * batch_size
+            * seq_len
+            * arch.num_key_value_heads
+            * arch.head_dim
+            * bytes_per_param
+        )
         kv_gb = kv_bytes / 1e9
 
     # Empirical 15% overhead for activations and framework buffers

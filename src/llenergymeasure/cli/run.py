@@ -272,6 +272,22 @@ def _run_impl(
         )
         return
 
+    # Single-experiment path: warn about any study-only flags the user set.
+    # These are parsed by run() for study mode but silently ignored here, so
+    # --cycles 5 on a single experiment would run once with no feedback.
+    _warn_ignored_study_flags(
+        cycles=cycles,
+        order=order,
+        no_gaps=no_gaps,
+        resume=resume,
+        resume_dir=resume_dir,
+        fail_fast=fail_fast,
+        no_circuit_breaker=no_circuit_breaker,
+        timeout=timeout,
+        no_lock=no_lock,
+        no_dedup=no_dedup,
+    )
+
     # Load/resolve the experiment config
     experiment_config = load_experiment_config(
         path=config,
@@ -338,6 +354,50 @@ def _run_impl(
 
     if output:
         print(f"Saved: {output}", file=sys.stderr)
+
+
+def _warn_ignored_study_flags(
+    *,
+    cycles: int | None,
+    order: str | None,
+    no_gaps: bool,
+    resume: bool,
+    resume_dir: Path | None,
+    fail_fast: bool,
+    no_circuit_breaker: bool,
+    timeout: float | None,
+    no_lock: bool,
+    no_dedup: bool,
+) -> None:
+    """Warn when study-only flags are set on a single-experiment run.
+
+    These flags only take effect in study mode (a YAML with ``sweep:`` or
+    ``experiments:``). On a single experiment they are silently ignored, which
+    hides mistakes like ``--cycles 5`` on a one-off run.
+    """
+    set_flags = [
+        name
+        for name, is_set in (
+            ("--cycles", cycles is not None),
+            ("--order", order is not None),
+            ("--no-gaps", no_gaps),
+            ("--resume", resume),
+            ("--resume-dir", resume_dir is not None),
+            ("--fail-fast", fail_fast),
+            ("--no-circuit-breaker", no_circuit_breaker),
+            ("--timeout", timeout is not None),
+            ("--no-lock", no_lock),
+            ("--no-dedup", no_dedup),
+        )
+        if is_set
+    ]
+    if set_flags:
+        print(
+            f"Warning: study-only flag(s) ignored on a single-experiment run: "
+            f"{', '.join(set_flags)}. These apply only to study configs "
+            f"(YAML with sweep: or experiments:).",
+            file=sys.stderr,
+        )
 
 
 def _resolve_progress_mode(quiet: bool, verbose: bool) -> str:

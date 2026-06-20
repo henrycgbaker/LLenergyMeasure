@@ -500,3 +500,30 @@ def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
     assert "VRAM estimate (peak)" in out
     assert "0.3" in out  # weights of larger config
     assert "OK" in out
+
+
+def test_print_study_dry_run_vram_memoized_per_model(capsys, monkeypatch):
+    """A sweep over one model+dtype fetches VRAM once, not once per experiment."""
+    from llenergymeasure.cli._display import print_study_dry_run
+    from llenergymeasure.config.models import StudyConfig
+    from tests.conftest import make_config
+
+    # Four experiments over the SAME model and dtype: estimate_vram does a HF
+    # Hub round-trip, so it must be called exactly once (memoized), not 4x.
+    configs = [make_config(model="gpt2", dtype="float16") for _ in range(4)]
+    study = StudyConfig(experiments=configs, study_name="memoize-test")
+
+    calls: list[str] = []
+
+    def mock_estimate(config):
+        calls.append(config.task.model)
+        return {"weights_gb": 0.2, "kv_cache_gb": 0.0, "overhead_gb": 0.03, "total_gb": 0.23}
+
+    import llenergymeasure.cli._vram as _vram_mod
+
+    monkeypatch.setattr(_vram_mod, "estimate_vram", mock_estimate)
+    monkeypatch.setattr(_vram_mod, "get_gpu_vram_gb", lambda: None)
+
+    print_study_dry_run(study)
+
+    assert len(calls) == 1, f"expected one memoized fetch, got {len(calls)}"

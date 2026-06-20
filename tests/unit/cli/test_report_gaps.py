@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from llenergymeasure.cli import app
@@ -140,6 +141,86 @@ def test_report_gaps_missing_out_errors(tmp_path: Path) -> None:
     assert result.exit_code != 0
     stripped = _strip(result.output).lower()
     assert "--out" in stripped or "out" in stripped
+
+
+def test_report_gaps_nonexistent_study_dir_exits_nonzero(tmp_path: Path) -> None:
+    """A typo'd --study-dir exits nonzero with an error, not a false 'No gaps found'."""
+    out = tmp_path / "proposals.yaml"
+    missing = tmp_path / "typo-study"  # never created
+    result = runner.invoke(
+        app,
+        [
+            "report-gaps",
+            "--source",
+            "runtime-warnings",
+            "--study-dir",
+            str(missing),
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "No gaps found" not in result.output
+    assert "does not exist" in _strip(result.output)
+
+
+def test_report_gaps_verbose_surfaces_skip_message(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """--verbose raises the log level so the 'no observations; skipping' INFO surfaces."""
+    study = tmp_path / "no-obs-study"
+    study.mkdir()  # exists but has no runtime_observations JSONL
+    out = tmp_path / "proposals.yaml"
+
+    with caplog.at_level("INFO", logger="llenergymeasure"):
+        result = runner.invoke(
+            app,
+            [
+                "report-gaps",
+                "--source",
+                "runtime-warnings",
+                "--study-dir",
+                str(study),
+                "--out",
+                str(out),
+                "--verbose",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert any("skipping" in r.getMessage().lower() for r in caplog.records)
+
+
+def test_report_gaps_no_verbose_suppresses_skip_message(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Without --verbose the INFO skip log stays below the default WARNING threshold."""
+    study = tmp_path / "no-obs-study"
+    study.mkdir()
+    out = tmp_path / "proposals.yaml"
+
+    # Reset the llenergymeasure logger to default so a prior --verbose test does
+    # not leak an INFO level into this assertion.
+    import logging
+
+    logging.getLogger("llenergymeasure").setLevel(logging.WARNING)
+
+    with caplog.at_level("WARNING", logger="llenergymeasure"):
+        result = runner.invoke(
+            app,
+            [
+                "report-gaps",
+                "--source",
+                "runtime-warnings",
+                "--study-dir",
+                str(study),
+                "--out",
+                str(out),
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert not any("skipping" in r.getMessage().lower() for r in caplog.records)
 
 
 def test_report_gaps_unsupported_source_errors(tmp_path: Path) -> None:
