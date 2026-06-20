@@ -82,7 +82,18 @@ def config_command(
     from llenergymeasure.cli import _setup_logging
 
     _setup_logging(verbose)
-    # --- GPU ---
+    _print_gpu_status(verbose)
+    _print_engine_status(verbose)
+    _print_energy_status()
+    _print_config_status(verbose)
+
+    # --- Python ---
+    print("Python")
+    print(f"  {sys.version.split()[0]}")
+
+
+def _print_gpu_status(verbose: int) -> None:
+    """Print the GPU section: detected devices and (verbose) the driver version."""
     print("GPU")
     gpus = _probe_gpu()
     if gpus:
@@ -105,7 +116,9 @@ def config_command(
     else:
         print("  No GPU detected")
 
-    # --- Inference engines ---
+
+def _print_engine_status(verbose: int) -> None:
+    """Print the inference-engine section: install state and (verbose) versions."""
     print("Engines")
     for engine, package in ENGINE_PACKAGES.items():
         installed = importlib.util.find_spec(package) is not None
@@ -119,7 +132,9 @@ def config_command(
         else:
             print(f"  {engine}: not installed  (runs in Docker - see docs/development.md)")
 
-    # --- Energy backends ---
+
+def _print_energy_status() -> None:
+    """Print the energy-backend section: which sampler would be selected."""
     print("Energy")
     has_nvml = importlib.util.find_spec("pynvml") is not None
     has_zeus = importlib.util.find_spec("zeus") is not None
@@ -139,49 +154,50 @@ def config_command(
     else:
         print("  Sampler: none (install nvidia-ml-py for NVML)")
 
-    # --- User config ---
+
+def _print_config_status(verbose: int) -> None:
+    """Print the user-config section: path, load status, and (verbose) non-defaults."""
     print("Config")
     from llenergymeasure.config.user_config import get_user_config_path
 
     config_path = get_user_config_path()
-    if config_path.exists():
-        print(f"  Path: {config_path}")
-        print("  Status: loaded")
-        if verbose > 0:
-            from llenergymeasure.config.user_config import (
-                UserConfig,
-                load_user_config,
-            )
-
-            try:
-                user_cfg = load_user_config()
-                defaults = UserConfig()
-                cfg_dump = user_cfg.model_dump()
-                default_dump = defaults.model_dump()
-                non_defaults: dict[str, Any] = {}
-                for section, values in cfg_dump.items():
-                    section_defaults = default_dump.get(section, {})
-                    if isinstance(values, dict) and isinstance(section_defaults, dict):
-                        diff = {k: v for k, v in values.items() if v != section_defaults.get(k)}
-                        if diff:
-                            non_defaults[section] = diff
-                    elif values != section_defaults:
-                        non_defaults[section] = values
-                if non_defaults:
-                    print("  Non-default values:")
-                    for section, values in non_defaults.items():
-                        if isinstance(values, dict):
-                            for k, v in values.items():
-                                print(f"    {section}.{k}: {v}")
-                        else:
-                            print(f"    {section}: {values}")
-                else:
-                    print("  (all values are defaults)")
-            except Exception as e:
-                print(f"  (could not load config: {e})")
-    else:
+    if not config_path.exists():
         print("  Status: using defaults (no config file)")
+        return
 
-    # --- Python ---
-    print("Python")
-    print(f"  {sys.version.split()[0]}")
+    print(f"  Path: {config_path}")
+    print("  Status: loaded")
+    if verbose == 0:
+        return
+
+    from llenergymeasure.config.user_config import (
+        UserConfig,
+        load_user_config,
+    )
+
+    try:
+        user_cfg = load_user_config()
+        defaults = UserConfig()
+        cfg_dump = user_cfg.model_dump()
+        default_dump = defaults.model_dump()
+        non_defaults: dict[str, Any] = {}
+        for section, values in cfg_dump.items():
+            section_defaults = default_dump.get(section, {})
+            if isinstance(values, dict) and isinstance(section_defaults, dict):
+                diff = {k: v for k, v in values.items() if v != section_defaults.get(k)}
+                if diff:
+                    non_defaults[section] = diff
+            elif values != section_defaults:
+                non_defaults[section] = values
+        if non_defaults:
+            print("  Non-default values:")
+            for section, values in non_defaults.items():
+                if isinstance(values, dict):
+                    for k, v in values.items():
+                        print(f"    {section}.{k}: {v}")
+                else:
+                    print(f"    {section}: {values}")
+        else:
+            print("  (all values are defaults)")
+    except Exception as e:
+        print(f"  (could not load config: {e})")

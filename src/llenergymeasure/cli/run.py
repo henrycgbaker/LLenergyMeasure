@@ -396,6 +396,190 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
 # ---------------------------------------------------------------------------
 
 
+_HistoricalRow = tuple[
+    int, str, str, float, float | None, float | None, float | None, float | None, float | None
+]
+
+
+def _resolve_resume_target(
+    resume: bool, resume_dir: Path | None, output: str | None
+) -> tuple[Path | None, Any, bool]:
+    """Resolve the resume target directory and load its manifest (best-effort).
+
+    Returns ``(resume_dir, resume_manifest, is_resume)``. Raises typer.BadParameter
+    when an explicit --resume-dir is not a study directory, or --resume finds nothing.
+    """
+    resume_manifest = None
+    is_resume = resume or resume_dir is not None
+    if resume_dir is not None:
+        if not (resume_dir / "manifest.json").exists():
+            raise typer.BadParameter(
+                f"No manifest.json in {resume_dir} - not a valid study directory.",
+                param_hint="--resume-dir",
+            )
+        try:
+            from llenergymeasure.api import load_resume_state
+
+            resume_manifest, _ = load_resume_state(resume_dir)
+        except Exception:
+            pass  # Best-effort: display will work without manifest data
+    elif resume:
+        from llenergymeasure.api import find_resumable_study
+
+        _output = Path(output or "./results")
+        resume_dir = find_resumable_study(_output)
+        if resume_dir is None:
+            raise typer.BadParameter(
+                f"No resumable study found in {_output}. Run a study first or use --resume-dir.",
+                param_hint="--resume",
+            )
+        try:
+            from llenergymeasure.api import load_resume_state
+
+            resume_manifest, _ = load_resume_state(resume_dir)
+        except Exception:
+            pass  # Best-effort: display will work without manifest data
+    return resume_dir, resume_manifest, is_resume
+
+
+def _build_study_cli_overrides(
+    cli_overrides: dict[str, Any],
+    cycles: int | None,
+    order: str | None,
+    no_gaps: bool,
+    fail_fast: bool,
+    no_circuit_breaker: bool,
+    timeout: float | None,
+    no_dedup: bool,
+    yaml_execution: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge CLI flags into the study override dict passed to load_study.
+
+    Applies the CLI-layer effective defaults (n_cycles=3, experiment_order="shuffle")
+    only when neither the YAML study_execution block nor a CLI flag sets them; the
+    Pydantic defaults are intentionally more conservative (n_cycles=1).
+    """
+    exec_overrides: dict[str, Any] = {}
+
+    if cycles is not None:
+        exec_overrides["n_cycles"] = cycles
+    elif "n_cycles" not in yaml_execution:
+        exec_overrides["n_cycles"] = 3  # CLI effective default
+
+    if order is not None:
+        exec_overrides["experiment_order"] = order
+    elif "experiment_order" not in yaml_execution:
+        exec_overrides["experiment_order"] = "shuffle"  # CLI effective default
+
+    if no_gaps:
+        exec_overrides["experiment_gap_seconds"] = 0
+        exec_overrides["cycle_gap_seconds"] = 0
+
+    # Robustness overrides: circuit breaker, timeout
+    if fail_fast:
+        exec_overrides["max_consecutive_failures"] = 1
+        exec_overrides["circuit_breaker_cooldown_seconds"] = 0
+    if no_circuit_breaker:
+        exec_overrides["max_consecutive_failures"] = 0
+    if timeout is not None:
+        exec_overrides["wall_clock_timeout_hours"] = timeout
+
+    # --no-dedup disables library-resolution mechanism sweep dedup (runs every declared config)
+    if no_dedup:
+        exec_overrides["deduplicate_equivalent"] = False
+
+    study_cli_overrides: dict[str, Any] = {}
+    if cli_overrides:
+        study_cli_overrides.update(cli_overrides)
+    if exec_overrides:
+        study_cli_overrides["study_execution"] = exec_overrides
+    return study_cli_overrides
+
+
+def _print_config_summary(
+    console: Any,
+    study_config: Any,
+    is_resume: bool,
+    resume_manifest: Any,
+    expand_elapsed: float,
+) -> None:
+    """Print the config-expansion summary lines (valid configs, skipped, resume status)."""
+    from llenergymeasure.utils.formatting import format_elapsed as _fmt_elapsed
+    from llenergymeasure.utils.formatting import truncate_detail as _trunc_detail
+
+    n_valid = len(study_config.experiments) // max(study_config.study_execution.n_cycles, 1)
+    n_skipped = len(study_config.skipped_configs) if study_config.skipped_configs else 0
+    _step_n = 1
+    _step_total = 1 + (1 if n_skipped else 0) + (1 if is_resume else 0)
+
+    detail_done = _trunc_detail(f"{n_valid} valid configs")
+    console.print(
+        f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Config':<16s} {detail_done:<34s}"
+        f"  [bold green]✓[/]  {_fmt_elapsed(expand_elapsed)}"
+    )
+    _step_n += 1
+
+    if n_skipped:
+        detail_skip = _trunc_detail(f"skipped {n_skipped} invalid config(s)")
+        console.print(
+            f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Config':<16s} {detail_skip:<34s}"
+            f"  [bold green]✓[/]  {_fmt_elapsed(expand_elapsed)}"
+        )
+        _step_n += 1
+
+    # Resume summary: show status counts from manifest
+    if is_resume and resume_manifest is not None:
+        m = resume_manifest
+        parts = []
+        if m.completed > 0:
+            parts.append(f"{m.completed} completed")
+        if m.failed > 0:
+            parts.append(f"{m.failed} failed")
+        if m.interrupted > 0:
+            parts.append(f"{m.interrupted} interrupted")
+        if m.skipped > 0:
+            parts.append(f"{m.skipped} skipped")
+        n_to_run = m.total_experiments - m.completed
+        parts.append(f"{n_to_run} to run")
+        resume_detail = _trunc_detail(", ".join(parts))
+        console.print(
+            f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Resume':<16s} {resume_detail:<34s}"
+            f"  [bold green]✓[/]  {_fmt_elapsed(0.0)}"
+        )
+
+
+def _build_historical_rows(resume_manifest: Any) -> list[_HistoricalRow]:
+    """Build completed/failed experiment rows from a resume manifest for pre-population.
+
+    Uses a sequential display index (1, 2, 3...) for historical rows and derives
+    elapsed from started/completed timestamps when the stored value is missing.
+    """
+    historical: list[_HistoricalRow] = []
+    hist_idx = 0
+    for entry in resume_manifest.experiments:
+        if entry.status not in ("completed", "failed"):
+            continue
+        hist_idx += 1
+        elapsed = entry.elapsed_seconds or 0.0
+        if elapsed == 0.0 and entry.started_at and entry.completed_at:
+            elapsed = (entry.completed_at - entry.started_at).total_seconds()
+        status = "OK" if entry.status == "completed" else "FAIL"
+        historical.append(
+            (
+                hist_idx,
+                status,
+                entry.config_summary,
+                elapsed,
+                entry.inference_seconds,
+                entry.energy_joules,
+                entry.adj_energy_joules,
+                entry.throughput_tok_s,
+                entry.mj_per_tok,
+            )
+        )
+    return historical
+
+
 def _run_study_impl(
     config: Path,
     cli_overrides: dict[str, Any],
@@ -426,79 +610,24 @@ def _run_study_impl(
     # Fast-fail: verify resume target exists before expensive grid expansion.
     # For resume, also load the manifest early so we can show a summary and
     # pre-populate the completed experiments table.
-    _resume_manifest = None
-    is_resume = resume or resume_dir is not None
-    if resume_dir is not None:
-        if not (resume_dir / "manifest.json").exists():
-            raise typer.BadParameter(
-                f"No manifest.json in {resume_dir} - not a valid study directory.",
-                param_hint="--resume-dir",
-            )
-        try:
-            from llenergymeasure.api import load_resume_state
-
-            _resume_manifest, _ = load_resume_state(resume_dir)
-        except Exception:
-            pass  # Best-effort: display will work without manifest data
-    elif resume:
-        from llenergymeasure.api import find_resumable_study
-
-        _output = Path(output or "./results")
-        resume_dir = find_resumable_study(_output)
-        if resume_dir is None:
-            raise typer.BadParameter(
-                f"No resumable study found in {_output}. Run a study first or use --resume-dir.",
-                param_hint="--resume",
-            )
-        try:
-            from llenergymeasure.api import load_resume_state
-
-            _resume_manifest, _ = load_resume_state(resume_dir)
-        except Exception:
-            pass  # Best-effort: display will work without manifest data
+    resume_dir, _resume_manifest, is_resume = _resolve_resume_target(resume, resume_dir, output)
 
     # Check what the YAML execution block specifies (to apply CLI effective defaults)
     raw = yaml.safe_load(config.read_text()) or {}
     yaml_execution = raw.get("study_execution", {}) or {}
 
-    # Build execution overrides from CLI flags
-    exec_overrides: dict[str, Any] = {}
-
-    # CLI effective defaults: n_cycles=3, experiment_order="shuffle" when neither YAML nor CLI specifies
-    # These are applied at CLI layer; Pydantic defaults are conservative (n_cycles=1)
-    if cycles is not None:
-        exec_overrides["n_cycles"] = cycles
-    elif "n_cycles" not in yaml_execution:
-        exec_overrides["n_cycles"] = 3  # CLI effective default
-
-    if order is not None:
-        exec_overrides["experiment_order"] = order
-    elif "experiment_order" not in yaml_execution:
-        exec_overrides["experiment_order"] = "shuffle"  # CLI effective default
-
-    if no_gaps:
-        exec_overrides["experiment_gap_seconds"] = 0
-        exec_overrides["cycle_gap_seconds"] = 0
-
-    # Robustness overrides: circuit breaker, timeout
-    if fail_fast:
-        exec_overrides["max_consecutive_failures"] = 1
-        exec_overrides["circuit_breaker_cooldown_seconds"] = 0
-    if no_circuit_breaker:
-        exec_overrides["max_consecutive_failures"] = 0
-    if timeout is not None:
-        exec_overrides["wall_clock_timeout_hours"] = timeout
-
-    # --no-dedup disables library-resolution mechanism sweep dedup (runs every declared config)
-    if no_dedup:
-        exec_overrides["deduplicate_equivalent"] = False
-
-    # Build full CLI overrides dict
-    study_cli_overrides: dict[str, Any] = {}
-    if cli_overrides:
-        study_cli_overrides.update(cli_overrides)
-    if exec_overrides:
-        study_cli_overrides["study_execution"] = exec_overrides
+    # Merge CLI flags (with CLI-layer effective defaults) into the load_study overrides
+    study_cli_overrides = _build_study_cli_overrides(
+        cli_overrides,
+        cycles,
+        order,
+        no_gaps,
+        fail_fast,
+        no_circuit_breaker,
+        timeout,
+        no_dedup,
+        yaml_execution,
+    )
 
     # Load study config with overrides - show step-format spinner during expansion
     from rich.console import Console as _ExpandConsole
@@ -541,45 +670,9 @@ def _run_study_impl(
     expand_elapsed = time.perf_counter() - t0_expand
 
     # Print completed lines with green ticks (same format as step display)
-    n_valid = len(study_config.experiments) // max(study_config.study_execution.n_cycles, 1)
-    n_skipped = len(study_config.skipped_configs) if study_config.skipped_configs else 0
-    _step_n = 1
-    _step_total = 1 + (1 if n_skipped else 0) + (1 if is_resume else 0)
-
-    detail_done = _trunc_detail(f"{n_valid} valid configs")
-    _expand_console.print(
-        f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Config':<16s} {detail_done:<34s}"
-        f"  [bold green]✓[/]  {_fmt_elapsed(expand_elapsed)}"
+    _print_config_summary(
+        _expand_console, study_config, is_resume, _resume_manifest, expand_elapsed
     )
-    _step_n += 1
-
-    if n_skipped:
-        detail_skip = _trunc_detail(f"skipped {n_skipped} invalid config(s)")
-        _expand_console.print(
-            f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Config':<16s} {detail_skip:<34s}"
-            f"  [bold green]✓[/]  {_fmt_elapsed(expand_elapsed)}"
-        )
-        _step_n += 1
-
-    # Resume summary: show status counts from manifest
-    if is_resume and _resume_manifest is not None:
-        m = _resume_manifest
-        parts = []
-        if m.completed > 0:
-            parts.append(f"{m.completed} completed")
-        if m.failed > 0:
-            parts.append(f"{m.failed} failed")
-        if m.interrupted > 0:
-            parts.append(f"{m.interrupted} interrupted")
-        if m.skipped > 0:
-            parts.append(f"{m.skipped} skipped")
-        n_to_run = m.total_experiments - m.completed
-        parts.append(f"{n_to_run} to run")
-        resume_detail = _trunc_detail(", ".join(parts))
-        _expand_console.print(
-            f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Resume':<16s} {resume_detail:<34s}"
-            f"  [bold green]✓[/]  {_fmt_elapsed(0.0)}"
-        )
 
     # Count sweep axes vs groups and explicit experiments from raw YAML for panel display
     raw_sweep = raw.get("sweep", {}) or {}
@@ -665,41 +758,7 @@ def _run_study_impl(
         # Pre-populate completed experiments from manifest on resume.
         # Uses sequential index (1, 2, 3...) for historical rows.
         if is_resume and _resume_manifest is not None:
-            historical: list[
-                tuple[
-                    int,
-                    str,
-                    str,
-                    float,
-                    float | None,
-                    float | None,
-                    float | None,
-                    float | None,
-                    float | None,
-                ]
-            ] = []
-            hist_idx = 0
-            for entry in _resume_manifest.experiments:
-                if entry.status not in ("completed", "failed"):
-                    continue
-                hist_idx += 1
-                elapsed = entry.elapsed_seconds or 0.0
-                if elapsed == 0.0 and entry.started_at and entry.completed_at:
-                    elapsed = (entry.completed_at - entry.started_at).total_seconds()
-                status = "OK" if entry.status == "completed" else "FAIL"
-                historical.append(
-                    (
-                        hist_idx,
-                        status,
-                        entry.config_summary,
-                        elapsed,
-                        entry.inference_seconds,
-                        entry.energy_joules,
-                        entry.adj_energy_joules,
-                        entry.throughput_tok_s,
-                        entry.mj_per_tok,
-                    )
-                )
+            historical = _build_historical_rows(_resume_manifest)
             if historical:
                 study_display.add_historical_rows(historical)
 
