@@ -1,7 +1,7 @@
 # Invalid Parameter Combinations
 
 > Auto-generated from config validators and test results.
-> Last updated: 2026-06-20 08:03 UTC
+> Last updated: 2026-06-20 15:22 UTC
 
 This document lists parameter combinations that will fail validation or runtime.
 The tool validates these at config load time and provides clear error messages.
@@ -21,28 +21,6 @@ These combinations are rejected at config load time with a clear error message.
 | tensorrt | `dtype=float32` | TensorRT-LLM is optimised for lower-precision inference | Use dtype='float16' or 'bfloat16' |
 | vllm | `load_in_4bit or load_in_8bit` | vLLM does not support bitsandbytes quantization | Use vllm.quantization (awq, gptq, fp8) for quantized inference |
 
-## Streaming Mode Constraints
-
-When `streaming=True`, certain parameters are ignored or behave differently
-because streaming requires sequential per-request processing to measure TTFT/ITL.
-
-| Engine | Parameter | Behaviour with streaming=True | Impact |
-|---------|-----------|------------------------------|--------|
-| all | `transformers.batch_size / vllm.max_num_seqs` | Ignored - processes 1 request at a time | Reduced throughput but accurate latency |
-| transformers | `transformers.torch_compile` | May cause graph-tracing errors | Falls back to non-compiled inference |
-| transformers | `transformers.batching_strategy` | Ignored - always sequential | No batching optimisation |
-| vllm | `vllm.enable_chunked_prefill` | May interfere with TTFT measurement | Consider disabling for accurate TTFT |
-
-**When to use streaming=True:**
-- Measuring user-perceived latency (TTFT, ITL)
-- Evaluating real-time chat/assistant workloads
-- MLPerf inference latency benchmarks
-
-**When to use streaming=False:**
-- Throughput benchmarking
-- Batch processing workloads
-- torch.compile optimisation testing
-
 ## Runtime Limitations
 
 These combinations pass config validation but may fail at runtime
@@ -52,24 +30,22 @@ due to hardware, model, or package requirements.
 |---------|-----------|------------|------------|
 | transformers | `transformers.attn_implementation=flash_attention_2` | flash-attn requires Ampere+ GPU (SM80+); fails on older architectures | Use attn_implementation='sdpa' on pre-Ampere GPUs |
 | transformers | `transformers.attn_implementation=flash_attention_3` | FA3 requires the flash_attn_3 package (built from flash-attn hopper/ directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built | Install flash_attn_3 from source, or use the Docker runner |
-| vllm | `vllm.kv_cache_dtype=fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use kv_cache_dtype='auto' for automatic selection |
-| vllm | `vllm.attention.engine=FLASHINFER` | FlashInfer requires JIT compilation on first use | Use attention.engine='auto' or 'FLASH_ATTN' |
-| vllm | `vllm.attention.engine=TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use attention.engine='auto' or 'FLASH_ATTN' |
-| vllm | `vllm.quantization_method=awq/gptq` | Requires a pre-quantized model checkpoint | Use a quantized model (e.g., TheBloke/*-AWQ) or omit |
-| vllm | `vllm.load_format=pt` | Model checkpoint must have .bin files (not just safetensors) | Use load_format='auto' or 'safetensors' |
+| vllm | `vllm.engine.kv_cache_dtype=fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use kv_cache_dtype='auto' for automatic selection |
+| vllm | `vllm.engine.attention.backend=flashinfer` | FlashInfer requires JIT compilation on first use | Leave attention.backend unset (auto) or use 'flash_attn' |
+| vllm | `vllm.engine.quantization=awq/gptq` | Requires a pre-quantized model checkpoint | Use a quantized model (e.g., TheBloke/*-AWQ) or omit |
 | tensorrt | `tensorrt.quant_config.quant_algo=FP8` | FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback | Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100 |
-| tensorrt | `tensorrt.quantization.method=int8_sq` | INT8 SmoothQuant requires calibration dataset | Provide tensorrt.quantization.calibration config or use a supported quantization method |
+| tensorrt | `tensorrt.quant_config.quant_algo=INT8` | INT8 quantisation requires a calibrated checkpoint; uncalibrated weights degrade accuracy | Use a pre-quantised checkpoint or a weight-only algo (W4A16_AWQ, W4A16_GPTQ, W8A16) |
 
 ## Engine Capability Matrix
 
 | Feature | Transformers | vLLM | TensorRT |
 |---------|---------|------|----------|
-| Tensor Parallel | No | Yes | Yes |
+| Tensor Parallel | Yes | Yes | Yes |
 | Data Parallel | No | No | No |
 | BitsAndBytes (4-bit) | Yes | No | No |
 | BitsAndBytes (8-bit) | Yes | No | No |
 | Native Quantization | No | AWQ/GPTQ/FP8 | INT8/W4A16_AWQ/W4A16_GPTQ/FP8 |
-| float32 precision | Yes | Yes | No |
+| float32 precision | Yes | No | No |
 | float16 precision | Yes | Yes | Yes |
 | bfloat16 precision | Yes | Yes | Yes |
 | Prefix Caching | No | Yes | No |
@@ -86,8 +62,8 @@ due to hardware, model, or package requirements.
 
 ### Memory-Constrained (Consumer GPU)
 ```yaml
-engine: pytorch
-quantization:
+engine: transformers
+transformers:
   load_in_4bit: true
   bnb_4bit_quant_type: nf4
 ```
@@ -96,15 +72,16 @@ quantization:
 ```yaml
 engine: vllm
 vllm:
-  gpu_memory_utilization: 0.9
-  enable_prefix_caching: true
+  engine:
+    gpu_memory_utilization: 0.9
+    enable_prefix_caching: true
 ```
 
 ### Maximum Performance (Ampere+)
 ```yaml
 engine: tensorrt
-fp_precision: float16
 tensorrt:
-  quantization:
-    method: fp8  # Hopper only
+  dtype: float16
+  quant_config:
+    quant_algo: FP8  # Hopper only
 ```

@@ -390,8 +390,8 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
 
     return {
         "tensor_parallel": {
-            # Transformers does NOT support tensor parallelism for HuggingFace models
-            "transformers": False,
+            # Transformers exposes HF-native tensor parallelism via tp_plan/tp_size
+            "transformers": "tp_plan" in transformers_fields,
             "vllm": "tensor_parallel_size" in vllm_fields,
             "tensorrt": "tensor_parallel_size" in tensorrt_fields,
         },
@@ -419,7 +419,8 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         },
         "float32_precision": {
             "transformers": True,
-            "vllm": True,
+            # vLLM rejects float32: dtype is Literal["float16", "bfloat16", "auto"]
+            "vllm": False,
             # TensorRT-LLM is optimised for lower precision
             "tensorrt": False,
         },
@@ -583,44 +584,6 @@ def get_validation_rules() -> list[dict[str, str]]:
     ]
 
 
-def get_streaming_constraints() -> list[dict[str, str]]:
-    """Get streaming mode constraints for documentation.
-
-    Returns parameters that are ignored or behave differently when
-    streaming=True, because streaming requires sequential per-request
-    processing to measure TTFT/ITL.
-
-    Returns:
-        List of dicts with keys: engine, parameter, behaviour, impact.
-    """
-    return [
-        {
-            "engine": "all",
-            "parameter": "transformers.batch_size / vllm.max_num_seqs",
-            "behaviour": "Ignored - processes 1 request at a time",
-            "impact": "Reduced throughput but accurate latency",
-        },
-        {
-            "engine": "transformers",
-            "parameter": "transformers.torch_compile",
-            "behaviour": "May cause graph-tracing errors",
-            "impact": "Falls back to non-compiled inference",
-        },
-        {
-            "engine": "transformers",
-            "parameter": "transformers.batching_strategy",
-            "behaviour": "Ignored - always sequential",
-            "impact": "No batching optimisation",
-        },
-        {
-            "engine": "vllm",
-            "parameter": "vllm.enable_chunked_prefill",
-            "behaviour": "May interfere with TTFT measurement",
-            "impact": "Consider disabling for accurate TTFT",
-        },
-    ]
-
-
 def get_runtime_limitations() -> list[dict[str, str]]:
     """Get known runtime limitations for documentation.
 
@@ -645,33 +608,21 @@ def get_runtime_limitations() -> list[dict[str, str]]:
         },
         {
             "engine": "vllm",
-            "parameter": "vllm.kv_cache_dtype=fp8",
+            "parameter": "vllm.engine.kv_cache_dtype=fp8",
             "limitation": "FP8 KV cache requires Hopper (H100) or newer GPU",
             "resolution": "Use kv_cache_dtype='auto' for automatic selection",
         },
         {
             "engine": "vllm",
-            "parameter": "vllm.attention.engine=FLASHINFER",
+            "parameter": "vllm.engine.attention.backend=flashinfer",
             "limitation": "FlashInfer requires JIT compilation on first use",
-            "resolution": "Use attention.engine='auto' or 'FLASH_ATTN'",
+            "resolution": "Leave attention.backend unset (auto) or use 'flash_attn'",
         },
         {
             "engine": "vllm",
-            "parameter": "vllm.attention.engine=TORCH_SDPA",
-            "limitation": "TORCH_SDPA not registered in vLLM attention backends",
-            "resolution": "Use attention.engine='auto' or 'FLASH_ATTN'",
-        },
-        {
-            "engine": "vllm",
-            "parameter": "vllm.quantization_method=awq/gptq",
+            "parameter": "vllm.engine.quantization=awq/gptq",
             "limitation": "Requires a pre-quantized model checkpoint",
             "resolution": "Use a quantized model (e.g., TheBloke/*-AWQ) or omit",
-        },
-        {
-            "engine": "vllm",
-            "parameter": "vllm.load_format=pt",
-            "limitation": "Model checkpoint must have .bin files (not just safetensors)",
-            "resolution": "Use load_format='auto' or 'safetensors'",
         },
         {
             "engine": "tensorrt",
@@ -681,8 +632,8 @@ def get_runtime_limitations() -> list[dict[str, str]]:
         },
         {
             "engine": "tensorrt",
-            "parameter": "tensorrt.quantization.method=int8_sq",
-            "limitation": "INT8 SmoothQuant requires calibration dataset",
-            "resolution": "Provide tensorrt.quantization.calibration config or use a supported quantization method",
+            "parameter": "tensorrt.quant_config.quant_algo=INT8",
+            "limitation": "INT8 quantisation requires a calibrated checkpoint; uncalibrated weights degrade accuracy",
+            "resolution": "Use a pre-quantised checkpoint or a weight-only algo (W4A16_AWQ, W4A16_GPTQ, W8A16)",
         },
     ]

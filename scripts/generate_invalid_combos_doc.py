@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from llenergymeasure.config.introspection import (
     get_capability_matrix_markdown,
     get_runtime_limitations,
-    get_streaming_constraints,
     get_validation_rules,
 )
 
@@ -51,40 +50,6 @@ def generate_markdown() -> str:
     lines.extend(
         [
             "",
-            "## Streaming Mode Constraints",
-            "",
-            "When `streaming=True`, certain parameters are ignored or behave differently",
-            "because streaming requires sequential per-request processing to measure TTFT/ITL.",
-            "",
-            "| Engine | Parameter | Behaviour with streaming=True | Impact |",
-            "|---------|-----------|------------------------------|--------|",
-        ]
-    )
-
-    for constraint in get_streaming_constraints():
-        lines.append(
-            f"| {constraint['engine']} | `{constraint['parameter']}` | "
-            f"{constraint['behaviour']} | {constraint['impact']} |"
-        )
-
-    lines.extend(
-        [
-            "",
-            "**When to use streaming=True:**",
-            "- Measuring user-perceived latency (TTFT, ITL)",
-            "- Evaluating real-time chat/assistant workloads",
-            "- MLPerf inference latency benchmarks",
-            "",
-            "**When to use streaming=False:**",
-            "- Throughput benchmarking",
-            "- Batch processing workloads",
-            "- torch.compile optimisation testing",
-        ]
-    )
-
-    lines.extend(
-        [
-            "",
             "## Runtime Limitations",
             "",
             "These combinations pass config validation but may fail at runtime",
@@ -112,8 +77,8 @@ def generate_markdown() -> str:
             "",
             "### Memory-Constrained (Consumer GPU)",
             "```yaml",
-            "engine: pytorch",
-            "quantization:",
+            "engine: transformers",
+            "transformers:",
             "  load_in_4bit: true",
             "  bnb_4bit_quant_type: nf4",
             "```",
@@ -122,17 +87,18 @@ def generate_markdown() -> str:
             "```yaml",
             "engine: vllm",
             "vllm:",
-            "  gpu_memory_utilization: 0.9",
-            "  enable_prefix_caching: true",
+            "  engine:",
+            "    gpu_memory_utilization: 0.9",
+            "    enable_prefix_caching: true",
             "```",
             "",
             "### Maximum Performance (Ampere+)",
             "```yaml",
             "engine: tensorrt",
-            "fp_precision: float16",
             "tensorrt:",
-            "  quantization:",
-            "    method: fp8  # Hopper only",
+            "  dtype: float16",
+            "  quant_config:",
+            "    quant_algo: FP8  # Hopper only",
             "```",
             "",
         ]
