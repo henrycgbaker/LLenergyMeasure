@@ -94,6 +94,16 @@ class ExperimentResult(BaseModel):
         default=None,
         description="(start_sec, end_sec) of measurement window relative to experiment start",
     )
+    measurement_window_discard_fraction: float | None = Field(
+        default=None,
+        description="Warm-up fraction discarded for steady_state methodology. None for "
+        "total/windowed.",
+    )
+    steady_state_not_detected: bool = Field(
+        default=False,
+        description="True when steady_state auto-detection was requested but found no "
+        "stable region and fell back to the fixed warm-up discard.",
+    )
 
     # Core metrics
     total_tokens: int = Field(..., description="Total tokens across all processes")

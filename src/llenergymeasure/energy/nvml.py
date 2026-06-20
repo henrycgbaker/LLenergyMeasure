@@ -34,6 +34,49 @@ class EnergyMeasurement:
     per_gpu_j: dict[int, float] | None = None
 
 
+def integrate_power_samples(samples: list[Any]) -> dict[int, float]:
+    """Integrate power samples to joules per GPU via the trapezoidal rule.
+
+    For each consecutive sample pair within a GPU group,
+    ``energy += (p[i] + p[i+1]) / 2 * dt``. Pairs where either ``power_w`` is
+    None are skipped rather than failing. Samples are grouped by ``gpu_index``
+    so multiple GPUs integrate independently.
+
+    This is the single source of truth for the energy integration math; both the
+    NVML sampler and the windowed re-integration path call it. It must not be
+    altered without re-validating energy accuracy.
+
+    Args:
+        samples: Power samples (any object with ``power_w``, ``timestamp``, and
+            optionally ``gpu_index`` attributes), in timestamp order per GPU.
+
+    Returns:
+        Mapping of gpu_index -> joules. Empty when fewer than two samples.
+    """
+    per_gpu_j: dict[int, float] = {}
+    if len(samples) < 2:
+        return per_gpu_j
+
+    by_gpu: dict[int, list[Any]] = {}
+    for s in samples:
+        gpu_idx = getattr(s, "gpu_index", 0)
+        by_gpu.setdefault(gpu_idx, []).append(s)
+
+    for gpu_idx, gpu_samples in by_gpu.items():
+        gpu_j = 0.0
+        for i in range(len(gpu_samples) - 1):
+            s_a = gpu_samples[i]
+            s_b = gpu_samples[i + 1]
+            if s_a.power_w is None or s_b.power_w is None:
+                continue
+            dt = s_b.timestamp - s_a.timestamp
+            avg_power = (s_a.power_w + s_b.power_w) / 2.0
+            gpu_j += avg_power * dt
+        per_gpu_j[gpu_idx] = gpu_j
+
+    return per_gpu_j
+
+
 class NVMLSampler:
     """Energy sampler using NVML via PowerThermalSampler.
 
@@ -129,24 +172,9 @@ class NVMLSampler:
                         max_gap_ms,
                     )
 
-            # Group samples by gpu_index for per-GPU integration
-            by_gpu: dict[int, list[Any]] = {}
-            for s in samples:
-                gpu_idx = getattr(s, "gpu_index", self._gpu_indices[0])
-                by_gpu.setdefault(gpu_idx, []).append(s)
-
-            for gpu_idx, gpu_samples in by_gpu.items():
-                gpu_j = 0.0
-                for i in range(len(gpu_samples) - 1):
-                    s_a = gpu_samples[i]
-                    s_b = gpu_samples[i + 1]
-                    if s_a.power_w is None or s_b.power_w is None:
-                        continue
-                    dt = s_b.timestamp - s_a.timestamp
-                    avg_power = (s_a.power_w + s_b.power_w) / 2.0
-                    gpu_j += avg_power * dt
-                per_gpu_j[gpu_idx] = gpu_j
-                total_j += gpu_j
+            # Trapezoidal integration per GPU (shared with windowed re-integration)
+            per_gpu_j = integrate_power_samples(samples)
+            total_j = sum(per_gpu_j.values())
 
         return EnergyMeasurement(
             total_j=total_j,
