@@ -16,6 +16,8 @@ from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     ENV_CONFIG_PATH,
     ENV_HF_TOKEN,
+    ENV_OUTPUT_DIR,
+    ENV_SAVE_TIMESERIES,
     Engine,
 )
 from llenergymeasure.infra.docker_errors import (
@@ -1496,3 +1498,62 @@ class TestMountPivot:
         cmd = self._build("transformers", tmp_path)
         expected_mount = f"{_resolve_package_parent_dir()}:/llem-src:ro"
         assert expected_mount in cmd
+
+
+# ---------------------------------------------------------------------------
+# Test: reserved exchange env keys are not clobbered by the LLEM_* forward loop
+# ---------------------------------------------------------------------------
+
+
+class TestReservedEnvForwarding:
+    """A stray host ``LLEM_*`` reserved exchange var must not override the
+    intended dispatch value. Docker applies ``-e`` last-wins over ``--env-file``,
+    so forwarding a host ``LLEM_CONFIG_PATH`` (etc.) would silently clobber the
+    value the builder set deliberately. The forward loop must skip reserved keys.
+    """
+
+    @staticmethod
+    def _forwarded_value(cmd: list[str], key: str) -> str | None:
+        """Last ``-e KEY=VALUE`` value for *key* (last-wins, as docker applies)."""
+        value = None
+        for i, arg in enumerate(cmd):
+            if arg == "-e" and i + 1 < len(cmd):
+                pair = cmd[i + 1]
+                if pair.startswith(f"{key}="):
+                    value = pair.split("=", 1)[1]
+        return value
+
+    def test_stray_reserved_keys_not_forwarded(self, monkeypatch):
+        """Stray host reserved keys are excluded from the blanket forward loop,
+        so the builder's intended exchange values win."""
+        config = make_config()
+        # Stray host values that would clobber the dispatch if forwarded.
+        monkeypatch.setenv(ENV_CONFIG_PATH, "/host/stray/config.json")
+        monkeypatch.setenv(ENV_OUTPUT_DIR, "/host/stray/out")
+        monkeypatch.setenv(ENV_SAVE_TIMESERIES, "0")
+
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+        # CONFIG_PATH is set once, to the intended exchange-dir path - not the stray.
+        config_vals = [
+            cmd[i + 1].split("=", 1)[1]
+            for i, arg in enumerate(cmd)
+            if arg == "-e" and cmd[i + 1].startswith(f"{ENV_CONFIG_PATH}=")
+        ]
+        assert config_vals == [f"{CONTAINER_EXCHANGE_DIR}/abc123_config.json"]
+        assert "/host/stray/config.json" not in config_vals
+        # OUTPUT_DIR / SAVE_TIMESERIES travel via --env-file, never via -e here,
+        # so the stray host values must not appear as -e args.
+        assert self._forwarded_value(cmd, ENV_OUTPUT_DIR) is None
+        assert self._forwarded_value(cmd, ENV_SAVE_TIMESERIES) is None
+
+    def test_non_reserved_llem_var_still_forwarded(self, monkeypatch):
+        """Non-reserved framework-default LLEM_* vars are still forwarded."""
+        config = make_config()
+        monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
+
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+        assert self._forwarded_value(cmd, "LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP") == "auto"
