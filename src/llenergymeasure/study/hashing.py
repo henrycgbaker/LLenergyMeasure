@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.ssot import engine_str
 from llenergymeasure.domain.hashing import ConfigHashView, hash_config
 
 __all__ = [
@@ -38,7 +39,7 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     into its own dict so the resolved-config / observed-config ordering separates
     "how the engine constructs" from "what it generates with".
     """
-    engine_name = config.engine.value if hasattr(config.engine, "value") else str(config.engine)
+    engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)
     dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
     sampling = dump.pop("sampling", None) or {}

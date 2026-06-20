@@ -9,6 +9,11 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 
+def bytes_to_mb(n: float) -> float:
+    """Convert a byte count to mebibytes (MiB)."""
+    return n / (1024 * 1024)
+
+
 def format_elapsed(seconds: float) -> str:
     """Format seconds as human-readable elapsed time.
 

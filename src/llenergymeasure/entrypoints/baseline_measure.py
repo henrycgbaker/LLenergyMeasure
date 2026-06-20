@@ -45,6 +45,7 @@ import traceback
 from pathlib import Path
 
 from llenergymeasure.config.ssot import ENV_BASELINE_SPEC_PATH, STAGE_LINE_PREFIX
+from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ def run_baseline_measurement(spec_path: Path) -> Path:
         measure_spot_check,
     )
 
-    raw = json.loads(spec_path.read_text(encoding="utf-8"))
+    raw = load_json(spec_path)
     mode = raw.get("mode")
     gpu_indices = list(raw.get("gpu_indices") or [])
     duration_sec = float(raw.get("duration_sec", 30.0))

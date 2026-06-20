@@ -11,6 +11,7 @@ warmup_until_converged(), model.generate() inference loop, and cleanup.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -36,8 +37,6 @@ class _TimingStreamer:
         self._prompt_seen = False
 
     def put(self, value: Any) -> None:
-        import time
-
         # The first put() carries the prompt input_ids (a 2-D tensor); drop it so
         # only generated-token arrivals are timed.
         if not self._prompt_seen:
@@ -92,27 +91,25 @@ class TransformersEngine:
         Returns:
             Tuple of (model, tokenizer).
         """
-        import time as _time
-
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         kwargs = self._model_load_kwargs(config)
         logger.info("Loading model %r with kwargs: %s", config.task.model, list(kwargs.keys()))
 
-        t0 = _time.perf_counter()
+        t0 = time.perf_counter()
         tokenizer = AutoTokenizer.from_pretrained(
             config.task.model, trust_remote_code=kwargs.get("trust_remote_code", False)
         )
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         if on_substep is not None:
-            on_substep("tokenizer loaded", _time.perf_counter() - t0)
+            on_substep("tokenizer loaded", time.perf_counter() - t0)
 
-        t0 = _time.perf_counter()
+        t0 = time.perf_counter()
         model = AutoModelForCausalLM.from_pretrained(config.task.model, **kwargs)
         model.eval()
         if on_substep is not None:
-            on_substep("model weights loaded", _time.perf_counter() - t0)
+            on_substep("model weights loaded", time.perf_counter() - t0)
 
         # Apply allow_tf32 (Ampere+ TF32 toggle)
         if config.transformers is not None and config.transformers.allow_tf32 is not None:
@@ -127,11 +124,11 @@ class TransformersEngine:
             mode = config.transformers.torch_compile_mode or "default"
             backend = config.transformers.torch_compile_backend or "inductor"
             try:
-                t0 = _time.perf_counter()
+                t0 = time.perf_counter()
                 model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
                 logger.debug("torch.compile applied (mode=%s, backend=%s)", mode, backend)
                 if on_substep is not None:
-                    on_substep(f"torch.compile ({mode})", _time.perf_counter() - t0)
+                    on_substep(f"torch.compile ({mode})", time.perf_counter() - t0)
             except Exception as e:
                 logger.warning("torch.compile failed (non-fatal, continuing without): %s", e)
 
@@ -153,8 +150,6 @@ class TransformersEngine:
         Returns:
             Latency in milliseconds.
         """
-        import time
-
         import torch
 
         hf_model, tokenizer = model
@@ -264,10 +259,8 @@ class TransformersEngine:
             batch = prompts[batch_start : batch_start + batch_size]
             try:
                 if profiling:
-                    import time as _time
-
                     streamer = _TimingStreamer()
-                    t0_ms = _time.perf_counter() * 1000.0
+                    t0_ms = time.perf_counter() * 1000.0
                     batch_input, batch_output, batch_time, batch_padding = self._run_batch(
                         hf_model, tokenizer, config, batch, generate_kwargs, streamer=streamer
                     )
@@ -631,8 +624,6 @@ class TransformersEngine:
         When ``streamer`` is provided (latency profiling), it is forwarded to
         ``generate(streamer=...)`` so per-token arrival times are recorded.
         """
-        import time
-
         import torch
 
         tokenizer_kwargs: dict[str, Any] = {

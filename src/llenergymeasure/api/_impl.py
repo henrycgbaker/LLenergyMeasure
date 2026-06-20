@@ -6,6 +6,7 @@ This module is internal (underscore prefix). Import via llenergymeasure.__init__
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any, overload
@@ -24,6 +25,8 @@ from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study.single import run_single_experiment
 from llenergymeasure.utils.exceptions import ConfigError
+
+logger = logging.getLogger(__name__)
 
 # Single source of truth for n_prompts default - derived from DatasetConfig field default
 # so run_experiment() kwargs and DatasetConfig always agree.
@@ -485,11 +488,7 @@ def _resolve_runner_specs(
     multi-engine studies without Docker, or auto-elevating when available), emits
     preflight progress, and warns when the study mixes local and Docker runners.
     """
-    import logging
-
     from llenergymeasure.study.preflight import run_study_preflight
-
-    _api_logger = logging.getLogger(__name__)
 
     if preresolved is not None:
         runner_specs, system_overrides = preresolved
@@ -516,7 +515,7 @@ def _resolve_runner_specs(
     # Warn on mixed runners (some local, some docker)
     modes = {spec.mode for spec in runner_specs.values()}
     if len(modes) > 1:
-        _api_logger.warning(
+        logger.warning(
             "Mixed runners detected. For consistent measurements, "
             "consider running all engines in Docker."
         )
@@ -535,9 +534,6 @@ def _write_study_artefacts(
     the system-overrides record, and the software environment snapshot. Each write is
     best-effort and logs on failure rather than aborting the run.
     """
-    import logging
-
-    _api_logger = logging.getLogger(__name__)
 
     # Identity fields for all study-level artefacts
     _study_hash = study.study_design_hash or ""
@@ -550,9 +546,9 @@ def _write_study_artefacts(
             original = Path(config_path).read_text(encoding="utf-8")
             header = f"# study_design_hash: {_study_hash} | study_name: {_study_name}\n"
             dest.write_text(header + original, encoding="utf-8")
-            _api_logger.info("Config YAML copied to %s", dest)
+            logger.info("Config YAML copied to %s", dest)
         except FileNotFoundError:
-            _api_logger.warning("Config YAML %s not found, skipping copy", config_path)
+            logger.warning("Config YAML %s not found, skipping copy", config_path)
 
     # Persist skipped config details to _study-artefacts/.
     if study.skipped_configs:
@@ -570,9 +566,9 @@ def _write_study_artefacts(
             overrides_path.write_text(
                 json.dumps(overrides_with_identity, indent=2), encoding="utf-8"
             )
-            _api_logger.info("System overrides written to %s", overrides_path)
+            logger.info("System overrides written to %s", overrides_path)
         except OSError as exc:
-            _api_logger.warning("Failed to write system_overrides.json: %s", exc)
+            logger.warning("Failed to write system_overrides.json: %s", exc)
 
     # Write study-level environment.json (installed_packages + software constants).
     try:
@@ -586,9 +582,9 @@ def _write_study_artefacts(
         }
         env_path = artefacts_dir / "environment.json"
         env_path.write_text(json.dumps(study_env, indent=2), encoding="utf-8")
-        _api_logger.info("Study-level environment written to %s", env_path)
+        logger.info("Study-level environment written to %s", env_path)
     except Exception as exc:
-        _api_logger.warning("Failed to write study-level environment.json: %s", exc)
+        logger.warning("Failed to write study-level environment.json: %s", exc)
 
 
 def _build_resolution_logs(
@@ -599,10 +595,6 @@ def _build_resolution_logs(
     Computed once here so runners don't need to know about resolution logic.
     Best-effort: returns whatever was built before any failure.
     """
-    import logging
-
-    _api_logger = logging.getLogger(__name__)
-
     resolution_logs: dict[str, dict[str, Any]] = {}
     try:
         from llenergymeasure.config.introspection import get_swept_field_paths
@@ -622,7 +614,7 @@ def _build_resolution_logs(
                 swept_fields=swept_fields,
             )
     except Exception as exc:
-        _api_logger.debug("Failed to build resolution logs: %s", exc)
+        logger.debug("Failed to build resolution logs: %s", exc)
     return resolution_logs
 
 

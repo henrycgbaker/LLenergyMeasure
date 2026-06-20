@@ -39,6 +39,7 @@ from llenergymeasure.config.ssot import (
     ENV_OUTPUT_DIR,
     ENV_SAVE_TIMESERIES,
 )
+from llenergymeasure.utils.io import load_json
 
 __all__ = ["StreamProgressCallback", "main", "run_container_experiment"]
 
@@ -167,7 +168,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     from llenergymeasure.infra.version_handshake import compute_expconf_fingerprint
 
     # --- Deserialise config ---
-    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    raw = load_json(config_path)
     config = ExperimentConfig.model_validate(raw)
 
     # Diagnostic: log container-side fingerprint so post-mortem analysis can

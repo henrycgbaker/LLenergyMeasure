@@ -25,6 +25,7 @@ from pathlib import Path
 
 from llenergymeasure.device.gpu_info import nvml_context
 from llenergymeasure.domain.metrics import EnergyBreakdown
+from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +313,7 @@ def load_baseline_cache(path: Path, ttl: float = 1800.0) -> BaselineCache | None
         return None
 
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = load_json(path)
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to read baseline cache %s: %s", path, exc)
         return None

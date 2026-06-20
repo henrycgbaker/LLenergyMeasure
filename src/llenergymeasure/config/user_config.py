@@ -66,12 +66,7 @@ class UserRunnersConfig(BaseModel):
                     f"Singularity runner not yet supported (runners.{field_name}='{value}'). "
                     "Use 'auto', 'local', 'docker', or 'docker:<image>'."
                 )
-            if (
-                value != "auto"
-                and value != "local"
-                and value != "docker"
-                and not value.startswith("docker:")
-            ):
+            if value not in {"auto", "local", "docker"} and not value.startswith("docker:"):
                 raise ValueError(
                     f"runners.{field_name}: expected 'auto', 'local', 'docker', or 'docker:<image>', "
                     f"got '{value}'"

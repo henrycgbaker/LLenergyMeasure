@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 
 from llenergymeasure.device.gpu_info import nvml_context
+from llenergymeasure.utils.formatting import bytes_to_mb
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def check_gpu_memory_residual(
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
             mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            used_mb = mem_info.used / (1024 * 1024)
+            used_mb = bytes_to_mb(mem_info.used)
         except Exception as e:
             logger.debug("GPU memory check failed: %s", e)
             return

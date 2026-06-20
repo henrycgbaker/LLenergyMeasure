@@ -30,6 +30,7 @@ from llenergymeasure.config.engine_invariants.loader import (
     resolve_field_path,
 )
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.ssot import engine_str
 from llenergymeasure.study.hashing import build_resolved_view, hash_config
 
 logger = logging.getLogger(__name__)
@@ -256,7 +257,7 @@ def resolve_library_effective(
     def _invariants_for(cfg: ExperimentConfig) -> tuple[Invariant, ...]:
         if explicit_rules is not None:
             return explicit_rules
-        engine = cfg.engine.value if hasattr(cfg.engine, "value") else str(cfg.engine)
+        engine = engine_str(cfg.engine)
         try:
             return resolved_loader.load_invariants(engine).invariants
         except FileNotFoundError:
@@ -305,7 +306,7 @@ def resolve_library_effective(
 
 def _canonical_excerpt(config: ExperimentConfig) -> dict[str, Any]:
     """Small human-readable excerpt of the canonical form for display/logs."""
-    engine = config.engine.value if hasattr(config.engine, "value") else str(config.engine)
+    engine = engine_str(config.engine)
     excerpt: dict[str, Any] = {
         "engine": engine,
         "task.model": config.task.model,

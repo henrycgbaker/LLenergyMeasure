@@ -49,6 +49,7 @@ from llenergymeasure.config.engine_invariants import (
 from llenergymeasure.config.ssot import Engine
 from llenergymeasure.study.message_normalise import build_template_regex, normalise
 from llenergymeasure.study.runtime_observations import RUNTIME_OBSERVATIONS_FILENAME
+from llenergymeasure.utils.io import load_json
 
 __all__ = [
     "GapProposal",
@@ -465,7 +466,7 @@ def _load_kwargs_via_manifest(
     study_dir: Path, manifest_path: Path
 ) -> tuple[dict[str, dict[str, Any]], int]:
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = load_json(manifest_path)
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("Failed to read manifest.json at %s: %s", manifest_path, exc)
         return {}, 0
@@ -528,7 +529,7 @@ def _read_resolution_sidecar(
 ) -> tuple[dict[str, Any] | None, bool]:
     """Parse ``_resolution.json`` at ``path``; return (flat_dict or None, failed)."""
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = load_json(path)
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("Failed to parse _resolution.json at %s: %s", path, exc)
         return None, True

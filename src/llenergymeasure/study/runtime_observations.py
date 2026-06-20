@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine
+from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine, engine_str
 from llenergymeasure.study.message_normalise import normalise
 
 __all__ = [
@@ -221,7 +221,7 @@ def _build_record(
     exit_reason: str | None,
     exit_code: int | None,
 ) -> dict[str, Any]:
-    engine_value = _engine_value(config.engine)
+    engine_value = engine_str(config.engine)
     return {
         "schema_version": SCHEMA_VERSION,
         "observed_at": datetime.now(timezone.utc)
@@ -285,10 +285,6 @@ def _serialise_exception(exc: BaseException) -> dict[str, Any]:
 
 def _normalise_message(message: str) -> str:
     return normalise(message).template
-
-
-def _engine_value(engine: Any) -> str:
-    return engine.value if hasattr(engine, "value") else str(engine)
 
 
 @lru_cache(maxsize=8)

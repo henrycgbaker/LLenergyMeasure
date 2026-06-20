@@ -178,6 +178,18 @@ def _run_experiment_worker(
         conn.close()
 
 
+def _as_failure_payload(payload: Any, config_hash: str) -> dict[str, Any] | None:
+    """Stamp and return ``payload`` if it is a worker error dict, else None.
+
+    A worker error dict carries both ``type`` and ``message`` keys; the
+    ``config_hash`` is added so the parent can attribute the failure.
+    """
+    if isinstance(payload, dict) and "type" in payload and "message" in payload:
+        payload["config_hash"] = config_hash
+        return payload
+    return None
+
+
 def _collect_result(
     p: Any,  # multiprocessing.Process
     parent_conn: Any,  # multiprocessing.Connection (parent end)
@@ -220,16 +232,14 @@ def _collect_result(
         # Non-zero exit - try to read error payload from pipe
         # Use pre-drained payload if available; otherwise poll/recv
         if pipe_payload is not _UNSET:
-            payload = pipe_payload
-            if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                payload["config_hash"] = config_hash
-                return payload
+            failure = _as_failure_payload(pipe_payload, config_hash)
+            if failure is not None:
+                return failure
         elif parent_conn.poll():
             try:
-                payload = parent_conn.recv()
-                if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                    payload["config_hash"] = config_hash
-                    return payload
+                failure = _as_failure_payload(parent_conn.recv(), config_hash)
+                if failure is not None:
+                    return failure
             except Exception:
                 pass
 
@@ -241,22 +251,15 @@ def _collect_result(
 
     # Success path - use pre-drained payload if available
     if pipe_payload is not _UNSET:
-        payload = pipe_payload
         # If payload is an error dict (exception in worker), treat as failure
-        if isinstance(payload, dict) and "type" in payload and "message" in payload:
-            payload["config_hash"] = config_hash
-            return payload
-        return payload
+        return _as_failure_payload(pipe_payload, config_hash) or pipe_payload
 
     # Fallback: read from pipe directly (no pre-drained payload)
     if parent_conn.poll():
         try:
             payload = parent_conn.recv()
             # If payload is an error dict (exception in worker), treat as failure
-            if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                payload["config_hash"] = config_hash
-                return payload
-            return payload
+            return _as_failure_payload(payload, config_hash) or payload
         except Exception as exc:
             return {
                 "type": "PipeError",

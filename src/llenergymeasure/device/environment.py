@@ -7,8 +7,8 @@ with reasonable defaults instead of crashing.
 
 import importlib.util
 import logging
-import os
 import platform
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +23,7 @@ from llenergymeasure.domain.environment import (
     GPUEnvironment,
     ThermalEnvironment,
 )
+from llenergymeasure.utils.formatting import bytes_to_mb
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ def _collect_gpu(pynvml: Any, handle: Any) -> GPUEnvironment:
 
     try:
         mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        vram_total_mb = mem_info.total / (1024 * 1024)
+        vram_total_mb = bytes_to_mb(mem_info.total)
         logger.debug("Environment: VRAM = %.0f MB", vram_total_mb)
     except pynvml.NVMLError as e:
         logger.debug("Environment: failed to get memory info: %s", e)
@@ -199,7 +200,7 @@ def _collect_cpu() -> CPUEnvironment:
 
 def _collect_container() -> ContainerEnvironment:
     """Detect container runtime."""
-    detected = os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+    detected = Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
     runtime: str | None = None
 
     if detected:
@@ -227,9 +228,9 @@ def _collect_container() -> ContainerEnvironment:
 
 def _detect_container_runtime() -> str | None:
     """Detect which container runtime is in use."""
-    if os.path.exists("/.dockerenv"):
+    if Path("/.dockerenv").exists():
         return "docker"
-    if os.path.exists("/run/.containerenv"):
+    if Path("/run/.containerenv").exists():
         return "podman"
     return None
 
@@ -270,8 +271,6 @@ def detect_cuda_version_with_source() -> tuple[str | None, str | None]:
             logger.debug("CUDA version: torch source failed", exc_info=True)
 
     # Source 2: /usr/local/cuda/version.txt or version.json
-    import re
-
     for version_file in (
         "/usr/local/cuda/version.txt",
         "/usr/local/cuda/version.json",

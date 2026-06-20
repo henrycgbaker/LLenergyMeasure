@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import time as _time
+import time
 from collections.abc import Callable
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.utils.exceptions import EngineError
+from llenergymeasure.utils.formatting import bytes_to_mb
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def _capture_kv_cache_stats(llm: Any) -> dict[str, Any] | None:
             block_bytes = getattr(cache_config, "block_size_bytes", None)
             if isinstance(block_bytes, int) and block_bytes > 0:
                 kv_bytes = usage * num_gpu_blocks * block_bytes
-                stats["kv_cache_mb"] = kv_bytes / (1024 * 1024)
+                stats["kv_cache_mb"] = bytes_to_mb(kv_bytes)
 
     return stats or None
 
@@ -150,10 +151,10 @@ class VLLMEngine:
         )
 
         try:
-            t0 = _time.perf_counter()
+            t0 = time.perf_counter()
             llm = LLM(**kwargs)
             if on_substep is not None:
-                on_substep("vLLM engine loaded", _time.perf_counter() - t0)
+                on_substep("vLLM engine loaded", time.perf_counter() - t0)
         except Exception as e:
             raise EngineError(f"vLLM model loading failed: {e}") from e
 
@@ -217,8 +218,6 @@ class VLLMEngine:
         Raises:
             EngineError: On OOM or other inference failures.
         """
-        import time
-
         from llenergymeasure.engines._cuda import reset_cuda_peak_memory
 
         llm, sampling_params = model
@@ -269,9 +268,9 @@ class VLLMEngine:
             try:
                 import torch
 
-                total_vram = torch.cuda.get_device_properties(
-                    torch.cuda.current_device()
-                ).total_memory / (1024 * 1024)
+                total_vram = bytes_to_mb(
+                    torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory
+                )
                 vllm_cfg = config.vllm
                 gpu_util = 0.9  # vLLM default
                 if (
@@ -581,7 +580,7 @@ class VLLMEngine:
             with nvml_context():
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
                 info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                mem_mb = float(info.used) / (1024 * 1024)
+                mem_mb = bytes_to_mb(float(info.used))
             return mem_mb
         except Exception:
             return None

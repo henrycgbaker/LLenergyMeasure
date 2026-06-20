@@ -32,6 +32,7 @@ from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.energy import select_energy_sampler
 from llenergymeasure.engines.protocol import EnginePlugin, InferenceOutput
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
+from llenergymeasure.utils.formatting import bytes_to_mb
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
@@ -351,9 +352,6 @@ class MeasurementHarness:
         """
         _p = progress
 
-        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            _emit_substep(_p, step, text, elapsed)
-
         if baseline is not None and config.measurement.baseline.enabled:
             # For cached/validated strategies, progress events are emitted by
             # study/runner.py::_get_baseline. Here we only mark from_cache for
@@ -375,7 +373,8 @@ class MeasurementHarness:
             baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
             if baseline is not None:
                 cache_label = " (cached)" if baseline.from_cache else ""
-                _substep(
+                _emit_substep(
+                    _p,
                     STEP_BASELINE,
                     f"baseline: {baseline.power_w:.1f}W"
                     f" ({baseline.sample_count} samples{cache_label})",
@@ -405,9 +404,6 @@ class MeasurementHarness:
         """
         _p = progress
 
-        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            _emit_substep(_p, step, text, elapsed)
-
         # 3. Load model via engine plugin
         if _p:
             _p.on_step_start("model", "Loading", f"model {config.task.model}")
@@ -415,7 +411,7 @@ class MeasurementHarness:
 
         # Build model substep callback
         def _on_model_substep(text: str, elapsed: float) -> None:
-            _substep("model", text, elapsed)
+            _emit_substep(_p, "model", text, elapsed)
 
         model = engine.load_model(config, on_substep=_on_model_substep)
 
@@ -430,7 +426,7 @@ class MeasurementHarness:
         # Must happen BEFORE warmup, which allocates KV cache.
         model_memory_mb = self._capture_model_memory_mb(gpu_indices=gpu_indices)
         if model_memory_mb > 0:
-            _substep("model", f"model memory: {model_memory_mb:.0f}MB")
+            _emit_substep(_p, "model", f"model memory: {model_memory_mb:.0f}MB")
 
         return model, snapshot, model_memory_mb
 
@@ -442,9 +438,6 @@ class MeasurementHarness:
         """Load and tokenise prompts before the measurement window (methodology fix)."""
         _p = progress
 
-        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            _emit_substep(_p, step, text, elapsed)
-
         if _p:
             _p.on_step_start(
                 "prompts",
@@ -454,7 +447,7 @@ class MeasurementHarness:
             t0_prompts = time.perf_counter()
         prompts = load_prompts(config)
         logger.debug("Loaded %d prompts via dataset loader", len(prompts))
-        _substep("prompts", f"tokenised {len(prompts)} prompts")
+        _emit_substep(_p, "prompts", f"tokenised {len(prompts)} prompts")
         if _p:
             _p.on_step_done("prompts", time.perf_counter() - t0_prompts)
         return prompts
@@ -472,9 +465,6 @@ class MeasurementHarness:
         Returns the WarmupResult with thermal_floor_wait_s populated.
         """
         _p = progress
-
-        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            _emit_substep(_p, step, text, elapsed)
 
         # 5. Warmup
         if _p:
@@ -522,7 +512,8 @@ class MeasurementHarness:
                 _p.on_step_update("warmup", f"{iters_label} ({converged}{cv_info})")
             _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
         iters = warmup_result.iterations_completed
-        _substep(
+        _emit_substep(
+            _p,
             "warmup",
             f"{iters} iteration{'s' if iters != 1 else ''}"
             + (f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""),
@@ -565,9 +556,6 @@ class MeasurementHarness:
         """
         _p = progress
 
-        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            _emit_substep(_p, step, text, elapsed)
-
         # 7. Select energy sampler
         if _p:
             _p.on_step_start("energy_select", "Selecting", "energy sampler")
@@ -576,7 +564,7 @@ class MeasurementHarness:
             config.measurement.energy_sampler, gpu_indices=gpu_indices
         )
         sampler_name = type(energy_sampler).__name__ if energy_sampler else "none"
-        _substep("energy_select", f"selected: {sampler_name}")
+        _emit_substep(_p, "energy_select", f"selected: {sampler_name}")
         if _p:
             _p.on_step_update("energy_select", f"energy sampler ({sampler_name})")
             _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
@@ -588,13 +576,13 @@ class MeasurementHarness:
 
         # 9. CUDA sync before inference (Zeus best practice)
         _cuda_sync()
-        _substep("measure", "CUDA sync (pre)")
+        _emit_substep(_p, "measure", "CUDA sync (pre)")
 
         if _p:
             _p.on_step_start(
                 "measure", "Measuring", f"inference ({config.task.dataset.n_prompts} prompts)"
             )
-        _substep("measure", "energy tracker started")
+        _emit_substep(_p, "measure", "energy tracker started")
 
         t_inference_start = time.perf_counter()
         start_time = datetime.now()
@@ -607,7 +595,7 @@ class MeasurementHarness:
 
         # 11. CUDA sync after inference, before stopping energy
         _cuda_sync()
-        _substep("measure", "CUDA sync (post)")
+        _emit_substep(_p, "measure", "CUDA sync (post)")
 
         # 11a. Capture observed params post-window (outside NVML sampling).
         # Must run here - model is still alive; capture overhead (~5-50 ms pure
@@ -628,7 +616,7 @@ class MeasurementHarness:
         if energy_sampler is not None and energy_tracker is not None:
             energy_measurement = energy_sampler.stop_tracking(energy_tracker)
             tracker_duration = energy_measurement.duration_sec if energy_measurement else 0.0
-            _substep("measure", f"energy tracker stopped  {tracker_duration:.1f}s")
+            _emit_substep(_p, "measure", f"energy tracker stopped  {tracker_duration:.1f}s")
         end_time = datetime.now()
 
         # 13. FLOPs estimation (warmup tokens excluded)
@@ -641,7 +629,7 @@ class MeasurementHarness:
                 _p.on_step_update("flops", f"FLOPs: {flops_result.value:.2e}")
             _p.on_step_done("flops", time.perf_counter() - t0_flops)
         if flops_result is not None:
-            _substep("flops", f"FLOPs: {flops_result.value:.2e}")
+            _emit_substep(_p, "flops", f"FLOPs: {flops_result.value:.2e}")
 
         return _MeasuredWindow(
             output=output,
@@ -672,9 +660,6 @@ class MeasurementHarness:
         """Write the timeseries + config sidecars and assemble the ExperimentResult."""
         _p = progress
 
-        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            _emit_substep(_p, step, text, elapsed)
-
         # 14. Write timeseries Parquet sidecar (if output_dir set and save_timeseries enabled)
         resolved_output_dir = Path(output_dir) if output_dir is not None else None
         if _p:
@@ -692,7 +677,7 @@ class MeasurementHarness:
                 resolved_output_dir / "timeseries.parquet",
             )
             timeseries_path = ts_file.name  # relative name in result JSON
-            _substep("save", "timeseries parquet written")
+            _emit_substep(_p, "save", "timeseries parquet written")
 
         # 15. Collect measurement quality warnings
         duration_sec = (window.end_time - window.start_time).total_seconds()
@@ -722,7 +707,7 @@ class MeasurementHarness:
             warmup_result=warmup_result,
             prompt_count=prompt_count,
         )
-        _substep("save", "result assembled")
+        _emit_substep(_p, "save", "result assembled")
 
         # 17. Write config.json sidecar (observed-params + observed_config_hash)
         # Written to output_dir (temp dir, same as timeseries.parquet) so the
@@ -734,7 +719,7 @@ class MeasurementHarness:
                 result=result,
                 output_dir=resolved_output_dir,
             )
-            _substep("save", "config sidecar written")
+            _emit_substep(_p, "save", "config sidecar written")
 
         if _p:
             _p.on_step_done("save", time.perf_counter() - t0_save)
@@ -813,7 +798,7 @@ class MeasurementHarness:
                     if not indices:
                         return 0.0
                     peak = max(torch.cuda.max_memory_allocated(device=idx) for idx in indices)
-                    return float(peak / (1024 * 1024))
+                    return bytes_to_mb(peak)
             except Exception:
                 pass
         return 0.0

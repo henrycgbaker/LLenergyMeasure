@@ -34,6 +34,7 @@ from llenergymeasure.config.ssot import (
     TEMP_PREFIX_EXCHANGE,
 )
 from llenergymeasure.harness.baseline import BaselineCache
+from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,7 @@ def run_baseline_container(
         )
         if error_path.exists():
             try:
-                err = json.loads(error_path.read_text(encoding="utf-8"))
+                err = load_json(error_path)
                 logger.warning(
                     "Baseline container error payload: type=%s message=%s",
                     err.get("type"),
@@ -279,7 +280,7 @@ def run_baseline_container(
         return None
 
     try:
-        raw = json.loads(result_path.read_text(encoding="utf-8"))
+        raw = load_json(result_path)
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning(
             "Baseline container wrote a malformed result: %s. Exchange dir preserved at %s.",
