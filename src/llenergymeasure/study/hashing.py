@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.experiment import engine_str
+from llenergymeasure.config.ssot import engine_str
 from llenergymeasure.domain.hashing import ConfigHashView, hash_config
 
 __all__ = [

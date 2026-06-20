@@ -30,7 +30,7 @@ from llenergymeasure.config.engine_invariants.loader import (
     resolve_field_path,
 )
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.experiment import engine_str
+from llenergymeasure.config.ssot import engine_str
 from llenergymeasure.study.hashing import build_resolved_view, hash_config
 
 logger = logging.getLogger(__name__)

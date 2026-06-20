@@ -40,8 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine
-from llenergymeasure.domain.experiment import engine_str
+from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine, engine_str
 from llenergymeasure.study.message_normalise import normalise
 
 __all__ = [

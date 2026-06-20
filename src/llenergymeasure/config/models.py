@@ -24,9 +24,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine
+from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine, engine_str
 from llenergymeasure.config.warnings import ConfigValidationWarning
-from llenergymeasure.domain.experiment import engine_str
 
 logger = logging.getLogger(__name__)
 

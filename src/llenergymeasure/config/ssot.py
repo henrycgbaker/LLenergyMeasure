@@ -58,6 +58,12 @@ class Engine(str, Enum):
 ALL_ENGINES: Final[frozenset[Engine]] = frozenset(Engine)
 """Unordered engine set - use for O(1) membership checks (``engine in ALL_ENGINES``)."""
 
+
+def engine_str(engine: Any) -> str:
+    """Coerce an Engine enum (or plain string) to its string value."""
+    return engine.value if hasattr(engine, "value") else str(engine)
+
+
 # ---------------------------------------------------------------------------
 # Runner mode constants
 # ---------------------------------------------------------------------------
