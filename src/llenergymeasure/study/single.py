@@ -48,7 +48,7 @@ def run_single_experiment(
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_declared_config_hash
-    from llenergymeasure.study.runner import _save_and_record
+    from llenergymeasure.study.runner import _provenance_from_spec, _save_and_record
 
     config = study.experiments[0]
     config_hash = compute_declared_config_hash(config)
@@ -187,6 +187,7 @@ def run_single_experiment(
         environment_snapshot=snapshot,
         resolution_log=(resolution_logs or {}).get(config_hash),
         resolved_config_hash=resolved_config_hash,
+        runner_provenance=_provenance_from_spec(spec),
     )
 
     # Clean up temp dirs

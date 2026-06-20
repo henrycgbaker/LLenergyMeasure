@@ -71,6 +71,7 @@ from llenergymeasure.utils.io import load_json
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
     from llenergymeasure.domain.environment import EnvironmentSnapshot
+    from llenergymeasure.domain.experiment import RunnerProvenance
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
@@ -90,6 +91,26 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+def _provenance_from_spec(spec: RunnerSpec | None) -> RunnerProvenance:
+    """Build a RunnerProvenance from a resolved RunnerSpec.
+
+    The infra-layer ``RunnerSpec`` cannot live on the domain result (layer
+    violation), so its execution-mode fields are mirrored onto the domain-layer
+    ``RunnerProvenance``. When no spec is available (pure in-process local run),
+    records ``mode="local"`` with ``source="local"`` and no image.
+    """
+    from llenergymeasure.domain.experiment import RunnerProvenance
+
+    if spec is None:
+        return RunnerProvenance(mode="local", image=None, source="local", image_source=None)
+    return RunnerProvenance(
+        mode=spec.mode,
+        image=spec.image,
+        source=spec.source,
+        image_source=spec.image_source,
+    )
+
+
 def _save_and_record(
     result: Any,
     study_dir: Path,
@@ -102,6 +123,7 @@ def _save_and_record(
     environment_snapshot: Any | None = None,
     resolution_log: dict[str, Any] | None = None,
     resolved_config_hash: str | None = None,
+    runner_provenance: RunnerProvenance | None = None,
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
@@ -113,11 +135,18 @@ def _save_and_record(
         ts_source_dir: Directory where the harness wrote timeseries.parquet.
         environment_snapshot: EnvironmentSnapshot for per-experiment environment.json sidecar.
         resolution_log: Pre-built resolution log for this experiment (written as _resolution.json).
+        runner_provenance: How the experiment was executed (local vs docker). Attached to the
+            frozen result via model_copy before saving so it persists into result.json.
 
     On save failure, marks the experiment as completed with empty path.
     """
     try:
         from llenergymeasure.results.persistence import save_environment, save_result
+
+        # Attach runner provenance to the frozen result before saving (it
+        # serialises into result.json, unlike the environment sidecar).
+        if runner_provenance is not None and hasattr(result, "model_copy"):
+            result = result.model_copy(update={"runner_provenance": runner_provenance})
 
         # Resolve timeseries sidecar from result fields.
         # MeasurementHarness writes timeseries.parquet to the output_dir and
@@ -811,6 +840,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             )
 
         exp_elapsed = time.monotonic() - exp_start
+        local_spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         self._handle_result(
             result,
             config_hash,
@@ -819,6 +849,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             exp_elapsed,
             ts_source_dir=ts_tmpdir,
             environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
+            runner_provenance=_provenance_from_spec(local_spec),
         )
 
         # Clean up the temp dir created for timeseries parquet output.
@@ -837,6 +868,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         elapsed: float,
         ts_source_dir: Path | None = None,
         environment_snapshot: Any | None = None,
+        runner_provenance: RunnerProvenance | None = None,
     ) -> None:
         """Update manifest and signal study display based on experiment outcome."""
         if isinstance(result, dict) and "type" in result:
@@ -861,6 +893,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 environment_snapshot=environment_snapshot,
                 resolution_log=self._resolution_logs.get(config_hash),
                 resolved_config_hash=self._resolved_hashes.get(config_hash),
+                runner_provenance=runner_provenance,
             )
             if self._progress:
                 host_path = self.result_files[-1] if self.result_files else None
@@ -1026,6 +1059,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             exp_elapsed,
             ts_source_dir=docker_ts_dir,
             environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
+            runner_provenance=_provenance_from_spec(spec),
         )
 
         # Clean up the temp dir after _save_and_record has copied the parquet.

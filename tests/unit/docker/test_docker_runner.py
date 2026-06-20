@@ -140,37 +140,6 @@ class TestSuccessPath:
 
         assert returned.experiment_id == result.experiment_id
 
-    def test_runner_metadata_injected_into_effective_config(self, tmp_path):
-        """Runner metadata is injected into the result's effective_config."""
-        config = make_config()
-        result = make_result()
-
-        exchange_dir = tmp_path / "llem-meta"
-        exchange_dir.mkdir()
-
-        with (
-            patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
-                return_value=str(exchange_dir),
-            ),
-            patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
-                side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
-            ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
-        ):
-            config_hash = _docker_config_hash(config)
-            result_path = exchange_dir / f"{config_hash}_result.json"
-            result_path.write_text(result.model_dump_json(), encoding="utf-8")
-
-            runner = DockerRunner(image=IMAGE, source="yaml")
-            _returned, _ts_dir = runner.run(config)
-
-        metadata = runner.get_runner_metadata()
-        assert metadata["runner_type"] == "docker"
-        assert metadata["runner_image"] == IMAGE
-        assert metadata["runner_source"] == "yaml"
-
 
 # ---------------------------------------------------------------------------
 # Test 2: Container failure - image not found
@@ -535,19 +504,11 @@ class TestHFTokenPropagation:
 
 
 # ---------------------------------------------------------------------------
-# Test 10: Runner metadata in effective_config (explicit verification)
+# Test 10: DockerRunner.run() return shape
 # ---------------------------------------------------------------------------
 
 
 class TestRunnerMetadata:
-    def test_get_runner_metadata_returns_correct_keys(self):
-        """get_runner_metadata() returns runner_type, runner_image, runner_source."""
-        runner = DockerRunner(image=IMAGE, source="auto_detected")
-        metadata = runner.get_runner_metadata()
-        assert metadata["runner_type"] == "docker"
-        assert metadata["runner_image"] == IMAGE
-        assert metadata["runner_source"] == "auto_detected"
-
     def test_run_returns_tuple(self, tmp_path):
         """DockerRunner.run() returns (result, ts_tmpdir) tuple."""
         config = make_config()

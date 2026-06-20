@@ -239,6 +239,63 @@ def test_steady_state_window_round_trips(tmp_path: Path, hf_model_result: Experi
 
 
 # ---------------------------------------------------------------------------
+# Runner provenance
+# ---------------------------------------------------------------------------
+
+
+def test_runner_provenance_docker_round_trips(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """A docker runner_provenance survives save/load and serialises into result.json."""
+    import json
+
+    from llenergymeasure.domain.experiment import RunnerProvenance
+
+    result = minimal_result.model_copy(
+        update={
+            "runner_provenance": RunnerProvenance(
+                mode="docker",
+                image="ghcr.io/example/transformers:1.0.0",
+                source="yaml",
+                image_source="registry",
+            )
+        }
+    )
+    result_path = save_result(result, tmp_path)
+
+    # Persisted into result.json (NOT excluded, unlike environment).
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["image"] == "ghcr.io/example/transformers:1.0.0"
+    assert payload["runner_provenance"]["source"] == "yaml"
+
+    loaded = load_result(result_path)
+    assert loaded.runner_provenance is not None
+    assert loaded.runner_provenance.mode == "docker"
+    assert loaded.runner_provenance.image == "ghcr.io/example/transformers:1.0.0"
+    assert loaded.runner_provenance.source == "yaml"
+    assert loaded.runner_provenance.image_source == "registry"
+
+
+def test_runner_provenance_local_round_trips(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """A local runner_provenance survives save/load with no image."""
+    from llenergymeasure.domain.experiment import RunnerProvenance
+
+    result = minimal_result.model_copy(
+        update={"runner_provenance": RunnerProvenance(mode="local", image=None, source="local")}
+    )
+    result_path = save_result(result, tmp_path)
+    loaded = load_result(result_path)
+
+    assert loaded.runner_provenance is not None
+    assert loaded.runner_provenance.mode == "local"
+    assert loaded.runner_provenance.image is None
+    assert loaded.runner_provenance.source == "local"
+
+
+# ---------------------------------------------------------------------------
 # Timeseries sidecar
 # ---------------------------------------------------------------------------
 

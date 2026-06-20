@@ -50,6 +50,28 @@ def mj_per_token(energy_j: float, total_tokens: float) -> float | None:
     return (energy_j / total_tokens * 1000.0) if total_tokens > 0 else None
 
 
+class RunnerProvenance(BaseModel):
+    """How an experiment was executed - local process or Docker container.
+
+    Persisted reproducibility metadata mirroring the fields of the infra-layer
+    ``RunnerSpec``. Kept in the domain layer (no infra import) so it can live on
+    ``ExperimentResult`` and serialise into result.json.
+    """
+
+    mode: str = Field(..., description='Execution mode - "local" or "docker"')
+    image: str | None = Field(default=None, description="Docker image used (None for local mode)")
+    source: str | None = Field(
+        default=None,
+        description='Precedence layer that produced the runner ("env", "yaml", '
+        '"user_config", "auto_detected", "default", "local")',
+    )
+    image_source: str | None = Field(
+        default=None, description="Where the Docker image was resolved from (None for local mode)"
+    )
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+
 class AggregationMetadata(BaseModel):
     """Metadata about the aggregation process."""
 
@@ -183,6 +205,14 @@ class ExperimentResult(BaseModel):
     timeseries: str | None = Field(
         default=None,
         description="Relative filename of timeseries sidecar (e.g. 'timeseries.parquet')",
+    )
+
+    # Runner provenance - how this experiment was executed (local vs docker).
+    # Persisted into result.json (unlike environment) as reproducibility metadata.
+    runner_provenance: RunnerProvenance | None = Field(
+        default=None,
+        description="How the experiment was executed (local process or Docker container). "
+        "None when no runner spec was available.",
     )
 
     # Environment sidecar (loaded from environment.json by load_result; excluded

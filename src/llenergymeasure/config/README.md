@@ -76,16 +76,17 @@ These CLI flags **still work** but emit deprecation warnings:
 
 ### Override Tracking
 
-All CLI overrides are recorded in result metadata for traceability:
+All CLI overrides are recorded in the per-experiment `_resolution.json` sidecar for
+traceability (which fields were overridden and why):
 
 ```json
 {
-  "effective_config": { "batch_size": 8, ... },
-  "cli_overrides": {
-    "batching.batch_size": { "original": 1, "new": 8 }
-  }
+  "batching.batch_size": { "original": 1, "new": 8, "source": "cli" }
 }
 ```
+
+The fully resolved configuration (all defaults filled in) is written to the
+`effective_config.json` sidecar next to `result.json`.
 
 ### Workflow Examples
 
@@ -696,18 +697,18 @@ lem config new -o my-config.yaml  # Specify output path
 
 ## Reproducibility
 
-Results include `effective_config` and `cli_overrides` fields for full reproducibility:
+Each experiment directory ships sidecars for full reproducibility next to `result.json`:
+
+- `effective_config.json` - the fully resolved configuration (every parameter value used,
+  including engine defaults that were not explicitly specified).
+- `_resolution.json` - which fields were overridden and why (CLI flag, sweep, YAML).
 
 ```json
+// effective_config.json
 {
-  "effective_config": {
-    "model_name": "meta-llama/Llama-2-7b-hf",
-    "batch_size": 8,
-    "dtype": "float16"
-  },
-  "cli_overrides": {
-    "batching.batch_size": {"new": 8, "original": 1}
-  }
+  "model_name": "meta-llama/Llama-2-7b-hf",
+  "batch_size": 8,
+  "dtype": "float16"
 }
 ```
 

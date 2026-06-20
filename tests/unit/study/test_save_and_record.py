@@ -13,8 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from llenergymeasure.domain.experiment import ExperimentResult
-from llenergymeasure.study.runner import _save_and_record
+from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
+from llenergymeasure.infra.runner_resolution import RunnerSpec
+from llenergymeasure.study.runner import _provenance_from_spec, _save_and_record
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -216,6 +217,52 @@ def test_save_and_record_writes_resolved_config_hash(tmp_path: Path) -> None:
     )
     # Source sidecar must be cleaned up
     assert not config_sidecar_src.exists()
+
+
+def test_provenance_from_spec_docker() -> None:
+    """A docker RunnerSpec maps onto a docker RunnerProvenance."""
+    spec = RunnerSpec(mode="docker", image="img:1.0", source="yaml", image_source="registry")
+    provenance = _provenance_from_spec(spec)
+    assert provenance == RunnerProvenance(
+        mode="docker", image="img:1.0", source="yaml", image_source="registry"
+    )
+
+
+def test_provenance_from_spec_none_defaults_to_local() -> None:
+    """No spec (pure in-process local) records mode=local, source=local, no image."""
+    provenance = _provenance_from_spec(None)
+    assert provenance.mode == "local"
+    assert provenance.image is None
+    assert provenance.source == "local"
+    assert provenance.image_source is None
+
+
+def test_save_and_record_attaches_runner_provenance(tmp_path: Path) -> None:
+    """runner_provenance passed to _save_and_record is written into result.json."""
+    import json
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    _save_and_record(
+        result,
+        study_dir,
+        manifest,
+        "aabb1122",
+        1,
+        result_files,
+        runner_provenance=RunnerProvenance(mode="docker", image="img:2.0", source="env"),
+    )
+
+    assert len(result_files) == 1
+    payload = json.loads(Path(result_files[0]).read_text())
+    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["image"] == "img:2.0"
+    assert payload["runner_provenance"]["source"] == "env"
 
 
 def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:

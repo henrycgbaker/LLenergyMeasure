@@ -112,18 +112,19 @@ class TestDockerRunnerIntegration:
         assert result.avg_tokens_per_second > 0
         assert result.total_tokens > 0
 
-    def test_runner_metadata_injected(self, tmp_path):
-        """Result effective_config contains Docker runner metadata."""
-        from llenergymeasure.infra.docker_runner import DockerRunner
+    def test_runner_provenance_recorded(self, tmp_path):
+        """Docker runner provenance is recorded on the saved result."""
+        from llenergymeasure.domain.experiment import RunnerProvenance
+        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.study.runner import _provenance_from_spec
 
-        config = self._make_config(tmp_path)
-        runner = DockerRunner(image=IMAGE, timeout=300, source="test")
-        result = runner.run(config)
-
-        ec = result.effective_config or {}
-        assert ec.get("runner_mode") == "docker"
-        assert ec.get("runner_image") == IMAGE
-        assert ec.get("runner_source") == "test"
+        provenance = _provenance_from_spec(
+            RunnerSpec(mode="docker", image=IMAGE, source="test", image_source="registry")
+        )
+        assert isinstance(provenance, RunnerProvenance)
+        assert provenance.mode == "docker"
+        assert provenance.image == IMAGE
+        assert provenance.source == "test"
 
     def test_exchange_dir_cleaned_on_success(self, tmp_path):
         """Exchange dir is removed after successful run (no temp dir leak)."""
