@@ -51,9 +51,9 @@ def _probe_engine_version(engine: str) -> str | None:
     """Try to retrieve version string for an installed inference engine."""
     try:
         if engine == Engine.TRANSFORMERS:
-            import torch
+            import transformers
 
-            return str(torch.__version__)
+            return str(transformers.__version__)
         elif engine == Engine.VLLM:
             import vllm
 
