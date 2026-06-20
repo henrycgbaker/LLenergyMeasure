@@ -357,6 +357,50 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     assert preflight_calls[0].task.model == "gpt2"
 
 
+@pytest.mark.parametrize("abort_status", ["timed_out", "circuit_breaker"])
+def test_run_preserves_runner_abort_status(monkeypatch, tmp_path, abort_status):
+    """ST1: _run() must not overwrite a terminal abort status the runner set.
+
+    On wall-clock timeout / circuit-breaker abort the StudyRunner marks the study
+    'timed_out'/'circuit_breaker' and returns; _run() previously called
+    mark_study_completed() unconditionally, clobbering that status and leaving the
+    aborted study looking completed (and therefore non-resumable).
+    """
+    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.preflight as study_pf_module
+
+    captured: dict = {}
+
+    def fake_run_via_runner(study, manifest, study_dir, **kw):
+        if abort_status == "timed_out":
+            manifest.mark_study_timed_out()
+        else:
+            manifest.mark_study_circuit_breaker()
+        captured["manifest"] = manifest
+        return [], [None, None], []
+
+    monkeypatch.setattr(api_module, "_run_via_runner", fake_run_via_runner)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+
+    # Two experiments -> multi-experiment path -> dispatches via _run_via_runner.
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "distilgpt2"}),
+        ]
+    )
+    api_module._run(study)
+
+    assert captured["manifest"].status == abort_status
+
+
 def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     """_run() does NOT re-run study preflight when preresolved is provided."""
     import llenergymeasure.api._impl as api_module

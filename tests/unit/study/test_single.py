@@ -105,3 +105,88 @@ def test_run_single_experiment_calls_gpu_memory_check(monkeypatch, tmp_path):
     assert len(gpu_check_calls) == 1, (
         f"Expected check_gpu_memory_residual to be called once, got {len(gpu_check_calls)}"
     )
+
+
+def test_single_experiment_passes_resolved_config_hash(monkeypatch, tmp_path):
+    """ST3: the single-experiment path passes resolved_config_hash to _save_and_record.
+
+    The multi-experiment runner path includes it; the single path previously omitted it,
+    so single-experiment config.json sidecars lacked resolved_config_hash.
+    """
+    import llenergymeasure.engines as engines_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.runner as runner_module
+    from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+    mock_result = make_result(experiment_id="resolved-hash-test")
+    mock_engine = _MockBackend(mock_result)
+
+    captured: dict = {}
+
+    def fake_save_and_record(result, study_dir, manifest, config_hash, cycle, result_files, **kw):
+        captured.update(kw)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
+    _patch_harness(monkeypatch, mock_result)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual", lambda *a, **k: None
+    )
+    monkeypatch.setattr(runner_module, "_save_and_record", fake_save_and_record)
+
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.study.manifest import ManifestWriter
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+
+    run_single_experiment(study, mock_manifest, tmp_path, runner_specs=None)
+
+    assert captured.get("resolved_config_hash") == hash_config(build_resolved_view(config))
+    assert captured["resolved_config_hash"]
+
+
+def test_single_experiment_writes_runtime_observations(monkeypatch, tmp_path):
+    """ST4: the single-experiment local path emits runtime_observations.jsonl.
+
+    The multi-experiment worker wraps execution in capture_runtime_observations; the
+    single path previously did not, so report-gaps found nothing for single-exp studies.
+    """
+    import json
+
+    import llenergymeasure.engines as engines_module
+    import llenergymeasure.harness.preflight as pf_module
+
+    mock_result = make_result(experiment_id="runtime-obs-test")
+    mock_engine = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
+    _patch_harness(monkeypatch, mock_result)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.study.manifest import ManifestWriter
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+
+    run_single_experiment(study, mock_manifest, tmp_path, runner_specs=None)
+
+    obs_file = tmp_path / "runtime_observations.jsonl"
+    assert obs_file.exists(), "runtime_observations.jsonl was not written"
+    lines = [ln for ln in obs_file.read_text().splitlines() if ln.strip()]
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["config_hash"]
+    assert record["outcome"] == "success"
