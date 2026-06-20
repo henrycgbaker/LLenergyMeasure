@@ -194,16 +194,3 @@ class CodeCarbonSampler:
             emissions_kg_co2=data.emissions_kg or 0.0,
             energy_per_token_j=0.0,  # Caller should set this
         )
-
-    def get_raw_data(self, tracker: Any) -> CodeCarbonData | None:
-        """Get the raw CodeCarbon data for detailed analysis.
-
-        Args:
-            tracker: EmissionsTracker from start_tracking.
-
-        Returns:
-            CodeCarbonData if tracking was started, None otherwise.
-        """
-        if tracker is None:
-            return None
-        return self._extract_data(tracker)

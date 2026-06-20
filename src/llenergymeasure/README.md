@@ -136,7 +136,7 @@ Security utilities:
 - `docker_preflight.py` - Docker-level pre-flight checks
 
 ### `device/` (Layer 2)
-- `gpu_info.py` - `GPUInfo`, `nvml_context()`, `_resolve_gpu_indices()`
+- `gpu_info.py` - `nvml_context()`, `_resolve_gpu_indices()`, `get_gpu_architecture()`
 - `power_thermal.py` - `PowerThermalSampler`, `ThermalThrottleInfo`
 - `environment.py` - hardware metadata collection via NVML and CUDA version detection
 - Placed above `config/` and `domain/` because `power_thermal.py` returns `ThermalThrottleInfo`

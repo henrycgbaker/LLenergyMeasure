@@ -1,4 +1,4 @@
-"""Unit tests for domain/metrics.py - precision, energy, inference, latency models."""
+"""Unit tests for domain/metrics.py - flops, energy, latency models."""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ import pytest
 
 from llenergymeasure.domain.metrics import (
     FlopsResult,
-    LatencyMeasurementMode,
-    LatencyMeasurements,
     collect_itl_measurements,
     compute_latency_statistics,
 )
-from tests.conftest import make_energy_metrics, make_inference_metrics
+from tests.conftest import make_energy_metrics
 
 # ---------------------------------------------------------------------------
 # TestFlopsResult
@@ -47,19 +45,6 @@ class TestEnergyMetrics:
     def test_total_power_w(self):
         em = make_energy_metrics(gpu_power_w=100.0, cpu_power_w=25.0)
         assert em.total_power_w == pytest.approx(125.0)
-
-
-# ---------------------------------------------------------------------------
-# TestInferenceMetrics
-# ---------------------------------------------------------------------------
-
-
-class TestInferenceMetrics:
-    """throughput alias."""
-
-    def test_throughput_alias(self):
-        im = make_inference_metrics(tokens_per_second=42.5)
-        assert im.throughput == im.tokens_per_second == 42.5
 
 
 # ---------------------------------------------------------------------------
@@ -226,25 +211,3 @@ class TestCollectItlMeasurements:
         assert len(full) == 3
         assert len(trimmed) == 1  # middle interval only
         assert trimmed[0] == pytest.approx(10.0)
-
-
-# ---------------------------------------------------------------------------
-# TestLatencyMeasurements
-# ---------------------------------------------------------------------------
-
-
-class TestLatencyMeasurements:
-    """LatencyMeasurements defaults."""
-
-    def test_default_measurement_mode(self):
-        lm = LatencyMeasurements(
-            ttft_ms=[10.0],
-            itl_full_ms=[5.0],
-            itl_trimmed_ms=[5.0],
-            request_count=1,
-            total_output_tokens=10,
-            excluded_tokens=0,
-            streaming_mode=True,
-            warmup_requests_excluded=0,
-        )
-        assert lm.measurement_mode == LatencyMeasurementMode.TRUE_STREAMING

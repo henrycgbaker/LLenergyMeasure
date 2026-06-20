@@ -513,13 +513,10 @@ class VLLMEngine:
     def _build_sampling_kwargs(config: ExperimentConfig) -> dict[str, Any]:
         """Build the effective SamplingParams kwargs dict (no constructor call).
 
-        Returns ``{}`` when beam search is active (sampling path preempted);
-        the caller dispatches to :meth:`_build_beam_search_params` in that case.
+        Only called for the sampling path; the caller dispatches beam search to
+        :meth:`_build_beam_search_params` before reaching here.
         """
         vllm_cfg = config.vllm
-        if vllm_cfg is not None and vllm_cfg.beam_search is not None:
-            return {}
-
         sampling = vllm_cfg.sampling if vllm_cfg is not None else None
         kwargs: dict[str, Any] = (
             sampling.model_dump(exclude_none=True) if sampling is not None else {}

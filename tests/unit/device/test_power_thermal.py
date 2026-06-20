@@ -1,13 +1,11 @@
-"""Unit tests for PowerThermalSampler and PowerThermalResult.
+"""Unit tests for PowerThermalSampler.
 
 Covers:
 - Thermal throttle constant fixes (B1): hw/sw bit distinction, combined bit, deprecated names
 - Sampler lifecycle: start/stop, context manager, thread cleanup
-- pynvml available: samples collected, is_available True, mean_power correct
+- pynvml available: samples collected, is_available True
 - pynvml unavailable (ImportError): is_available False, sample_count 0
 - Device handle failure: sample_count 0
-- get_power_samples filters None values
-- PowerThermalResult.from_sampler class method
 - Multi-GPU: gpu_indices constructor, samples tagged with gpu_index
 - PowerThermalSample.gpu_index default value
 """
@@ -21,7 +19,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from llenergymeasure.device.power_thermal import (
-    PowerThermalResult,
     PowerThermalSample,
     PowerThermalSampler,
 )
@@ -248,7 +245,7 @@ def _make_full_pynvml_mock() -> MagicMock:
 
 
 def test_sampler_lifecycle_pynvml_available():
-    """Sampler starts, collects samples, stops; is_available=True, mean_power=200W."""
+    """Sampler starts, collects samples, stops; is_available=True, samples read 200W."""
     mock_pynvml = _make_full_pynvml_mock()
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
@@ -258,9 +255,9 @@ def test_sampler_lifecycle_pynvml_available():
 
     assert sampler.is_available is True
     assert sampler.sample_count > 0
-    mean = sampler.get_mean_power()
-    assert mean is not None
-    assert mean == pytest.approx(200.0, rel=0.01)
+    powers = [s.power_w for s in sampler.get_samples() if s.power_w is not None]
+    assert powers
+    assert all(p == pytest.approx(200.0, rel=0.01) for p in powers)
 
 
 def test_sampler_captures_memory_bandwidth_utilisation():
@@ -294,7 +291,7 @@ def test_sampler_pynvml_unavailable():
 
     assert sampler.is_available is False
     assert sampler.sample_count == 0
-    assert sampler.get_mean_power() is None
+    assert sampler.get_samples() == []
 
 
 # =============================================================================
@@ -339,73 +336,6 @@ def test_sampler_context_manager_lifecycle():
     # After exit: thread cleaned up
     assert sampler._thread is None
     assert sampler._running is False
-
-
-# =============================================================================
-# Test 9: get_power_samples filters None values
-# =============================================================================
-
-
-def test_get_power_samples_filters_none():
-    """get_power_samples() excludes samples where power_w is None."""
-    sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=100)
-
-    # Inject samples: some with power, some without
-    sampler._samples = [
-        PowerThermalSample(timestamp=0.0, power_w=100.0),
-        PowerThermalSample(timestamp=0.1, power_w=None),  # no power reading
-        PowerThermalSample(timestamp=0.2, power_w=200.0),
-        PowerThermalSample(timestamp=0.3, power_w=None),  # no power reading
-        PowerThermalSample(timestamp=0.4, power_w=150.0),
-    ]
-
-    power_samples = sampler.get_power_samples()
-    assert power_samples == [100.0, 200.0, 150.0]
-    assert len(power_samples) == 3
-
-
-# =============================================================================
-# Test 10: PowerThermalResult.from_sampler
-# =============================================================================
-
-
-def test_power_thermal_result_from_sampler():
-    """PowerThermalResult.from_sampler() extracts power, memory, temp samples correctly."""
-    sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=100)
-    sampler._pynvml_available = True
-
-    # Inject pre-computed samples
-    sampler._samples = [
-        PowerThermalSample(
-            timestamp=0.0,
-            power_w=100.0,
-            memory_used_mb=10_000.0,
-            temperature_c=70.0,
-            throttle_reasons=0,
-            thermal_throttle=False,
-            gpu_index=0,
-        ),
-        PowerThermalSample(
-            timestamp=0.1,
-            power_w=200.0,
-            memory_used_mb=11_000.0,
-            temperature_c=72.0,
-            throttle_reasons=0,
-            thermal_throttle=False,
-            gpu_index=0,
-        ),
-    ]
-
-    mock_pynvml = _make_pynvml_mock(hw_thermal=0x40, sw_thermal=0x20)
-    with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        result = PowerThermalResult.from_sampler(sampler)
-
-    assert result.available is True
-    assert result.sample_count == 2
-    assert result.power_samples == [100.0, 200.0]
-    assert result.memory_samples == [10_000.0, 11_000.0]
-    assert result.temperature_samples == [70.0, 72.0]
-    assert result.thermal_throttle_info is not None
 
 
 # =============================================================================
@@ -469,20 +399,3 @@ def test_sampler_multi_gpu_samples_tagged():
     for s in gpu_1_samples:
         if s.power_w is not None:
             assert s.power_w == pytest.approx(200.0, rel=0.01)
-
-
-def test_sampler_multi_gpu_mean_power_is_sum_of_per_gpu_means():
-    """get_mean_power() returns sum of per-GPU means (total power across all GPUs)."""
-    sampler = PowerThermalSampler(gpu_indices=[0, 1], sample_interval_ms=100)
-
-    # GPU 0 at 100W, GPU 1 at 200W
-    sampler._samples = [
-        PowerThermalSample(timestamp=0.0, power_w=100.0, gpu_index=0),
-        PowerThermalSample(timestamp=0.0, power_w=200.0, gpu_index=1),
-        PowerThermalSample(timestamp=0.1, power_w=100.0, gpu_index=0),
-        PowerThermalSample(timestamp=0.1, power_w=200.0, gpu_index=1),
-    ]
-
-    mean = sampler.get_mean_power()
-    # mean GPU 0 = 100W, mean GPU 1 = 200W, sum = 300W
-    assert mean == pytest.approx(300.0, rel=1e-6)

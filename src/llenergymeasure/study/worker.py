@@ -241,19 +241,12 @@ def _collect_result(
 
     # Success path - use pre-drained payload if available
     if pipe_payload is not _UNSET:
-        try:
-            payload = pipe_payload
-            # If payload is an error dict (exception in worker), treat as failure
-            if isinstance(payload, dict) and "type" in payload and "message" in payload:
-                payload["config_hash"] = config_hash
-                return payload
+        payload = pipe_payload
+        # If payload is an error dict (exception in worker), treat as failure
+        if isinstance(payload, dict) and "type" in payload and "message" in payload:
+            payload["config_hash"] = config_hash
             return payload
-        except Exception as exc:
-            return {
-                "type": "PipeError",
-                "message": f"Failed to process pre-drained pipe payload: {exc}",
-                "config_hash": config_hash,
-            }
+        return payload
 
     # Fallback: read from pipe directly (no pre-drained payload)
     if parent_conn.poll():

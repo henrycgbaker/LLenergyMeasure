@@ -95,12 +95,10 @@ def print_dry_run(
     defaults = {
         "engine": "transformers",
         "dtype": None,
-        "n": 100,
-        "dataset": "aienergyscore",
     }
 
     def _annotate(field: str, value: object) -> str:
-        """Return annotation string if value differs from default."""
+        """Return a "(default)" annotation when value equals the field default."""
         if not verbose:
             return ""
         default = defaults.get(field)

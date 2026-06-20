@@ -32,29 +32,3 @@ def is_engine_available(engine: str) -> bool:
         # OSError: library dependency missing (tensorrt_llm on some systems)
         # Exception: catch-all for any other import-time errors
         return False
-
-
-def get_available_engines() -> list[str]:
-    """Get list of all available engines on the system.
-
-    Returns:
-        List of engine names that are installed and importable.
-    """
-    return [e for e in KNOWN_ENGINES if is_engine_available(e)]
-
-
-def get_engine_install_hint(engine: str) -> str:
-    """Get installation command for an engine.
-
-    Args:
-        engine: Engine name.
-
-    Returns:
-        pip install command string for the engine.
-    """
-    hints = {
-        "transformers": "pip install llenergymeasure",
-        "vllm": "Docker recommended - see docs/deployment.md",
-        "tensorrt": "Docker recommended - see docs/deployment.md",
-    }
-    return hints.get(engine, f"pip install llenergymeasure[{engine}]")

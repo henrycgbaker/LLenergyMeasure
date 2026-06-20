@@ -176,14 +176,6 @@ DTYPE_SUPPORT: dict[Engine, list[str]] = {
     Engine.TENSORRT: ["float16", "bfloat16"],  # TRT-LLM does not support fp32 inference
 }
 
-# Decoding strategies supported by each engine.
-# "sampling" = do_sample=True path; "greedy" = do_sample=False path.
-DECODING_SUPPORT: dict[Engine, list[str]] = {
-    Engine.TRANSFORMERS: ["greedy", "sampling"],  # full HuggingFace generate() support
-    Engine.VLLM: ["greedy", "sampling"],  # vLLM supports both via SamplingParams
-    Engine.TENSORRT: ["greedy", "sampling"],  # TRT-LLM supports both
-}
-
 # Map from engine name to the Python package that provides it.
 # Used by preflight checks and CLI to verify engine availability.
 ENGINE_PACKAGES: dict[Engine, str] = {
@@ -195,7 +187,6 @@ ENGINE_PACKAGES: dict[Engine, str] = {
 __all__ = [
     "ALL_ENGINES",
     "CONTAINER_EXCHANGE_DIR",
-    "DECODING_SUPPORT",
     "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
     "ENGINE_PACKAGES",

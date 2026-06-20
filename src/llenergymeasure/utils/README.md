@@ -1,18 +1,18 @@
 # utils/ - Cross-cutting Utilities
 
-Shared exceptions, constants, and security utilities. Layer 0 in the six-layer architecture.
+Shared exceptions and security utilities. Layer 0 in the six-layer architecture.
 
 ## Purpose
 
-Provides the foundation all other layers import: exception hierarchy, framework-wide constants, and filesystem security helpers.
+Provides the foundation all other layers import: exception hierarchy and filesystem security helpers.
 
 ## Modules
 
 | Module | Description |
 |--------|-------------|
 | `exceptions.py` | Exception hierarchy rooted at `LLEMError` |
-| `constants.py` | Framework-wide constants (timeouts, defaults, schema version) |
 | `security.py` | Path safety and experiment ID sanitisation |
+| `formatting.py` | Number / name formatting helpers |
 | `__init__.py` | Package marker |
 
 ## exceptions.py
@@ -31,26 +31,6 @@ from llenergymeasure.utils.exceptions import (
 ```
 
 `DockerError` carries structured fields: `fix_suggestion` and `stderr_snippet` for actionable error messages.
-
-## constants.py
-
-```python
-from llenergymeasure.utils.constants import (
-    DEFAULT_RESULTS_DIR,           # Path("results") or LLM_ENERGY_RESULTS_DIR env var
-    RAW_RESULTS_SUBDIR,            # "raw"
-    AGGREGATED_RESULTS_SUBDIR,     # "aggregated"
-    DEFAULT_WARMUP_RUNS,           # 3
-    DEFAULT_SAMPLING_INTERVAL_SEC, # 1.0
-    DEFAULT_MAX_NEW_TOKENS,        # 256
-    DEFAULT_TEMPERATURE,           # 1.0
-    SCHEMA_VERSION,                # "2.0.0"
-    DEFAULT_STATE_DIR,             # Path(".state") or LLM_ENERGY_STATE_DIR env var
-    GRACEFUL_SHUTDOWN_TIMEOUT_SEC, # 2
-    DEFAULT_FLOPS_TIMEOUT_SEC,     # 30
-)
-```
-
-`DEFAULT_RESULTS_DIR` and `DEFAULT_STATE_DIR` respect environment variable overrides.
 
 ## security.py
 

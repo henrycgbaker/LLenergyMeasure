@@ -40,7 +40,6 @@ from llenergymeasure.config.ssot import (
     RUNNER_DOCKER,
     RUNNER_LOCAL,
     TIMEOUT_DOCKER_CLI,
-    TIMEOUT_NVCC,
     RunnerMode,
 )
 
@@ -48,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_IMAGE_TEMPLATE",
-    "get_cuda_major_version",
     "get_default_image",
     "parse_runner_value",
     "resolve_image",
@@ -64,75 +62,6 @@ DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{versio
 
 # Local image tag produced by `docker compose build` (no registry prefix).
 LOCAL_IMAGE_TEMPLATE = "llenergymeasure:{engine}"
-
-
-# ---------------------------------------------------------------------------
-# CUDA version detection
-# ---------------------------------------------------------------------------
-
-
-@lru_cache(maxsize=1)
-def get_cuda_major_version() -> str | None:
-    """Detect the host CUDA major version.
-
-    Tries ``nvcc --version`` first, falls back to pynvml.
-
-    Returns:
-        CUDA major version string, e.g. ``"12"``, or ``None`` if detection fails.
-    """
-    # --- Primary: nvcc ---
-    try:
-        result = subprocess.run(
-            ["nvcc", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_NVCC,
-        )
-        if result.returncode == 0:
-            major = _parse_cuda_major_from_nvcc(result.stdout)
-            if major:
-                return major
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
-
-    # --- Secondary: pynvml ---
-    try:
-        import pynvml  # type: ignore[import-untyped]
-
-        from llenergymeasure.device.gpu_info import nvml_context
-
-        cuda_version_raw: int | None = None
-        with nvml_context():
-            cuda_version_raw = pynvml.nvmlSystemGetCudaDriverVersion()
-        if cuda_version_raw is not None:
-            # nvmlSystemGetCudaDriverVersion returns an integer like 12030 → major 12
-            major_int = cuda_version_raw // 1000
-            if major_int > 0:
-                return str(major_int)
-    except Exception:
-        pass
-
-    return None
-
-
-def _parse_cuda_major_from_nvcc(output: str) -> str | None:
-    """Extract CUDA major version from ``nvcc --version`` stdout.
-
-    Example line::
-        Cuda compilation tools, release 12.3, V12.3.107
-
-    Args:
-        output: Full stdout string from ``nvcc --version``.
-
-    Returns:
-        Major version string (e.g. ``"12"``), or ``None`` if not parseable.
-    """
-    import re
-
-    match = re.search(r"release\s+(\d+)\.\d+", output)
-    if match:
-        return match.group(1)
-    return None
 
 
 # ---------------------------------------------------------------------------

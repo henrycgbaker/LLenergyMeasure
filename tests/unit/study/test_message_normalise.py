@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from llenergymeasure.study.message_normalise import normalise
+from llenergymeasure.study.message_normalise import build_template_regex, normalise
 
 
 class TestNumericSubstitution:
@@ -73,20 +73,20 @@ class TestWhitespaceCollapse:
 
 class TestTemplateRegex:
     def test_num_placeholder_matches_number(self):
-        nm = normalise("temperature=0.001")
-        assert re.match(nm.match_regex, "temperature=0.5")
-        assert re.match(nm.match_regex, "temperature=1e-3")
+        regex = build_template_regex(normalise("temperature=0.001").template)
+        assert re.match(regex, "temperature=0.5")
+        assert re.match(regex, "temperature=1e-3")
 
     def test_path_placeholder_matches_path(self):
-        nm = normalise("error in /abs/path.py")
-        assert re.match(nm.match_regex, "error in /different/path.py")
+        regex = build_template_regex(normalise("error in /abs/path.py").template)
+        assert re.match(regex, "error in /different/path.py")
 
     def test_regex_is_anchored(self):
-        nm2 = normalise("count=42")
+        regex = build_template_regex(normalise("count=42").template)
         # Anchored so exact match passes.
-        assert re.match(nm2.match_regex, "count=42")
+        assert re.match(regex, "count=42")
         # Sanity: extra trailing content breaks the match.
-        assert not re.match(nm2.match_regex, "count=42 and more")
+        assert not re.match(regex, "count=42 and more")
 
 
 class TestEndToEndNormalisationEquivalence:
