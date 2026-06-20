@@ -118,11 +118,16 @@ else
     LAUNCH=(python3)
 fi
 
+# Framework module to exec. Defaults to the experiment container entrypoint;
+# the baseline dispatch overrides it with LLEM_ENTRY_MODULE so it reuses this
+# same package-mount + dep-prime bootstrap instead of duplicating it.
+ENTRY_MODULE="${LLEM_ENTRY_MODULE:-llenergymeasure.entrypoints.container}"
+
 # Engine-conditional final exec. TensorRT-LLM upstream image needs
 # nvidia_entrypoint.sh to set up LD_LIBRARY_PATH for libnvinfer.so
 # (closes #608); other engines exec python3 directly.
 if [ "${LLEM_ENGINE:-}" = "tensorrt" ]; then
-    exec /opt/nvidia/nvidia_entrypoint.sh "${LAUNCH[@]}" -m llenergymeasure.entrypoints.container "$@"
+    exec /opt/nvidia/nvidia_entrypoint.sh "${LAUNCH[@]}" -m "${ENTRY_MODULE}" "$@"
 else
-    exec "${LAUNCH[@]}" -m llenergymeasure.entrypoints.container "$@"
+    exec "${LAUNCH[@]}" -m "${ENTRY_MODULE}" "$@"
 fi

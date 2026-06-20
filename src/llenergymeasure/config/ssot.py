@@ -119,6 +119,11 @@ wrap the final exec in mpirun -n N --allow-run-as-root."""
 ENV_DEPS_CACHE_DIR: Final = "LLEM_DEPS_CACHE_DIR"
 """Override for the host-side runtime-deps cache directory. Defaults to
 ``platformdirs.user_cache_dir('llem')/deps`` when unset."""
+ENV_ENTRY_MODULE: Final = "LLEM_ENTRY_MODULE"
+"""Framework module the container entrypoint script exec's with ``python3 -m``.
+Defaults to ``llenergymeasure.entrypoints.container`` (the experiment path);
+the baseline dispatch sets it to ``llenergymeasure.entrypoints.baseline_measure``
+so both share the same package-mount + dep-prime bootstrap."""
 
 # ---------------------------------------------------------------------------
 # Temp file/directory prefixes

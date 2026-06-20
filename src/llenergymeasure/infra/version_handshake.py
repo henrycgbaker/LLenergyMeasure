@@ -20,7 +20,7 @@ Two-tier handshake:
    the image (e.g. ``vllm.__version__``) matches the version that our
    vendored invariants and discovered schemas in
    ``src/llenergymeasure/engines/{engine}/`` were generated against
-   (recorded in ``engine_versions/{engine}.yaml::library.current_version``).
+   (recorded in ``engine_versions/{engine}/current.yaml::library.current_version``).
    The probe is run only when the label-based check is inconclusive
    (no labels, or a literal ``"unknown"`` fingerprint left by a legacy
    build) so that label-based-OK paths stay cheap.

@@ -40,9 +40,11 @@ from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     DOCKER_PULL_TIMEOUT,
+    ENV_BASELINE_SPEC_PATH,
     ENV_CONFIG_PATH,
     ENV_DEPS_CACHE_DIR,
     ENV_ENGINE,
+    ENV_ENTRY_MODULE,
     ENV_HF_TOKEN,
     ENV_HOST_GID,
     ENV_HOST_UID,
@@ -66,9 +68,29 @@ from llenergymeasure.infra.docker_errors import (
 from llenergymeasure.utils.exceptions import DockerError
 from llenergymeasure.utils.io import load_json
 
-__all__ = ["DockerRunner"]
+__all__ = ["DockerRunner", "append_package_dispatch"]
 
 logger = logging.getLogger(__name__)
+
+# Reserved exchange env keys the docker command builders set deliberately
+# (via -e or --env-file). The blanket "forward every host LLEM_* var" loop
+# must skip these: docker applies -e last-wins over --env-file, so a stray
+# host LLEM_CONFIG_PATH / LLEM_OUTPUT_DIR / ... would silently clobber the
+# intended dispatch value. Built from the actual ENV_* constants so it can't
+# drift from what the builders set.
+_RESERVED_EXCHANGE_ENV: frozenset[str] = frozenset(
+    {
+        ENV_CONFIG_PATH,
+        ENV_OUTPUT_DIR,
+        ENV_SAVE_TIMESERIES,
+        ENV_ENGINE,
+        ENV_ENTRY_MODULE,
+        ENV_HOST_UID,
+        ENV_HOST_GID,
+        ENV_MPI_NP,
+        ENV_BASELINE_SPEC_PATH,
+    }
+)
 
 # Watchdog poll cadence: small enough to surface timeouts promptly, large
 # enough to keep idle CPU near zero. 0.5s gives users at most a half-second
@@ -186,6 +208,70 @@ def _ensure_deps_cache_dir() -> Path:
         cache_dir = Path(platformdirs.user_cache_dir("llem")) / "deps"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
+
+
+def append_package_dispatch(
+    cmd: list[str],
+    *,
+    engine: str,
+    entry_module: str | None = None,
+    mpi_np: int | None = None,
+) -> None:
+    """Append the bind-mounts + env + entrypoint that make the package importable.
+
+    Upstream engine images (vllm, tensorrt) and even our transformers image do
+    NOT have ``llenergymeasure`` installed; the framework runs from the host
+    source bind-mounted at ``/llem-src``. This appends the four mounts the
+    in-container entrypoint script needs (package source, pyproject.toml, the
+    script itself, and the host deps cache), the env it reads, and points
+    ``--entrypoint`` at the script. The script sets ``PYTHONPATH`` to include
+    ``/llem-src`` and primes any missing runtime deps, then exec's the module
+    named by ``LLEM_ENTRY_MODULE``.
+
+    Shared by the experiment dispatch (``DockerRunner._build_docker_cmd``) and
+    the baseline dispatch (``study.baseline_container.build_baseline_docker_cmd``)
+    so the two package-import setups cannot drift.
+
+    Args:
+        cmd: Docker command list to mutate in place (mounts/env appended before
+            the image name, which the caller adds afterwards).
+        engine: Engine value; sets ``LLEM_ENGINE`` so the script routes tensorrt
+            through ``nvidia_entrypoint.sh`` for the libnvinfer ``LD_LIBRARY_PATH``.
+        entry_module: Override for the module the script exec's. ``None`` leaves
+            the script default (``llenergymeasure.entrypoints.container``).
+        mpi_np: When > 1, sets ``LLEM_MPI_NP`` so the script wraps the exec in
+            ``mpirun -n N`` (TRT-LLM tensor parallelism).
+    """
+    pkg_parent = _resolve_package_parent_dir()
+    repo_root = _resolve_repo_root()
+    entry_script = repo_root / "scripts" / "container_entrypoint.sh"
+    pyproject = repo_root / "pyproject.toml"
+    deps_cache = _ensure_deps_cache_dir()
+    cmd.extend(
+        [
+            "-v",
+            f"{pkg_parent}:/llem-src:ro",
+            "-v",
+            f"{pyproject}:/llem-pyproject.toml:ro",
+            "-v",
+            f"{entry_script}:/llem-entry.sh:ro",
+            "-v",
+            f"{deps_cache}:/llem-runtime-deps",
+            "-e",
+            "PYTHONDONTWRITEBYTECODE=1",
+            "-e",
+            f"{ENV_ENGINE}={engine}",
+            "-e",
+            f"{ENV_HOST_UID}={os.getuid()}",
+            "-e",
+            f"{ENV_HOST_GID}={os.getgid()}",
+        ]
+    )
+    if entry_module is not None:
+        cmd.extend(["-e", f"{ENV_ENTRY_MODULE}={entry_module}"])
+    if mpi_np is not None and mpi_np > 1:
+        cmd.extend(["-e", f"{ENV_MPI_NP}={mpi_np}"])
+    cmd.extend(["--entrypoint", "/llem-entry.sh"])
 
 
 class DockerRunner:
@@ -910,9 +996,13 @@ class DockerRunner:
 
         # Forward LLEM_* env vars into the container so framework defaults set
         # on the host (e.g. LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP) reach the
-        # experiment process, which actually runs inside the container.
+        # experiment process, which actually runs inside the container. Reserved
+        # exchange keys are excluded: we set those deliberately above (or via
+        # the package-dispatch helper), and docker's -e is last-wins over the
+        # --env-file, so a stray host copy would silently clobber the intended
+        # value.
         for env_key, env_val in os.environ.items():
-            if env_key.startswith("LLEM_") and env_val:
+            if env_key.startswith("LLEM_") and env_val and env_key not in _RESERVED_EXCHANGE_ENV:
                 cmd.extend(["-e", f"{env_key}={env_val}"])
 
         # Extra volume mounts (engine cache, model cache, etc.)
@@ -924,57 +1014,15 @@ class DockerRunner:
         if config.engine == Engine.TENSORRT and config.tensorrt is not None:
             tp_size = config.tensorrt.tensor_parallel_size
 
-        # All engines: bind-mount the host package source, pyproject.toml
-        # (consulted by the entrypoint script's runtime-dep diff),
-        # the entrypoint script itself, and the host deps cache. The
-        # entrypoint script primes any missing runtime deps on first
-        # dispatch (and short-circuits subsequent ones via a pyproject-hash
-        # stamp), sets PYTHONPATH to include /llem-src and the deps cache,
-        # then exec's the framework entrypoint module - routing through
-        # /opt/nvidia/nvidia_entrypoint.sh when LLEM_ENGINE=tensorrt so the
-        # NGC LD_LIBRARY_PATH setup runs, and wrapping in mpirun when
-        # LLEM_MPI_NP is set (TP > 1).
-        #
-        # PYTHONDONTWRITEBYTECODE prevents __pycache__ litter on the
-        # bind-mounted source. LLEM_HOST_UID/LLEM_HOST_GID let the
-        # entrypoint script chown the primed deps to the host user, so
-        # the cache can be cleaned without sudo even though the container
-        # itself runs as root (default for upstream engine images).
-        pkg_parent = _resolve_package_parent_dir()
-        repo_root = _resolve_repo_root()
-        entry_script = repo_root / "scripts" / "container_entrypoint.sh"
-        pyproject = repo_root / "pyproject.toml"
-        deps_cache = _ensure_deps_cache_dir()
-        # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to
-        # the raw value via its ``__str__`` override.
-        cmd.extend(
-            [
-                "-v",
-                f"{pkg_parent}:/llem-src:ro",
-                "-v",
-                f"{pyproject}:/llem-pyproject.toml:ro",
-                "-v",
-                f"{entry_script}:/llem-entry.sh:ro",
-                "-v",
-                f"{deps_cache}:/llem-runtime-deps",
-                "-e",
-                "PYTHONDONTWRITEBYTECODE=1",
-                "-e",
-                f"{ENV_ENGINE}={config.engine}",
-                "-e",
-                f"{ENV_HOST_UID}={os.getuid()}",
-                "-e",
-                f"{ENV_HOST_GID}={os.getgid()}",
-            ]
-        )
-        if tp_size is not None and tp_size > 1:
-            cmd.extend(["-e", f"{ENV_MPI_NP}={tp_size}"])
-
-        # The entrypoint script handles the engine-conditional final exec
-        # (TRT-LLM routes through nvidia_entrypoint.sh; others exec python3
-        # directly) and the mpirun wrap for TP > 1, so docker_runner only
-        # needs to point --entrypoint at the script.
-        cmd.extend(["--entrypoint", "/llem-entry.sh"])
+        # All engines: bind-mount the host package source + bootstrap (so the
+        # package is importable in images that don't ship it) and point
+        # --entrypoint at the script. Shared with the baseline dispatch via
+        # append_package_dispatch so the two cannot drift. The experiment path
+        # uses the script's default entry module
+        # (``llenergymeasure.entrypoints.container``), so entry_module stays None.
+        # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to the
+        # raw value via its ``__str__`` override.
+        append_package_dispatch(cmd, engine=f"{config.engine}", mpi_np=tp_size)
 
         # Container name and labels for lifecycle management (cleanup, reaper).
         # These must appear before the image name in the docker run command.

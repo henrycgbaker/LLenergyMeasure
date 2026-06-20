@@ -388,6 +388,7 @@ class _BaselineMixin:
             mode="measure",
             duration_sec=config.measurement.baseline.duration_seconds,
             gpu_indices=gpu_indices,
+            engine=f"{config.engine}",
             on_stage=on_stage,
         )
 
@@ -418,6 +419,7 @@ class _BaselineMixin:
             mode="spot_check",
             duration_sec=5.0,
             gpu_indices=gpu_indices,
+            engine=f"{config.engine}",
         )
         return result.power_w if result is not None else None
 

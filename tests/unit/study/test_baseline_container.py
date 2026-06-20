@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.config.ssot import ENV_BASELINE_SPEC_PATH
+from llenergymeasure.config.ssot import ENV_BASELINE_SPEC_PATH, ENV_ENGINE, ENV_ENTRY_MODULE
 from llenergymeasure.study import baseline_container
 
 _MODULE = "llenergymeasure.study.baseline_container"
@@ -75,6 +75,7 @@ class TestBuildBaselineDockerCmd:
             image="ghcr.io/foo/bar:v1",
             exchange_dir=str(tmp_path),
             gpu_indices=[0, 2],
+            engine="vllm",
         )
         assert cmd[0] == "docker"
         assert "run" in cmd
@@ -83,18 +84,49 @@ class TestBuildBaselineDockerCmd:
         # env vars
         assert any(f"{ENV_BASELINE_SPEC_PATH}=" in part for part in cmd)
         assert any("CUDA_VISIBLE_DEVICES=0,2" in part for part in cmd)
-        # image
-        assert "ghcr.io/foo/bar:v1" in cmd
-        # entrypoint
-        assert "python3" in cmd
-        assert "-m" in cmd
-        assert "llenergymeasure.entrypoints.baseline_measure" in cmd
+        # image is the LAST arg (the entrypoint script invokes the module itself)
+        assert cmd[-1] == "ghcr.io/foo/bar:v1"
+
+    def test_cmd_makes_package_importable(self, tmp_path: Path):
+        """The baseline command must mount the host package + route through the
+        entrypoint script so the upstream engine image can import the package.
+
+        Without this, every Docker baseline run fails with ModuleNotFoundError:
+        upstream engine images do not ship the llenergymeasure package.
+        """
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+        )
+        # Package source bind-mount (makes the package importable via PYTHONPATH).
+        assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
+        # Dispatch routes through the shared in-container bootstrap script.
+        ep_idx = cmd.index("--entrypoint")
+        assert cmd[ep_idx + 1] == "/llem-entry.sh"
+        # The script exec's the baseline module (not the experiment one).
+        assert f"{ENV_ENTRY_MODULE}=llenergymeasure.entrypoints.baseline_measure" in cmd
+        # Engine is propagated so the script can route tensorrt correctly.
+        assert f"{ENV_ENGINE}=vllm" in cmd
+        # The old, broken trailing "python3 -m ..." form must be gone.
+        assert "python3" not in cmd
+
+    def test_cmd_tensorrt_engine_propagated(self, tmp_path: Path):
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="tensorrt",
+        )
+        assert f"{ENV_ENGINE}=tensorrt" in cmd
 
     def test_cmd_empty_gpu_indices(self, tmp_path: Path):
         cmd = baseline_container.build_baseline_docker_cmd(
             image="img:latest",
             exchange_dir=str(tmp_path),
             gpu_indices=[],
+            engine="transformers",
         )
         assert any("CUDA_VISIBLE_DEVICES=" in part for part in cmd)
 
@@ -145,6 +177,7 @@ class TestRunBaselineContainerSuccess:
                 mode="measure",
                 duration_sec=30.0,
                 gpu_indices=[0],
+                engine="vllm",
             )
 
         assert result is not None
@@ -168,6 +201,7 @@ class TestRunBaselineContainerSuccess:
                 mode="measure",
                 duration_sec=1.0,
                 gpu_indices=[0],
+                engine="vllm",
             )
 
         assert not exchange_dir.exists()
@@ -206,6 +240,7 @@ class TestRunBaselineContainerSuccess:
                 mode="measure",
                 duration_sec=30.0,
                 gpu_indices=[0],
+                engine="vllm",
                 on_stage=on_stage,
             )
 
@@ -249,6 +284,7 @@ class TestRunBaselineContainerSuccess:
                 mode="measure",
                 duration_sec=30.0,
                 gpu_indices=[0],
+                engine="vllm",
                 on_stage=broken,
             )
 
@@ -288,6 +324,7 @@ class TestRunBaselineContainerFailure:
                 mode="measure",
                 duration_sec=1.0,
                 gpu_indices=[0],
+                engine="vllm",
             )
 
         assert result is None
@@ -308,6 +345,7 @@ class TestRunBaselineContainerFailure:
                 mode="measure",
                 duration_sec=1.0,
                 gpu_indices=[0],
+                engine="vllm",
             )
 
         assert result is None
@@ -349,6 +387,7 @@ class TestRunBaselineContainerFailure:
                 mode="measure",
                 duration_sec=1.0,
                 gpu_indices=[0],
+                engine="vllm",
             )
 
         assert result is None
@@ -376,6 +415,7 @@ class TestRunBaselineContainerFailure:
                 mode="measure",
                 duration_sec=1.0,
                 gpu_indices=[0],
+                engine="vllm",
             )
 
         assert result is None
@@ -391,6 +431,7 @@ class TestRunBaselineContainerFailure:
                 mode="measure",
                 duration_sec=1.0,
                 gpu_indices=[0],
+                engine="vllm",
             )
 
         assert result is None

@@ -34,6 +34,7 @@ from llenergymeasure.config.ssot import (
     TEMP_PREFIX_EXCHANGE,
 )
 from llenergymeasure.harness.baseline import BaselineCache
+from llenergymeasure.infra.docker_runner import append_package_dispatch
 from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
@@ -58,19 +59,30 @@ _STAGE_LINE_PREFIX = f"{STAGE_LINE_PREFIX} stage="
 BASELINE_SPEC_FILENAME = "baseline_spec.json"
 
 
+_BASELINE_ENTRY_MODULE = "llenergymeasure.entrypoints.baseline_measure"
+
+
 def build_baseline_docker_cmd(
     image: str,
     exchange_dir: str,
     gpu_indices: list[int],
+    engine: str,
 ) -> list[str]:
     """Build the ``docker run`` command list for a baseline-only container.
+
+    Reuses ``infra.docker_runner.append_package_dispatch`` (the same mechanism
+    the experiment path uses) to bind-mount the host package source and route
+    through ``/llem-entry.sh``. Upstream engine images do not ship the
+    ``llenergymeasure`` package, so without this the baseline entry module would
+    fail with ``ModuleNotFoundError``. The script exec's the baseline entry
+    module (set via ``LLEM_ENTRY_MODULE``) instead of the experiment one.
 
     Kept separate from ``run_baseline_container`` so tests can assert on the
     command shape without mocking subprocess internals.
     """
     cuda_visible = ",".join(str(i) for i in gpu_indices) if gpu_indices else ""
     spec_container_path = f"{CONTAINER_EXCHANGE_DIR}/{BASELINE_SPEC_FILENAME}"
-    return [
+    cmd = [
         "docker",
         "run",
         "--rm",
@@ -82,11 +94,12 @@ def build_baseline_docker_cmd(
         f"{ENV_BASELINE_SPEC_PATH}={spec_container_path}",
         "-e",
         f"CUDA_VISIBLE_DEVICES={cuda_visible}",
-        image,
-        "python3",
-        "-m",
-        "llenergymeasure.entrypoints.baseline_measure",
     ]
+    # Mount the package + bootstrap and point --entrypoint at /llem-entry.sh,
+    # which makes the package importable and exec's the baseline entry module.
+    append_package_dispatch(cmd, engine=engine, entry_module=_BASELINE_ENTRY_MODULE)
+    cmd.append(image)
+    return cmd
 
 
 def parse_stage_line(line: str) -> tuple[str, dict[str, str]] | None:
@@ -117,6 +130,7 @@ def run_baseline_container(
     mode: str,
     duration_sec: float,
     gpu_indices: list[int],
+    engine: str,
     timeout_sec: float | None = None,
     on_stage: StageCallback | None = None,
 ) -> BaselineCache | None:
@@ -137,6 +151,9 @@ def run_baseline_container(
         gpu_indices: GPUs to measure. Translated to ``CUDA_VISIBLE_DEVICES`` so
             the baseline container sees exactly the same GPUs the experiment
             container will.
+        engine: Engine value of the image. Passed to the entrypoint script so
+            tensorrt baselines route through ``nvidia_entrypoint.sh`` (matching
+            the experiment container's libnvinfer setup).
         timeout_sec: Subprocess timeout. Defaults to
             ``max(duration_sec * 2 + 60, 120)`` - enough for cold-start,
             sampling, and teardown with headroom.
@@ -170,6 +187,7 @@ def run_baseline_container(
         image=image,
         exchange_dir=str(exchange_dir),
         gpu_indices=list(gpu_indices),
+        engine=engine,
     )
 
     logger.debug(
