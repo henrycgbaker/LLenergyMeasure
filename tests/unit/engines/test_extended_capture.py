@@ -120,6 +120,50 @@ class TestExtractDecodeItl:
         assert extract_decode_itl([]) == []
 
 
+def _req_decode_multi(first_token, finished, out_lens):
+    """RequestOutput with N parallel CompletionOutputs (n>1 sampling).
+
+    ``out_lens`` is a list of per-output token counts. The N completions stream
+    concurrently and share the single ``(finished - first_token)`` wall-time.
+    """
+    metrics = SimpleNamespace(first_token_time=first_token, finished_time=finished)
+    outputs = [SimpleNamespace(token_ids=list(range(n))) for n in out_lens]
+    return SimpleNamespace(metrics=metrics, outputs=outputs)
+
+
+class TestExtractDecodeItlParallelOutputs:
+    """EN5: n>1 parallel outputs use per-sequence (max) decode length, not sum."""
+
+    def test_n2_uses_max_not_sum(self):
+        # Two parallel outputs of 10 tokens each over a 0.9s decode window.
+        # Correct: max=10 -> 9 intervals -> 100 ms.
+        # Buggy (sum): 20 tokens -> 19 intervals -> ~47.4 ms (understated ~1/N).
+        outputs = [_req_decode_multi(first_token=1.0, finished=1.9, out_lens=[10, 10])]
+        itl = extract_decode_itl(outputs)
+        assert itl == pytest.approx([100.0])
+        # Prove it is NOT the summed-denominator value.
+        summed = 0.9 * 1000.0 / (20 - 1)
+        assert itl[0] != pytest.approx(summed)
+
+    def test_uneven_parallel_outputs_use_longest(self):
+        # Outputs of length 8 and 5: decode length is the longest (8) -> 7 intervals.
+        # 0.7s / 7 = 100 ms.
+        outputs = [_req_decode_multi(first_token=0.0, finished=0.7, out_lens=[8, 5])]
+        itl = extract_decode_itl(outputs)
+        assert itl == pytest.approx([100.0])
+
+    def test_n1_via_multi_helper_matches_single(self):
+        # A single parallel output behaves exactly as the n=1 path: max == its len.
+        outputs = [_req_decode_multi(first_token=1.0, finished=1.9, out_lens=[10])]
+        itl = extract_decode_itl(outputs)
+        assert itl == pytest.approx([100.0])
+
+    def test_all_parallel_outputs_single_token_skipped(self):
+        # Longest output has 1 token -> decode_len <= 1 -> skipped (no intervals).
+        outputs = [_req_decode_multi(first_token=1.0, finished=2.0, out_lens=[1, 1])]
+        assert extract_decode_itl(outputs) == []
+
+
 # ---------------------------------------------------------------------------
 # _capture_kv_cache_stats
 # ---------------------------------------------------------------------------

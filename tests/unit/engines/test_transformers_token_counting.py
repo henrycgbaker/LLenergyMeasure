@@ -5,12 +5,28 @@ import pytest
 torch = pytest.importorskip("torch")
 
 
-def _count_tokens(inputs: dict, outputs: "torch.Tensor") -> tuple[int, int]:  # type: ignore[name-defined]  # torch via importorskip
-    """Replicate the token counting logic from TransformersEngine._run_batch()."""
+def _count_tokens(
+    inputs: dict,
+    outputs: "torch.Tensor",  # type: ignore[name-defined]  # torch via importorskip
+    n_inputs: int | None = None,
+) -> tuple[int, int]:
+    """Replicate the token counting logic from TransformersEngine._run_batch().
+
+    ``n_inputs`` is the number of input prompts (the batch list length); it
+    defaults to the attention_mask row count for the n=1 case but must be passed
+    explicitly when ``outputs`` has ``n_inputs * num_return_sequences`` rows.
+    """
     input_token_count = int(inputs["attention_mask"].sum().item())
-    input_lengths = inputs["attention_mask"].sum(dim=1)  # shape: (batch,)
+    input_lengths = [int(x) for x in inputs["attention_mask"].sum(dim=1).tolist()]
+    if n_inputs is None:
+        n_inputs = len(input_lengths)
+    n_rows = int(outputs.shape[0])
+    n_return = n_rows // n_inputs if n_inputs > 0 and n_rows % n_inputs == 0 else 1
     output_token_count = int(
-        sum(max(0, outputs.shape[1] - int(inp_len.item())) for inp_len in input_lengths)
+        sum(
+            max(0, int(outputs.shape[1]) - input_lengths[min(j // n_return, n_inputs - 1)])
+            for j in range(n_rows)
+        )
     )
     return input_token_count, output_token_count
 
@@ -103,6 +119,66 @@ class TestPaddedBatch:
         _, new_out = _count_tokens(inputs, outputs)
 
         assert new_out == 0, f"Expected 0 output tokens when no generation, got {new_out}"
+
+
+class TestNumReturnSequences:
+    """EN4: outputs.shape[0] == batch * num_return_sequences; count ALL rows.
+
+    HF returns N rows per input prompt when num_return_sequences=N (incl. beam
+    search). The old loop counted only ``batch`` rows -> N-fold undercount.
+    """
+
+    def test_n1_unchanged_baseline(self) -> None:
+        # n=1: 2 prompts, input length 4, output length 6 -> 2 new tokens each = 4.
+        input_ids = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
+        attention_mask = torch.ones_like(input_ids)
+        inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        outputs = torch.zeros((2, 6), dtype=torch.long)  # 2 rows (n=1)
+
+        _, out_n1 = _count_tokens(inputs, outputs, n_inputs=2)
+        assert out_n1 == 4
+
+    def test_n3_counts_all_rows(self) -> None:
+        # 2 prompts, num_return_sequences=3 -> outputs has 6 rows. Each output row
+        # is length 6, every input length 4 -> 2 new tokens per row * 6 rows = 12.
+        # The n=1 count for the same inputs/output width would be 4, so n=3 == 3x.
+        input_ids = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
+        attention_mask = torch.ones_like(input_ids)
+        inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        outputs = torch.zeros((6, 6), dtype=torch.long)  # 2 inputs * 3 returns
+
+        _, out_n3 = _count_tokens(inputs, outputs, n_inputs=2)
+        assert out_n3 == 12, f"Expected 12 (all 6 rows), got {out_n3}"
+
+        # Equivalence to n=1 * N.
+        outputs_n1 = torch.zeros((2, 6), dtype=torch.long)
+        _, out_n1 = _count_tokens(inputs, outputs_n1, n_inputs=2)
+        assert out_n3 == 3 * out_n1
+
+    def test_n2_padded_maps_rows_to_source_input(self) -> None:
+        # Padded inputs: seq1 real length 3, seq2 real length 5. n=2 -> 4 rows.
+        # Output width 7. Rows map j//2: rows 0,1 -> input0 (len 3 -> 4 new),
+        # rows 2,3 -> input1 (len 5 -> 2 new). Total = 4+4+2+2 = 12.
+        input_ids = torch.tensor([[1, 2, 3, 0, 0], [4, 5, 6, 7, 8]])
+        attention_mask = torch.tensor([[1, 1, 1, 0, 0], [1, 1, 1, 1, 1]])
+        inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        outputs = torch.zeros((4, 7), dtype=torch.long)
+
+        _, out = _count_tokens(inputs, outputs, n_inputs=2)
+        assert out == 12, f"Expected 12 with per-source-input mapping, got {out}"
+
+    def test_non_multiple_row_count_falls_back(self) -> None:
+        # Defensive guard: 5 output rows for 2 inputs is not an exact multiple, so
+        # n_return falls back to 1 and rows map j//1 clamped to last input.
+        # Rows 0,1 -> input0 (len 4 -> 2 new), rows 2,3,4 -> input1 (clamped).
+        # input1 len 4 -> 2 new. Total = 5 rows * 2 = 10.
+        input_ids = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
+        attention_mask = torch.ones_like(input_ids)
+        inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        outputs = torch.zeros((5, 6), dtype=torch.long)
+
+        _, out = _count_tokens(inputs, outputs, n_inputs=2)
+        assert out == 10
 
 
 def _count_padding(inputs: dict) -> int:
