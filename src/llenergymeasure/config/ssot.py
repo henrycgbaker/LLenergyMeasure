@@ -127,6 +127,10 @@ TEMP_PREFIX_ENV_FILE: Final = "llem-env"
 TEMP_PREFIX_TIMESERIES: Final = "llem-ts-"
 """Prefix for temp directories holding timeseries parquet files."""
 
+STAGE_LINE_PREFIX: Final = "[llem.baseline]"
+"""Wire-protocol line prefix for baseline stage markers: emitted by
+entrypoints/baseline_measure._emit_stage and parsed by study/baseline_container."""
+
 # ---------------------------------------------------------------------------
 # Subprocess / thread timeout constants (seconds)
 # ---------------------------------------------------------------------------
@@ -211,6 +215,7 @@ __all__ = [
     "RUNNER_LOCAL",
     "SAMPLING_PRESETS",
     "SOURCE_MULTI_ENGINE_ELEVATION",
+    "STAGE_LINE_PREFIX",
     "TEMP_PREFIX_ENV_FILE",
     "TEMP_PREFIX_EXCHANGE",
     "TEMP_PREFIX_TIMESERIES",

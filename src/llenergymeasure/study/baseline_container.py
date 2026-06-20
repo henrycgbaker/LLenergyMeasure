@@ -30,9 +30,9 @@ from pathlib import Path
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     ENV_BASELINE_SPEC_PATH,
+    STAGE_LINE_PREFIX,
     TEMP_PREFIX_EXCHANGE,
 )
-from llenergymeasure.entrypoints.baseline_measure import STAGE_LINE_PREFIX
 from llenergymeasure.harness.baseline import BaselineCache
 
 logger = logging.getLogger(__name__)

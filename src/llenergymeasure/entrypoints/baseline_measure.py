@@ -44,18 +44,11 @@ import sys
 import traceback
 from pathlib import Path
 
-from llenergymeasure.config.ssot import ENV_BASELINE_SPEC_PATH
+from llenergymeasure.config.ssot import ENV_BASELINE_SPEC_PATH, STAGE_LINE_PREFIX
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["_emit_stage", "_prime_cuda", "main", "run_baseline_measurement"]
-
-
-# Line prefix for stage markers emitted to stdout. The host dispatcher
-# (``study/baseline_container.py``) matches this prefix when streaming the
-# subprocess output line-by-line, so it can surface live sub-step progress
-# in the CLI instead of the user staring at a single spinner for ~30s.
-STAGE_LINE_PREFIX = "[llem.baseline]"
 
 
 def _emit_stage(name: str, **kv: object) -> None:

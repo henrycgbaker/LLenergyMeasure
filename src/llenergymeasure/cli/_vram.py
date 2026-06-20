@@ -6,6 +6,8 @@ try/except and return None on any failure. Network errors never block the CLI.
 
 from __future__ import annotations
 
+from typing import Any
+
 from llenergymeasure.config.models import ExperimentConfig
 
 # Bytes per parameter for each dtype.
@@ -62,7 +64,7 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
             if hasattr(model_info, "config") and model_info.config is not None:
                 cfg = model_info.config
 
-                def _cfg_get(*names: str) -> object | None:
+                def _cfg_get(*names: str) -> Any:
                     for name in names:
                         value = cfg.get(name) if isinstance(cfg, dict) else getattr(cfg, name, None)
                         if value is not None:
