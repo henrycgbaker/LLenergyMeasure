@@ -120,7 +120,7 @@ measurement:
     duration_seconds: 30.0
   warmup:
     enabled: true
-    n_warmup: 3
+    n_prompts: 3
     thermal_floor_seconds: 30.0
 ```
 

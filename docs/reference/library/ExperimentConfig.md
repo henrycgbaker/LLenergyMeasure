@@ -109,9 +109,9 @@ Nested under `measurement:` in YAML, or `MeasurementConfig(...)` in Python:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | `bool` | `True` | Enable warmup phase. |
-| `n_warmup` | `int` | `5` | Number of full-length warmup prompts before measurement starts. Minimum 1. |
+| `n_prompts` | `int` | `5` | Number of full-length warmup prompts in fixed mode. Minimum 1. |
 | `thermal_floor_seconds` | `float` | `60.0` | Minimum seconds to wait after warmup for thermal stabilisation. Minimum 30s enforced. |
-| `convergence_detection` | `bool` | `False` | Enable CV-based adaptive convergence detection (additive to `n_warmup`). |
+| `convergence_detection` | `bool` | `False` | Enable CV-based adaptive convergence detection (replaces the fixed `n_prompts` count). |
 | `cv_threshold` | `float` | `0.05` | CV target for convergence (0.01-0.50, only used when `convergence_detection=True`). |
 | `max_prompts` | `int` | `20` | Safety cap on warmup prompts in CV mode. |
 
@@ -182,7 +182,7 @@ config = ExperimentConfig(
     ),
     engine="transformers",
     measurement=MeasurementConfig(
-        warmup=WarmupConfig(n_warmup=10, thermal_floor_seconds=90.0),
+        warmup=WarmupConfig(n_prompts=10, thermal_floor_seconds=90.0),
         energy_sampler="nvml",
     ),
 )

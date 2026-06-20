@@ -62,7 +62,7 @@ engine: transformers
 
 measurement:
   warmup:
-    n_warmup: 5
+    n_prompts: 5
   baseline:
     enabled: true
     strategy: validated

@@ -177,7 +177,7 @@ class ExperimentResult(BaseModel):
         default=None, description="Aggregation metadata (method, num_processes)"
     )
 
-    # Carry-forward fields (v1.x compat, used by aggregation/CLI)
+    # Optional detail fields used by aggregation/CLI
     thermal_throttle: ThermalThrottleInfo | None = Field(
         default=None, description="GPU thermal and power throttling information"
     )

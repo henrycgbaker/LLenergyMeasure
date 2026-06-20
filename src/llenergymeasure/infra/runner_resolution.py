@@ -30,9 +30,12 @@ if TYPE_CHECKING:
 
 from llenergymeasure.config.ssot import ENV_RUNNER_PREFIX, RUNNER_DOCKER, RUNNER_LOCAL, RunnerMode
 
+# Cross-module private import: the NVIDIA Container Toolkit binary list lives in
+# docker_preflight (its canonical home) and is reused for the docker-availability check.
+from llenergymeasure.infra.docker_preflight import _NVIDIA_TOOLKIT_BINS
+
 # Re-exported from image_registry for convenience - parse_runner_value is defined
 # there (canonical home) but used heavily in this module and its tests.
-from llenergymeasure.infra.docker_preflight import _NVIDIA_TOOLKIT_BINS
 from llenergymeasure.infra.image_registry import parse_runner_value
 
 __all__ = [

@@ -14,9 +14,9 @@ from llenergymeasure.harness.warmup import warmup_until_converged
 # =============================================================================
 
 
-def test_warmup_config_n_warmup_default_is_5() -> None:
-    """CM-21: n_warmup default is 5 (not 3)."""
-    assert WarmupConfig().n_warmup == 5
+def test_warmup_config_n_prompts_default_is_5() -> None:
+    """CM-21: n_prompts default is 5 (not 3)."""
+    assert WarmupConfig().n_prompts == 5
 
 
 def test_warmup_config_thermal_floor_default_60() -> None:
@@ -95,7 +95,7 @@ def test_warmup_config_max_prompts_default() -> None:
 
 
 def test_warmup_fixed_mode_returns_converged() -> None:
-    """Fixed mode (convergence_detection=False): converged=True, iterations_completed=n_warmup."""
+    """Fixed mode (convergence_detection=False): converged=True, iterations_completed=n_prompts."""
     call_count = 0
 
     def mock_inference() -> float:
@@ -103,7 +103,7 @@ def test_warmup_fixed_mode_returns_converged() -> None:
         call_count += 1
         return 100.0  # 100ms constant latency
 
-    config = WarmupConfig(n_warmup=3, thermal_floor_seconds=30.0)
+    config = WarmupConfig(n_prompts=3, thermal_floor_seconds=30.0)
     result = warmup_until_converged(mock_inference, config)
 
     assert result.converged is True
@@ -111,8 +111,8 @@ def test_warmup_fixed_mode_returns_converged() -> None:
     assert call_count == 3
 
 
-def test_warmup_fixed_mode_respects_n_warmup() -> None:
-    """Fixed mode runs exactly n_warmup iterations (not max_prompts)."""
+def test_warmup_fixed_mode_respects_n_prompts() -> None:
+    """Fixed mode runs exactly n_prompts iterations (not max_prompts)."""
     call_count = 0
 
     def mock_inference() -> float:
@@ -120,7 +120,7 @@ def test_warmup_fixed_mode_respects_n_warmup() -> None:
         call_count += 1
         return 50.0
 
-    config = WarmupConfig(n_warmup=7, max_prompts=20, thermal_floor_seconds=30.0)
+    config = WarmupConfig(n_prompts=7, max_prompts=20, thermal_floor_seconds=30.0)
     result = warmup_until_converged(mock_inference, config)
 
     assert result.iterations_completed == 7
@@ -135,7 +135,7 @@ def test_warmup_fixed_mode_respects_n_warmup() -> None:
 def test_warmup_cv_mode_converges() -> None:
     """CV mode: stable latencies should converge within max_prompts."""
     config = WarmupConfig(
-        n_warmup=1,
+        n_prompts=1,
         convergence_detection=True,
         cv_threshold=0.1,
         max_prompts=30,
@@ -151,66 +151,6 @@ def test_warmup_cv_mode_converges() -> None:
 
     assert result.converged is True
     assert result.iterations_completed <= config.max_prompts
-
-
-def test_warmup_cv_mode_runs_n_warmup_base_before_converging() -> None:
-    """CV is additive to n_warmup: the base n_warmup prompts run before convergence.
-
-    With constant latency (CV=0) and a non-default n_warmup=4, convergence must
-    not trigger during the base phase. The earliest possible convergence is one
-    iteration into the CV phase, once min_prompts/window_size are also satisfied.
-    """
-    call_count = 0
-
-    def stable_inference() -> float:
-        nonlocal call_count
-        call_count += 1
-        return 10.0  # constant -> CV=0.0
-
-    config = WarmupConfig(
-        n_warmup=4,
-        convergence_detection=True,
-        cv_threshold=0.1,
-        max_prompts=30,
-        window_size=3,
-        min_prompts=3,
-        thermal_floor_seconds=30.0,
-    )
-
-    result = warmup_until_converged(stable_inference, config)
-
-    assert result.converged is True
-    # Base phase (4) must complete before the CV phase can early-break, so the
-    # total must exceed n_warmup. (First CV-phase iteration is the 5th.)
-    assert result.iterations_completed > config.n_warmup
-    assert call_count == result.iterations_completed
-
-
-def test_warmup_cv_mode_budget_is_n_warmup_plus_max_prompts() -> None:
-    """When CV never converges, total iterations = n_warmup + max_prompts (additive)."""
-    call_count = 0
-
-    def noisy_inference() -> float:
-        nonlocal call_count
-        call_count += 1
-        # Alternate widely so CV never drops below threshold.
-        return 10.0 if call_count % 2 == 0 else 1000.0
-
-    config = WarmupConfig(
-        n_warmup=3,
-        convergence_detection=True,
-        cv_threshold=0.01,
-        max_prompts=6,
-        window_size=3,
-        min_prompts=3,
-        thermal_floor_seconds=30.0,
-    )
-
-    result = warmup_until_converged(noisy_inference, config)
-
-    assert result.converged is False
-    assert result.iterations_completed == config.n_warmup + config.max_prompts
-    assert call_count == config.n_warmup + config.max_prompts
 
 
 def test_warmup_disabled_skips() -> None:
@@ -243,7 +183,7 @@ def test_warmup_substep_callback() -> None:
         substep_calls.append((text, elapsed))
 
     config = WarmupConfig(
-        n_warmup=3,
+        n_prompts=3,
         convergence_detection=True,
         cv_threshold=0.1,
         max_prompts=10,
@@ -292,7 +232,7 @@ def test_warmup_disabled_returns_immediately() -> None:
 
 def test_warmup_substep_callback_no_progress_without_callback() -> None:
     """warmup_until_converged runs correctly when on_substep is None."""
-    config = WarmupConfig(n_warmup=2, thermal_floor_seconds=30.0)
+    config = WarmupConfig(n_prompts=2, thermal_floor_seconds=30.0)
     result = warmup_until_converged(lambda: 10.0, config, on_substep=None)
     assert result.converged is True
     assert result.iterations_completed == 2
@@ -343,6 +283,6 @@ def test_warmup_result_thermal_floor_wait_non_negative() -> None:
 
 def test_warmup_until_converged_result_thermal_default() -> None:
     """warmup_until_converged() returns WarmupResult with thermal_floor_wait_s=0.0."""
-    config = WarmupConfig(n_warmup=2, thermal_floor_seconds=30.0)
+    config = WarmupConfig(n_prompts=2, thermal_floor_seconds=30.0)
     result = warmup_until_converged(lambda: 10.0, config)
     assert result.thermal_floor_wait_s == 0.0

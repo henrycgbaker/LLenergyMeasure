@@ -65,14 +65,14 @@ measurement:
     enabled: true
     duration_seconds: 30.0         # 5.0 - 120.0
   # Warmup - Two modes: fixed (default) or CV convergence (opt-in).
-  # Fixed mode: runs exactly n_warmup prompts. CV computed for info only.
-  # CV mode: replaces n_warmup; runs until CV < cv_threshold (up to max_prompts).
+  # Fixed mode: runs exactly n_prompts prompts. CV computed for info only.
+  # CV mode: replaces n_prompts; runs until CV < cv_threshold (up to max_prompts).
   # After warmup, thermal_floor_seconds wait lets GPU temperature plateau before measurement.
   warmup:
     enabled: true
-    n_warmup: 3                      # Fixed mode iteration count (default: 5)
+    n_prompts: 3                     # Fixed mode iteration count (default: 5)
     thermal_floor_seconds: 30.0     # Post-warmup stabilisation wait. Minimum 30s (default: 60s)
-    #convergence_detection: true   # Enable CV-based warmup (replaces n_warmup). Default: false
+    #convergence_detection: true   # Enable CV-based warmup (replaces n_prompts). Default: false
     #cv_threshold: 0.05            # Stop when CV < 5%. Default: 0.05
     #max_prompts: 20               # Safety cap for CV mode. Default: 20
     #window_size: 3                # Sliding window for CV calculation. Default: 3

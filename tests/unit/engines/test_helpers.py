@@ -57,15 +57,15 @@ def test_warmup_disabled_returns_converged_immediately():
 # ---------------------------------------------------------------------------
 
 
-def test_warmup_fixed_mode_runs_n_warmup_iterations():
-    """Fixed mode runs exactly n_warmup iterations."""
+def test_warmup_fixed_mode_runs_n_prompts_iterations():
+    """Fixed mode runs exactly n_prompts iterations."""
     call_count = [0]
 
     def _counting_run() -> float:
         call_count[0] += 1
         return 50.0
 
-    config = WarmupConfig(n_warmup=3, convergence_detection=False, enabled=True)
+    config = WarmupConfig(n_prompts=3, convergence_detection=False, enabled=True)
     result = warmup_until_converged(_counting_run, config)
 
     assert result.iterations_completed == 3
@@ -74,7 +74,7 @@ def test_warmup_fixed_mode_runs_n_warmup_iterations():
 
 def test_warmup_fixed_mode_marks_converged():
     """Fixed mode marks converged=True regardless of latency variance."""
-    config = WarmupConfig(n_warmup=4, convergence_detection=False, enabled=True)
+    config = WarmupConfig(n_prompts=4, convergence_detection=False, enabled=True)
     # High variance latencies - would not converge in CV mode
     run_fn = _varying_latency_fn([10.0, 200.0, 10.0, 200.0])
     result = warmup_until_converged(run_fn, config)
@@ -84,7 +84,7 @@ def test_warmup_fixed_mode_marks_converged():
 
 def test_warmup_fixed_mode_result_has_warmup_result_type():
     """warmup_until_converged always returns a WarmupResult."""
-    config = WarmupConfig(n_warmup=2, convergence_detection=False, enabled=True)
+    config = WarmupConfig(n_prompts=2, convergence_detection=False, enabled=True)
     result = warmup_until_converged(_fixed_latency_fn(75.0), config)
 
     assert isinstance(result, WarmupResult)
@@ -92,7 +92,7 @@ def test_warmup_fixed_mode_result_has_warmup_result_type():
 
 def test_warmup_fixed_mode_records_max_prompts():
     """WarmupResult.max_prompts matches the config value used."""
-    config = WarmupConfig(n_warmup=5, convergence_detection=False, enabled=True)
+    config = WarmupConfig(n_prompts=5, convergence_detection=False, enabled=True)
     result = warmup_until_converged(_fixed_latency_fn(50.0), config)
 
     # In fixed mode, max_prompts is not directly set but target_cv from config is
@@ -108,7 +108,7 @@ def test_warmup_cv_mode_converges_on_stable_latency():
     """CV mode marks converged when latency CV drops below threshold."""
     # Uniform latency => CV = 0 => converges after min_prompts
     config = WarmupConfig(
-        n_warmup=1,
+        n_prompts=1,
         convergence_detection=True,
         cv_threshold=0.05,
         max_prompts=20,
@@ -125,7 +125,7 @@ def test_warmup_cv_mode_converges_on_stable_latency():
 def test_warmup_cv_mode_does_not_converge_with_high_variance():
     """CV mode does not converge when latency variance is too high."""
     config = WarmupConfig(
-        n_warmup=1,
+        n_prompts=1,
         convergence_detection=True,
         cv_threshold=0.05,  # minimum allowed threshold
         max_prompts=6,
@@ -142,13 +142,9 @@ def test_warmup_cv_mode_does_not_converge_with_high_variance():
 
 
 def test_warmup_cv_mode_respects_max_prompts():
-    """CV mode stops at n_warmup + max_prompts even without convergence.
-
-    CV is additive to n_warmup: the n_warmup base prompts run first, then up to
-    max_prompts convergence prompts, so the total budget is the sum.
-    """
+    """CV mode stops at max_prompts even without convergence."""
     config = WarmupConfig(
-        n_warmup=1,
+        n_prompts=1,
         convergence_detection=True,
         cv_threshold=0.05,
         max_prompts=5,
@@ -164,7 +160,7 @@ def test_warmup_cv_mode_respects_max_prompts():
         return 1.0 if call_count[0] % 2 == 0 else 100.0
 
     warmup_until_converged(_run, config)
-    assert call_count[0] <= config.n_warmup + config.max_prompts
+    assert call_count[0] <= config.max_prompts
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +178,7 @@ def test_warmup_continues_after_inference_failure():
             raise RuntimeError("simulated inference failure")
         return 50.0
 
-    config = WarmupConfig(n_warmup=4, convergence_detection=False, enabled=True)
+    config = WarmupConfig(n_prompts=4, convergence_detection=False, enabled=True)
     # Should not raise - failures are caught and logged inside warmup_until_converged
     result = warmup_until_converged(_sometimes_fails, config)
 

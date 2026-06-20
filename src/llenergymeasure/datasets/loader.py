@@ -37,17 +37,17 @@ AUTO_DETECT_COLUMNS: list[str] = ["prompt", "text", "instruction", "input", "que
 def load_prompts(config: ExperimentConfig) -> list[str]:
     """Load prompts according to the experiment configuration.
 
-    Dispatches based on config.dataset.source:
+    Dispatches based on config.task.dataset.source:
     - Built-in alias (e.g. "aienergyscore") -> load from bundled JSONL file
     - Path to an existing .jsonl file -> load from that file
     - Anything else -> raise ValueError with valid options
 
     Args:
-        config: Experiment configuration. Uses config.dataset (DatasetConfig)
-            and config.random_seed.
+        config: Experiment configuration. Uses config.task.dataset (DatasetConfig)
+            and config.task.random_seed.
 
     Returns:
-        List of exactly config.dataset.n_prompts prompt strings.
+        List of exactly config.task.dataset.n_prompts prompt strings.
 
     Raises:
         ValueError: If dataset source is unknown or file not found.
