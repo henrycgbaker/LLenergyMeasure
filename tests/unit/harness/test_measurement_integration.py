@@ -466,6 +466,146 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     assert len(result.measurement_warnings) == 1
 
 
+# =============================================================================
+# Measurement-methodology wiring (total / windowed / steady_state)
+# =============================================================================
+
+
+def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
+    """Run _build_result with a flat-100W timeseries and return the result."""
+    from datetime import datetime
+
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.domain.metrics import ThermalThrottleInfo
+    from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.engines.protocol import InferenceOutput
+    from llenergymeasure.harness import MeasurementHarness
+
+    harness = MeasurementHarness()
+    config = ExperimentConfig(task={"model": "test/model"}, measurement=measurement)
+    output = InferenceOutput(
+        elapsed_time_sec=1.0,
+        input_tokens=0,
+        output_tokens=output_tokens,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+    )
+    output.inference_time_sec = 1.0
+    # Sampler total (100 J over the full run) - the windowed path re-integrates from
+    # the timeseries and overrides this; total mode keeps it.
+    energy_measurement = EnergyMeasurement(total_j=100.0, duration_sec=1.0)
+    now = datetime.now()
+    return harness._build_result(
+        engine_name="transformers",
+        engine_version=None,
+        config=config,
+        output=output,
+        model_memory_mb=0.0,
+        snapshot=None,
+        start_time=now,
+        end_time=now,
+        duration_sec=1.0,
+        thermal_info=ThermalThrottleInfo(),
+        energy_measurement=energy_measurement,
+        baseline=None,
+        flops_result=None,
+        timeseries_path=None,
+        measurement_warnings=[],
+        timeseries_samples=samples,
+    )
+
+
+def _flat_samples():
+    """11 samples 0..1.0s at constant 100 W (full-run energy = 100 J)."""
+    from llenergymeasure.device.power_thermal import PowerThermalSample
+
+    return [
+        PowerThermalSample(timestamp=i * 0.1, power_w=100.0, gpu_index=0) for i in range(11)
+    ]
+
+
+def test_methodology_total_is_unchanged_default() -> None:
+    """Default total mode keeps the sampler total and spans the whole run."""
+    result = _methodology_build_result({}, samples=_flat_samples())
+    assert result.measurement_methodology == "total"
+    assert result.total_energy_j == pytest.approx(100.0)
+    assert result.total_inference_time_sec == pytest.approx(1.0)
+    assert result.steady_state_window == (0.0, 1.0)
+    assert result.steady_state_not_detected is False
+    assert result.measurement_window_discard_fraction is None
+    # output_tokens=100 over 100 J -> 1.0 J/token, mj 1000.
+    assert result.avg_energy_per_token_j == pytest.approx(1.0)
+
+
+def test_methodology_windowed_reintegrates_and_attributes_tokens() -> None:
+    """windowed [0.2,0.7] re-integrates 50 J and attributes 50% of tokens."""
+    result = _methodology_build_result(
+        {"measurement_methodology": "windowed", "measurement_window": (0.2, 0.7)},
+        samples=_flat_samples(),
+    )
+    assert result.measurement_methodology == "windowed"
+    assert result.total_energy_j == pytest.approx(50.0)
+    assert result.steady_state_window == (0.2, 0.7)
+    assert result.total_inference_time_sec == pytest.approx(0.5)
+    # 50 J over 50% of 100 output tokens = 50 J / 50 tokens = 1.0 J/token.
+    assert result.avg_energy_per_token_j == pytest.approx(1.0)
+    # throughput: 50% of 100 total tokens over 0.5s window = 100 tok/s.
+    assert result.avg_tokens_per_second == pytest.approx(100.0)
+    assert any("proportionally by time" in w for w in result.measurement_warnings)
+
+
+def test_methodology_steady_state_fixed_discard() -> None:
+    """steady_state fixed fraction 0.3 -> window [0.3,1.0], 70 J, discard fraction recorded."""
+    result = _methodology_build_result(
+        {"measurement_methodology": "steady_state", "warmup_discard_fraction": 0.3},
+        samples=_flat_samples(),
+    )
+    assert result.measurement_methodology == "steady_state"
+    assert result.total_energy_j == pytest.approx(70.0)
+    assert result.steady_state_window[0] == pytest.approx(0.3)
+    assert result.steady_state_window[1] == pytest.approx(1.0)
+    assert result.measurement_window_discard_fraction == pytest.approx(0.3)
+    assert result.steady_state_not_detected is False
+
+
+def test_methodology_steady_state_auto_not_detected_flag() -> None:
+    """auto-detect on a never-stable series sets the not-detected flag in the result."""
+    import math
+
+    from llenergymeasure.device.power_thermal import PowerThermalSample
+
+    noisy = [
+        PowerThermalSample(
+            timestamp=t / 10,
+            power_w=50.0 + 40.0 * math.sin(t) * (1 + t / 10) + (t * 3),
+            gpu_index=0,
+        )
+        for t in range(60)
+    ]
+    result = _methodology_build_result(
+        {
+            "measurement_methodology": "steady_state",
+            "steady_state_auto_detect": True,
+            "warmup_discard_fraction": 0.1,
+        },
+        samples=noisy,
+    )
+    assert result.measurement_methodology == "steady_state"
+    assert result.steady_state_not_detected is True
+    assert any("auto-detection found no stable region" in w for w in result.measurement_warnings)
+
+
+def test_methodology_falls_back_to_total_without_samples() -> None:
+    """No timeseries samples -> windowing cannot apply, total figures retained."""
+    result = _methodology_build_result(
+        {"measurement_methodology": "windowed", "measurement_window": (0.2, 0.7)},
+        samples=[],
+    )
+    # Keeps the sampler total and reports total methodology (window not applied).
+    assert result.measurement_methodology == "total"
+    assert result.total_energy_j == pytest.approx(100.0)
+
+
 def test_inference_output_tracks_input_output_tokens() -> None:
     """InferenceOutput separates input_tokens and output_tokens."""
     from llenergymeasure.engines.protocol import InferenceOutput

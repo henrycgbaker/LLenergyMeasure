@@ -244,17 +244,19 @@ def _coefficient_of_variation(values: list[float]) -> float:
 
 def _resolve_steady_state_window(
     cleaned: list[PowerThermalSample],
+    origin: float,
     span: float,
     config: MeasurementConfig,
 ) -> tuple[float, float, bool, list[str]]:
     """Resolve the steady-state window: auto-detect if opted in, else fixed discard.
 
     Returns ``(start_sec, end_sec, not_detected, warnings)`` where the bounds are
-    relative to the cleaned series origin.
+    relative to ``origin`` (the raw inference-start anchor). ``span`` is the realised
+    end bound; the onset is the resolved discard.
     """
     warnings: list[str] = []
 
-    # Fixed-discard onset (the default and the fallback).
+    # Fixed-discard onset (the default and the fallback), relative to the anchor.
     if config.warmup_discard_seconds is not None:
         fixed_start = min(config.warmup_discard_seconds, span)
     else:
@@ -264,8 +266,8 @@ def _resolve_steady_state_window(
         return fixed_start, span, False, warnings
 
     # Auto-detect over the per-GPU-pooled cleaned series (single GPU is the common case;
-    # for multi-GPU the pooled CV is a conservative stability proxy).
-    origin = cleaned[0].timestamp
+    # for multi-GPU the pooled CV is a conservative stability proxy). Onset is returned
+    # relative to the cleaned series start, then re-anchored to ``origin``.
     times = [s.timestamp for s in cleaned]
     powers = [s.power_w for s in cleaned if s.power_w is not None]
     onset = _detect_steady_state(powers, times) if len(powers) == len(times) else None
@@ -277,7 +279,8 @@ def _resolve_steady_state_window(
         )
         return fixed_start, span, True, warnings
 
-    _ = origin  # onset is already relative to series start
+    # _detect_steady_state returns onset relative to cleaned start; re-anchor to origin.
+    onset += cleaned[0].timestamp - origin
     return onset, span, False, warnings
 
 
@@ -308,6 +311,16 @@ def apply_measurement_window(
     if methodology == "total":
         return None
 
+    if len(samples) < 2:
+        return None
+
+    # Anchor the window to the RAW series origin (the sampler starts at inference
+    # start), so a window relative to inference start is not shifted when cleaning
+    # drops leading samples.
+    origin = min(s.timestamp for s in samples)
+    end_ts = max(s.timestamp for s in samples)
+    span = end_ts - origin
+
     cleaned = _clean_samples(samples)
     if len(cleaned) < 2:
         logger.warning(
@@ -318,8 +331,6 @@ def apply_measurement_window(
         )
         return None
 
-    origin = cleaned[0].timestamp
-    span = cleaned[-1].timestamp - origin
     warnings: list[str] = []
     not_detected = False
 
@@ -330,7 +341,7 @@ def apply_measurement_window(
         start_sec = min(start_sec, end_sec)
     else:  # steady_state
         start_sec, end_sec, not_detected, ss_warnings = _resolve_steady_state_window(
-            cleaned, span, config
+            cleaned, origin, span, config
         )
         warnings.extend(ss_warnings)
 
