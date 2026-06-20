@@ -109,34 +109,48 @@ def run_single_experiment(
     else:
         # Local in-process path - errors propagate naturally (PreFlightError, EngineError)
         import tempfile
+        import uuid
 
         from llenergymeasure.engines import get_engine
         from llenergymeasure.harness import MeasurementHarness
         from llenergymeasure.harness.preflight import run_preflight
-
-        if progress:
-            progress.on_step_start("container_preflight", "Checking", "CUDA, model access")
-        t0 = time.perf_counter()
-        run_preflight(config)
-        if progress:
-            progress.on_step_done("container_preflight", time.perf_counter() - t0)
+        from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
         # Create temp dir for timeseries parquet (if enabled)
         ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
 
+        # Wrap the in-process body (preflight -> engine import -> harness.run) in
+        # capture_runtime_observations so single-experiment studies emit
+        # runtime_observations.jsonl like the multi-experiment worker path
+        # (study/worker.py). Without it, report-gaps finds nothing for single-exp studies.
+        obs_ctx = capture_runtime_observations(
+            config,
+            study_dir=study_dir,
+            study_run_id=str(uuid.uuid4()),
+            cycle=cycle,
+            config_hash=config_hash,
+        )
         try:
-            engine = get_engine(config.engine)
-            harness = MeasurementHarness()
-            gpu_indices = _resolve_gpu_indices(config)
-            result = harness.run(
-                engine,
-                config,
-                snapshot=snapshot,
-                gpu_indices=gpu_indices,
-                progress=progress,
-                output_dir=str(ts_tmpdir) if ts_tmpdir else None,
-                save_timeseries=save_ts,
-            )
+            with obs_ctx:
+                if progress:
+                    progress.on_step_start("container_preflight", "Checking", "CUDA, model access")
+                t0 = time.perf_counter()
+                run_preflight(config)
+                if progress:
+                    progress.on_step_done("container_preflight", time.perf_counter() - t0)
+
+                engine = get_engine(config.engine)
+                harness = MeasurementHarness()
+                gpu_indices = _resolve_gpu_indices(config)
+                result = harness.run(
+                    engine,
+                    config,
+                    snapshot=snapshot,
+                    gpu_indices=gpu_indices,
+                    progress=progress,
+                    output_dir=str(ts_tmpdir) if ts_tmpdir else None,
+                    save_timeseries=save_ts,
+                )
         except Exception:
             if ts_tmpdir is not None:
                 shutil.rmtree(ts_tmpdir, ignore_errors=True)
@@ -148,6 +162,17 @@ def run_single_experiment(
         error_message = result.get("message", "")
         manifest.mark_failed(config_hash, cycle, error_type, error_message)
         return [], [None], [error_message]
+
+    # Resolved-config hash for the config.json sidecar - mirrors the multi-experiment
+    # runner path (StudyRunner._build_resolved_hashes) so single- and multi-experiment
+    # studies write identical sidecar fields. Best-effort: None on failure.
+    resolved_config_hash: str | None = None
+    try:
+        from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+        resolved_config_hash = hash_config(build_resolved_view(config))
+    except Exception:  # pragma: no cover - best-effort, mirrors the runner
+        resolved_config_hash = None
 
     result_files: list[str] = []
     warnings: list[str] = []
@@ -161,6 +186,7 @@ def run_single_experiment(
         ts_source_dir=ts_tmpdir,
         environment_snapshot=snapshot,
         resolution_log=(resolution_logs or {}).get(config_hash),
+        resolved_config_hash=resolved_config_hash,
     )
 
     # Clean up temp dirs

@@ -168,6 +168,11 @@ class ManifestWriter:
     # Public interface
     # ------------------------------------------------------------------
 
+    @property
+    def status(self) -> str:
+        """Current study-level status (e.g. 'running', 'completed', 'timed_out')."""
+        return self.manifest.status
+
     def mark_running(self, config_hash: str, cycle: int) -> None:
         """Mark a pending experiment as running."""
         entry = self._find(config_hash, cycle)

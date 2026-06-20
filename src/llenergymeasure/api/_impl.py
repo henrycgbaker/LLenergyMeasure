@@ -433,9 +433,13 @@ def _run(
 
     wall_time = time.monotonic() - wall_start
 
-    # Mark manifest as completed - only reached on success (SIGINT path calls
-    # manifest.mark_interrupted() then sys.exit(130) before returning here).
-    manifest.mark_study_completed()
+    # Mark the study completed - but never overwrite a terminal abort status the
+    # runner already set (wall-clock timeout or circuit-breaker). Doing so would make
+    # an aborted study look completed and therefore non-resumable, leaving its skipped
+    # experiments to never re-run. The SIGINT path calls mark_interrupted() then
+    # sys.exit(130) before returning here, so 'interrupted' is not normally seen.
+    if manifest.status not in ("timed_out", "circuit_breaker", "interrupted"):
+        manifest.mark_study_completed()
 
     completed = sum(1 for r in experiment_results if r is not None)
     failed = len(experiment_results) - completed

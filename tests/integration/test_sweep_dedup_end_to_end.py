@@ -56,6 +56,16 @@ def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
     assert max(group_sizes) >= 2
     assert sum(group_sizes) == 6
 
+    # ST2 regression: pre-run groups must carry real member ids. The producer previously
+    # hand-rolled member_indices / representative_index (the wrong keys + raw ints), so the
+    # runner's deserialiser - which reads member_experiment_ids / representative_experiment_id -
+    # loaded every group with empty members.
+    for g in study_config.pre_run_equivalence_groups:
+        assert "member_indices" not in g and "representative_index" not in g
+        assert len(g["member_experiment_ids"]) == g["member_count"]
+        assert g["representative_experiment_id"]
+        assert g["representative_experiment_id"] in g["member_experiment_ids"]
+
 
 def test_no_dedup_preserves_all_configs(tmp_path: Path) -> None:
     """With ``deduplicate_equivalent: false`` every declared config runs."""

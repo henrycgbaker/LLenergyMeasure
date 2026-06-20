@@ -78,14 +78,22 @@ def finalise_study(raw: LoadedStudyRaw) -> StudyConfig:
         shuffle_seed=execution.shuffle_seed,
     )
 
-    # Serialise pre-run equivalence groups for the sidecar writer.
+    # Serialise pre-run equivalence groups for the sidecar writer. The runner's deserialiser
+    # (StudyRunner._write_equivalence_groups_sidecar) reads member_experiment_ids /
+    # representative_experiment_id, so map the dedup group's member indices back to their
+    # declared-config-hash experiment ids and emit those keys. (This previously hand-rolled
+    # member_indices / representative_index - the wrong keys and raw ints - so every loaded
+    # group came back with empty members.)
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+
+    experiment_ids = [compute_declared_config_hash(exp) for exp in raw.valid_experiments]
     pre_run_groups: list[dict[str, Any]] = [
         {
             "resolved_config_hash": g.resolved_config_hash,
             "canonical_config_excerpt": g.canonical_excerpt,
-            "member_indices": list(g.member_indices),
+            "member_experiment_ids": [experiment_ids[i] for i in g.member_indices],
             "member_count": g.member_count,
-            "representative_index": g.representative_index,
+            "representative_experiment_id": experiment_ids[g.representative_index],
             "would_dedup": g.member_count > 1,
             "deduplicated": dedup.deduplicated and g.member_count > 1,
         }
