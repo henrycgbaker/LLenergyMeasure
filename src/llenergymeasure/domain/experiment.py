@@ -39,8 +39,13 @@ def compute_declared_config_hash(config: ExperimentConfig) -> str:
     return _hash_canonical(canonical)
 
 
-def mj_per_token(energy_j: float, total_tokens: int) -> float | None:
-    """Millijoules per token. Returns None when total_tokens is zero."""
+def mj_per_token(energy_j: float, total_tokens: float) -> float | None:
+    """Millijoules per token. Returns None when total_tokens is non-positive.
+
+    ``total_tokens`` is usually an integer count, but the windowed/steady-state
+    measurement modes attribute a fractional token share to a sub-window, so a float
+    is accepted.
+    """
     return (energy_j / total_tokens * 1000.0) if total_tokens > 0 else None
 
 

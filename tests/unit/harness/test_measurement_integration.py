@@ -519,9 +519,7 @@ def _flat_samples():
     """11 samples 0..1.0s at constant 100 W (full-run energy = 100 J)."""
     from llenergymeasure.device.power_thermal import PowerThermalSample
 
-    return [
-        PowerThermalSample(timestamp=i * 0.1, power_w=100.0, gpu_index=0) for i in range(11)
-    ]
+    return [PowerThermalSample(timestamp=i * 0.1, power_w=100.0, gpu_index=0) for i in range(11)]
 
 
 def test_methodology_total_is_unchanged_default() -> None:

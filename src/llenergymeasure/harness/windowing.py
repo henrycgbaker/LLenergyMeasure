@@ -20,7 +20,8 @@ The methodology survey behind this design is recorded in
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+import math
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from llenergymeasure.energy.nvml import integrate_power_samples
@@ -96,7 +97,8 @@ def _clean_samples(samples: list[PowerThermalSample]) -> list[PowerThermalSample
     cleaned: list[PowerThermalSample] = []
     half = _MEDIAN_KERNEL // 2
     for gpu_samples in by_gpu.values():
-        powers = [s.power_w for s in gpu_samples]
+        # power_w is guaranteed non-None here (None / non-positive dropped above).
+        powers = [s.power_w for s in gpu_samples if s.power_w is not None]
         for i, s in enumerate(gpu_samples):
             lo = max(0, i - half)
             hi = min(len(gpu_samples), i + half + 1)
@@ -111,8 +113,6 @@ def _clean_samples(samples: list[PowerThermalSample]) -> list[PowerThermalSample
 
 def _with_power(sample: PowerThermalSample, power_w: float) -> PowerThermalSample:
     """Return a shallow copy of ``sample`` with ``power_w`` replaced."""
-    from dataclasses import replace
-
     return replace(sample, power_w=power_w)
 
 
@@ -160,9 +160,7 @@ def _clip_gpu_window(
     return clipped
 
 
-def _interp_edge(
-    gpu_samples: list[PowerThermalSample], at: float
-) -> PowerThermalSample | None:
+def _interp_edge(gpu_samples: list[PowerThermalSample], at: float) -> PowerThermalSample | None:
     """Linearly interpolate a sample at timestamp ``at`` between bracketing samples.
 
     Returns None when ``at`` is outside the sample span (nothing to interpolate).
@@ -183,14 +181,10 @@ def _with_power_at(
     sample: PowerThermalSample, power_w: float, timestamp: float
 ) -> PowerThermalSample:
     """Return a copy of ``sample`` with ``power_w`` and ``timestamp`` replaced."""
-    from dataclasses import replace
-
     return replace(sample, power_w=power_w, timestamp=timestamp)
 
 
-def _detect_steady_state(
-    powers: list[float], times: list[float]
-) -> float | None:
+def _detect_steady_state(powers: list[float], times: list[float]) -> float | None:
     """Find the steady-state onset (seconds from series start) via sliding-window CV.
 
     Implements the lightweight windowed-stability test from the SOTA survey (a
@@ -239,7 +233,7 @@ def _coefficient_of_variation(values: list[float]) -> float:
     if mean <= 0.0:
         return float("inf")
     variance = sum((v - mean) ** 2 for v in values) / n
-    return (variance**0.5) / mean
+    return math.sqrt(variance) / mean
 
 
 def _resolve_steady_state_window(

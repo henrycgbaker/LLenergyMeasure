@@ -1093,7 +1093,9 @@ class MeasurementHarness:
         energy_duration = (
             measured_time_sec
             if window_result is not None
-            else (energy_measurement.duration_sec if energy_measurement is not None else duration_sec)
+            else (
+                energy_measurement.duration_sec if energy_measurement is not None else duration_sec
+            )
         )
         energy_breakdown = create_energy_breakdown(total_energy_j, baseline, energy_duration)
 
@@ -1251,10 +1253,7 @@ class MeasurementHarness:
             measurement_warnings.extend(window_result.warnings)
             discard_fraction = (
                 window_result.window[0] / output.inference_time_sec
-                if (
-                    window_result.methodology == "steady_state"
-                    and output.inference_time_sec > 0
-                )
+                if (window_result.methodology == "steady_state" and output.inference_time_sec > 0)
                 else None
             )
         else:
