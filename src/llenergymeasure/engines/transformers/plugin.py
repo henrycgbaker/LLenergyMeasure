@@ -385,10 +385,12 @@ class TransformersEngine:
             import copy
 
             # Capture the EFFECTIVE merged generation config the model used, not a
-            # rebuild from the requested kwargs alone. generate() internally starts
-            # from a deepcopy of the model's own generation_config (the live merged
-            # defaults) and overlays the explicit kwargs; replicate that so the
-            # observed config reflects model-defaults + overrides.
+            # rebuild from the requested kwargs alone. generate() starts from a
+            # deepcopy of the model's own generation_config (the live merged
+            # defaults) and overlays the explicit kwargs; we approximate that so the
+            # observed sampling shape reflects model-defaults + overrides. (We do
+            # not reproduce generate()'s further use_model_defaults backfill /
+            # max-length resolution, which do not affect the observed sampling hash.)
             base_cfg = getattr(hf_model, "generation_config", None)
             if base_cfg is not None:
                 gen_cfg = copy.deepcopy(base_cfg)
