@@ -92,8 +92,13 @@ class TestIsEngineAvailable:
 
         assert result is False
 
-    def test_handles_generic_exception_during_import(self):
-        """Unexpected exception during import should be caught and return False."""
+    def test_unexpected_error_during_import_propagates(self):
+        """A non-import error during import propagates (not masked as 'unavailable').
+
+        Only ImportError / OSError mean "engine not installed"; an unexpected
+        error (e.g. a CUDA init failure inside the package) is a real bug and
+        must surface rather than being silently swallowed.
+        """
         import llenergymeasure.config.engine_detection as _bd_mod
 
         real_import = __import__
@@ -107,11 +112,10 @@ class TestIsEngineAvailable:
         with _hide_module("vllm"):
             _bd_mod.__builtins__["__import__"] = _raise_runtime  # type: ignore[index]
             try:
-                result = is_engine_available("vllm")
+                with pytest.raises(RuntimeError, match="CUDA init failed"):
+                    is_engine_available("vllm")
             finally:
                 if original_builtins_import is not None:
                     _bd_mod.__builtins__["__import__"] = original_builtins_import  # type: ignore[index]
                 else:
                     del _bd_mod.__builtins__["__import__"]  # type: ignore[attr-defined]
-
-        assert result is False

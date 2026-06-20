@@ -37,20 +37,15 @@ def _make_model_info(param_count: int | None = _LLAMA_7B_PARAMS, with_config: bo
     else:
         model_info.safetensors = None
 
-    # architecture config (Llama-2-7B defaults)
+    # architecture config (Llama-2-7B defaults).
+    # HF Hub's ModelInfo.config is a plain dict in production, so the mock must
+    # be a dict too - an attribute-style object would mask the dict-access bug.
     if with_config:
-        cfg = SimpleNamespace(
-            num_hidden_layers=32,
-            num_attention_heads=32,
-            hidden_size=4096,
-            n_layer=None,
-            n_head=None,
-            num_layers=None,
-            num_heads=None,
-            d_model=None,
-            n_embd=None,
-        )
-        model_info.config = cfg
+        model_info.config = {
+            "num_hidden_layers": 32,
+            "num_attention_heads": 32,
+            "hidden_size": 4096,
+        }
     else:
         model_info.config = None
 

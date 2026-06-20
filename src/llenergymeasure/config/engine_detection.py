@@ -27,8 +27,7 @@ def is_engine_available(engine: str) -> bool:
             # Unknown engine
             return False
         return True
-    except (ImportError, OSError, Exception):
+    except (ImportError, OSError):
         # ImportError: package not installed
         # OSError: library dependency missing (tensorrt_llm on some systems)
-        # Exception: catch-all for any other import-time errors
         return False

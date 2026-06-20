@@ -451,7 +451,7 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         },
         "speculative_decoding": {
             "transformers": "prompt_lookup_num_tokens" in transformers_fields,
-            "vllm": "speculative_model" in vllm_fields,
+            "vllm": "speculative_config" in vllm_fields,
             "tensorrt": False,
         },
         "static_kv_cache": {

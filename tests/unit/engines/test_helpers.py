@@ -142,7 +142,11 @@ def test_warmup_cv_mode_does_not_converge_with_high_variance():
 
 
 def test_warmup_cv_mode_respects_max_prompts():
-    """CV mode stops at max_prompts even without convergence."""
+    """CV mode stops at n_warmup + max_prompts even without convergence.
+
+    CV is additive to n_warmup: the n_warmup base prompts run first, then up to
+    max_prompts convergence prompts, so the total budget is the sum.
+    """
     config = WarmupConfig(
         n_warmup=1,
         convergence_detection=True,
@@ -160,7 +164,7 @@ def test_warmup_cv_mode_respects_max_prompts():
         return 1.0 if call_count[0] % 2 == 0 else 100.0
 
     warmup_until_converged(_run, config)
-    assert call_count[0] <= config.max_prompts
+    assert call_count[0] <= config.n_warmup + config.max_prompts
 
 
 # ---------------------------------------------------------------------------

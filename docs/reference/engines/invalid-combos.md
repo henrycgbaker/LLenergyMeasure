@@ -1,7 +1,7 @@
 # Invalid Parameter Combinations
 
 > Auto-generated from config validators and test results.
-> Last updated: 2026-06-19 12:24 UTC
+> Last updated: 2026-06-20 08:03 UTC
 
 This document lists parameter combinations that will fail validation or runtime.
 The tool validates these at config load time and provides clear error messages.
@@ -75,7 +75,7 @@ due to hardware, model, or package requirements.
 | Prefix Caching | No | Yes | No |
 | torch.compile | Yes | No | No |
 | Beam Search | Yes | Yes | No |
-| Speculative Decoding | Yes | No | No |
+| Speculative Decoding | Yes | Yes | No |
 | Static KV Cache | Yes | No | No |
 
 **Notes:**

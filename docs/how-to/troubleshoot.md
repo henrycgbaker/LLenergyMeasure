@@ -274,8 +274,8 @@ model, or package requirements.
 
 | Feature | Transformers | vLLM | TensorRT |
 |---------|---------|------|----------|
-| Tensor Parallel | Yes (HF native) | Yes | Yes |
-| Data Parallel | Yes | No | No |
+| Tensor Parallel | No | Yes | Yes |
+| Data Parallel | No | No | No |
 | BitsAndBytes (4-bit) | Yes | No | No |
 | BitsAndBytes (8-bit) | Yes | No | No |
 | Native Quantization | No | AWQ / GPTQ / FP8 | INT8 / W4A16 (AWQ/GPTQ) / FP8 |

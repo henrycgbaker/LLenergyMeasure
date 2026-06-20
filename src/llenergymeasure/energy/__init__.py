@@ -27,18 +27,12 @@ Usage::
 from __future__ import annotations
 
 import importlib.util
-from typing import TYPE_CHECKING
 
 from llenergymeasure.energy.base import EnergySampler  # canonical definition
+from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLSampler
 from llenergymeasure.energy.zeus import ZeusSampler
 from llenergymeasure.utils.exceptions import ConfigError
-
-if TYPE_CHECKING:
-    from llenergymeasure.energy.codecarbon import (
-        CodeCarbonSampler as CodeCarbonSampler,
-    )
-
 
 # ---------------------------------------------------------------------------
 # v2.0 auto-selection API
@@ -110,8 +104,6 @@ def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
 
     # CodeCarbon - software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
     if importlib.util.find_spec("codecarbon") is not None:
-        from llenergymeasure.energy.codecarbon import CodeCarbonSampler
-
         cc_sampler = CodeCarbonSampler()
         if cc_sampler.is_available():
             return cc_sampler
@@ -138,8 +130,6 @@ def _instantiate(name: str, gpu_indices: list[int] | None = None) -> EnergySampl
     if name == "zeus":
         return ZeusSampler(gpu_indices=gpu_indices)
     if name == "codecarbon":
-        from llenergymeasure.energy.codecarbon import CodeCarbonSampler
-
         return CodeCarbonSampler()
 
     known = ", ".join(["nvml", "zeus", "codecarbon", "auto"])

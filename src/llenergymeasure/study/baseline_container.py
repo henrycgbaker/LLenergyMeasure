@@ -30,6 +30,7 @@ from pathlib import Path
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     ENV_BASELINE_SPEC_PATH,
+    STAGE_LINE_PREFIX,
     TEMP_PREFIX_EXCHANGE,
 )
 from llenergymeasure.harness.baseline import BaselineCache
@@ -47,7 +48,10 @@ __all__ = [
 # Positional args: (stage_name, elapsed_since_subprocess_start, kv_tags).
 StageCallback = Callable[[str, float, "dict[str, str]"], None]
 
-_STAGE_LINE_PREFIX = "[llem.baseline] stage="
+# Full marker the producer (entrypoints/baseline_measure._emit_stage) prints:
+# "<STAGE_LINE_PREFIX> stage=<name> ...". Derived from the producer's exported
+# prefix so the two sides cannot drift.
+_STAGE_LINE_PREFIX = f"{STAGE_LINE_PREFIX} stage="
 
 
 BASELINE_SPEC_FILENAME = "baseline_spec.json"

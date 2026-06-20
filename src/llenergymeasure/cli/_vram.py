@@ -6,6 +6,8 @@ try/except and return None on any failure. Network errors never block the CLI.
 
 from __future__ import annotations
 
+from typing import Any
+
 from llenergymeasure.config.models import ExperimentConfig
 
 # Bytes per parameter for each dtype.
@@ -55,27 +57,28 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
             ):
                 param_count = int(model_info.safetensors.total)
 
-            # Try to extract architecture details for KV cache estimation
+            # Try to extract architecture details for KV cache estimation.
+            # HF Hub's ModelInfo.config is a plain dict (the model's config.json
+            # contents) in production, so read via dict access; tolerate an
+            # attribute-style object too at this external-API edge.
             if hasattr(model_info, "config") and model_info.config is not None:
                 cfg = model_info.config
+
+                def _cfg_get(*names: str) -> Any:
+                    for name in names:
+                        value = cfg.get(name) if isinstance(cfg, dict) else getattr(cfg, name, None)
+                        if value is not None:
+                            return value
+                    return None
+
                 # Common field names across model families
-                n_layers = (
-                    getattr(cfg, "num_hidden_layers", None)
-                    or getattr(cfg, "n_layer", None)
-                    or getattr(cfg, "num_layers", None)
-                )
-                n_heads = (
-                    getattr(cfg, "num_attention_heads", None)
-                    or getattr(cfg, "n_head", None)
-                    or getattr(cfg, "num_heads", None)
-                )
-                hidden_size = (
-                    getattr(cfg, "hidden_size", None)
-                    or getattr(cfg, "d_model", None)
-                    or getattr(cfg, "n_embd", None)
-                )
-                if n_heads and hidden_size:
-                    head_dim = hidden_size // n_heads
+                _n_layers = _cfg_get("num_hidden_layers", "n_layer", "num_layers")
+                _n_heads = _cfg_get("num_attention_heads", "n_head", "num_heads")
+                _hidden = _cfg_get("hidden_size", "d_model", "n_embd")
+                n_layers = int(_n_layers) if _n_layers is not None else None
+                n_heads = int(_n_heads) if _n_heads is not None else None
+                if n_heads and _hidden is not None:
+                    head_dim = int(_hidden) // n_heads
         finally:
             socket.setdefaulttimeout(original_timeout)
 
