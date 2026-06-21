@@ -352,7 +352,7 @@ def test_study_detection_with_sweep_key(tmp_path):
 name: test
 model: test/model
 sweep:
-  transformers.dtype: [float32, float16]
+  transformers.engine_params.dtype: [float32, float16]
 """)
     import yaml
 
@@ -435,7 +435,7 @@ def test_run_study_routing_sweep_yaml(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.engine_params.dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
 
@@ -515,7 +515,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.engine_params.dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
     _capture_load, captured_overrides = _make_capture_load()
@@ -572,7 +572,7 @@ def _make_study_yaml(tmp_path, content: str | None = None) -> Path:
 
     study_yaml = tmp_path / "study.yaml"
     if content is None:
-        content = "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
+        content = "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.engine_params.dtype: [float32, float16]\n"
     study_yaml.write_text(content)
     return study_yaml
 

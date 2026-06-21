@@ -38,8 +38,8 @@ def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
         "engine": "transformers",
         "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
         "sweep": {
-            "transformers.sampling.do_sample": [True, False],
-            "transformers.sampling.temperature": [0.5, 1.0, 1.5],
+            "transformers.sampling_params.do_sample": [True, False],
+            "transformers.sampling_params.temperature": [0.5, 1.0, 1.5],
         },
     }
     path = _write_study(tmp_path, study)
@@ -64,8 +64,8 @@ def test_no_dedup_preserves_all_configs(tmp_path: Path) -> None:
         "engine": "transformers",
         "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
         "sweep": {
-            "transformers.sampling.do_sample": [True, False],
-            "transformers.sampling.temperature": [0.5, 1.0, 1.5],
+            "transformers.sampling_params.do_sample": [True, False],
+            "transformers.sampling_params.temperature": [0.5, 1.0, 1.5],
         },
         "study_execution": {"deduplicate_equivalent": False},
     }
@@ -86,8 +86,8 @@ def test_cli_override_no_dedup(tmp_path: Path) -> None:
         "engine": "transformers",
         "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 5}},
         "sweep": {
-            "transformers.sampling.do_sample": [True, False],
-            "transformers.sampling.temperature": [0.5, 0.7],
+            "transformers.sampling_params.do_sample": [True, False],
+            "transformers.sampling_params.temperature": [0.5, 0.7],
         },
     }
     path = _write_study(tmp_path, study)
@@ -107,8 +107,8 @@ def test_n_cycles_multiplies_unique_set(tmp_path: Path) -> None:
         "engine": "transformers",
         "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 5}},
         "sweep": {
-            "transformers.sampling.do_sample": [True, False],
-            "transformers.sampling.temperature": [0.5, 0.7],
+            "transformers.sampling_params.do_sample": [True, False],
+            "transformers.sampling_params.temperature": [0.5, 0.7],
         },
         "study_execution": {"n_cycles": 3},
     }
@@ -131,7 +131,7 @@ def test_single_config_sweep_no_dedup(tmp_path: Path) -> None:
         "engine": "transformers",
         "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 5}},
         "sweep": {
-            "transformers.sampling.temperature": [0.5, 0.7, 0.9],
+            "transformers.sampling_params.temperature": [0.5, 0.7, 0.9],
         },
     }
     path = _write_study(tmp_path, study)
