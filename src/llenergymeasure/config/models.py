@@ -307,6 +307,73 @@ class MeasurementConfig(BaseModel):
         ),
         json_schema_extra={"display_label": "Latency Profiling"},
     )
+    measurement_methodology: Literal["total", "windowed", "steady_state"] = Field(
+        default="total",
+        description=(
+            "Which part of the run to measure. 'total' (default) integrates the "
+            "whole run unchanged. 'windowed' measures an explicit "
+            "measurement_window. 'steady_state' discards a warm-up prefix and "
+            "measures the remainder (optionally auto-detecting the onset)."
+        ),
+        json_schema_extra={"display_label": "Measurement Window Mode"},
+    )
+    measurement_window: tuple[float, float] | None = Field(
+        default=None,
+        description=(
+            "Explicit (start_sec, end_sec) window relative to inference start, in "
+            "seconds. Required when measurement_methodology='windowed'; ignored "
+            "otherwise."
+        ),
+        json_schema_extra={"display_label": "Measurement Window"},
+    )
+    warmup_discard_fraction: float = Field(
+        default=0.1,
+        ge=0.0,
+        lt=1.0,
+        description=(
+            "Fraction of the run discarded as warm-up before measuring, for "
+            "measurement_methodology='steady_state'. Default 0.1 (first 10%). "
+            "Ignored unless warmup_discard_seconds is None."
+        ),
+        json_schema_extra={"display_label": "Warm-up Discard Fraction"},
+    )
+    warmup_discard_seconds: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Fixed warm-up duration in seconds to discard before measuring, for "
+            "measurement_methodology='steady_state'. When set, takes precedence "
+            "over warmup_discard_fraction. Ignored otherwise."
+        ),
+        json_schema_extra={"display_label": "Warm-up Discard Seconds"},
+    )
+    steady_state_auto_detect: bool = Field(
+        default=False,
+        description=(
+            "Opt-in sliding-window stability detector for "
+            "measurement_methodology='steady_state'. When enabled, a "
+            "coefficient-of-variation / variance-ratio test over the cleaned power "
+            "series locates the steady-state onset; on failure it falls back to the "
+            "fixed warm-up discard and sets steady_state_not_detected in the result."
+        ),
+        json_schema_extra={"display_label": "Steady-state Auto-detect"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_measurement_window(self) -> MeasurementConfig:
+        """Cross-field checks for the measurement-window modes."""
+        if self.measurement_methodology == "windowed":
+            if self.measurement_window is None:
+                raise ValueError(
+                    "measurement_window (start_sec, end_sec) is required when "
+                    "measurement_methodology='windowed'"
+                )
+            start, end = self.measurement_window
+            if start < 0.0:
+                raise ValueError("measurement_window start_sec must be >= 0")
+            if end <= start:
+                raise ValueError("measurement_window end_sec must be > start_sec")
+        return self
 
 
 # =============================================================================

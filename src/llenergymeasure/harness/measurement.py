@@ -963,6 +963,31 @@ class MeasurementHarness:
                 "no per-token timing was captured."
             )
 
+    def _resolve_measurement_window(
+        self,
+        config: ExperimentConfig,
+        output: InferenceOutput,
+        energy_measurement: Any,
+        timeseries_samples: list[PowerThermalSample] | None,
+    ) -> Any:
+        """Apply the configured measurement window, or None for total mode.
+
+        Prefers the energy sampler's own power samples (NVML) for re-integration, and
+        falls back to the harness PowerThermalSampler timeseries (always present even
+        with Zeus/CodeCarbon, which expose no raw samples). Returns a WindowResult, or
+        None when the window cannot be applied (keeping the unchanged total figures).
+        """
+        from llenergymeasure.harness.windowing import apply_measurement_window
+
+        if config.measurement.measurement_methodology == "total":
+            return None
+
+        sampler_samples = getattr(energy_measurement, "samples", None) or []
+        power_samples = sampler_samples if len(sampler_samples) >= 2 else (timeseries_samples or [])
+        return apply_measurement_window(
+            power_samples, config.measurement, output.inference_time_sec
+        )
+
     def _build_result(
         self,
         engine_name: str,
@@ -1022,52 +1047,88 @@ class MeasurementHarness:
 
         experiment_id = f"{config.task.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 
-        avg_tokens_per_second = (
-            output.total_tokens / output.inference_time_sec
-            if output.inference_time_sec > 0
-            else 0.0
+        # Resolve the measurement window (None for total mode = unchanged path).
+        window_result = self._resolve_measurement_window(
+            config, output, energy_measurement, timeseries_samples
         )
 
-        # Real energy values from energy sampler
-        total_energy_j = energy_measurement.total_j if energy_measurement is not None else 0.0
+        # Reported inference time: window duration for windowed/steady_state, else full run.
+        measured_time_sec = (
+            window_result.window_duration_sec
+            if window_result is not None
+            else output.inference_time_sec
+        )
+
+        # Real energy values from energy sampler (windowed re-integration overrides
+        # the sampler total when a window is in effect).
+        if window_result is not None:
+            total_energy_j = window_result.energy_j
+        else:
+            total_energy_j = energy_measurement.total_j if energy_measurement is not None else 0.0
         # duration_sec is passed in from run() - computed once, not recalculated here
 
-        # Energy per token: output tokens only (input tokens are not "generated")
+        # Token counts reported describe the full workload; for a sub-window, energy and
+        # throughput are normalised by the window-attributed token share (proportional by
+        # time - the harness has no absolute per-token timestamps).
         output_tokens = output.output_tokens if output.output_tokens > 0 else output.total_tokens
+        token_fraction = window_result.token_fraction if window_result is not None else 1.0
+        windowed_output_tokens = output_tokens * token_fraction
+        windowed_total_tokens = output.total_tokens * token_fraction
+
+        avg_tokens_per_second = (
+            windowed_total_tokens / measured_time_sec if measured_time_sec > 0 else 0.0
+        )
+
+        # Energy per token: output tokens only (input tokens are not "generated")
         avg_energy_per_token_j = (
-            total_energy_j / output_tokens if (total_energy_j > 0 and output_tokens > 0) else 0.0
+            total_energy_j / windowed_output_tokens
+            if (total_energy_j > 0 and windowed_output_tokens > 0)
+            else 0.0
         )
 
         # Energy breakdown with baseline adjustment.
         # Use energy sampler's window duration for baseline adjustment,
-        # not harness datetime duration, to avoid CUDA sync latency skew.
+        # not harness datetime duration, to avoid CUDA sync latency skew. For a
+        # sub-window, the realised window duration is the correct baseline span.
         energy_duration = (
-            energy_measurement.duration_sec if energy_measurement is not None else duration_sec
+            measured_time_sec
+            if window_result is not None
+            else (
+                energy_measurement.duration_sec if energy_measurement is not None else duration_sec
+            )
         )
         energy_breakdown = create_energy_breakdown(total_energy_j, baseline, energy_duration)
 
-        # Per-GPU energy breakdown from EnergyMeasurement.per_gpu_j
+        # Per-GPU energy breakdown. A window re-integrates per-GPU energy; otherwise the
+        # sampler's per-GPU totals are used.
+        per_gpu_source = (
+            window_result.per_gpu_j
+            if window_result is not None
+            else (energy_measurement.per_gpu_j if energy_measurement is not None else None)
+        )
         energy_per_device_j = None
         multi_gpu = None
-        if energy_measurement is not None and energy_measurement.per_gpu_j:
-            sorted_indices = sorted(energy_measurement.per_gpu_j.keys())
-            energy_per_device_j = [energy_measurement.per_gpu_j[i] for i in sorted_indices]
+        if per_gpu_source:
+            sorted_indices = sorted(per_gpu_source.keys())
+            energy_per_device_j = [per_gpu_source[i] for i in sorted_indices]
             if len(sorted_indices) > 1:
                 multi_gpu = MultiGPUMetrics(
                     num_gpus=len(sorted_indices),
                     energy_per_gpu_j=energy_per_device_j,
                     energy_total_j=total_energy_j,
                     energy_per_output_token_j=(
-                        total_energy_j / output_tokens if output_tokens > 0 else 0.0
+                        total_energy_j / windowed_output_tokens
+                        if windowed_output_tokens > 0
+                        else 0.0
                     ),
                 )
 
         # mJ/tok derived fields (energy in millijoules per OUTPUT token, matching
         # avg_energy_per_token_j; input tokens are prefilled, not "generated").
-        _mj_total = mj_per_token(total_energy_j, output_tokens)
+        _mj_total = mj_per_token(total_energy_j, windowed_output_tokens)
         energy_adjusted_j = energy_breakdown.adjusted_j if energy_breakdown else None
         _mj_adjusted = (
-            mj_per_token(energy_adjusted_j, output_tokens)
+            mj_per_token(energy_adjusted_j, windowed_output_tokens)
             if energy_adjusted_j is not None
             else None
         )
@@ -1183,7 +1244,24 @@ class MeasurementHarness:
         # Latency profiling provenance warnings (appended to measurement_warnings).
         self._append_latency_profiling_warnings(config, output, engine_name, measurement_warnings)
 
-        steady_state_window = (0.0, output.inference_time_sec)
+        # Measurement-methodology provenance. For total mode the window spans the whole
+        # run (unchanged); for windowed/steady_state the realised window is recorded.
+        if window_result is not None:
+            measurement_methodology = window_result.methodology
+            steady_state_window = window_result.window
+            steady_state_not_detected = window_result.steady_state_not_detected
+            measurement_warnings.extend(window_result.warnings)
+            discard_fraction = (
+                window_result.window[0] / output.inference_time_sec
+                if (window_result.methodology == "steady_state" and output.inference_time_sec > 0)
+                else None
+            )
+        else:
+            measurement_methodology = "total"
+            steady_state_window = (0.0, output.inference_time_sec)
+            steady_state_not_detected = False
+            discard_fraction = None
+
         warmup_excluded_samples = (
             warmup_result.iterations_completed if warmup_result is not None else None
         )
@@ -1192,7 +1270,7 @@ class MeasurementHarness:
             experiment_id=experiment_id,
             measurement_config_hash=compute_declared_config_hash(config),
             llenergymeasure_version=__version__,
-            measurement_methodology="total",
+            measurement_methodology=measurement_methodology,
             engine=engine_name,
             engine_version=engine_version,
             aggregation=AggregationMetadata(
@@ -1201,7 +1279,7 @@ class MeasurementHarness:
             ),
             total_tokens=output.total_tokens,
             total_energy_j=total_energy_j,
-            total_inference_time_sec=output.inference_time_sec,
+            total_inference_time_sec=measured_time_sec,
             avg_tokens_per_second=avg_tokens_per_second,
             avg_energy_per_token_j=avg_energy_per_token_j,
             total_flops=total_flops,
@@ -1225,5 +1303,7 @@ class MeasurementHarness:
             extended_metrics=extended_metrics,
             latency_stats=latency_stats,
             steady_state_window=steady_state_window,
+            measurement_window_discard_fraction=discard_fraction,
+            steady_state_not_detected=steady_state_not_detected,
             warmup_excluded_samples=warmup_excluded_samples,
         )
