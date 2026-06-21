@@ -9,7 +9,7 @@ All fields except `model` are optional and have sensible defaults.
 - [Top-Level Fields](#top-level-fields)
 - [Warmup (`warmup:`)](#warmup-warmup)
 - [Baseline (`baseline:`)](#baseline-baseline)
-- [PyTorch Engine (`pytorch:`)](#pytorch-engine-pytorch)
+- [Transformers Engine (`transformers:`)](#transformers-engine-transformers)
 - [vLLM Engine (`vllm.engine:`)](#vllm-engine-vllm-engine)
 - [vLLM Sampling (`vllm.sampling:`)](#vllm-sampling-vllm-sampling)
 - [vLLM Beam Search (`vllm.beam_search:`)](#vllm-beam-search-vllm-beam_search)
@@ -53,7 +53,7 @@ All fields except `model` are optional and have sensible defaults.
 | `validation_interval` | integer | `5` | Re-validate baseline every N experiments. Only used with strategy='validated'. |
 | `drift_threshold` | number | `0.1` | Power drift threshold (fraction) to trigger re-measurement. Only used with strategy='validated'. |
 
-### PyTorch Engine (`pytorch:`)
+### Transformers Engine (`transformers:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|

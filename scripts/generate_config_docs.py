@@ -38,10 +38,9 @@ def _description(prop: dict[str, Any]) -> str:
 
 _SECTION_ORDER = [
     ("top-level", "Top-Level Fields"),
-    ("decoder", "Decoder / Sampling (`decoder:`)"),
     ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
-    ("transformers", "PyTorch Engine (`pytorch:`)"),
+    ("transformers", "Transformers Engine (`transformers:`)"),
     ("vllm_engine", "vLLM Engine (`vllm.engine:`)"),
     ("vllm_sampling", "vLLM Sampling (`vllm.sampling:`)"),
     ("vllm_beam_search", "vLLM Beam Search (`vllm.beam_search:`)"),
@@ -51,7 +50,6 @@ _SECTION_ORDER = [
 
 # Map from JSON schema $defs key to our section key
 _DEF_TO_SECTION: dict[str, str] = {
-    "DecoderConfig": "decoder",
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
     "TransformersConfig": "transformers",
