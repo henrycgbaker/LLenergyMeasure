@@ -237,8 +237,8 @@ no error, process does not return.
 
 ## Invalid Parameter Combinations
 
-The full machine-generated reference lives in
-[`docs/reference/engines/invalid-combos.md`](../reference/engines/invalid-combos.md).
+The full machine-generated reference is the
+[Invalid Parameter Combinations](/reference/engines/invalid-combos) page.
 The summary below is hand-maintained; keep it consistent with that reference.
 
 ### Config Validation Errors
