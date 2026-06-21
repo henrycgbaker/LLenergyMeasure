@@ -160,6 +160,9 @@ def test_model_load_kwargs_contains_base_keys(monkeypatch):
     kwargs = engine._model_load_kwargs(config)
 
     assert "torch_dtype" in kwargs
+    # dtype unset -> "auto" (do not force bfloat16), so transformers infers from
+    # the checkpoint, matching vllm/tensorrt comparability (D2).
+    assert kwargs["torch_dtype"] == "auto"
     assert kwargs["device_map"] == "auto"
     # HF default - env var LLEM_TRUST_REMOTE_CODE not set, no typed override
     assert kwargs["trust_remote_code"] is False
@@ -505,6 +508,14 @@ def test_resolve_torch_dtype_bf16():
     assert TransformersEngine._resolve_torch_dtype("bfloat16") == torch.bfloat16
 
 
+def test_resolve_torch_dtype_auto_passthrough():
+    """'auto' is forwarded verbatim (from_pretrained reads the checkpoint dtype)."""
+    pytest.importorskip("torch")
+    from llenergymeasure.engines.transformers import TransformersEngine
+
+    assert TransformersEngine._resolve_torch_dtype("auto") == "auto"
+
+
 def test_resolve_torch_dtype_unknown_raises():
     """Unknown dtype string raises KeyError."""
     pytest.importorskip("torch")
@@ -512,6 +523,37 @@ def test_resolve_torch_dtype_unknown_raises():
 
     with pytest.raises(KeyError):
         TransformersEngine._resolve_torch_dtype("int8")
+
+
+def test_model_load_kwargs_explicit_dtype_maps_to_torch(monkeypatch):
+    """An explicit dtype is unchanged: float16 -> torch.float16, not 'auto'."""
+    torch = pytest.importorskip("torch")
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.transformers import TransformersEngine
+
+    engine = TransformersEngine()
+    config = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "float16"}},
+    )
+    kwargs = engine._model_load_kwargs(config)
+
+    assert kwargs["torch_dtype"] == torch.float16
+
+
+def test_model_load_kwargs_dtype_unset_is_auto():
+    """dtype unset -> torch_dtype='auto', NOT a forced bfloat16 default (D2)."""
+    torch = pytest.importorskip("torch")
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.transformers import TransformersEngine
+
+    engine = TransformersEngine()
+    config = ExperimentConfig(task={"model": "gpt2"})
+    kwargs = engine._model_load_kwargs(config)
+
+    assert kwargs["torch_dtype"] == "auto"
+    assert kwargs["torch_dtype"] != torch.bfloat16
 
 
 # =============================================================================
@@ -715,12 +757,36 @@ def test_model_load_kwargs_device_map_still_works():
 # =============================================================================
 
 
-def test_pytorch_version_returns_torch_version():
-    """TransformersEngine.version returns torch.__version__."""
-    torch = pytest.importorskip("torch")
+def test_transformers_version_returns_transformers_version():
+    """TransformersEngine.version returns transformers.__version__, not torch's."""
+    import sys
+    import types
+    from unittest.mock import patch
+
     from llenergymeasure.engines.transformers import TransformersEngine
 
-    assert TransformersEngine().version == torch.__version__
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.__version__ = "4.99.0"  # type: ignore[attr-defined]
+    with patch.dict(sys.modules, {"transformers": fake_transformers}):
+        assert TransformersEngine().version == "4.99.0"
+
+
+def test_transformers_version_unknown_when_import_fails():
+    """version falls back to 'unknown' when transformers cannot be imported."""
+    import builtins
+    from unittest.mock import patch
+
+    from llenergymeasure.engines.transformers import TransformersEngine
+
+    real_import = builtins.__import__
+
+    def _fail_transformers(name, *args, **kwargs):
+        if name == "transformers":
+            raise ImportError("no transformers")
+        return real_import(name, *args, **kwargs)
+
+    with patch.object(builtins, "__import__", _fail_transformers):
+        assert TransformersEngine().version == "unknown"
 
 
 def test_vllm_version_returns_string():

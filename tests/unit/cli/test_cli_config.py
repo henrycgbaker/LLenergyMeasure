@@ -296,16 +296,16 @@ def test_probe_gpu_returns_none_on_error() -> None:
 
 
 def test_probe_engine_version_transformers() -> None:
-    """_probe_engine_version returns torch.__version__ for transformers engine."""
+    """_probe_engine_version returns transformers.__version__ for transformers engine."""
     from llenergymeasure.cli.config_cmd import _probe_engine_version
 
-    mock_torch = MagicMock()
-    mock_torch.__version__ = "2.2.0"
+    mock_transformers = MagicMock()
+    mock_transformers.__version__ = "4.46.0"
 
-    with patch.dict("sys.modules", {"torch": mock_torch}):
+    with patch.dict("sys.modules", {"transformers": mock_transformers}):
         result = _probe_engine_version("transformers")
 
-    assert result == "2.2.0"
+    assert result == "4.46.0"
 
 
 def test_probe_engine_version_returns_none_on_import_error() -> None:

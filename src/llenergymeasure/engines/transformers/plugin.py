@@ -68,9 +68,9 @@ class TransformersEngine:
     def version(self) -> str:
         """Transformers library version string."""
         try:
-            import torch
+            import transformers
 
-            return torch.__version__  # type: ignore[no-any-return]
+            return str(transformers.__version__)
         except Exception:
             return "unknown"
 
@@ -391,14 +391,41 @@ class TransformersEngine:
 
         sampling: dict[str, Any] = {}
         try:
-            from transformers import GenerationConfig
+            import copy
 
-            gen_cfg = GenerationConfig(**generate_kwargs)
+            # Capture the EFFECTIVE merged generation config the model used, not a
+            # rebuild from the requested kwargs alone. generate() starts from a
+            # deepcopy of the model's own generation_config (the live merged
+            # defaults) and overlays the explicit kwargs; we approximate that so the
+            # observed sampling shape reflects model-defaults + overrides. (We do
+            # not reproduce generate()'s further use_model_defaults backfill /
+            # max-length resolution, which do not affect the observed sampling hash.)
+            base_cfg = getattr(hf_model, "generation_config", None)
+            if base_cfg is not None:
+                gen_cfg = copy.deepcopy(base_cfg)
+                gen_cfg.update(**generate_kwargs)
+            else:
+                # No live model config (e.g. a mock without one); fall back to a
+                # config built from the requested kwargs only.
+                from transformers import GenerationConfig
+
+                gen_cfg = GenerationConfig(**generate_kwargs)
             sampling = extract_observed_params(gen_cfg)
         except Exception as exc:  # pragma: no cover - best-effort capture
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
+
+        # Record the RESOLVED dtype the model actually ran in (D2). With dtype unset
+        # we pass torch_dtype="auto" so transformers infers from the checkpoint; the
+        # only authoritative source for what it settled on is the loaded model.
+        try:
+            resolved_dtype = getattr(hf_model, "dtype", None)
+            if resolved_dtype is not None:
+                engine_params["dtype"] = str(resolved_dtype)
+        except Exception as exc:  # pragma: no cover - best-effort capture
+            logger.debug("transformers resolved dtype capture failed: %s", exc)
+
         ep = TransformersEngine._engine_params(config)
         if ep is not None and (ep.load_in_4bit or ep.load_in_8bit):
             try:
@@ -495,8 +522,11 @@ class TransformersEngine:
         # flow through engine_params.model_extra (extra="allow").
         pt = self._engine_params(config)
         dtype = pt.dtype if pt is not None else None
+        # When dtype is unset, do NOT force a default - pass "auto" so transformers
+        # infers from the checkpoint, matching vllm/tensorrt which forward nothing
+        # and let each engine use its own default (comparability fix D2).
         kwargs: dict[str, Any] = {
-            "torch_dtype": self._resolve_torch_dtype(dtype or "bfloat16"),
+            "torch_dtype": self._resolve_torch_dtype(dtype or "auto"),
         }
 
         from llenergymeasure.utils.env_config import default_device_map
@@ -624,9 +654,16 @@ class TransformersEngine:
 
     @staticmethod
     def _resolve_torch_dtype(dtype: str) -> Any:
-        """Map dtype string to torch dtype object."""
+        """Map dtype string to torch dtype object, passing "auto" through unchanged.
+
+        from_pretrained() accepts the string "auto" to infer the checkpoint's own
+        dtype, so it is forwarded verbatim. Explicit float dtypes map to the torch
+        dtype object.
+        """
         import torch
 
+        if dtype == "auto":
+            return "auto"
         return {
             "float32": torch.float32,
             "float16": torch.float16,
@@ -695,10 +732,31 @@ class TransformersEngine:
             outputs = model.generate(**inputs, **gen_kwargs)
         elapsed = time.perf_counter() - t0
 
-        # Count only the newly generated tokens per sequence (handles padding correctly)
-        input_lengths = inputs["attention_mask"].sum(dim=1)  # shape: (batch,)
+        # Count newly generated tokens across EVERY output row. With
+        # num_return_sequences=N (incl. beam search) HF returns N rows per input
+        # prompt, so outputs.shape[0] == len(batch) * N; output row j maps to its
+        # source input via j // N. Counting only the batch rows would N-fold
+        # undercount generated tokens (EN4).
+        input_lengths = [int(x) for x in inputs["attention_mask"].sum(dim=1).tolist()]
+        n_inputs = len(batch)
+        n_rows = int(outputs.shape[0])
+        if n_inputs > 0 and n_rows % n_inputs == 0:
+            n_return = n_rows // n_inputs
+        else:
+            # Row count is not an exact multiple of the input count: fall back to
+            # mapping each row to inputs in order (clamped), and log the anomaly.
+            n_return = 1
+            logger.warning(
+                "transformers output rows (%d) not an exact multiple of input "
+                "prompts (%d); falling back to per-row input mapping for token count.",
+                n_rows,
+                n_inputs,
+            )
         output_token_count = int(
-            sum(max(0, outputs.shape[1] - int(inp_len.item())) for inp_len in input_lengths)
+            sum(
+                max(0, int(outputs.shape[1]) - input_lengths[min(j // n_return, n_inputs - 1)])
+                for j in range(n_rows)
+            )
         )
         return input_token_count, output_token_count, elapsed, padding_tokens
 

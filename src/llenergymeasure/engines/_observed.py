@@ -169,14 +169,22 @@ def extract_decode_itl(outputs: Any) -> list[float]:
     The engine does not expose a true per-token timestamp stream, so this derives
     one average ITL per request from the decode phase: the wall time between the
     first generated token and request completion, divided by the number of decode
-    intervals (``n_out - 1``). This is a PROPORTIONAL_ESTIMATE, not a true
-    per-token measurement - it assumes uniform spacing across decode steps.
+    intervals. This is a PROPORTIONAL_ESTIMATE, not a true per-token measurement -
+    it assumes uniform spacing across decode steps.
+
+    When a request has N>1 parallel outputs (n>1 sampling), the completions stream
+    CONCURRENTLY and finish around the same wall-clock time, so the single
+    ``(finished - first_token)`` interval spans one sequence's worth of decode
+    steps, not the sum across sequences. The number of decode intervals is
+    therefore the LONGEST single output's token count (``max``), not the summed
+    token count - summing would N-fold understate the ITL. For n=1 this is
+    identical to the single output's length, so the n=1 result is unchanged.
 
     Best-effort: a request is skipped (no sample produced) unless
-    ``first_token_time`` and ``finished_time`` are both present and the request
-    produced more than one output token (``n_out > 1``). The ``SimpleNamespace``
-    shape of ``o.metrics`` / ``o.outputs[*].token_ids`` makes this testable
-    without a live engine.
+    ``first_token_time`` and ``finished_time`` are both present and the longest
+    output produced more than one token (``decode_len > 1``). The
+    ``SimpleNamespace`` shape of ``o.metrics`` / ``o.outputs[*].token_ids`` makes
+    this testable without a live engine.
 
     Args:
         outputs: Iterable of ``RequestOutput`` objects.
@@ -196,8 +204,10 @@ def extract_decode_itl(outputs: Any) -> list[float]:
         request_outputs = getattr(o, "outputs", None)
         if not request_outputs:
             continue
-        n_out = sum(len(getattr(out, "token_ids", ()) or ()) for out in request_outputs)
-        if n_out <= 1:
+        # Per-sequence decode length = longest single output (n parallel streams
+        # share one wall-time interval), not the summed token count.
+        decode_len = max(len(getattr(out, "token_ids", ()) or ()) for out in request_outputs)
+        if decode_len <= 1:
             continue
-        itl_ms.append((finished - first_token) * 1000.0 / (n_out - 1))
+        itl_ms.append((finished - first_token) * 1000.0 / (decode_len - 1))
     return itl_ms
