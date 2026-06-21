@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.metrics import (
     EnergyBreakdown,
     ExtendedEfficiencyMetrics,
@@ -47,6 +48,28 @@ def mj_per_token(energy_j: float, total_tokens: float) -> float | None:
     is accepted.
     """
     return (energy_j / total_tokens * 1000.0) if total_tokens > 0 else None
+
+
+class RunnerProvenance(BaseModel):
+    """How an experiment was executed - local process or Docker container.
+
+    Persisted reproducibility metadata mirroring the fields of the infra-layer
+    ``RunnerSpec``. Kept in the domain layer (no infra import) so it can live on
+    ``ExperimentResult`` and serialise into result.json.
+    """
+
+    mode: str = Field(..., description='Execution mode - "local" or "docker"')
+    image: str | None = Field(default=None, description="Docker image used (None for local mode)")
+    source: str | None = Field(
+        default=None,
+        description='Precedence layer that produced the runner ("env", "yaml", '
+        '"user_config", "auto_detected", "default", "local")',
+    )
+    image_source: str | None = Field(
+        default=None, description="Where the Docker image was resolved from (None for local mode)"
+    )
+
+    model_config = {"frozen": True, "extra": "forbid"}
 
 
 class AggregationMetadata(BaseModel):
@@ -182,6 +205,23 @@ class ExperimentResult(BaseModel):
     timeseries: str | None = Field(
         default=None,
         description="Relative filename of timeseries sidecar (e.g. 'timeseries.parquet')",
+    )
+
+    # Runner provenance - how this experiment was executed (local vs docker).
+    # Persisted into result.json (unlike environment) as reproducibility metadata.
+    runner_provenance: RunnerProvenance | None = Field(
+        default=None,
+        description="How the experiment was executed (local process or Docker container). "
+        "None when no runner spec was available.",
+    )
+
+    # Environment sidecar (loaded from environment.json by load_result; excluded
+    # from result.json serialisation - the sidecar is the on-disk home).
+    environment: EnvironmentSnapshot | None = Field(
+        default=None,
+        exclude=True,
+        description="Hardware/runtime environment loaded from the environment.json sidecar. "
+        "None when no sidecar is present. Not serialised back into result.json.",
     )
 
     # Timestamps

@@ -19,8 +19,15 @@ from pathlib import Path
 
 import pytest
 
+from llenergymeasure.domain.environment import (
+    CPUEnvironment,
+    CUDAEnvironment,
+    EnvironmentMetadata,
+    EnvironmentSnapshot,
+    GPUEnvironment,
+)
 from llenergymeasure.domain.experiment import ExperimentResult
-from llenergymeasure.results.persistence import load_result, save_result
+from llenergymeasure.results.persistence import load_result, save_environment, save_result
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -232,6 +239,63 @@ def test_steady_state_window_round_trips(tmp_path: Path, hf_model_result: Experi
 
 
 # ---------------------------------------------------------------------------
+# Runner provenance
+# ---------------------------------------------------------------------------
+
+
+def test_runner_provenance_docker_round_trips(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """A docker runner_provenance survives save/load and serialises into result.json."""
+    import json
+
+    from llenergymeasure.domain.experiment import RunnerProvenance
+
+    result = minimal_result.model_copy(
+        update={
+            "runner_provenance": RunnerProvenance(
+                mode="docker",
+                image="ghcr.io/example/transformers:1.0.0",
+                source="yaml",
+                image_source="registry",
+            )
+        }
+    )
+    result_path = save_result(result, tmp_path)
+
+    # Persisted into result.json (NOT excluded, unlike environment).
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["image"] == "ghcr.io/example/transformers:1.0.0"
+    assert payload["runner_provenance"]["source"] == "yaml"
+
+    loaded = load_result(result_path)
+    assert loaded.runner_provenance is not None
+    assert loaded.runner_provenance.mode == "docker"
+    assert loaded.runner_provenance.image == "ghcr.io/example/transformers:1.0.0"
+    assert loaded.runner_provenance.source == "yaml"
+    assert loaded.runner_provenance.image_source == "registry"
+
+
+def test_runner_provenance_local_round_trips(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """A local runner_provenance survives save/load with no image."""
+    from llenergymeasure.domain.experiment import RunnerProvenance
+
+    result = minimal_result.model_copy(
+        update={"runner_provenance": RunnerProvenance(mode="local", image=None, source="local")}
+    )
+    result_path = save_result(result, tmp_path)
+    loaded = load_result(result_path)
+
+    assert loaded.runner_provenance is not None
+    assert loaded.runner_provenance.mode == "local"
+    assert loaded.runner_provenance.image is None
+    assert loaded.runner_provenance.source == "local"
+
+
+# ---------------------------------------------------------------------------
 # Timeseries sidecar
 # ---------------------------------------------------------------------------
 
@@ -302,3 +366,92 @@ def test_save_experiment_index_in_directory_name(
     result_path = save_result(minimal_result, tmp_path, experiment_index=5, cycle=3)
     dir_name = result_path.parent.name
     assert dir_name.startswith("005_c3_"), f"Expected '005_c3_' prefix in '{dir_name}'"
+
+
+# ---------------------------------------------------------------------------
+# Environment sidecar
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def env_snapshot() -> EnvironmentSnapshot:
+    """Minimal EnvironmentSnapshot for sidecar round-trip tests."""
+    hardware = EnvironmentMetadata(
+        gpu=GPUEnvironment(name="NVIDIA A100-SXM4-80GB", vram_total_mb=81920),
+        cuda=CUDAEnvironment(version="12.4", driver_version="535.104"),
+        cpu=CPUEnvironment(platform="Linux"),
+        collected_at=datetime(2026, 1, 1, 12, 0, 0),
+    )
+    return EnvironmentSnapshot(
+        hardware=hardware,
+        python_version="3.11.5",
+        tool_version="0.9.0",
+        cuda_version="12.4",
+        cuda_version_source="torch",
+    )
+
+
+def test_load_result_attaches_environment_sidecar(
+    tmp_path: Path,
+    minimal_result: ExperimentResult,
+    env_snapshot: EnvironmentSnapshot,
+) -> None:
+    """load_result() reads back the environment.json sidecar onto result.environment."""
+    result_path = save_result(minimal_result, tmp_path)
+    save_environment(
+        env_snapshot,
+        minimal_result.experiment_id,
+        minimal_result.measurement_config_hash,
+        result_path.parent,
+    )
+
+    loaded = load_result(result_path)
+
+    assert loaded.environment is not None
+    assert loaded.environment.python_version == "3.11.5"
+    assert loaded.environment.cuda_version == "12.4"
+    assert loaded.environment.cuda_version_source == "torch"
+    assert loaded.environment.hardware.gpu.name == "NVIDIA A100-SXM4-80GB"
+
+
+def test_load_result_without_environment_sidecar(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """load_result() leaves environment as None when no sidecar is present (best-effort)."""
+    result_path = save_result(minimal_result, tmp_path)
+    loaded = load_result(result_path)
+    assert loaded.environment is None
+
+
+def test_load_result_corrupt_environment_sidecar(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """A corrupt environment.json must not break load_result (best-effort)."""
+    result_path = save_result(minimal_result, tmp_path)
+    (result_path.parent / "environment.json").write_text("{ not valid json", encoding="utf-8")
+
+    loaded = load_result(result_path)
+
+    assert loaded.environment is None
+    assert loaded.experiment_id == minimal_result.experiment_id
+
+
+def test_environment_field_excluded_from_result_json(
+    tmp_path: Path,
+    minimal_result: ExperimentResult,
+    env_snapshot: EnvironmentSnapshot,
+) -> None:
+    """environment is loader-only - it never serialises back into result.json."""
+    result_path = save_result(minimal_result, tmp_path)
+    save_environment(
+        env_snapshot,
+        minimal_result.experiment_id,
+        minimal_result.measurement_config_hash,
+        result_path.parent,
+    )
+
+    loaded = load_result(result_path)
+    assert loaded.environment is not None
+    # model_dump_json drops the excluded field, so the re-serialised result
+    # matches the on-disk result.json (no environment leakage).
+    assert "environment" not in loaded.model_dump_json()

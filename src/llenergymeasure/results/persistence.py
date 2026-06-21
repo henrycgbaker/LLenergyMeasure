@@ -250,11 +250,16 @@ def load_result(path: Path) -> ExperimentResult:
     but the file is missing, loads successfully and emits a UserWarning
     (graceful degradation).
 
+    When an environment.json sidecar is present, it is parsed and attached
+    to ``result.environment``. This is best-effort: a missing or corrupt
+    sidecar leaves ``result.environment`` as None and never raises.
+
     Args:
         path: Path to result.json (as returned by save_result()).
 
     Returns:
-        ExperimentResult loaded from disk.
+        ExperimentResult loaded from disk, with ``environment`` populated
+        from the environment.json sidecar when one is present.
     """
     from llenergymeasure.domain.experiment import ExperimentResult
 
@@ -271,4 +276,28 @@ def load_result(path: Path) -> ExperimentResult:
             stacklevel=2,
         )
 
+    environment = _load_environment_sidecar(path.parent / "environment.json")
+    if environment is not None:
+        result = result.model_copy(update={"environment": environment})
+
     return result
+
+
+def _load_environment_sidecar(path: Path) -> EnvironmentSnapshot | None:
+    """Load an environment.json sidecar into an EnvironmentSnapshot.
+
+    Best-effort: returns None when the sidecar is absent or cannot be parsed,
+    so a missing or corrupt sidecar never breaks load_result. The sidecar's
+    extra ``experiment_id`` / ``measurement_config_hash`` keys are ignored by
+    EnvironmentSnapshot validation.
+    """
+    if not path.exists():
+        return None
+
+    from llenergymeasure.domain.environment import EnvironmentSnapshot
+
+    try:
+        return EnvironmentSnapshot.model_validate_json(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Could not load environment sidecar %s: %s", path, exc)
+        return None

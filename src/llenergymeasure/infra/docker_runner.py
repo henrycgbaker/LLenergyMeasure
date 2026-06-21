@@ -306,7 +306,7 @@ class DockerRunner:
                  >= ``timeout`` are accepted but redundant with the
                  wall-clock - the watchdog raises whichever fires first.
         source:  Runner resolution source string (e.g. ``"yaml"``, ``"auto_detected"``).
-                 Recorded in result effective_config for traceability.
+                 Recorded in the result's runner_provenance for traceability.
     """
 
     def __init__(
@@ -1101,11 +1101,3 @@ class DockerRunner:
             shutil.rmtree(exchange_dir)
         except Exception as exc:
             logger.warning("Could not remove exchange dir %s: %s", exchange_dir, exc)
-
-    def get_runner_metadata(self) -> dict[str, str]:
-        """Return runner metadata dict for inclusion in effective_config sidecar."""
-        return {
-            "runner_type": "docker",
-            "runner_image": self.image,
-            "runner_source": self.source,
-        }

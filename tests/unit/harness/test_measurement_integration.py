@@ -681,8 +681,8 @@ def test_harness_build_result_populates_timeseries_field() -> None:
     )
 
 
-def test_harness_build_result_populates_effective_config() -> None:
-    """_build_result() populates result.effective_config with the model name (RES-16)."""
+def test_harness_build_result_populates_model_name() -> None:
+    """_build_result() populates result.model_name from the config (RES-16)."""
     from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
