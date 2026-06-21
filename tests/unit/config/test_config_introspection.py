@@ -12,10 +12,12 @@ import pytest
 from llenergymeasure.config.introspection import (
     get_all_params,
     get_display_label,
+    get_engine_capabilities,
     get_engine_params,
     get_experiment_config_schema,
     get_field_role,
     get_param_test_values,
+    get_runtime_limitations,
     get_shared_params,
     get_swept_field_paths,
     get_validation_rules,
@@ -407,3 +409,64 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     # Optional sub-configs that are None on some experiments should be swept
     assert "transformers" in result
     assert "vllm" in result
+
+
+# ---------------------------------------------------------------------------
+# get_engine_capabilities (capability matrix must match real engine schema)
+# ---------------------------------------------------------------------------
+
+
+def test_capability_matrix_vllm_rejects_float32():
+    """vLLM dtype support excludes float32, so the float32 cell must be False."""
+    caps = get_engine_capabilities()
+    assert caps["float32_precision"]["vllm"] is False
+
+
+def test_capability_matrix_transformers_supports_tensor_parallel():
+    """TransformersConfig exposes tp_plan/tp_size, so transformers TP must be supported."""
+    caps = get_engine_capabilities()
+    assert caps["tensor_parallel"]["transformers"] is True
+
+
+def test_capability_matrix_cells_match_engine_dtype_support():
+    """Each engine's float32 cell must agree with SSOT DTYPE_SUPPORT."""
+    from llenergymeasure.config.ssot import Engine
+
+    caps = get_engine_capabilities()
+    for engine, key in (
+        (Engine.TRANSFORMERS, "transformers"),
+        (Engine.VLLM, "vllm"),
+        (Engine.TENSORRT, "tensorrt"),
+    ):
+        expected = "float32" in DTYPE_SUPPORT[engine]
+        assert caps["float32_precision"][key] is expected
+
+
+# ---------------------------------------------------------------------------
+# get_runtime_limitations (parameter paths must reference real config fields)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_limitations_use_real_field_paths():
+    """No stale/renamed paths: attention.engine, quantization_method, load_format are gone."""
+    params = [limit["parameter"] for limit in get_runtime_limitations()]
+    joined = "\n".join(params)
+    assert "attention.engine" not in joined
+    assert "quantization_method" not in joined
+    assert "load_format" not in joined
+    assert "tensorrt.quantization.method" not in joined
+
+
+def test_runtime_limitations_reference_corrected_vllm_paths():
+    """Corrected vLLM paths use the real nested engine_params prefix and backend field."""
+    params = [limit["parameter"] for limit in get_runtime_limitations()]
+    assert any("vllm.engine_params.attention.backend=" in p for p in params)
+    assert any("vllm.engine_params.quantization=" in p for p in params)
+    assert any("vllm.engine_params.kv_cache_dtype=" in p for p in params)
+
+
+def test_streaming_constraints_removed():
+    """get_streaming_constraints was removed because streaming is no longer a config field."""
+    import llenergymeasure.config.introspection as introspection
+
+    assert not hasattr(introspection, "get_streaming_constraints")

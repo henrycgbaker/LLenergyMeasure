@@ -48,7 +48,6 @@ def _short_ref_name(ref_target: str) -> str:
 
 _SECTION_ORDER = [
     ("top-level", "Top-Level Fields"),
-    ("decoder", "Decoder / Sampling (`decoder:`)"),
     ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
     ("transformers_engine", "Transformers Engine (`transformers.engine_params:`)"),
@@ -63,7 +62,6 @@ _SECTION_ORDER = [
 # generated nested Config; pydantic fully-qualifies the colliding EngineParams /
 # SamplingParams class names with their module path in $defs.
 _DEF_TO_SECTION: dict[str, str] = {
-    "DecoderConfig": "decoder",
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
     "llenergymeasure__engines__transformers__config__EngineParams": "transformers_engine",
