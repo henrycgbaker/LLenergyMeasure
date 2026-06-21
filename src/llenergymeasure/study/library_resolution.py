@@ -13,9 +13,9 @@ normalisation.
 Invariants chain (vLLM epsilon-clamp → greedy-normalise); iteration is capped at
 :data:`_MAX_ITER` to surface cycles via :class:`LibraryResolutionCycleError`.
 
-Out-of-scope per PLAN §Scope OUT: vLLM/TRT-LLM corpora don't exist yet, so
-this PR mostly exercises the transformers invariants. The library-resolution mechanism itself is
-engine-generic.
+The library-resolution mechanism is engine-generic. All three engine corpora
+(transformers, vLLM, TRT-LLM) now exist; transformers carries the richest
+dormant set, so it exercises the dedup path most fully.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ def _apply_invariants_fixpoint(
         LibraryResolutionCycleError: If the fixpoint loop exceeds
             :data:`_MAX_ITER` passes - the validated corpus has an invariant cycle.
     """
-    dormant_rules = [r for r in invariants if r.severity in ("dormant", "dormant_silent")]
+    dormant_rules = [r for r in invariants if r.severity == "dormant"]
     if not dormant_rules:
         return config.model_copy(deep=True)
 
