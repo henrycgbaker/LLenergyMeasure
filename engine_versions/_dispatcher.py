@@ -71,20 +71,23 @@ def _safe_to_version(safe: str) -> Version | None:
         return None
 
 
-def _find_fallback_safe_version(
-    *, engine_root: Path, target_version: str, producer: ProducerKind
+def find_fallback_safe_version(
+    *, engine_root: Path, target_version: str, required_rel: Path
 ) -> str | None:
     """Return ``safe`` of highest vendored archive at or below ``target_version``.
 
     Scans ``engine_root`` for ``v[0-9_a-zA-Z]+`` directories, parses each via
     :func:`_safe_to_version`, filters to those ``<= target`` AND that contain a
-    ``producers/<producer>.py`` file, returns the highest match. Returns
-    ``None`` when no candidate exists, when ``engine_root`` is not a directory,
-    or when ``target_version`` does not parse as PEP 440.
+    ``required_rel`` file (relative to the version directory), returns the
+    highest match. Returns ``None`` when no candidate exists, when
+    ``engine_root`` is not a directory, or when ``target_version`` does not
+    parse as PEP 440.
 
     Engine-root path is taken as a parameter so the dispatch logic is unit-
-    testable against tmp directories. :func:`load_producer` computes the
-    real path from this module's location.
+    testable against tmp directories. :func:`load_producer` computes the real
+    path from this module's location. ``required_rel`` is the per-resource
+    presence marker: ``producers/<producer>.py`` for code dispatch,
+    ``landmarks.yaml`` for the landmark-data loader.
     """
     try:
         target = Version(target_version)
@@ -93,7 +96,6 @@ def _find_fallback_safe_version(
     if not engine_root.is_dir():
         return None
 
-    producer_file = f"{producer}.py"
     candidates: list[tuple[Version, str]] = []
     for child in engine_root.iterdir():
         if not child.is_dir():
@@ -101,13 +103,29 @@ def _find_fallback_safe_version(
         version = _safe_to_version(child.name)
         if version is None or version > target:
             continue
-        if not (child / "producers" / producer_file).is_file():
+        if not (child / required_rel).is_file():
             continue
         candidates.append((version, child.name))
     if not candidates:
         return None
     candidates.sort(key=lambda pair: pair[0])
     return candidates[-1][1]
+
+
+def _find_fallback_safe_version(
+    *, engine_root: Path, target_version: str, producer: ProducerKind
+) -> str | None:
+    """Code-dispatch wrapper around :func:`find_fallback_safe_version`.
+
+    Requires a ``producers/<producer>.py`` file in each candidate version
+    directory. The landmark-data loader uses the generic helper directly with
+    a ``landmarks.yaml`` marker instead.
+    """
+    return find_fallback_safe_version(
+        engine_root=engine_root,
+        target_version=target_version,
+        required_rel=Path("producers") / f"{producer}.py",
+    )
 
 
 def load_producer(*, engine: str, version: str, producer: ProducerKind) -> ModuleType:
