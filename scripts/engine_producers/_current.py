@@ -201,7 +201,9 @@ def carry_forward_inputs(engine: str) -> list[str]:
     re-curates it for the new pin), but the ``engine_version`` metadata field is
     stamped to the current pin so it identifies the pin the file now lives under
     rather than lagging at the prior pin's version. Files with no
-    ``engine_version`` field are copied verbatim.
+    ``engine_version`` field are copied verbatim. Version references inside the
+    files' header comments / prose are left as carried; the maintainer rewrites
+    those at re-curation.
 
     Returns the list of file names (e.g. ``["curated.yaml"]``) actually copied,
     for the caller to log. Idempotent: a second call is a no-op (returns

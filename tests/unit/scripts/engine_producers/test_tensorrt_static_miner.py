@@ -271,6 +271,8 @@ class TestLandmarkContract:
             return "".join(f"class {name}:\n    pass\n" for name in names)
 
         (stub_root / "llmapi" / "llm_args.py").write_text(_empty_classes("llm_args.py"))
+        # No _CLASS_TARGETS live in builder.py today, so _empty_classes("builder.py")
+        # is empty; the fallback keeps it a parseable module for _load_source.
         (stub_root / "builder.py").write_text(_empty_classes("builder.py") or "pass\n")
         (stub_root / "version.py").write_text('__version__ = "1.0.0"\n')
         tree = _ARCHIVE._load_source(stub_root)
