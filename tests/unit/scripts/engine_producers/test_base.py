@@ -1,8 +1,8 @@
 """Tests for :mod:`scripts.engine_producers._base`.
 
-Covers AST primitives, pattern detectors, filters, confidence scoring,
-class/method finders, and structured error types - all on synthetic AST
-fixtures so the tests never depend on a specific library version.
+Covers AST primitives, class/method finders, and structured error types -
+all on synthetic AST fixtures so the tests never depend on a specific
+library version.
 """
 
 from __future__ import annotations
@@ -17,21 +17,11 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_producers._base import (  # noqa: E402
-    ConditionalLoggerWarningDetector,
-    ConditionalRaiseDetector,
-    ConditionalSelfAssignDetector,
-    ConditionalWarningsWarnDetector,
-    DetectedPattern,
     MinerLandmarkMissingError,
-    MinorIssuesDictAssignDetector,
     call_func_path,
-    default_detectors,
     extract_assign_target,
     extract_condition_fields,
     extract_loop_literal_iterable,
-    filter_condition_references_self,
-    filter_kwargs_positive_derivable,
-    filter_target_is_public_field,
     find_class,
     find_method,
     first_string_arg,
@@ -226,177 +216,6 @@ def test_extract_loop_literal_iterable_self_attr_returns_none() -> None:
     loop = ast.parse("for arg in self.allowed: pass").body[0]
     assert isinstance(loop, ast.For)
     assert extract_loop_literal_iterable(loop) is None
-
-
-# ---------------------------------------------------------------------------
-# Pattern detectors
-# ---------------------------------------------------------------------------
-
-
-def test_conditional_raise_detector_positive() -> None:
-    detector = ConditionalRaiseDetector()
-    node = _parse_if('if self.temperature < 0:\n    raise ValueError("must be non-negative")')
-    pattern = detector.detect(node.body[0])
-    assert pattern is not None
-    assert pattern.severity == "error"
-    assert pattern.emission_channel == "none"
-    assert pattern.message_template == "must be non-negative"
-
-
-def test_conditional_raise_detector_negative() -> None:
-    detector = ConditionalRaiseDetector()
-    stmt = ast.parse("x = 1").body[0]
-    assert detector.detect(stmt) is None
-
-
-def test_conditional_self_assign_detector_positive() -> None:
-    detector = ConditionalSelfAssignDetector()
-    node = _parse_if("if cond:\n    self.stop = []")
-    pattern = detector.detect(node.body[0])
-    assert pattern is not None
-    assert pattern.severity == "dormant"
-    assert pattern.affected_field == "stop"
-
-
-def test_conditional_self_assign_detector_non_self() -> None:
-    detector = ConditionalSelfAssignDetector()
-    node = _parse_if("if cond:\n    other.field = 1")
-    assert detector.detect(node.body[0]) is None
-
-
-def test_conditional_warnings_warn_detector() -> None:
-    detector = ConditionalWarningsWarnDetector()
-    node = _parse_if('if cond:\n    warnings.warn("deprecated")')
-    pattern = detector.detect(node.body[0])
-    assert pattern is not None
-    assert pattern.severity == "warn"
-    assert pattern.emission_channel == "warnings_warn"
-
-
-def test_conditional_logger_warning_detector_once() -> None:
-    detector = ConditionalLoggerWarningDetector()
-    node = _parse_if('if cond:\n    logger.warning_once("msg")')
-    pattern = detector.detect(node.body[0])
-    assert pattern is not None
-    assert pattern.emission_channel == "logger_warning_once"
-
-
-def test_conditional_logger_warning_detector_rejects_other_methods() -> None:
-    detector = ConditionalLoggerWarningDetector()
-    node = _parse_if('if cond:\n    logger.info("informational")')
-    assert detector.detect(node.body[0]) is None
-
-
-def test_conditional_logger_warning_detector_rejects_nested_logger_paths() -> None:
-    # Regression guard: `logger.sub.warning(...)` and `self.logger.warning(...)`
-    # MUST NOT match. The detector is deliberately strict (exactly two-element
-    # path rooted at `logger`) to avoid false-positive attribution from helper
-    # loggers. A library that genuinely uses a nested logger needs a
-    # library-specific detector.
-    detector = ConditionalLoggerWarningDetector()
-    for source in (
-        'if cond:\n    logger.sub.warning("msg")',
-        'if cond:\n    self.logger.warning("msg")',
-        'if cond:\n    module.logger.warning_once("msg")',
-    ):
-        node = _parse_if(source)
-        assert detector.detect(node.body[0]) is None, f"should reject: {source!r}"
-
-
-def test_minor_issues_dict_assign_detector() -> None:
-    detector = MinorIssuesDictAssignDetector()
-    node = _parse_if('if self.x:\n    minor_issues["temperature"] = msg.format(x=self.x)')
-    pattern = detector.detect(node.body[0])
-    assert pattern is not None
-    assert pattern.emission_channel == "minor_issues_dict"
-    assert pattern.affected_field == "temperature"
-
-
-def test_default_detectors_registered_and_ordered() -> None:
-    # The default bundle ordering matters - walkers that use
-    # default_detectors() get the most-specific detector first on each
-    # statement. Raise before self-assign (so raise+rollback chains are
-    # attributed to the raise); minor_issues before generic self-assign
-    # (so HF's dict-assign wins over the fallback).
-    names = [type(d).__name__ for d in default_detectors()]
-    assert names.index("ConditionalRaiseDetector") < names.index("ConditionalSelfAssignDetector")
-    assert names.index("MinorIssuesDictAssignDetector") > names.index(
-        "ConditionalSelfAssignDetector"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Filters and confidence scoring
-# ---------------------------------------------------------------------------
-
-
-PUBLIC_FIELDS = frozenset({"temperature", "top_p", "do_sample", "stop"})
-
-
-def test_filter_condition_references_self_positive() -> None:
-    expr = _parse_expr("self.temperature < 0.01")
-    assert filter_condition_references_self(expr, PUBLIC_FIELDS) is True
-
-
-def test_filter_condition_references_self_private_field() -> None:
-    expr = _parse_expr("self._internal is True")
-    # _internal is not in the public field set.
-    assert filter_condition_references_self(expr, PUBLIC_FIELDS) is False
-
-
-def test_filter_condition_references_self_argument_only() -> None:
-    expr = _parse_expr("strict")
-    assert filter_condition_references_self(expr, PUBLIC_FIELDS) is False
-
-
-def test_filter_target_is_public_field_positive() -> None:
-    pattern = DetectedPattern(
-        severity="dormant",
-        emission_channel="none",
-        affected_field="temperature",
-        message_template=None,
-        detail="self.temperature = 0",
-    )
-    assert filter_target_is_public_field(pattern, PUBLIC_FIELDS) is True
-
-
-def test_filter_target_is_public_field_rejects_private() -> None:
-    pattern = DetectedPattern(
-        severity="dormant",
-        emission_channel="none",
-        affected_field="_initialized",
-        message_template=None,
-        detail="",
-    )
-    assert filter_target_is_public_field(pattern, PUBLIC_FIELDS) is False
-
-
-def test_filter_target_is_public_field_neutral_for_non_assign() -> None:
-    # Non-assign pattern (no affected_field) passes this filter trivially.
-    pattern = DetectedPattern(
-        severity="error",
-        emission_channel="none",
-        affected_field=None,
-        message_template=None,
-        detail="",
-    )
-    assert filter_target_is_public_field(pattern, PUBLIC_FIELDS) is True
-
-
-def test_filter_kwargs_positive_derivable_simple() -> None:
-    expr = _parse_expr("self.do_sample is False and self.temperature != 1.0")
-    assert filter_kwargs_positive_derivable(expr) is True
-
-
-def test_filter_kwargs_positive_derivable_rejects_opaque() -> None:
-    # Opaque helper call against external state is not derivable.
-    expr = _parse_expr("importlib.util.find_spec('scipy')")
-    assert filter_kwargs_positive_derivable(expr) is False
-
-
-def test_filter_kwargs_positive_derivable_accepts_isinstance() -> None:
-    expr = _parse_expr("not isinstance(self.top_p, float)")
-    assert filter_kwargs_positive_derivable(expr) is True
 
 
 # ---------------------------------------------------------------------------

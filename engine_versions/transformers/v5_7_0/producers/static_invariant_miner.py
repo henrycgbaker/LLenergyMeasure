@@ -82,19 +82,13 @@ from scripts.engine_producers._section_classifier import (  # noqa: E402
     relabel_match_fields,
 )
 
-# Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
-# ConditionalSelfAssignDetector, etc.) and instead define parallel
-# ``_detect_*`` functions below: the base detectors emit ``DetectedPattern``
-# which carries severity / channel / affected_field but not the structured
-# ``FieldPredicate`` data we need for cross-field corpus invariants using
-# operators like ``not_divisible_by`` and ``@field_ref``. Extending the base
-# classes would either change their public ``DetectedPattern`` shape
-# (breaking the introspection extractor that currently consumes it) or
-# require lossy adapter shims at every emission site. With one miner live
-# today, the cheaper choice is per-miner detectors that emit a richer
-# local ``DetectedBody`` type. Revisit when a second miner (vLLM, TRT-LLM)
-# lands and we can see whether the parallel detector logic is genuinely
-# divergent or accidentally so.
+# Each engine defines its own ``_detect_*`` functions rather than sharing a
+# detector framework. The invariant shapes genuinely diverge per engine:
+# transformers needs the structured ``FieldPredicate`` data for cross-field
+# corpus invariants using operators like ``not_divisible_by`` and
+# ``@field_ref`` that vLLM and TRT-LLM never emit. A shared detector base
+# was tried and removed as dead - all three miners reimplement the detector
+# set they need locally and emit a richer local ``DetectedBody`` type.
 
 # ---------------------------------------------------------------------------
 # Probe contract
