@@ -13,7 +13,7 @@ Covers:
   - running ``assert_gate_soundness_fixpoint`` against the live validation
   gate must succeed.
 
-These tests skip cleanly when the 0.21.0 source isn't available locally
+These tests skip cleanly when the 1.0.0 source isn't available locally
 (CI on the GH-hosted runner extracts it; dev hosts may not). The skip is
 clearly logged so a missing source can't masquerade as a passing test.
 """
@@ -50,7 +50,7 @@ _SOURCE_ROOT = _ARCHIVE._DEFAULT_SOURCE_ROOT
 
 
 def _source_available() -> bool:
-    """True iff the 0.21.0 source tree is in place at the canonical location."""
+    """True iff the 1.0.0 source tree is in place at the canonical location."""
     return (
         _SOURCE_ROOT.is_dir()
         and (_SOURCE_ROOT / "llmapi" / "llm_args.py").is_file()
@@ -61,7 +61,7 @@ def _source_available() -> bool:
 _REQUIRES_SOURCE = pytest.mark.skipif(
     not _source_available(),
     reason=(
-        f"TRT-LLM 0.21.0 source not available at {_SOURCE_ROOT}. "
+        f"TRT-LLM 1.0.0 source not available at {_SOURCE_ROOT}. "
         f"Extract the wheel before running miner tests "
         f"(see scripts/engine_producers/tensorrt_static_invariant_miner.py docstring)."
     ),
@@ -101,11 +101,11 @@ class TestModuleContract:
 
 @_REQUIRES_SOURCE
 class TestSourceExtraction:
-    """Tests that exercise the live 0.21.0 source tree."""
+    """Tests that exercise the live 1.0.0 source tree."""
 
-    def test_walk_tensorrt_returns_021_version(self) -> None:
+    def test_walk_tensorrt_returns_pinned_version(self) -> None:
         candidates, version, rel_path = trt_miner.walk_tensorrt()
-        assert version == "0.21.0"
+        assert version == "1.0.0"
         assert rel_path.endswith("llm_args.py")
         assert candidates  # something extracted
 
@@ -117,8 +117,9 @@ class TestSourceExtraction:
         the corpus.
         """
         candidates, _version, _rel_path = trt_miner.walk_tensorrt()
-        # The miner emits 30 raw candidates; merger fingerprint-dedup
-        # collapses to ~27. We pin a generous band on raw output.
+        # The 1.0.0 walker emits 33 raw candidates (the 0.x->1.x major added
+        # the pytorch-backend config validators); merger fingerprint-dedup
+        # collapses the set. We pin a generous band on raw output.
         assert 20 <= len(candidates) <= 40, f"Unexpected raw candidate count: {len(candidates)}"
 
     def test_lookahead_positive_values_emits_three_field_rules(self) -> None:
@@ -244,46 +245,34 @@ class TestLandmarkContract:
         (stub_root / "llmapi").mkdir(parents=True)
         (stub_root / "llmapi" / "llm_args.py").write_text("class NotTrtLlmArgs:\n    pass\n")
         (stub_root / "builder.py").write_text("class BuildConfig:\n    pass\n")
-        (stub_root / "version.py").write_text('__version__ = "0.21.0"\n')
+        (stub_root / "version.py").write_text('__version__ = "1.0.0"\n')
         with pytest.raises(MinerLandmarkMissingError):
             _ARCHIVE._load_source(stub_root)
 
-    def test_method_landmarks_present_in_021(self) -> None:
+    def test_method_landmarks_present_in_pinned_source(self) -> None:
         """Every (class, method) the miner expects is present in the source."""
         tree = _ARCHIVE._load_source(_SOURCE_ROOT)
         for cls_name, method_name in _ARCHIVE._METHOD_LANDMARKS:
             cls = find_class(tree.llm_args, cls_name)
             assert cls is not None, f"Missing class {cls_name}"
             method = find_method(cls, method_name)
-            assert method is not None, f"Missing method {cls_name}.{method_name} in 0.21.0 source"
+            assert method is not None, f"Missing method {cls_name}.{method_name} in 1.0.0 source"
 
     def test_verify_method_landmarks_raises_on_missing_method(self, tmp_path: Path) -> None:
-        # Build a tree with all required *classes* but missing methods.
+        # All required *classes* present (derived from the producer's own
+        # _CLASS_TARGETS so the stub self-maintains across bumps) but with empty
+        # bodies - no validator methods. _load_source passes the class check;
+        # _verify_method_landmarks must then fail loud on the missing methods.
         stub_root = tmp_path / "tensorrt_llm"
         (stub_root / "llmapi").mkdir(parents=True)
-        (stub_root / "llmapi" / "llm_args.py").write_text(
-            "\n".join(
-                [
-                    "class BaseLlmArgs:",
-                    "    pass",
-                    "class TrtLlmArgs(BaseLlmArgs):",
-                    "    pass",
-                    "class LookaheadDecodingConfig:",
-                    "    pass",
-                    "class CalibConfig:",
-                    "    pass",
-                    "class BatchingType:",
-                    "    pass",
-                    "class CapacitySchedulerPolicy:",
-                    "    pass",
-                    "class ContextChunkingPolicy:",
-                    "    pass",
-                ]
-            )
-            + "\n"
-        )
-        (stub_root / "builder.py").write_text("class BuildConfig:\n    pass\n")
-        (stub_root / "version.py").write_text('__version__ = "0.21.0"\n')
+
+        def _empty_classes(rel_name: str) -> str:
+            names = [c for c, rel in _ARCHIVE._CLASS_TARGETS if Path(rel).name == rel_name]
+            return "".join(f"class {name}:\n    pass\n" for name in names)
+
+        (stub_root / "llmapi" / "llm_args.py").write_text(_empty_classes("llm_args.py"))
+        (stub_root / "builder.py").write_text(_empty_classes("builder.py") or "pass\n")
+        (stub_root / "version.py").write_text('__version__ = "1.0.0"\n')
         tree = _ARCHIVE._load_source(stub_root)
         with pytest.raises(MinerLandmarkMissingError):
             _ARCHIVE._verify_method_landmarks(tree)

@@ -16,7 +16,7 @@ from scripts.engine_producers import _current  # noqa: E402
 
 @pytest.mark.parametrize(
     ("engine", "expected"),
-    [("transformers", "5.7.0"), ("vllm", "0.19.1"), ("tensorrt", "0.21.0")],
+    [("transformers", "5.7.0"), ("vllm", "0.19.1"), ("tensorrt", "1.0.0")],
 )
 def test_current_version_reads_the_pin(engine: str, expected: str) -> None:
     assert _current.current_version(engine) == expected
@@ -27,7 +27,7 @@ def test_current_version_reads_the_pin(engine: str, expected: str) -> None:
     [
         ("transformers", "engine_versions/transformers/v5_7_0/outputs"),
         ("vllm", "engine_versions/vllm/v0_19_1/outputs"),
-        ("tensorrt", "engine_versions/tensorrt/v0_21_0/outputs"),
+        ("tensorrt", "engine_versions/tensorrt/v1_0_0/outputs"),
     ],
 )
 def test_current_outputs_dir_resolves_from_pin(engine: str, tail: str) -> None:

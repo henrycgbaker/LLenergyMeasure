@@ -205,7 +205,7 @@ def test_full_check_unchanged_by_scope_addition(fake_corpus: tuple[Path, Path]) 
 _PINS = {
     "transformers": "v5_7_0",
     "vllm": "v0_7_3",
-    "tensorrt": "v0_21_0",
+    "tensorrt": "v1_0_0",
 }
 
 # Genuine llem-orchestration knobs that belong to a future HarnessConfig,
