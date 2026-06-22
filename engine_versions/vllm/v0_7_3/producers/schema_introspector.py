@@ -24,6 +24,7 @@ from scripts.engine_producers._common import (
     make_envelope,
     merge_source_constraints,
 )
+from scripts.engine_producers._msgspec_lift import recover_field_types
 
 LANDMARKS: tuple[str, ...] = (
     "vllm.SamplingParams",
@@ -70,6 +71,18 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 "type": type_repr,
                 "default": spec.get("default"),
             }
+        # msgspec.json.schema renders union / enum / nested-struct sampling
+        # fields as an untyped anyOf, so the loop above labels them "unknown".
+        # msgspec.inspect (via _msgspec_lift.recover_field_types) resolves those
+        # same fields' concrete types, so fold the recovered type onto every
+        # field still marked "unknown" - augmenting the schema path, never
+        # overwriting a type json.schema already rendered (design 3 / 4A: a
+        # pure-deterministic, every-bump schema-debt retirement).
+        recovered_types = recover_field_types(vllm.SamplingParams)
+        for name, type_str in recovered_types.items():
+            spec = sampling_params.get(name)
+            if spec is not None and spec.get("type") == "unknown":
+                spec["type"] = type_str
     except Exception as exc:
         limitations.append(
             {

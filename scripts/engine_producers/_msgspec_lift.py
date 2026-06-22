@@ -52,6 +52,98 @@ _LENGTH_OPS: tuple[tuple[str, str], ...] = (
 )
 
 
+def recover_field_types(target_type: type) -> dict[str, str]:
+    """Recover ``{field: type_str}`` from a ``msgspec.Struct`` via type inspection.
+
+    ``msgspec.json.schema`` drops to an untyped ``anyOf`` (no top-level ``type``
+    key) for union / enum / nested-struct fields, so the schema introspector
+    renders them ``"unknown"``. ``msgspec.inspect.type_info`` still resolves the
+    concrete field type for those same fields, so this lift recovers them - the
+    same inspection :func:`lift` already runs, exposed for the schema product
+    (design 3: "wire ``_msgspec_lift`` into the sampling introspector to recover
+    the ``Any | None`` sampling-param types").
+
+    Returns ``{}`` for non-Struct types. Fields whose type is genuinely opaque
+    (a bare ``Any``) are omitted so the caller keeps its existing label rather
+    than overwriting ``unknown`` with another non-informative token.
+    """
+    if not (isinstance(target_type, type) and issubclass(target_type, msgspec.Struct)):
+        return {}
+    info = msgspec.inspect.type_info(target_type)
+    if not isinstance(info, msgspec.inspect.StructType):
+        return {}
+    recovered: dict[str, str] = {}
+    for field in info.fields:
+        type_str = _render_type(field.type)
+        if type_str is not None:
+            recovered[field.name] = type_str
+    return recovered
+
+
+def _render_type(node: Any) -> str | None:
+    """Render a ``msgspec.inspect`` type node to a compact type string, or None.
+
+    Returns ``None`` only for a bare ``AnyType`` (no information to add). Unions
+    render their members joined by `` | `` with ``None`` last, mirroring the
+    introspector's existing ``X | None`` convention; a union that is *only*
+    ``Any | None`` collapses to ``None`` (still no type information beyond
+    nullability) so the caller does not overwrite ``unknown`` with ``Any | None``.
+    """
+    inspect_mod = msgspec.inspect
+    if isinstance(node, inspect_mod.AnyType):
+        return None
+    if isinstance(node, inspect_mod.UnionType):
+        members = [m for m in node.types if not isinstance(m, inspect_mod.NoneType)]
+        has_none = len(members) < len(node.types)
+        rendered = [_render_type(m) for m in members]
+        parts = [r for r in rendered if r is not None]
+        if not parts:
+            return None
+        if has_none:
+            parts.append("None")
+        return " | ".join(parts)
+    return _render_scalar(node)
+
+
+def _render_scalar(node: Any) -> str:
+    """Render a non-union ``msgspec.inspect`` node to a type token."""
+    inspect_mod = msgspec.inspect
+    simple = {
+        inspect_mod.NoneType: "None",
+        inspect_mod.BoolType: "bool",
+        inspect_mod.IntType: "int",
+        inspect_mod.FloatType: "float",
+        inspect_mod.StrType: "str",
+        inspect_mod.BytesType: "bytes",
+    }
+    for cls, token in simple.items():
+        if isinstance(node, cls):
+            return token
+    if isinstance(node, inspect_mod.ListType):
+        return f"list[{_render_scalar_or_any(node.item_type)}]"
+    if isinstance(node, inspect_mod.DictType):
+        key = _render_scalar_or_any(node.key_type)
+        val = _render_scalar_or_any(node.value_type)
+        return f"dict[{key}, {val}]"
+    if isinstance(node, inspect_mod.LiteralType):
+        return f"Literal[{', '.join(repr(v) for v in node.values)}]"
+    if isinstance(node, inspect_mod.EnumType):
+        return node.cls.__name__
+    if isinstance(node, (inspect_mod.StructType, inspect_mod.DataclassType)):
+        return node.cls.__name__
+    # Fall back to the node's own class name with the trailing "Type" stripped
+    # (CustomType, DateTimeType, ...) so an unmapped node still carries a token.
+    return type(node).__name__.removesuffix("Type").lower()
+
+
+def _render_scalar_or_any(node: Any) -> str:
+    """Like :func:`_render_scalar` but renders a bare Any item as ``Any``."""
+    if isinstance(node, msgspec.inspect.AnyType):
+        return "Any"
+    rendered = _render_type(node)
+    return rendered if rendered is not None else "Any"
+
+
 def lift(
     target_type: type,
     *,
@@ -293,4 +385,4 @@ def _build_literal(
     )
 
 
-__all__ = ["lift"]
+__all__ = ["lift", "recover_field_types"]

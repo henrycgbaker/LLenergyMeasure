@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import pytest
 
@@ -19,7 +19,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_producers._msgspec_lift import lift  # noqa: E402
+from scripts.engine_producers._msgspec_lift import lift, recover_field_types  # noqa: E402
 
 
 class _BoundedStruct(msgspec.Struct):  # type: ignore[name-defined,misc]  # msgspec via importorskip
@@ -79,3 +79,47 @@ def test_lift_returns_empty_on_non_struct_type() -> None:
         pass
 
     assert lift(_NotStruct, namespace="m.n", today="2026-04-26", source_path="x.py") == []
+
+
+# ---------------------------------------------------------------------------
+# recover_field_types (W1.2): the schema-side type lift
+# ---------------------------------------------------------------------------
+
+
+class _UntypedByJsonSchema(msgspec.Struct):  # type: ignore[name-defined,misc]
+    """Fields msgspec.json.schema renders as an untyped anyOf / bare token.
+
+    Mirrors the vLLM ``SamplingParams`` shape: optional unions, a nested-list
+    union, a dict union, and a genuinely-opaque ``Any | None``. ``recover_field_types``
+    must resolve every concrete one and omit only the opaque ``Any | None``.
+    """
+
+    seed: int | None = None
+    stop_token_ids: list[int] | None = None
+    logit_bias: dict[int, float] | None = None
+    mode: Literal["greedy", "beam"] = "greedy"
+    logits_processors: Any | None = None  # genuinely opaque - stays unrecovered
+
+
+def test_recover_field_types_resolves_unions_and_containers() -> None:
+    recovered = recover_field_types(_UntypedByJsonSchema)
+    assert recovered["seed"] == "int | None"
+    assert recovered["stop_token_ids"] == "list[int] | None"
+    assert recovered["logit_bias"] == "dict[int, float] | None"
+    # msgspec sorts Literal values when building its type info; mirror that order.
+    assert recovered["mode"] == "Literal['beam', 'greedy']"
+
+
+def test_recover_field_types_omits_opaque_any() -> None:
+    # A field that resolves to only ``Any | None`` carries no type information
+    # beyond nullability, so it is omitted - the caller keeps its ``unknown``
+    # label rather than overwriting it with an equally-uninformative token.
+    recovered = recover_field_types(_UntypedByJsonSchema)
+    assert "logits_processors" not in recovered
+
+
+def test_recover_field_types_empty_for_non_struct() -> None:
+    class _NotStruct:
+        pass
+
+    assert recover_field_types(_NotStruct) == {}
