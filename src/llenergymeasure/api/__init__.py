@@ -21,6 +21,7 @@ __all__ = [
     "DiagnoseError",
     "DiagnoseResult",
     "ReportGapsError",
+    "build_study_skeleton",
     "diagnose_carried_failures",
     "diagnose_gaps",
     "find_resumable_study",
@@ -35,6 +36,19 @@ __all__ = [
     "save_result",
     "study_dir_name",
 ]
+
+
+def build_study_skeleton(engine: str) -> str:
+    """Return a commented starting study YAML for *engine* (a trim-me template).
+
+    Thin pass-through to
+    :func:`llenergymeasure.config.sweep_autoexpand.build_study_skeleton`; see
+    there for the auto-expansion policy. Raises ``ConfigError`` for an unknown
+    engine.
+    """
+    from llenergymeasure.config.sweep_autoexpand import build_study_skeleton
+
+    return build_study_skeleton(engine)
 
 
 def probe_energy_sampler() -> str | None:

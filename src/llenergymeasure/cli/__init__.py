@@ -116,6 +116,10 @@ app.command(
     help="Propose gate-confirmed rule entries from an upstream engine bump (local GPU)",
 )(_diagnose_bump_cmd)
 
+from llenergymeasure.cli.study_cmd import study_app as _study_app  # noqa: E402
+
+app.add_typer(_study_app, name="study", help="Study-authoring helpers")
+
 __all__ = ["app"]
 
 if __name__ == "__main__":

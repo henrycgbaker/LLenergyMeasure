@@ -15,9 +15,10 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config._dict_utils import _unflatten, deep_merge
+from llenergymeasure.config._dict_utils import _unflatten, deep_merge, is_sweep_group
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import ALL_ENGINES
+from llenergymeasure.config.sweep_autoexpand import expand_auto_sweep
 from llenergymeasure.utils.compat import StrEnum
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -102,8 +103,10 @@ def expand_grid(
     fixed = _extract_fixed(raw_study)
     merged_fixed = {**base_dict, **fixed}  # inline fields override base
 
-    # Step 3: Expand sweep: block into raw config dicts
-    sweep = raw_study.get("sweep", {})
+    # Step 3: Expand sweep: block into raw config dicts.
+    # Resolve any per-field ``auto`` shorthands to concrete value sets first, so
+    # the Cartesian/group logic (and downstream dedup) only ever see scalars.
+    sweep = expand_auto_sweep(raw_study.get("sweep", {}))
     sweep_raw_configs = _expand_sweep(sweep, merged_fixed)
 
     # Step 4: Append explicit experiments: list entries
@@ -302,7 +305,7 @@ def count_sweep_structure(raw_sweep: dict[str, Any]) -> tuple[int, int]:
     n_groups = 0
 
     for _key, values in raw_sweep.items():
-        if _is_group(values):
+        if is_sweep_group(values):
             n_groups += 1
         else:
             n_axes += 1
@@ -360,28 +363,6 @@ def _strip_other_engine_sections(config_dict: dict[str, Any], engine: str) -> di
 # =============================================================================
 # Sweep group helpers
 # =============================================================================
-
-
-def _is_group(value: object) -> bool:
-    """True if a sweep entry is a group (list of dicts), not an independent axis.
-
-    Disambiguation: a list of scalars is an independent axis (Cartesian product);
-    a list of dicts (or containing ``{}``) is a dependent group (union of variants).
-
-    Raises ``ConfigError`` for mixed lists (some dicts, some scalars).
-    """
-    if not isinstance(value, list) or len(value) == 0:
-        return False
-    has_dicts = any(isinstance(e, dict) for e in value)
-    if not has_dicts:
-        return False
-    all_dicts = all(isinstance(e, dict) for e in value)
-    if not all_dicts:
-        raise ConfigError(
-            "Sweep entry mixes dicts and scalars. Group entries must all be "
-            "dicts; independent axes must all be scalars."
-        )
-    return True
 
 
 def _group_engine_scope(group_key: str) -> str | None:
@@ -521,7 +502,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     groups: dict[str, list[dict[str, Any]]] = {}  # {group_name: [variant_dicts]}
 
     for key, values in sweep.items():
-        if _is_group(values):
+        if is_sweep_group(values):
             groups[key] = _expand_group(values)
             continue
 

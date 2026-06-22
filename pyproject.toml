@@ -202,6 +202,7 @@ ignore_imports = [
     # llem mirrors them" direction, not an upward dependency on engine behaviour.
     "llenergymeasure.config.models -> llenergymeasure.engines.*.config",
     "llenergymeasure.config.introspection -> llenergymeasure.engines.*.config",
+    "llenergymeasure.config.sweep_autoexpand -> llenergymeasure.engines.*.config",
 ]
 
 [[tool.importlinter.contracts]]
@@ -256,6 +257,7 @@ ignore_imports = [
     # matching main-layers ignore above.
     "llenergymeasure.config.models -> llenergymeasure.engines.*.config",
     "llenergymeasure.config.introspection -> llenergymeasure.engines.*.config",
+    "llenergymeasure.config.sweep_autoexpand -> llenergymeasure.engines.*.config",
 ]
 
 [[tool.importlinter.contracts]]

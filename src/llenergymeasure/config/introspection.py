@@ -40,6 +40,52 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 # =============================================================================
+# Engine Config-model registry + type unwrapping (shared SSOT)
+# =============================================================================
+
+
+def get_engine_config_model(engine: str) -> type[BaseModel]:
+    """Return the curated ``Config`` model class for *engine*.
+
+    Single source of truth for the engine -> Config-model mapping, used both by
+    :func:`get_engine_params` and the sweep auto-expander. Raises ``ValueError``
+    for an unknown engine (callers needing a different exception translate it).
+
+    The engine config imports are deferred so config/ carries no eager
+    engines/ dependency; the ``config -> engines.*.config`` edge is the one
+    exempted in import-linter.
+    """
+    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
+    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
+    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
+
+    engine_models: dict[str, type[BaseModel]] = {
+        "transformers": TransformersConfig,
+        "vllm": VLLMConfig,
+        "tensorrt": TensorRTConfig,
+    }
+    if engine not in engine_models:
+        raise ValueError(f"Unknown engine: {engine}. Must be one of {list(engine_models.keys())}")
+    return engine_models[engine]
+
+
+def _strip_optional(annotation: Any) -> Any:
+    """Return *annotation* with a leading ``| None`` (Optional) stripped.
+
+    ``bool | None`` reduces to ``bool``; a non-Optional annotation passes
+    through unchanged. Guards ``origin is type(None)`` so a bare ``None``
+    annotation is left alone.
+    """
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin is type(None) or (args and type(None) in args):
+        actual_types = [a for a in args if a is not type(None)]
+        if actual_types:
+            return actual_types[0]
+    return annotation
+
+
+# =============================================================================
 # Field Metadata Helpers (SSOT display labels and roles)
 # =============================================================================
 
@@ -123,12 +169,11 @@ def _extract_param_metadata(
     origin = get_origin(annotation)
     args = get_args(annotation)
 
-    is_optional = False
-    if origin is type(None) or (args and type(None) in args):
-        is_optional = True
-        actual_types = [a for a in args if a is not type(None)]
-        if actual_types:
-            annotation = actual_types[0]
+    is_optional = origin is type(None) or bool(args and type(None) in args)
+    if is_optional:
+        stripped = _strip_optional(annotation)
+        if stripped is not annotation:
+            annotation = stripped
             origin = get_origin(annotation)
             args = get_args(annotation)
 
@@ -223,14 +268,8 @@ def get_params_from_model(
     params: dict[str, dict[str, Any]] = {}
 
     for field_name, field_info in model_class.model_fields.items():
-        annotation = field_info.annotation
-
         # Handle Optional wrapper
-        args = get_args(annotation)
-        if args and type(None) in args:
-            actual_types = [a for a in args if a is not type(None)]
-            if actual_types:
-                annotation = actual_types[0]
+        annotation = _strip_optional(field_info.annotation)
 
         # Check if nested Pydantic model
         if include_nested and hasattr(annotation, "model_fields"):
@@ -274,22 +313,9 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
         ``engine_support: list[str]`` indicating which engines expose it.
     """
     from llenergymeasure.config.harness import TransformersHarness
-    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
-    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
-    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
 
-    engine_models = {
-        "transformers": TransformersConfig,
-        "vllm": VLLMConfig,
-        "tensorrt": TensorRTConfig,
-    }
-
-    if engine not in engine_models:
-        raise ValueError(f"Unknown engine: {engine}. Must be one of {list(engine_models.keys())}")
-
-    model_class = engine_models[engine]
-    # All values are Pydantic BaseModel subclasses, mypy can't infer this from dict
-    params = get_params_from_model(model_class, prefix=engine)  # type: ignore[arg-type]
+    model_class = get_engine_config_model(engine)
+    params = get_params_from_model(model_class, prefix=engine)
 
     # transformers also exposes the HarnessConfig residual (batch_size,
     # torch_compile, ...) as llem-orchestration knobs under the engine prefix.

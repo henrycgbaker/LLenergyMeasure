@@ -1,6 +1,6 @@
 """Tests for sweep group expansion in grid.py.
 
-Covers: group detection (_is_group), mini-grid expansion within entries,
+Covers: group detection (is_sweep_group), mini-grid expansion within entries,
 group x sweep crossing, engine scoping, fully-qualified key routing,
 empty groups ({}), group + explicit experiments, collision detection,
 combinatorial warnings, and hash stability.
@@ -12,12 +12,12 @@ import logging
 
 import pytest
 
+from llenergymeasure.config._dict_utils import is_sweep_group
 from llenergymeasure.config.grid import (
     _apply_group_overlay,
     _expand_group,
     _expand_group_entry,
     _group_engine_scope,
-    _is_group,
     _route_key_value,
     _validate_sweep_groups,
     expand_grid,
@@ -25,39 +25,39 @@ from llenergymeasure.config.grid import (
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
-# _is_group() detection
+# is_sweep_group() detection
 # =============================================================================
 
 
 class TestIsGroup:
     def test_list_of_scalars_is_not_group(self):
-        assert _is_group([1, 2, 3]) is False
+        assert is_sweep_group([1, 2, 3]) is False
 
     def test_list_of_strings_is_not_group(self):
-        assert _is_group(["float16", "bfloat16"]) is False
+        assert is_sweep_group(["float16", "bfloat16"]) is False
 
     def test_list_of_dicts_is_group(self):
-        assert _is_group([{"harness.transformers.torch_compile": True}]) is True
+        assert is_sweep_group([{"harness.transformers.torch_compile": True}]) is True
 
     def test_list_with_empty_dict_is_group(self):
-        assert _is_group([{}]) is True
+        assert is_sweep_group([{}]) is True
 
     def test_empty_list_is_not_group(self):
-        assert _is_group([]) is False
+        assert is_sweep_group([]) is False
 
     def test_single_scalar_is_not_group(self):
-        assert _is_group("float16") is False
+        assert is_sweep_group("float16") is False
 
     def test_none_is_not_group(self):
-        assert _is_group(None) is False
+        assert is_sweep_group(None) is False
 
     def test_mixed_list_raises_config_error(self):
         """Mixed dicts and scalars should raise ConfigError."""
         with pytest.raises(ConfigError, match="mixes dicts and scalars"):
-            _is_group([{}, "scalar"])
+            is_sweep_group([{}, "scalar"])
 
     def test_list_of_booleans_is_not_group(self):
-        assert _is_group([True, False]) is False
+        assert is_sweep_group([True, False]) is False
 
 
 # =============================================================================

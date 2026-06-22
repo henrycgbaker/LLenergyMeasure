@@ -9,6 +9,30 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from llenergymeasure.utils.exceptions import ConfigError
+
+
+def is_sweep_group(value: object) -> bool:
+    """True if a sweep entry is a group (list of dicts), not an independent axis.
+
+    Disambiguation: a list of scalars is an independent axis (Cartesian product);
+    a list of dicts (or containing ``{}``) is a dependent group (union of variants).
+
+    Raises ``ConfigError`` for mixed lists (some dicts, some scalars).
+    """
+    if not isinstance(value, list) or len(value) == 0:
+        return False
+    has_dicts = any(isinstance(e, dict) for e in value)
+    if not has_dicts:
+        return False
+    all_dicts = all(isinstance(e, dict) for e in value)
+    if not all_dicts:
+        raise ConfigError(
+            "Sweep entry mixes dicts and scalars. Group entries must all be "
+            "dicts; independent axes must all be scalars."
+        )
+    return True
+
 
 def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
     """Expand dotted keys into nested dicts. Non-dotted keys pass through.
