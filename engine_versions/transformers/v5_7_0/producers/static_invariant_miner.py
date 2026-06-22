@@ -77,6 +77,8 @@ from scripts.engine_producers._base import (  # noqa: E402  (late import after s
     format_call_template,
     render_binop_concat_template,
 )
+from scripts.engine_producers._current import current_version  # noqa: E402
+from scripts.engine_producers._landmarks import load_landmarks  # noqa: E402
 from scripts.engine_producers._section_classifier import (  # noqa: E402
     load_curated_sections,
     relabel_match_fields,
@@ -91,24 +93,6 @@ from scripts.engine_producers._section_classifier import (  # noqa: E402
 # set they need locally and emit a richer local ``DetectedBody`` type.
 
 # ---------------------------------------------------------------------------
-# Probe contract
-# ---------------------------------------------------------------------------
-
-# Static-miner LANDMARKS for Transformers 5.7.0.
-#
-# Read by the probe before the invariants miner orchestrator
-# (``scripts.engine_producers.transformers_miner``) runs. Covers the symbols
-# the orchestrator's ``_check_landmarks()`` verifies plus the symbols the
-# delegated dynamic miner (``transformers_dynamic_miner``) imports.
-LANDMARKS: tuple[str, ...] = (
-    "transformers.GenerationConfig",
-    "transformers.GenerationConfig.validate",
-    "transformers.BitsAndBytesConfig",
-    "transformers.BitsAndBytesConfig.post_init",
-)
-
-
-# ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
@@ -119,6 +103,21 @@ NATIVE_TYPE_GEN = "transformers.GenerationConfig"
 NATIVE_TYPE_WMK = "transformers.WatermarkingConfig"
 NATIVE_TYPE_SYNTH = "transformers.SynthIDTextWatermarkingConfig"
 NATIVE_TYPE_BNB = "transformers.BitsAndBytesConfig"
+
+# Landmark DATA is externalised to engine_versions/transformers/v<safe>/landmarks.yaml
+# and loaded for the pinned library version (with <=target fallback, mirroring
+# the producer dispatcher). transformers is import-driven, so the file carries
+# only the probe tuple; the walk targets stay hardcoded in the function bodies
+# below (algorithm structure, not version-varying data).
+_LANDMARKS = load_landmarks(ENGINE, current_version(ENGINE))
+
+# Static-miner LANDMARKS for Transformers 5.7.0: dotted attribute paths the
+# probe resolves under ``import transformers``. Read by the probe before the
+# invariants miner orchestrator (``scripts.engine_producers.transformers_miner``)
+# runs; covers the symbols the orchestrator's ``_check_landmarks()`` verifies
+# plus the symbols the delegated dynamic miner imports. Kept as a module
+# attribute because scripts/_drift._read_landmarks reads ``module.LANDMARKS``.
+LANDMARKS: tuple[str, ...] = _LANDMARKS.probe_landmarks
 
 # Field-path namespace for GenerationConfig fields. The corpus convention
 # (see existing transformers.yaml entries) puts every GenerationConfig

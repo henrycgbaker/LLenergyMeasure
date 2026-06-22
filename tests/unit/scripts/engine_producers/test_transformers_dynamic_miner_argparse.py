@@ -37,12 +37,6 @@ _VENDORED_MINERS: tuple[Path, ...] = (
     _PROJECT_ROOT
     / "engine_versions"
     / "transformers"
-    / "v4_57_3"
-    / "producers"
-    / "dynamic_invariant_miner.py",
-    _PROJECT_ROOT
-    / "engine_versions"
-    / "transformers"
     / "v5_7_0"
     / "producers"
     / "dynamic_invariant_miner.py",

@@ -157,8 +157,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         )
 
     # C9: fold source-text Field(...) bounds + Literal[...] membership onto the
-    # discovered GenerationConfig sampling fields (mirrors the v4_57_3 cut). The
-    # newest producer cut silently lost this call; without it a re-mine cannot
+    # discovered GenerationConfig sampling fields. Without it a re-mine cannot
     # surface declarative constraints the walker reads from class source. Near-
     # zero on a pin whose GenerationConfig stuffs fields via **kwargs self-
     # assigns, but the plumbing is load-bearing once a pin moves to class-body

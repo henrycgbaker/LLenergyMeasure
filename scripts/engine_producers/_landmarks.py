@@ -36,21 +36,27 @@ _LANDMARKS_FILE = Path("landmarks.yaml")
 class Landmarks:
     """Parsed per-version landmark data for one engine producer.
 
-    ``probe_landmarks`` is the drift-tool surface; ``class_targets`` and
-    ``method_landmarks`` are ``(name, file_rel_path)`` / ``(class, method)``
-    tuples the miner fails loud on; ``strenum_fields`` maps a StrEnum class to
-    the field it constrains; ``source_root`` is the resolved source tree (the
-    ``{version}`` token already substituted) and ``llm_args_rel`` /
-    ``builder_rel`` are the relative paths the miner AST-walks.
+    ``probe_landmarks`` is the drift-tool surface and the only required field;
+    ``class_targets`` and ``method_landmarks`` are ``(name, file_rel_path)`` /
+    ``(class, method)`` tuples the miner fails loud on; ``strenum_fields`` maps a
+    StrEnum class to the field it constrains; ``source_root`` is the resolved
+    source tree (the ``{version}`` token already substituted) and ``llm_args_rel``
+    / ``builder_rel`` are the relative paths the miner AST-walks.
+
+    The ``source.*``-derived fields are optional: a source-driven miner
+    (tensorrt walks an extracted tarball) supplies them, while an
+    import-driven miner (transformers imports the live package and hardcodes
+    its walk targets in function bodies) carries only ``probe_landmarks`` and
+    leaves these empty.
     """
 
     probe_landmarks: tuple[str, ...]
-    class_targets: tuple[tuple[str, Path], ...]
-    method_landmarks: tuple[tuple[str, str], ...]
-    strenum_fields: tuple[tuple[str, str], ...]
-    source_root: Path
-    llm_args_rel: Path
-    builder_rel: Path
+    class_targets: tuple[tuple[str, Path], ...] = ()
+    method_landmarks: tuple[tuple[str, str], ...] = ()
+    strenum_fields: tuple[tuple[str, str], ...] = ()
+    source_root: Path | None = None
+    llm_args_rel: Path | None = None
+    builder_rel: Path | None = None
 
 
 def _engine_root(engine: str) -> Path:
@@ -97,6 +103,12 @@ def load_landmarks(engine: str, version: str) -> Landmarks:
     doc = yaml.safe_load(path.read_text())
     if not isinstance(doc, dict):
         raise ValueError(f"{path} did not parse to a mapping.")
+
+    # An import-driven miner (transformers) carries only ``probe_landmarks``;
+    # the ``source``-derived walk fields are present only for source-driven
+    # miners (tensorrt) that AST-walk an extracted tarball.
+    if "source" not in doc:
+        return Landmarks(probe_landmarks=tuple(doc["probe_landmarks"]))
 
     source = doc["source"]
     files = source["files"]

@@ -203,7 +203,7 @@ def test_full_check_unchanged_by_scope_addition(fake_corpus: tuple[Path, Path]) 
 
 # Pin -> SSOT outputs dir for the 3 current engines.
 _PINS = {
-    "transformers": "v4_57_3",
+    "transformers": "v5_7_0",
     "vllm": "v0_7_3",
     "tensorrt": "v0_21_0",
 }

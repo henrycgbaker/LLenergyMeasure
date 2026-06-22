@@ -1,0 +1,26 @@
+# Per-version landmark data for the transformers static invariant miner (5.7.0).
+#
+# Externalised from the v5_7_0 producer's module-level LANDMARKS tuple. The
+# producer loads this file via scripts/engine_producers/_landmarks.load_landmarks
+# and keeps its walking algorithm unchanged; only the data source moved here.
+#
+# transformers is import-driven, not source-driven: the miner imports the live
+# package and hardcodes its walk targets (GenerationConfig, WatermarkingConfig,
+# SynthIDTextWatermarkingConfig, BitsAndBytesConfig) in function bodies, so this
+# file carries no source.root / class_targets / method_landmarks / strenum_fields
+# (all optional in the Landmarks schema).
+#
+# probe_landmarks -> the dotted attribute paths scripts/_drift.py resolves
+#                    under the installed library (the runtime drift gate). Read
+#                    by the probe before the invariants miner orchestrator
+#                    (scripts.engine_producers.transformers_miner) runs; covers
+#                    the symbols the orchestrator's _check_landmarks() verifies
+#                    plus the symbols the delegated dynamic miner imports.
+schema_version: 1
+engine: transformers
+library_version: "5.7.0"
+probe_landmarks:
+  - transformers.GenerationConfig
+  - transformers.GenerationConfig.validate
+  - transformers.BitsAndBytesConfig
+  - transformers.BitsAndBytesConfig.post_init
