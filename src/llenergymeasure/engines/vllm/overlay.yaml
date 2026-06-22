@@ -28,9 +28,6 @@ narrowings:
       minimum: 0.0
       exclusiveMaximum: 1.0
       x-narrowing-reason: *reason
-    swap_space:
-      minimum: 0.0
-      x-narrowing-reason: *reason
     cpu_offload_gb:
       minimum: 0.0
       x-narrowing-reason: *reason
@@ -49,9 +46,6 @@ narrowings:
     max_model_len:
       minimum: 1
       x-narrowing-reason: *reason
-    num_scheduler_steps:
-      minimum: 1
-      x-narrowing-reason: *reason
     tensor_parallel_size:
       minimum: 1
       x-narrowing-reason: *reason
@@ -63,9 +57,6 @@ narrowings:
       x-narrowing-reason: *reason
     quantization:
       enum: ["awq", "gptq", "fp8", "fp8_e5m2", "fp8_e4m3", "marlin", "bitsandbytes"]
-      x-narrowing-reason: *reason
-    max_seq_len_to_capture:
-      minimum: 1
       x-narrowing-reason: *reason
     kv_cache_memory_bytes:
       type: integer

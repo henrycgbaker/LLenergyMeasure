@@ -23,7 +23,6 @@ exposed_fields:
   engine_params:
     - dtype
     - gpu_memory_utilization
-    - swap_space
     - cpu_offload_gb
     - block_size
     - kv_cache_dtype
@@ -32,20 +31,18 @@ exposed_fields:
     - max_num_seqs
     - max_num_batched_tokens
     - max_model_len
-    - num_scheduler_steps
     - tensor_parallel_size
     - pipeline_parallel_size
     - distributed_executor_backend
     - enable_prefix_caching
     - quantization
-    - max_seq_len_to_capture
-    - speculative_config            # discovery debt: nested sub-config container not surfaced as a $defs entry
-    - offload_group_size            # discovery debt: CPU-offload kwargs not in EngineArgs signature
-    - offload_num_in_group          # discovery debt: CPU-offload kwargs not in EngineArgs signature
-    - offload_prefetch_step         # discovery debt: CPU-offload kwargs not in EngineArgs signature
-    - offload_params                # discovery debt: CPU-offload kwargs not in EngineArgs signature
+    - speculative_config
+    - offload_group_size
+    - offload_num_in_group
+    - offload_prefetch_step
+    - offload_params
     - disable_custom_all_reduce
-    - kv_cache_memory_bytes         # discovery debt: absolute KV-cache knob not in discovered schema
+    - kv_cache_memory_bytes
     - compilation_config
     - attention                     # discovery debt: nested AttentionConfig container not surfaced as a $defs entry
     - beam_search                   # discovery debt: nested BeamSearchParams container not surfaced as a $defs entry

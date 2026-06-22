@@ -26,15 +26,6 @@ class EngineParams(BaseModel):
             lt=1.0,
         ),
     ] = 0.9
-    swap_space: Annotated[
-        Any | None,
-        Field(
-            ge=0,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-        ),
-    ] = None
     cpu_offload_gb: Annotated[
         float | None,
         Field(
@@ -89,15 +80,6 @@ class EngineParams(BaseModel):
             },
         ),
     ] = None
-    num_scheduler_steps: Annotated[
-        Any | None,
-        Field(
-            ge=1,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
-        ),
-    ] = None
     tensor_parallel_size: Annotated[
         int | None,
         Field(
@@ -131,15 +113,6 @@ class EngineParams(BaseModel):
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             }
-        ),
-    ] = None
-    max_seq_len_to_capture: Annotated[
-        Any | None,
-        Field(
-            ge=1,
-            json_schema_extra={
-                "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
-            },
         ),
     ] = None
     speculative_config: Any | None = None
