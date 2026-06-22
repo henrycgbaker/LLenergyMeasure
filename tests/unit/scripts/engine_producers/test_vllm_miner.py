@@ -30,8 +30,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 vllm = pytest.importorskip("vllm", reason="vLLM not installed in this environment")
 
 from scripts.engine_producers._base import (  # noqa: E402
+    InvariantCandidate,
     MinerLandmarkMissingError,
-    RuleCandidate,
 )
 from scripts.engine_producers._dataclass_lift import lift as dataclass_lift  # noqa: E402
 from scripts.engine_producers._msgspec_lift import lift as msgspec_lift  # noqa: E402
@@ -63,7 +63,7 @@ class TestLiftCallSites:
         Per the research doc, vLLM 0.17.1 ships zero ``msgspec.Meta(...)``
         annotations on SamplingParams. The lift therefore returns ``[]``
         today - the test pins the call-site (lift IS invoked) and the
-        contract that the result is a list of :class:`RuleCandidate`. The
+        contract that the result is a list of :class:`InvariantCandidate`. The
         day vLLM adopts ``Meta(ge=...)`` annotations, the count flips
         positive without code change.
         """
@@ -77,7 +77,7 @@ class TestLiftCallSites:
         )
         assert isinstance(result, list)
         for cand in result:
-            assert isinstance(cand, RuleCandidate)
+            assert isinstance(cand, InvariantCandidate)
             assert cand.added_by == "msgspec_lift"
 
     def test_pydantic_lift_called_on_cache_config(self) -> None:
@@ -100,7 +100,7 @@ class TestLiftCallSites:
             f"(gpu_memory_utilization, swap_space, block_size etc.); got {len(result)}"
         )
         for cand in result:
-            assert isinstance(cand, RuleCandidate)
+            assert isinstance(cand, InvariantCandidate)
             assert cand.added_by == "pydantic_lift"
 
     def test_dataclass_lift_call_site_dropped_for_engine_args(self) -> None:
@@ -199,11 +199,12 @@ class TestStaticMinerLandmarks:
         assert method is not None, f"AST target method {target.class_name}.{target.method} missing"
 
     def test_landmark_missing_raises_loud(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Removing a landmark on the imported class makes ``_check_landmarks`` raise."""
-        from vllm.config import CacheConfig
+        """Removing a checked landmark method on its class makes ``_check_landmarks`` raise."""
+        from vllm import SamplingParams
 
-        # Hide the validator method on the class for the duration of this test.
-        monkeypatch.delattr(CacheConfig, "_validate_cache_dtype")
+        # Hide a method the miner expects (a current _CLASS_TARGETS landmark) for
+        # the duration of this test.
+        monkeypatch.delattr(SamplingParams, "_verify_args")
         with pytest.raises(MinerLandmarkMissingError):
             _check_landmarks()
 
@@ -303,10 +304,14 @@ class TestGateSoundnessOnVllmCorpus:
 
 
 def test_vllm_engine_registered_in_build_corpus() -> None:
-    """``--engine vllm`` resolves to the static + dynamic miner extractors.
+    """``--engine vllm`` resolves to the static miner extractor.
 
-    Without this, removing or renaming an entry in
-    ``_ENGINE_EXTRACTORS["vllm"]`` would silently break the pipeline.
+    The dynamic miner is intentionally NOT registered yet: it lives globally
+    with 0.16+ surface assumptions and is not per-version vendored, so wiring
+    it into ``_ENGINE_EXTRACTORS["vllm"]`` would trip a landmark error against
+    the pinned version. Re-enable once vllm dynamic vendoring per version lands.
+    Without this test, removing or renaming the static entry would silently
+    break the pipeline.
     """
     from scripts.engine_producers import build_corpus
 
@@ -315,12 +320,10 @@ def test_vllm_engine_registered_in_build_corpus() -> None:
     modules = {e.module for e in extractors}
     assert modules == {
         "scripts.engine_producers.vllm_static_invariant_miner",
-        "scripts.engine_producers.vllm_dynamic_invariant_miner",
     }
     basenames = {e.staging_basename for e in extractors}
     assert basenames == {
         "vllm_static_invariant_miner.yaml",
-        "vllm_dynamic_invariant_miner.yaml",
     }
 
 
