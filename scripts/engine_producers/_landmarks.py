@@ -33,27 +33,47 @@ _LANDMARKS_FILE = Path("landmarks.yaml")
 
 
 @dataclass(frozen=True)
+class AstTarget:
+    """One ``(module_attr, method, namespace, native_type)`` AST walk target.
+
+    Mirrors the import-driven vLLM miner's ``_ASTTarget`` record: the
+    ``module.Class`` attribute path, the method whose body is walked, the
+    invariant namespace, and the native config type. Carried as version-data
+    because vLLM's flat-vs-subpackage layout and validator naming shift the
+    walk surface across versions.
+    """
+
+    module_attr: str
+    method: str
+    namespace: str
+    native_type: str
+
+
+@dataclass(frozen=True)
 class Landmarks:
     """Parsed per-version landmark data for one engine producer.
 
     ``probe_landmarks`` is the drift-tool surface and the only required field;
     ``class_targets`` and ``method_landmarks`` are ``(name, file_rel_path)`` /
     ``(class, method)`` tuples the miner fails loud on; ``strenum_fields`` maps a
-    StrEnum class to the field it constrains; ``source_root`` is the resolved
+    StrEnum class to the field it constrains; ``ast_targets`` carries the
+    import-driven AST walk targets (vLLM); ``source_root`` is the resolved
     source tree (the ``{version}`` token already substituted) and ``llm_args_rel``
     / ``builder_rel`` are the relative paths the miner AST-walks.
 
-    The ``source.*``-derived fields are optional: a source-driven miner
-    (tensorrt walks an extracted tarball) supplies them, while an
-    import-driven miner (transformers imports the live package and hardcodes
-    its walk targets in function bodies) carries only ``probe_landmarks`` and
-    leaves these empty.
+    The ``source.*``-derived fields and ``ast_targets`` are optional: a
+    source-driven miner (tensorrt walks an extracted tarball) supplies the
+    source fields, an import-driven AST miner (vLLM imports the live package
+    and walks ``ast_targets``) supplies ``ast_targets``, and a probe-only
+    import-driven miner (transformers hardcodes its walk targets in function
+    bodies) carries only ``probe_landmarks``.
     """
 
     probe_landmarks: tuple[str, ...]
     class_targets: tuple[tuple[str, Path], ...] = ()
     method_landmarks: tuple[tuple[str, str], ...] = ()
     strenum_fields: tuple[tuple[str, str], ...] = ()
+    ast_targets: tuple[AstTarget, ...] = ()
     source_root: Path | None = None
     llm_args_rel: Path | None = None
     builder_rel: Path | None = None
@@ -104,11 +124,17 @@ def load_landmarks(engine: str, version: str) -> Landmarks:
     if not isinstance(doc, dict):
         raise ValueError(f"{path} did not parse to a mapping.")
 
-    # An import-driven miner (transformers) carries only ``probe_landmarks``;
+    ast_targets = _ast_targets(doc.get("ast_targets", []))
+
+    # An import-driven miner carries only ``probe_landmarks`` (transformers,
+    # probe-only) plus optional ``ast_targets`` (vLLM, import-driven AST walk);
     # the ``source``-derived walk fields are present only for source-driven
     # miners (tensorrt) that AST-walk an extracted tarball.
     if "source" not in doc:
-        return Landmarks(probe_landmarks=tuple(doc["probe_landmarks"]))
+        return Landmarks(
+            probe_landmarks=tuple(doc["probe_landmarks"]),
+            ast_targets=ast_targets,
+        )
 
     source = doc["source"]
     files = source["files"]
@@ -123,6 +149,7 @@ def load_landmarks(engine: str, version: str) -> Landmarks:
             (entry["class"], entry["method"]) for entry in doc["method_landmarks"]
         ),
         strenum_fields=tuple((entry["enum"], entry["field"]) for entry in doc["strenum_fields"]),
+        ast_targets=ast_targets,
         source_root=source_root,
         llm_args_rel=llm_args_rel,
         builder_rel=builder_rel,
@@ -132,3 +159,20 @@ def load_landmarks(engine: str, version: str) -> Landmarks:
 def _class_target(entry: dict[str, Any], files: dict[str, str]) -> tuple[str, Path]:
     """Map a class_targets entry ``{class, file}`` to ``(class_name, rel_path)``."""
     return entry["class"], Path(files[entry["file"]])
+
+
+def _ast_targets(entries: list[dict[str, Any]]) -> tuple[AstTarget, ...]:
+    """Map ``ast_targets`` entries to :class:`AstTarget` records.
+
+    Each entry is ``{module_attr, method, namespace, native_type}``; an absent
+    or empty list yields ``()`` (the probe-only / source-driven engines).
+    """
+    return tuple(
+        AstTarget(
+            module_attr=entry["module_attr"],
+            method=entry["method"],
+            namespace=entry["namespace"],
+            native_type=entry["native_type"],
+        )
+        for entry in entries
+    )

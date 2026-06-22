@@ -38,6 +38,8 @@ from scripts.engine_producers._base import (
     find_method,
     first_string_arg,
 )
+from scripts.engine_producers._current import current_version
+from scripts.engine_producers._landmarks import load_landmarks
 from scripts.engine_producers._section_classifier import (
     load_curated_sections,
     relabel_match_fields,
@@ -50,42 +52,18 @@ from scripts.engine_producers._section_classifier import (
 ENGINE = "vllm"
 LIBRARY = "vllm"
 
-NS_SAMPLING = "vllm.sampling"
-NS_GUIDED = "vllm.sampling.guided_decoding"
-NS_ENGINE = "vllm.engine"
+# Landmark DATA is externalised to engine_versions/vllm/v<safe>/landmarks.yaml
+# and loaded for the pinned library version (with <=target fallback, mirroring
+# the producer dispatcher). The walking algorithm below stays version-stable;
+# only these data bindings change across versions.
+_LANDMARKS = load_landmarks(ENGINE, current_version(ENGINE))
 
 
 # Drift-tool contract landmarks. Read by ``scripts._drift`` before the
-# miner runs; a missing landmark flips the probe verdict to ``fail``.
-LANDMARKS: tuple[str, ...] = (
-    "vllm.sampling_params.SamplingParams",
-    "vllm.sampling_params.SamplingParams._verify_args",
-    "vllm.sampling_params.SamplingParams.__post_init__",
-    "vllm.sampling_params.SamplingParams._verify_greedy_sampling",
-    "vllm.sampling_params.GuidedDecodingParams",
-    "vllm.sampling_params.GuidedDecodingParams.__post_init__",
-    "vllm.config.ParallelConfig",
-    "vllm.config.ParallelConfig._verify_args",
-    "vllm.config.ParallelConfig.__post_init__",
-    "vllm.config.LoRAConfig",
-    "vllm.config.LoRAConfig.__post_init__",
-    "vllm.config.CacheConfig",
-    "vllm.config.CacheConfig._verify_args",
-    "vllm.config.CacheConfig._verify_cache_dtype",
-    "vllm.config.CacheConfig._verify_prefix_caching",
-    "vllm.config.ModelConfig",
-    "vllm.config.ModelConfig._verify_quantization",
-    "vllm.config.ModelConfig._verify_tokenizer_mode",
-    "vllm.config.ModelConfig._verify_cuda_graph",
-    "vllm.config.ModelConfig._verify_bnb_config",
-    "vllm.config.SchedulerConfig",
-    "vllm.config.SchedulerConfig.__post_init__",
-    "vllm.config.SchedulerConfig._verify_args",
-    "vllm.config.DecodingConfig",
-    "vllm.config.DecodingConfig.__post_init__",
-    "vllm.config.SpeculativeConfig",
-    "vllm.config.SpeculativeConfig._verify_args",
-)
+# miner runs; a missing landmark flips the probe verdict to ``fail``. Kept
+# as a module attribute because scripts/_drift._read_landmarks reads
+# ``module.LANDMARKS``.
+LANDMARKS: tuple[str, ...] = _LANDMARKS.probe_landmarks
 
 
 # ---------------------------------------------------------------------------
@@ -111,120 +89,17 @@ class _ASTTarget:
         return f"vllm.{self.module_attr.rsplit('.', 1)[0]}"
 
 
-_CLASS_TARGETS: tuple[_ASTTarget, ...] = (
-    # SamplingParams family - sampling_params.py
+# Built from the externalised ast_targets. The walker iterates this tuple
+# exactly as before; reconstructing the per-version sibling's _ASTTarget shape
+# keeps the walk byte-identical.
+_CLASS_TARGETS: tuple[_ASTTarget, ...] = tuple(
     _ASTTarget(
-        module_attr="sampling_params.SamplingParams",
-        method="_verify_args",
-        namespace=NS_SAMPLING,
-        native_type="vllm.SamplingParams",
-    ),
-    _ASTTarget(
-        module_attr="sampling_params.SamplingParams",
-        method="__post_init__",
-        namespace=NS_SAMPLING,
-        native_type="vllm.SamplingParams",
-    ),
-    _ASTTarget(
-        module_attr="sampling_params.SamplingParams",
-        method="_verify_greedy_sampling",
-        namespace=NS_SAMPLING,
-        native_type="vllm.SamplingParams",
-    ),
-    # GuidedDecodingParams is the 0.7.3 predecessor of StructuredOutputsParams.
-    _ASTTarget(
-        module_attr="sampling_params.GuidedDecodingParams",
-        method="__post_init__",
-        namespace=NS_GUIDED,
-        native_type="vllm.sampling_params.GuidedDecodingParams",
-    ),
-    # vllm.config.* family - flat single-file layout in 0.7.3.
-    _ASTTarget(
-        module_attr="config.ParallelConfig",
-        method="_verify_args",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.ParallelConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.ParallelConfig",
-        method="__post_init__",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.ParallelConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.LoRAConfig",
-        method="__post_init__",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.LoRAConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.CacheConfig",
-        method="_verify_args",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.CacheConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.CacheConfig",
-        method="_verify_cache_dtype",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.CacheConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.CacheConfig",
-        method="_verify_prefix_caching",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.CacheConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.ModelConfig",
-        method="_verify_quantization",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.ModelConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.ModelConfig",
-        method="_verify_tokenizer_mode",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.ModelConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.ModelConfig",
-        method="_verify_cuda_graph",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.ModelConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.ModelConfig",
-        method="_verify_bnb_config",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.ModelConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.SchedulerConfig",
-        method="__post_init__",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.SchedulerConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.SchedulerConfig",
-        method="_verify_args",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.SchedulerConfig",
-    ),
-    _ASTTarget(
-        module_attr="config.DecodingConfig",
-        method="__post_init__",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.DecodingConfig",
-    ),
-    # SpeculativeConfig._verify_args is small in 0.7.3 (a handful of
-    # field-bound predicates rather than 0.16+'s 264-line wiring); walk it.
-    _ASTTarget(
-        module_attr="config.SpeculativeConfig",
-        method="_verify_args",
-        namespace=NS_ENGINE,
-        native_type="vllm.config.SpeculativeConfig",
-    ),
+        module_attr=t.module_attr,
+        method=t.method,
+        namespace=t.namespace,
+        native_type=t.native_type,
+    )
+    for t in _LANDMARKS.ast_targets
 )
 
 

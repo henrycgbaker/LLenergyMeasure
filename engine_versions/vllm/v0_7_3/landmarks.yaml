@@ -1,0 +1,77 @@
+# Per-version landmark data for the vllm static invariant miner (0.7.3).
+#
+# Externalised from the v0_7_3 producer's module-level tuples. The producer
+# loads this file via scripts/engine_producers/_landmarks.load_landmarks and
+# keeps its walking algorithm unchanged; only the data source moved here.
+#
+# vllm is import-driven, not source-driven: the miner imports the live package
+# and AST-walks the methods named in ast_targets. There is no source.root /
+# class_targets / method_landmarks / strenum_fields (all optional in the
+# Landmarks schema); only probe_landmarks + ast_targets are carried.
+#
+# probe_landmarks -> the dotted attribute paths scripts/_drift.py resolves
+#                    under the installed library (the runtime drift gate). Read
+#                    by the probe before the miner runs; a missing landmark
+#                    flips the probe verdict to fail.
+# ast_targets     -> the (module_attr, method, namespace, native_type) walk
+#                    targets the miner iterates. module_attr is the
+#                    `module.Class` attribute path under the `vllm` package;
+#                    namespace is the invariant namespace for match.fields.
+#                    vllm 0.7.3 ships a flat single-file `vllm.config` module
+#                    and `_verify_*` validator naming; the per-concern
+#                    subpackage refactor lands in 0.16.0.
+schema_version: 1
+engine: vllm
+library_version: "0.7.3"
+probe_landmarks:
+  - vllm.sampling_params.SamplingParams
+  - vllm.sampling_params.SamplingParams._verify_args
+  - vllm.sampling_params.SamplingParams.__post_init__
+  - vllm.sampling_params.SamplingParams._verify_greedy_sampling
+  - vllm.sampling_params.GuidedDecodingParams
+  - vllm.sampling_params.GuidedDecodingParams.__post_init__
+  - vllm.config.ParallelConfig
+  - vllm.config.ParallelConfig._verify_args
+  - vllm.config.ParallelConfig.__post_init__
+  - vllm.config.LoRAConfig
+  - vllm.config.LoRAConfig.__post_init__
+  - vllm.config.CacheConfig
+  - vllm.config.CacheConfig._verify_args
+  - vllm.config.CacheConfig._verify_cache_dtype
+  - vllm.config.CacheConfig._verify_prefix_caching
+  - vllm.config.ModelConfig
+  - vllm.config.ModelConfig._verify_quantization
+  - vllm.config.ModelConfig._verify_tokenizer_mode
+  - vllm.config.ModelConfig._verify_cuda_graph
+  - vllm.config.ModelConfig._verify_bnb_config
+  - vllm.config.SchedulerConfig
+  - vllm.config.SchedulerConfig.__post_init__
+  - vllm.config.SchedulerConfig._verify_args
+  - vllm.config.DecodingConfig
+  - vllm.config.DecodingConfig.__post_init__
+  - vllm.config.SpeculativeConfig
+  - vllm.config.SpeculativeConfig._verify_args
+ast_targets:
+  # SamplingParams family - sampling_params.py
+  - {module_attr: sampling_params.SamplingParams, method: _verify_args, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: __post_init__, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: _verify_greedy_sampling, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  # GuidedDecodingParams is the 0.7.3 predecessor of StructuredOutputsParams.
+  - {module_attr: sampling_params.GuidedDecodingParams, method: __post_init__, namespace: vllm.sampling.guided_decoding, native_type: vllm.sampling_params.GuidedDecodingParams}
+  # vllm.config.* family - flat single-file layout in 0.7.3.
+  - {module_attr: config.ParallelConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.ParallelConfig}
+  - {module_attr: config.ParallelConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.ParallelConfig}
+  - {module_attr: config.LoRAConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.LoRAConfig}
+  - {module_attr: config.CacheConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.CacheConfig}
+  - {module_attr: config.CacheConfig, method: _verify_cache_dtype, namespace: vllm.engine, native_type: vllm.config.CacheConfig}
+  - {module_attr: config.CacheConfig, method: _verify_prefix_caching, namespace: vllm.engine, native_type: vllm.config.CacheConfig}
+  - {module_attr: config.ModelConfig, method: _verify_quantization, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.ModelConfig, method: _verify_tokenizer_mode, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.ModelConfig, method: _verify_cuda_graph, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.ModelConfig, method: _verify_bnb_config, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.SchedulerConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.SchedulerConfig}
+  - {module_attr: config.SchedulerConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.SchedulerConfig}
+  - {module_attr: config.DecodingConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.DecodingConfig}
+  # SpeculativeConfig._verify_args is small in 0.7.3 (a handful of field-bound
+  # predicates rather than 0.16+'s 264-line wiring); walk it.
+  - {module_attr: config.SpeculativeConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}
