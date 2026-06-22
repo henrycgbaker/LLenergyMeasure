@@ -32,6 +32,7 @@ from scripts._rules_validation_common import (  # noqa: E402
     extract_error_details,
     extract_state,
     invariant_claimed_fields,
+    is_msgspec_type_error,
     is_type_check_invariant,
     is_type_coercion_artifact,
     locus_confirms_invariant,
@@ -831,6 +832,119 @@ class TestExtractErrorDetails:
 
     def test_plain_raise_no_backtick_yields_empty(self) -> None:
         assert extract_error_details(ValueError("something went wrong")) == ()
+
+    def test_msgspec_value_error_locus(self) -> None:
+        # A msgspec Meta/bound violation carries a `$.<field>` locus and no
+        # "got" clause -> classified as a genuine value rule, not a parse.
+        exc = ValueError("Expected `int` >= 1 - at `$.truncate_prompt_tokens`")
+        details = extract_error_details(exc)
+        assert details == (
+            ErrorDetail(loc=("truncate_prompt_tokens",), error_type="msgspec_value_error"),
+        )
+
+    def test_msgspec_type_error_locus(self) -> None:
+        # A wrong-type parse carries a "got `...`" clause -> a coercion artefact.
+        exc = ValueError("Expected `int | null`, got `array` - at `$.seed`")
+        details = extract_error_details(exc)
+        assert details == (ErrorDetail(loc=("seed",), error_type="msgspec_type_error"),)
+
+    def test_msgspec_nested_locus_keeps_segments(self) -> None:
+        exc = ValueError("Expected `str`, got `int` - at `$.guided_decoding.json`")
+        details = extract_error_details(exc)
+        assert details == (
+            ErrorDetail(loc=("guided_decoding", "json"), error_type="msgspec_type_error"),
+        )
+
+    def test_plain_verify_args_raise_not_misread_as_msgspec(self) -> None:
+        # vLLM's imperative _verify_args raises pass through msgspec.convert
+        # verbatim, with no `$.` locus - they must take the plain-backtick path,
+        # not the msgspec branch.
+        details = extract_error_details(ValueError("temperature must be non-negative, got -1.0."))
+        assert all(d.error_type != "msgspec_type_error" for d in details)
+
+
+# ---------------------------------------------------------------------------
+# msgspec construction dispatch + coercion guard (W1.1 - design 5.4)
+# ---------------------------------------------------------------------------
+
+
+class TestMsgspecConstructionDispatch:
+    """Guard: the gate must route msgspec Structs through ``msgspec.convert``.
+
+    A ``msgspec.Struct`` does NOT validate on direct ``Struct(**kwargs)``
+    construction - only on ``convert`` / ``decode``. If a future edit reverts
+    the gate's construction seam to a bare ``cls(**kwargs)`` for msgspec engines,
+    every msgspec-native rule would silently confirm as ``no_op`` and this test
+    fails - keeping the gate from regressing to pydantic-only (design 5.4).
+    """
+
+    def test_construct_probe_fires_msgspec_meta_validation(self) -> None:
+        msgspec = pytest.importorskip("msgspec")
+        from typing import Annotated
+
+        # Build the struct via defstruct so the Annotated[...] type is a real
+        # object at class-creation time; the module's ``from __future__ import
+        # annotations`` would otherwise defer a class-body annotation to a string
+        # that msgspec cannot resolve (Annotated is a function-local import).
+        bound_type = Annotated[int, msgspec.Meta(ge=1)]
+        _SP = msgspec.defstruct("_SP", [("bound", bound_type, 1)])
+
+        # Direct construction skips the Meta check (this is the gap).
+        assert _SP(bound=0).bound == 0
+        # The gate's construction seam must fire it.
+        with pytest.raises(msgspec.ValidationError):
+            validate_rules._construct_probe(_SP, {"bound": 0})
+
+    def test_construct_probe_runs_post_init_under_convert(self) -> None:
+        msgspec = pytest.importorskip("msgspec")
+
+        class _SP(msgspec.Struct):  # type: ignore[name-defined,misc]
+            n: int = 1
+
+            def __post_init__(self) -> None:
+                if self.n < 1:
+                    raise ValueError("`n` must be at least 1")
+
+        # convert still invokes __post_init__, so imperative _verify_args-style
+        # raises keep firing on the same probe path.
+        with pytest.raises(ValueError, match="at least 1"):
+            validate_rules._construct_probe(_SP, {"n": 0})
+
+    def test_construct_probe_leaves_pydantic_path_unchanged(self) -> None:
+        pydantic = pytest.importorskip("pydantic")
+
+        class _M(pydantic.BaseModel):
+            x: int = 0
+
+        # Pydantic validates on direct construction; the seam must NOT route it
+        # through msgspec.convert (which would fail to handle a BaseModel).
+        obj = validate_rules._construct_probe(_M, {"x": 5})
+        assert isinstance(obj, _M)
+        assert obj.x == 5
+
+    def test_is_msgspec_struct_only_true_for_structs(self) -> None:
+        msgspec = pytest.importorskip("msgspec")
+
+        class _S(msgspec.Struct):  # type: ignore[name-defined,misc]
+            a: int = 0
+
+        assert validate_rules._is_msgspec_struct(_S) is True
+        assert validate_rules._is_msgspec_struct(_DataclassConfig) is False
+        assert validate_rules._is_msgspec_struct(int) is False
+
+    def test_msgspec_type_error_rejected_as_coercion_artifact(self) -> None:
+        # A wrong-typed probe under convert raises a msgspec type error; for a
+        # value rule (not a type-check) the gate must reject it as a coercion
+        # artefact so it cannot false-confirm.
+        details = (ErrorDetail(loc=("logprobs",), error_type="msgspec_type_error"),)
+        assert is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
+        assert is_msgspec_type_error(details) is True
+
+    def test_msgspec_value_error_is_not_coercion_artifact(self) -> None:
+        # A genuine bound/enum rule firing under convert is a real confirm.
+        details = (ErrorDetail(loc=("truncate_prompt_tokens",), error_type="msgspec_value_error"),)
+        assert not is_type_coercion_artifact(details, is_type_check=False, numeric_predicate=False)
+        assert is_msgspec_type_error(details) is False
 
 
 # ---------------------------------------------------------------------------

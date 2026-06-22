@@ -62,6 +62,7 @@ from scripts._rules_validation_common import (  # noqa: E402  (late import after
     compare_expected_vs_observed,
     diff_input_vs_state,
     invariant_claimed_fields,
+    is_msgspec_type_error,
     is_type_check_invariant,
     is_type_coercion_artifact,
     locus_confirms_invariant,
@@ -183,7 +184,43 @@ def _construct_bitsandbytes_config(kwargs: dict[str, Any]) -> Any:
 
 def _construct_generic(engine: str, native_type: str, kwargs: dict[str, Any]) -> Any:
     cls = resolve_native_type(engine, native_type)
+    return _construct_probe(cls, kwargs)
+
+
+def _construct_probe(cls: Any, kwargs: dict[str, Any]) -> Any:
+    """Construct a probe instance of ``cls``, firing the engine's field validation.
+
+    Pydantic models and dataclasses validate on direct ``cls(**kwargs)``
+    construction, so that path is left unchanged. A ``msgspec.Struct`` does
+    NOT: it validates field types and ``Meta(ge=/le=/...)`` constraints only
+    on ``decode`` / ``convert``, never on direct construction. vLLM's
+    ``SamplingParams`` is a msgspec Struct, so a direct ``SamplingParams(**kwargs)``
+    probe would silently skip every msgspec-native rule and the gate would
+    confirm it as a ``no_op`` (design 5.4 msgspec coercion gap). Routing msgspec
+    Structs through :func:`msgspec.convert` fires that field-level validation
+    while still running ``__post_init__`` (so vLLM's imperative ``_verify_args``
+    rules keep firing on the same path). The dispatch is on the resolved class's
+    type system, so non-msgspec engines are untouched.
+    """
+    if _is_msgspec_struct(cls):
+        import msgspec  # type: ignore[import-not-found]
+
+        return msgspec.convert(kwargs, cls)
     return cls(**kwargs)
+
+
+def _is_msgspec_struct(cls: Any) -> bool:
+    """True iff ``cls`` is a ``msgspec.Struct`` subclass.
+
+    Guarded so the gate never imports msgspec for a non-msgspec engine
+    (transformers / tensorrt containers may not ship it): absence of msgspec
+    means no Struct can be present, so the direct-construction path is correct.
+    """
+    try:
+        import msgspec  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+    return isinstance(cls, type) and issubclass(cls, msgspec.Struct)
 
 
 # ---------------------------------------------------------------------------
@@ -537,8 +574,17 @@ def compute_gate_soundness_divergences(
 
     # 2. Message-template substring match (only when positive raised, since
     #    the message_template specifically describes the raised string).
+    #    A type-check invariant whose raise is a msgspec wrong-type parse is
+    #    exempt: msgspec.convert's field-type check pre-empts the engine's
+    #    imperative type-raise, so the corpus template (which describes that
+    #    superseded imperative message) no longer matches even though the SAME
+    #    type rule is firing. This mirrors the coercion-guard's type-check
+    #    exemption below.
     template = str(invariant.get("message_template") or "")
-    if pos.exception_type is not None and template:
+    template_exempt = is_type_check_invariant(invariant) and is_msgspec_type_error(
+        pos.error_details
+    )
+    if pos.exception_type is not None and template and not template_exempt:
         matched, fragment = message_matches_template(pos.exception_message or "", template)
         if not fragment:
             divergences.append(

@@ -15,15 +15,16 @@ differently from what the corpus claims, CI fails. See
 Type-coercion-artefact guard - error sources
 ---------------------------------------------
 :func:`is_type_coercion_artifact` reads the structured ``error_details``
-extracted by :func:`extract_error_details` from two sources: pydantic's
-structured ``.errors()`` list, and backtick-quoted field names in plain-raise
-messages. There is deliberately no msgspec branch: the gate constructs probes
-by *direct* ``Struct(**kwargs)`` construction, and a msgspec ``Struct`` does
-NOT validate types or constraints on direct construction (it validates only on
-``decode`` / ``convert``). vllm's ``SamplingParams`` is a msgspec Struct, but
-its value rules fire in ``__post_init__`` / ``_verify_args`` as plain
-``ValueError``s, not msgspec errors - so a msgspec parse artefact is not
-reachable on the live construction path.
+extracted by :func:`extract_error_details` from three sources: pydantic's
+structured ``.errors()`` list, msgspec's ``ValidationError`` message (the gate
+constructs msgspec ``Struct`` probes via ``msgspec.convert`` - see
+``scripts.validate_rules._construct_probe`` - so field-type and ``Meta(...)``
+constraints fire as ``msgspec.ValidationError``), and backtick-quoted field
+names in plain-raise messages. The msgspec branch distinguishes a wrong-type
+parse artefact (``Expected `int`, got `str``) from a genuine value-rule firing
+(``Expected `int` >= 1`` / ``Invalid enum value`` / an imperative
+``__post_init__`` raise), so a wrong-typed probe value cannot false-confirm a
+value rule.
 """
 
 from __future__ import annotations
@@ -415,25 +416,33 @@ _BACKTICK_FIELD_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
 def extract_error_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
     """Extract structured ``(loc, error_type)`` pairs from a raised exception.
 
-    Two sources, in priority order:
+    Three sources, in priority order:
 
     1. **pydantic ``ValidationError``** - the structured ``.errors()`` list is
        authoritative: each entry carries a ``loc`` tuple and a machine
        ``type`` (``int_parsing``, ``literal_error``, ``greater_than``, ...).
-    2. **plain exceptions** (``ValueError`` from ``__post_init__`` /
+    2. **msgspec ``ValidationError``** - the gate constructs msgspec ``Struct``
+       probes via ``msgspec.convert`` (``scripts.validate_rules._construct_probe``),
+       so field-type and ``Meta(...)`` constraints fire here. The message carries
+       an ``at `$.<field>``` locus; a ``got `...``` clause marks a wrong-type
+       parse artefact (``error_type`` :data:`_MSGSPEC_TYPE_ERROR`), distinguishing
+       it from a genuine bound/enum value rule (``error_type``
+       :data:`_MSGSPEC_VALUE_ERROR`).
+    3. **plain exceptions** (``ValueError`` from ``__post_init__`` /
        ``_verify_args`` / ``GenerationConfig.validate``) - backtick-quoted
        field names in the message are the locus; error_type is
-       ``plain`` (no machine code available).
-
-    msgspec parse errors are deliberately not handled: the gate constructs
-    Structs directly, which do not validate on construction (see module
-    docstring), so a msgspec parse artefact never reaches this function.
+       ``plain`` (no machine code available). vLLM's imperative ``_verify_args``
+       raises pass through here even under ``msgspec.convert`` because msgspec
+       re-raises ``__post_init__`` errors verbatim, without a ``$.`` locus.
 
     Returns ``()`` when no field locus can be recovered (the caller then falls
     back to permissive behaviour - it never *blocks* a confirm on absence of a
     locus, only refines attribution when one is present).
     """
     details = _extract_pydantic_details(exc)
+    if details:
+        return details
+    details = _extract_msgspec_details(exc)
     if details:
         return details
     return _extract_plain_details(exc)
@@ -459,6 +468,50 @@ def _extract_pydantic_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
         loc = tuple(str(part) for part in err["loc"])
         collected.append(ErrorDetail(loc=loc, error_type=str(err["type"])))
     return tuple(collected)
+
+
+# msgspec ValidationError messages carry a JSON-pointer-style locus, e.g.
+# "Expected `int` >= 1 - at `$.truncate_prompt_tokens`" or
+# "Expected `int | null`, got `array` - at `$.seed`". The field is the last
+# pointer segment after ``$.``; nested loci (``$.guided_decoding.json``) keep
+# every segment so attribution can intersect the claimed field.
+_MSGSPEC_LOCUS_RE = re.compile(r"at `\$((?:\.[A-Za-z_][A-Za-z0-9_]*)+)`")
+
+# Synthesised machine codes for the two msgspec error classes we distinguish.
+# A ``, got `<type>``` clause means msgspec coerced/parsed the value to the
+# wrong type before any value rule could apply (a coercion artefact); anything
+# else with a ``$.`` locus is a genuine value rule (bound, enum, or imperative
+# raise) firing under ``msgspec.convert``.
+_MSGSPEC_TYPE_ERROR = "msgspec_type_error"
+_MSGSPEC_VALUE_ERROR = "msgspec_value_error"
+_MSGSPEC_GOT_CLAUSE_RE = re.compile(r"got `[^`]+`")
+
+
+def _extract_msgspec_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
+    """Extract ``(loc, error_type)`` from a msgspec ``ValidationError`` message.
+
+    Duck-typed on the ``at `$.<field>``` locus marker rather than importing
+    msgspec (this module is engine-agnostic and msgspec is absent outside the
+    vLLM container). Returns ``()`` when the message has no msgspec locus - the
+    caller then falls back to the plain backtick-field extractor, which is the
+    right path for vLLM's imperative ``_verify_args`` raises (msgspec re-raises
+    ``__post_init__`` errors verbatim, so they carry no ``$.`` locus).
+    """
+    message = str(exc)
+    matches = _MSGSPEC_LOCUS_RE.findall(message)
+    if not matches:
+        return ()
+    error_type = (
+        _MSGSPEC_TYPE_ERROR if _MSGSPEC_GOT_CLAUSE_RE.search(message) else _MSGSPEC_VALUE_ERROR
+    )
+    seen: set[tuple[str, ...]] = set()
+    details: list[ErrorDetail] = []
+    for pointer in matches:
+        loc = tuple(seg for seg in pointer.split(".") if seg)
+        if loc and loc not in seen:
+            seen.add(loc)
+            details.append(ErrorDetail(loc=loc, error_type=error_type))
+    return tuple(details)
 
 
 def _extract_plain_details(exc: BaseException) -> tuple[ErrorDetail, ...]:
@@ -772,15 +825,19 @@ def message_matches_template(observed_message: str, template: str) -> tuple[bool
 # by :func:`run_case`, never against bare message substrings.
 
 
-# pydantic machine error codes for value-parsing/coercion (D2 pitfall 2). When
-# the positive probe raised one of these AND the invariant is not itself a
-# type-check, the "confirm" is a coercion artefact, not the claimed rule firing.
+# pydantic + msgspec machine error codes for value-parsing/coercion (D2 pitfall
+# 2). When the positive probe raised one of these AND the invariant is not
+# itself a type-check, the "confirm" is a coercion artefact, not the claimed
+# rule firing. ``_MSGSPEC_TYPE_ERROR`` is the msgspec analogue of pydantic's
+# ``*_parsing`` codes: it marks a wrong-type ``msgspec.convert`` parse
+# (``Expected `int`, got `str```) firing before any value rule applies.
 _PARSING_ERROR_TYPES: frozenset[str] = frozenset(
     {
         "int_parsing",
         "float_parsing",
         "bool_parsing",
         "decimal_parsing",
+        _MSGSPEC_TYPE_ERROR,
     }
 )
 
@@ -874,6 +931,20 @@ def locus_confirms_invariant(
         return True
     error_fields = {part for detail in details for part in detail.loc}
     return bool(error_fields & claimed)
+
+
+def is_msgspec_type_error(error_details: Iterable[ErrorDetail]) -> bool:
+    """True iff any captured locus is a msgspec wrong-type parse artefact.
+
+    The gate constructs msgspec ``Struct`` probes through ``msgspec.convert``,
+    whose field-type check fires (``Expected `int`, got `str``) BEFORE an
+    imperative ``__post_init__`` / ``_verify_args`` raise can reword it. For a
+    type-check invariant that IS the same rule confirming via msgspec's channel,
+    so the gate must not flag the (now-superseded) imperative message template as
+    a mismatch. Surfaced as a named predicate so the message-template check can
+    exempt exactly this case without re-parsing the message text.
+    """
+    return any(detail.error_type == _MSGSPEC_TYPE_ERROR for detail in error_details)
 
 
 def is_type_coercion_artifact(
