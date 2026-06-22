@@ -27,11 +27,14 @@ loud (no silent fallback to a hard-coded default).
 
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 
 import yaml
 from packaging.version import InvalidVersion, Version
+
+_ENGINE_VERSION_RE = re.compile(r"^(engine_version:[ \t]*).*$", re.MULTILINE)
 
 # Maintainer-owned input files (design section 4). curated.yaml is required:
 # it is the exposure allowlist every derivation needs. overlay.yaml is
@@ -159,6 +162,18 @@ def previous_pin_outputs_dir(engine: str) -> Path | None:
     return max(candidates, key=lambda item: item[0])[1]
 
 
+def _stamp_engine_version(path: Path, version: str) -> None:
+    """Rewrite a carried input file's ``engine_version`` field to ``version``.
+
+    Text-level replacement (not a YAML round-trip) so the file's comments and
+    formatting survive. No-op when the file carries no ``engine_version`` field.
+    """
+    text = path.read_text(encoding="utf-8")
+    new_text, count = _ENGINE_VERSION_RE.subn(rf"\g<1>{version}", text, count=1)
+    if count:
+        path.write_text(new_text, encoding="utf-8")
+
+
 def carry_forward_inputs(engine: str) -> list[str]:
     """Seed the current pin's outputs/ with the maintainer-owned input files.
 
@@ -182,6 +197,12 @@ def carry_forward_inputs(engine: str) -> list[str]:
     - ``overlay.yaml`` is OPTIONAL. Carried only when the current pin lacks one
       and the prior pin has one; its absence everywhere is fine, not an error.
 
+    The curation CONTENT carries forward unchanged (the maintainer reviews and
+    re-curates it for the new pin), but the ``engine_version`` metadata field is
+    stamped to the current pin so it identifies the pin the file now lives under
+    rather than lagging at the prior pin's version. Files with no
+    ``engine_version`` field are copied verbatim.
+
     Returns the list of file names (e.g. ``["curated.yaml"]``) actually copied,
     for the caller to log. Idempotent: a second call is a no-op (returns
     ``[]``) because the files now exist on the current pin.
@@ -189,6 +210,7 @@ def carry_forward_inputs(engine: str) -> list[str]:
     current = current_outputs_dir(engine)
     current.mkdir(parents=True, exist_ok=True)
     prior = previous_pin_outputs_dir(engine)
+    pin = current_version(engine)
     copied: list[str] = []
 
     for name in REQUIRED_INPUT_FILES:
@@ -203,6 +225,7 @@ def carry_forward_inputs(engine: str) -> list[str]:
                 f"engine needs a bootstrap {name} (out of scope for the per-bump loop)."
             )
         shutil.copy2(src, dst)
+        _stamp_engine_version(dst, pin)
         copied.append(name)
 
     for name in OPTIONAL_INPUT_FILES:
@@ -213,6 +236,7 @@ def carry_forward_inputs(engine: str) -> list[str]:
         if not src.exists():
             continue
         shutil.copy2(src, dst)
+        _stamp_engine_version(dst, pin)
         copied.append(name)
 
     return copied

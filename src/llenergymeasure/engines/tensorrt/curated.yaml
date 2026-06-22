@@ -16,7 +16,7 @@
 # no discovery debt.
 schema_version: 1.0.0
 engine: tensorrt
-engine_version: 0.21.0
+engine_version: 1.0.0
 exposed_fields:
   engine_params:
     - max_batch_size

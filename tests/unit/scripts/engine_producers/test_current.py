@@ -190,6 +190,34 @@ def test_carry_forward_seeds_curated_and_overlay(
     assert "temperature" in (current_out / "overlay.yaml").read_text()
 
 
+def test_carry_forward_stamps_engine_version_to_current_pin(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Curation CONTENT carries forward verbatim, but the engine_version metadata
+    # is stamped to the NEW pin (it identifies the pin the file now lives under,
+    # not the version it was authored against).
+    current_out = _carry_tree(
+        monkeypatch,
+        tmp_path,
+        engine="transformers",
+        current="5.8.1",
+        prior="5.7.0",
+        prior_files={
+            "curated.yaml": "engine: transformers\nengine_version: 5.7.0\nexposed_fields: {}\n",
+            "overlay.yaml": "engine_version: 5.7.0\nnarrowings: {temperature: {le: 2.0}}\n",
+        },
+    )
+    _current.carry_forward_inputs("transformers")
+    curated = (current_out / "curated.yaml").read_text()
+    overlay = (current_out / "overlay.yaml").read_text()
+    assert "engine_version: 5.8.1" in curated
+    assert "engine_version: 5.7.0" not in curated
+    assert "engine_version: 5.8.1" in overlay
+    # Content other than the version metadata is untouched.
+    assert "exposed_fields: {}" in curated
+    assert "temperature" in overlay
+
+
 def test_carry_forward_curated_only_when_prior_has_no_overlay(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

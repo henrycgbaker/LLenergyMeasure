@@ -20,7 +20,7 @@
 # "fields present in the discovered schema or curated surface" rule.
 schema_version: 1.0.0
 engine: tensorrt
-engine_version: 0.21.0
+engine_version: 1.0.0
 
 _narrowing_reason: &reason "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
 

@@ -18,7 +18,7 @@
 # they remain exposed and are tracked for miner deepening.
 schema_version: 1.0.0
 engine: vllm
-engine_version: 0.7.3
+engine_version: 0.19.1
 exposed_fields:
   engine_params:
     - dtype
