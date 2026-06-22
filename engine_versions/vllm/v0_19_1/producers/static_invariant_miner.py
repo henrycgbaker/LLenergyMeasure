@@ -1,20 +1,25 @@
-"""AST static miner for vLLM 0.7.3.
+"""AST static miner for vLLM 0.19.1.
 
 Vendored machinery: full miner body lives here, version-pinned. The
 global ``scripts/engine_producers/vllm_static_miner.py`` is a thin
 dispatcher that resolves ``library.current_version`` from the SSOT and
 delegates to this module.
 
-vLLM 0.7.3 ships a flat single-file ``vllm.config`` module (the per-
-concern subpackage refactor lands in 0.16.0) and uses ``_verify_*``
-validator naming throughout. ``EPLBConfig``,
-``StructuredOutputsConfig``, ``MultiModalConfig``, and
-``StructuredOutputsParams`` do not exist at this version; their
-equivalents are absent or live under ``DecodingConfig`` /
-``GuidedDecodingParams``. The :data:`_CLASS_TARGETS` registry below
-reflects the 0.7.3 surface; the walker / detector / kwargs-synth
-machinery is engine-version-agnostic and matches the per-version sibling
-modules at 0.16.0+.
+vLLM 0.19.1 split the flat 0.7.3 ``vllm/config.py`` into the
+``vllm/config/*.py`` per-concern subpackage, so the imperative landmarks
+move from ``vllm.config.<Class>`` to ``vllm.config.<module>.<Class>``
+(ParallelConfig -> ``config.parallel``, ModelConfig -> ``config.model``,
+SchedulerConfig -> ``config.scheduler``, SpeculativeConfig ->
+``config.speculative``); ``GuidedDecodingParams`` renamed to
+``StructuredOutputsParams`` and ``DecodingConfig`` was removed. Most
+per-field constraints migrated from imperative ``_verify_*`` /
+``__post_init__`` bodies to declarative pydantic-dataclass ``Field(...)``
+bounds, ``Literal[...]`` membership, and validator hooks; CacheConfig and
+LoRAConfig no longer carry walkable imperative field-predicates at all
+(recovered by the declarative walker in the schema introspector). The
+ast_targets registry in ``landmarks.yaml`` reflects the imperative residue
+that survives at 0.19.1; the walker / detector / kwargs-synth machinery
+below is engine-version-agnostic and byte-identical to the 0.7.3 cut.
 """
 
 from __future__ import annotations

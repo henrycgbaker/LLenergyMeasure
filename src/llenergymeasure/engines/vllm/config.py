@@ -1,4 +1,4 @@
-# DO NOT EDIT - regenerated from engine_versions/vllm/v0_7_3/outputs/{curated.yaml,schema.discovered.json}
+# DO NOT EDIT - regenerated from engine_versions/vllm/v0_19_1/outputs/{curated.yaml,schema.discovered.json}
 # Edit those upstream and run `uv run python scripts/engine_producers/regen_engine_configs.py --write`.
 
 from __future__ import annotations
@@ -13,26 +13,28 @@ class EngineParams(BaseModel):
         extra="allow",
         use_attribute_docstrings=True,
     )
-    dtype: str | None = "auto"
+    dtype: Any | None = "auto"
     gpu_memory_utilization: Annotated[
         float | None,
         Field(
             ge=0.0,
+            gt=0.0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
+            le=1.0,
             lt=1.0,
         ),
     ] = 0.9
     swap_space: Annotated[
-        float | None,
+        Any | None,
         Field(
-            ge=0.0,
+            ge=0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
         ),
-    ] = 4
+    ] = None
     cpu_offload_gb: Annotated[
         float | None,
         Field(
@@ -58,7 +60,7 @@ class EngineParams(BaseModel):
             }
         ),
     ] = "auto"
-    enforce_eager: bool | None = None
+    enforce_eager: bool | None = False
     enable_chunked_prefill: bool | None = None
     max_num_seqs: Annotated[
         int | None,
@@ -88,14 +90,14 @@ class EngineParams(BaseModel):
         ),
     ] = None
     num_scheduler_steps: Annotated[
-        int | None,
+        Any | None,
         Field(
             ge=1,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
         ),
-    ] = 1
+    ] = None
     tensor_parallel_size: Annotated[
         int | None,
         Field(
@@ -132,14 +134,14 @@ class EngineParams(BaseModel):
         ),
     ] = None
     max_seq_len_to_capture: Annotated[
-        int | None,
+        Any | None,
         Field(
             ge=1,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
         ),
-    ] = 8192
+    ] = None
     speculative_config: Any | None = None
     offload_group_size: Annotated[
         int | None,
@@ -149,7 +151,7 @@ class EngineParams(BaseModel):
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
         ),
-    ] = None
+    ] = 0
     offload_num_in_group: Annotated[
         int | None,
         Field(
@@ -158,7 +160,7 @@ class EngineParams(BaseModel):
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
         ),
-    ] = None
+    ] = 1
     offload_prefetch_step: Annotated[
         int | None,
         Field(
@@ -167,8 +169,8 @@ class EngineParams(BaseModel):
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
         ),
-    ] = None
-    offload_params: Any | None = None
+    ] = 1
+    offload_params: Any | None = []
     disable_custom_all_reduce: bool | None = False
     kv_cache_memory_bytes: Annotated[
         int | None,
@@ -179,7 +181,9 @@ class EngineParams(BaseModel):
             },
         ),
     ] = None
-    compilation_config: Any | None = None
+    compilation_config: Any | None = (
+        "{'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': [], 'splitting_ops': None, 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_images_per_batch': 0, 'compile_sizes': None, 'compile_ranges_endpoints': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': None, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}"
+    )
     attention: Any | None = None
     beam_search: Any | None = None
 
@@ -199,7 +203,7 @@ class SamplingParams(BaseModel):
             le=2,
         ),
     ] = 1.0
-    top_k: Any | None = -1
+    top_k: Any | None = 0
     top_p: Annotated[
         Any | None,
         Field(

@@ -1,0 +1,67 @@
+# Per-version landmark data for the vllm static invariant miner (0.19.1).
+#
+# Externalised from the recovered v0_19_1 producer's module-level tuples. The
+# producer loads this file via scripts/engine_producers/_landmarks.load_landmarks
+# and keeps its walking algorithm unchanged; only the data source moved here.
+#
+# vllm is import-driven, not source-driven: the miner imports the live package
+# and AST-walks the methods named in ast_targets. There is no source.root /
+# class_targets / method_landmarks / strenum_fields (all optional in the
+# Landmarks schema); only probe_landmarks + ast_targets are carried.
+#
+# probe_landmarks -> the dotted attribute paths scripts/_drift.py resolves
+#                    under the installed library (the runtime drift gate). Read
+#                    by the probe before the miner runs; a missing landmark
+#                    flips the probe verdict to fail.
+# ast_targets     -> the (module_attr, method, namespace, native_type) walk
+#                    targets the miner iterates. module_attr is the
+#                    `module.Class` attribute path under the `vllm` package;
+#                    namespace is the invariant namespace for match.fields.
+#                    vllm 0.19.1 split the flat 0.7.3 `vllm/config.py` into the
+#                    `vllm/config/*.py` per-concern subpackage, so config landmarks
+#                    move to `config.<module>.<Class>`; GuidedDecodingParams renamed
+#                    to StructuredOutputsParams and DecodingConfig was removed. The
+#                    imperative `_verify_*` surface SHRANK across the bump (the
+#                    recall cliff this leg measures); CacheConfig / LoRAConfig /
+#                    DecodingConfig validators are gone (now Field()/Literal[],
+#                    recovered by the declarative walker in the introspector).
+schema_version: 1
+engine: vllm
+library_version: "0.19.1"
+probe_landmarks:
+  - vllm.sampling_params.SamplingParams
+  - vllm.sampling_params.SamplingParams._verify_args
+  - vllm.sampling_params.SamplingParams.__post_init__
+  - vllm.sampling_params.SamplingParams._verify_greedy_sampling
+  - vllm.sampling_params.StructuredOutputsParams
+  - vllm.sampling_params.StructuredOutputsParams.__post_init__
+  - vllm.config.parallel.ParallelConfig
+  - vllm.config.parallel.ParallelConfig._verify_args
+  - vllm.config.parallel.ParallelConfig.__post_init__
+  - vllm.config.model.ModelConfig
+  - vllm.config.model.ModelConfig._verify_quantization
+  - vllm.config.model.ModelConfig._verify_cuda_graph
+  - vllm.config.model.ModelConfig._verify_bnb_config
+  - vllm.config.scheduler.SchedulerConfig
+  - vllm.config.scheduler.SchedulerConfig.__post_init__
+  - vllm.config.speculative.SpeculativeConfig
+  - vllm.config.speculative.SpeculativeConfig._verify_args
+  - vllm.config.speculative.SpeculativeConfig.__post_init__
+ast_targets:
+  # SamplingParams family - sampling_params.py
+  - {module_attr: sampling_params.SamplingParams, method: _verify_args, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: __post_init__, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: _verify_greedy_sampling, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  # config/*.py subpackage family (0.7.3's flat config.py split per concern).
+  # CacheConfig / LoRAConfig / DecodingConfig dropped: their imperative
+  # validators are gone at 0.19.1 (constraints are now Field()/Literal[],
+  # recovered by the declarative walker). ModelConfig._verify_tokenizer_mode
+  # and SchedulerConfig._verify_args likewise no longer exist.
+  - {module_attr: config.parallel.ParallelConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.ParallelConfig}
+  - {module_attr: config.parallel.ParallelConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.ParallelConfig}
+  - {module_attr: config.model.ModelConfig, method: _verify_quantization, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.model.ModelConfig, method: _verify_cuda_graph, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.model.ModelConfig, method: _verify_bnb_config, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.scheduler.SchedulerConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.SchedulerConfig}
+  - {module_attr: config.speculative.SpeculativeConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}
+  - {module_attr: config.speculative.SpeculativeConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}

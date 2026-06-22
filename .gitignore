@@ -55,8 +55,10 @@ scripts/_poc_*.yaml
 scripts/probe_*_results.json
 
 # Rule-extractor staging outputs (regenerated each run; consumed by the
-# corpus merger - never hand-edited, never committed).
-configs/engine_invariants/_staging/
+# corpus merger - never hand-edited, never committed). The .gitkeep marks the
+# per-engine staging dir; the mine byproducts inside it are never tracked.
+src/llenergymeasure/engines/*/_staging/*
+!src/llenergymeasure/engines/*/_staging/.gitkeep
 
 # Probe primitive cache (rewritten on every probe run; tracks the
 # previous-run fingerprint per (engine, producer) for drift detection).
