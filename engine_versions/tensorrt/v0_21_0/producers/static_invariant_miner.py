@@ -54,6 +54,8 @@ from scripts.engine_producers._base import (
     find_method,
     first_string_arg,
 )
+from scripts.engine_producers._current import current_version
+from scripts.engine_producers._landmarks import load_landmarks
 from scripts.engine_producers._section_classifier import (
     load_curated_sections,
     relabel_match_fields,
@@ -68,73 +70,36 @@ ENGINE = "tensorrt"
 LIBRARY = "tensorrt_llm"
 NAMESPACE = "tensorrt"
 
+# Landmark DATA is externalised to engine_versions/tensorrt/v<safe>/landmarks.yaml
+# and loaded for the pinned library version (with <=target fallback, mirroring
+# the producer dispatcher). The walking algorithm below stays version-stable;
+# only these data bindings change across versions.
+_LANDMARKS = load_landmarks(ENGINE, current_version(ENGINE))
+
 # Default source root. Overridable via ``--source-root`` for tests / CI.
-_DEFAULT_SOURCE_ROOT = Path("/tmp/trt-llm-0.21.0/tensorrt_llm")
+_DEFAULT_SOURCE_ROOT = _LANDMARKS.source_root
 
 # Files we AST-walk.
-LLM_ARGS_REL = Path("llmapi/llm_args.py")
-BUILDER_REL = Path("builder.py")
+LLM_ARGS_REL = _LANDMARKS.llm_args_rel
+BUILDER_REL = _LANDMARKS.builder_rel
 
 # Probe LANDMARKS: dotted attribute paths the probe resolves under
-# ``import tensorrt_llm``. Mirrors the validator surface this miner
-# expects to find when the installed library is 0.21.0.
-LANDMARKS: tuple[str, ...] = (
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_dtype",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_model",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_model_format_misc",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.set_runtime_knobs_from_build_config",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_build_config_with_runtime_params",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_build_config_remaining",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_speculative_config",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_lora_config_consistency",
-    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
-    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs.validate_enable_build_cache",
-    "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig",
-    "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig.validate_positive_values",
-    "tensorrt_llm.llmapi.llm_args.CalibConfig",
-    "tensorrt_llm.llmapi.llm_args.BatchingType",
-    "tensorrt_llm.llmapi.llm_args.CapacitySchedulerPolicy",
-    "tensorrt_llm.llmapi.llm_args.ContextChunkingPolicy",
-    "tensorrt_llm.builder.Builder",
-    "tensorrt_llm.builder.Builder.build_engine",
-)
+# ``import tensorrt_llm``. Mirrors the validator surface this miner expects to
+# find when the installed library matches the pin. Kept as a module attribute
+# because scripts/_drift._read_landmarks reads ``module.LANDMARKS``.
+LANDMARKS: tuple[str, ...] = _LANDMARKS.probe_landmarks
 
-# Class-level AST targets the miner expects to find inside 0.21.0 source.
+# Class-level AST targets the miner expects to find inside source.
 # Each entry is ``(class_name, file_relative_path)``.
-_CLASS_TARGETS: tuple[tuple[str, Path], ...] = (
-    ("BaseLlmArgs", LLM_ARGS_REL),
-    ("TrtLlmArgs", LLM_ARGS_REL),
-    ("LookaheadDecodingConfig", LLM_ARGS_REL),
-    ("CalibConfig", LLM_ARGS_REL),
-    ("BatchingType", LLM_ARGS_REL),
-    ("CapacitySchedulerPolicy", LLM_ARGS_REL),
-    ("ContextChunkingPolicy", LLM_ARGS_REL),
-)
+_CLASS_TARGETS: tuple[tuple[str, Path], ...] = _LANDMARKS.class_targets
 
-# Method-level landmarks: ``(class_name, method_name)``. The full set the
-# adversarial-reviewed design expects to be present in 0.21.0 source. These
-# are the methods whose bodies are walked for invariant extraction.
-_METHOD_LANDMARKS: tuple[tuple[str, str], ...] = (
-    ("BaseLlmArgs", "validate_dtype"),
-    ("BaseLlmArgs", "validate_model"),
-    ("BaseLlmArgs", "validate_model_format_misc"),
-    ("BaseLlmArgs", "set_runtime_knobs_from_build_config"),
-    ("BaseLlmArgs", "validate_build_config_with_runtime_params"),
-    ("BaseLlmArgs", "validate_build_config_remaining"),
-    ("BaseLlmArgs", "validate_speculative_config"),
-    ("BaseLlmArgs", "validate_lora_config_consistency"),
-    ("TrtLlmArgs", "validate_enable_build_cache"),
-    ("LookaheadDecodingConfig", "validate_positive_values"),
-)
+# Method-level landmarks: ``(class_name, method_name)``. The methods whose
+# bodies are walked for invariant extraction.
+_METHOD_LANDMARKS: tuple[tuple[str, str], ...] = _LANDMARKS.method_landmarks
 
 # StrEnum classes whose members are the allowlist for a particular
 # TrtLlmArgs field. Mapping is ``(enum class name, top-level field name)``.
-_STRENUM_FIELDS: tuple[tuple[str, str], ...] = (
-    ("BatchingType", "batching_type"),
-    ("CapacitySchedulerPolicy", "capacity_scheduler_policy"),
-    ("ContextChunkingPolicy", "context_chunking_policy"),
-)
+_STRENUM_FIELDS: tuple[tuple[str, str], ...] = _LANDMARKS.strenum_fields
 
 # Pydantic classes whose ``Literal[...]``-typed fields are lifted as
 # allowlist invariants via class-body AST.

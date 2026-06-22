@@ -1,9 +1,8 @@
 # Per-version landmark data for the tensorrt static invariant miner (0.21.0).
 #
-# Externalised from the v0_21_0 producer's module-level tuples. This file is
-# the reference side of the producer-dedup gate: the rewired v1_0_0 producer
-# loads it when the pin resolves to 0.21.0 and is expected to reproduce the
-# v0_21_0 reference producer's output.
+# Externalised from the v0_21_0 producer's module-level tuples. The producer
+# loads this file via scripts/engine_producers/_landmarks.load_landmarks and
+# keeps its walking algorithm unchanged; only the data source moved here.
 #
 # probe_landmarks  -> the dotted attribute paths scripts/_drift.py resolves
 #                     under the installed library (the runtime drift gate).
