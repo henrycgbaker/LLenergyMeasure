@@ -36,13 +36,16 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_producers import transformers_dynamic_invariant_miner as intro  # noqa: E402
+from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
 # Every test in this module needs transformers importable - the miner
 # observes the real library. Skip the whole module if it's not installed.
 pytest.importorskip("transformers")
 
 
-_CORPUS_PATH = _PROJECT_ROOT / "configs" / "engine_rules" / "transformers.proposed.yaml"
+# Resolve the committed corpus from the per-pin SSOT (the old flat
+# configs/engine_rules/ location was removed in the SSOT layout migration).
+_CORPUS_PATH = current_outputs_dir("transformers") / "rules.proposed.yaml"
 
 
 @pytest.fixture(scope="module")

@@ -199,12 +199,16 @@ class TestStaticMinerLandmarks:
         assert method is not None, f"AST target method {target.class_name}.{target.method} missing"
 
     def test_landmark_missing_raises_loud(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Removing a checked landmark method on its class makes ``_check_landmarks`` raise."""
-        from vllm import SamplingParams
+        """Removing any checked landmark method makes ``_check_landmarks`` raise.
 
-        # Hide a method the miner expects (a current _CLASS_TARGETS landmark) for
-        # the duration of this test.
-        monkeypatch.delattr(SamplingParams, "_verify_args")
+        The landmark to hide is derived from the producer's own ``_CLASS_TARGETS``
+        so the test follows the pinned version's landmark set with no hardcoded
+        method name - it stays correct across version bumps.
+        """
+        target = _CLASS_TARGETS[0]
+        module = __import__(target.module_path, fromlist=[target.class_name])
+        cls = getattr(module, target.class_name)
+        monkeypatch.delattr(cls, target.method)
         with pytest.raises(MinerLandmarkMissingError):
             _check_landmarks()
 

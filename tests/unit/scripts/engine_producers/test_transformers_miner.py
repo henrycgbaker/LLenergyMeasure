@@ -207,7 +207,7 @@ def test_walk_deterministic_with_frozen_timestamp(
 ) -> None:
     pytest.importorskip("transformers")
     frozen = "2026-04-23T00:00:00Z"
-    monkeypatch.setenv("LLENERGY_WALKER_FROZEN_AT", frozen)
+    monkeypatch.setenv(tf_walker.FROZEN_AT_ENV, frozen)
     c1, e1 = tf_walker.walk()
     c2, e2 = tf_walker.walk()
     # Envelope agrees AND carries the frozen value.

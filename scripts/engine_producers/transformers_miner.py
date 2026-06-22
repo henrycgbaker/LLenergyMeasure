@@ -271,6 +271,11 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
     }
 
 
+# Env var that pins the envelope ``mined_at`` for byte-stable reproducibility
+# (CI sets it; tests reference this constant rather than the literal string).
+FROZEN_AT_ENV = "LLENERGY_MINER_FROZEN_AT"
+
+
 def walk() -> tuple[list[InvariantCandidate], dict[str, Any]]:
     """Return ``(candidates, envelope_metadata)`` - full corpus for this engine.
 
@@ -312,7 +317,7 @@ def walk() -> tuple[list[InvariantCandidate], dict[str, Any]]:
         )
 
     # Allow tests / reproducibility checks to pin the timestamp.
-    frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
+    frozen = os.environ.get(FROZEN_AT_ENV)
     mined_at = (
         frozen
         if frozen
