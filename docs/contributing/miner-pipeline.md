@@ -31,7 +31,8 @@ src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
 └── _failed_validation_{engine}.yaml          Quarantined rules
 
 scripts/engine_producers/
-├── _base.py                          Shared AST primitives, detectors, filters
+├── _base.py                          Shared AST leaf primitives (no detector framework - each engine defines its own)
+├── _landmarks.py                     load_landmarks() - per-version landmark-data loader (reads v<safe>/landmarks.yaml)
 ├── _current.py                       load_current() / safe_version() - SSOT loader + identifier-safe version mangler
 ├── _pydantic_lift.py                 Lift module for Pydantic models
 ├── _msgspec_lift.py                  Lift module for msgspec.Struct
@@ -44,7 +45,8 @@ scripts/engine_producers/
 └── validate_rules.py            Replays each rule against the live library
 
 engine_versions/{engine}/current.yaml          SSOT for library version (Renovate-writable input only)
-engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer modules
+engine_versions/{engine}/v<safe>/landmarks.yaml  Per-version landmark DATA (probe + optional source/ast/class targets)
+engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer modules (walking algorithm)
 ├── static_invariant_miner.py
 ├── dynamic_invariant_miner.py        (when applicable)
 └── schema_introspector.py
@@ -72,17 +74,20 @@ they are non-empty.
 The dispatcher's stderr log (visible in the probe step output) names
 which `v<safe>/producers/` archive it used. Two resolution routes:
 
-1. **Patch LANDMARKS in the fallback producer.** When the symbols still
-   resolve under both library versions, edit the LANDMARKS tuple (and
-   any related `_CLASS_TARGETS` / `_ASTTarget` definitions) in the
-   fallback producer to follow the upstream rename. One set of code
-   covers both versions.
+1. **Patch the landmark data.** When the symbols still resolve under
+   both library versions (only a rename or path shift), edit the
+   `landmarks.yaml` for the resolved version - the `probe_landmarks`
+   tuple plus any `class_targets` / `ast_targets` / `source` entries -
+   to follow the upstream rename. The walking algorithm is unchanged, so
+   one set of producer code covers both versions; add a new
+   `v<safe(N)>/landmarks.yaml` only if the data must differ from the
+   fallback version's.
 2. **Vendor a fresh `vN/producers/` directory.** When the library API
-   has genuinely diverged, create a new
-   `engine_versions/{engine}/v<safe(N)>/producers/` directory by
-   copying the fallback dir and patching against the new API. The
-   dispatcher's exact-match path then selects the new directory at the
-   bumped version.
+   has genuinely diverged so the *walk shape* changed, create a new
+   `engine_versions/{engine}/v<safe(N)>/producers/` directory (with its
+   own `landmarks.yaml`) by copying the fallback dir and patching against
+   the new API. The dispatcher's exact-match path then selects the new
+   directory at the bumped version.
 
 Per-producer granularity matters: `vllm/invariants` might still resolve
 under the bumped library while `vllm/schemas` does not, or vice versa.
@@ -94,12 +99,12 @@ under the bumped library while `vllm/schemas` does not, or vice versa.
 | Symptom | Files to inspect first |
 |---|---|
 | Miner produces no rules for a new engine | `engine_versions/{engine}/v<safe>/producers/{static,dynamic}_invariant_miner.py` (does the file exist? imports succeed?); the dispatcher (`engine_versions/_dispatcher.py`) error message names the path to create when no exact-match archive AND no fallback is present at or below the SSOT-pinned version |
-| `MinerLandmarkMissingError` raised at import time | `engine_versions/{engine}/v<safe>/producers/*.py LANDMARKS` tuple (which dotted path is missing in the live library? `scripts/_drift.py --engine {engine} --producer invariants` will surface it) |
+| `MinerLandmarkMissingError` raised at import time | `engine_versions/{engine}/v<safe>/landmarks.yaml` `probe_landmarks` (which dotted path is missing in the live library? `scripts/_drift.py --engine {engine} --producer invariants` will surface it; the producer re-exposes this list as `module.LANDMARKS`) |
 | Validation gate fails on a previously-passing rule | `src/llenergymeasure/engines/{engine}/rules.proposed.yaml` (locate the rule by id) and `_staging/_failed_validation_{engine}.yaml` (which check failed: `positive_raises`, `message_template_match`, or `negative_does_not_raise`) |
 | Rule duplication or merge surprises | `scripts/engine_producers/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
-| Static miner missed a predicate | `scripts/engine_producers/_base.py` (shared detectors) and `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` (per-version surface) |
-| Dynamic miner inferred wrong template | `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` (predicate-inference logic); the seven templates live in the per-version module or `_base.py` depending on engine |
-| Drift between dispatcher LANDMARKS and live library | `scripts/_drift.py --engine {engine} --producer {invariants,schemas}` reports `landmarks_missing` (declared landmarks that don't resolve under the live library). Maintainer flow: patch LANDMARKS in the per-version producer module |
+| Static miner missed a predicate | `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` (the per-engine `_detect_*` functions and walk surface); `scripts/engine_producers/_base.py` for the shared AST leaf primitives the detectors compose |
+| Dynamic miner inferred wrong template | `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` (predicate-inference logic; the seven templates live in the per-version module) |
+| Drift between declared landmarks and live library | `scripts/_drift.py --engine {engine} --producer {invariants,schemas}` reports `landmarks_missing` (declared landmarks that don't resolve under the live library). Maintainer flow: patch `probe_landmarks` (and any `class_targets` / `ast_targets`) in the per-version `landmarks.yaml` |
 
 The error classes (`MinerError`, `MinerLandmarkMissingError`) live in
 `scripts/engine_producers/_base.py` and are intentionally fail-loud: a

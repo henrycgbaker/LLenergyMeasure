@@ -10,7 +10,7 @@ This document is the practitioner's guide to adding invariant miner support for 
 
 1. Read [miner-pipeline.md](/contributing/miner-pipeline) to understand the static miner / dynamic miner / lift module split.
 2. Read the [corpus format reference](/reference/invariants-corpus-format) to understand what rules look like.
-3. Review `engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py` and `engine_versions/transformers/v4_57_3/producers/dynamic_invariant_miner.py` as the gold standard. The comments in those files contain important design decisions. The `scripts/engine_producers/transformers_*_invariant_miner.py` modules are thin dispatcher shims that delegate to the per-version vendored producers.
+3. Review `engine_versions/transformers/v5_7_0/producers/static_invariant_miner.py` and `engine_versions/transformers/v5_7_0/producers/dynamic_invariant_miner.py` as the gold standard. The comments in those files contain important design decisions. The `scripts/engine_producers/transformers_*_invariant_miner.py` modules are thin dispatcher shims that delegate to the per-version vendored producers.
 
 ---
 
@@ -30,51 +30,129 @@ Before writing any code, answer these questions:
 
 ---
 
-## The vendoring model
+## The new-engine contract
 
-Each producer (static invariant miner, dynamic invariant miner, schema introspector) lives at two levels:
+Adding an engine means producing seven things. Items 3-6 are the
+mining code; items 1-2 decide its shape; item 7 wires it into dispatch.
+The remaining steps of this guide expand each in order.
 
-- **Per-version vendored module** at `engine_versions/<engine>/v<safe>/producers/{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. This is the real implementation. It pins its `LANDMARKS` tuple (the live class / method paths it expects) to the library version named in `engine_versions/<engine>/current.yaml:library.current_version`.
-
-- **Dispatcher shim** at `scripts/engine_producers/<engine>_{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. ~14 lines via `scripts/engine_producers/_stub_factory.py`. Module-level `__getattr__` (PEP 562) resolves to `engine_versions.<engine>.<safe_version>.producers.<producer>` at attribute-access time. The orchestrator (`build_corpus.py`) imports the shim; the shim defers to the dispatcher.
-
-When the SSOT bumps to a new library version, the dispatcher raises `ModuleNotFoundError` naming the exact file path to create. The maintainer copies the previous version's producer to the new path, adjusts `LANDMARKS` to match the new surface, and the cell re-runs green.
-
-Step 1 of this guide walks through the shim contract; subsequent steps detail the per-version producer body.
+1. **An introspection mechanism.** Decide how the miner reaches the
+   engine's validation source. Two patterns exist, plus one recovery
+   technique:
+   - *Import-driven framework reflection.* The library imports inside
+     the engine's CPU build phase, so the miner imports the live package
+     and reads source via `inspect.getsource()` (transformers, vLLM).
+   - *Source-AST of an extracted tarball.* The library cannot import on
+     the build host (TRT-LLM 0.21.0 needs a live CUDA runtime even inside
+     the NGC container), so the miner AST-walks an extracted source tree
+     and never imports the package (tensorrt).
+   - *Docstring-type recovery.* When the config constructor is
+     `__init__(self, **kwargs)` and carries no field annotations,
+     introspection of the signature yields `type='unknown'`. Recover
+     field types from the docstring Args block instead. The transformers
+     schema introspector does this for `GenerationConfig` via
+     `docstring_arg_types`.
+2. **Per-version landmark DATA** at
+   `engine_versions/<engine>/v<safe>/landmarks.yaml`. The data the miner
+   walks with - probe landmarks, and (depending on mechanism) source-tree
+   layout, class / method targets, StrEnum field map, or AST walk
+   targets. See [Landmark data: `landmarks.yaml`](#landmark-data-landmarksyaml).
+3. **A static miner** exposing the walk + emit + `main(--out)` contract
+   that `build_corpus.py` invokes (Step 3).
+4. **An engine-appropriate local detector set** and predicate vocabulary
+   (Step 3). Do not wire a shared detector framework - it was removed.
+   Each engine defines its own `_detect_*` functions.
+5. **A schema `discover()` body** reusing the `_common` primitives
+   (Step 5).
+6. **Dispatch wiring** (Step 6): the `current.yaml` library pin, the
+   vendored `producers/` directory, the `_stub_factory` shims, and
+   registration in `scripts/_drift._PRODUCER_MODULES` plus
+   `build_corpus._ENGINE_EXTRACTORS`.
+7. **An optional dynamic miner** (Step 4) - only when the engine's
+   constructors raise on invalid inputs. TRT-LLM has none by design.
 
 ---
 
-## Step 1: Add the fail-loud import contract
+## The dispatch model
 
-Create `scripts/engine_producers/{engine}_static_invariant_miner.py` (and corresponding `_dynamic_invariant_miner` / `_schema_introspector` shims) using `_stub_factory.py`'s `make_static_stub` / `make_dynamic_stub` / `make_schema_stub`. The shim's job is to defer to the per-version producer module via the dispatcher; the fail-loud contract lives inside the per-version producer.
+Each producer (static invariant miner, dynamic invariant miner, schema introspector) lives at two levels, and its version-varying data lives in a third file:
 
-In `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py`,
-declare the LANDMARKS tuple the dispatcher + probe gate on. The miner
-does not perform a self-check on the installed library version: the
-dispatcher resolves which `v<safe>/` archive to use from the
-SSOT-pinned `library.current_version`, and the probe verifies the
-LANDMARKS resolve under the live library before any mining runs.
+- **Per-version vendored module** at `engine_versions/<engine>/v<safe>/producers/{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. This is the real implementation: the *walking algorithm*, which is version-stable. It does not pin a `LANDMARKS` tuple inline; instead it binds its data at import time from the externalised landmarks file (see below).
 
-Declare landmark checks for every class or method the miner will walk:
+- **Per-version landmark data** at `engine_versions/<engine>/v<safe>/landmarks.yaml`. The data the algorithm walks with - probe landmarks plus optional source-tree / class-target / AST-target fields - keyed to the library version named in `engine_versions/<engine>/current.yaml:library.current_version`. The producer loads it via `load_landmarks(ENGINE, current_version(ENGINE))` and re-exposes the probe tuple as a module attribute named `LANDMARKS`, because `scripts/_drift._read_landmarks` reads `module.LANDMARKS`.
+
+- **Dispatcher shim** at `scripts/engine_producers/<engine>_{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. ~5 lines via `scripts/engine_producers/_stub_factory.py`. Module-level `__getattr__` (PEP 562) resolves to `engine_versions.<engine>.<safe_version>.producers.<producer>` at attribute-access time. `build_corpus.py` invokes the shim; the shim defers to the dispatcher.
+
+Both the code dispatcher (`engine_versions/_dispatcher.py`) and the landmark-data loader (`scripts/engine_producers/_landmarks.py`) resolve `(engine, version)` the same way: exact-match `v<safe(version)>/` wins; on a miss they fall back to the highest vendored version **at or below** the target that carries the required file. There is no fall-forward. When neither code nor data exists at or below the target, the resolver raises naming the exact path to create.
+
+Because the algorithm is version-stable and only the data moves, one producer per engine matches its SSOT pin (exact). A patch-version bump whose landmarks still resolve is zero-touch: the dispatcher and loader fall back to the existing `v<safe>/`, and the probe verifies the landmarks resolve under the live library. A bump that genuinely shifts the surface needs a fresh `v<safe>/landmarks.yaml` (and, if the walk shape changed, a fresh `producers/` directory). The probe is the runtime gate either way.
+
+Step 1 of this guide details the landmarks file; subsequent steps detail the per-version producer body.
+
+---
+
+## Step 1: Supply the landmark data and the fail-loud contract
+
+The fail-loud import contract lives inside the per-version producer; the *data* it gates on lives in `landmarks.yaml`. Author both.
+
+### Landmark data: `landmarks.yaml`
+
+Create `engine_versions/{engine}/v<safe>/landmarks.yaml`. The data shape you supply depends on your engine's introspection mechanism (contract item 1). `scripts/engine_producers/_landmarks.py` parses the document into a typed `Landmarks` dataclass; `probe_landmarks` is the only required key. The three real shapes in the tree:
+
+| Field | Required? | Carried by | Meaning |
+|---|---|---|---|
+| `probe_landmarks` | yes | all three engines | Dotted attribute paths `scripts/_drift.py` resolves under the installed library - the runtime drift gate. Re-exposed by the producer as `module.LANDMARKS`. |
+| `ast_targets` | optional | vLLM (import-driven AST) | `{module_attr, method, namespace, native_type}` walk targets: the `module.Class` attribute path under the package, the validator method whose body is walked, the invariant namespace, and the native config type. |
+| `source.root` | optional | tensorrt (source-driven) | Template for the extracted source tree; the `{version}` token is substituted with the requested library version. |
+| `source.files` | optional | tensorrt | Named relative paths (`llm_args`, `builder`) the miner AST-walks under `source.root`. |
+| `class_targets` | optional | tensorrt | `{class, file}` entries the miner fails loud on if absent from source. |
+| `method_landmarks` | optional | tensorrt | `{class, method}` validator methods whose bodies are walked. |
+| `strenum_fields` | optional | tensorrt | `{enum, field}` map of a StrEnum class to the field it constrains (StrEnum-typed allowlists). |
+
+The three mechanisms map onto the schema as follows:
+
+- **transformers** (import-driven, probe-only): carries only `probe_landmarks`. The miner imports the live package and hardcodes its walk targets (`GenerationConfig`, `WatermarkingConfig`, `SynthIDTextWatermarkingConfig`, `BitsAndBytesConfig`) in its function bodies, so no `source.*` / `ast_targets` are needed - those targets are algorithm structure, not version-varying data.
+- **vLLM** (import-driven, AST-walk): carries `probe_landmarks` plus a four-field `ast_targets` list. The miner imports the live package and AST-walks the methods named in `ast_targets`; the flat-vs-subpackage layout and validator naming shift across versions, so the walk surface is data.
+- **tensorrt** (source-driven): carries `probe_landmarks` plus `source.root` / `source.files`, `class_targets`, `method_landmarks`, and `strenum_fields`. The library needs CUDA to import, so the miner AST-walks an extracted tarball rather than importing - the source-tree layout is data.
+
+### The fail-loud contract in the producer
+
+The producer binds the data at module load and re-exposes the probe tuple as `LANDMARKS`:
+
+```python
+from scripts.engine_producers._current import current_version
+from scripts.engine_producers._landmarks import load_landmarks
+
+ENGINE = "myengine"
+
+# Landmark DATA is externalised; the producer loads it for the SSOT-pinned
+# version (with <=target fallback, mirroring the code dispatcher).
+_LANDMARKS = load_landmarks(ENGINE, current_version(ENGINE))
+
+# Kept as a module attribute because scripts/_drift._read_landmarks reads
+# ``module.LANDMARKS`` for the probe.
+LANDMARKS: tuple[str, ...] = _LANDMARKS.probe_landmarks
+```
+
+The miner does not self-check the installed library version: the dispatcher resolves which `v<safe>/` archive to use from the SSOT-pinned `library.current_version`, and the probe (`scripts/_drift`) verifies the `LANDMARKS` resolve under the live library before any mining runs. Inside the walk, guard every class or method you read with `find_class` / `find_method` and raise `MinerLandmarkMissingError` when one returns `None`:
 
 ```python
 import ast
 import inspect
-from scripts.engine_producers._base import find_class, find_method
+from scripts.engine_producers._base import find_class, MinerLandmarkMissingError
 
 from enginelib.config import SomeConfigClass
 
-_source = inspect.getsource(SomeConfigClass)
-_module = ast.parse(_source)
+_module = ast.parse(inspect.getsource(SomeConfigClass))
 _cls = find_class(_module, "SomeConfigClass")
 if _cls is None:
     raise MinerLandmarkMissingError(
         "SomeConfigClass",
-        "expected in enginelib.config - check if the class was renamed"
+        "expected in enginelib.config - check if the class was renamed",
     )
 ```
 
-**Why this matters:** the Haiku-era TRT-LLM extractor imported `LlmConfig` - a class that does not exist in TRT-LLM 0.21.0. It caught the `ImportError` and silently returned `[]`. The fail-loud contract makes silent coverage loss impossible.
+**Why this matters:** a previous TRT-LLM extractor imported `LlmConfig` - a class that does not exist in TRT-LLM 0.21.0. It caught the `ImportError` and silently returned `[]`. The fail-loud contract makes silent coverage loss impossible.
 
 ---
 
@@ -147,81 +225,86 @@ The dataclass lift is limited to `Literal[...]` value-allowlist invariants (no n
 
 Create `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
 
-### Pattern: walking a validator method
+There is **no shared detector framework** to import. Each engine defines its own local `_detect_*` functions and its own `DetectedBody`-style record, because the invariant shapes genuinely diverge per engine (see [Local detectors, not a shared framework](#local-detectors-not-a-shared-framework) below). `_base.py` provides only mechanical leaf primitives - the AST text helpers (`call_func_path`, `first_string_arg`, `render_joinedstr_template`, ...), `find_class` / `find_method`, the `InvariantCandidate` / `MinerSource` output types, `candidate_to_dict`, and the `MinerLandmarkMissingError` fail-loud type. Compose those.
+
+### Pattern: detectors over `if` bodies
+
+A detector inspects one statement and returns a local detected-body record (or `None`). Define the set your engine needs:
 
 ```python
 import ast
-import inspect
-from scripts.engine_producers._base import (
-    find_class, find_method, extract_condition_fields,
-    filter_condition_references_self,
-    ConditionalRaiseDetector, ConditionalSelfAssignDetector,
-    ConditionalWarningsWarnDetector, ConditionalLoggerWarningDetector,
-    InvariantCandidate, MinerSource,
-)
+from dataclasses import dataclass
+from scripts.engine_producers._base import call_func_path, first_string_arg
 
-def walk_validate_method(cls_source: str, cls_name: str) -> list[InvariantCandidate]:
-    module = ast.parse(cls_source)
-    cls_node = find_class(module, cls_name)
-    if cls_node is None:
-        raise MinerLandmarkMissingError(cls_name)
 
-    validate = find_method(cls_node, "validate")
-    if validate is None:
-        raise MinerLandmarkMissingError(f"{cls_name}.validate")
+@dataclass
+class DetectedBody:
+    """Local to this engine - shape it to what your invariants need."""
+    severity: str            # "error" | "warn" | "dormant"
+    outcome: str
+    emission_channel: str
+    affected_field: str | None
+    message_template: str | None
+    detail: str
 
-    public_fields = frozenset(
-        # derive from the class's dataclasses.fields() or __annotations__
+
+def _detect_raise(stmt: ast.stmt) -> DetectedBody | None:
+    if not isinstance(stmt, ast.Raise) or stmt.exc is None:
+        return None
+    return DetectedBody(
+        severity="error", outcome="error", emission_channel="none",
+        affected_field=None,
+        message_template=first_string_arg(stmt.exc) if isinstance(stmt.exc, ast.Call) else None,
+        detail="raise",
     )
 
-    detectors = (
-        ConditionalRaiseDetector(),
-        ConditionalSelfAssignDetector(),
-        ConditionalWarningsWarnDetector(),
-        ConditionalLoggerWarningDetector(),
+
+def _detect_logger_warning(stmt: ast.stmt) -> DetectedBody | None:
+    if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
+        return None
+    path = call_func_path(stmt.value)
+    if path != ["logger", "warning"]:
+        return None
+    return DetectedBody(
+        severity="warn", outcome="warn", emission_channel="logger_warning",
+        affected_field=None, message_template=first_string_arg(stmt.value),
+        detail="logger.warning",
     )
 
-    candidates = []
-    for node in ast.walk(validate):
-        if not isinstance(node, ast.If):
-            continue
-        if not filter_condition_references_self(node.test, public_fields):
-            continue
-        for stmt in node.body:
-            for detector in detectors:
-                pattern = detector.detect(stmt)
-                if pattern is not None:
-                    # build InvariantCandidate from pattern + condition
-                    candidate = _build_candidate(node.test, pattern, ...)
-                    candidates.append(candidate)
-    return candidates
+
+_DETECTORS = (_detect_raise, _detect_logger_warning)
+
+
+def _detect_body(stmt: ast.stmt) -> DetectedBody | None:
+    for det in _DETECTORS:
+        result = det(stmt)
+        if result is not None:
+            return result
+    return None
 ```
 
-### Per-engine detector customisation
+Walk the guarded validator method, descend into `if` bodies, run `_detect_body` on each statement, and build an `InvariantCandidate` from the accumulated condition predicates plus the detected body. The condition predicate must reference a public field via `self.<field>`; drop predicates that do not.
 
-The five default detectors cover the most common patterns. For engine-specific patterns, write a custom detector:
+### How many detectors does your engine need?
 
-```python
-# Example: engine uses self.errors.append(...) for error collection
-class ErrorsAppendDetector:
-    def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
-        if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
-            return None
-        path = call_func_path(stmt.value)
-        if path != ["self", "errors", "append"]:
-            return None
-        return DetectedPattern(
-            severity="error",
-            emission_channel="none",
-            affected_field=None,
-            message_template=first_string_arg(stmt.value),
-            detail="self.errors.append",
-        )
-```
+The detector set is engine-specific - size it to the validator patterns the engine actually emits. The three reference engines differ:
 
-### Important: the "revisit" comment
+| Engine | Detectors | Set |
+|---|---|---|
+| tensorrt | 2 | `_detect_raise`, `_detect_logger_warning` |
+| vLLM | 4 | `_detect_raise`, `_detect_self_assign`, `_detect_logger_warning`, `_detect_warnings_warn` |
+| transformers | 6 | the above plus `_detect_assert` and `_detect_minor_issues` (HuggingFace's `minor_issues[key] = msg` announced-dormancy pattern) |
 
-Per the transformers static miner's header, per-engine miners currently define their own `_detect_*` functions rather than using `_base.py`'s detector classes directly. This is because the `DetectedPattern` shape from `_base.py` doesn't carry the structured `FieldPredicate` data needed for cross-field corpus rules (operators like `not_divisible_by` and `@field_ref`). Once two or more engine miners exist and we can see whether the parallel detector logic is genuinely divergent or accidentally so, harmonise in a `_base.py` refactor.
+### Local detectors, not a shared framework
+
+A shared `_base.py` detector framework (`ConditionalRaiseDetector`, `ConditionalSelfAssignDetector`, `ConditionalWarningsWarnDetector`, `ConditionalLoggerWarningDetector`, `MinorIssuesDictAssignDetector`, a `DetectedPattern` record, and `default_detectors`) was tried. With all three engines built, it turned out to be dead - none of the miners used it. It was removed.
+
+The divergence is genuine, not accidental:
+
+- The detector *set size* differs (2 / 4 / 6 above) because the engines emit different validator shapes.
+- transformers needs structured `FieldPredicate` data carrying cross-field operators - `not_divisible_by` and `@field_ref` cross-field references for shapes like `num_beams % num_beam_groups != 0` - that vLLM and TRT-LLM never emit. A shared `DetectedPattern` record could not carry that without becoming the union of every engine's needs.
+
+So the revisit is **resolved**: define your detectors and your detected-body record locally, in your engine's producer. Do not reach for a `_base.py` detector base - there isn't one, by decision.
 
 ---
 
@@ -315,36 +398,61 @@ def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[InvariantCandi
 
 ---
 
-## Step 5: Write the corpus orchestration entry
+## Step 5: Write the schema introspector
 
-`engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` houses the orchestration. Lift modules, AST walkers, and cluster probes all live in this module (or its companion `dynamic_invariant_miner.py`); the dispatcher shim under `scripts/engine_producers/` only re-exports `mine` / `LANDMARKS` symbols. The pattern:
+Create `engine_versions/{engine}/v<safe>/producers/schema_introspector.py` with a `discover(repo_root, image_ref) -> dict` body that reuses the shared envelope and per-field helpers from `scripts/engine_producers/_common.py`. The introspector reads the engine's typed API surface (`inspect.signature`, Pydantic `model_json_schema()`, `dataclasses.fields()`, msgspec) and emits the deterministic `schema.discovered.json` envelope - top-level metadata plus `engine_params` / `sampling_params` sections and a `discovery_limitations` list.
 
-```python
-def mine() -> list[InvariantCandidate]:
-    candidates = []
-    candidates.extend(mine_pydantic_invariants())
-    candidates.extend(mine_dataclass_invariants())
-    # Combinatorial cluster probes
-    candidates.extend(mine_cluster_invariants())
-    return candidates
+When a config class is `__init__(self, **kwargs)` with no field annotations (contract item 1, docstring-type recovery), the signature yields `type='unknown'`. Recover field types from the docstring Args block - the transformers introspector reads `GenerationConfig`'s docstring via `_common.docstring_arg_types` / `annotation_to_type_str`, and records the opaque `**kwargs` themselves as a `discovery_limitations` entry rather than inventing fields for them.
 
-if __name__ == "__main__":
-    import yaml
-    from scripts.engine_producers._base import candidate_to_dict
-    results = mine()
-    staging = {
-        "schema_version": "1.0.0",
-        "engine": ENGINE,
-        "invariants": [candidate_to_dict(c) for c in results],
-    }
-    output_path = Path("src/llenergymeasure/engines/_staging/myengine_miner.yaml")
-    output_path.write_text(yaml.dump(staging, allow_unicode=True))
-    print(f"Wrote {len(results)} candidates to {output_path}")
-```
+The full envelope shape is the [schema discovered format](/reference/schema-discovered-format); the conceptual treatment is in [engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines).
 
 ---
 
-## Step 6: Write fixpoint regression tests
+## Step 6: Write the corpus orchestration entry and wire dispatch
+
+### The `main(--out)` contract
+
+Each miner is invoked by `build_corpus.py` as `python -m {module} --out {staging_path}`, so every static / dynamic producer must expose a `main(argv)` that accepts a single `--out` argument and writes a corpus-shaped staging YAML to that path. The lift modules, AST walkers, and cluster probes all live in the per-version producer (or its companion `dynamic_invariant_miner.py`); the dispatcher shim under `scripts/engine_producers/` carries no logic of its own. The pattern (mirroring the transformers static miner):
+
+```python
+import argparse
+import sys
+from pathlib import Path
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("src/llenergymeasure/engines/myengine/_staging/myengine_static_invariant_miner.yaml"),
+    )
+    args = parser.parse_args(argv)
+
+    candidates, engine_version, rel_path = walk_myengine()
+    text = emit_yaml(candidates, engine_version=engine_version, rel_path=rel_path)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(text)
+    print(f"Wrote {len(candidates)} candidate invariants to {args.out}", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+### Wire dispatch
+
+With the producers and `landmarks.yaml` in place, wire the engine into the four dispatch seams (contract item 6):
+
+1. **Pin the library version.** Set `library.current_version` in `engine_versions/{engine}/current.yaml`. The dispatcher and the landmark-data loader both resolve `v<safe>/` from this pin.
+2. **Vendor the producers.** The `engine_versions/{engine}/v<safe>/producers/` directory holds `static_invariant_miner.py`, the optional `dynamic_invariant_miner.py`, and `schema_introspector.py`, each with a sibling `__init__.py`.
+3. **Add the `_stub_factory` shims.** Create `scripts/engine_producers/{engine}_static_invariant_miner.py` (and the `_dynamic_invariant_miner` / `_schema_introspector` shims) using `_stub_factory.make_static_stub` / `make_dynamic_stub` / `make_schema_stub`. ~5 lines each; the shim binds `(engine, producer)` and the dispatcher does the resolution.
+4. **Register in both tables.** Add the producer module paths to `scripts/_drift._PRODUCER_MODULES` (keyed `(engine, "invariants")` and `(engine, "schemas")` - this is the probe seam) and add a `_Extractor` row per staging producer to `scripts/engine_producers/build_corpus._ENGINE_EXTRACTORS` (this is the mine seam). The two tables are the single places that enumerate each engine's producers.
+
+---
+
+## Step 7: Write fixpoint regression tests
 
 Each per-engine miner ships with parametrised tests:
 
@@ -352,7 +460,9 @@ Each per-engine miner ships with parametrised tests:
 # tests/unit/scripts/engine_producers/test_myengine_miner.py
 
 import pytest
-from scripts.engine_producers.myengine_miner import CLUSTERS
+from engine_versions.myengine.v<safe>.producers.dynamic_invariant_miner import (
+    CLUSTERS, probe_cluster,
+)
 
 @pytest.mark.parametrize("cluster", CLUSTERS, ids=lambda c: c.name)
 def test_cluster_probes_without_crashing(cluster):
@@ -375,7 +485,7 @@ def test_landmark_checks_raise_on_missing():
 
 ---
 
-## Step 7: Add to CI
+## Step 8: Add to CI
 
 1. Decide the engine's CI shape:
    - **Upstream image consumer** (vllm / tensorrt pattern) - add the engine
@@ -416,7 +526,7 @@ def test_landmark_checks_raise_on_missing():
 
 ---
 
-## Step 8: Generate and review the corpus
+## Step 9: Generate and review the corpus
 
 Run the miner locally (inside the engine's Docker container if CUDA is required):
 
@@ -464,13 +574,19 @@ if method_node is None:
 
 ### The `public_fields` filter
 
-Derive public fields from the class's dataclass fields or `__annotations__`, and use `filter_condition_references_self` to drop predicates that don't reference a public field:
+Derive public fields from the class's dataclass fields or `__annotations__`, and use `_base.extract_condition_fields` (which returns the `self.<field>` names a condition references) to drop predicates that don't reference a public field:
 
 ```python
+from scripts.engine_producers._base import extract_condition_fields
+
 public_fields = frozenset(
     f.name for f in dataclasses.fields(GenerationConfig)
     if not f.name.startswith("_")
 )
+
+# Skip an `if` whose condition references no public field.
+if not (extract_condition_fields(node.test) & public_fields):
+    continue
 ```
 
 ### Unparseable sub-clauses: log, don't drop
@@ -557,6 +673,8 @@ The fail-loud probe and the YAML diff together cover the failure modes that trip
 | Adding `manual_seed` rules for automatable constraints | Pipeline-failure debt | Extend the miner instead |
 | Using Hypothesis as property-based test runner (not value generator) | Non-deterministic corpus | Use `hypothesis.strategies.from_type` with a fixed seed; never `@given` |
 | Not calling `find_method` before walking | `AttributeError` on `None` if method renamed | Always guard: `if method is None: raise MinerLandmarkMissingError(...)` |
+| Reaching for a shared `_base.py` detector framework | There isn't one - it was removed as dead | Define your `_detect_*` functions and detected-body record locally in your producer |
+| Pinning a `LANDMARKS` tuple inline in the producer | Drifts from the externalised data; the probe reads `module.LANDMARKS` | Put the data in `v<safe>/landmarks.yaml`; bind via `load_landmarks(...)` and re-export `LANDMARKS` |
 
 ---
 
@@ -566,8 +684,12 @@ The fail-loud probe and the YAML diff together cover the failure modes that trip
 - [invariants-corpus-format.md](/reference/invariants-corpus-format) - corpus format
 - [parameter-discovery.md](/explanation/architecture/parameter-discovery) - runtime validation
 - [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview
-- `engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py` - gold-standard static miner
-- `engine_versions/transformers/v4_57_3/producers/dynamic_invariant_miner.py` - gold-standard dynamic miner
+- `engine_versions/transformers/v5_7_0/producers/static_invariant_miner.py` - gold-standard static miner
+- `engine_versions/transformers/v5_7_0/producers/dynamic_invariant_miner.py` - gold-standard dynamic miner
+- `engine_versions/transformers/v5_7_0/landmarks.yaml` - probe-only landmark data (import-driven example)
+- `engine_versions/tensorrt/v0_21_0/landmarks.yaml` - source-driven landmark data (extracted-tarball example)
+- `engine_versions/vllm/v0_7_3/landmarks.yaml` - import-driven AST landmark data (`ast_targets` example)
+- `scripts/engine_producers/_landmarks.py` - the `load_landmarks` loader + `Landmarks` schema
 - `engine_versions/_dispatcher.py` and `scripts/engine_producers/_stub_factory.py` - per-version dispatch
 - `scripts/_drift.py` - the drift tool that surfaces missing-vs-extra-vs-stable landmark state at probe time
-- `scripts/engine_producers/_base.py` - shared infrastructure
+- `scripts/engine_producers/_base.py` - shared leaf primitives (AST helpers, `InvariantCandidate`, `find_class` / `find_method`, `candidate_to_dict`)

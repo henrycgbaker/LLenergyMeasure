@@ -72,9 +72,15 @@ Producer code (the static miner, dynamic miner, and schema introspector
 for each engine) is vendored per library version under
 `engine_versions/<engine>/v<safe>/producers/`, where `<safe>` is the
 identifier-safe form of the library version (`0.7.3` -> `v0_7_3`). Each
-vendored directory contains a frozen snapshot of the producer authored
-against that specific library API: LANDMARKS, AST targets, introspector
-class targets.
+vendored directory contains a frozen snapshot of the producer's
+*walking algorithm* authored against that specific library API. The
+version-varying *data* the algorithm walks with - probe landmarks, AST
+targets, source-tree layout, introspector class targets - is externalised
+alongside it in `engine_versions/<engine>/v<safe>/landmarks.yaml`, which
+the producer loads at import via `load_landmarks(engine, version)` and
+re-exposes as `module.LANDMARKS` for the probe. The landmark-data loader
+(`scripts/engine_producers/_landmarks.py`) resolves `(engine, version)`
+with the same exact-match-then-`<=`-fallback rule as the code dispatcher.
 
 `scripts/engine_producers/<engine>_<producer>.py` is a thin dispatcher
 shim (built via `_stub_factory.make_*_stub`) that resolves to the
@@ -150,7 +156,7 @@ flowchart TD
 The introspector is engine-specific and per-version vendored. The real
 implementation lives at
 `engine_versions/<engine>/v<safe>/producers/schema_introspector.py`,
-where `<safe>` is the SSOT-pinned library version (e.g. `v4_57_3`).
+where `<safe>` is the SSOT-pinned library version (e.g. `v5_7_0`).
 `scripts/engine_producers/<engine>_schema_introspector.py` is a thin
 dispatcher shim (built via `_stub_factory.make_schema_stub`) that
 resolves to the per-version module at attribute-access time via PEP 562
@@ -262,17 +268,23 @@ the shape of cross-field predicates. The dynamic miner sees the message
 determine that the underlying check is `num_beams % num_beam_groups != 0`.
 The static miner reads the predicate structure directly from the AST.
 
-For each `if` body in a validator method, the miner runs five pattern
-detectors. Each targets a specific source pattern and emits a rule of a
-specific severity:
+For each `if` body in a validator method, the miner runs a set of
+local `_detect_*` functions. Each targets a specific source pattern and
+emits a rule of a specific severity:
 
-| Detector | Pattern matched | Emitted severity |
+| Detected pattern | Source shape | Emitted severity |
 |---|---|---|
-| `ConditionalRaiseDetector` | `if X: raise SomeException(msg)` | `error` |
-| `ConditionalSelfAssignDetector` | `if X: self.A = B` (silent normalisation) | `dormant` |
-| `ConditionalWarningsWarnDetector` | `if X: warnings.warn(msg)` | `warn` |
-| `ConditionalLoggerWarningDetector` | `if X: logger.warning(msg)` | `warn` |
-| `MinorIssuesDictAssignDetector` | HF-specific: `if X: minor_issues[key] = msg` | `dormant` |
+| conditional raise | `if X: raise SomeException(msg)` | `error` |
+| conditional self-assign | `if X: self.A = B` (silent normalisation) | `dormant` |
+| conditional `warnings.warn` | `if X: warnings.warn(msg)` | `warn` |
+| conditional `logger.warning` | `if X: logger.warning(msg)` | `warn` |
+| HF `minor_issues` dict assign | HF-specific: `if X: minor_issues[key] = msg` | `dormant` |
+
+The detector set is per-engine, not shared: each engine defines its own
+`_detect_*` functions and detected-body record because the validator
+shapes (and the detector set size: tensorrt 2, vLLM 4, transformers 6)
+genuinely diverge. There is no shared detector framework in `_base.py` -
+an early one was tried and removed as dead.
 
 Three filters guard against false positives: the predicate must
 reference a public field via `self.<field>`, self-assign targets must
