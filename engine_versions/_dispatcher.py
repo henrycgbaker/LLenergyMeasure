@@ -128,57 +128,6 @@ def _find_fallback_safe_version(
     )
 
 
-def find_forward_safe_version(
-    *, engine_root: Path, target_version: str, required_rel: Path
-) -> str | None:
-    """Return ``safe`` of the lowest vendored archive at or above ``target_version``.
-
-    The forward counterpart of :func:`find_fallback_safe_version`, used only as
-    a last resort when no archive exists at or below the target. In the
-    single-producer steady state the one kept producer sits ABOVE the pin (e.g.
-    a ``v0_19_1`` producer kept while ``current_version`` is still ``0.7.3``,
-    because the algorithm is version-stable and only the per-version landmark
-    DATA differs), so code dispatch must fall FORWARD to it. The runtime drift
-    probe stays the gate: if the forward producer's ``LANDMARKS`` no longer
-    resolve under the live library, the probe fails red.
-
-    Returns ``None`` when no candidate exists, when ``engine_root`` is not a
-    directory, or when ``target_version`` does not parse as PEP 440.
-    """
-    try:
-        target = Version(target_version)
-    except InvalidVersion:
-        return None
-    if not engine_root.is_dir():
-        return None
-
-    candidates: list[tuple[Version, str]] = []
-    for child in engine_root.iterdir():
-        if not child.is_dir():
-            continue
-        version = _safe_to_version(child.name)
-        if version is None or version < target:
-            continue
-        if not (child / required_rel).is_file():
-            continue
-        candidates.append((version, child.name))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda pair: pair[0])
-    return candidates[0][1]
-
-
-def _find_forward_safe_version(
-    *, engine_root: Path, target_version: str, producer: ProducerKind
-) -> str | None:
-    """Code-dispatch wrapper around :func:`find_forward_safe_version`."""
-    return find_forward_safe_version(
-        engine_root=engine_root,
-        target_version=target_version,
-        required_rel=Path("producers") / f"{producer}.py",
-    )
-
-
 def load_producer(*, engine: str, version: str, producer: ProducerKind) -> ModuleType:
     """Return the ``producers.<producer>`` submodule for ``(engine, version)``.
 
@@ -191,17 +140,15 @@ def load_producer(*, engine: str, version: str, producer: ProducerKind) -> Modul
     Returns:
         The imported producer module. Exact match is preferred:
         ``engine_versions.<engine>.v<safe(version)>.producers.<producer>``.
-        On miss, falls back to the highest vendored archive ``<= version``, or
-        if none exists below, falls forward to the lowest archive ``>= version``
-        (the single-producer steady state, where the kept producer is newer than
-        the pin). A stderr log line names the resolved archive. The caller reads
+        On miss, falls back to the highest vendored archive ``<= version`` and
+        emits a stderr log line naming the fallback. The caller reads
         ``LANDMARKS`` (and optionally ``_CLASS_TARGETS`` etc.) from the
         returned module.
 
     Raises:
-        ModuleNotFoundError: when no vendored archive exists in either direction
-            with a ``producers/<producer>.py`` file. The error message names the
-            exact file path to create.
+        ModuleNotFoundError: when no vendored archive exists at or below
+            ``version`` with a ``producers/<producer>.py`` file. The error
+            message names the exact file path to create for the next chunk PR.
     """
     # Late import: ``_current`` imports yaml/packaging which we'd rather not
     # pay at every ``__getattr__`` call site. Importing here keeps module-
@@ -221,36 +168,25 @@ def load_producer(*, engine: str, version: str, producer: ProducerKind) -> Modul
         pass
 
     engine_root = Path(__file__).resolve().parent / engine
-    resolved_safe = _find_fallback_safe_version(
+    fallback_safe = _find_fallback_safe_version(
         engine_root=engine_root, target_version=version, producer=producer
     )
-    direction = "falling back to"
-    if resolved_safe is None:
-        # No archive at or below the target: fall FORWARD to the lowest archive
-        # above it. This is the single-producer steady state, where the one kept
-        # producer is newer than ``current_version`` (the algorithm is version-
-        # stable; only the per-version landmark DATA differs). The drift probe
-        # remains the runtime gate.
-        resolved_safe = _find_forward_safe_version(
-            engine_root=engine_root, target_version=version, producer=producer
-        )
-        direction = "falling forward to"
-    if resolved_safe is None:
+    if fallback_safe is None:
         raise ModuleNotFoundError(
             f"No archived producer for {engine}=={version} ({producer}), and "
-            f"no vendored archive exists in either direction "
+            f"no fallback vendored archive exists at or below {version} "
             f"with engine_versions/{engine}/v*/producers/{producer}.py. "
             f"Create engine_versions/{engine}/{safe}/producers/{producer}.py "
-            f"(with sibling __init__.py files as needed) by copying the nearest "
+            f"(with sibling __init__.py files as needed) by copying the prior "
             f"version's producers and rewriting LANDMARKS for the new library "
             f"API. See the version-bump chunk pattern in the engine archive "
             f"package docstring."
         )
 
-    resolved_qualified = f"engine_versions.{engine}.{resolved_safe}.producers.{producer}"
+    fallback_qualified = f"engine_versions.{engine}.{fallback_safe}.producers.{producer}"
     print(
         f"engine_versions._dispatcher: no exact match for {engine}=={version}; "
-        f"{direction} {resolved_qualified}",
+        f"falling back to {fallback_qualified}",
         file=sys.stderr,
     )
-    return importlib.import_module(resolved_qualified)
+    return importlib.import_module(fallback_qualified)

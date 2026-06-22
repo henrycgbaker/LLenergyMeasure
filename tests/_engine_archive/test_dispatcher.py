@@ -5,9 +5,8 @@ Covers:
 - ``safe_version`` mangling helper.
 - The auto-fallback contract: when no exact-match archive exists at the
   target version, the dispatcher resolves to the highest vendored archive
-  ``<= target``; if none exists below, it falls forward to the lowest archive
-  ``>= target`` (the single-producer steady state). The resolution is logged.
-- The no-resolution diagnostic: when no archive exists in either direction
+  ``<= target`` and logs the fallback to stderr.
+- The no-fallback diagnostic: when no archive exists at or below the target
   with a ``producers/<producer>.py`` file, the dispatcher raises
   ``ModuleNotFoundError`` with the path the maintainer needs to create.
 
@@ -21,11 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from engine_versions._dispatcher import (
-    _find_fallback_safe_version,
-    _find_forward_safe_version,
-    load_producer,
-)
+from engine_versions._dispatcher import _find_fallback_safe_version, load_producer
 from scripts.engine_producers._current import safe_version
 
 # ---------------------------------------------------------------------------
@@ -187,56 +182,6 @@ def test_find_fallback_filters_per_producer_kind(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Forward unit tests (_find_forward_safe_version): last-resort resolution when
-# the only kept producer sits ABOVE the pin (single-producer steady state).
-# ---------------------------------------------------------------------------
-
-
-def test_find_forward_picks_lowest_above_target(tmp_path: Path) -> None:
-    """v0_7_3 + v0_19_1 vendored; target 0.5.0 (below both) forwards to v0_7_3."""
-    for safe in ("v0_7_3", "v0_19_1"):
-        _make_archive(tmp_path, safe, "static_invariant_miner")
-    result = _find_forward_safe_version(
-        engine_root=tmp_path,
-        target_version="0.5.0",
-        producer="static_invariant_miner",
-    )
-    assert result == "v0_7_3"
-
-
-def test_find_forward_returns_none_when_all_below(tmp_path: Path) -> None:
-    """All vendored versions below target -> no forward candidate."""
-    _make_archive(tmp_path, "v0_7_3", "static_invariant_miner")
-    result = _find_forward_safe_version(
-        engine_root=tmp_path,
-        target_version="1.0.0",
-        producer="static_invariant_miner",
-    )
-    assert result is None
-
-
-def test_find_forward_returns_none_for_missing_engine_root(tmp_path: Path) -> None:
-    """Non-existent engine_root returns None."""
-    result = _find_forward_safe_version(
-        engine_root=tmp_path / "missing",
-        target_version="0.7.3",
-        producer="static_invariant_miner",
-    )
-    assert result is None
-
-
-def test_find_forward_returns_none_for_invalid_target_version(tmp_path: Path) -> None:
-    """Garbage target_version returns None."""
-    _make_archive(tmp_path, "v0_7_3", "static_invariant_miner")
-    result = _find_forward_safe_version(
-        engine_root=tmp_path,
-        target_version="not-a-version",
-        producer="static_invariant_miner",
-    )
-    assert result is None
-
-
-# ---------------------------------------------------------------------------
 # load_producer: integration against real engine_versions/ tree
 # ---------------------------------------------------------------------------
 
@@ -276,22 +221,14 @@ def test_load_producer_falls_back_to_v0_7_3_for_intermediate_target(
 
 
 # ---------------------------------------------------------------------------
-# No-resolution contract: raise loud only when nothing exists in EITHER direction
+# No-fallback contract: raise loud when nothing exists at or below target
 # ---------------------------------------------------------------------------
 
 
-def test_below_lowest_vendored_falls_forward(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """All vendored vllm versions are >= 0.7.3; target 0.0.0 falls forward to the
-    lowest vendored archive (the single-producer steady state, where the kept
-    producer is newer than the pin)."""
-    module = load_producer(engine="vllm", version="0.0.0", producer="static_invariant_miner")
-    assert module.__name__.startswith("engine_versions.vllm.")
-    assert module.__name__.endswith(".producers.static_invariant_miner")
-    captured = capsys.readouterr()
-    assert "no exact match" in captured.err
-    assert "falling forward to" in captured.err
+def test_below_lowest_vendored_raises_loud() -> None:
+    """All vendored vllm versions are >= 0.7.3; target 0.0.0 has no candidate."""
+    with pytest.raises(ModuleNotFoundError):
+        load_producer(engine="vllm", version="0.0.0", producer="static_invariant_miner")
 
 
 def test_unknown_engine_raises_loud() -> None:
@@ -313,21 +250,17 @@ def test_unknown_producer_raises_loud() -> None:
 
 
 def test_dispatcher_error_message_names_file_to_create() -> None:
-    """No-resolution diagnostic names the path the maintainer needs to create.
+    """No-fallback diagnostic names the path the maintainer needs to create.
 
-    With fall-forward, a real engine always resolves to some vendored archive in
-    one direction; the raise fires only when the ``(engine, producer)`` has no
-    vendored archive at all (here, an unknown engine). The error message must
-    still point at the file to create so the diagnostic is actionable.
+    This is the primary signal a maintainer sees when neither an exact-match
+    archive nor any earlier vendored archive can serve the bumped version.
+    The error message must point at the file to create so the next chunk PR
+    is unblocked without spelunking.
     """
     with pytest.raises(ModuleNotFoundError) as exc_info:
-        load_producer(
-            engine="not-a-real-engine",
-            version="0.7.3",
-            producer="static_invariant_miner",
-        )
+        load_producer(engine="vllm", version="0.0.0", producer="static_invariant_miner")
     msg = str(exc_info.value)
-    assert "not-a-real-engine" in msg
-    assert "0.7.3" in msg
-    assert "engine_versions/not-a-real-engine/v0_7_3/producers/static_invariant_miner.py" in msg
+    assert "vllm" in msg
+    assert "0.0.0" in msg
+    assert "engine_versions/vllm/v0_0_0/producers/static_invariant_miner.py" in msg
     assert "LANDMARKS" in msg
