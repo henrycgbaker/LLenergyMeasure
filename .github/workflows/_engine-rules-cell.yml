@@ -373,10 +373,10 @@ jobs:
         # The decay alarm + surface-trend compare against the most-recent
         # PRIOR vendored pin's outputs/. Resolution is pure-filesystem (needs
         # `packaging`), so it runs host-side after uv sync and feeds the
-        # path into the in-container re-gate + the host surface diff. Today
-        # every engine has exactly one outputs-bearing version dir (the
-        # current pin), so this resolves empty and both alarm steps skip -
-        # a structural no-op until C10 populates the trailing window.
+        # path into the in-container re-gate + the host surface diff. vllm and
+        # tensorrt now retain a populated N-1 window (v0_7_3, v0_21_0), so this
+        # resolves to it and both alarm steps fire; transformers has only its
+        # current pin, so it resolves empty and both alarm steps skip.
         id: prior
         if: steps.probe.outputs.verdict == 'pass'
         env:
@@ -399,7 +399,7 @@ jobs:
         # through the live gate against the NEW container. The validated
         # envelope records gate output only, so the carried input is the prior
         # pin's rules.proposed.yaml (it carries the probe kwargs). Skips when
-        # no prior exists (today's state for every engine).
+        # no prior exists (transformers today; fires for vllm and tensorrt).
         if: steps.probe.outputs.verdict == 'pass' && steps.prior.outputs.prev_outputs != ''
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -818,8 +818,9 @@ jobs:
         # catalogue re-gate acceptance with the Rung-0 healed/residual split,
         # the surface trend, and the proposed/validated diff summary - the
         # alarm sections present only when a prior pin exists. A major bump
-        # leads with the expected-churn warning. Today no prior exists, so the
-        # body is the counts + diff (+ a "no prior" note).
+        # leads with the expected-churn warning (tensorrt 0.x->1.x is one). For
+        # transformers no prior exists, so its body is the counts + diff (+ a
+        # "no prior" note).
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}

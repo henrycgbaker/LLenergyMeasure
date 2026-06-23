@@ -127,10 +127,13 @@ def previous_pin_outputs_dir(engine: str) -> Path | None:
     "Prior" means: a ``engine_versions/{engine}/v<safe>/`` version directory
     that (a) carries a populated ``outputs/`` directory and (b) is a STRICTLY
     LOWER semver than the current pin. The newest such version wins. Returns
-    ``None`` when no qualifying prior exists - which is the state for every
-    engine today (each has exactly one outputs-bearing version dir, the
-    current pin), so the decay alarm and surface-trend steps are a structural
-    no-op until C10 populates the trailing window.
+    ``None`` when no qualifying prior exists.
+
+    transformers has only its current pin (v5_7_0), so this returns ``None`` and
+    the decay alarm + surface-trend steps are a structural no-op for it. vllm and
+    tensorrt each retain their pre-bump pin as a populated N-1 window (vllm
+    v0_7_3 under pin 0.19.1, tensorrt v0_21_0 under pin 1.0.0), so this returns
+    that window and the decay alarm + surface-trend steps fire for them.
 
     The carried-input source for the decay alarm (``rules.proposed.yaml`` in
     the returned directory; the validated envelope records gate output only)

@@ -75,9 +75,10 @@ def _fake_engine_tree(
 def test_previous_pin_none_when_pin_is_only_outputs_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # Today's state: the current pin is the only version dir with outputs/,
-    # and the newer vendored version dirs have none. Resolver returns None
-    # (the decay alarm + surface trend are a structural no-op).
+    # Pure-logic case on a synthetic tree: when the current pin is the only
+    # version dir with outputs/ (newer vendored dirs carry none), the resolver
+    # returns None. The real repo's per-engine state is pinned separately in
+    # test_previous_pin_and_major_bump_real_repo_state.
     _fake_engine_tree(
         monkeypatch,
         tmp_path,
@@ -128,6 +129,28 @@ def test_previous_pin_none_for_unknown_engine(
     monkeypatch.setattr(_current, "_find_repo_root", lambda start: tmp_path)
     monkeypatch.setattr(_current, "current_version", lambda e: "1.0.0")
     assert _current.previous_pin_outputs_dir("nonexistent") is None
+
+
+def test_previous_pin_and_major_bump_real_repo_state() -> None:
+    """Pin the real-repo N-1 window + major-bump flag per engine.
+
+    Unlike the synthetic cases above, this asserts against the actual vendored
+    engine_versions/ tree, so a future bump or N-1-window change (the decay
+    alarm + surface-trend + major-bump CI gates all read these) must update an
+    explicit oracle rather than silently drifting. transformers carries only its
+    pin; vllm and tensorrt each retain a populated N-1 window.
+    """
+    # transformers: single pin dir -> no prior window, no major bump.
+    assert _current.previous_pin_outputs_dir("transformers") is None
+    assert _current.is_major_bump("transformers") is False
+    # vllm: N-1 window v0_7_3 under pin 0.19.1; 0.x -> 0.x is not a major bump.
+    vllm_prior = _current.previous_pin_outputs_dir("vllm")
+    assert vllm_prior is not None and vllm_prior.parent.name == "v0_7_3"
+    assert _current.is_major_bump("vllm") is False
+    # tensorrt: N-1 window v0_21_0 under pin 1.0.0; 0.x -> 1.x IS a major bump.
+    trt_prior = _current.previous_pin_outputs_dir("tensorrt")
+    assert trt_prior is not None and trt_prior.parent.name == "v0_21_0"
+    assert _current.is_major_bump("tensorrt") is True
 
 
 # ---------------------------------------------------------------------------
