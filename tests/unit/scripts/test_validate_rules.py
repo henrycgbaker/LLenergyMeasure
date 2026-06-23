@@ -81,6 +81,35 @@ class _NormalisingConfig:
             self.temperature = 1.0
 
 
+# A SchedulerConfig-shaped pydantic-dataclass with required ``InitVar`` args
+# (mirrors vLLM 0.19.1's SchedulerConfig) for the Tier-0 scaffold tests. Defined
+# at module scope so ``InitVar`` resolves at pydantic's deferred class build (a
+# function-local InitVar is invisible to the rebuild). Skipped at import time if
+# pydantic is absent; the scaffold tests ``importorskip("pydantic")``.
+try:
+    from dataclasses import InitVar as _InitVar
+
+    from pydantic import Field as _PydField
+    from pydantic.dataclasses import dataclass as _pyd_dataclass
+
+    @_pyd_dataclass
+    class _SchedulerLike:
+        max_model_len: _InitVar[int]
+        is_encoder_decoder: _InitVar[bool]
+        max_num_batched_tokens: int = _PydField(default=2048, ge=1)
+        max_num_seqs: int = _PydField(default=128, ge=1)
+        enable_chunked_prefill: bool = True
+
+        def __post_init__(self, max_model_len: int, is_encoder_decoder: bool) -> None:
+            if is_encoder_decoder:
+                self.enable_chunked_prefill = False
+            if self.max_num_batched_tokens < self.max_num_seqs:
+                raise ValueError("max_num_batched_tokens must be >= max_num_seqs")
+
+except ImportError:  # pragma: no cover - pydantic always present in unit env
+    _SchedulerLike = None  # type: ignore[assignment,misc]
+
+
 # ---------------------------------------------------------------------------
 # extract_state
 # ---------------------------------------------------------------------------
@@ -948,6 +977,48 @@ class TestMsgspecConstructionDispatch:
 
 
 # ---------------------------------------------------------------------------
+# Tier-0 construction scaffold (SchedulerConfig InitVar quarantine fix)
+# ---------------------------------------------------------------------------
+
+
+class TestConstructScaffold:
+    """The scaffold injects NEUTRAL values for required construction args the
+    corpus kwargs omit (e.g. SchedulerConfig's ``is_encoder_decoder`` /
+    ``max_model_len`` InitVars), so a rule's own validator is what gets tested.
+    """
+
+    @staticmethod
+    def _scheduler_like() -> Any:
+        pytest.importorskip("pydantic")
+        return _SchedulerLike
+
+    def test_scaffold_includes_required_initvars(self) -> None:
+        cls = self._scheduler_like()
+        scaffold = validate_rules._scaffold_required_args(cls, {})
+        # is_encoder_decoder is False (its neutral / synthesised value, which is
+        # also its default - so it never flips enable_chunked_prefill).
+        assert scaffold == {"max_model_len": 1, "is_encoder_decoder": False}
+
+    def test_scaffold_does_not_overwrite_rule_kwargs(self) -> None:
+        cls = self._scheduler_like()
+        scaffold = validate_rules._scaffold_required_args(cls, {"max_model_len": 2})
+        assert "max_model_len" not in scaffold
+        assert scaffold == {"is_encoder_decoder": False}
+
+    def test_scaffold_lets_required_initvar_class_construct(self) -> None:
+        cls = self._scheduler_like()
+        # Without the scaffold this raises "is_encoder_decoder field required"
+        # before the rule's own validator runs; with it, the validator fires.
+        with pytest.raises(ValueError, match="max_num_seqs"):
+            validate_rules._construct_probe(cls, {"max_num_seqs": 2, "max_num_batched_tokens": 1})
+
+    def test_scaffold_empty_on_introspection_failure(self) -> None:
+        # A class with no pydantic fields / dataclass fields yields no scaffold,
+        # degrading to the current bare cls(**kwargs) behaviour.
+        assert validate_rules._scaffold_required_args(int, {}) == {}
+
+
+# ---------------------------------------------------------------------------
 # invariant_claimed_fields + is_type_check_invariant
 # ---------------------------------------------------------------------------
 
@@ -1004,6 +1075,22 @@ class TestLocusConfirms:
     def test_empty_details_is_permissive(self) -> None:
         # No structured locus recoverable (composed ValueError) - do not block.
         assert locus_confirms_invariant({"a"}, ()) is True
+
+    def test_present_but_empty_loc_is_permissive(self) -> None:
+        # A pydantic-dataclass __post_init__ cross-field raise reports a present
+        # detail with loc=() - no recoverable field, so it must not block (V7's
+        # SchedulerConfig max_num_batched_tokens < max_model_len raise).
+        details = (ErrorDetail(loc=(), error_type="value_error"),)
+        assert locus_confirms_invariant({"max_num_batched_tokens"}, details) is True
+
+    def test_mixed_empty_and_named_loc_still_refines(self) -> None:
+        # When SOME locus is recoverable, attribution still refines: a named loc
+        # that misses the claimed fields blocks even alongside an empty-loc detail.
+        details = (
+            ErrorDetail(loc=(), error_type="value_error"),
+            ErrorDetail(loc=("mode",), error_type="literal_error"),
+        )
+        assert locus_confirms_invariant({"a", "b"}, details) is False
 
     def test_no_claimed_fields_is_permissive(self) -> None:
         details = (ErrorDetail(loc=("x",), error_type="plain"),)

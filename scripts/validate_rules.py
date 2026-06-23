@@ -206,7 +206,102 @@ def _construct_probe(cls: Any, kwargs: dict[str, Any]) -> Any:
         import msgspec  # type: ignore[import-not-found]
 
         return msgspec.convert(kwargs, cls)
-    return cls(**kwargs)
+    scaffold = _scaffold_required_args(cls, kwargs)
+    return cls(**{**scaffold, **kwargs})
+
+
+# Minimal-valid synthesised value per inner type name. Used only when a required
+# construction arg has no class-supplied default_factory to reuse; values are the
+# smallest valid non-None instance so they never alter which branch a rule's
+# predicate tests (the rule kwargs always win on key conflict, and a value rule
+# fires on its OWN field, not on a scaffolded sibling).
+_SCAFFOLD_TYPE_DEFAULTS: dict[type, Any] = {
+    bool: False,
+    int: 1,
+    float: 1.0,
+    str: "x",
+}
+
+
+def _scaffold_required_args(cls: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Return NEUTRAL values for mandatory construction args missing from ``kwargs``.
+
+    Some native types declare required construction args the corpus kwargs don't
+    carry - e.g. vLLM's ``SchedulerConfig`` makes ``max_model_len`` and
+    ``is_encoder_decoder`` ``dataclasses.InitVar`` parameters with no default, so
+    a bare ``SchedulerConfig(**rule_kwargs)`` raises "field required" before the
+    rule's own validator runs. This resolver synthesises the absent mandatory args
+    so the rule's predicate is the thing under test.
+
+    The scaffold is NEUTRAL: it must not change which branch the rule tests. The
+    rule's kwargs always win on key conflict (caller does ``{**scaffold,
+    **kwargs}``), and a required field's value prefers the class's own
+    ``default_factory`` (its real default) over a synthesised stand-in, so a
+    sibling a validator rewrites (e.g. ``is_encoder_decoder`` flips
+    ``enable_chunked_prefill``) lands on its default value, not a flipping one.
+
+    On ANY introspection failure return an empty scaffold - this only ever ADDS
+    args the corpus omitted, so degrading to the current ``cls(**kwargs)``
+    behaviour is always safe.
+    """
+    import dataclasses as _dc
+
+    try:
+        scaffold: dict[str, Any] = {}
+        pyd_fields = getattr(cls, "__pydantic_fields__", None)
+        if pyd_fields is not None:
+            for name, info in pyd_fields.items():
+                if name in kwargs or not getattr(info, "is_required", lambda: False)():
+                    continue
+                # init=False fields report required but reject as kwargs.
+                if getattr(info, "init", True) is False:
+                    continue
+                factory = getattr(info, "default_factory", None)
+                if callable(factory):
+                    scaffold[name] = factory()
+                    continue
+                scaffold[name] = _scaffold_value_for_annotation(info.annotation)
+            return scaffold
+        if _dc.is_dataclass(cls):
+            for f in _dc.fields(cls):
+                if not f.init or f.name in kwargs:
+                    continue
+                if f.default is not _dc.MISSING:
+                    continue
+                if f.default_factory is not _dc.MISSING:  # type: ignore[misc]
+                    scaffold[f.name] = f.default_factory()
+                    continue
+                scaffold[f.name] = _scaffold_value_for_annotation(f.type)
+            return scaffold
+    except Exception:
+        return {}
+    return {}
+
+
+def _scaffold_value_for_annotation(annotation: Any) -> Any:
+    """Synthesise a minimal-valid value for a required field's annotation.
+
+    Unwraps a ``dataclasses.InitVar`` wrapper to its inner type (pydantic stores
+    an InitVar field's annotation AS the ``InitVar[...]`` wrapper, with the inner
+    type on ``.type``), then maps the inner type to its minimal-valid value. For a
+    ``Literal[...]`` the first member is used. Unknown types fall back to ``1``,
+    valid for the int-heavy config fields these scaffolds target; the value only
+    needs to construct cleanly, since the rule kwargs - never the scaffold - carry
+    the field under test.
+    """
+    import dataclasses as _dc
+    import typing
+
+    inner = annotation
+    if isinstance(inner, _dc.InitVar):
+        inner = inner.type
+    origin = typing.get_origin(inner)
+    if origin is typing.Literal:
+        members = typing.get_args(inner)
+        return members[0] if members else 1
+    if isinstance(inner, type) and inner in _SCAFFOLD_TYPE_DEFAULTS:
+        return _SCAFFOLD_TYPE_DEFAULTS[inner]
+    return 1
 
 
 def _is_msgspec_struct(cls: Any) -> bool:

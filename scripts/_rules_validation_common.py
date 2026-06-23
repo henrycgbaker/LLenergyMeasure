@@ -917,6 +917,14 @@ def locus_confirms_invariant(
       attribution only *refines* when evidence is present (e.g. transformers'
       ``GenerationConfig.validate`` composes a single ValueError with no
       per-field loc, where the existing message-template check still applies).
+    - Present-but-empty loc only (every captured detail has ``loc=()``) -> also
+      ``True``. A pydantic-dataclass ``__post_init__`` cross-field raise reports
+      ``{loc: (), type: value_error}`` - a real, present detail that carries no
+      recoverable field, so it would never intersect the claimed fields and
+      would wrongly block a legitimate confirm (vLLM 0.19's SchedulerConfig
+      ``max_num_batched_tokens < max_model_len`` raise). No recoverable locus is
+      the same "evidence absent" case as an empty ``details`` list; defer to the
+      message-template backstop. Mixed loci (some empty, some named) still refine.
     - No claimed fields (invariant omits ``match.fields``) -> ``True``. Nothing
       to attribute against; defer to the other gate checks.
     - Otherwise: at least one captured locus element must intersect the claimed
@@ -930,6 +938,9 @@ def locus_confirms_invariant(
     if not details:
         return True
     error_fields = {part for detail in details for part in detail.loc}
+    if not error_fields:
+        # Present details but no recoverable locus (all loc=()) - permissive.
+        return True
     return bool(error_fields & claimed)
 
 
