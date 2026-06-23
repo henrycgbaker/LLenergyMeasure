@@ -437,11 +437,20 @@ def _extract_predicates(condition: ast.expr, field_refs: frozenset[str]) -> list
 # ---------------------------------------------------------------------------
 
 
+# Sentinel return from ``_value_satisfying`` meaning "OMIT this field from the
+# probe kwargs", not "set it to a value". ``absent: true`` means the field is
+# not provided at all, so the library default applies. Passing ``None`` instead
+# breaks the moment a field tightens from ``X | None`` to a strict type (e.g.
+# vLLM 0.19.1 made ``enable_chunked_prefill`` a plain ``bool``, which rejects
+# ``None`` at construction before the cross-field rule can fire).
+_OMIT_FIELD = object()
+
+
 def _value_satisfying(op: str, rhs: Any) -> Any:
     if op == "present" and rhs is True:
         return 1
     if op == "absent":
-        return None
+        return _OMIT_FIELD
     if op == "==":
         return rhs
     if op == "!=":
@@ -574,9 +583,13 @@ def _synthesise_kwargs(preds: list[_Predicate]) -> dict[str, Any]:
         if isinstance(p.rhs, str) and p.rhs.startswith("@"):
             companion = p.rhs[1:].split(".")[-1]
             out.setdefault(companion, 2)
-            out.setdefault(p.field, _value_satisfying(p.op, out[companion]))
+            value = _value_satisfying(p.op, out[companion])
         else:
-            out.setdefault(p.field, _value_satisfying(p.op, p.rhs))
+            value = _value_satisfying(p.op, p.rhs)
+        if value is _OMIT_FIELD:
+            # ``absent: true`` -> the field is not provided; let the default apply.
+            continue
+        out.setdefault(p.field, value)
     return out
 
 
