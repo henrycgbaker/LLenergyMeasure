@@ -172,16 +172,17 @@ def _load_curated(outputs: Path) -> dict[str, list[str]]:
     return {section: list(exposed.get(section) or []) for section in SECTIONS}
 
 
-# Keys an overlay narrowing may TIGHTEN on a mined field.
-_NARROWING_KEYS: tuple[str, ...] = (
-    "type",
-    "minimum",
-    "maximum",
-    "exclusiveMinimum",
-    "exclusiveMaximum",
-    "enum",
-    "description",
-)
+# Non-bound keys an overlay narrowing may TIGHTEN or complete on a mined field.
+# Numeric bounds are handled per-edge by _apply_narrowing (keep-tighter), not
+# layered blindly, so a mined and a hand-enforced bound on the same edge never
+# coexist (which would emit contradictory ge+gt / le+lt on one field).
+_NON_BOUND_NARROWING_KEYS: tuple[str, ...] = ("type", "enum", "description")
+
+# Lower/upper numeric edges as (inclusive_key, exclusive_key) JSON Schema names.
+_BOUND_EDGES: dict[str, tuple[str, str]] = {
+    "lower": ("minimum", "exclusiveMinimum"),
+    "upper": ("maximum", "exclusiveMaximum"),
+}
 
 
 def _load_overlay(outputs: Path) -> dict[str, dict[str, dict[str, Any]]]:
@@ -211,15 +212,45 @@ _TYPE_NARROWINGS: dict[str, frozenset[str]] = {
 }
 
 
+def _bound_on_edge(prop: dict[str, Any], edge: str) -> tuple[float, bool] | None:
+    """Return ``(value, is_exclusive)`` for the bound on *edge* in *prop*, else None."""
+    inclusive_key, exclusive_key = _BOUND_EDGES[edge]
+    if exclusive_key in prop:
+        return prop[exclusive_key], True
+    if inclusive_key in prop:
+        return prop[inclusive_key], False
+    return None
+
+
+def _tighter_bound(edge: str, a: tuple[float, bool], b: tuple[float, bool]) -> tuple[float, bool]:
+    """Return the tighter (more restrictive) of two bounds on *edge*.
+
+    On the lower edge the larger value is tighter; on the upper edge the smaller
+    value is tighter; on a tie the exclusive variant (gt/lt) is tighter than the
+    inclusive one (ge/le).
+    """
+    (a_val, a_excl), (b_val, _) = a, b
+    if a_val == b_val:
+        return a if a_excl else b
+    if edge == "lower":
+        return a if a_val > b_val else b
+    return a if a_val < b_val else b
+
+
 def _apply_narrowing(
     field: str, mined: dict[str, Any], narrowing: dict[str, Any]
 ) -> dict[str, Any]:
     """Tighten a mined property with an overlay narrowing.
 
     Tighten-only: a ``type`` narrowing must be a subtype of the mined type
-    (integer narrows number; like narrows like). A contradiction
-    (``string`` mined, ``integer`` overlay) raises with both shapes. Other
-    narrowing keys (bounds, enum, description) layer on additively.
+    (integer narrows number; like narrows like). A contradiction (``string``
+    mined, ``integer`` overlay) raises with both shapes.
+
+    Numeric bounds are resolved per edge: the mined and the hand-enforced bound
+    on the same edge never coexist (that would emit contradictory ge+gt / le+lt
+    on one field); the tighter survives, so a stale hand-enforced bound retires
+    once mining surfaces a stricter one. Enum, type and description complete or
+    narrow additively.
     """
     out = dict(mined)
     new_type = narrowing.get("type")
@@ -231,7 +262,21 @@ def _apply_narrowing(
                 f"overlay narrowing on {field!r} contradicts mined type: "
                 f"mined {mined_type!r}, overlay {new_type!r} (narrowings may only tighten)."
             )
-    for key in _NARROWING_KEYS:
+    for edge, (inclusive_key, exclusive_key) in _BOUND_EDGES.items():
+        mined_bound = _bound_on_edge(mined, edge)
+        overlay_bound = _bound_on_edge(narrowing, edge)
+        if overlay_bound is None:
+            continue  # a mined bound (if any) already rides in out unchanged
+        chosen = (
+            _tighter_bound(edge, mined_bound, overlay_bound)
+            if mined_bound is not None
+            else overlay_bound
+        )
+        out.pop(inclusive_key, None)
+        out.pop(exclusive_key, None)
+        value, is_exclusive = chosen
+        out[exclusive_key if is_exclusive else inclusive_key] = value
+    for key in _NON_BOUND_NARROWING_KEYS:
         if key in narrowing:
             out[key] = narrowing[key]
     reason = narrowing.get("x-narrowing-reason")

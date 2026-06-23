@@ -145,6 +145,33 @@ def test_overlay_narrowing_tightens_mined_field() -> None:
     assert prop["x-narrowing-applied"] == "NaN softmax below 0"
 
 
+def test_overlay_and_mined_bound_on_same_edge_keep_tighter() -> None:
+    """Mined + hand-enforced bounds on one edge never coexist; the tighter wins.
+
+    Regression for the vllm gpu_memory_utilization bug: a mined
+    exclusiveMinimum plus an overlay minimum (and a mined maximum plus an
+    overlay exclusiveMaximum) were both emitted, producing a contradictory
+    ge+gt / le+lt field that rejected the previously-valid inclusive endpoint.
+    """
+    mined = {"type": "number", "default": 0.9, "exclusiveMinimum": 0, "maximum": 1}
+    narrowing = {"minimum": 0.0, "exclusiveMaximum": 1.0, "x-narrowing-reason": "legacy"}
+    out = rec._apply_narrowing("gpu_memory_utilization", mined, narrowing)
+    # lower: mined gt 0 (exclusive) beats overlay ge 0 (inclusive) on a value tie
+    assert out.get("exclusiveMinimum") == 0
+    assert "minimum" not in out
+    # upper: overlay lt 1 (exclusive) beats mined le 1 (inclusive) on a value tie
+    assert out.get("exclusiveMaximum") == 1.0
+    assert "maximum" not in out
+
+
+def test_overlay_bound_retires_when_mined_bound_is_stricter() -> None:
+    """A stale looser overlay bound retires once mining surfaces a stricter one."""
+    mined = {"type": "integer", "minimum": 1}  # ge 1 (mined)
+    narrowing = {"minimum": 0, "x-narrowing-reason": "legacy ge 0"}  # ge 0 (looser)
+    out = rec._apply_narrowing("max_num_seqs", mined, narrowing)
+    assert out["minimum"] == 1  # mined ge 1 wins (tighter); overlay ge 0 retires
+
+
 def test_overlay_narrowing_allows_subtype_tighten() -> None:
     """integer narrows number (a legal tighten)."""
     overlay = _empty_overlay()

@@ -17,12 +17,10 @@ class EngineParams(BaseModel):
     gpu_memory_utilization: Annotated[
         float | None,
         Field(
-            ge=0.0,
             gt=0.0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
-            le=1.0,
             lt=1.0,
         ),
     ] = 0.9

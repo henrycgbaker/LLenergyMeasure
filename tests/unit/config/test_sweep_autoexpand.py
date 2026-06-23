@@ -43,12 +43,16 @@ def test_bounded_float_inclusive_buckets_min_mid_max() -> None:
     assert resolve_auto_values("transformers.sampling_params.temperature") == [0.0, 1.0, 2.0]
 
 
-def test_bounded_float_exclusive_upper_stays_in_range() -> None:
-    """vllm gpu_memory_utilization (ge=0.0, lt=1.0) keeps every value in range."""
+def test_bounded_float_exclusive_bounds_nudged_inward() -> None:
+    """vllm gpu_memory_utilization (gt=0.0, lt=1.0): both ends nudged inward.
+
+    The mined exclusiveMinimum retires the stale hand-enforced inclusive ge=0.0,
+    so the field carries a single coherent bound per edge (gt/lt) and the
+    resolver nudges both endpoints inward rather than using either verbatim.
+    """
     values = resolve_auto_values("vllm.engine_params.gpu_memory_utilization")
-    assert all(0.0 <= v < 1.0 for v in values)
-    assert values[0] == 0.0  # inclusive lower used verbatim
-    assert values[-1] < 1.0  # exclusive upper nudged inward
+    assert values == [0.001, 0.5, 0.999]
+    assert all(0.0 < v < 1.0 for v in values)
 
 
 def test_unbounded_numeric_raises_config_error() -> None:
