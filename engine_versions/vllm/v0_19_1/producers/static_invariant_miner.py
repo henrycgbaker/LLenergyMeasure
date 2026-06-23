@@ -294,6 +294,23 @@ def _self_attr(node: ast.expr) -> str | None:
     return None
 
 
+def _self_method_name(node: ast.expr) -> str | None:
+    """Return ``X`` for a ``self.X(...)`` call expression, else None.
+
+    Used to follow a validator that factors a cross-field check into a sibling
+    method called from ``__post_init__`` (e.g. vLLM 0.19's
+    ``self.verify_max_model_len(...)``), so the relocated raise is still mined.
+    """
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "self"
+    ):
+        return node.func.attr
+    return None
+
+
 def _literal(node: ast.expr) -> tuple[bool, Any]:
     if isinstance(node, ast.Constant):
         return True, node.value
@@ -314,17 +331,22 @@ def _literal(node: ast.expr) -> tuple[bool, Any]:
     return False, None
 
 
-def _rhs_value(node: ast.expr) -> tuple[bool, Any]:
+def _rhs_value(node: ast.expr, field_refs: frozenset[str]) -> tuple[bool, Any]:
     ok, v = _literal(node)
     if ok:
         return True, v
     name = _self_attr(node)
     if name is not None:
         return True, f"@{name}"
+    if isinstance(node, ast.Name) and node.id in field_refs:
+        # A bare reference to a config field / InitVar (e.g. a validator helper
+        # comparing self.<field> against the max_model_len InitVar parameter)
+        # resolves to the same ``@`` cross-field reference as ``self.<field>``.
+        return True, f"@{node.id}"
     return False, None
 
 
-def _extract_compare(cmp: ast.Compare) -> list[_Predicate]:
+def _extract_compare(cmp: ast.Compare, field_refs: frozenset[str]) -> list[_Predicate]:
     preds: list[_Predicate] = []
     operands = [cmp.left, *cmp.comparators]
     for left, op, right in zip(operands, cmp.ops, cmp.comparators, strict=False):
@@ -346,12 +368,12 @@ def _extract_compare(cmp: ast.Compare) -> list[_Predicate]:
         left_field = _self_attr(left)
         right_field = _self_attr(right)
         if left_field is not None:
-            ok, rhs = _rhs_value(right)
+            ok, rhs = _rhs_value(right, field_refs)
             if ok:
                 preds.append(_Predicate(field=left_field, op=op_name, rhs=rhs))
         elif right_field is not None:
             flipped = _FLIPPED_OPS.get(op_name)
-            ok, rhs = _rhs_value(left)
+            ok, rhs = _rhs_value(left, field_refs)
             if flipped is not None and ok:
                 preds.append(_Predicate(field=right_field, op=flipped, rhs=rhs))
     return preds
@@ -386,20 +408,20 @@ def _extract_call(call: ast.Call) -> list[_Predicate]:
     return []
 
 
-def _extract_predicates(condition: ast.expr) -> list[_Predicate]:
+def _extract_predicates(condition: ast.expr, field_refs: frozenset[str]) -> list[_Predicate]:
     if isinstance(condition, ast.BoolOp) and isinstance(condition.op, ast.And):
         out: list[_Predicate] = []
         for value in condition.values:
-            out.extend(_extract_predicates(value))
+            out.extend(_extract_predicates(value, field_refs))
         return out
     if isinstance(condition, ast.BoolOp) and isinstance(condition.op, ast.Or):
         return []
     if isinstance(condition, ast.Compare):
-        return _extract_compare(condition)
+        return _extract_compare(condition, field_refs)
     if isinstance(condition, ast.Call):
         return _extract_call(condition)
     if isinstance(condition, ast.UnaryOp) and isinstance(condition.op, ast.Not):
-        inner = _extract_predicates(condition.operand)
+        inner = _extract_predicates(condition.operand, field_refs)
         if len(inner) == 1 and inner[0].op in _INVERSE_OPS:
             p = inner[0]
             return [_Predicate(field=p.field, op=_INVERSE_OPS[p.op], rhs=p.rhs)]
@@ -603,13 +625,14 @@ def _walk_function(
     func: ast.FunctionDef,
     *,
     target: _ASTTarget,
+    field_names: frozenset[str],
+    class_methods: dict[str, ast.FunctionDef],
     rel_source_path: str,
     today: str,
 ) -> list[InvariantCandidate]:
     invariants: list[InvariantCandidate] = []
     seen_ids: set[str] = set()
-
-    public_fields = _public_field_names_from_target(target)
+    visited_helpers: set[str] = set()
 
     def descend(body: list[ast.stmt], frame: _Frame) -> None:
         for stmt in body:
@@ -617,10 +640,19 @@ def _walk_function(
                 _handle_if(stmt, frame)
             elif isinstance(stmt, ast.For):
                 descend(stmt.body, frame)
+            elif isinstance(stmt, ast.Expr):
+                # Follow a same-class validator helper called from this method
+                # (e.g. self.verify_max_model_len(...)) so a raise that upstream
+                # relocated out of the walked method is still mined. One level
+                # per helper (visited guard) to avoid cycles.
+                helper = _self_method_name(stmt.value)
+                if helper is not None and helper in class_methods and helper not in visited_helpers:
+                    visited_helpers.add(helper)
+                    descend(class_methods[helper].body, frame)
 
     def _handle_if(if_node: ast.If, frame: _Frame) -> None:
-        own_preds = _extract_predicates(if_node.test)
-        if public_fields and not any(p.field in public_fields for p in own_preds):
+        own_preds = _extract_predicates(if_node.test, field_names)
+        if field_names and not any(p.field in field_names for p in own_preds):
             descend(if_node.body, frame)
             return
         local = _Frame(predicates=[*frame.predicates, *own_preds])
@@ -806,17 +838,43 @@ def _describe_rule(*, target: _ASTTarget, preds: list[_Predicate], detected: _De
 # ---------------------------------------------------------------------------
 
 
+def _initvar_names(cls: type) -> set[str]:
+    """Names declared as ``InitVar`` on the class (or its MRO).
+
+    InitVars are passed to ``__post_init__`` but not stored as fields, yet a
+    validator compares config knobs against them (e.g. SchedulerConfig's
+    ``max_model_len: InitVar[int]``). Detected from annotations whether or not
+    the defining module uses ``from __future__ import annotations`` (which
+    leaves the annotation a string).
+    """
+    import dataclasses as _dc
+
+    out: set[str] = set()
+    for klass in getattr(cls, "__mro__", [cls]):
+        for name, ann in getattr(klass, "__annotations__", {}).items():
+            if name.startswith("_"):
+                continue
+            if (
+                isinstance(ann, _dc.InitVar)
+                or ann is _dc.InitVar
+                or (isinstance(ann, str) and "InitVar" in ann)
+            ):
+                out.add(name)
+    return out
+
+
 def _public_field_names_from_target(target: _ASTTarget) -> frozenset[str]:
     """Return the set of public field names of the target class.
 
-    vLLM 0.7.3 mixes stdlib dataclasses (``ParallelConfig``,
-    ``LoRAConfig``, ``SchedulerConfig``, ``DecodingConfig``) with bare
-    classes (``CacheConfig``, ``ModelConfig``, ``SpeculativeConfig``).
-    The dataclass / msgspec / pydantic ladder below catches the
-    dataclasses; the bare-class fallback constructs an instance with no
-    args to enumerate ``vars()``. On any failure return an empty set so
-    the public-field filter degrades to "no filter" (recall over
-    precision).
+    vLLM mixes stdlib dataclasses (``ParallelConfig``, ``LoRAConfig``,
+    ``SchedulerConfig``, ``DecodingConfig``) with bare classes (``CacheConfig``,
+    ``ModelConfig``, ``SpeculativeConfig``). The dataclass / msgspec / pydantic
+    ladder below catches the dataclasses; the bare-class fallback constructs an
+    instance with no args to enumerate ``vars()``. InitVar-declared names are
+    folded in too: they are not stored fields but they ARE config knobs a
+    validator compares against, so a bare reference to one resolves to an ``@``
+    field-ref. On any failure return an empty set so the public-field filter
+    degrades to "no filter" (recall over precision).
     """
     try:
         module = __import__(target.module_path, fromlist=[target.class_name])
@@ -824,21 +882,25 @@ def _public_field_names_from_target(target: _ASTTarget) -> frozenset[str]:
     except (ImportError, AttributeError):
         return frozenset()
 
-    pyd_fields = getattr(cls, "__pydantic_fields__", None)
-    if pyd_fields:
-        return frozenset(pyd_fields.keys())
-    struct_fields = getattr(cls, "__struct_fields__", None)
-    if struct_fields:
-        return frozenset(n for n in struct_fields if not n.startswith("_"))
     import dataclasses as _dc
 
-    if _dc.is_dataclass(cls):
-        return frozenset(f.name for f in _dc.fields(cls) if not f.name.startswith("_"))
-    try:
-        instance = cls()
-        return frozenset(n for n in vars(instance) if not n.startswith("_"))
-    except Exception:
-        return frozenset()
+    names: set[str] = set()
+    pyd_fields = getattr(cls, "__pydantic_fields__", None)
+    struct_fields = getattr(cls, "__struct_fields__", None)
+    if pyd_fields:
+        names.update(pyd_fields.keys())
+    elif struct_fields:
+        names.update(n for n in struct_fields if not n.startswith("_"))
+    elif _dc.is_dataclass(cls):
+        names.update(f.name for f in _dc.fields(cls) if not f.name.startswith("_"))
+    else:
+        try:
+            instance = cls()
+        except Exception:
+            return frozenset()
+        names.update(n for n in vars(instance) if not n.startswith("_"))
+    names.update(_initvar_names(cls))
+    return frozenset(names)
 
 
 def _field_default_from_target(target: _ASTTarget, field_name: str) -> tuple[bool, Any]:
@@ -967,10 +1029,16 @@ def walk_vllm_static(*, today: str | None = None) -> tuple[list[InvariantCandida
                 f"{target.module_path}.{target.class_name}.{target.method}",
                 detail="vanished mid-walk",
             )
+        field_names = _public_field_names_from_target(target)
+        class_methods = {
+            node.name: node for node in cls_ast.body if isinstance(node, ast.FunctionDef)
+        }
         candidates.extend(
             _walk_function(
                 method_ast,
                 target=target,
+                field_names=field_names,
+                class_methods=class_methods,
                 rel_source_path=rel_path,
                 today=today,
             )
