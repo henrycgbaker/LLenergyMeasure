@@ -11,9 +11,16 @@
     {
       "section": "engine_params",
       "fields": [
-        "build_config"
+        "decoding_config"
       ],
-      "reason": "BuildConfig is not a Pydantic model; appears as Optional[object] in the schema"
+      "reason": "DecodingConfig is a plain (non-Pydantic, non-dataclass) class; not introspectable by the dataclass-lift, and superseded by the mined speculative_config decoding union"
+    },
+    {
+      "section": "engine_params",
+      "fields": [
+        "cp_config"
+      ],
+      "reason": "cp_config is a bare dict (context-parallel settings) with no Pydantic/dataclass schema class; leaves are not introspectable and must come from overlay.yaml if exposed"
     },
     {
       "section": "sampling_params",
@@ -335,10 +342,8 @@
       "deprecated": false
     },
     "build_config": {
-      "type": "Optional[tensorrt_llm.builder.BuildConfig]",
-      "default": null,
-      "description": "Build config.",
-      "deprecated": false
+      "$ref": "#/$defs/BuildConfig",
+      "default": null
     },
     "enable_prompt_adapter": {
       "type": "boolean",
@@ -1686,6 +1691,488 @@
       ],
       "title": "UserProvidedDecodingConfig",
       "type": "object"
+    },
+    "BuildConfig": {
+      "title": "BuildConfig",
+      "type": "object",
+      "properties": {
+        "max_input_len": {
+          "type": "int",
+          "default": 1024
+        },
+        "max_seq_len": {
+          "type": "int",
+          "default": null
+        },
+        "opt_batch_size": {
+          "type": "int",
+          "default": 8
+        },
+        "max_batch_size": {
+          "type": "int",
+          "default": 2048
+        },
+        "max_beam_width": {
+          "type": "int",
+          "default": 1
+        },
+        "max_num_tokens": {
+          "type": "int",
+          "default": 8192
+        },
+        "opt_num_tokens": {
+          "type": "int | None",
+          "default": null
+        },
+        "max_prompt_embedding_table_size": {
+          "type": "int",
+          "default": 0
+        },
+        "kv_cache_type": {
+          "type": "KVCacheType",
+          "default": null
+        },
+        "gather_context_logits": {
+          "type": "int",
+          "default": false
+        },
+        "gather_generation_logits": {
+          "type": "int",
+          "default": false
+        },
+        "strongly_typed": {
+          "type": "bool",
+          "default": true
+        },
+        "force_num_profiles": {
+          "type": "int | None",
+          "default": null
+        },
+        "profiling_verbosity": {
+          "type": "str",
+          "default": "layer_names_only"
+        },
+        "enable_debug_output": {
+          "type": "bool",
+          "default": false
+        },
+        "max_draft_len": {
+          "type": "int",
+          "default": 0
+        },
+        "speculative_decoding_mode": {
+          "type": "SpeculativeDecodingMode",
+          "default": 1
+        },
+        "use_refit": {
+          "type": "bool",
+          "default": false
+        },
+        "input_timing_cache": {
+          "type": "str",
+          "default": null
+        },
+        "output_timing_cache": {
+          "type": "str",
+          "default": "model.cache"
+        },
+        "lora_config": {
+          "$ref": "#/$defs/LoraConfig",
+          "default": null
+        },
+        "auto_parallel_config": {
+          "$ref": "#/$defs/AutoParallelConfig",
+          "default": null
+        },
+        "weight_sparsity": {
+          "type": "bool",
+          "default": false
+        },
+        "weight_streaming": {
+          "type": "bool",
+          "default": false
+        },
+        "plugin_config": {
+          "$ref": "#/$defs/PluginConfig",
+          "default": null
+        },
+        "use_strip_plan": {
+          "type": "bool",
+          "default": false
+        },
+        "max_encoder_input_len": {
+          "type": "int",
+          "default": 1024
+        },
+        "dry_run": {
+          "type": "bool",
+          "default": false
+        },
+        "visualize_network": {
+          "type": "str",
+          "default": null
+        },
+        "monitor_memory": {
+          "type": "bool",
+          "default": false
+        },
+        "use_mrope": {
+          "type": "bool",
+          "default": false
+        }
+      }
+    },
+    "AutoParallelConfig": {
+      "title": "AutoParallelConfig",
+      "type": "object",
+      "properties": {
+        "world_size": {
+          "type": "int",
+          "default": 1
+        },
+        "gpus_per_node": {
+          "type": "int",
+          "default": 8
+        },
+        "cluster_key": {
+          "type": "str",
+          "default": null
+        },
+        "cluster_info": {
+          "$ref": "#/$defs/ClusterInfo",
+          "default": null
+        },
+        "sharding_cost_model": {
+          "type": "str",
+          "default": "alpha_beta"
+        },
+        "comm_cost_model": {
+          "type": "str",
+          "default": "alpha_beta"
+        },
+        "enable_pipeline_parallelism": {
+          "type": "bool",
+          "default": false
+        },
+        "enable_shard_unbalanced_shape": {
+          "type": "bool",
+          "default": false
+        },
+        "enable_shard_dynamic_shape": {
+          "type": "bool",
+          "default": false
+        },
+        "enable_reduce_scatter": {
+          "type": "bool",
+          "default": true
+        },
+        "builder_flags": {
+          "type": "int | None",
+          "default": null
+        },
+        "debug_mode": {
+          "type": "bool",
+          "default": false
+        },
+        "infer_shape": {
+          "type": "bool",
+          "default": true
+        },
+        "validation_mode": {
+          "type": "bool",
+          "default": false
+        },
+        "same_buffer_io": {
+          "type": "dict[str, str]",
+          "default": {}
+        },
+        "same_spec_io": {
+          "type": "dict[str, str]",
+          "default": {}
+        },
+        "sharded_io_allowlist": {
+          "type": "list[str]",
+          "default": []
+        },
+        "fill_weights": {
+          "type": "bool",
+          "default": false
+        },
+        "parallel_config_cache": {
+          "type": "str | None",
+          "default": null
+        },
+        "profile_cache": {
+          "type": "str | None",
+          "default": null
+        },
+        "dump_path": {
+          "type": "str | None",
+          "default": null
+        },
+        "debug_outputs": {
+          "type": "list[str] | str",
+          "default": []
+        }
+      }
+    },
+    "ClusterInfo": {
+      "title": "ClusterInfo",
+      "type": "object",
+      "properties": {
+        "inter_node_bw_per_device": {
+          "type": "int",
+          "default": 25
+        },
+        "intra_node_bw_per_device": {
+          "type": "int",
+          "default": 0
+        },
+        "inter_node_latency": {
+          "type": "int",
+          "default": 10
+        },
+        "intra_node_latency": {
+          "type": "int",
+          "default": 10
+        },
+        "intra_node_sharp": {
+          "type": "bool",
+          "default": false
+        },
+        "inter_node_sharp": {
+          "type": "bool",
+          "default": true
+        },
+        "memory_bw": {
+          "type": "int",
+          "default": 0
+        },
+        "memory_budget_per_device": {
+          "type": "int",
+          "default": 0
+        },
+        "math_throughput": {
+          "$ref": "#/$defs/MathThroughput",
+          "default": null
+        },
+        "memory_efficiency": {
+          "type": "float",
+          "default": 1.0
+        },
+        "math_efficiency": {
+          "type": "float",
+          "default": 1.0
+        },
+        "communication_efficiency": {
+          "type": "float",
+          "default": 1.0
+        }
+      }
+    },
+    "MathThroughput": {
+      "title": "MathThroughput",
+      "type": "object",
+      "properties": {
+        "int4": {
+          "type": "int",
+          "default": 0
+        },
+        "int8": {
+          "type": "int",
+          "default": 0
+        },
+        "fp8": {
+          "type": "int",
+          "default": 0
+        },
+        "float16": {
+          "type": "int",
+          "default": 0
+        },
+        "bfloat16": {
+          "type": "int",
+          "default": 0
+        },
+        "float32": {
+          "type": "int",
+          "default": 0
+        }
+      }
+    },
+    "PluginConfig": {
+      "title": "PluginConfig",
+      "type": "object",
+      "properties": {
+        "_dtype": {
+          "type": "str",
+          "default": "float16"
+        },
+        "_bert_attention_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_gpt_attention_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_explicitly_disable_gemm_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_gemm_swiglu_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_fp8_rowwise_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_qserve_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_identity_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_nccl_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_lora_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_dora_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_weight_only_groupwise_quant_matmul_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_weight_only_quant_matmul_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_smooth_quant_plugins": {
+          "type": "bool",
+          "default": true
+        },
+        "_smooth_quant_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_layernorm_quantization_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_rmsnorm_quantization_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_quantize_per_token_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_quantize_tensor_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_moe_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_mamba_conv1d_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_low_latency_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_low_latency_gemm_swiglu_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_gemm_allreduce_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_context_fmha": {
+          "type": "bool",
+          "default": true
+        },
+        "_bert_context_fmha_fp32_acc": {
+          "type": "bool",
+          "default": false
+        },
+        "_paged_kv_cache": {
+          "type": "bool | None",
+          "default": null
+        },
+        "_remove_input_padding": {
+          "type": "bool",
+          "default": true
+        },
+        "_norm_quant_fusion": {
+          "type": "bool",
+          "default": false
+        },
+        "_reduce_fusion": {
+          "type": "bool",
+          "default": false
+        },
+        "_user_buffer": {
+          "type": "bool",
+          "default": false
+        },
+        "_tokens_per_block": {
+          "type": "int",
+          "default": 32
+        },
+        "_use_paged_context_fmha": {
+          "type": "bool",
+          "default": true
+        },
+        "_use_fp8_context_fmha": {
+          "type": "bool",
+          "default": true
+        },
+        "_fuse_fp4_quant": {
+          "type": "bool",
+          "default": false
+        },
+        "_multiple_profiles": {
+          "type": "bool",
+          "default": false
+        },
+        "_paged_state": {
+          "type": "bool",
+          "default": true
+        },
+        "_streamingllm": {
+          "type": "bool",
+          "default": false
+        },
+        "_manage_weights": {
+          "type": "bool",
+          "default": false
+        },
+        "_use_fused_mlp": {
+          "type": "bool",
+          "default": true
+        },
+        "_pp_reduce_scatter": {
+          "type": "bool",
+          "default": false
+        }
+      }
     }
   }
 }

@@ -247,6 +247,22 @@ def exposable_default(value: Any) -> Any:
     return None
 
 
+def _single_candidate(annotation: Any) -> Any | None:
+    """Return the sole non-``None`` member of ``annotation`` (unwrapping ``X | None``), else None.
+
+    Multi-member unions and bare generics (``list[SubConfig]``) have no single
+    class to ``$ref`` and yield None.
+    """
+    origin = get_origin(annotation)
+    if origin is Union or origin is types.UnionType:
+        candidates = tuple(a for a in get_args(annotation) if a is not type(None))
+    elif origin is None:
+        candidates = (annotation,)
+    else:
+        return None
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _resolve_pydantic_type(annotation: Any) -> type | None:
     """Return the Pydantic model in ``annotation`` (unwrapping ``X | None``), else None.
 
@@ -256,18 +272,27 @@ def _resolve_pydantic_type(annotation: Any) -> type | None:
     sub-config to ``$ref``. Recognises both ``pydantic.BaseModel`` subclasses and
     ``pydantic.dataclasses``-decorated classes (both expose ``model_json_schema``).
     """
-    candidates: tuple[Any, ...]
-    origin = get_origin(annotation)
-    if origin is Union or origin is types.UnionType:
-        candidates = tuple(a for a in get_args(annotation) if a is not type(None))
-    elif origin is None:
-        candidates = (annotation,)
-    else:
-        return None
-    if len(candidates) != 1:
-        return None
-    candidate = candidates[0]
+    candidate = _single_candidate(annotation)
     if isinstance(candidate, type) and hasattr(candidate, "model_json_schema"):
+        return candidate
+    return None
+
+
+def _resolve_dataclass_type(annotation: Any) -> type | None:
+    """Return the non-Pydantic ``@dataclass`` in ``annotation`` (unwrapping ``X | None``), else None.
+
+    The Pydantic path (:func:`_resolve_pydantic_type`) takes precedence; this
+    catches the stdlib-dataclass sub-configs that engine-args classes nest
+    WITHOUT Pydantic (e.g. vLLM ``CompilationConfig`` / ``AttentionConfig``,
+    which expose no ``model_json_schema``), so they recurse into ``$defs``
+    instead of flattening to a bare type-name string.
+    """
+    candidate = _single_candidate(annotation)
+    if (
+        isinstance(candidate, type)
+        and dataclasses.is_dataclass(candidate)
+        and not hasattr(candidate, "model_json_schema")
+    ):
         return candidate
     return None
 
@@ -284,13 +309,15 @@ def dataclass_fields_to_specs(
     so downstream JSON stays concrete. Types are rendered via
     ``annotation_to_type_str``.
 
-    When a field's resolved type is a Pydantic model and a ``defs`` accumulator
-    is supplied, the field is emitted as a JSON Schema ``$ref`` and the model's
-    own ``model_json_schema()`` (its ``$defs`` plus its root definition) is
-    folded into ``defs``. This surfaces the Pydantic sub-configs nested inside
-    stdlib-dataclass engine-args (e.g. vllm ``EngineArgs``) that would otherwise
-    flatten to ``type: object`` - the 2026-05-24 ``$defs`` resolution. Pass the
-    same ``defs`` dict to :func:`make_envelope` to ship it.
+    When a field's resolved type is a sub-config class and a ``defs`` accumulator
+    is supplied, the field is emitted as a JSON Schema ``$ref`` and the class is
+    folded into ``defs``: a Pydantic model via its ``model_json_schema()``
+    (:func:`_fold_model_defs`), a stdlib ``@dataclass`` via a recursive walk of
+    its own fields (:func:`_fold_dataclass_defs`). This surfaces the sub-configs
+    nested inside stdlib-dataclass engine-args (e.g. vllm ``EngineArgs`` ->
+    ``CompilationConfig`` / ``AttentionConfig``) that would otherwise flatten to
+    a bare type-name string. Pass the same ``defs`` dict to :func:`make_envelope`
+    to ship it.
     """
     specs: dict[str, dict[str, Any]] = {}
     # Only resolve string annotations to real types when recursion is requested -
@@ -309,11 +336,20 @@ def dataclass_fields_to_specs(
             except Exception:
                 default = None
         if defs is not None:
-            nested = _resolve_pydantic_type(hints.get(fld.name, fld.type))
-            if nested is not None:
-                _fold_model_defs(nested, defs)
+            annotation = hints.get(fld.name, fld.type)
+            nested_model = _resolve_pydantic_type(annotation)
+            if nested_model is not None:
+                _fold_model_defs(nested_model, defs)
                 specs[fld.name] = {
-                    "$ref": f"#/$defs/{nested.__name__}",
+                    "$ref": f"#/$defs/{nested_model.__name__}",
+                    "default": exposable_default(default),
+                }
+                continue
+            nested_dc = _resolve_dataclass_type(annotation)
+            if nested_dc is not None:
+                _fold_dataclass_defs(nested_dc, defs)
+                specs[fld.name] = {
+                    "$ref": f"#/$defs/{nested_dc.__name__}",
                     "default": exposable_default(default),
                 }
                 continue
@@ -354,6 +390,62 @@ def _fold_model_defs(model: type, defs: dict[str, Any]) -> None:
         defs.setdefault(name, body)
     # The root schema body (title/properties/...) becomes this model's own def.
     defs.setdefault(model.__name__, schema)
+
+
+def _fold_dataclass_defs(cls: type, defs: dict[str, Any]) -> None:
+    """Fold a non-Pydantic ``@dataclass`` and its nested dataclasses into ``defs``.
+
+    The dataclass analogue of :func:`_fold_model_defs` (stdlib dataclasses carry
+    no ``model_json_schema``). Recurses through :func:`dataclass_fields_to_specs`,
+    so a dataclass-typed field (``CompilationConfig.pass_config``) folds its own
+    ``$def`` and ``$ref`` too. A placeholder entry is written BEFORE recursing so
+    a self- or mutually-referential dataclass terminates - the standard ``$defs``
+    cycle break (a re-entry sees ``cls.__name__`` already present and returns,
+    leaving the dangling ``$ref`` to be filled once the outer call completes).
+    """
+    if cls.__name__ in defs:
+        return
+    defs[cls.__name__] = {}  # cycle-break placeholder; overwritten below
+    defs[cls.__name__] = {
+        "title": cls.__name__,
+        "type": "object",
+        "properties": dataclass_fields_to_specs(cls, defs=defs),
+    }
+
+
+def fold_dict_typed_subconfig(
+    specs: dict[str, dict[str, Any]],
+    field: str,
+    cls: type,
+    defs: dict[str, Any],
+) -> bool:
+    """Rewrite a dict-typed sub-config field to a ``$ref`` of its real class.
+
+    Some engine-args fields are annotated as a bare dict / ``object`` (e.g. vLLM
+    ``EngineArgs.speculative_config: dict[str, Any] | None``, tensorrt
+    ``TrtLlmArgs.build_config: Optional[object]``) yet are coerced to a concrete
+    config class at construction. The annotation alone cannot be recursed, so the
+    introspector carries a field->class hint and calls this: ``cls`` is folded
+    into ``defs`` (via the Pydantic or dataclass path) and the field's spec
+    becomes a ``$ref`` so its leaves are discoverable. The original ``default`` is
+    preserved.
+
+    Returns ``True`` when the field was folded, ``False`` (no mutation) when the
+    field is absent or ``cls`` is neither a Pydantic model nor a dataclass (a
+    plain class the lift cannot introspect) - so the caller can record an honest
+    discovery limitation instead of leaving a silent gap.
+    """
+    spec = specs.get(field)
+    if spec is None:
+        return False
+    if hasattr(cls, "model_json_schema"):
+        _fold_model_defs(cls, defs)
+    elif dataclasses.is_dataclass(cls):
+        _fold_dataclass_defs(cls, defs)
+    else:
+        return False
+    specs[field] = {"$ref": f"#/$defs/{cls.__name__}", "default": spec.get("default")}
+    return True
 
 
 def merge_source_constraints(

@@ -26,6 +26,7 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
+    fold_dict_typed_subconfig,
     make_envelope,
     merge_source_constraints,
 )
@@ -53,6 +54,29 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     # in the envelope resolves (2026-05-24 ``$defs`` resolution).
     defs: dict[str, Any] = {}
     engine_params = dataclass_fields_to_specs(EngineArgs, defs=defs)
+
+    # speculative_config is annotated ``dict[str, Any] | None`` on EngineArgs but
+    # is coerced to ``SpeculativeConfig(**dict)`` in
+    # ``EngineArgs.create_speculative_config``; carry that field->class hint so
+    # the speculative-decoding leaves (num_speculative_tokens, method,
+    # draft_tensor_parallel_size, ...) are discoverable rather than hidden behind
+    # one opaque dict. Version-pinned to 0.19.1's import path; failure degrades
+    # to the dict spec plus a recorded limitation rather than aborting discovery.
+    try:
+        from vllm.config.speculative import (  # type: ignore[import-not-found]
+            SpeculativeConfig,
+        )
+
+        fold_dict_typed_subconfig(engine_params, "speculative_config", SpeculativeConfig, defs)
+    except Exception as exc:  # pragma: no cover - defensive: version-path drift
+        limitations.append(
+            {
+                "section": "engine_params",
+                "fields": ["speculative_config"],
+                "reason": f"SpeculativeConfig class-hint resolution failed ({exc!r}); "
+                "speculative_config left as dict[str, Any]",
+            }
+        )
 
     sampling_params: dict[str, Any] = {}
     try:

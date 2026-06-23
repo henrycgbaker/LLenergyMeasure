@@ -33,6 +33,7 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
+    fold_dict_typed_subconfig,
     make_envelope,
     merge_source_constraints,
 )
@@ -52,11 +53,16 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     """
     import tensorrt_llm  # type: ignore[import-not-found]
     from tensorrt_llm import SamplingParams  # type: ignore[import-not-found]
+    from tensorrt_llm.builder import BuildConfig  # type: ignore[import-not-found]
     from tensorrt_llm.llmapi.llm_args import TrtLlmArgs  # type: ignore[import-not-found]
 
     limitations: list[dict[str, Any]] = []
 
     raw_schema = TrtLlmArgs.model_json_schema()
+    # ``model_json_schema()`` returns the nested-class $defs (KvCacheConfig /
+    # SchedulerConfig / ...); seed the accumulator with them so the dataclass-lift
+    # folds below (BuildConfig etc.) land in the same $defs namespace.
+    defs: dict[str, Any] = dict(raw_schema.get("$defs") or {})
     engine_params: dict[str, Any] = {}
     for name, spec in raw_schema.get("properties", {}).items():
         if name.startswith("_"):
@@ -87,11 +93,49 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             "deprecated": spec.get("deprecated", False),
         }
 
+    # build_config / decoding_config / cp_config are non-Pydantic on TrtLlmArgs, so
+    # model_json_schema() renders them as bare Optional[object]/Optional[dict] with no
+    # $def, burying their leaves. BuildConfig is a stdlib dataclass -> fold it via the
+    # field->class hint so the build-time levers (max_batch_size / max_num_tokens /
+    # max_seq_len caps, plugin_config, weight_streaming, kv_cache_type, max_draft_len, ...)
+    # become discoverable rather than hidden behind one opaque object.
+    fold_dict_typed_subconfig(engine_params, "build_config", BuildConfig, defs)
+
+    # decoding_config is also non-Pydantic; fold it if it resolves to an introspectable
+    # class, else record the gap honestly (it is largely superseded by the richly-mined
+    # speculative_config decoding union). DecodingConfig is a plain class on 1.0.0 (not a
+    # dataclass/Pydantic model), so the fold no-ops and we record the limitation; a future
+    # version that makes it a dataclass would fold automatically.
+    decoding_reason: str | None = None
+    try:
+        from tensorrt_llm.llmapi.llm_args import (  # type: ignore[import-not-found]
+            DecodingConfig,
+        )
+
+        if not fold_dict_typed_subconfig(engine_params, "decoding_config", DecodingConfig, defs):
+            decoding_reason = (
+                "DecodingConfig is a plain (non-Pydantic, non-dataclass) class; not "
+                "introspectable by the dataclass-lift, and superseded by the mined "
+                "speculative_config decoding union"
+            )
+    except Exception as exc:  # pragma: no cover - defensive: class-path drift
+        decoding_reason = f"DecodingConfig not importable ({exc!r}); left as Optional[object]"
+    if decoding_reason is not None:
+        limitations.append(
+            {"section": "engine_params", "fields": ["decoding_config"], "reason": decoding_reason}
+        )
+
+    # cp_config is a bare Optional[dict] (context-parallel settings: cp_type / cp_size /
+    # ...) with NO schema class to introspect, so its leaves can only come from an
+    # overlay. Recorded so the gap is explicit rather than silently absent from the
+    # discovered surface.
     limitations.append(
         {
             "section": "engine_params",
-            "fields": ["build_config"],
-            "reason": "BuildConfig is not a Pydantic model; appears as Optional[object] in the schema",
+            "fields": ["cp_config"],
+            "reason": "cp_config is a bare dict (context-parallel settings) with no "
+            "Pydantic/dataclass schema class; leaves are not introspectable and must "
+            "come from overlay.yaml if exposed",
         }
     )
 
@@ -127,8 +171,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
-        # ``model_json_schema()`` returns the nested-class definitions
-        # (KvCacheConfig / SchedulerConfig / ...) that ``$ref`` entries point
-        # at; preserve them rather than dropping at envelope assembly.
-        defs=raw_schema.get("$defs"),
+        # The pydantic $defs (KvCacheConfig / SchedulerConfig / ...) plus the
+        # dataclass-lift folds (BuildConfig / DecodingConfig) accumulated above.
+        defs=defs,
     )

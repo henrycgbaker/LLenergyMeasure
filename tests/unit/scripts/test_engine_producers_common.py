@@ -54,6 +54,35 @@ class _ListOfPydanticArgs:
     subs: list[_SubConfig] = dataclasses.field(default_factory=list)
 
 
+# Non-Pydantic (stdlib) dataclass sub-configs - the vLLM CompilationConfig /
+# AttentionConfig shape that exposes no ``model_json_schema``.
+@dataclasses.dataclass
+class _DcLeaf:
+    mode: str = "default"
+    size: int | None = None
+
+
+@dataclasses.dataclass
+class _DcMid:
+    leaf: _DcLeaf = dataclasses.field(default_factory=_DcLeaf)
+    flag: bool = False
+    self_ref: _DcMid | None = None  # self-reference -> cycle guard
+
+
+@dataclasses.dataclass
+class _DcEngineArgsLike:
+    mid: _DcMid | None = None
+    pyd: _SubConfig | None = None  # mixed: Pydantic sub-config alongside dataclass
+    plain: str = "p"
+    leaves: list[_DcLeaf] | None = None  # generic -> no single class to $ref
+
+
+@dataclasses.dataclass
+class _DictTypedArgs:
+    spec: dict | None = None  # dict-typed (like vLLM speculative_config) -> needs a hint
+    plain: int = 0
+
+
 # ---------------------------------------------------------------------------
 # annotation_to_type_str
 # ---------------------------------------------------------------------------
@@ -366,6 +395,84 @@ def test_dataclass_specs_list_of_pydantic_stays_object_not_ref() -> None:
     defs: dict = {}
     specs = _common.dataclass_fields_to_specs(_ListOfPydanticArgs, defs=defs)
     assert "$ref" not in specs["subs"]
+    assert defs == {}
+
+
+def test_dataclass_specs_recurse_into_non_pydantic_dataclass_field() -> None:
+    """A stdlib-dataclass sub-config field becomes a $ref with its leaves in $defs.
+
+    This is the vLLM ``EngineArgs -> CompilationConfig`` shape: a nested
+    ``@dataclass`` that exposes no ``model_json_schema`` and would otherwise
+    flatten to a bare type-name string.
+    """
+    defs: dict = {}
+    specs = _common.dataclass_fields_to_specs(_DcEngineArgsLike, defs=defs)
+
+    # Dataclass-typed field -> $ref; the def carries the leaves with types/defaults.
+    assert specs["mid"]["$ref"] == "#/$defs/_DcMid"
+    assert "_DcMid" in defs and "_DcLeaf" in defs
+    assert defs["_DcLeaf"]["properties"]["mode"] == {"type": "str", "default": "default"}
+    # Transitive: _DcMid.leaf folds _DcLeaf as a nested $ref.
+    assert defs["_DcMid"]["properties"]["leaf"]["$ref"] == "#/$defs/_DcLeaf"
+    # Cycle: _DcMid.self_ref -> _DcMid terminates via the placeholder guard.
+    assert defs["_DcMid"]["properties"]["self_ref"]["$ref"] == "#/$defs/_DcMid"
+    # Mixed: a Pydantic sub-config in the same class still routes via model_json_schema.
+    assert specs["pyd"]["$ref"] == "#/$defs/_SubConfig"
+    assert "_SubConfig" in defs
+    # Plain scalar untouched; generic list[dataclass] not recursed.
+    assert specs["plain"] == {"type": "str", "default": "p"}
+    assert "$ref" not in specs["leaves"]
+
+
+def test_dataclass_specs_without_defs_flatten_dataclass_to_type_str() -> None:
+    """The legacy (no-``defs``) path keeps the flat type string for dataclasses too."""
+    specs = _common.dataclass_fields_to_specs(_DcEngineArgsLike)
+    assert "$ref" not in specs["mid"]
+    assert "type" in specs["mid"]
+
+
+def test_fold_dict_typed_subconfig_rewrites_dict_field_to_ref() -> None:
+    """A dict-typed field is rewritten to a $ref once the real class is supplied.
+
+    Mirrors vLLM ``speculative_config`` (annotated ``dict[str, Any]`` but coerced
+    to ``SpeculativeConfig``): the introspector carries the field->class hint.
+    """
+    defs: dict = {}
+    specs = _common.dataclass_fields_to_specs(_DictTypedArgs, defs=defs)
+    # Pre-hint: dict-typed field is a bare type string, no $ref, no def.
+    assert "$ref" not in specs["spec"]
+    assert defs == {}
+
+    folded = _common.fold_dict_typed_subconfig(specs, "spec", _DcLeaf, defs)
+    assert folded is True
+    assert specs["spec"] == {"$ref": "#/$defs/_DcLeaf", "default": None}
+    assert defs["_DcLeaf"]["properties"]["mode"]["type"] == "str"
+
+
+def test_fold_dict_typed_subconfig_noop_on_missing_field() -> None:
+    """No hinted field -> returns False, no mutation, no crash."""
+    defs: dict = {}
+    specs: dict = {"plain": {"type": "int", "default": 0}}
+    assert _common.fold_dict_typed_subconfig(specs, "absent", _DcLeaf, defs) is False
+    assert specs == {"plain": {"type": "int", "default": 0}}
+    assert defs == {}
+
+
+def test_fold_dict_typed_subconfig_returns_false_for_plain_class() -> None:
+    """A plain (non-dataclass, non-Pydantic) class cannot be lifted -> False, no mutation.
+
+    This is the tensorrt ``DecodingConfig`` shape: the caller uses the False
+    return to record an honest discovery limitation instead of a silent gap.
+    """
+
+    class _PlainCls:
+        def __init__(self, a: int = 1) -> None:
+            self.a = a
+
+    defs: dict = {}
+    specs: dict = {"spec": {"type": "object", "default": None}}
+    assert _common.fold_dict_typed_subconfig(specs, "spec", _PlainCls, defs) is False
+    assert specs == {"spec": {"type": "object", "default": None}}  # untouched
     assert defs == {}
 
 
