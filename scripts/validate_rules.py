@@ -547,7 +547,7 @@ def _validate_invariant_with_captures(
     neg_silent = (
         diff_input_vs_state(kwargs_negative, neg.observed_state) if neg.observed_state else {}
     )
-    negative_confirmed = _negative_confirms(neg, neg_silent)
+    negative_confirmed = _negative_outcome_label(neg, neg_silent, invariant) == "no_op"
 
     observed_messages = list(pos.warnings_captured) + list(
         strip_warning_once_sentinel(pos.logger_messages)
@@ -704,15 +704,16 @@ def compute_gate_soundness_divergences(
 
     # 3. Negative must not fire at all - not raise AND not emit. A negative that
     #    starts warning/dormant-announcing (without raising) is a dead negative
-    #    case just as much as one that raises; classify_outcome != no_op covers
-    #    both, preserving the old _negative_confirms semantics now that the
-    #    standalone negative_confirmed divergence is folded into this check.
+    #    case just as much as one that raises; _negative_outcome_label != no_op
+    #    covers both. The label downgrades a dormant-announce that is unrelated
+    #    construction INFO (not this rule's own template) back to no_op, so a
+    #    negative is only "dead" when the rule itself fires.
     neg_silent = (
         diff_input_vs_state(dict(invariant.get("kwargs_negative") or {}), neg.observed_state)
         if neg.observed_state
         else {}
     )
-    neg_outcome = classify_outcome(neg, neg_silent)
+    neg_outcome = _negative_outcome_label(neg, neg_silent, invariant)
     if neg_outcome != "no_op":
         observed: Any = (
             {"type": neg.exception_type, "message": neg.exception_message or ""}
@@ -790,14 +791,36 @@ def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
     return observed_outcome != "no_op"
 
 
-def _negative_confirms(neg: CaptureBuffers, silent_normalisations: dict[str, Any]) -> bool:
-    """True iff the invariant did NOT fire on the negative kwargs.
+def _negative_outcome_label(
+    neg: CaptureBuffers,
+    silent_normalisations: dict[str, Any],
+    invariant: dict[str, Any],
+) -> str:
+    """Outcome label for the NEGATIVE probe, ignoring announcement noise.
 
-    Delegates to :func:`classify_outcome` so the definition of "fired"
-    lives in one place: anything other than ``no_op`` counts as firing,
-    which would be a dead miner entry.
+    Identical to :func:`classify_outcome` except a ``dormant_announced`` is
+    downgraded to ``no_op`` unless one of the captured logger messages is the
+    rule's OWN announcement (matches ``message_template``). The negative probe
+    constructs the same config object as the positive, so it emits the same
+    unrelated vLLM INFO (e.g. ``"Chunked prefill is enabled"`` while building a
+    SchedulerConfig); that plumbing is not this invariant firing and must not
+    count as a dead negative. The static bootstrap allowlist
+    (``_VLLM_BOOTSTRAP_NOISE``) cannot enumerate every such per-rule INFO ahead
+    of each library bump, so attribution is by template instead. A template-less
+    rule keeps the strict reading (any announcement counts) - there is no
+    fragment to attribute against.
     """
-    return classify_outcome(neg, silent_normalisations) == "no_op"
+    outcome = classify_outcome(neg, silent_normalisations)
+    if outcome != "dormant_announced":
+        return outcome
+    template = str(invariant.get("message_template") or "")
+    if not template:
+        return outcome
+    announced = any(
+        message_matches_template(message, template)[0]
+        for message in strip_warning_once_sentinel(neg.logger_messages)
+    )
+    return outcome if announced else "no_op"
 
 
 # ---------------------------------------------------------------------------

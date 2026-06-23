@@ -836,6 +836,80 @@ class TestComputeGateSoundnessDivergences:
 
 
 # ---------------------------------------------------------------------------
+# negative-noise guard: a dormant-announce on the NEGATIVE only counts as the
+# rule firing when it is the rule's OWN announcement, not unrelated library INFO
+# emitted while constructing the same config (the SchedulerConfig fix).
+# ---------------------------------------------------------------------------
+
+_SCHEDULER_NOISE = "Chunked prefill is enabled with max_num_batched_tokens=2048."
+_RULE_TEMPLATE = "max_num_batched_tokens must be greater than or equal to max_num_seqs"
+
+
+class TestNegativeOutcomeLabel:
+    def test_unrelated_announcement_downgraded_to_no_op(self) -> None:
+        neg = _capture(logger_messages=(_SCHEDULER_NOISE,))
+        invariant = {"message_template": _RULE_TEMPLATE}
+        assert validate_rules._negative_outcome_label(neg, {}, invariant) == "no_op"
+
+    def test_own_announcement_stays_dormant_announced(self) -> None:
+        neg = _capture(logger_messages=(_RULE_TEMPLATE,))
+        invariant = {"message_template": _RULE_TEMPLATE}
+        assert validate_rules._negative_outcome_label(neg, {}, invariant) == "dormant_announced"
+
+    def test_no_template_keeps_strict_reading(self) -> None:
+        neg = _capture(logger_messages=("some unrelated info",))
+        assert (
+            validate_rules._negative_outcome_label(neg, {}, {"message_template": None})
+            == "dormant_announced"
+        )
+
+    def test_non_dormant_outcomes_pass_through(self) -> None:
+        raised = _capture(exception_type="ValueError", exception_message="boom")
+        assert (
+            validate_rules._negative_outcome_label(raised, {}, {"message_template": "x"}) == "error"
+        )
+        clean = _capture(observed_state={"a": 0})
+        assert (
+            validate_rules._negative_outcome_label(clean, {}, {"message_template": "x"}) == "no_op"
+        )
+
+
+class TestNegativeNoiseGuardIntegration:
+    def test_negative_unrelated_logger_noise_is_not_a_divergence(self) -> None:
+        # An error rule whose positive raises cleanly; the negative constructs
+        # the same config and emits unrelated vLLM INFO. That plumbing must not
+        # read as the rule firing on the negative kwargs.
+        invariant = {
+            "id": "r_noise",
+            "severity": "error",
+            "kwargs_positive": {"max_num_batched_tokens": 1, "max_num_seqs": 2},
+            "kwargs_negative": {"max_num_batched_tokens": 2048, "max_num_seqs": 2},
+            "message_template": _RULE_TEMPLATE,
+        }
+        pos = _capture(exception_type="ValueError", exception_message=_RULE_TEMPLATE)
+        neg = _capture(logger_messages=(_SCHEDULER_NOISE,))
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert all(
+            d.check_failed != validate_rules.CHECK_NEGATIVE_DOES_NOT_RAISE for d in divergences
+        )
+
+    def test_negative_emitting_rule_own_announcement_still_diverges(self) -> None:
+        invariant = {
+            "id": "r_own",
+            "severity": "dormant",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "use `a=0` for stability",
+        }
+        pos = _capture(logger_messages=("use `a=0` for stability",))
+        neg = _capture(logger_messages=("use `a=0` for stability",))
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert any(
+            d.check_failed == validate_rules.CHECK_NEGATIVE_DOES_NOT_RAISE for d in divergences
+        )
+
+
+# ---------------------------------------------------------------------------
 # extract_error_details - pydantic / plain (chunk C4)
 # ---------------------------------------------------------------------------
 
