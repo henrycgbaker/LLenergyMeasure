@@ -110,7 +110,7 @@ class TestSourceExtraction:
         assert candidates  # something extracted
 
     def test_walk_tensorrt_rule_count_in_target_range(self) -> None:
-        """Pin the design's 20-28 invariant target.
+        """Pin the raw candidate count to a regression-catching band.
 
         If a future TRT-LLM source change kicks the count outside this band,
         the test fails loudly - surface the drift rather than silently shift
@@ -119,8 +119,10 @@ class TestSourceExtraction:
         candidates, _version, _rel_path = trt_miner.walk_tensorrt()
         # The 1.0.0 walker emits 33 raw candidates (the 0.x->1.x major added
         # the pytorch-backend config validators); merger fingerprint-dedup
-        # collapses the set. We pin a generous band on raw output.
-        assert 20 <= len(candidates) <= 40, f"Unexpected raw candidate count: {len(candidates)}"
+        # collapses the set. The lower bound catches a silent recall regression
+        # (e.g. losing those validators) while tolerating minor source-snapshot
+        # variance; the upper leaves headroom for additive growth.
+        assert 28 <= len(candidates) <= 40, f"Unexpected raw candidate count: {len(candidates)}"
 
     def test_lookahead_positive_values_emits_three_field_rules(self) -> None:
         """``LookaheadDecodingConfig.validate_positive_values`` covers 3 fields."""

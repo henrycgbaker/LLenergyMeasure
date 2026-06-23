@@ -31,7 +31,7 @@ alone for local development without a validation run.
 ```yaml
 schema_version: "1.0.0"
 engine: transformers
-engine_version: "4.56.0"
+engine_version: "5.7.0"
 mined_at: "2026-04-23T00:00:00Z"
 invariants:
   - id: ...

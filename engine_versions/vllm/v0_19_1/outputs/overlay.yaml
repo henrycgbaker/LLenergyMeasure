@@ -1,14 +1,15 @@
-# Hand-authored overlay for vllm 0.7.3 (Move 2 narrowings channel).
+# Hand-authored overlay for vllm 0.19.1 (Move 2 narrowings channel).
 #
 # Recovers the field-level bounds + Literal sets the pre-v0.10 hand-written
 # VLLMEngineConfig / VLLMSamplingConfig enforced at parse and the
 # engine_configs.py migration dropped. The codegen projects each narrowing
 # onto the generated Config class as a Field(ge/le/...) bound or a Literal.
 #
-# Scope (judgement, per the R3 backfill rubric): vllm's current pin (0.7.3) is
-# the same release era the hand-written classes were authored against, so both
-# the numeric bounds and the Literal sets are carried with high confidence -
-# they were genuinely enforced against exactly this engine version. The
+# Scope (judgement, per the R3 backfill rubric): these bounds were authored
+# against the pre-v0.10 hand-written classes (vllm 0.7.3 era) and carried
+# forward to the current pin, so both the numeric bounds and the Literal sets
+# are retained with high confidence - the schema mine does not surface these
+# semantic constraints from types alone. The
 # numeric bounds also appear in the deleted introspection.py custom-test-values
 # block (e.g. gpu_memory_utilization 1.5 violates lt=1.0), which is direct
 # evidence they fired at parse.

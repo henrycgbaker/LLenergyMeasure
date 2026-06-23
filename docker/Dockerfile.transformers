@@ -24,16 +24,16 @@
 # torch 2.7.1 satisfies the torch>=2.5 floor. transformers 5.10+ references
 # torch.float8_e8m0fnu (added in torch 2.7), so the torch stack is pinned to
 # 2.7.1-cuda12.6-cudnn9 to clear that import wall.
-# TRANSFORMERS_VERSION comes from engine_versions/transformers.yaml SSOT.
+# TRANSFORMERS_VERSION comes from engine_versions/transformers/current.yaml SSOT.
 # ============================================================
 ARG PYTORCH_VERSION=2.7.1-cuda12.6-cudnn9-runtime
 ARG PYTORCH_DEVEL_VERSION=2.7.1-cuda12.6-cudnn9-devel
 
-# Source of truth: engine_versions/transformers.yaml `library.current_version`.
+# Source of truth: engine_versions/transformers/current.yaml `library.current_version`.
 # Renovate authors that file; CI passes the value via
-# `--build-arg TRANSFORMERS_VERSION=$(yq '.library.current_version' engine_versions/transformers.yaml)`
+# `--build-arg TRANSFORMERS_VERSION=$(yq '.library.current_version' engine_versions/transformers/current.yaml)`
 # at build time. The ARG default below is a fallback for local manual builds only.
-ARG TRANSFORMERS_VERSION=4.57.3
+ARG TRANSFORMERS_VERSION=5.7.0
 
 # Build stage: compile flash-attn FA2 + FA3 (needs nvcc from devel image)
 # FA2 = standard flash-attn pip package.

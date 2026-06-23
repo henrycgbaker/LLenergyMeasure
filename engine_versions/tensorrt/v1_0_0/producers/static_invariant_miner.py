@@ -117,7 +117,9 @@ _METHOD_LANDMARKS: tuple[tuple[str, str], ...] = _LANDMARKS.method_landmarks
 _STRENUM_FIELDS: tuple[tuple[str, str], ...] = _LANDMARKS.strenum_fields
 
 # Pydantic classes whose ``Literal[...]``-typed fields are lifted as
-# allowlist invariants via class-body AST.
+# allowlist invariants via class-body AST. Intentional in-code per-version
+# constant (deliberately NOT externalised to landmarks.yaml): review it on each
+# tensorrt bump in case the lift surface gains or loses a config class.
 _LITERAL_LIFT_CLASSES: tuple[str, ...] = ("BaseLlmArgs", "TrtLlmArgs", "CalibConfig")
 
 
