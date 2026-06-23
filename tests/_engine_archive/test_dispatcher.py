@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from engine_versions._dispatcher import _find_fallback_safe_version, load_producer
-from scripts.engine_producers._current import safe_version
+from scripts.engine_producers._current import current_version, safe_version
 
 # ---------------------------------------------------------------------------
 # safe_version mangling
@@ -188,8 +188,12 @@ def test_find_fallback_filters_per_producer_kind(tmp_path: Path) -> None:
 
 def test_load_producer_exact_match() -> None:
     """When the exact version is vendored, the dispatcher returns that one."""
-    module = load_producer(engine="vllm", version="0.7.3", producer="static_invariant_miner")
-    assert module.__name__ == "engine_versions.vllm.v0_7_3.producers.static_invariant_miner"
+    pin = current_version("vllm")
+    module = load_producer(engine="vllm", version=pin, producer="static_invariant_miner")
+    assert (
+        module.__name__
+        == f"engine_versions.vllm.{safe_version(pin)}.producers.static_invariant_miner"
+    )
 
 
 def test_load_producer_falls_back_when_above_all_vendored(
@@ -208,25 +212,13 @@ def test_load_producer_falls_back_when_above_all_vendored(
     assert "falling back to" in captured.err
 
 
-def test_load_producer_falls_back_to_v0_7_3_for_intermediate_target(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """vllm has v0_7_3 vendored; target 0.7.4 (unvendored) falls back to v0_7_3."""
-    module = load_producer(engine="vllm", version="0.7.4", producer="static_invariant_miner")
-    assert module.__name__ == "engine_versions.vllm.v0_7_3.producers.static_invariant_miner"
-    captured = capsys.readouterr()
-    assert "falling back to engine_versions.vllm.v0_7_3.producers.static_invariant_miner" in (
-        captured.err
-    )
-
-
 # ---------------------------------------------------------------------------
 # No-fallback contract: raise loud when nothing exists at or below target
 # ---------------------------------------------------------------------------
 
 
 def test_below_lowest_vendored_raises_loud() -> None:
-    """All vendored vllm versions are >= 0.7.3; target 0.0.0 has no candidate."""
+    """All vendored vllm producers are >= 0.19.1; target 0.0.0 has no candidate."""
     with pytest.raises(ModuleNotFoundError):
         load_producer(engine="vllm", version="0.0.0", producer="static_invariant_miner")
 

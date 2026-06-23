@@ -1,4 +1,4 @@
-"""Host test for the vLLM 0.7.3 schema introspector's msgspec type recovery (W1.2).
+"""Host test for the vLLM schema introspector's msgspec type recovery (W1.2).
 
 The introspector recovers ``SamplingParams`` field types via
 ``msgspec.json.schema``, then folds ``_msgspec_lift.recover_field_types`` onto
@@ -46,8 +46,11 @@ class _FakeEngineArgs:
 @pytest.fixture
 def discover(monkeypatch: pytest.MonkeyPatch):
     """Load the real per-pin ``discover`` with a synthetic ``vllm`` injected."""
+    from scripts.engine_producers._current import current_version
+
+    pin = current_version("vllm")
     vllm = types.ModuleType("vllm")
-    vllm.__version__ = "0.7.3-test"  # type: ignore[attr-defined]
+    vllm.__version__ = f"{pin}-test"  # type: ignore[attr-defined]
     vllm.SamplingParams = _FakeSamplingParams  # type: ignore[attr-defined]
     arg_utils = types.ModuleType("vllm.engine.arg_utils")
     arg_utils.EngineArgs = _FakeEngineArgs  # type: ignore[attr-defined]
@@ -63,7 +66,7 @@ def discover(monkeypatch: pytest.MonkeyPatch):
 
     from engine_versions._dispatcher import load_producer
 
-    producer = load_producer(engine="vllm", version="0.7.3", producer="schema_introspector")
+    producer = load_producer(engine="vllm", version=pin, producer="schema_introspector")
     return producer.discover
 
 

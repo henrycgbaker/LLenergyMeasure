@@ -1,10 +1,11 @@
-"""Per-engine lazy-LANDMARKS tests for vLLM at v0.7.3.
+"""Per-engine lazy-LANDMARKS tests for the vLLM producers at the current pin.
 
-Asserts that the producer modules' PEP 562 ``__getattr__`` hooks resolve
-``LANDMARKS`` to the same tuple that ``load_producer`` returns directly
-from the per-version archive subpackage. This catches drift between the
-producer-side wiring (script ``_get_landmarks`` + dispatcher call) and
-the archive contents (``_engine_archive/vllm/v0_7_3/producers/*.py``).
+Asserts the producer shim modules' PEP 562 ``__getattr__`` hooks resolve
+``LANDMARKS`` through the dispatcher to the pinned per-version producer, and
+that the dispatcher resolves the pin EXACTLY (no ``<= target`` fallback to an
+older dir). After the producer dedup each engine vendors a single producer at
+its current pin; the prior pin keeps only its ``landmarks.yaml`` + ``outputs/``
+corpus, so there is no cross-version producer to drift against.
 
 Mirror of ``tests/_engine_archive/test_dispatcher.py`` style: pytest,
 parametrize across producer kinds, no fixtures.
@@ -18,8 +19,11 @@ from types import ModuleType
 import pytest
 
 from engine_versions._dispatcher import load_producer
+from scripts.engine_producers._current import current_version, safe_version
 
-# (producer_module_path, producer_kind) pairs. The producer kind is the
+_ENGINE = "vllm"
+
+# (shim_module_path, producer_kind) pairs. The producer kind is the
 # dispatcher's producer argument name.
 _PRODUCERS: tuple[tuple[str, str], ...] = (
     ("scripts.engine_producers.vllm_static_invariant_miner", "static_invariant_miner"),
@@ -28,7 +32,7 @@ _PRODUCERS: tuple[tuple[str, str], ...] = (
 
 
 def _import_producer(module_path: str) -> ModuleType:
-    """Import (or re-import) the producer module fresh.
+    """Import (or re-import) the shim module fresh.
 
     Re-import avoids cross-test contamination of the module-global
     ``LANDMARKS`` cache populated by ``_get_landmarks()``.
@@ -51,14 +55,17 @@ def test_producer_landmarks_is_non_empty_tuple_of_dotted_paths(
 
 
 @pytest.mark.parametrize("module_path,producer", _PRODUCERS)
-def test_producer_landmarks_matches_dispatcher(module_path: str, producer: str) -> None:
-    """Producer-side LANDMARKS must equal what the dispatcher returns directly.
+def test_shim_resolves_to_exact_pin_producer(module_path: str, producer: str) -> None:
+    """The shim must dispatch to the pin's own vendored producer, resolved exactly.
 
-    Drift between these two means the producer module's ``_get_landmarks``
-    is resolving a different version (or wiring) than the per-version
-    archive at v0.7.3 actually contains - exactly the failure mode the
-    archive subpackage is meant to prevent.
+    ``load_producer`` at the current pin must import the pin's producer module
+    (not fall back to an older ``<= target`` dir), and the shim's lazy
+    ``LANDMARKS`` must equal that producer's. A fallback firing here would mean
+    the pinned producer dir went missing or the dispatcher mis-resolved the pin.
     """
-    module = _import_producer(module_path)
-    direct = load_producer(engine="vllm", version="0.7.3", producer=producer).LANDMARKS
-    assert direct == module.LANDMARKS
+    pin = current_version(_ENGINE)
+    pinned = load_producer(engine=_ENGINE, version=pin, producer=producer)
+    expected = f"engine_versions.{_ENGINE}.{safe_version(pin)}.producers.{producer}"
+    assert pinned.__name__ == expected
+    shim = _import_producer(module_path)
+    assert shim.LANDMARKS == pinned.LANDMARKS
