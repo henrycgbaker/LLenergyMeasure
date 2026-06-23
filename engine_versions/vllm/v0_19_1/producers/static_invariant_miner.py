@@ -627,6 +627,7 @@ def _walk_function(
     target: _ASTTarget,
     field_names: frozenset[str],
     class_methods: dict[str, ast.FunctionDef],
+    target_methods: frozenset[str],
     rel_source_path: str,
     today: str,
 ) -> list[InvariantCandidate]:
@@ -644,9 +645,17 @@ def _walk_function(
                 # Follow a same-class validator helper called from this method
                 # (e.g. self.verify_max_model_len(...)) so a raise that upstream
                 # relocated out of the walked method is still mined. One level
-                # per helper (visited guard) to avoid cycles.
+                # per helper (visited guard) to avoid cycles. Skip a helper that
+                # is ITSELF a direct ast_target on this class - it is walked
+                # directly, so following it here would discover its rules twice
+                # and shift their provenance onto the calling method.
                 helper = _self_method_name(stmt.value)
-                if helper is not None and helper in class_methods and helper not in visited_helpers:
+                if (
+                    helper is not None
+                    and helper in class_methods
+                    and helper not in target_methods
+                    and helper not in visited_helpers
+                ):
                     visited_helpers.add(helper)
                     descend(class_methods[helper].body, frame)
 
@@ -1033,12 +1042,19 @@ def walk_vllm_static(*, today: str | None = None) -> tuple[list[InvariantCandida
         class_methods = {
             node.name: node for node in cls_ast.body if isinstance(node, ast.FunctionDef)
         }
+        # Methods of THIS class that are themselves direct ast_targets: a helper
+        # call into one of these is skipped during call-following because it is
+        # walked directly (avoids duplicate-discovery provenance churn).
+        target_methods = frozenset(
+            t.method for t in _CLASS_TARGETS if t.class_name == target.class_name
+        )
         candidates.extend(
             _walk_function(
                 method_ast,
                 target=target,
                 field_names=field_names,
                 class_methods=class_methods,
+                target_methods=target_methods,
                 rel_source_path=rel_path,
                 today=today,
             )

@@ -383,3 +383,45 @@ invariants:
   - sampling_params.py:470 (vllm.SamplingParams._verify_args)
   added_by: static_miner
   added_at: '2026-06-22'
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SchedulerConfig.verify_max_model_len: raises when max_num_batched_tokens < @max_model_len
+    AND enable_chunked_prefill absent (cross-field; sibling-neutralising is_encoder_decoder/max_num_seqs
+    kwargs hand-supplied)'
+  severity: error
+  native_type: vllm.config.SchedulerConfig
+  miner_source:
+    path: scheduler.py
+    method: verify_max_model_len
+    line_at_scan: 264
+  match:
+    engine: vllm
+    fields:
+      vllm.engine_params.max_num_batched_tokens:
+        <: '@max_model_len'
+      vllm.engine_params.enable_chunked_prefill:
+        absent: true
+  kwargs_positive:
+    max_model_len: 2
+    max_num_batched_tokens: 1
+    enable_chunked_prefill: false
+    max_num_seqs: 1
+    is_encoder_decoder: false
+  kwargs_negative:
+    max_model_len: 2
+    max_num_batched_tokens: 2
+    enable_chunked_prefill: false
+    max_num_seqs: 1
+    is_encoder_decoder: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}).
+    This effectively limits the maximum sequence length to max_num_batched_tokens and makes vLLM reject
+    longer sequences. Please increase max_num_batched_tokens or decrease max_model_len.
+  references:
+  - scheduler.py:264 (vllm.config.SchedulerConfig.verify_max_model_len)
+  added_by: manual_seed
+  added_at: '2026-06-22'

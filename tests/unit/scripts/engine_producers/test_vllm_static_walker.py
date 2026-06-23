@@ -86,12 +86,62 @@ class SchedulerConfig:
         target=target,
         field_names=frozenset({"max_num_batched_tokens", "max_model_len"}),
         class_methods=methods,
+        target_methods=frozenset({"__post_init__"}),
         rel_source_path="config/scheduler.py",
         today="2026-06-23",
     )
     assert len(candidates) == 1
     match = candidates[0].match_fields
     assert match == {"vllm.config.scheduler.max_num_batched_tokens": {"<": "@max_model_len"}}
+
+
+def test_walk_function_skips_helper_that_is_itself_a_target() -> None:
+    """A helper that is ITSELF a direct ast_target is not followed (no duplicate).
+
+    Mirrors SamplingParams.__post_init__ calling self._verify_args() while
+    _verify_args is also a walked target: following it from __post_init__ would
+    discover its raise a second time and shift provenance onto __post_init__.
+    """
+    src = """
+class SamplingParams:
+    def __post_init__(self):
+        self._verify_args()
+
+    def _verify_args(self):
+        if self.n < 1:
+            raise ValueError("n must be at least 1")
+"""
+    cls = ast.parse(src).body[0]
+    assert isinstance(cls, ast.ClassDef)
+    methods = {n.name: n for n in cls.body if isinstance(n, ast.FunctionDef)}
+    target = sm._ASTTarget(
+        module_attr="sampling_params.SamplingParams",
+        method="__post_init__",
+        namespace="vllm.sampling_params",
+        native_type="vllm.SamplingParams",
+    )
+    # _verify_args is also a target, so __post_init__ must NOT re-discover it.
+    candidates = sm._walk_function(
+        methods["__post_init__"],
+        target=target,
+        field_names=frozenset({"n"}),
+        class_methods=methods,
+        target_methods=frozenset({"__post_init__", "_verify_args"}),
+        rel_source_path="sampling_params.py",
+        today="2026-06-23",
+    )
+    assert candidates == []
+    # A non-target helper IS still followed (the V7 recovery path stays intact).
+    candidates = sm._walk_function(
+        methods["__post_init__"],
+        target=target,
+        field_names=frozenset({"n"}),
+        class_methods=methods,
+        target_methods=frozenset({"__post_init__"}),
+        rel_source_path="sampling_params.py",
+        today="2026-06-23",
+    )
+    assert len(candidates) == 1
 
 
 def test_walk_function_does_not_recurse_unlisted_or_external_calls() -> None:
@@ -120,6 +170,7 @@ class C:
         target=target,
         field_names=frozenset({"x", "y"}),
         class_methods=methods,  # not_a_method is absent -> not followed
+        target_methods=frozenset({"m"}),  # helper is not a target -> followed
         rel_source_path="config/scheduler.py",
         today="2026-06-23",
     )

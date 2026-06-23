@@ -4,7 +4,7 @@ engine_version: 0.19.1
 image_ref: vllm/vllm-openai:v0.19.1
 engine_commit: 0.19.1
 base_image_ref: llenergymeasure:vllm
-validated_at: '2026-06-22T16:20:08.978932+00:00'
+validated_at: '2026-06-22'
 validation_commit: unknown
 cases:
 - id: vllm_parallelconfig_dormant_data_parallel_rank_set_true
@@ -135,6 +135,21 @@ cases:
   observed_exception:
     type: ValidationError
     message: Expected `int`, got `str` - at `$.top_k`
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for SchedulerConfig\n  Value error, max_num_batched_tokens\
+      \ (1) is smaller than max_model_len (2). This effectively limits the maximum\
+      \ sequence length to max_num_batched_tokens and makes vLLM reject longer sequences.\
+      \ Please increase max_num_batched_tokens or decrease max_model_len. [type=value_error,\
+      \ input_value=ArgsKwargs((), {'max_mode...ncoder_decoder': False}), input_type=ArgsKwargs]\n\
+      \    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
   positive_confirmed: true
   negative_confirmed: true
 divergences: []
