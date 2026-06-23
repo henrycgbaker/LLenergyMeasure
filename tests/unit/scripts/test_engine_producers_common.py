@@ -8,6 +8,8 @@ package.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Literal
@@ -449,3 +451,36 @@ def test_transformers_schema_introspector_landmarks_resolve() -> None:
         except AttributeError:
             missing.append(landmark)
     assert not missing, f"Unresolvable transformers landmarks: {missing}"
+
+
+# ---------------------------------------------------------------------------
+# CPU-safety: the mining orchestration must import without torch
+# ---------------------------------------------------------------------------
+
+
+def test_mining_orchestration_import_is_torch_free() -> None:
+    """Importing build_corpus + the static-miner shims must not pull torch.
+
+    The mining orchestration runs on torchless CI runners (engine + torch deps
+    live only inside each engine's Docker image); the real library import
+    happens inside ``walk()``, in-container. A regression that imports torch at
+    module load would crash the host-side dispatch before it can dispatch. Run
+    in a fresh subprocess so the verdict is independent of what other tests have
+    already imported - the old in-process ``post - pre`` check was order-flaky,
+    only passing when a sibling test had already pre-imported torch.
+    """
+    probe = (
+        "import sys\n"
+        "import scripts.engine_producers.build_corpus\n"
+        "import scripts.engine_producers.vllm_static_invariant_miner\n"
+        "import scripts.engine_producers.tensorrt_static_invariant_miner\n"
+        "import scripts.engine_producers.transformers_static_invariant_miner\n"
+        "bad = sorted(m for m in sys.modules if m == 'torch' or m.startswith('torch.'))\n"
+        "raise SystemExit('torch imported at module load: ' + repr(bad) if bad else 0)\n"
+    )
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join([str(REPO_ROOT), str(REPO_ROOT / "src")]),
+    }
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, env=env)
+    assert result.returncode == 0, (result.stdout + result.stderr).strip()

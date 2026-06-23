@@ -331,25 +331,7 @@ def test_vllm_engine_registered_in_build_corpus() -> None:
     }
 
 
-# ---------------------------------------------------------------------------
-# CPU-only safety
-# ---------------------------------------------------------------------------
-
-
-def test_vllm_miner_does_not_import_torch() -> None:
-    """Mining must not pull torch into the importing process.
-
-    The miner is invoked from ``ubuntu-latest`` GitHub runners which have
-    no torch installed (engines run inside their Docker images; host has
-    no engine deps). Asserting ``torch not in sys.modules`` after the
-    walkers run is a stronger CPU-safety guarantee than the previous
-    ``torch.cuda.is_initialized()`` check: it catches an inadvertent
-    ``import torch`` even before any CUDA context could be created, and
-    needs no host torch dependency to enforce.
-    """
-    pre = {name for name in sys.modules if name == "torch" or name.startswith("torch.")}
-    walk_vllm_static(today="2026-04-27")
-    walk_vllm_dynamic(today="2026-04-27")
-    post = {name for name in sys.modules if name == "torch" or name.startswith("torch.")}
-    added = post - pre
-    assert not added, f"miner imported torch modules: {sorted(added)}"
+# CPU-safety (the orchestration imports without torch) is covered
+# order-independently in tests/unit/scripts/test_engine_producers_common.py
+# ::test_mining_orchestration_import_is_torch_free - a fresh-subprocess import
+# check, not the old order-flaky in-process post-minus-pre diff that lived here.
