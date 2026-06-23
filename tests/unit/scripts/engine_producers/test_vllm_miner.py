@@ -310,12 +310,13 @@ class TestGateSoundnessOnVllmCorpus:
 def test_vllm_engine_registered_in_build_corpus() -> None:
     """``--engine vllm`` resolves to the static miner extractor.
 
-    The dynamic miner is intentionally NOT registered yet: it lives globally
-    with 0.16+ surface assumptions and is not per-version vendored, so wiring
-    it into ``_ENGINE_EXTRACTORS["vllm"]`` would trip a landmark error against
-    the pinned version. Re-enable once vllm dynamic vendoring per version lands.
-    Without this test, removing or renaming the static entry would silently
-    break the pipeline.
+    The dynamic miner is now vendored at
+    ``engine_versions/vllm/v0_19_1/producers/`` but is deliberately NOT wired
+    into ``_ENGINE_EXTRACTORS["vllm"]``: enabling it would merge its never-yet
+    gate-validated output into the corpus and needs an in-container re-mine
+    that mutates committed corpus bytes, so it is gated on a deliberate enable
+    decision. Without this test, removing or renaming the static entry - or
+    silently wiring the dynamic miner - would slip through unnoticed.
     """
     from scripts.engine_producers import build_corpus
 

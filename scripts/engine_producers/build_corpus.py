@@ -186,10 +186,10 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
             staging_basename="tensorrt_static_invariant_miner.yaml",
         ),
     ),
-    # vllm dynamic miner is not yet per-version vendored - it lives globally
-    # with 0.16+ surface assumptions, so invoking it against v0_7_3 trips a
-    # MinerLandmarkMissingError. Tracked as separate work; re-enable once
-    # vllm dynamic vendoring per version lands.
+    # vllm dynamic miner is vendored at engine_versions/vllm/v0_19_1/producers/
+    # but deliberately not wired here. Enabling it would merge its (never-yet
+    # gate-validated) output into the corpus, requiring an in-container re-mine
+    # that mutates committed corpus bytes; gated on a deliberate enable decision.
     "vllm": (
         _Extractor(
             module="scripts.engine_producers.vllm_static_invariant_miner",
