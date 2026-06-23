@@ -188,6 +188,20 @@ def read_dockerfile_from(dockerfile: Path) -> str:
     return _expand(from_lines[0][0])
 
 
+def _sorted_stable(items: list[Any]) -> list[Any]:
+    """Sort *items* deterministically.
+
+    Falls back to a type-stable key when the elements are not mutually orderable
+    (e.g. opaque values sanitised to ``None`` mixed with primitives, or a
+    genuinely heterogeneous set). Without the fallback ``sorted`` would raise a
+    ``TypeError`` and abort the whole mine on such a default.
+    """
+    try:
+        return sorted(items)
+    except TypeError:
+        return sorted(items, key=lambda x: (x is None, str(x)))
+
+
 def jsonable(value: Any) -> Any:
     """Coerce a value into something json.dumps can handle without default=str.
 
@@ -200,7 +214,7 @@ def jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [jsonable(v) for v in value]
     if isinstance(value, set):
-        return sorted(jsonable(v) for v in value)
+        return _sorted_stable([jsonable(v) for v in value])
     if isinstance(value, dict):
         return {str(k): jsonable(v) for k, v in value.items()}
     if isinstance(value, type):
@@ -225,7 +239,7 @@ def exposable_default(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [exposable_default(v) for v in value]
     if isinstance(value, set):
-        return sorted(exposable_default(v) for v in value)
+        return _sorted_stable([exposable_default(v) for v in value])
     if isinstance(value, dict):
         return {str(k): exposable_default(v) for k, v in value.items()}
     if isinstance(value, type):

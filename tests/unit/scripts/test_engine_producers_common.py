@@ -396,6 +396,21 @@ def test_exposable_default_nulls_opaque_objects_keeps_clean_structures() -> None
     assert _common.exposable_default({"k": _OpaqueBlob()}) == {"k": None}
 
 
+def test_exposable_default_set_with_opaque_elements_does_not_raise() -> None:
+    """A set default with opaque elements must not crash the mine.
+
+    Opaque elements null to None, leaving a non-orderable mix; sorting must fall
+    back to a stable key rather than raising TypeError (which would abort the
+    whole dataclass mine). Clean homogeneous sets keep their natural sort order.
+    """
+    assert _common.exposable_default({"b", "a"}) == ["a", "b"]
+    assert _common.exposable_default({3, 1, 2}) == [1, 2, 3]
+    # opaque + primitive: opaque -> None, no crash, deterministic order
+    assert _common.exposable_default({1, _OpaqueBlob()}) == [1, None]
+    # all-opaque: every element nulls to None, still deterministic
+    assert _common.exposable_default({_OpaqueBlob(), _OpaqueBlob()}) == [None, None]
+
+
 def test_dataclass_specs_null_opaque_object_default_not_stringified() -> None:
     """A field whose default is an opaque object is recorded as None, never its
     repr string - else codegen would emit a bogus non-None default and forward
