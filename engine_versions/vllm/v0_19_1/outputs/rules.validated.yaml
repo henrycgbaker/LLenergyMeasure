@@ -137,6 +137,52 @@ cases:
     message: Expected `int`, got `str` - at `$.top_k`
   positive_confirmed: true
   negative_confirmed: true
+- id: vllm_schedulerconfig_raises_long_prefill_token_threshold_gt_ref_max_model_len
+  outcome: error
+  emission_channel: none
+  observed_messages:
+  - Chunked prefill is enabled with max_num_batched_tokens=2048.
+  - Chunked prefill is enabled with max_num_batched_tokens=2048.
+  - Concurrent partial prefills enabled with max_num_partial_prefills=2, max_long_partial_prefills=1,
+    long_prefill_token_threshold=3
+  - Concurrent partial prefills enabled with max_num_partial_prefills=2, max_long_partial_prefills=1,
+    long_prefill_token_threshold=3
+  - max_num_batched_tokens (2048) exceeds max_num_seqs * max_model_len (256). This
+    may lead to unexpected behavior.
+  - max_num_batched_tokens (2048) exceeds max_num_seqs * max_model_len (256). This
+    may lead to unexpected behavior.
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for SchedulerConfig\n  Value error, long_prefill_token_threshold\
+      \ (3) cannot be greater than the max_model_len (2). [type=value_error, input_value=ArgsKwargs((),\
+      \ {'is_encod...ll_token_threshold': 3}), input_type=ArgsKwargs]\n    For further\
+      \ information visit https://errors.pydantic.dev/2.13/v/value_error"
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_max_long_partial_prefills_gt_ref_max_num_partial_prefills
+  outcome: error
+  emission_channel: none
+  observed_messages:
+  - Chunked prefill is enabled with max_num_batched_tokens=2048.
+  - Chunked prefill is enabled with max_num_batched_tokens=2048.
+  - Concurrent partial prefills enabled with max_num_partial_prefills=2, max_long_partial_prefills=3,
+    long_prefill_token_threshold=0
+  - Concurrent partial prefills enabled with max_num_partial_prefills=2, max_long_partial_prefills=3,
+    long_prefill_token_threshold=0
+  - max_num_batched_tokens (2048) exceeds max_num_seqs * max_model_len (128). This
+    may lead to unexpected behavior.
+  - max_num_batched_tokens (2048) exceeds max_num_seqs * max_model_len (128). This
+    may lead to unexpected behavior.
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for SchedulerConfig\n  Value error, self.max_long_partial_prefills=3\
+      \ must be less than or equal to self.max_num_partial_prefills=2. [type=value_error,\
+      \ input_value=ArgsKwargs((), {'max_mode...g_partial_prefills': 3}), input_type=ArgsKwargs]\n\
+      \    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  positive_confirmed: true
+  negative_confirmed: true
 - id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
   outcome: error
   emission_channel: none
@@ -149,6 +195,21 @@ cases:
       \ sequence length to max_num_batched_tokens and makes vLLM reject longer sequences.\
       \ Please increase max_num_batched_tokens or decrease max_model_len. [type=value_error,\
       \ input_value=ArgsKwargs((), {'max_mode...ncoder_decoder': False}), input_type=ArgsKwargs]\n\
+      \    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+  outcome: error
+  emission_channel: none
+  observed_messages:
+  - Chunked prefill is enabled with max_num_batched_tokens=1.
+  - Chunked prefill is enabled with max_num_batched_tokens=1.
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for SchedulerConfig\n  Value error, max_num_batched_tokens\
+      \ (1) must be greater than or equal to max_num_seqs (2). [type=value_error,\
+      \ input_value=ArgsKwargs((), {'max_mode...num_batched_tokens': 1}), input_type=ArgsKwargs]\n\
       \    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
   positive_confirmed: true
   negative_confirmed: true
