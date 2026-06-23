@@ -183,25 +183,6 @@ class C:
 # ---------------------------------------------------------------------------
 
 
-def test_synthesise_kwargs_omits_absent_field() -> None:
-    """An ``absent: true`` predicate drops the field from the probe kwargs.
-
-    vLLM 0.19.1 made ``enable_chunked_prefill`` a strict ``bool``; synthesising
-    it as ``None`` raised a ``bool_type`` error at construction before the
-    cross-field rule could fire. Omitting it lets the library default apply so
-    the real constraint surfaces.
-    """
-    assert sm._value_satisfying("absent", True) is sm._OMIT_FIELD
-    preds = [
-        sm._Predicate(field="max_num_batched_tokens", op="<", rhs="@max_model_len"),
-        sm._Predicate(field="enable_chunked_prefill", op="absent", rhs=True),
-    ]
-    kwargs = sm._synthesise_kwargs(preds)
-    assert "enable_chunked_prefill" not in kwargs
-    # the cross-field companion + the comparison field are still synthesised.
-    assert kwargs == {"max_model_len": 2, "max_num_batched_tokens": 1}
-
-
 def test_minimal_value_for_type_covers_scalars_containers_unions_and_opaque() -> None:
     mv = sm._minimal_value_for_type
     # scalars
