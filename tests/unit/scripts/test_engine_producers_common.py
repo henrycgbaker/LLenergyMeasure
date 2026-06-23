@@ -368,6 +368,44 @@ def test_dataclass_specs_list_of_pydantic_stays_object_not_ref() -> None:
 
 
 # ---------------------------------------------------------------------------
+# exposable_default - opaque object defaults must NOT leak as stringified reprs
+# ---------------------------------------------------------------------------
+
+
+class _OpaqueBlob:
+    def __repr__(self) -> str:
+        return "<opaque config object repr blob>"
+
+
+@dataclasses.dataclass
+class _OpaqueDefaultArgs:
+    blob: object = dataclasses.field(default_factory=_OpaqueBlob)
+    plain: int = 0
+
+
+def test_exposable_default_nulls_opaque_objects_keeps_clean_structures() -> None:
+    assert _common.exposable_default(_OpaqueBlob()) is None
+    assert _common.exposable_default(5) == 5
+    assert _common.exposable_default("auto") == "auto"
+    assert _common.exposable_default([1, 2]) == [1, 2]
+    assert _common.exposable_default({"a": 1}) == {"a": 1}
+    # An opaque value nested inside a clean container is nulled in place rather
+    # than stringified.
+    assert _common.exposable_default({"k": _OpaqueBlob()}) == {"k": None}
+
+
+def test_dataclass_specs_null_opaque_object_default_not_stringified() -> None:
+    """A field whose default is an opaque object is recorded as None, never its
+    repr string - else codegen would emit a bogus non-None default and forward
+    that stringified blob to the engine on every unset run (the compilation_config
+    regression). Pin the contract so the str() fallback can't return silently.
+    """
+    specs = _common.dataclass_fields_to_specs(_OpaqueDefaultArgs)
+    assert specs["blob"]["default"] is None
+    assert specs["plain"]["default"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Per-engine LANDMARKS contracts
 # ---------------------------------------------------------------------------
 #
@@ -380,13 +418,13 @@ def test_dataclass_specs_list_of_pydantic_stays_object_not_ref() -> None:
 # only on the next drift-tool run.
 
 
-def test_transformers_introspector_landmarks_resolve() -> None:
+def test_transformers_schema_introspector_landmarks_resolve() -> None:
     pytest.importorskip("transformers")
     import importlib
 
-    from scripts.engine_producers import transformers_introspector
+    from scripts.engine_producers import transformers_schema_introspector
 
-    landmarks = transformers_introspector.LANDMARKS
+    landmarks = transformers_schema_introspector.LANDMARKS
     assert isinstance(landmarks, tuple) and landmarks, "LANDMARKS must be a non-empty tuple"
 
     missing: list[str] = []

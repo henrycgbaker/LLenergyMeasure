@@ -208,6 +208,31 @@ def jsonable(value: Any) -> Any:
     return str(value)
 
 
+def exposable_default(value: Any) -> Any:
+    """Sanitise a field default for the discovered schema.
+
+    Like :func:`jsonable` for clean structures (primitives, lists, dicts, sets),
+    but an opaque non-serialisable object becomes ``None`` rather than its repr
+    string. A complex default (e.g. a pydantic sub-config instance) must not
+    leak into the schema as a stringified blob: codegen would emit it as a
+    non-None default and forward that bogus value to the engine on every unset
+    run. Recording ``None`` makes the field omit cleanly (exclude_none) unless
+    the user sets it. Pin this contract in tests so the str() regression can't
+    return silently.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [exposable_default(v) for v in value]
+    if isinstance(value, set):
+        return sorted(exposable_default(v) for v in value)
+    if isinstance(value, dict):
+        return {str(k): exposable_default(v) for k, v in value.items()}
+    if isinstance(value, type):
+        return value.__name__
+    return None
+
+
 def _resolve_pydantic_type(annotation: Any) -> type | None:
     """Return the Pydantic model in ``annotation`` (unwrapping ``X | None``), else None.
 
@@ -275,12 +300,12 @@ def dataclass_fields_to_specs(
                 _fold_model_defs(nested, defs)
                 specs[fld.name] = {
                     "$ref": f"#/$defs/{nested.__name__}",
-                    "default": jsonable(default),
+                    "default": exposable_default(default),
                 }
                 continue
         specs[fld.name] = {
             "type": annotation_to_type_str(fld.type),
-            "default": jsonable(default),
+            "default": exposable_default(default),
         }
     return specs
 

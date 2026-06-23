@@ -588,21 +588,26 @@ class TestNewEngineFields:
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["compilation_config"] == {"mode": "default", "engine": "inductor"}
 
-    def test_none_new_fields_omitted(self):
-        """When new fields are None, they are NOT in kwargs.
+    def test_none_engine_field_omitted_value_forwarded(self):
+        """exclude_none mechanism: an engine field left None is dropped from
+        kwargs; the same field given a value is forwarded verbatim.
 
-        disable_custom_all_reduce is excluded here: its generated default is
-        False (non-None), so it forwards verbatim rather than being dropped.
+        Field-agnostic on purpose - it pins ``_build_llm_kwargs``'s behaviour,
+        not which specific fields happen to default None vs a concrete value.
+        Enumerating "these fields default None" re-encoded substrate that shifts
+        every codegen change (e.g. fields whose schema default is a concrete
+        vllm value like offload_params=[] forward verbatim, exactly like
+        disable_custom_all_reduce=False).
         """
-        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {}})
-        kwargs = VLLMEngine()._build_llm_kwargs(config)
-        for key in [
-            "kv_cache_memory_bytes",
-            "offload_group_size",
-            "offload_params",
-            "compilation_config",
-        ]:
-            assert key not in kwargs
+        omitted = VLLMEngine()._build_llm_kwargs(
+            make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"max_model_len": None}})
+        )
+        assert "max_model_len" not in omitted
+
+        kept = VLLMEngine()._build_llm_kwargs(
+            make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"max_model_len": 4096}})
+        )
+        assert kept["max_model_len"] == 4096
 
 
 # =============================================================================

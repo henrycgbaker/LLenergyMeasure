@@ -247,7 +247,7 @@
     },
     "eplb_config": {
       "type": "EPLBConfig",
-      "default": "EPLBConfig(window_size=1000, step_interval=3000, num_redundant_experts=0, log_balancedness=False, log_balancedness_interval=1, use_async=False, policy='default')"
+      "default": null
     },
     "enable_eplb": {
       "type": "bool",
@@ -556,7 +556,7 @@
     },
     "structured_outputs_config": {
       "type": "StructuredOutputsConfig",
-      "default": "StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False)"
+      "default": null
     },
     "reasoning_parser": {
       "type": "str",
@@ -626,15 +626,15 @@
     },
     "compilation_config": {
       "type": "CompilationConfig",
-      "default": "{'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': [], 'splitting_ops': None, 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_images_per_batch': 0, 'compile_sizes': None, 'compile_ranges_endpoints': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': None, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}"
+      "default": null
     },
     "attention_config": {
       "type": "AttentionConfig",
-      "default": "AttentionConfig(backend=None, flash_attn_version=None, use_prefill_decode_attention=False, flash_attn_max_num_splits_for_cuda_graph=32, use_cudnn_prefill=False, use_trtllm_ragged_deepseek_prefill=False, use_trtllm_attention=None, disable_flashinfer_prefill=True, disable_flashinfer_q_quantization=False, use_prefill_query_quantization=False)"
+      "default": null
     },
     "kernel_config": {
       "type": "KernelConfig",
-      "default": "KernelConfig(enable_flashinfer_autotune=None, moe_backend='auto')"
+      "default": null
     },
     "enable_flashinfer_autotune": {
       "type": "bool",
@@ -650,7 +650,7 @@
     },
     "profiler_config": {
       "type": "ProfilerConfig",
-      "default": "ProfilerConfig(profiler=None, torch_profiler_dir='', torch_profiler_with_stack=True, torch_profiler_with_flops=False, torch_profiler_use_gzip=True, torch_profiler_dump_cuda_time_total=True, torch_profiler_record_shapes=False, torch_profiler_with_memory=False, ignore_frontend=False, delay_iterations=0, max_iterations=0, warmup_iterations=0, active_iterations=5, wait_iterations=0)"
+      "default": null
     },
     "kv_transfer_config": {
       "type": "KVTransferConfig | None",
