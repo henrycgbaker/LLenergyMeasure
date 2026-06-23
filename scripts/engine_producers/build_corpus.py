@@ -178,8 +178,8 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
     ),
     # TRT-LLM is static-only by adversarial-review decision #8 - the dynamic
     # constructor probe yields zero raises (TRT-LLM defers all real validation
-    # to engine build, opaque from Python). The static miner reads the 0.21.0
-    # source tree extracted to /tmp/trt-llm-0.21.0/.
+    # to engine build, opaque from Python). The static miner reads the 1.0.0
+    # source tree extracted to /tmp/trt-llm-1.0.0/.
     "tensorrt": (
         _Extractor(
             module="scripts.engine_producers.tensorrt_static_invariant_miner",

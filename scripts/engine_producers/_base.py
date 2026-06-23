@@ -308,38 +308,6 @@ def extract_loop_literal_iterable(loop: ast.For) -> list[Any] | None:
     return values
 
 
-def candidate_to_dict(candidate: InvariantCandidate) -> dict[str, Any]:
-    """Serialize a InvariantCandidate to the YAML corpus dict shape.
-
-    Used by all per-engine miners (dynamic + static) to emit staging files.
-    Ensures consistent schema across all miners.
-    """
-    return {
-        "id": candidate.id,
-        "engine": candidate.engine,
-        "library": candidate.library,
-        "invariant_under_test": candidate.invariant_under_test,
-        "severity": candidate.severity,
-        "native_type": candidate.native_type,
-        "miner_source": {
-            "path": candidate.miner_source.path,
-            "method": candidate.miner_source.method,
-            "line_at_scan": candidate.miner_source.line_at_scan,
-        },
-        "match": {
-            "engine": candidate.engine,
-            "fields": candidate.match_fields,
-        },
-        "kwargs_positive": candidate.kwargs_positive,
-        "kwargs_negative": candidate.kwargs_negative,
-        "expected_outcome": candidate.expected_outcome,
-        "message_template": candidate.message_template,
-        "references": candidate.references,
-        "added_by": candidate.added_by,
-        "added_at": candidate.added_at,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Class helpers
 # ---------------------------------------------------------------------------

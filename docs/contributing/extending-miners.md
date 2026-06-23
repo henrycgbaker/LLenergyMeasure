@@ -225,7 +225,7 @@ The dataclass lift is limited to `Literal[...]` value-allowlist invariants (no n
 
 Create `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
 
-There is **no shared detector framework** to import. Each engine defines its own local `_detect_*` functions and its own `DetectedBody`-style record, because the invariant shapes genuinely diverge per engine (see [Local detectors, not a shared framework](#local-detectors-not-a-shared-framework) below). `_base.py` provides only mechanical leaf primitives - the AST text helpers (`call_func_path`, `first_string_arg`, `render_joinedstr_template`, ...), `find_class` / `find_method`, the `InvariantCandidate` / `MinerSource` output types, `candidate_to_dict`, and the `MinerLandmarkMissingError` fail-loud type. Compose those.
+There is **no shared detector framework** to import. Each engine defines its own local `_detect_*` functions and its own `DetectedBody`-style record, because the invariant shapes genuinely diverge per engine (see [Local detectors, not a shared framework](#local-detectors-not-a-shared-framework) below). `_base.py` provides only mechanical leaf primitives - the AST text helpers (`call_func_path`, `first_string_arg`, `render_joinedstr_template`, ...), `find_class` / `find_method`, the `InvariantCandidate` / `MinerSource` output types, and the `MinerLandmarkMissingError` fail-loud type. Compose those.
 
 ### Pattern: detectors over `if` bodies
 
@@ -692,4 +692,4 @@ The fail-loud probe and the YAML diff together cover the failure modes that trip
 - `scripts/engine_producers/_landmarks.py` - the `load_landmarks` loader + `Landmarks` schema
 - `engine_versions/_dispatcher.py` and `scripts/engine_producers/_stub_factory.py` - per-version dispatch
 - `scripts/_drift.py` - the drift tool that surfaces missing-vs-extra-vs-stable landmark state at probe time
-- `scripts/engine_producers/_base.py` - shared leaf primitives (AST helpers, `InvariantCandidate`, `find_class` / `find_method`, `candidate_to_dict`)
+- `scripts/engine_producers/_base.py` - shared leaf primitives (AST helpers, `InvariantCandidate`, `find_class` / `find_method`)

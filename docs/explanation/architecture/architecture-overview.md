@@ -168,19 +168,26 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 ```
   scripts/
   └── engine_producers/              Invariant miner pipeline (build-time)
-      ├── _base.py                Shared infrastructure: RuleCandidate, MinerError types,
-      │                           AST primitives, pattern detectors
+      ├── _base.py                Shared leaf toolbox: InvariantCandidate, MinerSource,
+      │                           MinerError types, AST primitives (no shared detector
+      │                           framework - each engine reimplements its detectors)
+      ├── _common.py              Envelope build + default sanitisation + dataclass lift
+      ├── _source_walker.py       Shared source-AST walk + declarative-constraint lift
+      ├── _section_classifier.py  Field -> engine/sampling/harness section mapping
+      ├── _landmarks.py           Per-version landmarks.yaml loader
+      ├── _current.py             Pin resolution + carry-forward inputs
+      ├── _stub_factory.py        Per-version producer dispatch shims
       ├── _pydantic_lift.py       Pydantic v2 sub-library lift
       ├── _msgspec_lift.py        msgspec sub-library lift
       ├── _dataclass_lift.py      stdlib dataclass sub-library lift
       ├── _fixpoint_test.py       Gate-soundness + corpus fixpoint contract
       ├── transformers_miner.py   Transformers orchestration entry
-      ├── transformers_static_miner.py
-      ├── transformers_dynamic_miner.py
-      ├── vllm_static_miner.py
-      ├── vllm_dynamic_miner.py
       ├── tensorrt_miner.py       TensorRT-LLM orchestration entry
-      ├── tensorrt_static_miner.py
+      ├── <engine>_static_invariant_miner.py    Static-miner dispatch shims
+      ├── <engine>_dynamic_invariant_miner.py   Dynamic-miner modules (transformers, vllm)
+      ├── <engine>_schema_introspector.py       Schema-introspector dispatch shims
+      ├── regen_engine_configs.py Typed Config codegen from mined schema + overlay
+      ├── regen_engine_corpus.py  SSOT outputs -> src/ shadow sync (+ --check)
       └── build_corpus.py         Merge + dedup + validation-gate orchestration
 
   scripts/
