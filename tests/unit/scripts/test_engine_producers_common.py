@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import dataclasses  # noqa: E402
 
+import pydantic  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from scripts.engine_producers import _common  # noqa: E402
@@ -81,6 +82,22 @@ class _DcEngineArgsLike:
 class _DictTypedArgs:
     spec: dict | None = None  # dict-typed (like vLLM speculative_config) -> needs a hint
     plain: int = 0
+
+
+# A pydantic dataclass sub-config - the vLLM @config shape: is_dataclass True,
+# __pydantic_fields__ present, model_json_schema absent. Its Field bounds + Literal
+# enum must be captured (the bare-dataclass walk loses them).
+@pydantic.dataclasses.dataclass
+class _PydDcLeaf:
+    frac: float = pydantic.Field(default=0.9, gt=0, le=1)
+    mode: Literal["a", "b", "c"] = "a"
+    unbounded: int = 0  # no Field bound -> stays plain (the SkipValidation/class-3 shape)
+
+
+@dataclasses.dataclass
+class _ArgsWithPydDc:
+    leaf: _PydDcLeaf | None = None
+    plain: str = "p"
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +446,27 @@ def test_dataclass_specs_without_defs_flatten_dataclass_to_type_str() -> None:
     specs = _common.dataclass_fields_to_specs(_DcEngineArgsLike)
     assert "$ref" not in specs["mid"]
     assert "type" in specs["mid"]
+
+
+def test_pydantic_dataclass_field_captures_bounds_and_enums() -> None:
+    """A pydantic-dataclass sub-config folds via the rich path, keeping Field bounds + Literal enums.
+
+    This is the vLLM ``@config`` shape (is_dataclass + __pydantic_fields__, no
+    model_json_schema). The bare-dataclass walk would lose ``gt=0, le=1`` and the
+    ``Literal`` membership; the pydantic JSON-schema path keeps them, which is what
+    the schema-lift needs to feed bucketing + enforcement.
+    """
+    defs: dict = {}
+    specs = _common.dataclass_fields_to_specs(_ArgsWithPydDc, defs=defs)
+    assert specs["leaf"]["$ref"] == "#/$defs/_PydDcLeaf"
+    leaf = defs["_PydDcLeaf"]["properties"]
+    # Numeric bound preserved (Field(gt=0, le=1) -> exclusiveMinimum/maximum).
+    assert leaf["frac"].get("exclusiveMinimum") == 0
+    assert leaf["frac"].get("maximum") == 1
+    # Literal enum preserved.
+    assert leaf["mode"].get("enum") == ["a", "b", "c"]
+    # An unbounded field stays plain (no bound invented) - the class-3 shape.
+    assert "minimum" not in leaf["unbounded"] and "maximum" not in leaf["unbounded"]
 
 
 def test_fold_dict_typed_subconfig_rewrites_dict_field_to_ref() -> None:

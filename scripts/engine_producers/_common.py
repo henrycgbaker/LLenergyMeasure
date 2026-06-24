@@ -264,16 +264,21 @@ def _single_candidate(annotation: Any) -> Any | None:
 
 
 def _resolve_pydantic_type(annotation: Any) -> type | None:
-    """Return the Pydantic model in ``annotation`` (unwrapping ``X | None``), else None.
+    """Return the Pydantic model OR pydantic-dataclass in ``annotation``, else None.
 
-    Handles the common ``SubConfig`` and ``SubConfig | None`` / ``Optional[SubConfig]``
-    shapes the dataclass walker meets on engine-args classes; nested generics
-    (``list[SubConfig]``) are left as ``type: object`` since there is no single
-    sub-config to ``$ref``. Recognises both ``pydantic.BaseModel`` subclasses and
-    ``pydantic.dataclasses``-decorated classes (both expose ``model_json_schema``).
+    Recognises ``pydantic.BaseModel`` subclasses (expose ``model_json_schema``) AND
+    ``pydantic.dataclasses``-decorated classes (expose ``__pydantic_fields__`` but
+    NOT ``model_json_schema`` - e.g. vLLM's ``@config`` sub-configs). Both carry the
+    validation metadata (``Literal`` enums, ``Field(ge/le/...)`` bounds) that the
+    rich :func:`_fold_model_defs` path captures from the pydantic JSON schema; a
+    PLAIN stdlib dataclass has neither and routes to :func:`_resolve_dataclass_type`,
+    whose bare-fields walk cannot see those bounds. Nested generics
+    (``list[SubConfig]``) have no single class to ``$ref`` and yield None.
     """
     candidate = _single_candidate(annotation)
-    if isinstance(candidate, type) and hasattr(candidate, "model_json_schema"):
+    if isinstance(candidate, type) and (
+        hasattr(candidate, "model_json_schema") or hasattr(candidate, "__pydantic_fields__")
+    ):
         return candidate
     return None
 
@@ -292,6 +297,7 @@ def _resolve_dataclass_type(annotation: Any) -> type | None:
         isinstance(candidate, type)
         and dataclasses.is_dataclass(candidate)
         and not hasattr(candidate, "model_json_schema")
+        and not hasattr(candidate, "__pydantic_fields__")
     ):
         return candidate
     return None
@@ -377,13 +383,22 @@ def _safe_type_hints(cls: type) -> dict[str, Any]:
 def _fold_model_defs(model: type, defs: dict[str, Any]) -> None:
     """Fold ``model``'s root definition and its own ``$defs`` into ``defs``.
 
-    ``model_json_schema(ref_template=...)`` returns ``{$defs: {...}, ...root...}``
-    keyed under the standard ``#/$defs/<Name>`` namespace. We lift the root
-    body under the model name and merge any transitively-referenced sub-models,
-    so the envelope's ``$defs`` is self-contained (every ``$ref`` resolves).
+    The pydantic JSON schema (``{$defs: {...}, ...root...}`` under the standard
+    ``#/$defs/<Name>`` namespace) carries the validation metadata (``enum``,
+    ``minimum``/``maximum``/``exclusive*``) the bare-dataclass walk loses. A
+    ``BaseModel`` exposes ``model_json_schema``; a ``pydantic.dataclasses`` class
+    does not, so its schema is built via ``pydantic.TypeAdapter`` - the field
+    bounds/enums land identically either way. We lift the root body under the
+    model name and merge transitively-referenced sub-models so every ``$ref``
+    resolves.
     """
     try:
-        schema = model.model_json_schema(ref_template="#/$defs/{model}")
+        if hasattr(model, "model_json_schema"):
+            schema = model.model_json_schema(ref_template="#/$defs/{model}")
+        else:
+            import pydantic  # local: keep the host-side dispatch import surface minimal
+
+            schema = pydantic.TypeAdapter(model).json_schema(ref_template="#/$defs/{model}")
     except Exception:
         return
     for name, body in schema.pop("$defs", {}).items():
