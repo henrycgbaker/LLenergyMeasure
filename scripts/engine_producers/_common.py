@@ -303,6 +303,45 @@ def _resolve_dataclass_type(annotation: Any) -> type | None:
     return None
 
 
+def _literal_enum_spec(annotation: Any) -> dict[str, Any] | None:
+    """If *annotation* is ``Literal[...]`` (optionally ``X | None``), return ``{type, enum}``.
+
+    A flat ``Literal``-annotated field (e.g. vLLM ``EngineArgs.dtype``) otherwise
+    renders as the opaque ``"Literal[...]"`` type STRING via
+    :func:`annotation_to_type_str`, which the codegen's scalar-only translator
+    cannot parse and collapses to ``Any | None`` - so the membership set never
+    reaches the generated config. Capturing it as a structured JSON Schema ``enum``
+    (plus the members' base scalar type) lets the codegen project a real
+    ``Literal[...]`` field. Mirrors the enum capture the Pydantic ``$ref`` path
+    already gets from :func:`_fold_model_defs`. Returns ``None`` for non-Literal
+    annotations. Membership is rendered in declared order (deterministic).
+    """
+    candidate = annotation
+    origin = get_origin(candidate)
+    if origin is Union or origin is types.UnionType:
+        non_none = [a for a in get_args(candidate) if a is not type(None)]
+        if len(non_none) != 1:
+            return None
+        candidate = non_none[0]
+        origin = get_origin(candidate)
+    if origin is None or "Literal" not in str(origin):
+        return None
+    members = list(get_args(candidate))
+    spec: dict[str, Any] = {"enum": [jsonable(m) for m in members]}
+    member_types = {type(m) for m in members}
+    if member_types == {str}:
+        spec["type"] = "str"
+    elif member_types == {bool}:
+        spec["type"] = "bool"
+    elif member_types == {int}:
+        spec["type"] = "int"
+    elif member_types <= {int, float}:
+        spec["type"] = "float"
+    # Mixed / non-scalar members: emit the enum alone (codegen builds the Literal
+    # from membership without a base scalar type).
+    return spec
+
+
 def dataclass_fields_to_specs(
     cls: type,
     *,
@@ -358,6 +397,10 @@ def dataclass_fields_to_specs(
                     "$ref": f"#/$defs/{nested_dc.__name__}",
                     "default": exposable_default(default),
                 }
+                continue
+            enum_spec = _literal_enum_spec(annotation)
+            if enum_spec is not None:
+                specs[fld.name] = {**enum_spec, "default": exposable_default(default)}
                 continue
         specs[fld.name] = {
             "type": annotation_to_type_str(fld.type),

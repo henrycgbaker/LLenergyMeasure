@@ -644,3 +644,47 @@ def test_mining_orchestration_import_is_torch_free() -> None:
     }
     result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, env=env)
     assert result.returncode == 0, (result.stdout + result.stderr).strip()
+
+
+@dataclasses.dataclass
+class _ArgsWithFlatLiteral:
+    """A flat (non-nested) dataclass carrying ``Literal`` scalar fields.
+
+    Mirrors vLLM ``EngineArgs.dtype`` / ``kv_cache_dtype``: the membership set
+    lives directly on the engine-args dataclass, not on a nested sub-config.
+    """
+
+    dtype: Literal["auto", "half", "bfloat16"] = "auto"
+    block: Literal[8, 16, 32] = 16
+    backend: Literal["a", "b"] | None = None
+    plain: int = 3
+
+
+def test_flat_literal_field_captures_enum_not_type_string() -> None:
+    """A flat ``Literal`` field becomes a structured ``enum`` (not an opaque string).
+
+    Without the capture, ``annotation_to_type_str`` renders ``"Literal[...]"`` which
+    the scalar-only codegen translator drops to ``Any | None`` - so the membership
+    never reaches the generated config. The structured ``enum`` + base scalar type
+    lets the codegen project a real ``Literal[...]`` field.
+    """
+    specs = _common.dataclass_fields_to_specs(_ArgsWithFlatLiteral, defs={})
+    assert specs["dtype"] == {
+        "enum": ["auto", "half", "bfloat16"],
+        "type": "str",
+        "default": "auto",
+    }
+    assert specs["block"] == {"enum": [8, 16, 32], "type": "int", "default": 16}
+    # ``X | None`` unwraps to the sole Literal; the enum is captured (default kept).
+    assert specs["backend"]["enum"] == ["a", "b"]
+    assert specs["backend"]["type"] == "str"
+    # A non-Literal scalar is untouched (no enum invented).
+    assert specs["plain"] == {"type": "int", "default": 3}
+    assert "enum" not in specs["plain"]
+
+
+def test_literal_enum_spec_ignores_non_literal() -> None:
+    """``_literal_enum_spec`` returns None for non-Literal annotations (no false enums)."""
+    assert _common._literal_enum_spec(int) is None
+    assert _common._literal_enum_spec(str | None) is None
+    assert _common._literal_enum_spec(Literal["x", "y"]) == {"enum": ["x", "y"], "type": "str"}

@@ -13,7 +13,7 @@ class EngineParams(BaseModel):
         extra="allow",
         use_attribute_docstrings=True,
     )
-    dtype: Any | None = "auto"
+    dtype: Literal["auto", "half", "float16", "bfloat16", "float", "float32"] | None = "auto"
     gpu_memory_utilization: Annotated[
         float | None,
         Field(
