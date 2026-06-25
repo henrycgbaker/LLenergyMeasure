@@ -506,6 +506,42 @@ def fold_dict_typed_subconfig(
     return True
 
 
+def enumerate_config_classes(root: type) -> list[type]:
+    """Return all config classes reachable from ``root`` via typed fields.
+
+    Walks the dataclass / pydantic field tree from ``root`` (inclusive),
+    descending into any field whose annotation resolves to a single pydantic
+    model/dataclass or stdlib dataclass (reusing :func:`_resolve_pydantic_type`
+    / :func:`_resolve_dataclass_type`; container-wrapped generics like
+    ``list[Sub]`` are not descended, matching the existing fold path). Cycle-
+    guarded on the qualified type key; returned sorted by ``(module, qualname)``
+    for determinism. Pure + torch-free (no library import at module load).
+    """
+    seen: dict[str, type] = {}
+
+    def _walk(cls: type) -> None:
+        if not isinstance(cls, type):
+            return
+        key = f"{cls.__module__}.{cls.__qualname__}"
+        if key in seen:
+            return
+        seen[key] = cls
+        if hasattr(cls, "__pydantic_fields__"):
+            annotations = {n: i.annotation for n, i in cls.__pydantic_fields__.items()}
+        elif dataclasses.is_dataclass(cls):
+            hints = _safe_type_hints(cls)
+            annotations = {f.name: hints.get(f.name, f.type) for f in dataclasses.fields(cls)}
+        else:
+            annotations = {}
+        for ann in annotations.values():
+            sub = _resolve_pydantic_type(ann) or _resolve_dataclass_type(ann)
+            if isinstance(sub, type):
+                _walk(sub)
+
+    _walk(root)
+    return [seen[k] for k in sorted(seen)]
+
+
 def merge_source_constraints(
     schema_fields: dict[str, dict[str, Any]],
     source_paths: list[Path],

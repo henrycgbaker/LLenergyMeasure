@@ -33,6 +33,11 @@ probe_landmarks:
   - vllm.sampling_params.SamplingParams._verify_args
   - vllm.sampling_params.SamplingParams.__post_init__
   - vllm.sampling_params.SamplingParams._verify_greedy_sampling
+  - vllm.sampling_params.SamplingParams._validate_allowed_token_ids
+  - vllm.sampling_params.SamplingParams._validate_logit_bias
+  - vllm.sampling_params.SamplingParams._validate_logprobs
+  - vllm.sampling_params.SamplingParams._validate_spec_decode
+  - vllm.sampling_params.SamplingParams._validate_structured_outputs
   - vllm.sampling_params.StructuredOutputsParams
   - vllm.sampling_params.StructuredOutputsParams.__post_init__
   - vllm.config.parallel.ParallelConfig
@@ -45,17 +50,34 @@ probe_landmarks:
   - vllm.config.model.ModelConfig._verify_bnb_config
   - vllm.config.model.ModelConfig.__post_init__
   - vllm.config.model.ModelConfig.validate_model_config_after
+  - vllm.config.model.ModelConfig.verify_with_parallel_config
+  - vllm.config.multimodal.MultiModalConfig
+  - vllm.config.multimodal.MultiModalConfig._validate_multimodal_config
   - vllm.config.scheduler.SchedulerConfig
   - vllm.config.scheduler.SchedulerConfig.__post_init__
   - vllm.config.speculative.SpeculativeConfig
   - vllm.config.speculative.SpeculativeConfig._verify_args
   - vllm.config.speculative.SpeculativeConfig.__post_init__
   - vllm.config.speculative.SpeculativeConfig._verify_and_get_draft_tp
+  - vllm.config.speculative.SpeculativeConfig._validate_suffix_decoding
 ast_targets:
   # SamplingParams family - sampling_params.py
   - {module_attr: sampling_params.SamplingParams, method: _verify_args, namespace: vllm.sampling, native_type: vllm.SamplingParams}
   - {module_attr: sampling_params.SamplingParams, method: __post_init__, namespace: vllm.sampling, native_type: vllm.SamplingParams}
   - {module_attr: sampling_params.SamplingParams, method: _verify_greedy_sampling, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  # Comprehensive-mine additions: raise-bearing validators surfaced by the
+  # drift-completeness census that the original 0.19.1 landmark set missed
+  # (SamplingParams @field/value validators + StructuredOutputsParams /
+  # MultiModalConfig / SpeculativeConfig relocated validators). The gate filters
+  # any that do not construct/fire; encoding the full validated surface per the
+  # comprehensive-mining intent.
+  - {module_attr: sampling_params.SamplingParams, method: _validate_allowed_token_ids, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: _validate_logit_bias, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: _validate_logprobs, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: _validate_spec_decode, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.SamplingParams, method: _validate_structured_outputs, namespace: vllm.sampling, native_type: vllm.SamplingParams}
+  - {module_attr: sampling_params.StructuredOutputsParams, method: __post_init__, namespace: vllm.sampling, native_type: vllm.StructuredOutputsParams}
+  - {module_attr: config.multimodal.MultiModalConfig, method: _validate_multimodal_config, namespace: vllm.engine, native_type: vllm.config.MultiModalConfig}
   # config/*.py subpackage family (0.7.3's flat config.py split per concern).
   # CacheConfig / LoRAConfig / DecodingConfig dropped: their imperative
   # validators are gone at 0.19.1 (constraints are now Field()/Literal[],
@@ -77,7 +99,9 @@ ast_targets:
   - {module_attr: config.model.ModelConfig, method: _verify_bnb_config, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
   - {module_attr: config.model.ModelConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
   - {module_attr: config.model.ModelConfig, method: validate_model_config_after, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.model.ModelConfig, method: verify_with_parallel_config, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
   - {module_attr: config.scheduler.SchedulerConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.SchedulerConfig}
   - {module_attr: config.speculative.SpeculativeConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}
   - {module_attr: config.speculative.SpeculativeConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}
   - {module_attr: config.speculative.SpeculativeConfig, method: _verify_and_get_draft_tp, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}
+  - {module_attr: config.speculative.SpeculativeConfig, method: _validate_suffix_decoding, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}

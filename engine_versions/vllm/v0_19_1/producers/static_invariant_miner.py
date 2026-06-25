@@ -109,6 +109,55 @@ _CLASS_TARGETS: tuple[_ASTTarget, ...] = tuple(
 )
 
 
+def probe_uncovered_validators() -> tuple[list[str], list[str]]:
+    """Drift-completeness probe: live raise-bearing validators NOT in ast_targets.
+
+    Imports the live vLLM config tree (in-container) and returns
+    (validators_uncovered, validators_unanalyzable). Uncovered = raise-bearing
+    validators on flat-hoisted config classes reachable from the seed set that
+    the miner's ast_targets covered set misses (the relocation gap). Unanalyzable
+    = inherited/wrapped validators that cannot be statically analyzed (surfaced,
+    not dropped). Engine-specific: vLLM is import-based, seeded on the ast_targets
+    classes + SamplingParams + StructuredOutputsParams; EngineArgs supplies the
+    flat-hoist field set (blob-only exclusion). Called by scripts._drift.run().
+    """
+    import dataclasses
+
+    from vllm.engine.arg_utils import EngineArgs
+    from vllm.sampling_params import SamplingParams
+
+    from scripts.engine_producers import _completeness
+
+    covered = {(t.class_name, t.method) for t in _CLASS_TARGETS}
+    seeds: list[type] = []
+    seen_seed: set[type] = set()
+    for t in _CLASS_TARGETS:
+        module = __import__(t.module_path, fromlist=[t.class_name])
+        cls = getattr(module, t.class_name, None)
+        if isinstance(cls, type) and cls not in seen_seed:
+            seen_seed.add(cls)
+            seeds.append(cls)
+    for extra in (SamplingParams, EngineArgs):
+        if extra not in seen_seed:
+            seen_seed.add(extra)
+            seeds.append(extra)
+    try:
+        from vllm.sampling_params import StructuredOutputsParams
+
+        if StructuredOutputsParams not in seen_seed:
+            seeds.append(StructuredOutputsParams)
+    except Exception:
+        pass
+    hoist_fields = {f.name for f in dataclasses.fields(EngineArgs)}
+    seed_names = {c.__name__ for c in seeds}
+    return _completeness.compute_uncovered_validators(
+        roots=seeds,
+        covered=covered,
+        hoist_fields=hoist_fields,
+        seed_names=seed_names,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Detected pattern + invariant emission
 # ---------------------------------------------------------------------------

@@ -279,6 +279,14 @@ jobs:
           echo "::endgroup::"
           VERDICT=$(jq -r '.verdict' "/tmp/llem-probe-out/probe-${ENGINE}.json")
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+          # Drift-completeness diagnostic (non-verdict): count of live raise-bearing
+          # validators NOT in the miner covered set (the stale-ABSENT relocation
+          # gap). Rides on the same report; gated by a SEPARATE step below so it
+          # never affects the probe verdict. // [] defends against a report that
+          # predates the field; an infra-error exit (no output file) aborts the
+          # step at the verdict jq above, before this line.
+          UNCOVERED_COUNT=$(jq -r '(.validators_uncovered // []) | length' "/tmp/llem-probe-out/probe-${ENGINE}.json")
+          echo "validators_uncovered_count=${UNCOVERED_COUNT}" >> "$GITHUB_OUTPUT"
           exit "$DRIFT_RC"
 
       - name: Save current YAMLs for diffing
@@ -783,6 +791,49 @@ jobs:
           } | scripts/ci/upsert_pr_comment.sh
           gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
+      - name: Completeness comment (uncovered validators)
+        # Surfaces the drift-completeness diagnostic when the miner covered set
+        # has gone stale-ABSENT (a live raise-bearing validator the ast_targets
+        # hand-list misses). Independent of the probe verdict; only posted when
+        # the mine itself ran (verdict pass) so it does not double up with the
+        # probe-blocked comment on a stale-PRESENT failure.
+        if: steps.probe.outputs.verdict == 'pass' && steps.probe.outputs.validators_uncovered_count != '0' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr-number }}
+          MARKER: "bot-id: completeness-${{ inputs.engine }}"
+          REPO: ${{ github.repository }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
+          UNCOVERED_COUNT=$(jq -r '(.validators_uncovered // []) | length' "$REPORT")
+          UNANALYZABLE_COUNT=$(jq -r '(.validators_unanalyzable // []) | length' "$REPORT")
+          {
+            echo "<!-- ${MARKER} -->"
+            echo "## Engine invariants - ${ENGINE} (uncovered validators)"
+            echo
+            echo "**Completeness gap:** ${UNCOVERED_COUNT} live raise-bearing validator(s) on flat-hoisted config classes are NOT in the miner covered set (ast_targets) under ${ENGINE}==${VER}. The relocation/drift went un-mined silently."
+            echo
+            echo "Uncovered validators (${UNCOVERED_COUNT}):"
+            echo
+            jq -r '.validators_uncovered[] | "- `" + . + "`"' "$REPORT"
+            echo
+            if [[ "$UNANALYZABLE_COUNT" -gt 0 ]]; then
+              echo "<details><summary>Unanalyzable validators (${UNANALYZABLE_COUNT}, informational)</summary>"
+              echo
+              echo "Inherited/wrapped validators the detector could not statically analyze (surfaced, not gated):"
+              echo
+              jq -r '.validators_unanalyzable[] | "- `" + . + "`"' "$REPORT"
+              echo
+              echo "</details>"
+              echo
+            fi
+            echo "**To resolve**, add each named validator (as a \`{module_attr, method, namespace, native_type}\` entry) to \`ast_targets\` (and its method to \`probe_landmarks\`) in \`engine_versions/${ENGINE}/v<pin>/landmarks.yaml\`, then re-mine. The gate filters any that do not construct or fire."
+            echo
+            echo "CI stays red until \`validators_uncovered\` is empty or the \`accept-uncovered-validators\` label is applied."
+          } | scripts/ci/upsert_pr_comment.sh
+
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
         uses: actions/upload-artifact@v4
@@ -1053,4 +1104,18 @@ jobs:
         if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
+
+      - name: Completeness gate (red CI)
+        # Drift-completeness must show as a red CI check: a live raise-bearing
+        # validator that the miner covered set (ast_targets) misses is a silent
+        # recall gap (the relocation/stale-ABSENT class). Distinct from the probe
+        # verdict (stale-PRESENT): the mine SUCCEEDS but is incomplete, so this is
+        # a SEPARATE gate keyed on the validators_uncovered diagnostic, never on
+        # the verdict. The completeness comment above names the validators and how
+        # to resolve. The 'accept-uncovered-validators' PR label bypasses this gate
+        # for triaged-but-deferred gaps (admin escalation).
+        if: steps.probe.outputs.verdict == 'pass' && steps.probe.outputs.validators_uncovered_count != '' && steps.probe.outputs.validators_uncovered_count != '0' && !contains(github.event.pull_request.labels.*.name, 'accept-uncovered-validators')
+        run: |
+          echo "::error::Drift-completeness gap: ${{ steps.probe.outputs.validators_uncovered_count }} uncovered validator(s) not in the miner covered set. CI is red until they are added to ast_targets (and re-mined) or the accept-uncovered-validators label is applied."
           exit 1

@@ -22,6 +22,17 @@ every report and are informational - they NEVER affect verdict:
                                   A maintainer-facing hint that the canonical
                                   module path has moved; future producer cuts
                                   should declare against the canonical path.
+    ``validators_uncovered``    : live raise-bearing config validators NOT in
+                                  the miner's covered set (its ``ast_targets``
+                                  registry) - the stale-ABSENT relocation gap,
+                                  where upstream moved a check into a validator
+                                  the landmark set never named. A drift-
+                                  completeness signal; only the "invariants"
+                                  producer computes it (the prober is optional).
+    ``validators_unanalyzable`` : inherited/wrapped validators that could not
+                                  be statically analyzed - surfaced rather than
+                                  dropped (the false-negative guard), so the
+                                  census never claims coverage it cannot prove.
 
 Producer-module discovery uses a per-engine convention table (see
 ``_PRODUCER_MODULES``); each producer module exposes a
@@ -101,9 +112,17 @@ class DriftReport:
 
     ``verdict`` is ``fail`` iff ``landmarks_missing`` is non-empty.
 
-    Diagnostic fields (``fingerprint_drift``, ``landmarks_aliased``) ride
-    along on every report and steer human attention on pass-but-suspicious
-    bumps. They NEVER affect verdict.
+    Diagnostic fields (``fingerprint_drift``, ``landmarks_aliased``,
+    ``validators_uncovered``, ``validators_unanalyzable``) ride along on every
+    report and steer human attention on pass-but-suspicious bumps. They NEVER
+    affect verdict.
+
+    ``validators_uncovered`` = live raise-bearing config validators not in the
+    miner's covered set (the stale-ABSENT relocation gap).
+    ``validators_unanalyzable`` = inherited/wrapped validators that could not be
+    statically analyzed - surfaced, not dropped (the false-negative guard).
+    Both are populated only for the "invariants" producer, and only when the
+    producer module exposes an optional ``probe_uncovered_validators`` callable.
     """
 
     engine: str
@@ -115,6 +134,8 @@ class DriftReport:
     fingerprint_drift: list[str] = field(default_factory=list)
     landmarks_missing: list[str] = field(default_factory=list)
     landmarks_aliased: list[str] = field(default_factory=list)
+    validators_uncovered: list[str] = field(default_factory=list)
+    validators_unanalyzable: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -369,18 +390,35 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
 
     aliased = [r.landmark for r in resolved if r.aliased]
 
+    # Drift-completeness diagnostic: live raise-bearing validators NOT in the
+    # miner's covered set (the stale-ABSENT relocation gap). Only the
+    # "invariants" producer carries the optional prober; a prober error degrades
+    # to a single unanalyzable marker rather than breaking the verdict.
+    validators_uncovered: list[str] = []
+    validators_unanalyzable: list[str] = []
+    if producer == "invariants":
+        prober = getattr(producer_module, "probe_uncovered_validators", None)
+        if callable(prober):
+            try:
+                validators_uncovered, validators_unanalyzable = prober()
+            except Exception:
+                # Best-effort diagnostic; never break the probe verdict on a prober error.
+                validators_unanalyzable = ["<prober-error>"]
+
     verdict: Literal["pass", "fail"] = "fail" if missing else "pass"
 
     return DriftReport(
         engine=engine,
         producer=producer,
-        schema_version=1,
+        schema_version=2,
         current_version=current_version,
         verdict=verdict,
         fingerprint=fingerprint,
         fingerprint_drift=drift,
         landmarks_missing=missing,
         landmarks_aliased=aliased,
+        validators_uncovered=validators_uncovered,
+        validators_unanalyzable=validators_unanalyzable,
     )
 
 

@@ -688,3 +688,75 @@ def test_literal_enum_spec_ignores_non_literal() -> None:
     assert _common._literal_enum_spec(int) is None
     assert _common._literal_enum_spec(str | None) is None
     assert _common._literal_enum_spec(Literal["x", "y"]) == {"enum": ["x", "y"], "type": "str"}
+
+
+# ---------------------------------------------------------------------------
+# enumerate_config_classes - typed-field reachability walk
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class _LeafOnly:
+    """A flat dataclass with no typed config-class fields - only scalars."""
+
+    a: int = 0
+    b: str = "x"
+    nums: list[int] | None = None
+
+
+@dataclasses.dataclass
+class _MutualA:
+    """Mutually-referential pair (A -> B -> A) - exercises the cycle guard."""
+
+    other: _MutualB | None = None
+    flag: bool = False
+
+
+@dataclasses.dataclass
+class _MutualB:
+    back: _MutualA | None = None
+    n: int = 0
+
+
+def test_enumerate_config_classes_returns_root_and_all_subconfigs() -> None:
+    """A nested dataclass tree returns root + every reachable sub-config, sorted + deduped."""
+    classes = _common.enumerate_config_classes(_DcEngineArgsLike)
+    # Root + the two dataclass sub-configs (_DcMid, _DcLeaf) + the pydantic
+    # sub-config (_SubConfig) and its nested model (_NestedModel) are reachable.
+    names = {c.__name__ for c in classes}
+    assert names == {
+        "_DcEngineArgsLike",
+        "_DcMid",
+        "_DcLeaf",
+        "_SubConfig",
+        "_NestedModel",
+    }
+    # Deterministic: sorted by (module, qualname) and free of duplicates.
+    keys = [f"{c.__module__}.{c.__qualname__}" for c in classes]
+    assert keys == sorted(keys)
+    assert len(keys) == len(set(keys))
+
+
+def test_enumerate_config_classes_terminates_on_cycle() -> None:
+    """A self / mutual cycle terminates and lists each class exactly once."""
+    # Self-reference: _DcMid.self_ref -> _DcMid.
+    self_cycle = _common.enumerate_config_classes(_DcMid)
+    assert {c.__name__ for c in self_cycle} == {"_DcMid", "_DcLeaf"}
+
+    # Mutual reference: _MutualA <-> _MutualB.
+    mutual = _common.enumerate_config_classes(_MutualA)
+    mutual_names = [c.__name__ for c in mutual]
+    assert sorted(mutual_names) == ["_MutualA", "_MutualB"]
+    assert len(mutual_names) == len(set(mutual_names))  # each once, no infinite loop
+
+
+def test_enumerate_config_classes_does_not_descend_container_generics() -> None:
+    """``list[Sub]`` is NOT descended (matches the existing fold semantics)."""
+    classes = _common.enumerate_config_classes(_ListOfPydanticArgs)
+    # Only the root: ``subs: list[_SubConfig]`` has no single class to descend.
+    assert {c.__name__ for c in classes} == {"_ListOfPydanticArgs"}
+
+
+def test_enumerate_config_classes_returns_just_root_when_no_config_fields() -> None:
+    """A class with no typed config-class fields returns just itself."""
+    assert _common.enumerate_config_classes(_LeafOnly) == [_LeafOnly]

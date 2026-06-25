@@ -44,6 +44,7 @@ def _install_synthetic_producer(
     producer: _drift.ProducerKind,
     landmarks: tuple[str, ...],
     module_name: str = "scripts._drift_synthetic_producer",
+    uncovered_probe: tuple[list[str], list[str]] | None = None,
 ) -> types.ModuleType:
     """Register a fake producer module + retarget the ``_PRODUCER_MODULES`` map.
 
@@ -51,9 +52,20 @@ def _install_synthetic_producer(
     placing one in ``sys.modules`` is sufficient. Tests use this to
     decouple LANDMARKS contents from the real miner / introspector
     bodies, which live elsewhere on the repo's release cadence.
+
+    When ``uncovered_probe`` is given, the module also exposes a
+    ``probe_uncovered_validators`` callable returning that
+    ``(uncovered, unanalyzable)`` tuple - the optional drift-completeness
+    prober ``run()`` invokes for the "invariants" producer.
     """
     module = types.ModuleType(module_name)
     module.LANDMARKS = landmarks  # type: ignore[attr-defined]
+    if uncovered_probe is not None:
+
+        def _probe() -> tuple[list[str], list[str]]:
+            return uncovered_probe
+
+        module.probe_uncovered_validators = _probe  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, module_name, module)
     monkeypatch.setitem(_drift._PRODUCER_MODULES, (engine, producer), module_name)
     return module
@@ -133,8 +145,8 @@ def test_drift_fail_when_landmark_missing(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert report.landmarks_missing == ["json.NonExistentSymbolXYZ"]
 
 
-def test_drift_schema_version_is_one(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """``schema_version`` is always 1."""
+def test_drift_schema_version_is_two(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """``schema_version`` is 2 (bumped when the validator-completeness fields landed)."""
     _redirect_compat_dir(monkeypatch, tmp_path)
     _install_synthetic_producer(
         monkeypatch,
@@ -145,7 +157,7 @@ def test_drift_schema_version_is_one(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 
     report = _drift.run(engine="transformers", producer="invariants")
 
-    assert report.schema_version == 1
+    assert report.schema_version == 2
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +237,7 @@ def test_drift_writes_compat_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert "invariants" in cache
     assert cache["invariants"]["verdict"] == "pass"
     assert cache["invariants"]["fingerprint"]
-    assert cache["invariants"]["schema_version"] == 1
+    assert cache["invariants"]["schema_version"] == 2
     assert cache["invariants"]["current_version"]
 
 
@@ -262,7 +274,7 @@ def test_drift_output_flag_writes_to_file_keeps_stdout_clean(
     payload = json.loads(out.read_text())
     assert payload["engine"] == "transformers"
     assert payload["verdict"] == "pass"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert "current_version" in payload
     assert "landmarks_missing" in payload
 
@@ -285,7 +297,7 @@ def test_drift_atomic_output_rename_failure_leaves_destination_intact(
     report = _drift.DriftReport(
         engine="transformers",
         producer="invariants",
-        schema_version=1,
+        schema_version=2,
         current_version="9.9.9",
         verdict="pass",
         fingerprint="deadbeef",
@@ -450,3 +462,107 @@ def test_aliased_never_affects_verdict(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert report.verdict == "pass"  # not flipped by alias
     assert report.landmarks_aliased  # but informational signal present
     assert report.landmarks_missing == []
+
+
+# ---------------------------------------------------------------------------
+# Validator drift-completeness diagnostic
+# ---------------------------------------------------------------------------
+
+
+def test_uncovered_validators_surface_in_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The optional prober's ``(uncovered, unanalyzable)`` ride along on the report."""
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("json.JSONDecodeError",),
+        uncovered_probe=(["Foo.validate_after"], ["Bar.inherited_validator"]),
+    )
+
+    report = _drift.run(engine="transformers", producer="invariants")
+
+    assert report.validators_uncovered == ["Foo.validate_after"]
+    assert report.validators_unanalyzable == ["Bar.inherited_validator"]
+
+
+def test_uncovered_validators_never_affect_verdict(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A non-empty ``validators_uncovered`` is informational; verdict stays ``pass``."""
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("json.JSONDecodeError",),  # all resolve -> landmarks_missing empty
+        uncovered_probe=(["Foo.relocated_check", "Baz.new_validator"], []),
+    )
+
+    report = _drift.run(engine="transformers", producer="invariants")
+
+    assert report.validators_uncovered  # non-empty completeness signal
+    assert report.landmarks_missing == []
+    assert report.verdict == "pass"  # not flipped by the uncovered set
+
+
+def test_uncovered_validators_not_probed_for_schemas_producer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """For the "schemas" producer the prober is NOT called - the fields stay empty.
+
+    Even when a schema producer module happens to expose
+    ``probe_uncovered_validators``, ``run()`` only invokes it for "invariants".
+    """
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="schemas",
+        landmarks=("json.JSONDecodeError",),
+        uncovered_probe=(["Should.not_appear"], ["Should.not_appear_either"]),
+    )
+
+    report = _drift.run(engine="transformers", producer="schemas")
+
+    assert report.validators_uncovered == []
+    assert report.validators_unanalyzable == []
+
+
+def test_uncovered_validators_empty_when_prober_absent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A producer WITHOUT ``probe_uncovered_validators`` yields empty lists (permits-zero)."""
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("json.JSONDecodeError",),
+        # no uncovered_probe -> module has no probe_uncovered_validators attr
+    )
+
+    report = _drift.run(engine="transformers", producer="invariants")
+
+    assert report.validators_uncovered == []
+    assert report.validators_unanalyzable == []
+
+
+def test_uncovered_validators_schema_version_is_two(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The completeness-field report carries ``schema_version`` 2."""
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("json.JSONDecodeError",),
+        uncovered_probe=(["Foo.validate_after"], []),
+    )
+
+    report = _drift.run(engine="transformers", producer="invariants")
+
+    assert report.schema_version == 2

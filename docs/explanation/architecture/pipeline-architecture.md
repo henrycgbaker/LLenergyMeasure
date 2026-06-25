@@ -38,6 +38,7 @@ flowchart TD
 2. **build-transformers.** Builds the transformers runtime image. Cache hits land in ~10-15 min; cold FA3 builds ~60-90 min. Pushes to `ghcr.io/<repo>/transformers-cache:transformers-<VER>`.
 3. **invariants-transformers + schemas-transformers cells.** Orchestrator's `needs:` graph fires these on build success. Each cell pulls the transformers-cache image, runs probe -> mine/introspect -> validate, and uploads a writeback artefact.
 4. **Probe + CI verdict.** A probe failure turns CI red. The `accept-probe-fail` PR label bypasses the gate for known-drift cases (admin escalation; see [#547](https://github.com/henrycgbaker/llenergymeasure/issues/547)).
+   - **Drift-completeness gate.** A separate, non-verdict diagnostic (`validators_uncovered` in the probe report) reds CI when a live raise-bearing config validator is not in the miner covered set (`ast_targets`) - the stale-ABSENT relocation gap, distinct from the stale-PRESENT landmark check. The `accept-uncovered-validators` PR label bypasses this gate for triaged-but-deferred gaps.
 5. **publish-engine-image.yml.** Fires directly on push to `main` (no rebuild). Tag-copy via `docker buildx imagetools create`: `transformers-cache:transformers-<VER>` -> `transformers:transformers-<VER>` and `transformers:latest`. Registry-side metadata op only; seconds, no build infrastructure. The production image is bit-identical to the cache image that CI validated on the PR.
 
 ### vllm + tensorrt PR-time CI flow (no rebuild; upstream-direct)

@@ -68,6 +68,7 @@ _NATIVE_ORIGIN: dict[str, dict[str, str]] = {
         "ParallelConfig": ENGINE_PARAMS,
         "CacheConfig": ENGINE_PARAMS,
         "ModelConfig": ENGINE_PARAMS,
+        "MultiModalConfig": ENGINE_PARAMS,
         "SchedulerConfig": ENGINE_PARAMS,
         "LoRAConfig": ENGINE_PARAMS,
         "DecodingConfig": ENGINE_PARAMS,
