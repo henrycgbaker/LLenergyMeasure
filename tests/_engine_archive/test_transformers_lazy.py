@@ -14,8 +14,12 @@ from __future__ import annotations
 import importlib
 
 from engine_versions._dispatcher import load_producer
+from scripts.engine_producers._current import current_version
 
-_TRANSFORMERS_VERSION = "5.7.0"
+_ENGINE = "transformers"
+# Derive the pin from current.yaml (like the vllm/tensorrt lazy tests) so this
+# tracks the bump automatically instead of a literal that silently goes stale.
+_TRANSFORMERS_VERSION = current_version(_ENGINE)
 
 
 def _assert_landmark_shape(landmarks: object) -> tuple[str, ...]:

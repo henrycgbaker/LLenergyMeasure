@@ -205,7 +205,7 @@ class TransformersEngine:
         # fall back to the non-profiled path when num_beams > 1.
         profiling = config.measurement.latency_profiling
         profiling_forced_batch_size = False
-        _ep = self._engine_params(config)
+        _ep = config.active_engine_params()
         num_beams = _ep.num_beams if _ep is not None and _ep.num_beams is not None else 1
         if profiling and num_beams > 1:
             logger.warning(
@@ -399,7 +399,7 @@ class TransformersEngine:
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
-        ep = TransformersEngine._engine_params(config)
+        ep = config.active_engine_params()
         if ep is not None and (ep.load_in_4bit or ep.load_in_8bit):
             try:
                 bnb = getattr(hf_model, "quantization_config", None)
@@ -455,18 +455,12 @@ class TransformersEngine:
         return []
 
     # -------------------------------------------------------------------------
-    # Private: nested-config accessors (engine_params / sampling_params / harness)
+    # Private: nested-config accessor (harness residual)
     # -------------------------------------------------------------------------
-
-    @staticmethod
-    def _engine_params(config: ExperimentConfig) -> Any:
-        """Return the active engine's engine_params block, or None."""
-        return config.active_engine_params()
-
-    @staticmethod
-    def _sampling_params(config: ExperimentConfig) -> Any:
-        """Return the active engine's sampling_params block, or None."""
-        return config.active_sampling_params()
+    # engine_params / sampling_params are read directly via the shared
+    # config.active_engine_params() / config.active_sampling_params() accessors
+    # (matching the vllm + tensorrt plugins); only the transformers-specific
+    # harness residual needs a plugin-local accessor.
 
     @staticmethod
     def _harness(config: ExperimentConfig) -> Any:
@@ -493,7 +487,7 @@ class TransformersEngine:
         # All from_pretrained-side fields live on engine_params (dtype, tp_*,
         # device_map, attn_implementation, BnB knobs, max_memory, etc.); extras
         # flow through engine_params.model_extra (extra="allow").
-        pt = self._engine_params(config)
+        pt = config.active_engine_params()
         dtype = pt.dtype if pt is not None else None
         kwargs: dict[str, Any] = {
             "torch_dtype": self._resolve_torch_dtype(dtype or "bfloat16"),
@@ -711,8 +705,8 @@ class TransformersEngine:
         engine_params. Greedy decoding (temperature=0 or do_sample=False) strips
         sampling params and forces do_sample=False, matching HF greedy semantics.
         """
-        sampling = self._sampling_params(config)
-        ep = self._engine_params(config)
+        sampling = config.active_sampling_params()
+        ep = config.active_engine_params()
 
         kwargs: dict[str, Any] = (
             sampling.model_dump(exclude_none=True) if sampling is not None else {}

@@ -13,8 +13,7 @@ from typing import Annotated
 import typer
 
 study_app = typer.Typer(
-    name="study",
-    help="Study-authoring helpers",
+    # name + help are set by the parent app.add_typer(...) mount, not here.
     add_completion=False,
 )
 

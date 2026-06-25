@@ -38,14 +38,13 @@ from tests.conftest import TEST_CONFIG_HASH
 def _make_experiment(
     model: str = "meta-llama/Llama-3.1-8B", engine: str = "transformers"
 ) -> ExperimentConfig:
-    # dtype now lives per-engine. transformers uses the generated nested shape
-    # (engine_params); vllm/tensorrt keep the flat hand-written shape.
-    if engine == "transformers":
-        kwargs = {engine: {"engine_params": {"dtype": "bfloat16"}}}
-    elif engine in ("vllm", "tensorrt"):
-        kwargs = {engine: {"dtype": "bfloat16"}}
-    else:
-        kwargs = {}
+    # dtype lives per-engine under the generated nested shape (engine_params) for
+    # all three engines (the v0.10 nested-config migration).
+    kwargs = (
+        {engine: {"engine_params": {"dtype": "bfloat16"}}}
+        if engine in ("transformers", "vllm", "tensorrt")
+        else {}
+    )
     return ExperimentConfig(task={"model": model}, engine=engine, **kwargs)
 
 

@@ -41,6 +41,7 @@ import inspect
 import textwrap
 
 from scripts.engine_producers import _common
+from scripts.engine_producers._base import extract_condition_fields
 
 
 def _settable_fields(cls: type) -> set[str]:
@@ -63,16 +64,12 @@ def _settable_fields(cls: type) -> set[str]:
 
 
 def _self_fields(fn: ast.AST) -> list[str]:
-    """Return the sorted set of ``X`` for every ``self.X`` attribute in ``fn``."""
-    names: set[str] = set()
-    for node in ast.walk(fn):
-        if (
-            isinstance(node, ast.Attribute)
-            and isinstance(node.value, ast.Name)
-            and node.value.id == "self"
-        ):
-            names.add(node.attr)
-    return sorted(names)
+    """Return the sorted set of ``X`` for every ``self.X`` attribute in ``fn``.
+
+    Delegates to the canonical AST primitive ``_base.extract_condition_fields``
+    (a generic ``self.X`` attribute walk); the only delta is the sorted() wrap.
+    """
+    return sorted(extract_condition_fields(fn))
 
 
 def _has_raise(fn: ast.AST) -> bool:
@@ -138,8 +135,15 @@ def _effective_covered(
     return effective
 
 
-def find_raise_validators(cls: type) -> tuple[list[tuple[str, list[str]]], list[str]]:
+def find_raise_validators(
+    cls: type,
+    own_methods: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] | None = None,
+) -> tuple[list[tuple[str, list[str]]], list[str]]:
     """Find the raise-bearing validators defined on ``cls``'s own source.
+
+    ``own_methods`` may be passed by a caller that already parsed the class
+    (e.g. :func:`compute_uncovered_validators`, which also needs them for the
+    helper-follow), to avoid re-parsing the source; omit it for standalone use.
 
     Returns ``(analyzable_raisers, unanalyzable)``:
 
@@ -173,7 +177,8 @@ def find_raise_validators(cls: type) -> tuple[list[tuple[str, list[str]]], list[
         ):
             candidates.add(name)
 
-    own_methods = _own_methods(cls)
+    if own_methods is None:
+        own_methods = _own_methods(cls)
     if own_methods is None:
         return [], [f"{cls.__name__}:<no-source>"]
 
@@ -220,31 +225,33 @@ def compute_uncovered_validators(
     for key in sorted(reachable):
         cls = reachable[key]
         cn = cls.__name__
-        raisers, unanalyz = find_raise_validators(cls)
+        # Parse the class source ONCE and share it between the raiser-find and
+        # the helper-follow coverage expansion.
+        own = _own_methods(cls)
+        raisers, unanalyz = find_raise_validators(cls, own_methods=own)
         for u in unanalyz:
             unanalyzable.append(f"{cn}.{u}")
+        settable = _settable_fields(cls)
+        # Blob-only exclusion (loop-invariant): a class is genuinely flat when it
+        # is a seed or shares >=3 settable fields with the flat-hoist (engine-args)
+        # surface. The threshold demotes blob sub-configs that share an incidental
+        # field name or two (e.g. CompilationConfig) while keeping the genuinely-
+        # hoisted scalar configs. Skip the whole method scan for non-flat classes.
+        genuinely_flat = cn in seed_names or len(settable & hoist_fields) >= 3
+        if not genuinely_flat:
+            continue
         # Effective coverage = the covered methods of this class PLUS the
         # transitive closure of their same-class self.helper() callees, so a
         # raise the miner reaches via helper-follow is not false-flagged.
-        own = _own_methods(cls)
         effective = (
             _effective_covered(cn, own, covered)
             if own is not None
             else {m for (c, m) in covered if c == cn}
         )
-        settable = _settable_fields(cls)
-        # Blob-only exclusion: a class is genuinely flat when it is a seed or
-        # shares >=3 settable fields with the flat-hoist (engine-args) surface.
-        # The threshold demotes blob sub-configs that share an incidental field
-        # name or two with the engine-args surface (e.g. CompilationConfig)
-        # while keeping the genuinely-hoisted scalar configs.
-        genuinely_flat = cn in seed_names or len(settable & hoist_fields) >= 3
         for method, self_fields in raisers:
             if method in effective:
                 continue
             real = [f for f in self_fields if f in settable and not f.startswith("_")]
-            if not genuinely_flat:
-                continue
             if not real:
                 # No settable non-private self.X (all-private / derived /
                 # field-validator-arg) - nothing user-facing to flag.

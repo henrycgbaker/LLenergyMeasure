@@ -712,33 +712,17 @@ def _merge_carried_seeded(
     return merged
 
 
-def fold_reclassified_into_proposed(regate_report: dict[str, Any], proposed_path: Path) -> int:
-    """Fold the decay alarm's reclassified-dormant payloads into a proposed corpus.
+def _fold_payloads_into_proposed(payloads: list[dict[str, Any]], proposed_path: Path) -> int:
+    """Merge invariant ``payloads`` into the proposed corpus at ``proposed_path``.
 
-    CR1 (the silent-knowledge-loss fix): when a carried dormant rule's
-    announcement decays, ``reconcile_regate_report`` builds the correct
-    ``dormant_silent`` carry payload (``reconciliation.reclassified[].invariant``),
-    but that payload is otherwise only printed in the PR comment and discarded.
-    This persists it into the new pin's ``rules.proposed.yaml`` (the SSOT) so it
-    survives - the ``_load_carried_seeded`` carry then keeps it across the next
-    re-mine.
-
-    Merge is by rule id, EXISTING wins on collision (mirrors the manual-seed
-    merge: if the new mine already re-emitted the id, the machine-extracted
-    version is authoritative and the reclassified carry is redundant). The file
-    envelope (schema_version / engine / engine_version / mined_at) is preserved;
-    only the ``invariants`` list grows. Output stays id-sorted for byte-stable
-    ``--check``.
-
-    Returns the number of entries folded in (0 when there is no reconciliation
-    block, no reclassified entries, or every id already exists).
+    The shared writeback policy for both persist modes (CR1 reclassified-dormant
+    and P2b diagnose proposals): merge by rule id, EXISTING wins on collision (a
+    deterministic mine that already re-emitted the id is authoritative; the
+    carried/proposed payload is then redundant). The file envelope
+    (schema_version / engine / engine_version / mined_at) is preserved; only the
+    ``invariants`` list grows, id-sorted for byte-stable ``--check``. Returns the
+    number of entries folded in (0 when ``payloads`` is empty or every id exists).
     """
-    reclassified = (regate_report.get("reconciliation") or {}).get("reclassified") or []
-    payloads = [
-        entry["invariant"]
-        for entry in reclassified
-        if isinstance(entry, dict) and isinstance(entry.get("invariant"), dict)
-    ]
     if not payloads:
         return 0
 
@@ -768,6 +752,30 @@ def fold_reclassified_into_proposed(regate_report: dict[str, Any], proposed_path
         yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
     )
     return folded
+
+
+def fold_reclassified_into_proposed(regate_report: dict[str, Any], proposed_path: Path) -> int:
+    """Fold the decay alarm's reclassified-dormant payloads into a proposed corpus.
+
+    CR1 (the silent-knowledge-loss fix): when a carried dormant rule's
+    announcement decays, ``reconcile_regate_report`` builds the correct
+    ``dormant_silent`` carry payload (``reconciliation.reclassified[].invariant``),
+    but that payload is otherwise only printed in the PR comment and discarded.
+    This persists it into the new pin's ``rules.proposed.yaml`` (the SSOT) so it
+    survives - the ``_load_carried_seeded`` carry then keeps it across the next
+    re-mine. Merge policy is the shared :func:`_fold_payloads_into_proposed`
+    (by id, existing wins, id-sorted, byte-stable).
+
+    Returns the number of entries folded in (0 when there is no reconciliation
+    block, no reclassified entries, or every id already exists).
+    """
+    reclassified = (regate_report.get("reconciliation") or {}).get("reclassified") or []
+    payloads = [
+        entry["invariant"]
+        for entry in reclassified
+        if isinstance(entry, dict) and isinstance(entry.get("invariant"), dict)
+    ]
+    return _fold_payloads_into_proposed(payloads, proposed_path)
 
 
 def fold_diagnose_into_proposed(diagnose_doc: dict[str, Any], proposed_path: Path) -> int:
@@ -780,13 +788,8 @@ def fold_diagnose_into_proposed(diagnose_doc: dict[str, Any], proposed_path: Pat
     diagnose run produced is auto-merged anywhere; this persists those confirmed
     entries into the new pin's ``rules.proposed.yaml`` (the SSOT) so they ride the
     bump-PR data diff for the maintainer to review - the same SSOT-then-shadow
-    path the CR1 reclassified fold uses (:func:`fold_reclassified_into_proposed`).
-
-    Merge is by rule id, EXISTING wins on collision (identical to the CR1 fold and
-    the manual-seed merge: a deterministic miner that already re-emitted the id is
-    authoritative; the diagnose proposal is then redundant). The file envelope
-    (schema_version / engine / engine_version / mined_at) is preserved; only the
-    ``invariants`` list grows, id-sorted for byte-stable ``--check``.
+    path the CR1 reclassified fold uses. Merge policy is the shared
+    :func:`_fold_payloads_into_proposed` (by id, existing wins, id-sorted).
 
     Returns the number of entries folded in (0 when the fragment carries no
     ``invariants``, or every id already exists).
@@ -795,35 +798,7 @@ def fold_diagnose_into_proposed(diagnose_doc: dict[str, Any], proposed_path: Pat
     if not isinstance(candidates, list):
         return 0
     payloads = [c for c in candidates if isinstance(c, dict) and c.get("id")]
-    if not payloads:
-        return 0
-
-    doc = yaml.safe_load(proposed_path.read_text())
-    if not isinstance(doc, dict) or not isinstance(doc.get("invariants"), list):
-        raise ValueError(
-            f"Proposed corpus at {proposed_path} must be a mapping with an 'invariants' list."
-        )
-    invariants: list[dict[str, Any]] = doc["invariants"]
-    existing_ids = {str(inv.get("id", "")) for inv in invariants if isinstance(inv, dict)}
-
-    folded = 0
-    for payload in payloads:
-        if str(payload.get("id", "")) in existing_ids:
-            continue
-        invariants.append(dict(payload))
-        existing_ids.add(str(payload.get("id", "")))
-        folded += 1
-
-    if folded == 0:
-        return 0
-
-    doc["invariants"] = [
-        _ordered_rule(r) for r in sorted(invariants, key=lambda r: r.get("id", ""))
-    ]
-    proposed_path.write_text(
-        yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
-    )
-    return folded
+    return _fold_payloads_into_proposed(payloads, proposed_path)
 
 
 def _preserve_added_at(invariants: list[dict[str, Any]], prior: dict[bytes, str]) -> None:

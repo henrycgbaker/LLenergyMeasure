@@ -973,10 +973,11 @@ def _public_field_names_from_target(target: _ASTTarget) -> frozenset[str]:
 def _field_default_from_target(target: _ASTTarget, field_name: str) -> tuple[bool, Any]:
     """Return ``(known, default_value)`` from runtime introspection.
 
-    0.7.3 lacks pydantic-dataclass configs, so this falls open in most
-    cases. Kept for parity with the per-version siblings; the dataclass
-    branch picks up ``ParallelConfig`` / ``SchedulerConfig`` defaults
-    when the last predicate's field is dataclass-bound.
+    At 0.19.1 the per-concern configs are pydantic-dataclasses, so the
+    pydantic branch is the primary default source; the stdlib-dataclass
+    branch picks up ``ParallelConfig`` / ``SchedulerConfig`` defaults when
+    the last predicate's field is dataclass-bound. Falls open (known=False)
+    only when neither introspection path resolves the field.
     """
     try:
         module = __import__(target.module_path, fromlist=[target.class_name])

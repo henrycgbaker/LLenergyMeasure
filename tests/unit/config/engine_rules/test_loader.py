@@ -346,6 +346,7 @@ def test_enum_value_errors_share_common_base_class() -> None:
     assert issubclass(UnknownAddedByError, UnknownEnumValueError)
     assert issubclass(UnknownSeverityError, UnknownEnumValueError)
     assert issubclass(UnknownOutcomeError, UnknownEnumValueError)
+    assert issubclass(UnknownEmissionChannelError, UnknownEnumValueError)
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +390,6 @@ def test_llm_fields_default_false_and_localised_allows_error(tmp_path: Path) -> 
     _write_corpus(tmp_path, "transformers", localised)
     inv = EngineRulesLoader(corpus_root=tmp_path).load_rules("transformers").invariants[0]
     assert inv.llm_localised is True and inv.severity == "error"
-    assert issubclass(UnknownEmissionChannelError, UnknownEnumValueError)
 
 
 # ---------------------------------------------------------------------------

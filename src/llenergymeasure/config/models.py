@@ -96,19 +96,28 @@ def _nested_subsection_models(section: BaseModel) -> dict[str, type[BaseModel]]:
     return models
 
 
-def _discovered_field_names(engine: str, sub_name: str) -> set[str]:
+@lru_cache(maxsize=16)
+def _discovered_field_names(engine: str, sub_name: str) -> frozenset[str]:
     """Discovered-schema field names for a sub-section; empty if no schema ships.
 
     Broadens the soft-validation vocabulary beyond the curated ``model_fields``
     so a typo of an un-curated-but-discovered passthrough field is still caught.
+    Memoised per ``(engine, sub_name)`` (the discovered schema is a stable
+    committed artifact) so a sweep validating many configs reads each schema once;
+    tests that mutate the on-disk schema call ``_reset_discovered_field_cache``.
     """
     from llenergymeasure.config.schema_loader import SchemaLoader
 
     try:
         schema = SchemaLoader().load_schema(engine)
     except (FileNotFoundError, ValueError):
-        return set()
-    return set(getattr(schema, sub_name, {}) or {})
+        return frozenset()
+    return frozenset(getattr(schema, sub_name, {}) or {})
+
+
+def _reset_discovered_field_cache() -> None:
+    """Clear the memoised discovered-schema vocab; used by tests that mutate it."""
+    _discovered_field_names.cache_clear()
 
 
 # =============================================================================
@@ -581,10 +590,15 @@ class ExperimentConfig(BaseModel):
             sub_section = getattr(section, sub_name, None)
             if sub_section is None:
                 continue
+            extras = sub_section.model_extra
+            if not extras:
+                # No extra keys to vet: skip building the vocabulary (which reads
+                # the discovered-schema JSON off disk). The common case.
+                continue
             vocabulary = sorted(
                 set(model.model_fields) | _discovered_field_names(self.engine.value, sub_name)
             )
-            for key in sub_section.model_extra or {}:
+            for key in extras:
                 suggestion = difflib.get_close_matches(
                     key, vocabulary, n=1, cutoff=_CLOSE_MATCH_CUTOFF
                 )
