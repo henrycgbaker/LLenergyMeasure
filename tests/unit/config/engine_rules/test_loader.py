@@ -13,6 +13,7 @@ from llenergymeasure.config.engine_rules import (
     VALID_SEVERITY,
     EngineInvariants,
     EngineRulesLoader,
+    LLMProposedSeverityError,
     UnknownAddedByError,
     UnknownEmissionChannelError,
     UnknownEnumValueError,
@@ -345,6 +346,49 @@ def test_enum_value_errors_share_common_base_class() -> None:
     assert issubclass(UnknownAddedByError, UnknownEnumValueError)
     assert issubclass(UnknownSeverityError, UnknownEnumValueError)
     assert issubclass(UnknownOutcomeError, UnknownEnumValueError)
+
+
+# ---------------------------------------------------------------------------
+# Universal safety gate - an llm_proposed invariant may only ever warn
+# ---------------------------------------------------------------------------
+
+
+def test_llm_proposed_with_non_warn_severity_raises(tmp_path: Path) -> None:
+    # The safety gate: an LLM is a recall localiser, never an adjudicator, so an
+    # llm_proposed invariant carrying a hard severity is rejected at load.
+    bad_corpus = _CORPUS_MINIMAL.replace(
+        "    severity: dormant\n", "    severity: error\n    llm_proposed: true\n"
+    )
+    _write_corpus(tmp_path, "transformers", bad_corpus)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    with pytest.raises(LLMProposedSeverityError, match="severity='error'"):
+        loader.load_rules("transformers")
+
+
+def test_llm_proposed_with_warn_severity_loads(tmp_path: Path) -> None:
+    corpus = _CORPUS_MINIMAL.replace(
+        "    severity: dormant\n", "    severity: warn\n    llm_proposed: true\n"
+    )
+    _write_corpus(tmp_path, "transformers", corpus)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    inv = loader.load_rules("transformers").invariants[0]
+    assert inv.llm_proposed is True and inv.severity == "warn"
+
+
+def test_llm_fields_default_false_and_localised_allows_error(tmp_path: Path) -> None:
+    # Absent flags default False (older corpora are unaffected); llm_localised is
+    # NOT gated on severity (it may carry error once a positive-violation probe
+    # confirmed the deterministically re-derived bound).
+    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+    base = EngineRulesLoader(corpus_root=tmp_path).load_rules("transformers").invariants[0]
+    assert base.llm_proposed is False and base.llm_localised is False
+
+    localised = _CORPUS_MINIMAL.replace(
+        "    severity: dormant\n", "    severity: error\n    llm_localised: true\n"
+    )
+    _write_corpus(tmp_path, "transformers", localised)
+    inv = EngineRulesLoader(corpus_root=tmp_path).load_rules("transformers").invariants[0]
+    assert inv.llm_localised is True and inv.severity == "error"
     assert issubclass(UnknownEmissionChannelError, UnknownEnumValueError)
 
 

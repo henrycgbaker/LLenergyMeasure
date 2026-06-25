@@ -204,6 +204,17 @@ class UnknownEmissionChannelError(UnknownEnumValueError):
     """Invariant entry has an ``expected_outcome.emission_channel`` value outside :data:`EmissionChannel`."""
 
 
+class LLMProposedSeverityError(ValueError):
+    """An ``llm_proposed`` invariant carries a non-``warn`` severity.
+
+    The universal safety gate: an LLM is a recall localiser, never an adjudicator,
+    so an LLM-proposed invariant may only ever warn. Error severity is reachable
+    only via a deterministic re-derivation, an observed bad output, or human vetting
+    (all of which clear ``llm_proposed``). Rejecting at load time makes the worst
+    case a false warning, never a false reject.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -264,6 +275,24 @@ class Invariant:
     preserves the existing ``AddedBy`` Literal and the corpus-invariants
     test that pins it; ``cross_validated_by`` is a strictly additive field
     with a sane default for older invariants.
+    """
+
+    llm_proposed: bool = False
+    """An LLM proposed this invariant (the recall localiser, never the adjudicator).
+
+    The universal safety gate: an llm_proposed invariant may only ever WARN, never
+    hard-reject. :func:`_parse_invariant` enforces ``llm_proposed -> severity == 'warn'``
+    so the worst case is a false warning on a valid config, never a false reject.
+    Error severity stays reachable only via a deterministic re-derivation, an observed
+    bad output, or human vetting (which clear this flag).
+    """
+
+    llm_localised: bool = False
+    """An LLM localised the source span this invariant was derived from.
+
+    Weaker than :attr:`llm_proposed`: the bound itself was re-derived deterministically
+    (e.g. a docstring parser) from an LLM-pointed span, so it may carry error severity,
+    but a positive-violation probe must have confirmed it (enforced at mine time).
     """
 
     def try_match(self, config: Any) -> InvariantMatch | None:
@@ -681,6 +710,14 @@ def _parse_invariant(raw: dict[str, Any]) -> Invariant:
                 f"Invariant {invariant_id!r} has cross_validated_by entry={source!r}; "
                 f"must be one of: {sorted(VALID_ADDED_BY)}"
             )
+    llm_proposed = bool(raw.get("llm_proposed", False))
+    llm_localised = bool(raw.get("llm_localised", False))
+    if llm_proposed and severity != "warn":
+        raise LLMProposedSeverityError(
+            f"Invariant {invariant_id!r} is llm_proposed but severity={severity!r}; "
+            "an LLM-proposed invariant may only warn (error severity requires a "
+            "deterministic re-derivation, an observed bad output, or human vetting)."
+        )
     match_fields = dict(match["fields"])
     expected_outcome = _normalise_normalised_fields(expected_outcome, match_fields)
     return Invariant(
@@ -701,6 +738,8 @@ def _parse_invariant(raw: dict[str, Any]) -> Invariant:
         added_by=added_by,
         added_at=str(raw.get("added_at", "")),
         cross_validated_by=cross_validated_by,
+        llm_proposed=llm_proposed,
+        llm_localised=llm_localised,
     )
 
 
