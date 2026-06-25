@@ -38,15 +38,19 @@ probe_landmarks:
   - vllm.config.parallel.ParallelConfig
   - vllm.config.parallel.ParallelConfig._verify_args
   - vllm.config.parallel.ParallelConfig.__post_init__
+  - vllm.config.parallel.ParallelConfig._validate_parallel_config
   - vllm.config.model.ModelConfig
   - vllm.config.model.ModelConfig._verify_quantization
   - vllm.config.model.ModelConfig._verify_cuda_graph
   - vllm.config.model.ModelConfig._verify_bnb_config
+  - vllm.config.model.ModelConfig.__post_init__
+  - vllm.config.model.ModelConfig.validate_model_config_after
   - vllm.config.scheduler.SchedulerConfig
   - vllm.config.scheduler.SchedulerConfig.__post_init__
   - vllm.config.speculative.SpeculativeConfig
   - vllm.config.speculative.SpeculativeConfig._verify_args
   - vllm.config.speculative.SpeculativeConfig.__post_init__
+  - vllm.config.speculative.SpeculativeConfig._verify_and_get_draft_tp
 ast_targets:
   # SamplingParams family - sampling_params.py
   - {module_attr: sampling_params.SamplingParams, method: _verify_args, namespace: vllm.sampling, native_type: vllm.SamplingParams}
@@ -57,11 +61,23 @@ ast_targets:
   # validators are gone at 0.19.1 (constraints are now Field()/Literal[],
   # recovered by the declarative walker). ModelConfig._verify_tokenizer_mode
   # and SchedulerConfig._verify_args likewise no longer exist.
+  #
+  # 0.19.1 relocated several imperative validators into pydantic
+  # ``@model_validator`` methods (and ModelConfig.__post_init__) that the
+  # original 0.19.1 landmark set missed: ParallelConfig._validate_parallel_config,
+  # ModelConfig.__post_init__ / validate_model_config_after, and
+  # SpeculativeConfig._verify_and_get_draft_tp now carry the raise constraints the
+  # stale _verify_* targets lost. Walking them recovers the relocated cross-field
+  # and single-field invariants (the V7-class method-relocation gap, generalised).
   - {module_attr: config.parallel.ParallelConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.ParallelConfig}
   - {module_attr: config.parallel.ParallelConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.ParallelConfig}
+  - {module_attr: config.parallel.ParallelConfig, method: _validate_parallel_config, namespace: vllm.engine, native_type: vllm.config.ParallelConfig}
   - {module_attr: config.model.ModelConfig, method: _verify_quantization, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
   - {module_attr: config.model.ModelConfig, method: _verify_cuda_graph, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
   - {module_attr: config.model.ModelConfig, method: _verify_bnb_config, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.model.ModelConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
+  - {module_attr: config.model.ModelConfig, method: validate_model_config_after, namespace: vllm.engine, native_type: vllm.config.ModelConfig}
   - {module_attr: config.scheduler.SchedulerConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.SchedulerConfig}
   - {module_attr: config.speculative.SpeculativeConfig, method: _verify_args, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}
   - {module_attr: config.speculative.SpeculativeConfig, method: __post_init__, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}
+  - {module_attr: config.speculative.SpeculativeConfig, method: _verify_and_get_draft_tp, namespace: vllm.engine, native_type: vllm.config.SpeculativeConfig}

@@ -3,6 +3,38 @@ engine: vllm
 engine_version: 0.19.1
 mined_at: '2026-06-22'
 invariants:
+- id: vllm_parallelconfig_dormant_all2all_backend_in
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._validate_parallel_config: marks dormant when all2all_backend
+    in [''pplx'', ''naive'']'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 350
+  match:
+    engine: vllm
+    fields:
+      vllm.engine_params.all2all_backend:
+        in:
+        - pplx
+        - naive
+  kwargs_positive:
+    all2all_backend: pplx
+  kwargs_negative:
+    all2all_backend: allgather_reducescatter
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - all2all_backend
+  message_template: null
+  references:
+  - parallel.py:350 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-06-22'
 - id: vllm_parallelconfig_dormant_data_parallel_rank_set_true
   engine: vllm
   library: vllm
@@ -34,6 +66,71 @@ invariants:
   message_template: null
   references:
   - parallel.py:662 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-06-22'
+- id: vllm_parallelconfig_raises_data_parallel_external_lb_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._validate_parallel_config: raises when data_parallel_size <= 1
+    AND data_parallel_external_lb present True'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 359
+  match:
+    engine: vllm
+    fields:
+      vllm.engine_params.data_parallel_size:
+        <=: 1
+      vllm.engine_params.data_parallel_external_lb:
+        present: true
+  kwargs_positive:
+    data_parallel_size: 1
+    data_parallel_external_lb: 1
+  kwargs_negative:
+    data_parallel_size: 1
+    data_parallel_external_lb: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: data_parallel_external_lb can only be set when data_parallel_size > 1
+  references:
+  - parallel.py:359 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-06-22'
+- id: vllm_parallelconfig_raises_data_parallel_size_local_gt_ref_data_parallel_size
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._validate_parallel_config: raises when data_parallel_size_local
+    > @data_parallel_size'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 353
+  match:
+    engine: vllm
+    fields:
+      vllm.engine_params.data_parallel_size_local:
+        '>': '@data_parallel_size'
+  kwargs_positive:
+    data_parallel_size: 2
+    data_parallel_size_local: 3
+  kwargs_negative:
+    data_parallel_size: 2
+    data_parallel_size_local: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: data_parallel_size_local ({data_parallel_size_local}) must be <= data_parallel_size
+    ({data_parallel_size})
+  references:
+  - parallel.py:353 (vllm.config.ParallelConfig._validate_parallel_config)
   added_by: static_miner
   added_at: '2026-06-22'
 - id: vllm_samplingparams_dormant_bad_words_unset_true

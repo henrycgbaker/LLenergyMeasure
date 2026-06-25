@@ -713,6 +713,15 @@ def _build_rule(
     if not match_fields:
         return None
 
+    # Internals guard: an invariant whose every match field is a private
+    # (underscore-prefixed) attribute addresses internal library state the public
+    # config surface never exposes (e.g. ParallelConfig._api_process_rank, set
+    # internally, never by a user). Such a rule is empirically real but can never
+    # fire against a user config, so it is inert clutter. The comprehensive-mining
+    # intent records every validated invariant EXCEPT these internals.
+    if all(path.rsplit(".", 1)[-1].startswith("_") for path in match_fields):
+        return None
+
     kwargs_pos = _synthesise_kwargs(effective_preds)
     kwargs_neg = _synthesise_kwargs(_negate_predicates(effective_preds))
     if kwargs_pos == kwargs_neg:
