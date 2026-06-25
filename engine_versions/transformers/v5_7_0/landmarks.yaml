@@ -22,5 +22,14 @@ library_version: "5.7.0"
 probe_landmarks:
   - transformers.GenerationConfig
   - transformers.GenerationConfig.validate
+  # The cross-object helper GenerationConfig.validate() delegates to when
+  # watermarking_config is a WatermarkingConfig. The dynamic miner exercises it
+  # (so it IS in the covered set); declaring it here keeps the drift-completeness
+  # covered-set extractor from false-flagging it and lets the stale-PRESENT
+  # landmark check guard it on a library bump. (SynthIDTextWatermarkingConfig is
+  # a valid watermarking_config value but is not mined - a known coverage gap
+  # tracked separately - so it is intentionally not declared covered here.)
+  - transformers.WatermarkingConfig
+  - transformers.WatermarkingConfig.validate
   - transformers.BitsAndBytesConfig
   - transformers.BitsAndBytesConfig.post_init

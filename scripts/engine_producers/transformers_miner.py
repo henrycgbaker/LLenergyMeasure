@@ -111,6 +111,60 @@ def __getattr__(name: str) -> object:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+def probe_uncovered_validators() -> tuple[list[str], list[str]]:
+    """Drift-completeness probe: live raise-bearing validators NOT in the
+    transformers miner covered set.
+
+    Import-based (transformers is CPU-importable in-container). The active
+    (dynamic) miner mines ``GenerationConfig.validate(strict=True)`` (a single
+    monolithic method - no same-class ``self.helper()`` delegation on this pin,
+    so the shared helper-follow is inert here; coverage rests on ``validate``
+    itself plus the cross-object ``self.watermarking_config.validate()`` hop) and
+    the hand-curated ``BitsAndBytesConfig.post_init``. The covered set mirrors
+    exactly that: ``GenerationConfig.validate``, ``WatermarkingConfig.validate``
+    (exercised whenever a ``WatermarkingConfig`` is the probed watermarking value),
+    and ``BitsAndBytesConfig.post_init``. ``SynthIDTextWatermarkingConfig`` is a
+    valid ``watermarking_config`` value but the dynamic miner never probes a
+    SynthID instance and the corpus has zero SynthID invariants - so it is NOT
+    claimed as covered here (a known miner-coverage gap, tracked separately, not
+    a drift-completeness concern), and is deliberately not seeded.
+
+    Seeds = the three genuinely-covered classes; ``GenerationConfig`` is a plain
+    class (no declared field set), so seed membership - not a field-overlap count
+    - keeps it genuinely-flat, and the empty-settable plain-class fallback flags
+    any of its own uncovered validators. ``BitsAndBytesConfig`` declares one
+    dataclass field but exposes its real knobs as ``__init__`` params, which
+    ``_settable_fields`` now captures (so a relocated/renamed ``post_init`` would
+    be surfaced). Returns ``(validators_uncovered, validators_unanalyzable)``.
+    Called best-effort by :func:`scripts._drift.run`; importing the classes does
+    NOT pull bitsandbytes / touch CUDA (they are transformers config schemas).
+    """
+    from transformers import (  # type: ignore
+        BitsAndBytesConfig,
+        GenerationConfig,
+        WatermarkingConfig,
+    )
+
+    from scripts.engine_producers import _completeness
+
+    covered = {
+        ("GenerationConfig", "validate"),
+        ("WatermarkingConfig", "validate"),
+        ("BitsAndBytesConfig", "post_init"),
+    }
+    seeds: list[type] = [GenerationConfig, WatermarkingConfig, BitsAndBytesConfig]
+    seed_names = {c.__name__ for c in seeds}
+    hoist_fields: set[str] = set()
+    for c in seeds:
+        hoist_fields |= _completeness._settable_fields(c)
+    return _completeness.compute_uncovered_validators(
+        roots=seeds,
+        covered=covered,
+        hoist_fields=hoist_fields,
+        seed_names=seed_names,
+    )
+
+
 # ---------------------------------------------------------------------------
 # BitsAndBytesConfig type-check invariants (kept hand-curated - CPU-safe)
 # ---------------------------------------------------------------------------

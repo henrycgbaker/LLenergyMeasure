@@ -45,6 +45,14 @@ probe_landmarks:
   - tensorrt_llm.llmapi.llm_args.TorchCompileConfig.validate_torch_compile_max_num_streams
   - tensorrt_llm.llmapi.llm_args.TorchLlmArgs
   - tensorrt_llm.llmapi.llm_args.TorchLlmArgs.validate_stream_interval
+  # TorchLlmArgs @model_validators surfaced by the drift-completeness probe: they
+  # guard nested-config cross-field relations (attention_dp / cuda_graph) and a
+  # MoE load-balancer file-existence check. Walked for completeness; the static
+  # self.X extractor mines no candidate from them (nested-config / file-path
+  # raises, not direct self.X compares), so the corpus stays byte-identical.
+  - tensorrt_llm.llmapi.llm_args.TorchLlmArgs.validate_attention_dp_config
+  - tensorrt_llm.llmapi.llm_args.TorchLlmArgs.validate_cuda_graph_config
+  - tensorrt_llm.llmapi.llm_args.TorchLlmArgs.validate_load_balancer
   - tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_peft_cache_config
 class_targets:
   - {class: BaseLlmArgs, file: llm_args}
@@ -70,6 +78,9 @@ method_landmarks:
   - {class: LookaheadDecodingConfig, method: validate_positive_values}
   - {class: CudaGraphConfig, method: validate_cuda_graph_max_batch_size}
   - {class: TorchCompileConfig, method: validate_torch_compile_max_num_streams}
+  - {class: TorchLlmArgs, method: validate_attention_dp_config}
+  - {class: TorchLlmArgs, method: validate_cuda_graph_config}
+  - {class: TorchLlmArgs, method: validate_load_balancer}
   - {class: TorchLlmArgs, method: validate_stream_interval}
   - {class: BaseLlmArgs, method: validate_peft_cache_config}
 strenum_fields:

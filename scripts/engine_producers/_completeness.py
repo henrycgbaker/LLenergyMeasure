@@ -43,24 +43,96 @@ import textwrap
 from scripts.engine_producers import _common
 from scripts.engine_producers._base import extract_condition_fields
 
+# Imperative validator naming conventions. Deliberately wide (both underscore
+# and bare forms) because upstream uses both - e.g. vLLM's
+# ``SchedulerConfig.verify_max_model_len`` has no leading underscore; missing it
+# would blind the tripwire to exactly the relocation class it exists to catch.
+_VALIDATOR_NAME_PREFIXES = ("_verify", "verify", "validate", "_validate", "_check", "check")
+
+# Pydantic validator decorator names (as they appear in source / on the class).
+_VALIDATOR_DECORATORS = frozenset(
+    {"field_validator", "model_validator", "validator", "root_validator"}
+)
+
+# Base classes whose own bodies carry no domain raise-validators, so a class
+# inheriting ONLY from these needs no "<base not in source>" unanalyzable marker
+# in the AST-source path. Framework/stdlib roots only; engine-specific safe
+# bases are passed in by the per-engine prober.
+_SAFE_BASE_NAMES = frozenset(
+    {
+        "object",
+        "BaseModel",
+        "StrictBaseModel",
+        "Enum",
+        "IntEnum",
+        "StrEnum",
+        "str",
+        "int",
+        "float",
+        "ABC",
+        "Generic",
+        "Protocol",
+        "NamedTuple",
+        "TypedDict",
+        "Struct",
+    }
+)
+
+
+def _is_validator_named(name: str) -> bool:
+    """True if ``name`` matches an imperative validator naming convention.
+
+    ``__post_init__`` / ``post_init`` or any of the :data:`_VALIDATOR_NAME_PREFIXES`.
+    Shared by the live-class and AST-source detectors so both stay in step.
+    """
+    return name in {"__post_init__", "post_init"} or name.startswith(_VALIDATOR_NAME_PREFIXES)
+
+
+def _init_param_names(cls: type) -> set[str]:
+    """Return the explicit ``__init__`` parameter names of ``cls`` (constructor knobs).
+
+    Excludes ``self`` / ``*args`` / ``**kwargs``; empty when ``__init__`` is not
+    introspectable (C-extension / builtin). Some configs declare a single (or no)
+    field yet accept their real user knobs as explicit ``__init__`` params set as
+    instance attributes - e.g. transformers' ``BitsAndBytesConfig`` (one dataclass
+    field ``quant_method`` but ten ``__init__`` knobs like ``load_in_4bit``). A
+    no-op for dataclass / msgspec / auto-``__init__`` classes (their ``__init__``
+    mirrors the fields) and for pydantic (whose ``__init__`` is ``(self, **data)``).
+    """
+    try:
+        params = inspect.signature(cls.__init__).parameters
+    except (ValueError, TypeError):
+        return set()
+    return {
+        n
+        for n, p in params.items()
+        if n != "self" and p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL)
+    }
+
 
 def _settable_fields(cls: type) -> set[str]:
     """Return the user-settable field names of ``cls``.
 
     Robust across pydantic (``__pydantic_fields__``), msgspec ``Struct``
     (``__struct_fields__`` - SamplingParams is a msgspec Struct), and stdlib
-    dataclasses (``dataclasses.fields``). Returns an empty set for any other
-    class shape.
+    dataclasses (``dataclasses.fields``), UNIONED with the explicit ``__init__``
+    parameter knobs (:func:`_init_param_names`) so a config whose knobs are
+    constructor params rather than declared fields (BitsAndBytesConfig) is not
+    silently under-reported. Returns an empty set for an opaque class with no
+    declared fields and a ``**kwargs``-only constructor (e.g. GenerationConfig),
+    which the empty-settable plain-class fallback then handles.
     """
+    fields: set[str] = set()
     pyd_fields = getattr(cls, "__pydantic_fields__", None)
     if pyd_fields:
-        return set(pyd_fields.keys())
+        fields |= set(pyd_fields.keys())
     struct_fields = getattr(cls, "__struct_fields__", None)
     if struct_fields:
-        return set(struct_fields)
+        fields |= set(struct_fields)
     if dataclasses.is_dataclass(cls):
-        return {f.name for f in dataclasses.fields(cls)}
-    return set()
+        fields |= {f.name for f in dataclasses.fields(cls)}
+    fields |= _init_param_names(cls)
+    return fields
 
 
 def _self_fields(fn: ast.AST) -> list[str]:
@@ -158,13 +230,7 @@ def find_raise_validators(
     Candidate validator names = pydantic decorator names (model + field
     validators, guarded via ``getattr`` since not all classes carry
     ``__pydantic_decorators__``) UNION method names matching the imperative
-    naming conventions: ``__post_init__`` / ``post_init`` or any of the
-    ``verify`` / ``_verify`` / ``validate`` / ``_validate`` / ``check`` /
-    ``_check`` prefixes. The prefix set is deliberately wide (both underscore
-    and bare forms) because upstream uses both - e.g. vLLM's
-    ``SchedulerConfig.verify_max_model_len`` has no leading underscore; missing
-    it would blind the tripwire to exactly the relocation class it exists to
-    catch.
+    naming conventions (:func:`_is_validator_named`).
     """
     candidates: set[str] = set()
     decorators = getattr(cls, "__pydantic_decorators__", None)
@@ -172,9 +238,7 @@ def find_raise_validators(
         candidates.update(getattr(decorators, "model_validators", {}).keys())
         candidates.update(getattr(decorators, "field_validators", {}).keys())
     for name in dir(cls):
-        if name in {"__post_init__", "post_init"} or name.startswith(
-            ("_verify", "verify", "validate", "_validate", "_check", "check")
-        ):
+        if _is_validator_named(name):
             candidates.add(name)
 
     if own_methods is None:
@@ -251,10 +315,221 @@ def compute_uncovered_validators(
         for method, self_fields in raisers:
             if method in effective:
                 continue
-            real = [f for f in self_fields if f in settable and not f.startswith("_")]
+            real = _real_self_fields(self_fields, settable)
             if not real:
                 # No settable non-private self.X (all-private / derived /
                 # field-validator-arg) - nothing user-facing to flag.
+                continue
+            uncovered.append(f"{cn}.{method}")
+    return sorted(set(uncovered)), sorted(set(unanalyzable))
+
+
+def _real_self_fields(self_fields: list[str], settable: set[str]) -> list[str]:
+    """Return the user-facing knobs among ``self_fields`` (the flag predicate).
+
+    Normally a knob is a non-private field present in ``settable``. When
+    ``settable`` is EMPTY the class is a plain Python class with no introspectable
+    field set (e.g. transformers' ``GenerationConfig``, which assigns its knobs in
+    ``__init__`` rather than as declared fields); a seed plain class still has
+    user-facing public attributes, so fall back to every non-private ``self.X``
+    rather than zeroing the flag (which would silently blind the tripwire). Only
+    reached for genuinely-flat classes (the blob-only exclusion already ran).
+    """
+    if not settable:
+        return [f for f in self_fields if not f.startswith("_")]
+    return [f for f in self_fields if f in settable and not f.startswith("_")]
+
+
+# ---------------------------------------------------------------------------
+# AST-source twins (for engines that cannot import their library on host)
+# ---------------------------------------------------------------------------
+#
+# tensorrt has no host CUDA, so its miner walks the EXTRACTED SOURCE via AST and
+# never imports tensorrt_llm. The live-class detector above cannot run there
+# (no live types, no inspect.getsource, no __pydantic_decorators__). These twins
+# operate purely on parsed ``ast.ClassDef`` nodes and reuse the same generic
+# FunctionDef helpers (``_has_raise`` / ``_self_fields`` / ``_self_callees`` /
+# ``_effective_covered``) so the two paths stay in step.
+
+
+def _own_methods_ast(
+    classdef: ast.ClassDef,
+) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Return ``{name: FunctionDef}`` for ``classdef``'s own (body-defined) methods."""
+    return {
+        n.name: n for n in classdef.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def _has_validator_decorator(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True if ``fn`` carries a pydantic validator decorator (in :data:`_VALIDATOR_DECORATORS`).
+
+    Matches both ``@field_validator(...)`` (an ``ast.Call``) and bare ``@validator``,
+    via attribute (``pydantic.field_validator``) or plain name.
+    """
+    for dec in fn.decorator_list:
+        node = dec.func if isinstance(dec, ast.Call) else dec
+        name = node.attr if isinstance(node, ast.Attribute) else getattr(node, "id", "")
+        if name in _VALIDATOR_DECORATORS:
+            return True
+    return False
+
+
+def _settable_fields_ast(classdef: ast.ClassDef) -> set[str]:
+    """Return the declared field names of ``classdef`` from its source body.
+
+    Captures annotated class-body assignments (``name: type [= ...]`` - the
+    pydantic / dataclass field shape) plus plain ``name = ...`` class vars.
+    Private (leading-underscore) names are kept here (the flag predicate filters
+    them) but dunders are skipped. The AST twin of :func:`_settable_fields`.
+    """
+    fields: set[str] = set()
+    for stmt in classdef.body:
+        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            fields.add(stmt.target.id)
+        elif isinstance(stmt, ast.Assign):
+            for tgt in stmt.targets:
+                if isinstance(tgt, ast.Name):
+                    fields.add(tgt.id)
+    return {f for f in fields if not f.startswith("__")}
+
+
+def _settable_fields_ast_inherited(
+    cls_name: str, classdefs: dict[str, ast.ClassDef], _seen: set[str] | None = None
+) -> set[str]:
+    """Union of ``cls_name``'s own declared fields and those of its PARSED ancestors.
+
+    The AST analogue of pydantic's merged ``__pydantic_fields__`` (which already
+    includes inherited fields - the live and AST paths must agree). Climbs base
+    classes present in ``classdefs``; out-of-source bases contribute nothing
+    (their fields are invisible to the AST - the base-class false-negative guard
+    surfaces them separately). Cycle-guarded. Without this the engine-args
+    surface of an inheritance-based config (tensorrt: ``TrtLlmArgs`` inherits
+    ~48 fields from ``BaseLlmArgs``) collapses to the few own-body fields, which
+    kills the ``>=3`` blob-escape and blinds the tripwire to relocations into
+    not-yet-named config classes.
+    """
+    if _seen is None:
+        _seen = set()
+    if cls_name in _seen or cls_name not in classdefs:
+        return set()
+    _seen.add(cls_name)
+    node = classdefs[cls_name]
+    fields = _settable_fields_ast(node)
+    for base in _base_names(node):
+        fields |= _settable_fields_ast_inherited(base, classdefs, _seen)
+    return fields
+
+
+def find_raise_validators_ast(
+    classdef: ast.ClassDef,
+) -> list[tuple[str, list[str]]]:
+    """AST-source twin of :func:`find_raise_validators`.
+
+    Candidate validator names = body methods carrying a pydantic validator
+    decorator UNION the imperative naming conventions (:func:`_is_validator_named`),
+    same as the live detector. Returns ``(method_name, self_fields)`` for each
+    candidate whose body contains a ``raise``. (Inherited/wrapped validators are
+    handled at the enumeration level via the base-class guard, since the AST path
+    cannot see them on a single ClassDef the way ``dir(cls)`` can.)
+    """
+    own = _own_methods_ast(classdef)
+    raisers: list[tuple[str, list[str]]] = []
+    for name in sorted(own):
+        fn = own[name]
+        if (_is_validator_named(name) or _has_validator_decorator(fn)) and _has_raise(fn):
+            raisers.append((name, _self_fields(fn)))
+    return raisers
+
+
+def _base_names(classdef: ast.ClassDef) -> list[str]:
+    """Return the simple names of ``classdef``'s base classes (best-effort)."""
+    names: list[str] = []
+    for base in classdef.bases:
+        if isinstance(base, ast.Name):
+            names.append(base.id)
+        elif isinstance(base, ast.Attribute):
+            names.append(base.attr)
+    return names
+
+
+def _missing_bases_ast(
+    cls_name: str,
+    classdefs: dict[str, ast.ClassDef],
+    safe_bases: frozenset[str],
+    _seen: set[str] | None = None,
+) -> list[str]:
+    """Transitive-closure base names reachable from ``cls_name`` that are neither
+    parsed (in ``classdefs``) nor ``safe`` - i.e. their inherited validators are
+    invisible to the AST.
+
+    Walks THROUGH parsed-but-non-flat intermediates (which the per-class scan
+    skips) so a flat class re-parented through an unparsed grandparent is still
+    surfaced, matching the live path's full-MRO ``dir(cls)`` visibility and the
+    design's "never silently dropped" contract.
+    """
+    if _seen is None:
+        _seen = set()
+    missing: list[str] = []
+    node = classdefs.get(cls_name)
+    if node is None:
+        return missing
+    for base in _base_names(node):
+        if base in _seen:
+            continue
+        _seen.add(base)
+        if base in classdefs:
+            missing.extend(_missing_bases_ast(base, classdefs, safe_bases, _seen))
+        elif base not in safe_bases:
+            missing.append(base)
+    return missing
+
+
+def compute_uncovered_validators_ast(
+    *,
+    classdefs: dict[str, ast.ClassDef],
+    covered: set[tuple[str, str]],
+    hoist_fields: set[str],
+    seed_names: set[str],
+    safe_bases: frozenset[str] = _SAFE_BASE_NAMES,
+) -> tuple[list[str], list[str]]:
+    """AST-source twin of :func:`compute_uncovered_validators`.
+
+    ``classdefs`` maps class short-name -> its parsed ``ast.ClassDef`` (every
+    class the prober extracted from the source tree). Flags raise-bearing
+    validators NOT in ``covered`` once they clear the same blob-only +
+    no-settable-non-private-self-field exclusions.
+
+    False-negative guard (the AST analogue of the inherited/wrapped surfacing):
+    a class with a base that is NOT among the parsed ``classdefs`` and NOT in
+    ``safe_bases`` may inherit validators the AST cannot see -> that base is
+    surfaced to ``validators_unanalyzable`` (``"Cls:<base Base not in source>"``),
+    never silently assumed clean. Returns ``(uncovered, unanalyzable)`` sorted+deduped.
+    """
+    uncovered: list[str] = []
+    unanalyzable: list[str] = []
+    for cn in sorted(classdefs):
+        node = classdefs[cn]
+        # Inheritance-aware settable (matches the live path's merged fields), so a
+        # class whose engine-arg surface lives on a parsed base still clears the
+        # blob-escape and has its validators' self.X correctly recognised as knobs.
+        settable = _settable_fields_ast_inherited(cn, classdefs)
+        genuinely_flat = cn in seed_names or len(settable & hoist_fields) >= 3
+        if not genuinely_flat:
+            # Out-of-scope blob (e.g. a stdlib JSONEncoder / metaclass): not a
+            # config knob surface, so its out-of-source bases are noise, not a gap.
+            continue
+        # False-negative guard - only meaningful for an in-scope flat class: any
+        # base in the TRANSITIVE chain NOT in the parsed source may hide inherited
+        # validators the AST cannot see, so surface it (never silently drop).
+        for base in _missing_bases_ast(cn, classdefs, safe_bases):
+            unanalyzable.append(f"{cn}:<base {base} not in source>")
+        own = _own_methods_ast(node)
+        effective = _effective_covered(cn, own, covered)
+        for method, self_fields in find_raise_validators_ast(node):
+            if method in effective:
+                continue
+            if not _real_self_fields(self_fields, settable):
                 continue
             uncovered.append(f"{cn}.{method}")
     return sorted(set(uncovered)), sorted(set(unanalyzable))

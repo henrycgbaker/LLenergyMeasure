@@ -1142,6 +1142,61 @@ def _verify_method_landmarks(tree: _SourceTree) -> None:
             )
 
 
+def probe_uncovered_validators(
+    source_root: Path | None = None,
+) -> tuple[list[str], list[str]]:
+    """Drift-completeness probe: raise-bearing validators NOT in ``_METHOD_LANDMARKS``.
+
+    AST-source based (tensorrt cannot be imported on host - no CUDA): parses the
+    extracted 1.0.0 source tree and returns ``(validators_uncovered,
+    validators_unanalyzable)``. The covered set is the validator methods the
+    miner actually walks (:data:`_METHOD_LANDMARKS`); ``class_targets`` /
+    ``strenum_fields`` / :data:`_LITERAL_LIFT_CLASSES` are field-type lifts, not
+    validator walks, so they are NOT treated as covered. Seeds (the
+    genuinely-flat config surface that escapes the blob-only exclusion) = the
+    ``class_targets`` classes; the flat-hoist field set = ``TrtLlmArgs``'s
+    PUBLIC fields including those inherited from ``BaseLlmArgs`` (so the blob
+    escape can auto-discover relocations into engine-arg-shaped classes that are
+    not yet named). Every class in the source files is scanned so a validator
+    relocated into a brand-new config class is still caught. Called best-effort
+    by :func:`scripts._drift.run`; a missing source tree degrades to a single
+    ``<prober-error>`` marker rather than a false completeness gap.
+    """
+    from scripts.engine_producers import _completeness
+
+    root: Path = source_root if source_root is not None else _DEFAULT_SOURCE_ROOT
+    tree = _load_source(root)
+    classdefs: dict[str, ast.ClassDef] = {}
+    collisions: list[str] = []
+    for module in (tree.llm_args, tree.builder):
+        for node in ast.iter_child_nodes(module):
+            if isinstance(node, ast.ClassDef):
+                if node.name in classdefs:
+                    # Same short name in both source files: the covered/seed sets
+                    # key on short names, so a silent drop could hide validators.
+                    # Surface it (never silently lose a class).
+                    collisions.append(f"{node.name}:<short-name collision across source files>")
+                    continue
+                classdefs[node.name] = node
+
+    covered = {(cls, method) for cls, method in _METHOD_LANDMARKS}
+    seed_names = {cls for cls, _rel in _CLASS_TARGETS}
+    # Inheritance-aware + public-only hoist surface (the blob-escape measures
+    # overlap of PUBLIC knobs; private PrivateAttr fields are not user knobs).
+    hoist_fields = {
+        f
+        for f in _completeness._settable_fields_ast_inherited("TrtLlmArgs", classdefs)
+        if not f.startswith("_")
+    }
+    uncovered, unanalyzable = _completeness.compute_uncovered_validators_ast(
+        classdefs=classdefs,
+        covered=covered,
+        hoist_fields=hoist_fields,
+        seed_names=seed_names,
+    )
+    return uncovered, sorted(set(unanalyzable) | set(collisions))
+
+
 def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandidate], str, str]:
     """Walk TRT-LLM source and return ``(candidates, version, llm_args_rel_path)``.
 

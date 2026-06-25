@@ -287,6 +287,15 @@ jobs:
           # step at the verdict jq above, before this line.
           UNCOVERED_COUNT=$(jq -r '(.validators_uncovered // []) | length' "/tmp/llem-probe-out/probe-${ENGINE}.json")
           echo "validators_uncovered_count=${UNCOVERED_COUNT}" >> "$GITHUB_OUTPUT"
+          # Observability: a prober that errored degrades to a <prober-error>
+          # marker in validators_unanalyzable with an EMPTY validators_uncovered,
+          # which the completeness gate (keyed on the uncovered count) would pass
+          # silently. Emit a warning so a broken tripwire is visible rather than
+          # green-and-silent. Non-verdict: never fails the step.
+          if jq -e '(.validators_unanalyzable // []) | index("<prober-error>")' \
+              "/tmp/llem-probe-out/probe-${ENGINE}.json" >/dev/null; then
+            echo "::warning::Drift-completeness prober for ${ENGINE} errored (<prober-error>); the completeness tripwire did not run this cell."
+          fi
           exit "$DRIFT_RC"
 
       - name: Save current YAMLs for diffing
