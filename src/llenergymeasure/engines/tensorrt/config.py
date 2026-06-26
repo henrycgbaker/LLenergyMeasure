@@ -14,7 +14,7 @@ class EngineParams(BaseModel):
         use_attribute_docstrings=True,
     )
     max_batch_size: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=1,
             json_schema_extra={
@@ -26,7 +26,7 @@ class EngineParams(BaseModel):
     The maximum batch size.
     """
     tensor_parallel_size: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=1,
             json_schema_extra={
@@ -38,7 +38,7 @@ class EngineParams(BaseModel):
     The tensor parallel size.
     """
     pipeline_parallel_size: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=1,
             json_schema_extra={
@@ -50,7 +50,7 @@ class EngineParams(BaseModel):
     The pipeline parallel size.
     """
     max_input_len: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=1,
             json_schema_extra={
@@ -62,7 +62,7 @@ class EngineParams(BaseModel):
     The maximum input length.
     """
     max_seq_len: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=1,
             json_schema_extra={
@@ -74,7 +74,7 @@ class EngineParams(BaseModel):
     The maximum sequence length.
     """
     max_num_tokens: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=1,
             json_schema_extra={
@@ -96,7 +96,7 @@ class EngineParams(BaseModel):
     """
     The data type to use for the model.
     """
-    fast_build: Any | None = False
+    fast_build: bool | None = False
     """
     Enable fast build.
     """

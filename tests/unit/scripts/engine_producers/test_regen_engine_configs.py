@@ -48,6 +48,18 @@ from scripts.engine_producers import regen_engine_configs as rec  # noqa: E402
         ("str | bool | None", {"anyOf": [{"type": "string"}, {"type": "boolean"}]}),
         # Non-scalar member (engine class / PathLike) -> permissive.
         ("PretrainedConfig | str | PathLike | None", {}),
+        # JSON-native spelling (a model_json_schema lift, e.g. vLLM
+        # sampling_params) maps identically to the Python spelling - a bounded
+        # native-typed field must not silently widen to Any | None.
+        ("number", {"type": "number"}),
+        ("integer", {"type": "integer"}),
+        ("boolean", {"type": "boolean"}),
+        ("string", {"type": "string"}),
+        ("integer | None", {"type": "integer"}),
+        ("string | number", {"anyOf": [{"type": "string"}, {"type": "number"}]}),
+        # A JSON container is not a scalar -> stays permissive.
+        ("array", {}),
+        ("object | None", {}),
     ],
 )
 def test_python_type_to_json_schema(type_str: str | None, expected: dict) -> None:

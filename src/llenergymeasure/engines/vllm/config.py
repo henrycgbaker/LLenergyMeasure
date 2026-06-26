@@ -163,48 +163,48 @@ class SamplingParams(BaseModel):
         use_attribute_docstrings=True,
     )
     temperature: Annotated[
-        Any | None,
+        float | None,
         Field(
-            ge=0,
+            ge=0.0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
-            le=2,
+            le=2.0,
         ),
     ] = 1.0
-    top_k: Any | None = 0
+    top_k: int | None = 0
     top_p: Annotated[
-        Any | None,
+        float | None,
         Field(
-            ge=0,
+            ge=0.0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
-            le=1,
+            le=1.0,
         ),
     ] = 1.0
     repetition_penalty: Annotated[
-        Any | None,
+        float | None,
         Field(
             ge=0.1,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
-            le=10,
+            le=10.0,
         ),
     ] = 1.0
     min_p: Annotated[
-        Any | None,
+        float | None,
         Field(
-            ge=0,
+            ge=0.0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
-            le=1,
+            le=1.0,
         ),
     ] = 0.0
     min_tokens: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=0,
             json_schema_extra={
@@ -213,28 +213,28 @@ class SamplingParams(BaseModel):
         ),
     ] = 0
     presence_penalty: Annotated[
-        Any | None,
+        float | None,
         Field(
-            ge=-2,
+            ge=-2.0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
-            le=2,
+            le=2.0,
         ),
     ] = 0.0
     frequency_penalty: Annotated[
-        Any | None,
+        float | None,
         Field(
-            ge=-2,
+            ge=-2.0,
             json_schema_extra={
                 "x-narrowing-applied": "hand-enforced constraint carried from pre-v0.10 engine_configs.py; retires when declarative mining surfaces it at a newer pin"
             },
-            le=2,
+            le=2.0,
         ),
     ] = 0.0
-    ignore_eos: Any | None = False
+    ignore_eos: bool | None = False
     n: Annotated[
-        Any | None,
+        int | None,
         Field(
             ge=1,
             json_schema_extra={

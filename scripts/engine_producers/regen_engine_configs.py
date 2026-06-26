@@ -23,10 +23,11 @@ in memory and byte-compares against the committed file (exit 1 with a diff on
 drift); ``--write`` regenerates and writes. ``--engine`` restricts the run; the
 default is every engine in ``ENGINES`` (transformers pilot only today).
 
-Data gap: the committed schema carries no ``enum``/``minimum``/``maximum`` keys
-yet, so no ``Literal``/bounds appear in today's generated file; real enums and
-bounds land with the next in-container re-mine (the projection itself is proven
-by synthetic-fixture tests).
+The committed schema carries structured ``enum``/``minimum``/``maximum``/
+``exclusiveMinimum``/``exclusiveMaximum`` keys (mined in-container), which this
+wrapper projects into real ``Literal``/bounded fields. Both the mined Python
+type spelling and the JSON-native spelling a model-schema lift emits are mapped,
+so a bounded native-typed field is never silently widened to ``Any | None``.
 """
 
 from __future__ import annotations
@@ -105,26 +106,50 @@ _SCALAR_TYPES: dict[str, str] = {
     "float": "number",
 }
 
+# The same scalars in JSON-Schema-native spelling. Sections lifted via a
+# pydantic/msgspec ``model_json_schema`` (vLLM ``sampling_params``) record types
+# already JSON-native (``"number"``/``"integer"``/``"boolean"``/``"string"``),
+# unlike the dataclass-introspected sections that record Python strings. Both
+# vocabularies must map, or a bounded native-typed field (``temperature`` ->
+# ``number`` with ``ge``/``le``) silently collapses to ``Any | None``.
+_JSON_SCALAR_TYPES: frozenset[str] = frozenset(_SCALAR_TYPES.values())
+
+
+def _scalar_for(member: str) -> str | None:
+    """JSON Schema scalar for one union member, or ``None`` if it is not scalar.
+
+    Accepts both vocabularies: the legacy Python spelling (``int`` ->
+    ``integer``) and a JSON-native scalar already emitted by a model-schema lift
+    (``integer`` -> ``integer``).
+    """
+    if member in _SCALAR_TYPES:
+        return _SCALAR_TYPES[member]
+    if member in _JSON_SCALAR_TYPES:
+        return member
+    return None
+
 
 def _python_type_to_json_schema(type_str: str | None) -> dict[str, Any]:
     """Translate one envelope ``type`` string into JSON Schema keys.
 
     Handles the live envelope's vocabulary:
 
-    - scalars (``"str"`` -> ``{"type": "string"}``, etc.) -> ``{"type": ...}``;
+    - scalars in either Python (``"str"``) or JSON-native (``"string"``)
+      spelling -> ``{"type": ...}``;
     - the ``"unknown"`` / ``None`` sentinel (fields with no annotation) -> ``{}``
       (datamodel-codegen renders ``Any | None``);
-    - Python union strings (``"str | bool | None"``). Scalar members map to a
-      JSON Schema ``anyOf``; any non-scalar member (engine class, PathLike)
-      collapses the whole field to permissive ``Any | None`` (``{}``), since the
-      generated class validates SHAPE only and the engine owns the rest.
+    - union strings (``"str | bool | None"``). Scalar members map to a JSON
+      Schema ``anyOf``; any non-scalar member (engine class, PathLike, JSON
+      container like ``array``/``object``) collapses the whole field to
+      permissive ``Any | None`` (``{}``), since the generated class validates
+      SHAPE only and the engine owns the rest.
     """
     if not type_str or type_str == "unknown":
         return {}
 
     members = [m.strip() for m in type_str.split("|")]
-    scalars = [_SCALAR_TYPES[m] for m in members if m in _SCALAR_TYPES]
-    has_unmappable = any(m not in _SCALAR_TYPES and m != "None" for m in members)
+    scalars = [s for m in members if (s := _scalar_for(m)) is not None]
+    has_unmappable = any(_scalar_for(m) is None and m != "None" for m in members)
 
     if has_unmappable or not scalars:
         return {}
