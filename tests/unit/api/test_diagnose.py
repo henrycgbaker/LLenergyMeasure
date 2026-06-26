@@ -26,16 +26,20 @@ import pytest
 from llenergymeasure.api._source_window import SymbolRequest, windowed_source
 from llenergymeasure.api.diagnose import (
     CLASSIFICATIONS,
+    TIER_D_CLASSIFICATIONS,
     DiagnoseError,
     Diagnosis,
     build_carried_triage_prompt,
     build_gap_diagnose_prompt,
+    build_tier_d_prompt,
     carried_symbol_requests,
     config_surface_symbol_requests,
     diagnose_carried_failures,
     diagnose_gaps,
+    diagnose_tier_d,
     parse_diagnoses,
     render_proposed_yaml,
+    tier_d_rule_id,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "diagnose"
@@ -791,3 +795,219 @@ def test_container_gate_missing_output_raises_diagnose_error(
     )
     with pytest.raises(DiagnoseError, match="no verdicts file"):
         runner("transformers", [{"rule_id": "r", "native_type": "X"}])
+
+
+# ---------------------------------------------------------------------------
+# Tier-D: pure-inference advisories for undeclared-semantic (class-3) fields
+# ---------------------------------------------------------------------------
+
+_TIER_D_CANDIDATES = [
+    {"section": "engine_params", "leaf": "max_logprobs", "type": "int", "default": 20},
+    {"section": "engine_params", "leaf": "master_port", "type": "int", "default": 0},
+    {"section": "sampling_params", "leaf": "logprobs", "type": "int | None", "default": None},
+]
+
+
+def _write_tier_d_surface(path: Path) -> None:
+    """A config-surface module whose classes own the candidate fields.
+
+    ``ModelConfig`` (Config suffix) and ``SamplingParams`` (Params suffix) are
+    both recognised by the config-class walker, so a citation into either span
+    resolves to a constructible native_type.
+    """
+    path.write_text(
+        "class ModelConfig:\n"
+        "    max_logprobs: int = 20\n"
+        "    master_port: int = 0\n"
+        "\n"
+        "    def __post_init__(self) -> None:\n"
+        "        if self.max_logprobs < 0:\n"
+        '            raise ValueError("max_logprobs must be >= 0")\n'
+        "\n"
+        "\n"
+        "class SamplingParams:\n"
+        "    logprobs: int | None = None\n"
+    )
+
+
+def test_tier_d_prompt_lists_candidates_and_bound_contract() -> None:
+    prompt = build_tier_d_prompt(
+        engine="vllm",
+        new_version="0.19.1",
+        candidates=_TIER_D_CANDIDATES,
+        source="class ModelConfig:\n    max_logprobs: int = 20\n",
+    )
+    # Each candidate is listed under its deterministic, model-verbatim rule_id.
+    assert tier_d_rule_id("vllm", "engine_params", "max_logprobs") in prompt
+    assert tier_d_rule_id("vllm", "sampling_params", "logprobs") in prompt
+    # The sentinel guard (the max_logprobs=-1 class of hallucination) is stated.
+    assert "fires_when" in prompt and "sentinel" in prompt.lower()
+
+
+def test_tier_d_prompt_requires_candidates_and_source() -> None:
+    with pytest.raises(DiagnoseError, match="at least one candidate"):
+        build_tier_d_prompt(engine="vllm", new_version="0.19.1", candidates=[], source="x")
+    with pytest.raises(DiagnoseError, match="non-empty"):
+        build_tier_d_prompt(
+            engine="vllm", new_version="0.19.1", candidates=_TIER_D_CANDIDATES, source="  "
+        )
+
+
+def test_parse_tier_d_classifications_and_bad_fires_when() -> None:
+    raw = json.dumps(
+        {
+            "diagnoses": [
+                {
+                    "rule_id": "vllm_tier_d_engine_params_max_logprobs",
+                    "classification": "bounded",
+                    "reason": "must be >= 0",
+                    "citation": "config.py:2",
+                    "constraint": "must be >= 0",
+                    "fires_when": {"<": 0},
+                    "kwargs_positive": {"max_logprobs": -1},
+                    "kwargs_negative": {"max_logprobs": 5},
+                },
+                {
+                    "rule_id": "vllm_tier_d_engine_params_master_port",
+                    "classification": "free_counter",  # not a Tier-D label -> unknown
+                    "reason": "free port",
+                    "citation": "",
+                    "kwargs_positive": {},
+                    "kwargs_negative": {},
+                },
+                {
+                    "rule_id": "vllm_tier_d_sampling_params_logprobs",
+                    "classification": "bounded",
+                    "reason": "x",
+                    "citation": "c.py:1",
+                    "fires_when": {"divisible_by": 2},  # unsupported Tier-D operator
+                    "kwargs_positive": {"logprobs": 3},
+                    "kwargs_negative": {"logprobs": 2},
+                },
+            ]
+        }
+    )
+    diags = {d.rule_id: d for d in parse_diagnoses(raw, classifications=TIER_D_CLASSIFICATIONS)}
+    assert diags["vllm_tier_d_engine_params_max_logprobs"].fires_when == {"<": 0}
+    assert diags["vllm_tier_d_engine_params_master_port"].classification == "unknown"
+    bad = diags["vllm_tier_d_sampling_params_logprobs"]
+    assert bad.fires_when is None
+    assert "fires_when" in bad.kwargs_malformed
+
+
+def _tier_d_response() -> str:
+    return json.dumps(
+        {
+            "diagnoses": [
+                {
+                    "rule_id": "vllm_tier_d_engine_params_max_logprobs",
+                    "classification": "bounded",
+                    "reason": "post_init raises if < 0",
+                    "citation": "config.py:2",
+                    "constraint": "must be >= 0",
+                    "fires_when": {"<": 0},
+                    "kwargs_positive": {"max_logprobs": -1},
+                    "kwargs_negative": {"max_logprobs": 5},
+                },
+                {
+                    "rule_id": "vllm_tier_d_engine_params_master_port",
+                    "classification": "unconstrained",
+                    "reason": "free TCP port; any int valid",
+                    "citation": "config.py:3",
+                    "kwargs_positive": {},
+                    "kwargs_negative": {},
+                },
+                {
+                    "rule_id": "vllm_tier_d_sampling_params_logprobs",
+                    "classification": "bounded",
+                    "reason": "x",
+                    "citation": "config.py:10",
+                    "fires_when": {"nonsense": 1},  # malformed -> dropped
+                    "kwargs_positive": {"logprobs": -1},
+                    "kwargs_negative": {"logprobs": 1},
+                },
+                {
+                    "rule_id": "vllm_tier_d_fabricated_id",  # not a candidate -> ignored
+                    "classification": "bounded",
+                    "reason": "x",
+                    "citation": "config.py:2",
+                    "fires_when": {"<": 0},
+                    "kwargs_positive": {"q": -1},
+                    "kwargs_negative": {"q": 1},
+                },
+            ]
+        }
+    )
+
+
+def test_tier_d_end_to_end_splits_by_classification_and_gate(tmp_path: Path) -> None:
+    _write_tier_d_surface(tmp_path / "config.py")
+    model = _StubModel(_tier_d_response())
+    result = diagnose_tier_d(
+        engine="vllm",
+        new_version="0.19.1",
+        candidates=_TIER_D_CANDIDATES,
+        source_root=tmp_path,
+        config_surface_files=["config.py"],
+        model=model,
+        gate_runner=_gate_stub({"vllm_tier_d_engine_params_max_logprobs": "confirmed"}),
+    )
+
+    # Only the construction-confirmed bounded field is emitted.
+    assert [e["id"] for e in result.confirmed] == ["vllm_tier_d_engine_params_max_logprobs"]
+    entry = result.confirmed[0]
+    assert entry["added_by"] == "llm_advisory"
+    assert entry["severity"] == "warn"
+    assert entry["llm_proposed"] is True
+    assert entry["expected_outcome"] == {"outcome": "warn", "emission_channel": "none"}
+    assert entry["match"]["fields"] == {"vllm.engine_params.max_logprobs": {"<": 0}}
+    # native_type resolved from the citation's enclosing class.
+    assert entry["native_type"].endswith("ModelConfig")
+    # Unconstrained reported but never gated/emitted; malformed dropped; fabricated ignored.
+    assert [r["rule_id"] for r in result.tier_d_unconstrained] == [
+        "vllm_tier_d_engine_params_master_port"
+    ]
+    assert [r["rule_id"] for r in result.dropped_malformed] == [
+        "vllm_tier_d_sampling_params_logprobs"
+    ]
+    assert result.proposed_yaml is not None and "llm_advisory" in result.proposed_yaml
+
+
+def test_tier_d_path_validator_drops_unresolved(tmp_path: Path) -> None:
+    _write_tier_d_surface(tmp_path / "config.py")
+    gate_calls: list[list[dict[str, Any]]] = []
+
+    def _recording_gate(engine: str, proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        gate_calls.append(proposals)
+        return [{"rule_id": p["rule_id"], "verdict": "confirmed"} for p in proposals]
+
+    def _reject_all(path: str) -> None:
+        raise ValueError(f"unreachable: {path}")
+
+    result = diagnose_tier_d(
+        engine="vllm",
+        new_version="0.19.1",
+        candidates=_TIER_D_CANDIDATES,
+        source_root=tmp_path,
+        config_surface_files=["config.py"],
+        model=_StubModel(_tier_d_response()),
+        gate_runner=_recording_gate,
+        path_validator=_reject_all,
+    )
+    # The bounded candidate's path was rejected -> never gated, never confirmed.
+    assert result.confirmed == []
+    assert gate_calls == []
+    assert any(r["verdict"] == "path_unresolved" for r in result.unconfirmed)
+
+
+def test_tier_d_requires_candidates() -> None:
+    with pytest.raises(DiagnoseError, match="at least one candidate"):
+        diagnose_tier_d(
+            engine="vllm",
+            new_version="0.19.1",
+            candidates=[],
+            source_root=Path("/nonexistent"),
+            config_surface_files=["config.py"],
+            model=_StubModel("{}"),
+            gate_runner=_gate_stub({}),
+        )

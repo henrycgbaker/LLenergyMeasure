@@ -63,6 +63,8 @@ __all__ = [
     "CLASSIFICATIONS",
     "DEFAULT_BUDGET_CHARS",
     "RESPONSE_SCHEMA",
+    "TIER_D_CLASSIFICATIONS",
+    "TIER_D_RESPONSE_SCHEMA",
     "DiagnoseError",
     "DiagnoseModel",
     "Diagnosis",
@@ -70,12 +72,15 @@ __all__ = [
     "OllamaDiagnoseModel",
     "build_carried_triage_prompt",
     "build_gap_diagnose_prompt",
+    "build_tier_d_prompt",
     "carried_symbol_requests",
     "config_surface_symbol_requests",
     "diagnose_carried_failures",
     "diagnose_gaps",
+    "diagnose_tier_d",
     "parse_diagnoses",
     "render_proposed_yaml",
+    "tier_d_rule_id",
 ]
 
 
@@ -141,6 +146,63 @@ RESPONSE_SCHEMA: dict[str, Any] = {
 }
 
 
+TIER_D_CLASSIFICATIONS = (
+    "bounded",
+    "unconstrained",
+    "unknown",
+)
+"""The classifications the Tier-D (pure-inference) proposer may emit per field.
+
+- ``bounded`` - the field carries a real numeric/semantic constraint stated in
+  the source or docstring; the proposer supplies ``fires_when`` (the illegal
+  region), an illegal ``kwargs_positive``, and a legal ``kwargs_negative``. Only
+  ``bounded`` diagnoses are gated.
+- ``unconstrained`` - no real bound (a free counter / port / rank, or a sentinel
+  like ``-1``/``0`` the library explicitly accepts as unlimited/disabled). These
+  are NOT gated and never emitted - the deterministic noise filter could not
+  reject them, but the model can.
+- ``unknown`` - the source does not let the model decide; not gated.
+"""
+
+# JSON schema for the Tier-D structured-output call: the generic diagnosis shape
+# plus the per-field bound (``fires_when`` predicate + human-readable
+# ``constraint``). Mirrors the carried/gap RESPONSE_SCHEMA so the same ollama
+# structured-output path drives all three modes.
+TIER_D_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "diagnoses": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "rule_id": {"type": "string"},
+                    "classification": {
+                        "type": "string",
+                        "enum": list(TIER_D_CLASSIFICATIONS),
+                    },
+                    "reason": {"type": "string"},
+                    "citation": {"type": "string"},
+                    "constraint": {"type": "string"},
+                    "fires_when": {"type": "object"},
+                    "kwargs_positive": {"type": "object"},
+                    "kwargs_negative": {"type": "object"},
+                },
+                "required": [
+                    "rule_id",
+                    "classification",
+                    "reason",
+                    "citation",
+                    "kwargs_positive",
+                    "kwargs_negative",
+                ],
+            },
+        }
+    },
+    "required": ["diagnoses"],
+}
+
+
 @dataclass
 class Diagnosis:
     """One parsed per-rule diagnosis with a malformed-kwargs flag.
@@ -151,6 +213,14 @@ class Diagnosis:
     were required). A malformed diagnosis is still PARSED (never crashes the
     run) but is flagged so the caller can drop it before gating rather than feed
     the gate an un-constructible probe.
+
+    ``fires_when`` / ``constraint`` are Tier-D-only (empty for modes 1a/1b):
+    ``fires_when`` is the one-key predicate over the candidate field that
+    describes the ILLEGAL region (so the advisory warns only out-of-bound, not on
+    every set), and ``constraint`` is the human-readable bound for the message.
+    A ``fires_when`` carrying an unsupported operator is recorded in
+    ``kwargs_malformed`` under ``"fires_when"`` so the diagnosis is dropped before
+    gating rather than emitting an un-evaluable match predicate.
     """
 
     rule_id: str
@@ -160,6 +230,8 @@ class Diagnosis:
     kwargs_positive: dict[str, Any]
     kwargs_negative: dict[str, Any]
     kwargs_malformed: dict[str, list[str]] = field(default_factory=dict)
+    fires_when: dict[str, Any] | None = None
+    constraint: str = ""
 
     @property
     def is_malformed(self) -> bool:
@@ -168,6 +240,15 @@ class Diagnosis:
 
 # String stand-ins that signal a model failed to emit a native JSON scalar.
 _STRINGLY_TYPED_SENTINELS = frozenset({"true", "false", "none", "null"})
+
+# Match operators a Tier-D ``fires_when`` predicate may use: single-field
+# numeric bounds, membership, and presence. These are the subset of the loader's
+# operator vocabulary (``loader._OPERATOR_HANDLERS``) that a per-field advisory
+# can express without a cross-field ``@ref``. A ``fires_when`` outside this set
+# is recorded malformed and the diagnosis dropped before gating.
+_TIER_D_OPERATORS = frozenset(
+    {"<", "<=", ">", ">=", "==", "!=", "in", "not_in", "present", "absent"}
+)
 
 
 def _malformed_keys(kwargs: dict[str, Any]) -> list[str]:
@@ -179,7 +260,17 @@ def _malformed_keys(kwargs: dict[str, Any]) -> list[str]:
     return sorted(bad)
 
 
-def parse_diagnoses(raw: str) -> list[Diagnosis]:
+def _fires_when_malformed(fires_when: Any) -> bool:
+    """True if a Tier-D ``fires_when`` is not a one-key supported-operator dict."""
+    if not isinstance(fires_when, dict) or len(fires_when) != 1:
+        return True
+    (op,) = fires_when.keys()
+    return op not in _TIER_D_OPERATORS
+
+
+def parse_diagnoses(
+    raw: str, *, classifications: Sequence[str] = CLASSIFICATIONS
+) -> list[Diagnosis]:
     """Parse the model's structured-JSON response into :class:`Diagnosis` entries.
 
     Explicit failure: a non-parsing body, a non-object root, a missing
@@ -187,7 +278,14 @@ def parse_diagnoses(raw: str) -> list[Diagnosis]:
     (never a silent empty - that was a spike failure mode). Individual entries
     that parse but carry type-malformed kwargs are KEPT and flagged via
     ``kwargs_malformed`` so the gate-wiring stage can drop them without crashing.
+
+    ``classifications`` is the allowed classification vocabulary (mode 1a/1b use
+    :data:`CLASSIFICATIONS`; Tier-D passes :data:`TIER_D_CLASSIFICATIONS`); an
+    entry outside it is coerced to ``unknown``. The optional ``fires_when`` /
+    ``constraint`` keys (Tier-D) are read when present; a malformed ``fires_when``
+    is flagged in ``kwargs_malformed`` so it never reaches the match predicate.
     """
+    allowed = set(classifications)
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -206,7 +304,7 @@ def parse_diagnoses(raw: str) -> list[Diagnosis]:
         if not isinstance(rule_id, str) or not rule_id:
             continue
         classification = str(entry.get("classification", "unknown"))
-        if classification not in CLASSIFICATIONS:
+        if classification not in allowed:
             classification = "unknown"
         pos = entry.get("kwargs_positive") or {}
         neg = entry.get("kwargs_negative") or {}
@@ -219,6 +317,10 @@ def parse_diagnoses(raw: str) -> list[Diagnosis]:
             malformed["kwargs_positive"] = bad_pos
         if bad_neg := _malformed_keys(neg):
             malformed["kwargs_negative"] = bad_neg
+        fires_when = entry.get("fires_when")
+        if fires_when is not None and _fires_when_malformed(fires_when):
+            malformed["fires_when"] = [str(fires_when)]
+            fires_when = None
         out.append(
             Diagnosis(
                 rule_id=rule_id,
@@ -228,6 +330,8 @@ def parse_diagnoses(raw: str) -> list[Diagnosis]:
                 kwargs_positive=pos,
                 kwargs_negative=neg,
                 kwargs_malformed=malformed,
+                fires_when=fires_when if isinstance(fires_when, dict) else None,
+                constraint=str(entry.get("constraint", "")),
             )
         )
     if not out:
@@ -273,13 +377,14 @@ class OllamaDiagnoseModel:
     num_ctx: int = 16384
     num_predict: int = 4096
     timeout_s: int = 1800
+    response_schema: dict[str, Any] = field(default_factory=lambda: RESPONSE_SCHEMA)
 
     def complete(self, prompt: str) -> str:
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "format": RESPONSE_SCHEMA,
+            "format": self.response_schema,
             "options": {
                 "temperature": 0,
                 "num_ctx": self.num_ctx,
@@ -559,6 +664,31 @@ For EACH gap you find, emit one diagnosis object describing a rule mining missed
 Only flag gaps you can ground in the source above. If mining looks complete, emit an empty diagnoses array. Emit a JSON object with a diagnoses array."""
 
 
+_TIER_D_PROMPT = """You are auditing config-parameter bounds in an inference-engine library: {engine} {new_version}.
+
+Below is a list of NUMERIC config fields that carry NO machine-enforced bound (no pydantic Field(ge/le), no Literal enum, no mined rule). For each, your job is the SEMANTIC-BOUND check: read the SOURCE and decide whether the field has a REAL constraint stated only in semantics - a docstring "Args" note, an imperative `if x < 0: raise`, a validator, or a documented valid range. The deterministic miner cannot see these.
+
+BE CONSERVATIVE. Most of these fields are unconstrained free integers (counters, ports, ranks, sizes, timeouts). Do NOT invent a bound. In PARTICULAR, a sentinel value the library explicitly accepts (commonly `-1` = unlimited / `0` = disabled / `None` = auto) means the field is NOT bounded there - classify it `unconstrained`, never `bounded`. A wrong `bounded` call produces a false warning on a valid config.
+
+FIELDS TO AUDIT (use the given rule_id verbatim for each):
+{candidates}
+
+NEW {new_version} SOURCE (cite real file:line from it):
+{source}
+
+For EACH field emit one diagnosis object:
+  - rule_id: the exact rule_id given for that field.
+  - classification: `bounded` if the source states a real constraint; `unconstrained` if it is a free value or sentinel-accepting; `unknown` if the source does not let you decide.
+  - reason: WHERE the bound is stated (e.g. "docstring Args: must be >= 1") or why it is unconstrained.
+  - citation: file and line number(s) of the OWNING CLASS / the constraint in the source above (so the gate can construct it).
+  - constraint: for `bounded` only - a short human statement of the bound (e.g. "must be >= 0").
+  - fires_when: for `bounded` only - a ONE-KEY predicate over THIS field describing the ILLEGAL region, using one of: "<", "<=", ">", ">=", "==", "!=", "in", "not_in". E.g. a field that must be >= 0 fires_when {{"<": 0}}; a field that must be <= 1.0 fires_when {{">": 1.0}}.
+  - kwargs_positive: for `bounded` only - constructor keyword args for the field's native_type that set THIS field to an ILLEGAL value (one satisfying fires_when). NATIVE JSON types (numbers, not strings).
+  - kwargs_negative: for `bounded` only - constructor keyword args setting THIS field to a LEGAL value (one NOT satisfying fires_when).
+
+These probes will be CONSTRUCTED by a deterministic gate: the illegal kwargs must actually make the library raise, the legal kwargs must construct cleanly, or the proposal is dropped. Emit a JSON object with a diagnoses array containing one object per field above."""
+
+
 def _compact_carried(carried: Sequence[dict[str, Any]]) -> str:
     """Render the carried rule entries (the OLD knowledge) for the prompt."""
     lines: list[str] = []
@@ -629,6 +759,55 @@ def build_gap_diagnose_prompt(
         engine=engine,
         new_version=new_version,
         envelope_summary=_summarise_envelope(schema),
+        source=source,
+    )
+
+
+def tier_d_rule_id(engine: str, section: str, leaf: str) -> str:
+    """Deterministic rule_id for a Tier-D candidate field.
+
+    Stable across runs (no model freedom) so a diagnosis maps back to its
+    candidate by id and the emitted advisory id is reproducible / byte-stable.
+    """
+    return f"{engine}_tier_d_{section}_{leaf}"
+
+
+def _compact_candidates(engine: str, candidates: Sequence[dict[str, Any]]) -> str:
+    """Render the candidate fields (the audit list) for the Tier-D prompt."""
+    lines: list[str] = []
+    for cand in candidates:
+        section = str(cand["section"])
+        leaf = str(cand["leaf"])
+        lines.append(
+            "\n".join(
+                [
+                    f"- rule_id: {tier_d_rule_id(engine, section, leaf)}",
+                    f"  field: {leaf}",
+                    f"  section: {section}",
+                    f"  type: {cand.get('type', '')}",
+                    f"  default: {cand.get('default', '')}",
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def build_tier_d_prompt(
+    *,
+    engine: str,
+    new_version: str,
+    candidates: Sequence[dict[str, Any]],
+    source: str,
+) -> str:
+    """Build the Tier-D pure-inference prompt from the candidate list + source."""
+    if not candidates:
+        raise DiagnoseError("tier-d diagnose requires at least one candidate field")
+    if not source.strip():
+        raise DiagnoseError("tier-d diagnose requires non-empty config-surface source")
+    return _TIER_D_PROMPT.format(
+        engine=engine,
+        new_version=new_version,
+        candidates=_compact_candidates(engine, candidates),
         source=source,
     )
 
@@ -829,6 +1008,11 @@ class DiagnoseResult:
     source_truncated: list[str] = field(default_factory=list)
     source_missing: list[str] = field(default_factory=list)
     proposed_yaml: str | None = None
+    # Tier-D only: fields the proposer judged to carry NO real bound (a free
+    # counter / port / rank, or a sentinel-accepting field). Reported, never
+    # gated or emitted - the model is the noise filter the deterministic
+    # candidate enumeration could not be.
+    tier_d_unconstrained: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _gate_and_split(
@@ -1021,4 +1205,211 @@ def diagnose_gaps(
     )
     result.source_truncated = window.truncated
     result.source_missing = window.missing
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Tier-D: pure-inference advisories for undeclared-semantic (class-3) fields
+# ---------------------------------------------------------------------------
+#
+# Tier-D is the localiser-not-adjudicator contract applied to numeric fields the
+# deterministic surface left UNBOUNDED. The proposer reads the source and, per
+# field, either supplies a bound (illegal/legal probes + a fires_when predicate)
+# or rejects it as unconstrained. The gate then runs the CONSTRUCTION-VIOLATION
+# path (the illegal value must actually raise, the legal value must construct) -
+# the empirical sentinel guard that kills the `max_logprobs=-1`-is-legal class of
+# hallucination. Confirmed advisories land at severity=warn / outcome=warn /
+# llm_proposed=true / added_by=llm_advisory: they WARN at pre-flight, never
+# reject (the universal safety gate - an LLM assertion can only ever warn).
+
+
+def _tier_d_match_fields(engine: str, candidate: dict[str, Any], diag: Diagnosis) -> dict[str, Any]:
+    """Build the advisory's ``match.fields`` from the candidate path + fires_when.
+
+    The path is ``<engine>.<section>.<leaf>`` (the project-config location); the
+    predicate is the model's ``fires_when`` (the illegal region) so the advisory
+    warns only out-of-bound, not on every set (over-warning guard, Risk #5).
+    """
+    path = f"{engine}.{candidate['section']}.{candidate['leaf']}"
+    return {path: diag.fires_when}
+
+
+def _tier_d_proposal(
+    engine: str,
+    candidate: dict[str, Any],
+    diag: Diagnosis,
+    *,
+    native_type: str,
+) -> dict[str, Any]:
+    """Assemble the gate proposal for a Tier-D candidate diagnosis.
+
+    Carries ``tier_d: True`` so the in-container gate routes to the
+    construction-violation path (illegal must raise) rather than the
+    firing/emission grain, and the carried ``match`` so the gate-soundness locus
+    check can attribute the raise. Severity is forced ``warn`` (the emitted
+    advisory severity); the gate confirms by construction-violation regardless.
+    """
+    return {
+        "rule_id": diag.rule_id,
+        "classification": diag.classification,
+        "native_type": native_type,
+        "severity": "warn",
+        "tier_d": True,
+        "match": {"engine": engine, "fields": _tier_d_match_fields(engine, candidate, diag)},
+        "expected_outcome": {"outcome": "warn", "emission_channel": "none"},
+        "kwargs_positive": dict(diag.kwargs_positive),
+        "kwargs_negative": dict(diag.kwargs_negative),
+        "invariant_under_test": diag.constraint or diag.reason,
+        "message_template": diag.constraint or None,
+        "references": [f"llm_advisory: {diag.reason}", f"citation: {diag.citation}"],
+    }
+
+
+def _tier_d_entry(proposal: dict[str, Any], engine: str) -> dict[str, Any]:
+    """Shape a construction-confirmed Tier-D proposal into a corpus advisory.
+
+    ``added_by=llm_advisory`` (distinct from ``llm_diagnose`` = gate-confirmed
+    FIRING) + ``llm_proposed=True`` so the loader's universal safety gate pins it
+    to warn. Frozen + carried byte-stably across re-mines via
+    ``build_corpus._CARRIED_PROVENANCES``.
+    """
+    entry: dict[str, Any] = {
+        "id": proposal["rule_id"],
+        "engine": engine,
+        "library": engine,
+        "invariant_under_test": proposal.get("invariant_under_test") or "",
+        "severity": "warn",
+        "native_type": proposal["native_type"],
+        "match": proposal.get("match") or {"fields": {}},
+        "kwargs_positive": proposal.get("kwargs_positive") or {},
+        "kwargs_negative": proposal.get("kwargs_negative") or {},
+        "expected_outcome": {"outcome": "warn", "emission_channel": "none"},
+        "references": proposal.get("references") or [],
+        "added_by": "llm_advisory",
+        "llm_proposed": True,
+    }
+    if proposal.get("message_template"):
+        entry["message_template"] = proposal["message_template"]
+    return entry
+
+
+def diagnose_tier_d(
+    *,
+    engine: str,
+    new_version: str,
+    candidates: Sequence[dict[str, Any]],
+    source_root: Path,
+    config_surface_files: Sequence[str],
+    model: DiagnoseModel,
+    gate_runner: GateRunner,
+    path_validator: Callable[[str], None] | None = None,
+    budget_chars: int = DEFAULT_BUDGET_CHARS,
+) -> DiagnoseResult:
+    """Tier-D: pure-inference warn advisories for class-3 (undeclared-semantic) fields.
+
+    ``candidates`` is the deterministic class-3 set (each a mapping with
+    ``section`` / ``leaf`` / ``type`` / ``default``;
+    :func:`scripts.engine_producers.tier_d_candidates.enumerate_class3_candidates`
+    is the caller's source). The config-surface source is windowed per config
+    class (mode-1b machinery); the model audits each candidate and supplies a
+    bound or rejects it. Only ``bounded`` diagnoses are gated, by the
+    construction-violation path; confirmed advisories are emitted at warn.
+
+    ``path_validator`` (injected by the scripts-level driver, which can import
+    :mod:`scripts.engine_producers._section_classifier`) raises on an emitted
+    match path that does not resolve on the generated Config, so a dead advisory
+    is dropped rather than silently committed. ``None`` skips the check (tests /
+    callers without the scripts surface).
+    """
+    result = DiagnoseResult(engine=engine, engine_version=new_version, mode="tier_d")
+    if not candidates:
+        raise DiagnoseError("tier-d diagnose requires at least one candidate field")
+
+    requests = config_surface_symbol_requests(
+        source_root=source_root, config_surface_files=config_surface_files
+    )
+    window = _assemble_source(
+        source_root=source_root,
+        requests=requests,
+        budget_chars=budget_chars,
+        files=config_surface_files,
+    )
+    result.source_truncated = window.truncated
+    result.source_missing = window.missing
+
+    prompt = build_tier_d_prompt(
+        engine=engine, new_version=new_version, candidates=candidates, source=window.source
+    )
+    diagnoses = parse_diagnoses(model.complete(prompt), classifications=TIER_D_CLASSIFICATIONS)
+
+    # Map each diagnosis back to the candidate it was asked about (by the
+    # deterministic rule_id); ignore any fabricated ids the model invents.
+    cand_by_id = {tier_d_rule_id(engine, str(c["section"]), str(c["leaf"])): c for c in candidates}
+    class_index = _config_class_index(
+        source_root=source_root, config_surface_files=config_surface_files
+    )
+
+    gateable: list[tuple[dict[str, Any], Diagnosis, str]] = []
+    for diag in diagnoses:
+        candidate = cand_by_id.get(diag.rule_id)
+        if candidate is None:
+            continue
+        if diag.classification != "bounded":
+            result.tier_d_unconstrained.append(
+                {
+                    "rule_id": diag.rule_id,
+                    "classification": diag.classification,
+                    "reason": diag.reason,
+                }
+            )
+            continue
+        if diag.is_malformed or diag.fires_when is None:
+            result.dropped_malformed.append(
+                {
+                    "rule_id": diag.rule_id,
+                    "classification": diag.classification,
+                    "malformed": diag.kwargs_malformed or {"fires_when": ["missing"]},
+                    "reason": "type-malformed probe or missing fires_when predicate",
+                }
+            )
+            continue
+        native_type = _native_type_for_citation(diag.citation, class_index)
+        proposal = _tier_d_proposal(engine, candidate, diag, native_type=native_type)
+        if path_validator is not None:
+            (path,) = _tier_d_match_fields(engine, candidate, diag)
+            try:
+                path_validator(path)
+            except Exception as exc:  # UnreachableMatchPathError / UnresolvableMatchPathError
+                result.unconfirmed.append(
+                    {"rule_id": diag.rule_id, "verdict": "path_unresolved", "reason": str(exc)}
+                )
+                continue
+        gateable.append((proposal, diag, diag.rule_id))
+
+    if not gateable:
+        return result
+
+    proposals = [proposal for proposal, _, _ in gateable]
+    proposal_by_id = {p["rule_id"]: p for p in proposals}
+    verdicts = gate_runner(engine, proposals)
+
+    for verdict in verdicts:
+        rule_id = verdict.get("rule_id", "")
+        proposal = proposal_by_id.get(rule_id, {})
+        if verdict.get("verdict") == "confirmed":
+            result.confirmed.append(_tier_d_entry(proposal, engine))
+        else:
+            result.unconfirmed.append(
+                {
+                    "rule_id": rule_id,
+                    "classification": proposal.get("classification"),
+                    "verdict": verdict.get("verdict"),
+                    "gate": verdict,
+                }
+            )
+
+    if result.confirmed:
+        result.proposed_yaml = render_proposed_yaml(
+            engine=engine, engine_version=new_version, entries=result.confirmed
+        )
     return result
