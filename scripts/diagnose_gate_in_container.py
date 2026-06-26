@@ -26,6 +26,14 @@ emission). Such a proposal is reported as ``not_construction_confirmable``, a
 distinct verdict from ``not_confirmed``, so the caller can surface it as a cited
 proposal for review rather than counting it a failure.
 
+A proposal tagged ``tier_d`` takes the CONSTRUCTION-VIOLATION path
+(``gate_one_tier_d``): the claimed-illegal positive must RAISE and the legal
+negative must construct, with the same coercion/locus soundness guards - the
+empirical sentinel guard for the Tier-D pure-inference advisories. The advisory
+is always EMITTED at warn (the universal safety gate); the gate only decides
+whether the bound is real, and reports rich per-probe fields so the host can
+apply a stricter or more permissive keep-policy without re-running the gate.
+
 Invoked by :class:`llenergymeasure.api.diagnose.ContainerGateRunner`:
 
     python3 scripts/diagnose_gate_in_container.py <engine> <in.json> <out.json>
@@ -114,6 +122,89 @@ def gate_one(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _is_sentinel_value(value: Any) -> bool:
+    """True for the integer sentinels a claimed lower bound commonly mis-flags.
+
+    ``-1`` (unlimited) and ``0`` (disabled/auto) are routinely accepted by
+    inference libraries even where a docstring says ``>0``; a Tier-D positive
+    probe that picks one and DOESN'T raise is the `max_logprobs=-1`-is-legal
+    hallucination the sentinel guard exists to catch.
+    """
+    return value in (-1, 0) and not isinstance(value, bool)
+
+
+def gate_one_tier_d(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
+    """Construction-violation gate for a Tier-D pure-inference advisory.
+
+    The confirmation grain is CONSTRUCTION, not firing/emission: the
+    claimed-illegal ``kwargs_positive`` must actually RAISE and the legal
+    ``kwargs_negative`` must construct cleanly, with the SAME coercion/locus
+    soundness guards production uses - the empirical sentinel guard that kills the
+    `max_logprobs=-1`-is-legal class of hallucination. The advisory is EMITTED at
+    warn regardless (the universal safety gate); the gate only decides whether the
+    bound is real. The rich ``constructs_legal`` / ``illegal_raises`` /
+    ``coercion_artifact`` / ``illegal_is_sentinel`` fields let the host apply a
+    more permissive keep-policy without re-running the gate.
+    """
+    rule_id = proposal["rule_id"]
+    # severity=error routes the strict positive-MUST-raise soundness branch.
+    # message_template is intentionally omitted: a Tier-D constraint is human
+    # prose, not the library's exception string, so the template-match soundness
+    # check would spuriously fail on it.
+    inv = {
+        "id": rule_id,
+        "native_type": proposal.get("native_type") or "",
+        "severity": "error",
+        "kwargs_positive": dict(proposal.get("kwargs_positive") or {}),
+        "kwargs_negative": dict(proposal.get("kwargs_negative") or {}),
+        "expected_outcome": {"outcome": "error"},
+        "match": proposal.get("match") or {"fields": {}},
+    }
+    illegal_values = list((proposal.get("kwargs_positive") or {}).values())
+    out: dict[str, Any] = {
+        "rule_id": rule_id,
+        "severity": "warn",
+        "tier_d": True,
+        "illegal_is_sentinel": any(_is_sentinel_value(v) for v in illegal_values),
+    }
+    try:
+        _case, pos, neg = V._validate_invariant_with_captures(engine, inv)
+    except Exception as exc:  # construction blew up before observe
+        out.update({"verdict": "infra_error", "error": f"{type(exc).__name__}: {exc}"})
+        return out
+
+    soundness = V.compute_gate_soundness_divergences(inv, pos, neg)
+    soundness_failed = [d.check_failed for d in soundness if d.check_failed is not None]
+    constructs_legal = neg.exception_type is None
+    illegal_raises = pos.exception_type is not None
+    coercion_artifact = V.CHECK_TYPE_COERCION_ARTIFACT in soundness_failed
+    # STRICT default: the bound is real iff the illegal value raises, the legal
+    # value constructs, and the raise is attributable to the claimed field (no
+    # coercion artefact / locus mismatch / dead negative). soundness empty implies
+    # all of those for a severity=error, no-template inv.
+    confirmed = illegal_raises and constructs_legal and not soundness
+    out.update(
+        {
+            "constructs_legal": constructs_legal,
+            "illegal_raises": illegal_raises,
+            "illegal_exc_type": pos.exception_type,
+            "illegal_message": (pos.exception_message or "")[:160],
+            "coercion_artifact": coercion_artifact,
+            "verdict": "confirmed" if confirmed else "not_confirmed",
+        }
+    )
+    if soundness_failed:
+        out["soundness_failed"] = soundness_failed
+    return out
+
+
+def _gate_one(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch a proposal to the Tier-D or the firing-confirmation gate path."""
+    if proposal.get("tier_d"):
+        return gate_one_tier_d(engine, proposal)
+    return gate_one(engine, proposal)
+
+
 def main() -> int:
     engine = sys.argv[1]
     in_path = Path(sys.argv[2])
@@ -123,7 +214,7 @@ def main() -> int:
     # as the production paths do (validate_rules.py:754,1088). Without it the first
     # proposal absorbs vLLM's one-time platform-detection burst and misclassifies.
     V.warm_up_engine_observation(engine)
-    verdicts = [gate_one(engine, p) for p in proposals]
+    verdicts = [_gate_one(engine, p) for p in proposals]
     out_path.write_text(json.dumps(verdicts, indent=2))
     confirmed = sum(1 for v in verdicts if v.get("verdict") == "confirmed")
     print(f"gated {len(verdicts)} proposals: {confirmed} confirmed", file=sys.stderr)
