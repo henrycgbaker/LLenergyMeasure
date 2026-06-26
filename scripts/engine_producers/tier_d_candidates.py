@@ -159,19 +159,82 @@ def _is_schema_constrained(shape: dict[str, Any], defs: dict[str, Any]) -> bool:
     return False
 
 
-def _corpus_covered_leaves(rules: dict[str, Any]) -> set[str]:
-    """Return the set of leaf names covered by any corpus rule.
+def _corpus_covered_leaves(rules: dict[str, Any]) -> set[tuple[str, str]]:
+    """Return the set of ``(section, leaf)`` pairs covered by any corpus rule.
 
     Each invariant's ``match.fields`` is a dict whose keys are dotted paths
-    (``<engine>.<section>.<leaf>``); the tail segment is the covered leaf.
+    (``<engine>.<section>.<leaf>``). Coverage is keyed on ``(section, leaf)``,
+    not the bare leaf, so a leaf that exists in two sections (e.g. ``seed`` under
+    both engine_params and sampling_params) is only excluded from the section
+    that actually carries a rule.
     """
-    covered: set[str] = set()
+    covered: set[tuple[str, str]] = set()
     for inv in rules.get("invariants", []):
         fields = inv.get("match", {}).get("fields", {})
         if isinstance(fields, dict):
             for path in fields:
-                covered.add(str(path).split(".")[-1])
+                parts = str(path).split(".")
+                if len(parts) >= 3:
+                    covered.add((parts[1], parts[-1]))
     return covered
+
+
+def _field_has_machine_constraint(field_info: Any) -> bool:
+    """True if a pydantic ``FieldInfo`` carries a numeric bound or a ``Literal``.
+
+    The generated Config lifts bounds the discovered schema does NOT record as
+    keys: tensorrt / transformers schemas carry only ``type``/``default``, yet
+    their Config fields are ``Field(ge=...)`` / ``Literal[...]`` (via the overlay
+    narrowings + lifts). A leaf the Config already bounds is class 1/2, not
+    class 3, so it must be excluded.
+    """
+    for marker in getattr(field_info, "metadata", None) or []:
+        if any(hasattr(marker, attr) for attr in ("ge", "gt", "le", "lt", "multiple_of")):
+            return True
+    return _annotation_contains_literal(getattr(field_info, "annotation", None))
+
+
+def _annotation_contains_literal(annotation: Any) -> bool:
+    """True if ``annotation`` is (or unions/wraps) a ``typing.Literal``."""
+    import typing
+
+    if typing.get_origin(annotation) is typing.Literal:
+        return True
+    return any(_annotation_contains_literal(arg) for arg in typing.get_args(annotation))
+
+
+def _config_constrained_leaves(engine: str) -> set[tuple[str, str]]:
+    """Return ``(section, leaf)`` pairs the generated Config already constrains.
+
+    Imports the engine's torch-free generated ``Config`` (host-safe, the same
+    import :mod:`_section_classifier` uses) and inspects each section sub-model's
+    fields for a numeric bound or ``Literal``. Returns an empty set when the
+    Config cannot be imported (no generated shadow for the engine).
+    """
+    import importlib
+    import typing
+
+    try:
+        config_model = importlib.import_module(f"llenergymeasure.engines.{engine}.config").Config
+    except Exception:
+        return set()
+    out: set[tuple[str, str]] = set()
+    fields = getattr(config_model, "model_fields", {}) or {}
+    for section in _SECTIONS:
+        section_field = fields.get(section)
+        if section_field is None:
+            continue
+        annotation = section_field.annotation
+        submodels = [
+            arg
+            for arg in (typing.get_args(annotation) or (annotation,))
+            if hasattr(arg, "model_fields")
+        ]
+        for submodel in submodels:
+            for leaf, field_info in submodel.model_fields.items():
+                if _field_has_machine_constraint(field_info):
+                    out.add((section, leaf))
+    return out
 
 
 def _load_artifacts(engine: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -194,6 +257,7 @@ def enumerate_class3_candidates(
     schema, rules = _load_artifacts(engine)
     defs: dict[str, Any] = schema.get("$defs", {}) or {}
     covered = _corpus_covered_leaves(rules)
+    config_constrained = _config_constrained_leaves(engine)
 
     candidates: list[Class3Candidate] = []
     total = 0
@@ -208,10 +272,13 @@ def enumerate_class3_candidates(
             if _is_composite_ref(shape, defs):
                 n_composite += 1
                 continue
-            if _is_schema_constrained(shape, defs):
+            # Class 1/2 if the schema records a constraint OR the generated
+            # Config already bounds the field (the latter catches tensorrt /
+            # transformers, whose schemas lift no constraint keys).
+            if _is_schema_constrained(shape, defs) or (section, leaf) in config_constrained:
                 n_constrained += 1
                 continue
-            if leaf in covered:
+            if (section, leaf) in covered:
                 n_corpus += 1
                 continue
 

@@ -73,7 +73,10 @@ def test_corpus_covered_leaves_takes_dotted_tail():
             {},
         ]
     }
-    assert tdc._corpus_covered_leaves(rules) == {"all2all_backend", "num_beams"}
+    assert tdc._corpus_covered_leaves(rules) == {
+        ("engine_params", "all2all_backend"),
+        ("sampling_params", "num_beams"),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -127,6 +130,8 @@ def test_enumerate_recipe_over_fixture(monkeypatch):
     monkeypatch.setattr(
         tdc, "_load_artifacts", lambda engine: (_fixture_schema(), _fixture_rules())
     )
+    # Isolate the synthetic schema from the real generated Config bounds.
+    monkeypatch.setattr(tdc, "_config_constrained_leaves", lambda engine: set())
     candidates, counts = tdc.enumerate_class3_candidates("vllm")
 
     leaves = {c.leaf for c in candidates}
@@ -157,6 +162,7 @@ def test_candidates_sorted_deterministically(monkeypatch):
     monkeypatch.setattr(
         tdc, "_load_artifacts", lambda engine: (_fixture_schema(), _fixture_rules())
     )
+    monkeypatch.setattr(tdc, "_config_constrained_leaves", lambda engine: set())
     a, _ = tdc.enumerate_class3_candidates("vllm")
     b, _ = tdc.enumerate_class3_candidates("vllm")
     assert [(c.section, c.leaf) for c in a] == [(c.section, c.leaf) for c in b]
@@ -178,8 +184,11 @@ def test_vllm_anchor_cases_real_schema():
     assert "gpu_memory_utilization" not in leaves
     # enum + corpus-covered -> EXCLUDED
     assert "all2all_backend" not in leaves
-    # genuinely-unconstrained numeric -> INCLUDED
-    assert "tensor_parallel_size" in leaves
+    # bounded via the generated Config (Field(ge=1)) even though the discovered
+    # schema lifts no constraint key -> class 1/2 -> EXCLUDED
+    assert "tensor_parallel_size" not in leaves
+    # genuinely-unconstrained numeric (no schema key, no Config bound) -> INCLUDED
+    assert "seed" in leaves
     # bool leaf -> EXCLUDED
     assert "enable_return_routed_experts" not in leaves
     # free-form identifier -> EXCLUDED
@@ -198,12 +207,15 @@ def test_real_counts_are_deterministic():
 
 
 def test_no_candidate_carries_machine_constraint():
-    # Invariant: nothing in the output can already be schema-constrained.
+    # Invariant: nothing in the output is already schema-constrained, composite,
+    # or bounded by the generated Config (the class 1/2 signals).
     for engine in tdc._ENGINES:
         schema = json.loads((current_outputs_dir(engine) / "schema.discovered.json").read_text())
         defs = schema.get("$defs", {}) or {}
+        config_constrained = tdc._config_constrained_leaves(engine)
         candidates, _ = tdc.enumerate_class3_candidates(engine)
         for c in candidates:
             shape = schema[c.section][c.leaf]
             assert not tdc._is_schema_constrained(shape, defs)
             assert not tdc._is_composite_ref(shape, defs)
+            assert (c.section, c.leaf) not in config_constrained
