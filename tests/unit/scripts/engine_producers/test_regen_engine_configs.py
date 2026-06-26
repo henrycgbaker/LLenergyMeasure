@@ -109,7 +109,7 @@ def _empty_overlay() -> dict:
 
 def test_compose_filters_to_curated_only() -> None:
     curated = {"engine_params": ["dtype", "use_cache"], "sampling_params": ["temperature"]}
-    schema = rec.compose_synthetic_schema(_DISCOVERED, curated, _empty_overlay())
+    schema = rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, _empty_overlay())
 
     ep = schema["$defs"]["EngineParams"]["properties"]
     sp = schema["$defs"]["SamplingParams"]["properties"]
@@ -126,7 +126,7 @@ def test_compose_filters_to_curated_only() -> None:
 
 def test_compose_marks_sections_extra_allow() -> None:
     curated = {"engine_params": ["dtype"], "sampling_params": []}
-    schema = rec.compose_synthetic_schema(_DISCOVERED, curated, _empty_overlay())
+    schema = rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, _empty_overlay())
     assert schema["$defs"]["EngineParams"]["additionalProperties"] is True
     assert schema["properties"]["engine_params"] == {"$ref": "#/$defs/EngineParams"}
 
@@ -134,7 +134,7 @@ def test_compose_marks_sections_extra_allow() -> None:
 def test_compose_debt_field_becomes_permissive_stub() -> None:
     """A curated field absent from discovery is a permissive Any | None stub."""
     curated = {"engine_params": ["device_map"], "sampling_params": []}
-    schema = rec.compose_synthetic_schema(_DISCOVERED, curated, _empty_overlay())
+    schema = rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, _empty_overlay())
     assert schema["$defs"]["EngineParams"]["properties"]["device_map"] == {}
 
 
@@ -150,7 +150,7 @@ def test_overlay_narrowing_tightens_mined_field() -> None:
         "x-narrowing-reason": "NaN softmax below 0",
     }
     curated = {"engine_params": [], "sampling_params": ["temperature"]}
-    schema = rec.compose_synthetic_schema(_DISCOVERED, curated, overlay)
+    schema = rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, overlay)
     prop = schema["$defs"]["SamplingParams"]["properties"]["temperature"]
     assert prop["minimum"] == 0.0
     assert prop["type"] == "number"  # mined type preserved
@@ -189,7 +189,7 @@ def test_overlay_narrowing_allows_subtype_tighten() -> None:
     overlay = _empty_overlay()
     overlay["narrowings"]["sampling_params"]["temperature"] = {"type": "integer"}
     curated = {"engine_params": [], "sampling_params": ["temperature"]}
-    schema = rec.compose_synthetic_schema(_DISCOVERED, curated, overlay)
+    schema = rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, overlay)
     assert schema["$defs"]["SamplingParams"]["properties"]["temperature"]["type"] == "integer"
 
 
@@ -199,7 +199,7 @@ def test_overlay_narrowing_contradiction_errors() -> None:
     overlay["narrowings"]["engine_params"]["dtype"] = {"type": "integer"}
     curated = {"engine_params": ["dtype"], "sampling_params": []}
     with pytest.raises(ValueError, match="contradicts mined type"):
-        rec.compose_synthetic_schema(_DISCOVERED, curated, overlay)
+        rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, overlay)
 
 
 def test_overlay_completion_adds_new_field() -> None:
@@ -209,7 +209,7 @@ def test_overlay_completion_adds_new_field() -> None:
         "x-completion-reason": "nested CompileConfig not walked yet",
     }
     curated = {"engine_params": [], "sampling_params": ["temperature"]}
-    schema = rec.compose_synthetic_schema(_DISCOVERED, curated, overlay)
+    schema = rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, overlay)
     sp = schema["$defs"]["SamplingParams"]["properties"]
     assert sp["compile_mode"]["type"] == "string"
     assert sp["compile_mode"]["x-source"] == "engine_overlay"
@@ -221,7 +221,7 @@ def test_overlay_completion_shadowing_curated_field_errors() -> None:
     overlay["completions"]["engine_params"]["dtype"] = {"type": "string"}
     curated = {"engine_params": ["dtype"], "sampling_params": []}
     with pytest.raises(ValueError, match="shadows a curated field"):
-        rec.compose_synthetic_schema(_DISCOVERED, curated, overlay)
+        rec.compose_synthetic_schema("transformers", _DISCOVERED, curated, overlay)
 
 
 # ---------------------------------------------------------------------------

@@ -182,6 +182,100 @@ def _field_shape_to_property(shape: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# vLLM wholesale-forwarded nested blob projection
+# ---------------------------------------------------------------------------
+
+# vLLM forwards these nested config blobs WHOLESALE through
+# engine_params.model_dump(exclude_none=True) (plugin._build_llm_kwargs). Each
+# is projected ONE LEVEL into a typed submodel: scalar/enum/bounded interior
+# leaves are typed (enforcement when set, :auto bucketing of the interior); any
+# interior leaf that is itself a nested-config $ref stays permissive Any | None
+# (no deeper recursion - that would balloon the transitive closure and clash
+# with the flat-hoisted ModelConfig). Only these two vLLM blobs are projected;
+# tensorrt / transformers blobs stay Any | None.
+_VLLM_NESTED_BLOBS: dict[str, frozenset[str]] = {
+    "vllm": frozenset({"compilation_config", "speculative_config"}),
+}
+
+
+def _ref_target(shape: dict[str, Any]) -> str | None:
+    """Return the bare ``$defs`` class name a field shape ``$ref``s, else None."""
+    ref = shape.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        return ref.rsplit("/", 1)[-1]
+    return None
+
+
+def _is_scalar_enum_member(value: Any) -> bool:
+    """True if an enum member is a hashable scalar a Literal can carry.
+
+    Guards against non-scalar enum members (e.g. vLLM ``CUDAGraphMode`` carries
+    nested-list members like ``[2, 0]``) which cannot be spelled as a Literal;
+    such an enum collapses the whole leaf to permissive ``Any | None``.
+    """
+    return isinstance(value, (str, int, float, bool)) and not isinstance(value, list)
+
+
+def _project_nested_leaf(shape: dict[str, Any], discovered_defs: dict[str, Any]) -> dict[str, Any]:
+    """Project one interior leaf of a wholesale blob to a NULLABLE JSON property.
+
+    One-level projection. Returns a property carrying ``enum`` and numeric
+    bounds where the leaf is a clean scalar / enum / bounded value, and a bare
+    ``{}`` (-> ``Any | None``) for anything that is not: a ``$ref`` to a nested
+    config, an enum with non-scalar members, an array / object / path shape.
+
+    The mined ``default`` is deliberately STRIPPED: every projected leaf is
+    nullable with default ``None`` so ``model_dump(exclude_none=True)`` forwards
+    only user-set keys (no injected defaults that would change runtime
+    behavior), while a set value is still validated against the typed leaf.
+    """
+    target_name = _ref_target(shape)
+    if target_name is not None:
+        target = discovered_defs.get(target_name) or {}
+        # $ref to a nested config (has properties) -> no deeper projection.
+        if "properties" in target or "enum" not in target:
+            return {}
+        members = target["enum"]
+        # An enum with a non-scalar member cannot be spelled as a Literal.
+        if not all(_is_scalar_enum_member(m) for m in members):
+            return {}
+        prop: dict[str, Any] = {"enum": list(members)}
+        if "type" in target:
+            prop["type"] = target["type"]
+        return prop
+
+    prop = _python_type_to_json_schema(shape.get("type"))
+    for key in _PASSTHROUGH_KEYS:
+        if key == "default":
+            continue  # strip mined default -> nullable leaf (mitigation 1)
+        if key in shape:
+            prop[key] = shape[key]
+    return prop
+
+
+def _project_nested_blob(class_name: str, discovered_defs: dict[str, Any]) -> dict[str, Any]:
+    """Build a typed ``$defs`` entry for one wholesale-forwarded blob class.
+
+    ``additionalProperties: true`` forces ``extra="allow"`` (mitigation 2: the
+    upstream ``$def`` carries ``additionalProperties: false``, which would
+    reject engine-accepted extras). Interior leaves are projected one level via
+    ``_project_nested_leaf``; properties are emitted in SORTED key order so the
+    codegen output is a deterministic byte-stable fixpoint (mitigation 4).
+    """
+    source = discovered_defs.get(class_name) or {}
+    source_props: dict[str, Any] = source.get("properties", {}) or {}
+    projected: dict[str, Any] = {
+        name: _project_nested_leaf(source_props[name], discovered_defs)
+        for name in sorted(source_props)
+    }
+    return {
+        "type": "object",
+        "additionalProperties": True,
+        "properties": projected,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Curation + overlay
 # ---------------------------------------------------------------------------
 
@@ -311,6 +405,7 @@ def _apply_narrowing(
 
 
 def compose_synthetic_schema(
+    engine: str,
     discovered: dict[str, Any],
     curated: dict[str, list[str]],
     overlay: dict[str, dict[str, dict[str, Any]]],
@@ -334,6 +429,8 @@ def compose_synthetic_schema(
     """
     narrowings = overlay["narrowings"]
     completions = overlay["completions"]
+    discovered_defs: dict[str, Any] = discovered.get("$defs", {}) or {}
+    blob_fields = _VLLM_NESTED_BLOBS.get(engine, frozenset())
     # Resolve curated fields against the union of discovered sections.
     discovered_fields: dict[str, Any] = {}
     for section in SECTIONS:
@@ -345,6 +442,13 @@ def compose_synthetic_schema(
         section_props: dict[str, Any] = {}
         for name in curated.get(section, []):
             mined_shape = discovered_fields.get(name)
+            blob_class = _ref_target(mined_shape) if mined_shape is not None else None
+            if name in blob_fields and blob_class is not None and blob_class in discovered_defs:
+                # Wholesale-forwarded vLLM blob: project ONE LEVEL into a typed
+                # submodel instead of collapsing to Any | None.
+                defs[blob_class] = _project_nested_blob(blob_class, discovered_defs)
+                section_props[name] = {"$ref": f"#/$defs/{blob_class}"}
+                continue
             # Absent from discovery -> permissive debt stub ({} -> Any | None).
             prop = _field_shape_to_property(mined_shape) if mined_shape is not None else {}
             if name in narrowings[section]:
@@ -376,7 +480,8 @@ def compose_synthetic_schema(
         "type": "object",
         "additionalProperties": True,
         "properties": properties,
-        "$defs": defs,
+        # Sorted for a deterministic byte-stable codegen fixpoint (mitigation 4).
+        "$defs": {name: defs[name] for name in sorted(defs)},
     }
 
 
@@ -404,7 +509,7 @@ def generate_config(engine: str, outputs: Path) -> bytes:
     discovered = json.loads((outputs / "schema.discovered.json").read_text(encoding="utf-8"))
     curated = _load_curated(outputs)
     overlay = _load_overlay(outputs)
-    synthetic = compose_synthetic_schema(discovered, curated, overlay)
+    synthetic = compose_synthetic_schema(engine, discovered, curated, overlay)
     safe_version = "v" + str(discovered.get("engine_version", "unknown")).replace(".", "_")
     header = (
         f"# DO NOT EDIT - regenerated from engine_versions/{engine}/{safe_version}/outputs/"

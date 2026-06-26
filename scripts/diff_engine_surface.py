@@ -234,6 +234,7 @@ def _property_renders_untyped(prop: dict[str, Any]) -> bool:
 
 
 def census_curated_typing(
+    engine: str,
     schema: dict[str, Any],
     curated: dict[str, Any],
     overlay: dict[str, dict[str, dict[str, Any]]] | None = None,
@@ -255,7 +256,7 @@ def census_curated_typing(
     overlay = overlay or {
         top: {section: {} for section in _SCHEMA_SECTIONS} for top in ("narrowings", "completions")
     }
-    synthetic = compose_synthetic_schema(schema, curated_sections, overlay)
+    synthetic = compose_synthetic_schema(engine, schema, curated_sections, overlay)
     defs = synthetic.get("$defs", {})
 
     total = 0
@@ -329,7 +330,7 @@ def census_pin(outputs_dir: Path) -> PinCensus:
         curated = _load_yaml(curated_path)
         overlay = _load_overlay(outputs_dir)
         census.curated_fields, census.curated_untyped_fields = census_curated_typing(
-            schema, curated, overlay
+            census.engine or "", schema, curated, overlay
         )
 
     return census
