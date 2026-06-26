@@ -194,13 +194,43 @@ def test_skeleton_contains_curated_fields_and_scaffold(engine: str) -> None:
     assert f"{engine}.sampling_params.temperature:" in text
 
 
+def _cap_sweep_product(sweep: dict, cap: int) -> dict:
+    """Bound a resolved-list sweep's Cartesian product to ``cap`` configs.
+
+    The skeleton emits every curated knob as a live ``:auto``-resolved value
+    list; for vLLM that is ~17 axes whose product is ~7e7 - far too many to
+    fully construct + validate in a unit test. Collapse trailing axes to their
+    first value once the running product would exceed ``cap``, leaving leading
+    axes full. Zero-invalid holds for any sub-grid of a zero-invalid grid (the
+    skeleton already prunes per-field rule-rejected values, and the live axes
+    carry no cross-field rule among them), so a bounded representative grid
+    preserves the round-trip contract at tractable cost.
+    """
+    capped: dict = {}
+    product = 1
+    for key, values in sweep.items():
+        vals = values if isinstance(values, list) else [values]
+        if vals and product * len(vals) <= cap:
+            capped[key] = vals
+            product *= len(vals)
+        else:
+            capped[key] = vals[:1] if vals else vals
+    return capped
+
+
 @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
 def test_skeleton_roundtrips_with_zero_invalid(engine: str, tmp_path) -> None:
-    """The auto-expanded skeleton parses + round-trips with zero invalid configs."""
+    """The auto-expanded skeleton parses + round-trips with zero invalid configs.
+
+    The full skeleton Cartesian is unbounded (vLLM ~7e7 after the curated knobs
+    became bucketable), so this validates a bounded representative sub-grid - see
+    :func:`_cap_sweep_product`.
+    """
     parsed = yaml.safe_load(build_study_skeleton(engine))
     # Fill the task placeholders so the configs can validate.
     parsed["task"]["model"] = "gpt2"
     parsed["task"]["dataset"]["source"] = "arc"
+    parsed["sweep"] = _cap_sweep_product(parsed.get("sweep") or {}, cap=512)
     path = tmp_path / "skeleton.yaml"
     path.write_text(yaml.safe_dump(parsed))
 
