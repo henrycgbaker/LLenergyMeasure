@@ -147,8 +147,11 @@ def test_relabel_match_fields_rekeys_and_preserves_refs(
 
 
 def test_relabel_handles_nested_namespace(curated: dict[str, dict[str, str]]) -> None:
-    # Watermarking sub-walk emits a nested namespace; the field name is the
-    # rightmost component and the section is recomputed.
+    # WatermarkingConfig is forwarded WHOLESALE through GenerationConfig's
+    # watermarking_config field (the plugin special-cases nothing), so an interior
+    # leaf is blob-reachable under that container - the reachability guard emits a
+    # NESTED path rather than the old lossy flat namespace-drop (which manufactured
+    # a dead flat path). The container is on sampling_params (native origin).
     stale = {"transformers.sampling.watermarking_config.greenlist_ratio": {">": 1.0}}
     relabelled = relabel_match_fields(
         stale,
@@ -156,4 +159,6 @@ def test_relabel_handles_nested_namespace(curated: dict[str, dict[str, str]]) ->
         native_type="transformers.WatermarkingConfig",
         curated_sections=curated["transformers"],
     )
-    assert relabelled == {"transformers.sampling_params.greenlist_ratio": {">": 1.0}}
+    assert relabelled == {
+        "transformers.sampling_params.watermarking_config.greenlist_ratio": {">": 1.0}
+    }
