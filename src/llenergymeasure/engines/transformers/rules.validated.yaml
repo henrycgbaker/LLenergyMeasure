@@ -639,46 +639,6 @@ cases:
     message: '`early_stopping` must be a boolean or ''never'', but is __walker_synth__.'
   positive_confirmed: true
   negative_confirmed: true
-- id: transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool
-  outcome: error
-  emission_channel: none
-  observed_messages: []
-  observed_silent_normalisations: {}
-  observed_exception:
-    type: TypeError
-    message: llm_int8_enable_fp32_cpu_offload must be a boolean
-  positive_confirmed: true
-  negative_confirmed: true
-- id: transformers_raises_llm_int8_has_fp16_weight_not_type_bool
-  outcome: error
-  emission_channel: none
-  observed_messages: []
-  observed_silent_normalisations: {}
-  observed_exception:
-    type: TypeError
-    message: llm_int8_has_fp16_weight must be a boolean
-  positive_confirmed: true
-  negative_confirmed: true
-- id: transformers_raises_llm_int8_skip_modules_not_type_list
-  outcome: error
-  emission_channel: none
-  observed_messages: []
-  observed_silent_normalisations: {}
-  observed_exception:
-    type: TypeError
-    message: llm_int8_skip_modules must be a list of strings
-  positive_confirmed: true
-  negative_confirmed: true
-- id: transformers_raises_llm_int8_threshold_not_type_float
-  outcome: error
-  emission_channel: none
-  observed_messages: []
-  observed_silent_normalisations: {}
-  observed_exception:
-    type: TypeError
-    message: llm_int8_threshold must be a float
-  positive_confirmed: true
-  negative_confirmed: true
 - id: transformers_raises_load_in_4bit_not_type_bool
   outcome: error
   emission_channel: none

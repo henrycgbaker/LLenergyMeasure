@@ -90,10 +90,11 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.sampling_params.watermarking_config",
         "transformers.engine_params.load_in_4bit",
         "transformers.engine_params.load_in_8bit",
-        "transformers.engine_params.llm_int8_threshold",
-        "transformers.engine_params.llm_int8_skip_modules",
-        "transformers.engine_params.llm_int8_enable_fp32_cpu_offload",
-        "transformers.engine_params.llm_int8_has_fp16_weight",
+        # The four llm_int8_* type-check invariants were dropped: the transformers
+        # plugin builds BitsAndBytesConfig from a CLOSED flat set (load_in_4bit /
+        # load_in_8bit / bnb_4bit_*) and never reads llm_int8_*, so a flat
+        # engine_params.llm_int8_* value is unreachable - the rule never fires.
+        # The reachability guard (_section_classifier._REACHABILITY) drops them.
         # Note: transformers.bnb_4bit_compute_dtype - validation-CI quarantined
         # the type-check invariant under 4.57.3. Coverage loss tracked in a
         # follow-up alongside num_beam_groups / diversity_penalty.
