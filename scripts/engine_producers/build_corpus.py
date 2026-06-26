@@ -640,8 +640,12 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
 #   decayed and were reclassified to ``dormant_silent`` by the decay-alarm
 #   reconciliation (validate_rules.RECLASSIFIED_DECAYED_ANNOUNCEMENT); the
 #   equivalence still holds, so the carry must survive subsequent re-mines.
+# - ``llm_advisory`` - Tier-D pure-inference warn advisories, gated once by the
+#   construction-violation sentinel probe then frozen; the deterministic miners
+#   never produce them, so they must be carried (and ``regen --check`` compares
+#   the carried bytes, never re-runs the LLM).
 _CARRIED_PROVENANCES: frozenset[str] = frozenset(
-    {"manual_seed", "reclassified_decayed_announcement"}
+    {"manual_seed", "reclassified_decayed_announcement", "llm_advisory"}
 )
 
 

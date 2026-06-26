@@ -133,10 +133,11 @@ AddedBy = Literal[
     "observed_collision",
     "reclassified_decayed_announcement",
     "llm_diagnose",
+    "llm_advisory",
 ]
 """Provenance of a invariant in the corpus.
 
-Ten discovery paths with distinct trust/verifiability profiles:
+Eleven discovery paths with distinct trust/verifiability profiles:
 
 - ``static_miner`` - invariant extracted by parsing Python source AST
   (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
@@ -166,7 +167,14 @@ Ten discovery paths with distinct trust/verifiability profiles:
   the engine container; only the gate-confirmed entries carry this provenance.
   The LLM is a recall-maximising proposer, never an adjudicator: nothing tagged
   ``llm_diagnose`` reaches the corpus without the deterministic gate confirming
-  the claimed behaviour reconstructs.
+  the claimed behaviour FIRES (raise / emit) as declared.
+- ``llm_advisory`` - proposed by the Tier-D pure-inference proposer for fields
+  the deterministic surface left unbounded, then CONSTRUCTION-VIOLATION confirmed
+  (the claimed-illegal value actually raises, the legal value constructs - the
+  empirical sentinel guard). Distinct from ``llm_diagnose`` because the bar is
+  construction sanity, not firing-confirmation, so it is always ``llm_proposed``
+  and may only ever WARN, never reject. Frozen + carried across re-mines (the
+  proposer is not re-run under ``regen --check``).
 """
 
 VALID_SEVERITY: frozenset[str] = frozenset(get_args(Severity))
@@ -761,6 +769,16 @@ def _parse_invariant(raw: dict[str, Any]) -> Invariant:
             )
     llm_proposed = bool(raw.get("llm_proposed", False))
     llm_localised = bool(raw.get("llm_localised", False))
+    # An llm_advisory (Tier-D) entry is a pure-inference advisory, never a
+    # gate-confirmed firing rule, so it may only ever warn - independent of the
+    # llm_proposed flag (defense in depth: an advisory can never masquerade as an
+    # error even if its llm_proposed bit is dropped).
+    if added_by == "llm_advisory" and severity != "warn":
+        raise LLMProposedSeverityError(
+            f"Invariant {invariant_id!r} is added_by=llm_advisory but severity={severity!r}; "
+            "a Tier-D advisory may only warn (it is construction-sanity confirmed, "
+            "not firing-confirmed, and never human-vetted to error)."
+        )
     if llm_proposed and severity != "warn":
         raise LLMProposedSeverityError(
             f"Invariant {invariant_id!r} is llm_proposed but severity={severity!r}; "

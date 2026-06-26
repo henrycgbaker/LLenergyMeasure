@@ -235,6 +235,7 @@ def test_valid_added_by_set_has_all_provenance_classes() -> None:
                 "observed_collision",
                 "reclassified_decayed_announcement",
                 "llm_diagnose",
+                "llm_advisory",
             }
         )
         == VALID_ADDED_BY
@@ -254,10 +255,15 @@ def test_valid_added_by_set_has_all_provenance_classes() -> None:
         "observed_collision",
         "reclassified_decayed_announcement",
         "llm_diagnose",
+        "llm_advisory",
     ],
 )
 def test_all_added_by_values_round_trip(tmp_path: Path, provenance: str) -> None:
     corpus = _CORPUS_MINIMAL.replace("added_by: static_miner", f"added_by: {provenance}")
+    # An llm_advisory entry may only ever warn (the Tier-D safety guard), so flip
+    # the minimal corpus's dormant severity for that provenance.
+    if provenance == "llm_advisory":
+        corpus = corpus.replace("    severity: dormant\n", "    severity: warn\n")
     _write_corpus(tmp_path, "transformers", corpus)
     loader = EngineRulesLoader(corpus_root=tmp_path)
     invariants = loader.load_rules("transformers").invariants
@@ -374,6 +380,31 @@ def test_llm_proposed_with_warn_severity_loads(tmp_path: Path) -> None:
     loader = EngineRulesLoader(corpus_root=tmp_path)
     inv = loader.load_rules("transformers").invariants[0]
     assert inv.llm_proposed is True and inv.severity == "warn"
+
+
+def test_llm_advisory_with_non_warn_severity_raises(tmp_path: Path) -> None:
+    # The Tier-D advisory guard is independent of llm_proposed: an llm_advisory
+    # entry may never carry a hard severity even if its llm_proposed bit is unset.
+    bad_corpus = _CORPUS_MINIMAL.replace(
+        "    severity: dormant\n    native_type",
+        "    severity: error\n    native_type",
+    ).replace("    added_by: static_miner\n", "    added_by: llm_advisory\n")
+    _write_corpus(tmp_path, "transformers", bad_corpus)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    with pytest.raises(LLMProposedSeverityError, match="added_by=llm_advisory"):
+        loader.load_rules("transformers")
+
+
+def test_llm_advisory_warn_advisory_round_trips(tmp_path: Path) -> None:
+    # The Tier-D emission path: a warn advisory with llm_proposed=true loads and
+    # keeps both flags - the universal safety gate is satisfied.
+    corpus = _CORPUS_MINIMAL.replace(
+        "    severity: dormant\n", "    severity: warn\n    llm_proposed: true\n"
+    ).replace("    added_by: static_miner\n", "    added_by: llm_advisory\n")
+    _write_corpus(tmp_path, "transformers", corpus)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    inv = loader.load_rules("transformers").invariants[0]
+    assert inv.added_by == "llm_advisory" and inv.severity == "warn" and inv.llm_proposed is True
 
 
 def test_llm_fields_default_false_and_localised_allows_error(tmp_path: Path) -> None:

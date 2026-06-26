@@ -1011,6 +1011,22 @@ def _diagnose_rule(
     return rule
 
 
+def _advisory_rule(
+    *,
+    invariant_id: str = "transformers_tier_d_advisory",
+    fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A Tier-D pure-inference warn advisory, shaped as ``llm_advisory``.
+
+    The deterministic miners never re-emit it, so it must be carried forward
+    across re-mines (frozen) or every re-mine clobbers it.
+    """
+    rule = _ast_rule(invariant_id=invariant_id, severity="warn", fields=fields or {"f_adv": True})
+    rule["added_by"] = "llm_advisory"
+    rule["llm_proposed"] = True
+    return rule
+
+
 class TestSeededCarry:
     """The merger carries miner-unreachable invariants forward from the prior
     committed corpus so a re-mine does not clobber them: hand-shaped
@@ -1045,6 +1061,19 @@ class TestSeededCarry:
         carried = build_corpus._load_carried_seeded(path)
         assert [c["id"] for c in carried] == ["transformers_dormant_decayed"]
         assert carried[0]["added_by"] == "reclassified_decayed_announcement"
+
+    def test_load_carried_seeded_carries_llm_advisory(self, tmp_path: Path) -> None:
+        # Tier-D advisories are LLM-proposed (never re-mined deterministically),
+        # so they must be carried or every re-mine drops them.
+        path = tmp_path / "prior.yaml"
+        path.write_text(
+            yaml.safe_dump(
+                _envelope([_ast_rule(invariant_id="mined"), _advisory_rule()]), sort_keys=False
+            )
+        )
+        carried = build_corpus._load_carried_seeded(path)
+        assert [c["id"] for c in carried] == ["transformers_tier_d_advisory"]
+        assert carried[0]["added_by"] == "llm_advisory"
 
     def test_load_carried_seeded_missing_corpus(self, tmp_path: Path) -> None:
         assert build_corpus._load_carried_seeded(tmp_path / "absent.yaml") == []
