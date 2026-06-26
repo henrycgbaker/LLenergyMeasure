@@ -22,7 +22,9 @@ from llenergymeasure.config.engine_rules import (
     evaluate_predicate,
 )
 from llenergymeasure.config.engine_rules.loader import (
+    AmbiguousFieldRefError,
     _is_int_pair,
+    _parse_invariant,
     _resolve_field_refs_in_spec,
 )
 
@@ -281,3 +283,58 @@ def test_try_match_with_not_divisible_by_field_ref_does_not_fire_on_valid() -> N
     # 6 % 3 == 0 → divisible → invariant does not fire.
     config = _Config(transformers=_Transformers(sampling=_Sampling(num_beams=6, num_beam_groups=3)))
     assert invariant.try_match(config) is None
+
+
+# ---------------------------------------------------------------------------
+# Depth-aware bare-@ref guard (corpus load via _parse_invariant)
+# ---------------------------------------------------------------------------
+
+
+def _raw_invariant(match_fields: dict[str, Any]) -> dict[str, Any]:
+    """Minimal raw-invariant dict carrying ``match_fields``, for _parse_invariant."""
+    return {
+        "id": "guard_x",
+        "engine": "vllm",
+        "severity": "error",
+        "native_type": "vllm.EngineArgs",
+        "match": {"engine": "vllm", "fields": match_fields},
+        "kwargs_positive": {},
+        "kwargs_negative": {},
+        "expected_outcome": {"outcome": "error", "emission_channel": "runtime_exception"},
+        "added_by": "manual_seed",
+    }
+
+
+def test_bare_ref_on_depth3_path_is_accepted() -> None:
+    # A bare @ref on a section-leaf path (depth 3) is a same-section sibling - OK.
+    inv = _parse_invariant(
+        _raw_invariant({"vllm.engine_params.max_num_batched_tokens": {"<": "@max_model_len"}})
+    )
+    assert inv.match_fields["vllm.engine_params.max_num_batched_tokens"] == {"<": "@max_model_len"}
+
+
+def test_bare_ref_on_depth4_nested_path_is_accepted() -> None:
+    # A bare @ref on a nested-blob leaf (depth 4) is a same-blob sibling - OK.
+    inv = _parse_invariant(
+        _raw_invariant(
+            {"vllm.engine_params.compilation_config.mode": {"<": "@max_cudagraph_capture_size"}}
+        )
+    )
+    assert "vllm.engine_params.compilation_config.mode" in inv.match_fields
+
+
+def test_bare_ref_on_containerless_path_raises() -> None:
+    # A bare @ref on a path with no enclosing container (< 3 segments) is
+    # ambiguous: it would resolve at the wrong depth. A dotted ref is required.
+    with pytest.raises(AmbiguousFieldRefError, match="bare cross-field ref"):
+        _parse_invariant(_raw_invariant({"vllm.max_num_batched_tokens": {"<": "@max_model_len"}}))
+
+
+def test_dotted_ref_on_containerless_path_is_accepted() -> None:
+    # A dotted root-anchored ref is unaffected by the bare-ref guard.
+    inv = _parse_invariant(
+        _raw_invariant({"vllm.max_num_batched_tokens": {"<": "@vllm.engine_params.max_model_len"}})
+    )
+    assert inv.match_fields["vllm.max_num_batched_tokens"] == {
+        "<": "@vllm.engine_params.max_model_len"
+    }

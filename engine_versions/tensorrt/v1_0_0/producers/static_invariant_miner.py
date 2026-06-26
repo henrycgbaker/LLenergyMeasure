@@ -1312,6 +1312,7 @@ def _candidate_to_dict(c: InvariantCandidate, curated_sections: dict[str, str]) 
                 engine=ENGINE,
                 native_type=c.native_type,
                 curated_sections=curated_sections,
+                verify_resolves=True,
             ),
         },
         "kwargs_positive": c.kwargs_positive,

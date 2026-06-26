@@ -165,67 +165,120 @@ def build_study_skeleton(engine: str) -> str:
 
     auto_lines: list[str] = []
     placeholder_lines: list[str] = []
+    nested_lines: list[str] = []
 
     for section in _CURATED_SECTIONS:
         section_model = _section_model(config_model, section)
         if section_model is None:
             continue
-        for field_name in section_model.model_fields:
-            fqn = f"{engine}.{section}.{field_name}"
-            try:
-                values = resolve_auto_values(fqn)
-            except ConfigError:
-                placeholder_lines.append(
-                    f"  # {fqn}: []  # supply explicit values (no natural set)"
-                )
+        for field_name, field_info in section_model.model_fields.items():
+            nested_model = _nested_submodel(field_info.annotation)
+            if nested_model is not None:
+                # Recurse ONE level into a typed nested config sub-model. Its
+                # interior leaves are emitted COMMENTED-out (opt-in) rather than
+                # as live sweep axes: a wholesale-forwarded blob like vLLM's
+                # compilation_config / speculative_config carries dozens of
+                # auto-expandable leaves, and emitting them all uncommented would
+                # blow the skeleton's Cartesian product into the billions. The
+                # researcher uncomments the specific nested knobs they want.
+                container_fqn = f"{engine}.{section}.{field_name}"
+                for leaf_name in nested_model.model_fields:
+                    _append_nested_leaf(engine, f"{container_fqn}.{leaf_name}", nested_lines)
                 continue
-            # An auto-expandable type can still carry values an engine cross-field
-            # rule rejects in isolation (e.g. transformers early_stopping=True
-            # needs num_beams>1). Emit only the surviving values uncommented so the
-            # skeleton round-trips with zero invalid configs; if none survive, the
-            # whole field becomes a commented placeholder.
-            rejected = _rule_rejected_values(engine, section, field_name, values)
-            valid = [v for v in values if v not in rejected]
-            if not valid:
-                placeholder_lines.append(
-                    f"  # {fqn}: {_yaml_scalar_list(values)}  "
-                    f"# engine rules reject all of {_yaml_scalar_list(rejected)} on their own"
-                )
-                continue
-            line = f"  {fqn}: {_yaml_scalar_list(valid)}"
-            if rejected:
-                line += (
-                    f"  # omitted {_yaml_scalar_list(rejected)} (engine rules reject on their own)"
-                )
-            auto_lines.append(line)
+            _emit_skeleton_field(
+                engine,
+                f"{engine}.{section}.{field_name}",
+                auto_lines,
+                placeholder_lines,
+            )
 
-    return _render_skeleton(engine, auto_lines, placeholder_lines)
+    return _render_skeleton(engine, auto_lines, placeholder_lines, nested_lines)
 
 
-def _rule_rejected_values(
+def _emit_skeleton_field(
     engine: str,
-    section: str,
-    field_name: str,
+    fqn: str,
+    auto_lines: list[str],
+    placeholder_lines: list[str],
+) -> None:
+    """Append the skeleton line(s) for one curated FQN to the running buffers.
+
+    A non-auto-expandable type becomes a commented placeholder. An
+    auto-expandable type emits only the values that survive the engine's
+    cross-field rules uncommented (round-trip-clean); if none survive, the whole
+    field is commented out instead.
+    """
+    try:
+        values = resolve_auto_values(fqn)
+    except ConfigError:
+        placeholder_lines.append(f"  # {fqn}: []  # supply explicit values (no natural set)")
+        return
+    # An auto-expandable type can still carry values an engine cross-field rule
+    # rejects in isolation (e.g. transformers early_stopping=True needs
+    # num_beams>1). Emit only the surviving values uncommented so the skeleton
+    # round-trips with zero invalid configs; if none survive, the whole field
+    # becomes a commented placeholder.
+    rejected = _rule_rejected_values_for_fqn(engine, fqn, values)
+    valid = [v for v in values if v not in rejected]
+    if not valid:
+        placeholder_lines.append(
+            f"  # {fqn}: {_yaml_scalar_list(values)}  "
+            f"# engine rules reject all of {_yaml_scalar_list(rejected)} on their own"
+        )
+        return
+    line = f"  {fqn}: {_yaml_scalar_list(valid)}"
+    if rejected:
+        line += f"  # omitted {_yaml_scalar_list(rejected)} (engine rules reject on their own)"
+    auto_lines.append(line)
+
+
+def _append_nested_leaf(engine: str, fqn: str, nested_lines: list[str]) -> None:
+    """Append a single nested-config interior leaf as a COMMENTED skeleton line.
+
+    Auto-expandable nested leaves carry their resolved value set (for the
+    researcher to uncomment and trim); non-auto-expandable ones get a bare
+    placeholder. Always commented so the skeleton's live Cartesian stays bounded.
+    """
+    try:
+        values = resolve_auto_values(fqn)
+    except ConfigError:
+        nested_lines.append(f"  # {fqn}: []  # supply explicit values (no natural set)")
+        return
+    nested_lines.append(f"  # {fqn}: {_yaml_scalar_list(values)}")
+
+
+def _rule_rejected_values_for_fqn(
+    engine: str,
+    fqn: str,
     values: list[Any],
 ) -> list[Any]:
-    """Return the subset of *values* a minimal config rejects for this field.
+    """Return the subset of *values* a minimal config rejects for FQN's field.
 
     Validates each value in isolation against ``ExperimentConfig`` (a bare model
     + dataset scaffold), catching engine cross-field rules that the pure
     type-driven resolver cannot see. Used only by the skeleton generator to keep
-    its output round-trip-clean.
+    its output round-trip-clean. ``fqn`` is the full dotted key
+    (``<engine>.<section>...<leaf>``); the leaf value is nested into the engine
+    section dict at the matching depth so a nested-config leaf is placed correctly.
     """
     # Deferred import: ExperimentConfig lives in the same layer (config/), but
     # importing at module top would create an import cycle (models -> grid ->
     # sweep_autoexpand).
     from llenergymeasure.config.models import ExperimentConfig
 
+    # Drop the leading engine segment; the remainder is the path under the engine
+    # section dict (e.g. ["engine_params", "compilation_config", "mode"]).
+    section_path = fqn.split(".")[1:]
+
     rejected: list[Any] = []
     for value in values:
+        leaf_dict: dict[str, Any] = {section_path[-1]: value}
+        for seg in reversed(section_path[:-1]):
+            leaf_dict = {seg: leaf_dict}
         candidate: dict[str, Any] = {
             "engine": engine,
             "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
-            engine: {section: {field_name: value}},
+            engine: leaf_dict,
         }
         try:
             ExperimentConfig(**candidate)
@@ -242,41 +295,83 @@ def _rule_rejected_values(
 def _resolve_field_info(fqn: str) -> FieldInfo:
     """Map an engine-field FQN onto a ``FieldInfo`` on the curated Config model.
 
-    Expects ``<engine>.<section>.<field>`` where section is one of
-    ``engine_params`` / ``sampling_params``. The engine is read from the key's
-    own prefix. Raises ``ConfigError`` for a malformed FQN, an unknown engine
-    prefix, an unknown section, or a field not declared on the curated model.
+    Expects ``<engine>.<section>.<field>`` (depth 3) for a flat section leaf, or
+    ``<engine>.<section>.<container>...<leaf>`` (depth > 3) for a leaf inside a
+    typed nested sub-model (e.g. ``vllm.engine_params.compilation_config.mode``).
+    The engine is read from the key's own prefix; ``<section>`` is one of
+    ``engine_params`` / ``sampling_params``. For depth > 3 each intermediate
+    segment must name a field whose type (unwrapping ``X | None``) is itself a
+    pydantic sub-model, descended in turn to the terminal ``FieldInfo``.
+
+    Raises ``ConfigError`` for a malformed FQN, an unknown engine prefix, an
+    unknown section, a field not declared on the resolved model, or an
+    intermediate segment that is not a typed nested sub-model.
     """
     parts = fqn.split(".")
-    if len(parts) != 3:
+    if len(parts) < 3:
         raise ConfigError(
             f"Sweep key '{fqn}' is not an engine-field key. Auto-expansion only "
-            f"applies to keys shaped '<engine>.<section>.<field>' "
-            f"(section is one of {', '.join(_CURATED_SECTIONS)})."
+            f"applies to keys shaped '<engine>.<section>.<field>' (or a deeper "
+            f"'<engine>.<section>.<container>.<leaf>' into a typed nested config); "
+            f"section is one of {', '.join(_CURATED_SECTIONS)}."
         )
 
-    engine, section, field_name = parts
+    engine, section, *rest = parts
     if section not in _CURATED_SECTIONS:
         raise ConfigError(
             f"Sweep key '{fqn}' has unknown section '{section}'. "
             f"Expected one of: {', '.join(_CURATED_SECTIONS)}."
         )
 
-    section_model = _section_model(_engine_config_model(engine), section)
-    if section_model is None:
+    current_model = _section_model(_engine_config_model(engine), section)
+    if current_model is None:
         raise ConfigError(
             f"Sweep key '{fqn}': engine '{engine}' has no '{section}' section "
             f"on its curated Config model."
         )
 
-    field_info = section_model.model_fields.get(field_name)
+    # ``rest`` is [intermediate..., leaf]. Descend each intermediate segment into
+    # its typed nested sub-model before resolving the terminal leaf.
+    *intermediate, field_name = rest
+    for seg in intermediate:
+        seg_info = current_model.model_fields.get(seg)
+        if seg_info is None:
+            raise ConfigError(
+                f"Sweep key '{fqn}': field '{seg}' is not a curated field on "
+                f"{engine}.{section}. Check the field name against the engine's "
+                f"curated Config model."
+            )
+        nested_model = _nested_submodel(seg_info.annotation)
+        if nested_model is None:
+            raise ConfigError(
+                f"Sweep key '{fqn}': field '{seg}' is not a typed nested config "
+                f"sub-model, so it cannot be descended into. Auto-expansion of a "
+                f"deeper leaf requires every intermediate segment to be a typed "
+                f"nested config."
+            )
+        current_model = nested_model
+
+    field_info = current_model.model_fields.get(field_name)
     if field_info is None:
         raise ConfigError(
             f"Sweep key '{fqn}': field '{field_name}' is not a curated field on "
-            f"{engine}.{section}. Supply explicit values, or check the field name "
-            f"against the engine's curated Config model."
+            f"{'.'.join([engine, section, *intermediate])}. Supply explicit "
+            f"values, or check the field name against the engine's curated Config "
+            f"model."
         )
     return field_info
+
+
+def _nested_submodel(annotation: Any) -> type[BaseModel] | None:
+    """Return the pydantic sub-model in *annotation* (unwrapping ``X | None``).
+
+    Returns ``None`` when the annotation is not (a union containing) a single
+    ``BaseModel`` subclass - e.g. an ``Any | None`` blob field or a scalar leaf.
+    """
+    for candidate in get_args(annotation) or (annotation,):
+        if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+            return candidate
+    return None
 
 
 def _engine_config_model(engine: str) -> type[BaseModel]:
@@ -443,6 +538,7 @@ def _render_skeleton(
     engine: str,
     auto_lines: list[str],
     placeholder_lines: list[str],
+    nested_lines: list[str],
 ) -> str:
     """Assemble the final skeleton YAML text from resolved sweep lines."""
     header = [
@@ -473,5 +569,10 @@ def _render_skeleton(
     if placeholder_lines:
         sweep_block.append("  # --- not auto-expandable (supply explicit values) ---")
         sweep_block.extend(placeholder_lines)
+    if nested_lines:
+        sweep_block.append(
+            "  # --- nested config interiors (commented; uncomment + trim to use) ---"
+        )
+        sweep_block.extend(nested_lines)
 
     return "\n".join([*header, "", *scaffold, "", *sweep_block, ""])

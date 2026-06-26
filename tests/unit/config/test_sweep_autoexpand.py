@@ -86,6 +86,58 @@ def test_unknown_engine_prefix_raises_config_error() -> None:
 
 
 # =============================================================================
+# resolve_auto_values - nested typed sub-model leaves (depth > 3)
+# =============================================================================
+
+
+def test_nested_literal_enum_leaf_yields_all_members() -> None:
+    """A Literal leaf inside a typed nested config resolves to its members.
+
+    vLLM's compilation_config is projected as a typed sub-model; its ``mode``
+    leaf is ``Literal[0, 1, 2, 3] | None``.
+    """
+    assert resolve_auto_values("vllm.engine_params.compilation_config.mode") == [0, 1, 2, 3]
+
+
+def test_nested_literal_str_leaf_yields_all_members() -> None:
+    """A string-Literal nested leaf resolves to its members verbatim."""
+    values = resolve_auto_values("vllm.engine_params.compilation_config.compile_cache_save_format")
+    assert values == ["binary", "unpacked"]
+
+
+def test_nested_bool_leaf_yields_false_then_true() -> None:
+    """A bool leaf inside a typed nested config resolves to [False, True]."""
+    assert resolve_auto_values("vllm.engine_params.compilation_config.compile_mm_encoder") == [
+        False,
+        True,
+    ]
+
+
+def test_nested_unbounded_numeric_leaf_raises_cleanly() -> None:
+    """An unbounded numeric nested leaf has no finite range -> ConfigError, no crash."""
+    with pytest.raises(ConfigError, match="lacks both a lower and an upper"):
+        resolve_auto_values("vllm.engine_params.compilation_config.cudagraph_num_of_warmups")
+
+
+def test_nested_leaf_under_any_blob_intermediate_raises_cleanly() -> None:
+    """Descending through an Any|None intermediate (not a typed sub-model) errors cleanly."""
+    with pytest.raises(ConfigError, match="not a typed nested config"):
+        resolve_auto_values("vllm.engine_params.compilation_config.cudagraph_mode.foo")
+
+
+def test_unknown_nested_leaf_raises_config_error() -> None:
+    """An unknown leaf on a typed nested sub-model -> ConfigError naming the FQN."""
+    with pytest.raises(ConfigError, match="not a curated field"):
+        resolve_auto_values("vllm.engine_params.compilation_config.does_not_exist")
+
+
+def test_expand_auto_sweep_resolves_nested_axis() -> None:
+    """An ``auto`` axis on a nested-config leaf is replaced by its resolved list."""
+    out = expand_auto_sweep({"vllm.engine_params.compilation_config.mode": "auto"})
+    assert out == {"vllm.engine_params.compilation_config.mode": [0, 1, 2, 3]}
+
+
+# =============================================================================
 # expand_auto_sweep - block rewriting
 # =============================================================================
 
@@ -175,6 +227,31 @@ def test_skeleton_emits_valid_subset_of_partly_rejected_field() -> None:
     assert "[false]" in line
     # The rejected value is named in an adjacent comment, not emitted as a value.
     assert "omitted [true]" in line
+
+
+def test_skeleton_emits_nested_config_leaves_commented() -> None:
+    """vLLM's typed nested config interiors are emitted COMMENTED (opt-in).
+
+    A wholesale-forwarded blob (compilation_config / speculative_config) carries
+    dozens of auto-expandable leaves; emitting them all as live sweep axes would
+    blow the skeleton's Cartesian product into the billions. So each nested leaf
+    is commented out for the researcher to uncomment and trim.
+    """
+    text = build_study_skeleton("vllm")
+    assert "nested config interiors" in text
+    # A nested Literal leaf appears with its resolved set, behind a leading '#'.
+    nested = [line for line in text.splitlines() if "compilation_config.mode" in line]
+    assert len(nested) == 1
+    assert nested[0].lstrip().startswith("# vllm.engine_params.compilation_config.mode:")
+    assert "[0, 1, 2, 3]" in nested[0]
+
+
+def test_skeleton_nested_leaves_are_not_live_sweep_axes() -> None:
+    """Nested-config leaves stay commented, so they never enter the live sweep dict."""
+    parsed = yaml.safe_load(build_study_skeleton("vllm"))
+    sweep = parsed.get("sweep") or {}
+    assert all("compilation_config" not in key for key in sweep)
+    assert all("speculative_config" not in key for key in sweep)
 
 
 def test_skeleton_unknown_engine_raises() -> None:

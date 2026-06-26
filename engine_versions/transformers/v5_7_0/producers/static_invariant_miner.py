@@ -1419,6 +1419,7 @@ def _candidate_to_dict(
                 engine=ENGINE,
                 native_type=invariant.native_type,
                 curated_sections=curated_sections,
+                verify_resolves=True,
             ),
         },
         "kwargs_positive": invariant.kwargs_positive,

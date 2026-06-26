@@ -215,6 +215,21 @@ class LLMProposedSeverityError(ValueError):
     """
 
 
+class AmbiguousFieldRefError(ValueError):
+    """A bare ``@ref`` cross-field reference cannot resolve as a same-container sibling.
+
+    A bare reference (``@max_model_len``, no dot) resolves by stripping exactly one
+    level off its host predicate path - i.e. it MUST name a sibling inside the same
+    container. That is sound for a section-sibling at depth 3
+    (``vllm.engine_params.<leaf>``) and a same-blob sibling at depth >= 4
+    (``vllm.engine_params.compilation_config.<leaf>``). A host predicate path with
+    no enclosing container (fewer than 3 dotted segments) has nothing to be a
+    sibling of, so the bare ref would resolve at the wrong depth. For any
+    cross-container / cross-depth target a DOTTED root-anchored ref
+    (``@vllm.engine_params.max_model_len``) is required; raised at corpus load.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -448,6 +463,40 @@ def _resolve_one_ref(ref: str, config: Any, predicate_field_path: str) -> Any:
     parent_parts = predicate_field_path.split(".")[:-1]
     full_path = ".".join([*parent_parts, target]) if parent_parts else target
     return resolve_field_path(config, full_path)
+
+
+def _assert_bare_refs_are_same_container_siblings(
+    invariant_id: str, match_fields: dict[str, Any]
+) -> None:
+    """Raise if any bare ``@ref`` can't resolve as a same-container sibling.
+
+    A bare reference resolves via :func:`_resolve_one_ref` by stripping exactly
+    one level off its host predicate path, so it only makes sense when that path
+    has an enclosing container - i.e. an ``{engine}.{section}.<leaf>`` (depth 3,
+    section-sibling) or deeper ``{engine}.{section}.{container}.<leaf>`` (depth
+    >= 4, same-blob sibling). A host path with fewer than 3 segments has no
+    container to be a sibling of, so the bare ref would silently resolve at the
+    wrong depth; such a cross-depth target must use a DOTTED root-anchored ref.
+
+    Dotted refs (``@a.b.c``) are root-anchored and unaffected. Conservative by
+    design: the current corpus carries only depth-3 bare refs, so this is
+    byte-neutral (no current rule trips it).
+    """
+    for path, spec in match_fields.items():
+        bare_refs = [
+            ref for ref in _collect_field_refs(spec) if "." not in ref[len(_FIELD_REF_PREFIX) :]
+        ]
+        if not bare_refs:
+            continue
+        if len(path.split(".")) < 3:
+            raise AmbiguousFieldRefError(
+                f"Invariant {invariant_id!r}: match path {path!r} carries a bare "
+                f"cross-field ref ({', '.join(bare_refs)}) but has no enclosing "
+                f"container (needs >= 3 dotted segments, "
+                f"'{{engine}}.{{section}}.<leaf>'). A bare ref resolves as a "
+                f"same-container sibling; use a dotted root-anchored ref "
+                f"(e.g. '@{{engine}}.{{section}}.<field>') for a cross-depth target."
+            )
 
 
 _OPERATOR_HANDLERS: dict[str, Any] = {
@@ -719,6 +768,7 @@ def _parse_invariant(raw: dict[str, Any]) -> Invariant:
             "deterministic re-derivation, an observed bad output, or human vetting)."
         )
     match_fields = dict(match["fields"])
+    _assert_bare_refs_are_same_container_siblings(invariant_id, match_fields)
     expected_outcome = _normalise_normalised_fields(expected_outcome, match_fields)
     return Invariant(
         id=str(invariant_id),
