@@ -47,11 +47,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from llenergymeasure.config.ssot import ENGINES  # noqa: E402
 from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
 # Engines with config generation enabled. All three engines now generate their
 # config.py from the discovered schema + curated.yaml.
-ENGINES: tuple[str, ...] = ("transformers", "vllm", "tensorrt")
 
 # Native schema sections, projected into same-named sub-models.
 SECTIONS: tuple[str, ...] = ("engine_params", "sampling_params")
@@ -182,18 +182,23 @@ def _field_shape_to_property(shape: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# vLLM wholesale-forwarded nested blob projection
+# Per-engine wholesale-forwarded nested blob projection
 # ---------------------------------------------------------------------------
 
-# vLLM forwards these nested config blobs WHOLESALE through
-# engine_params.model_dump(exclude_none=True) (plugin._build_llm_kwargs). Each
-# is projected ONE LEVEL into a typed submodel: scalar/enum/bounded interior
-# leaves are typed (enforcement when set, :auto bucketing of the interior); any
-# interior leaf that is itself a nested-config $ref stays permissive Any | None
-# (no deeper recursion - that would balloon the transitive closure and clash
-# with the flat-hoisted ModelConfig). Only these two vLLM blobs are projected;
-# tensorrt / transformers blobs stay Any | None.
-_VLLM_NESTED_BLOBS: dict[str, frozenset[str]] = {
+# Per-engine list of nested config blobs that the engine forwards WHOLESALE and
+# that should be projected into a typed submodel rather than collapsed to
+# Any | None. Each listed blob is projected ONE LEVEL: scalar/enum/bounded
+# interior leaves are typed (enforcement when set, :auto bucketing of the
+# interior); any interior leaf that is itself a nested-config $ref stays
+# permissive Any | None (no deeper recursion - that would balloon the
+# transitive closure and clash with the flat-hoisted ModelConfig). Engines
+# absent from this map (or with an empty set) project nothing -> their blobs
+# stay Any | None.
+#
+# vLLM forwards compilation_config / speculative_config WHOLESALE through
+# engine_params.model_dump(exclude_none=True) (plugin._build_llm_kwargs), so it
+# lists exactly those two; tensorrt / transformers list nothing today.
+_PROJECTED_NESTED_BLOBS: dict[str, frozenset[str]] = {
     "vllm": frozenset({"compilation_config", "speculative_config"}),
 }
 
@@ -430,7 +435,7 @@ def compose_synthetic_schema(
     narrowings = overlay["narrowings"]
     completions = overlay["completions"]
     discovered_defs: dict[str, Any] = discovered.get("$defs", {}) or {}
-    blob_fields = _VLLM_NESTED_BLOBS.get(engine, frozenset())
+    blob_fields = _PROJECTED_NESTED_BLOBS.get(engine, frozenset())
     # Resolve curated fields against the union of discovered sections.
     discovered_fields: dict[str, Any] = {}
     for section in SECTIONS:
@@ -444,7 +449,7 @@ def compose_synthetic_schema(
             mined_shape = discovered_fields.get(name)
             blob_class = _ref_target(mined_shape) if mined_shape is not None else None
             if name in blob_fields and blob_class is not None and blob_class in discovered_defs:
-                # Wholesale-forwarded vLLM blob: project ONE LEVEL into a typed
+                # Wholesale-forwarded nested blob: project ONE LEVEL into a typed
                 # submodel instead of collapsing to Any | None.
                 defs[blob_class] = _project_nested_blob(blob_class, discovered_defs)
                 section_props[name] = {"$ref": f"#/$defs/{blob_class}"}

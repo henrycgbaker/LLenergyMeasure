@@ -87,6 +87,48 @@ _NO_DEADLINE = float("inf")
 _CONTAINER_ENTRY_SCRIPT_REL = ("scripts", "container_entrypoint.sh")
 
 
+# Per-engine container provisioning. The generic command builder consults this
+# descriptor instead of hardcoding engine names, so a new backend that needs a
+# host-cache mount or MPI tensor-parallel injection only edits this table.
+#
+# - ``pre_hf_cache_mounts`` / ``post_hf_cache_mounts``: ``(home_relative, container)``
+#   pairs auto-mounted from the host ``$HOME`` (persisting compiled artefacts
+#   across ephemeral containers). They straddle the always-on HuggingFace cache
+#   mount so the emitted ``-v`` ordering is preserved; a mount whose container
+#   path is already present in ``extra_mounts`` is skipped (user override wins).
+# - ``tensor_parallel_via_mpi``: when True, a tensor_parallel_size > 1 injects
+#   the ``LLEM_MPI_NP`` env var so the entrypoint wraps the process in mpirun.
+class _EngineContainerSpec:
+    __slots__ = ("post_hf_cache_mounts", "pre_hf_cache_mounts", "tensor_parallel_via_mpi")
+
+    def __init__(
+        self,
+        *,
+        pre_hf_cache_mounts: tuple[tuple[str, str], ...] = (),
+        post_hf_cache_mounts: tuple[tuple[str, str], ...] = (),
+        tensor_parallel_via_mpi: bool = False,
+    ) -> None:
+        self.pre_hf_cache_mounts = pre_hf_cache_mounts
+        self.post_hf_cache_mounts = post_hf_cache_mounts
+        self.tensor_parallel_via_mpi = tensor_parallel_via_mpi
+
+
+_ENGINE_CONTAINER_SPECS: dict[Engine, _EngineContainerSpec] = {
+    Engine.TENSORRT: _EngineContainerSpec(
+        # TRT-LLM engine cache: persist compiled engines across ephemeral
+        # containers.
+        pre_hf_cache_mounts=((".cache/trt-llm", "/root/.cache/trt-llm"),),
+        # flashinfer JIT cache: TRT-LLM warm runs reuse already-compiled
+        # per-arch attention kernels (cold compile is minutes).
+        post_hf_cache_mounts=((".cache/flashinfer", "/root/.cache/flashinfer"),),
+        tensor_parallel_via_mpi=True,
+    ),
+}
+
+# Shared empty spec for engines with no special provisioning.
+_DEFAULT_ENGINE_CONTAINER_SPEC = _EngineContainerSpec()
+
+
 @contextmanager
 def _env_file(secrets: dict[str, str]) -> Iterator[Path | None]:
     """Write secrets to a temp env-file, yield path, delete on exit.
@@ -825,13 +867,18 @@ class DockerRunner:
         if env_path is not None:
             cmd.extend(["--env-file", str(env_path)])
 
-        # TRT-LLM engine cache: persist compiled engines across ephemeral containers
-        if config.engine == Engine.TENSORRT:
-            cache_host = str(Path.home() / ".cache" / "trt-llm")
-            cache_container = "/root/.cache/trt-llm"
-            # Only add if not already in extra_mounts (user may override path)
-            if not any(cp == cache_container for _, cp in self.extra_mounts):
-                cmd.extend(["-v", f"{cache_host}:{cache_container}"])
+        spec = _ENGINE_CONTAINER_SPECS.get(config.engine, _DEFAULT_ENGINE_CONTAINER_SPEC)
+
+        def _add_home_cache_mount(home_relative: str, container_path: str) -> None:
+            # Only add if not already in extra_mounts (user may override path).
+            if not any(cp == container_path for _, cp in self.extra_mounts):
+                cache_host = str(Path.home() / home_relative)
+                cmd.extend(["-v", f"{cache_host}:{container_path}"])
+
+        # Engine cache mounts that precede the always-on HuggingFace cache (e.g.
+        # the TRT-LLM compiled-engine cache).
+        for home_relative, container_path in spec.pre_hf_cache_mounts:
+            _add_home_cache_mount(home_relative, container_path)
 
         # Auto-mount the host HuggingFace cache so model weights persist across
         # ephemeral containers; otherwise each run re-downloads the full model.
@@ -841,13 +888,10 @@ class DockerRunner:
             cmd.extend(["-v", f"{hf_cache_host}:{hf_cache_container}"])
             cmd.extend(["-e", f"HF_HOME={hf_cache_container}"])
 
-        # Auto-mount the host flashinfer JIT cache so TRT-LLM warm runs reuse
-        # already-compiled per-arch attention kernels (cold compile is minutes).
-        if config.engine == Engine.TENSORRT:
-            fi_cache_host = Path.home() / ".cache" / "flashinfer"
-            fi_cache_container = "/root/.cache/flashinfer"
-            if not any(cp == fi_cache_container for _, cp in self.extra_mounts):
-                cmd.extend(["-v", f"{fi_cache_host}:{fi_cache_container}"])
+        # Engine cache mounts that follow the HuggingFace cache (e.g. the
+        # flashinfer JIT cache for TRT-LLM warm-run kernel reuse).
+        for home_relative, container_path in spec.post_hf_cache_mounts:
+            _add_home_cache_mount(home_relative, container_path)
 
         # Forward LLEM_* env vars into the container so framework defaults set
         # on the host (e.g. LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP) reach the
@@ -860,9 +904,10 @@ class DockerRunner:
         for host_path, container_path in self.extra_mounts:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
 
-        # Determine TRT-LLM tensor parallel size for MPI injection
+        # Determine tensor parallel size for MPI injection (engines whose spec
+        # opts into mpirun-wrapped tensor parallelism, e.g. TRT-LLM).
         tp_size = None
-        if config.engine == Engine.TENSORRT:
+        if spec.tensor_parallel_via_mpi:
             engine_params = config.active_engine_params()
             tp_size = engine_params.tensor_parallel_size if engine_params is not None else None
 

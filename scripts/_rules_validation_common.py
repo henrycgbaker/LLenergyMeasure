@@ -29,6 +29,7 @@ value rule.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import io
 import logging
@@ -233,16 +234,35 @@ def diff_input_vs_state(
 # ---------------------------------------------------------------------------
 
 
+def _warm_up_vllm() -> None:
+    """Fire vLLM's one-time platform-detection burst onto a quiet logger.
+
+    The first time a vLLM config class is reached it lazily resolves
+    ``current_platform``, which logs a burst (``Checking if CUDA platform is
+    available``, ``Automatically detected platform cuda`` ...) exactly once per
+    process. Touching the lazy attribute here is what fires that burst.
+    """
+    import vllm.platforms as _vllm_platforms  # type: ignore
+
+    _ = _vllm_platforms.current_platform
+
+
+# Per-engine warm-up hooks. The process-once warm-up is a general concept; only
+# engines that emit one-time import-side-effect logging on first config access
+# register a hook here. Engines absent from this map no-op.
+_ENGINE_WARMUP_HOOKS: dict[str, Callable[[], None]] = {
+    "vllm": _warm_up_vllm,
+}
+
+
 def warm_up_engine_observation(engine: str) -> None:
     """Flush an engine's one-time import-side-effect logging before observation.
 
     Some engines emit process-once log lines on first config access, not on
-    every construction. vLLM is the clear case: the first time a config class is
-    reached it lazily resolves ``current_platform``, which logs a burst (``Checking
-    if CUDA platform is available``, ``Automatically detected platform cuda`` ...)
-    exactly once per process. Whichever invariant happens to trigger that first
-    access absorbs the whole burst onto the attached engine logger and is
-    misclassified ``dormant_announced``; every later invariant sees nothing.
+    every construction. vLLM is the clear case: whichever invariant happens to
+    trigger that first access absorbs the whole burst onto the attached engine
+    logger and is misclassified ``dormant_announced``; every later invariant
+    sees nothing.
 
     The two gate paths trigger this first access at different points - the
     in-process gate (``build_corpus``) has already imported the engine while
@@ -252,19 +272,16 @@ def warm_up_engine_observation(engine: str) -> None:
     ``--fail-on-divergence`` trips. Firing the burst here, once, before any
     logger handler is attached, makes both paths observe an already-warm engine.
 
-    Guarded as a no-op when the engine is unknown or not importable (the gate
-    runs one engine per container), so it never crashes another engine's run.
+    Guarded as a no-op when the engine has no warm-up hook or is not importable
+    (the gate runs one engine per container), so it never crashes another
+    engine's run.
     """
-    if engine != "vllm":
+    hook = _ENGINE_WARMUP_HOOKS.get(engine)
+    if hook is None:
         return
-    try:
-        import vllm.platforms as _vllm_platforms  # type: ignore
-
-        # Touching the lazy attribute is what fires the one-time detection burst.
-        _ = _vllm_platforms.current_platform
-    except Exception:
-        # Warm-up is best-effort; a failure here must never block the gate.
-        pass
+    # Warm-up is best-effort; a failure here must never block the gate.
+    with contextlib.suppress(Exception):
+        hook()
 
 
 # ---------------------------------------------------------------------------
