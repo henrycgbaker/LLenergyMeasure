@@ -73,7 +73,7 @@ from scripts.engine_producers._current import current_version
 from scripts.engine_producers._landmarks import load_landmarks
 from scripts.engine_producers._section_classifier import (
     load_curated_sections,
-    relabel_match_fields,
+    relabel_or_skip_dead_path,
 )
 from scripts.engine_producers._source_walker import _literal_values
 
@@ -1290,7 +1290,20 @@ def _read_source_version(source_root: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(c: InvariantCandidate, curated_sections: dict[str, str]) -> dict[str, Any]:
+def _candidate_to_dict(
+    c: InvariantCandidate, curated_sections: dict[str, str]
+) -> dict[str, Any] | None:
+    # D2: re-key onto classified {engine}.{section}.{field} paths (curation
+    # first, then llm_args-side / sampling-side native origin). A candidate whose
+    # match path is a dead end (unreachable or unresolvable) is skipped whole.
+    fields = relabel_or_skip_dead_path(
+        c.match_fields,
+        engine=ENGINE,
+        native_type=c.native_type,
+        curated_sections=curated_sections,
+    )
+    if fields is None:
+        return None
     return {
         "id": c.id,
         "engine": c.engine,
@@ -1305,15 +1318,7 @@ def _candidate_to_dict(c: InvariantCandidate, curated_sections: dict[str, str]) 
         },
         "match": {
             "engine": c.engine,
-            # D2: re-key onto classified {engine}.{section}.{field} paths
-            # (curation first, then llm_args-side / sampling-side native origin).
-            "fields": relabel_match_fields(
-                c.match_fields,
-                engine=ENGINE,
-                native_type=c.native_type,
-                curated_sections=curated_sections,
-                verify_resolves=True,
-            ),
+            "fields": fields,
         },
         "kwargs_positive": c.kwargs_positive,
         "kwargs_negative": c.kwargs_negative,
@@ -1341,12 +1346,21 @@ def emit_yaml(
         else dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     )
     curated_sections = load_curated_sections(ENGINE)
+    rows = [
+        d for c in sorted_candidates if (d := _candidate_to_dict(c, curated_sections)) is not None
+    ]
+    skipped = len(sorted_candidates) - len(rows)
+    if skipped:
+        print(
+            f"[{ENGINE}] skipped {skipped} candidate(s) with unreachable match paths",
+            file=sys.stderr,
+        )
     doc: dict[str, Any] = {
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
         "mined_at": mined_at,
-        "invariants": [_candidate_to_dict(c, curated_sections) for c in sorted_candidates],
+        "invariants": rows,
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 

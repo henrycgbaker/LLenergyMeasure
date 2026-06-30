@@ -81,7 +81,7 @@ from scripts.engine_producers._current import current_version  # noqa: E402
 from scripts.engine_producers._landmarks import load_landmarks  # noqa: E402
 from scripts.engine_producers._section_classifier import (  # noqa: E402
     load_curated_sections,
-    relabel_match_fields,
+    relabel_or_skip_dead_path,
 )
 
 # Each engine defines its own ``_detect_*`` functions rather than sharing a
@@ -1387,14 +1387,25 @@ def _site_packages_relative(abs_path: str) -> str:
 
 def _candidate_to_dict(
     invariant: InvariantCandidate, rel_path: str, curated_sections: dict[str, str]
-) -> dict[str, Any]:
-    """Render a InvariantCandidate in canonical corpus YAML shape.
+) -> dict[str, Any] | None:
+    """Render a InvariantCandidate in canonical corpus YAML shape, or ``None`` to skip.
 
     ``match.fields`` keys are relabelled from the miner's internal namespaces
     onto canonical ``{engine}.{section}.{field}`` rule paths (curation-first,
     then native-class origin) - the section split is what runtime resolution
-    and the required-invariants floor key on.
+    and the required-invariants floor key on. A candidate whose match path is a
+    dead end - unreachable per the routing table (e.g. an unrouted
+    ``BitsAndBytesConfig`` field) or unresolvable against the generated Config
+    (e.g. a nested ``watermarking_config.*`` leaf) - is skipped whole.
     """
+    fields = relabel_or_skip_dead_path(
+        invariant.match_fields,
+        engine=ENGINE,
+        native_type=invariant.native_type,
+        curated_sections=curated_sections,
+    )
+    if fields is None:
+        return None
     expected_outcome: dict[str, Any] = {
         "outcome": invariant.outcome,
         "emission_channel": invariant.emission_channel,
@@ -1414,13 +1425,7 @@ def _candidate_to_dict(
         },
         "match": {
             "engine": ENGINE,
-            "fields": relabel_match_fields(
-                invariant.match_fields,
-                engine=ENGINE,
-                native_type=invariant.native_type,
-                curated_sections=curated_sections,
-                verify_resolves=True,
-            ),
+            "fields": fields,
         },
         "kwargs_positive": invariant.kwargs_positive,
         "kwargs_negative": invariant.kwargs_negative,
@@ -1446,15 +1451,24 @@ def emit_yaml(
     # Sort for deterministic byte-stable output.
     candidates_sorted = sorted(candidates, key=lambda c: (c.method, c.id))
     curated_sections = load_curated_sections(ENGINE)
+    rows = [
+        d
+        for r in candidates_sorted
+        if (d := _candidate_to_dict(r, rel_path, curated_sections)) is not None
+    ]
+    skipped = len(candidates_sorted) - len(rows)
+    if skipped:
+        print(
+            f"[{ENGINE}] skipped {skipped} candidate(s) with unreachable match paths",
+            file=sys.stderr,
+        )
     doc: dict[str, Any] = {
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
         "miner": "transformers_static_miner",
         "mined_at": dt.date(2026, 4, 25).isoformat(),
-        "invariants": [
-            _candidate_to_dict(r, rel_path, curated_sections) for r in candidates_sorted
-        ],
+        "invariants": rows,
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 

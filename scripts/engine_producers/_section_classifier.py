@@ -436,6 +436,47 @@ def relabel_match_fields_with_drops(
     return relabelled, dropped
 
 
+def relabel_or_skip_dead_path(
+    match_fields: dict[str, object],
+    *,
+    engine: str,
+    native_type: str,
+    curated_sections: dict[str, str],
+) -> dict[str, object] | None:
+    """Relabel a static-mined candidate's match fields, or return ``None`` to SKIP it.
+
+    A fresh re-mine re-discovers source constraints whose config-time match path
+    is DEAD - either unreachable per the routing table (a field the engine plugin
+    does not route, e.g. transformers ``BitsAndBytesConfig.llm_int8_*`` or tensorrt
+    ``LookaheadDecodingConfig`` knobs) or unresolvable against the generated
+    Config (e.g. a nested ``watermarking_config.*`` leaf that is not a declared
+    field). Such a path can never fire, so the curated corpus omits it; emitting
+    it (or emitting the candidate with the dead leaf silently dropped, which would
+    only BROADEN its firing condition) would diverge the corpus from a fresh
+    re-mine. So the WHOLE candidate is skipped (``None``) when any leaf is dead.
+
+    Drift backstop: a *previously routable, in-corpus* rule whose leaf turns dead
+    (a genuine Config regression) is dropped here too, which surfaces as a corpus
+    byte-diff in ``regen_engine_corpus --check`` / ``build_corpus --check`` - the
+    durable CI gate that already guards the corpus. Mine-time crash-on-dead-path
+    is redundant with that gate and only aborts the re-mine on the first dead
+    candidate; the byte-diff names exactly which rule moved. The LLM/Tier-D path
+    keeps :func:`assert_path_resolves` fail-loud directly (it has no such gate).
+    """
+    try:
+        relabelled, dropped = relabel_match_fields_with_drops(
+            match_fields,
+            engine=engine,
+            native_type=native_type,
+            curated_sections=curated_sections,
+            allow_unreachable="drop",
+            verify_resolves=True,
+        )
+    except UnresolvableMatchPathError:
+        return None
+    return None if dropped else relabelled
+
+
 # ---------------------------------------------------------------------------
 # Host-only structural RESOLVES check (the durable dead-path net)
 # ---------------------------------------------------------------------------

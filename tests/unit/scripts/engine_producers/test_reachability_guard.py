@@ -34,6 +34,7 @@ from scripts.engine_producers._section_classifier import (  # noqa: E402
     load_curated_sections,
     relabel_match_fields,
     relabel_match_fields_with_drops,
+    relabel_or_skip_dead_path,
 )
 
 
@@ -208,3 +209,61 @@ def test_verify_resolves_wired_into_relabel(curated: dict[str, dict[str, str]]) 
         verify_resolves=True,
     )
     assert relabelled == {"vllm.engine_params.max_num_batched_tokens": {"<": 0}}
+
+
+# ---------------------------------------------------------------------------
+# relabel_or_skip_dead_path: the static miner's whole-candidate dead-path drop
+# ---------------------------------------------------------------------------
+
+
+def test_skip_dead_path_returns_fields_for_live_leaf(curated: dict[str, dict[str, str]]) -> None:
+    # A reachable + resolvable leaf passes through unchanged (not skipped).
+    fields = relabel_or_skip_dead_path(
+        {"vllm.config.SchedulerConfig.max_num_batched_tokens": {"<": 0}},
+        engine="vllm",
+        native_type="vllm.config.SchedulerConfig",
+        curated_sections=curated["vllm"],
+    )
+    assert fields == {"vllm.engine_params.max_num_batched_tokens": {"<": 0}}
+
+
+def test_skip_dead_path_drops_unreachable_leaf(curated: dict[str, dict[str, str]]) -> None:
+    # An unreachable leaf (not routed by the plugin) -> whole candidate skipped.
+    fields = relabel_or_skip_dead_path(
+        {"ns.llm_int8_threshold": {"<": 0}},
+        engine="transformers",
+        native_type="transformers.BitsAndBytesConfig",
+        curated_sections=curated["transformers"],
+    )
+    assert fields is None
+
+
+def test_skip_dead_path_drops_unresolvable_leaf(curated: dict[str, dict[str, str]]) -> None:
+    # A computed @property (world_size_across_dp) classifies as a flat path but
+    # does NOT resolve against the generated Config -> whole candidate skipped.
+    # This is the real vLLM re-mine crash, now a clean drop.
+    fields = relabel_or_skip_dead_path(
+        {"ns.world_size_across_dp": {">": 1}},
+        engine="vllm",
+        native_type="vllm.config.ParallelConfig",
+        curated_sections=curated["vllm"],
+    )
+    assert fields is None
+
+
+def test_skip_dead_path_drops_whole_candidate_on_one_dead_leaf(
+    curated: dict[str, dict[str, str]],
+) -> None:
+    # A candidate mixing a live ParallelConfig leaf with a dead one is skipped
+    # WHOLE - emitting only the live leaf would broaden the rule's firing
+    # condition. (all2all_backend is a real, resolvable ParallelConfig field.)
+    fields = relabel_or_skip_dead_path(
+        {
+            "ns.all2all_backend": {"in": ["pplx", "naive"]},
+            "ns.world_size_across_dp": {">": 1},
+        },
+        engine="vllm",
+        native_type="vllm.config.ParallelConfig",
+        curated_sections=curated["vllm"],
+    )
+    assert fields is None
