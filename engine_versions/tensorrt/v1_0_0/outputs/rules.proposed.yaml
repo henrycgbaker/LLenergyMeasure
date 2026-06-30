@@ -32,3 +32,26 @@ invariants:
   - llmapi/llm_args.py:129 (tensorrt_llm.CudaGraphConfig.validate_cuda_graph_max_batch_size)
   added_by: static_miner
   added_at: '2026-06-22'
+- id: tensorrt_tier_d_sampling_params_truncate_prompt_tokens
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: '_validate: raises if truncate_prompt_tokens is not None and < 1'
+  severity: warn
+  native_type: tensorrt_llm.sampling_params.SamplingParams
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.sampling_params.truncate_prompt_tokens:
+        <: 1
+  kwargs_positive:
+    truncate_prompt_tokens: 0
+  kwargs_negative:
+    truncate_prompt_tokens: 1
+  expected_outcome:
+    outcome: warn
+    emission_channel: none
+  references:
+  - 'llm_advisory: _validate: raises if truncate_prompt_tokens is not None and < 1'
+  - 'citation: tensorrt_llm/sampling_params.py -- SamplingParams._validate (lines 314-317)'
+  added_by: llm_advisory
+  llm_proposed: true
