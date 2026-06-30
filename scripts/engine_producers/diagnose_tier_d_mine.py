@@ -34,6 +34,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.api.diagnose import (  # noqa: E402
+    DEFAULT_BUDGET_CHARS,
     TIER_D_RESPONSE_SCHEMA,
     ContainerGateRunner,
     DiagnoseModel,
@@ -67,12 +68,15 @@ def run_tier_d_mine(
     surface_files: list[str],
     model: DiagnoseModel,
     gate_runner: GateRunner,
+    budget_chars: int = DEFAULT_BUDGET_CHARS,
 ) -> DiagnoseResult:
     """Compute candidates and run the Tier-D proposer/gate (no GPU in this layer).
 
     Both ``model`` and ``gate_runner`` are injected so the whole orchestration is
     unit-testable without ollama or docker; the CLI ``main`` supplies the live
-    :class:`OllamaDiagnoseModel` + :class:`ContainerGateRunner`.
+    :class:`OllamaDiagnoseModel` + :class:`ContainerGateRunner`. ``budget_chars``
+    caps the windowed source (the candidates span many config files; a larger
+    budget + a wider model context cover more of them in one call).
     """
     candidates, _counts = enumerate_class3_candidates(engine)
     candidate_dicts = [
@@ -90,6 +94,7 @@ def run_tier_d_mine(
         model=model,
         gate_runner=gate_runner,
         path_validator=_path_validator(engine),
+        budget_chars=budget_chars,
     )
 
 
@@ -149,12 +154,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--model", default="qwen2.5-coder:32b", help="Local ollama proposer model.")
     parser.add_argument(
+        "--budget-chars",
+        type=int,
+        default=DEFAULT_BUDGET_CHARS,
+        help="Windowed-source char budget (raise to cover more config files per call).",
+    )
+    parser.add_argument(
+        "--num-ctx",
+        type=int,
+        default=16384,
+        help="Model context window (raise alongside --budget-chars for a wider source).",
+    )
+    parser.add_argument(
         "--out", type=Path, help="Where to write confirmed advisories (else stdout)."
     )
     parser.add_argument("--workdir", type=Path, default=Path("/tmp/llem-tier-d"))
     args = parser.parse_args(argv)
 
-    model = OllamaDiagnoseModel(model=args.model, response_schema=TIER_D_RESPONSE_SCHEMA)
+    model = OllamaDiagnoseModel(
+        model=args.model, response_schema=TIER_D_RESPONSE_SCHEMA, num_ctx=args.num_ctx
+    )
     gate_runner = ContainerGateRunner(
         image=args.image,
         repo=Path.cwd(),
@@ -168,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         surface_files=args.surface_files,
         model=model,
         gate_runner=gate_runner,
+        budget_chars=args.budget_chars,
     )
     _report(result)
     if result.confirmed and result.proposed_yaml is not None:
