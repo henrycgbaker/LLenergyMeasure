@@ -494,6 +494,19 @@ def config_surface_symbol_requests(
     return requests
 
 
+def _is_validator_member(name: str) -> bool:
+    """True for method names that can carry a CONSTRUCTION raise on a field.
+
+    Restricts Tier-D's cited-field windows to validator-like members so the char
+    budget is spent on the bodies that constrain (``_verify_args`` /
+    ``__post_init__`` / ``validate`` / ``@field_validator`` helpers) and not on
+    ``__repr__`` / ``compute_hash`` / accessors that merely reference the field.
+    """
+    if name in {"__post_init__", "post_init", "__init__"}:
+        return True
+    return any(tok in name for tok in ("verify", "validat", "check"))
+
+
 def tier_d_symbol_requests(
     *,
     source_root: Path,
@@ -679,6 +692,7 @@ def _assemble_source(
     requests: Sequence[SymbolRequest],
     budget_chars: int,
     files: Sequence[str],
+    member_filter: Callable[[str], bool] | None = None,
 ) -> WindowReport:
     """Window the requests and guard the empty-source failure mode.
 
@@ -686,7 +700,12 @@ def _assemble_source(
     cited symbol resolved in any file) - the trial's empty-input guard, hoisted
     before the model call so a silent empty prompt can never reach the proposer.
     """
-    report = windowed_source(source_root=source_root, requests=requests, budget_chars=budget_chars)
+    report = windowed_source(
+        source_root=source_root,
+        requests=requests,
+        budget_chars=budget_chars,
+        member_filter=member_filter,
+    )
     if not report.source.strip():
         detail = "; ".join(report.missing) or "no config classes located"
         raise DiagnoseError(
@@ -1418,6 +1437,7 @@ def diagnose_tier_d(
         requests=requests,
         budget_chars=budget_chars,
         files=config_surface_files,
+        member_filter=_is_validator_member,
     )
     result.source_truncated = window.truncated
     result.source_missing = window.missing

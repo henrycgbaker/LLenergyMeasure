@@ -858,6 +858,37 @@ def test_tier_d_cited_field_windowing_admits_the_validator_body(tmp_path: Path) 
     assert "logprobs must be non-negative or -1" in report.source
 
 
+def test_tier_d_validator_filter_drops_noise_method_windows() -> None:
+    # The budget-robustness fix: a field referenced by many accessor methods AND
+    # one validator should create a WINDOW only for the validator, so a char
+    # budget is not spent on noise (the full-surface mine evicted the real
+    # validator otherwise). Asserted on the windows produced, not rendered text
+    # (context lines around the field span can bleed into adjacent lines).
+    import ast
+
+    from llenergymeasure.api._source_window import _windows_for_class
+    from llenergymeasure.api.diagnose import _is_validator_member
+
+    lines = ["class CConfig:", "    f: int = 0"]
+    lines += [f"    def noise{i}(self):\n        return self.f" for i in range(8)]
+    lines += [
+        "    def _verify_args(self):",
+        "        if self.f < -1:",
+        "            raise ValueError('f')",
+    ]
+    cls = next(n for n in ast.parse("\n".join(lines)).body if isinstance(n, ast.ClassDef))
+
+    unfiltered, _ = _windows_for_class(cls, file="c.py", fields=("f",))
+    filtered, _ = _windows_for_class(
+        cls, file="c.py", fields=("f",), member_filter=_is_validator_member
+    )
+    assert len(filtered) < len(unfiltered)
+    assert any("_verify_args" in w.label for w in filtered)
+    assert not any("noise" in w.label for w in filtered)
+    assert _is_validator_member("_verify_args") and _is_validator_member("__post_init__")
+    assert not _is_validator_member("__repr__") and not _is_validator_member("compute_hash")
+
+
 def test_tier_d_native_types_resolves_declaring_class(tmp_path: Path) -> None:
     # native_type comes from the candidate's DECLARING class (deterministic), not
     # the model's citation - the model often emits an unparseable citation.

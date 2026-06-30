@@ -24,7 +24,7 @@ REPORTED, never silently truncated (the design's no-silent-truncation principle)
 from __future__ import annotations
 
 import ast
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -152,6 +152,7 @@ def _windows_for_class(
     *,
     file: str,
     fields: tuple[str, ...],
+    member_filter: Callable[[str], bool] | None = None,
 ) -> tuple[list[_Window], list[str]]:
     """Bounded windows for a class: its header plus the cited or surface spans.
 
@@ -161,6 +162,13 @@ def _windows_for_class(
     (1b surface mode) :func:`_surface_windows` returns one bounded leading slice
     of the class. Either way the windows stay bounded, never the whole (possibly
     100K-char) class body that would blow the budget and starve the rest.
+
+    ``member_filter`` (when given) restricts the METHOD windows to members whose
+    name it accepts - the field annotation span is always kept. Tier-D passes a
+    validator-name filter so the char budget is spent on ``_verify_args`` /
+    ``__post_init__`` / ``validate`` bodies (where a construction raise lives) and
+    not on ``__repr__`` / ``compute_hash`` noise that references the field but
+    never constrains it.
     """
     header_end = cls.body[0].lineno - 1 if cls.body else cls.lineno
     header = _Window(
@@ -188,7 +196,9 @@ def _windows_for_class(
             # A method / validator body: window a BOUNDED region around the first
             # field reference, not the whole (possibly 100-line) method. A long
             # __init__ that touches the field once must not blow the budget.
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                member_filter is None or member_filter(stmt.name)
+            ):
                 refs = _reference_lines(stmt, fname)
                 if refs:
                     method_end = stmt.end_lineno or stmt.lineno
@@ -256,6 +266,7 @@ def windowed_source(
     source_root: Path,
     requests: Sequence[SymbolRequest],
     budget_chars: int = DEFAULT_BUDGET_CHARS,
+    member_filter: Callable[[str], bool] | None = None,
 ) -> WindowReport:
     """Assemble per-symbol source windows under a char budget.
 
@@ -310,7 +321,9 @@ def windowed_source(
                 not_in_file.append(req.class_name)
                 continue
             located_classes.add(req.class_name)
-            windows, miss = _windows_for_class(cls, file=rel, fields=req.fields)
+            windows, miss = _windows_for_class(
+                cls, file=rel, fields=req.fields, member_filter=member_filter
+            )
             missing.extend(miss)
             all_windows.extend(_expand(w, len(lines)) for w in windows)
 
