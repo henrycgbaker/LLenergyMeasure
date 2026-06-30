@@ -106,6 +106,7 @@ _ENGINE_RESOLUTION: dict[str, EngineResolution] = {
             "tensorrt_llm.llmapi.llm_args",
             "tensorrt_llm.llmapi",
             "tensorrt_llm.plugin.plugin",
+            "tensorrt_llm.sampling_params",
         ),
     ),
 }

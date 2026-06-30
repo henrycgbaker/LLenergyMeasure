@@ -173,6 +173,29 @@ def gate_one_tier_d(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
         out.update({"verdict": "infra_error", "error": f"{type(exc).__name__}: {exc}"})
         return out
 
+    # Mirror the production gate's infra guards (validate_rules._carried_verdict):
+    # an unresolved native_type on the positive probe, or a construction-drift
+    # error on the negative probe, is an INFRA failure - NOT an empirical bound
+    # raise. Without this a NativeTypeResolutionError on the illegal probe would
+    # be mis-counted as illegal_raises=True (the live tensorrt mine surfaced it).
+    if pos.exception_type == "NativeTypeResolutionError":
+        out.update(
+            {
+                "verdict": "infra_error",
+                "error": f"native_type unresolved: {pos.exception_message or ''}",
+            }
+        )
+        return out
+    if neg.exception_type in V._CONSTRUCTION_DRIFT_EXC_NAMES:
+        out.update(
+            {
+                "verdict": "infra_error",
+                "error": f"negative probe will not construct ({neg.exception_type}): "
+                f"{neg.exception_message or ''}",
+            }
+        )
+        return out
+
     soundness = V.compute_gate_soundness_divergences(inv, pos, neg)
     soundness_failed = [d.check_failed for d in soundness if d.check_failed is not None]
     constructs_legal = neg.exception_type is None

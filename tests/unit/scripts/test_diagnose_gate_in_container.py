@@ -226,6 +226,39 @@ def test_tier_d_sentinel_flagged_when_illegal_value_is_a_sentinel(
     assert out["verdict"] == "not_confirmed"
 
 
+def test_tier_d_unresolved_native_type_is_infra_not_a_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A NativeTypeResolutionError on the illegal probe is INFRA, never counted
+    as an empirical bound raise (the live tensorrt mine surfaced this)."""
+    case = CaseResult(id="x", outcome="error", emission_channel="none")
+    unresolved = _capture(
+        exception_type="NativeTypeResolutionError",
+        exception_message="could not resolve class 'SamplingParams'",
+    )
+    _stub_captures(monkeypatch, case=case, pos=unresolved, neg=unresolved)
+
+    out = gate.gate_one_tier_d("tensorrt", _tier_d_proposal(native_type="tensorrt_llm.Nope"))
+    assert out["verdict"] == "infra_error"
+    assert "native_type unresolved" in out["error"]
+
+
+def test_tier_d_negative_construction_drift_is_infra(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If the legal probe will not even construct (a TypeError/import drift), the
+    advisory cannot be adjudicated - infra_error, not a confirmation."""
+    case = CaseResult(id="x", outcome="error", emission_channel="none")
+    pos = _capture(
+        exception_type="ValueError",
+        exception_message="bad",
+        error_details=(ErrorDetail(loc=("max_tokens",), error_type="greater_than"),),
+    )
+    neg = _capture(exception_type="TypeError", exception_message="missing required arg")
+    _stub_captures(monkeypatch, case=case, pos=pos, neg=neg)
+
+    out = gate.gate_one_tier_d("tensorrt", _tier_d_proposal())
+    assert out["verdict"] == "infra_error"
+
+
 def test_tier_d_empty_native_type_is_infra_error_not_confirmed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
