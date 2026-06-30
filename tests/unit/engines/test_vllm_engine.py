@@ -582,11 +582,17 @@ class TestNewEngineFields:
         assert kwargs["offload_group_size"] == 4
 
     def test_compilation_config_dict_passthrough(self):
-        """compilation_config dict passes through as-is to kwargs."""
-        comp = {"mode": "default", "engine": "inductor"}
+        """compilation_config dict passes through as-is to kwargs.
+
+        ``mode`` is an int Literal (0..3) since the nested submodel projection;
+        ``engine`` is a non-schema key kept by the submodel's extra="allow". Both
+        are user-set, so model_dump forwards them verbatim - the pass-through the
+        plugin relies on.
+        """
+        comp = {"mode": 3, "engine": "inductor"}
         config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"compilation_config": comp}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
-        assert kwargs["compilation_config"] == {"mode": "default", "engine": "inductor"}
+        assert kwargs["compilation_config"] == {"mode": 3, "engine": "inductor"}
 
     def test_none_engine_field_omitted_value_forwarded(self):
         """exclude_none mechanism: an engine field left None is dropped from
