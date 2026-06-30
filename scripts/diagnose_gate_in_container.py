@@ -32,7 +32,13 @@ negative must construct, with the same coercion/locus soundness guards - the
 empirical sentinel guard for the Tier-D pure-inference advisories. The advisory
 is always EMITTED at warn (the universal safety gate); the gate only decides
 whether the bound is real, and reports rich per-probe fields so the host can
-apply a stricter or more permissive keep-policy without re-running the gate.
+apply a stricter or more permissive keep-policy without re-running the gate. The
+verdict records the GRAIN it confirmed at. Some engines enforce generation
+bounds at generate()-time, not config construction (transformers ``num_beams>=1``
+raises only inside ``model.generate()``); for those, a GENERATE-grain fallback
+(``_generate_grain_confirms`` on a tiny CPU model) runs when construction did not
+confirm, so the gate is not blind to the bounds the LLM is uniquely good at
+finding.
 
 Invoked by :class:`llenergymeasure.api.diagnose.ContainerGateRunner`:
 
@@ -133,6 +139,60 @@ def _is_sentinel_value(value: Any) -> bool:
     return value in (-1, 0) and not isinstance(value, bool)
 
 
+# Engines whose generation bounds are enforced at generate()-time, not at config
+# construction, so the construction gate is structurally blind to them and a
+# generate-grain probe is needed (e.g. transformers num_beams>=1).
+_GENERATE_GRAIN_ENGINES = {"transformers"}
+_TINY_LM: Any = None
+
+
+def _tiny_causal_lm() -> Any:
+    """A tiny random CPU model for the generate()-grain probe (built once).
+
+    From config only - no checkpoint, no download, no GPU. Generation bounds like
+    ``num_beams>=1`` raise inside ``model.generate()`` (beam-tensor allocation),
+    never at ``GenerationConfig`` construction, so a one-token generate on this
+    model is the only grain that surfaces them.
+    """
+    global _TINY_LM
+    if _TINY_LM is None:
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        cfg = AutoConfig.for_model(
+            "gpt2", n_layer=1, n_head=1, n_embd=8, vocab_size=64, n_positions=64
+        )
+        _TINY_LM = AutoModelForCausalLM.from_config(cfg).eval()
+    return _TINY_LM
+
+
+def _generate_grain_confirms(proposal: dict[str, Any]) -> tuple[bool, str | None]:
+    """Confirm a transformers bound at GENERATE()-time.
+
+    Returns ``(confirmed, illegal_exception_name)``: confirmed iff the illegal
+    kwargs make ``model.generate()`` raise and the legal kwargs do not.
+    """
+    import torch
+    from transformers import GenerationConfig
+
+    model = _tiny_causal_lm()
+    ids = torch.tensor([[1, 2, 3]])
+
+    def _raises(kwargs: dict[str, Any]) -> str | None:
+        try:
+            with torch.no_grad():
+                model.generate(
+                    ids,
+                    generation_config=GenerationConfig(max_new_tokens=2, pad_token_id=0, **kwargs),
+                )
+            return None
+        except Exception as exc:
+            return type(exc).__name__
+
+    illegal_exc = _raises(dict(proposal.get("kwargs_positive") or {}))
+    legal_exc = _raises(dict(proposal.get("kwargs_negative") or {}))
+    return (illegal_exc is not None and legal_exc is None), illegal_exc
+
+
 def gate_one_tier_d(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
     """Construction-violation gate for a Tier-D pure-inference advisory.
 
@@ -214,10 +274,25 @@ def gate_one_tier_d(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
             "illegal_message": (pos.exception_message or "")[:160],
             "coercion_artifact": coercion_artifact,
             "verdict": "confirmed" if confirmed else "not_confirmed",
+            "grain": "construction" if confirmed else None,
         }
     )
     if soundness_failed:
         out["soundness_failed"] = soundness_failed
+
+    # Generate-grain fallback: a bound enforced at generate()-time (transformers
+    # num_beams>=1) is invisible to the construction gate. If construction did not
+    # confirm but the legal probe at least constructs, try the generate grain for
+    # engines that enforce there. The advisory stays warn; only the grain differs.
+    if not confirmed and constructs_legal and engine in _GENERATE_GRAIN_ENGINES:
+        try:
+            gen_confirmed, gen_illegal_exc = _generate_grain_confirms(proposal)
+        except Exception as exc:  # model build / generate infra failure
+            out["generate_grain_error"] = f"{type(exc).__name__}: {exc}"
+        else:
+            out["generate_illegal_exc"] = gen_illegal_exc
+            if gen_confirmed:
+                out.update({"verdict": "confirmed", "grain": "generate"})
     return out
 
 

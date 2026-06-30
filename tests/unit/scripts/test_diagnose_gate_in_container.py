@@ -306,6 +306,53 @@ def test_tier_d_dead_negative_is_not_confirmed(monkeypatch: pytest.MonkeyPatch) 
     assert out["constructs_legal"] is False
 
 
+def test_tier_d_generate_grain_confirms_when_construction_blind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bound enforced at generate()-time (transformers num_beams>=1) does not
+    raise at construction, so the construction grain returns not_confirmed; the
+    generate-grain fallback then confirms it with grain=generate."""
+    case = CaseResult(id="x", outcome="no_op", emission_channel="none")
+    # Construction: illegal value constructs cleanly (no raise), legal constructs.
+    _stub_captures(monkeypatch, case=case, pos=_capture(), neg=_capture())
+    monkeypatch.setattr(gate, "_generate_grain_confirms", lambda p: (True, "ZeroDivisionError"))
+
+    out = gate.gate_one_tier_d(
+        "transformers",
+        {
+            "rule_id": "transformers_tier_d_sampling_params_num_beams",
+            "tier_d": True,
+            "native_type": "transformers.GenerationConfig",
+            "severity": "warn",
+            "kwargs_positive": {"num_beams": 0},
+            "kwargs_negative": {"num_beams": 1},
+            "match": {"fields": {"transformers.sampling_params.num_beams": {"<": 1}}},
+        },
+    )
+    assert out["verdict"] == "confirmed"
+    assert out["grain"] == "generate"
+    assert out["generate_illegal_exc"] == "ZeroDivisionError"
+
+
+def test_tier_d_generate_grain_not_tried_for_construction_engines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """vllm/tensorrt enforce at construction; the generate grain must NOT run for
+    them even if construction did not confirm."""
+    case = CaseResult(id="x", outcome="no_op", emission_channel="none")
+    _stub_captures(monkeypatch, case=case, pos=_capture(), neg=_capture())
+    called = {"gen": False}
+
+    def _boom(p: dict[str, Any]):
+        called["gen"] = True
+        return (True, "X")
+
+    monkeypatch.setattr(gate, "_generate_grain_confirms", _boom)
+    out = gate.gate_one_tier_d("vllm", _tier_d_proposal())
+    assert out["verdict"] == "not_confirmed"
+    assert called["gen"] is False
+
+
 def test_tier_d_infra_error_when_construction_blows_up(monkeypatch: pytest.MonkeyPatch) -> None:
     def _boom(engine: str, inv: dict[str, Any]):
         raise RuntimeError("native_type unresolved")
