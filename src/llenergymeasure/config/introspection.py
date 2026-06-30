@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-from llenergymeasure.config.ssot import ALL_ENGINES, Engine
+from llenergymeasure.config.ssot import ALL_ENGINES, ENGINES, Engine
 
 _ALL_ENGINES_LIST: list[Engine] = list(ALL_ENGINES)
 
@@ -749,9 +749,10 @@ def get_capability_matrix_markdown() -> str:
         "|---------|---------|------|----------|",
     ]
 
-    # Fixed column order matching the header. ALL_ENGINES is an unordered
-    # frozenset, so iterating it would scramble the cells against the header.
-    column_engines = ("transformers", "vllm", "tensorrt")
+    # Fixed column order matching the header. ENGINES is the ordered SSOT tuple
+    # (Engine enum definition order), so the cells line up with the header without
+    # a hardcoded duplicate of the engine list.
+    column_engines = ENGINES
 
     for cap_key, cap_values in capabilities.items():
         display_name = display_names.get(cap_key, cap_key)

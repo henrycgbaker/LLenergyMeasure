@@ -58,6 +58,10 @@ class Engine(str, Enum):
 ALL_ENGINES: Final[frozenset[Engine]] = frozenset(Engine)
 """Unordered engine set - use for O(1) membership checks (``engine in ALL_ENGINES``)."""
 
+ENGINES: Final[tuple[str, ...]] = tuple(str(e) for e in Engine)
+"""Engine names in declaration order, as plain strings - use for deterministic
+ordered iteration and CLI ``choices`` (definition order: transformers, vllm, tensorrt)."""
+
 # ---------------------------------------------------------------------------
 # Runner mode constants
 # ---------------------------------------------------------------------------
@@ -198,6 +202,7 @@ __all__ = [
     "DECODING_SUPPORT",
     "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
+    "ENGINES",
     "ENGINE_PACKAGES",
     "ENV_BASELINE_SPEC_PATH",
     "ENV_CARBON_INTENSITY",

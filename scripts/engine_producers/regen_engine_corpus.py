@@ -45,9 +45,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from llenergymeasure.config.ssot import ENGINES  # noqa: E402
 from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
-
-ENGINES: tuple[str, ...] = ("transformers", "vllm", "tensorrt")
 
 # Files always synced. overlay.yaml is handled separately: it is optional
 # and only synced when the SSOT carries one.
