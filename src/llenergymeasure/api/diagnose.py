@@ -953,6 +953,19 @@ GateRunner = Callable[[str, list[dict[str, Any]]], list[dict[str, Any]]]
 
 _GATE_SCRIPT = "scripts/diagnose_gate_in_container.py"
 
+# Per-engine docker entrypoint for the gate container, mirroring
+# scripts/ci/run_in_engine_container.sh. vLLM's image entrypoint is its OpenAI
+# server ("vllm serve") and transformers has none, so both force ``python3``.
+# The NVIDIA tensorrt image's entrypoint (/opt/nvidia/nvidia_entrypoint.sh)
+# performs REQUIRED CUDA forward-compat setup before exec-ing its arguments;
+# overriding it leaves flashinfer's cold ``import tensorrt_llm`` unable to load
+# its CUDA libraries, so it raises, poisons ``sys.modules``, and EVERY probe then
+# fails native_type resolution. Keeping it (and passing ``python3`` as the
+# command it exec-s) makes the tensorrt gate functional. A new engine overrides
+# this only if its image entrypoint is not a plain interpreter.
+_GATE_ENTRYPOINT: dict[str, str] = {"tensorrt": "/opt/nvidia/nvidia_entrypoint.sh"}
+_DEFAULT_GATE_ENTRYPOINT = "python3"
+
 
 @dataclass
 class ContainerGateRunner:
@@ -970,16 +983,25 @@ class ContainerGateRunner:
     workdir: Path
     docker_flags: Sequence[str] = ()
 
-    def __call__(self, engine: str, proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        # Proposals and verdicts both live in the workdir, bind-mounted at
-        # /gateout (rw); the repo is mounted read-only-ish at /repo so the
-        # in-container gate can import scripts.validate_rules. This keeps the
-        # workdir free to sit anywhere on the host, not just under the repo.
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        in_path = self.workdir / "diagnose_proposals.json"
-        out_path = self.workdir / "diagnose_gate_verdicts.json"
-        in_path.write_text(json.dumps(proposals, indent=2))
-        cmd = [
+    def _docker_cmd(self, engine: str) -> list[str]:
+        """Build the ``docker run`` argv for one gate invocation.
+
+        Pure (no I/O) so the per-engine entrypoint policy is unit-testable. The
+        repo is mounted at ``/repo`` (so the gate can import ``scripts``) and the
+        workdir at ``/gateout`` (proposals in, verdicts out). The entrypoint is
+        resolved from :data:`_GATE_ENTRYPOINT`; a non-interpreter entrypoint (the
+        NVIDIA setup wrapper) exec-s its arguments, so the interpreter becomes the
+        command it runs.
+        """
+        gate_args = [
+            _GATE_SCRIPT,
+            engine,
+            "/gateout/diagnose_proposals.json",
+            "/gateout/diagnose_gate_verdicts.json",
+        ]
+        entrypoint = _GATE_ENTRYPOINT.get(engine, _DEFAULT_GATE_ENTRYPOINT)
+        command = gate_args if entrypoint == _DEFAULT_GATE_ENTRYPOINT else ["python3", *gate_args]
+        return [
             "docker",
             "run",
             "--rm",
@@ -993,13 +1015,21 @@ class ContainerGateRunner:
             "-e",
             "PYTHONDONTWRITEBYTECODE=1",
             "--entrypoint",
-            "python3",
+            entrypoint,
             self.image,
-            _GATE_SCRIPT,
-            engine,
-            "/gateout/diagnose_proposals.json",
-            "/gateout/diagnose_gate_verdicts.json",
+            *command,
         ]
+
+    def __call__(self, engine: str, proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # Proposals and verdicts both live in the workdir, bind-mounted at
+        # /gateout (rw); the repo is mounted read-only-ish at /repo so the
+        # in-container gate can import scripts.validate_rules. This keeps the
+        # workdir free to sit anywhere on the host, not just under the repo.
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        in_path = self.workdir / "diagnose_proposals.json"
+        out_path = self.workdir / "diagnose_gate_verdicts.json"
+        in_path.write_text(json.dumps(proposals, indent=2))
+        cmd = self._docker_cmd(engine)
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as exc:

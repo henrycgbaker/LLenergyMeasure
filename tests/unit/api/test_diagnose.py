@@ -800,6 +800,37 @@ def test_container_gate_missing_output_raises_diagnose_error(
         runner("transformers", [{"rule_id": "r", "native_type": "X"}])
 
 
+def test_docker_cmd_preserves_tensorrt_image_entrypoint(tmp_path: Path) -> None:
+    """tensorrt keeps the image entrypoint (CUDA forward-compat setup) and runs
+    the interpreter as the exec-ed command; vLLM and transformers override the
+    entrypoint to python3 to bypass vLLM's ``vllm serve`` server. Overriding the
+    tensorrt entrypoint breaks flashinfer's CUDA import and fails every probe."""
+    from llenergymeasure.api.diagnose import ContainerGateRunner
+
+    runner = ContainerGateRunner(
+        image="llenergymeasure:tensorrt-1.0.0", repo=tmp_path, workdir=tmp_path / "wd"
+    )
+
+    trt = runner._docker_cmd("tensorrt")
+    assert trt[trt.index("--entrypoint") + 1] == "/opt/nvidia/nvidia_entrypoint.sh"
+    # The interpreter is the command, exec-ed by the NVIDIA entrypoint after setup.
+    assert trt[trt.index("llenergymeasure:tensorrt-1.0.0") + 1 :] == [
+        "python3",
+        "scripts/diagnose_gate_in_container.py",
+        "tensorrt",
+        "/gateout/diagnose_proposals.json",
+        "/gateout/diagnose_gate_verdicts.json",
+    ]
+
+    for engine in ("vllm", "transformers"):
+        cmd = runner._docker_cmd(engine)
+        assert cmd[cmd.index("--entrypoint") + 1] == "python3"
+        # The gate script is the entrypoint's first arg, not preceded by python3.
+        assert cmd[cmd.index("llenergymeasure:tensorrt-1.0.0") + 1] == (
+            "scripts/diagnose_gate_in_container.py"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Tier-D: pure-inference advisories for undeclared-semantic (class-3) fields
 # ---------------------------------------------------------------------------
