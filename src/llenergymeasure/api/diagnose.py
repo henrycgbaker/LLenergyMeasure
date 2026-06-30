@@ -1127,7 +1127,11 @@ def render_proposed_yaml(
         "engine_version": engine_version,
         "invariants": entries,
     }
-    return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False)
+    # width=100 is the canonical corpus wrapping: build_corpus.emit_yaml and the
+    # static miners all emit at width=100, so PyYAML's default width=80 here would
+    # re-wrap long scalars and make a Tier-D advisory byte-diverge from the rest of
+    # the corpus. Keep this aligned with the other rules-corpus serializers.
+    return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 
 
 # ---------------------------------------------------------------------------
