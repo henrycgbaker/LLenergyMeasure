@@ -171,6 +171,8 @@ def _generate_grain_confirms(proposal: dict[str, Any]) -> tuple[bool, str | None
     Returns ``(confirmed, illegal_exception_name)``: confirmed iff the illegal
     kwargs make ``model.generate()`` raise and the legal kwargs do not.
     """
+    import signal
+
     import torch
     from transformers import GenerationConfig
 
@@ -178,6 +180,14 @@ def _generate_grain_confirms(proposal: dict[str, Any]) -> tuple[bool, str | None
     ids = torch.tensor([[1, 2, 3]])
 
     def _raises(kwargs: dict[str, Any]) -> str | None:
+        # A huge illegal value (e.g. max_length=2**31) would make generate() emit
+        # billions of tokens; a hard wall-clock alarm makes that inconclusive
+        # ("Timeout"), never a hang. A Timeout is NOT counted as a clean raise.
+        def _on_alarm(signum: int, frame: Any) -> None:
+            raise TimeoutError("generate exceeded the probe budget")
+
+        old = signal.signal(signal.SIGALRM, _on_alarm)
+        signal.alarm(15)
         try:
             with torch.no_grad():
                 model.generate(
@@ -185,12 +195,18 @@ def _generate_grain_confirms(proposal: dict[str, Any]) -> tuple[bool, str | None
                     generation_config=GenerationConfig(max_new_tokens=2, pad_token_id=0, **kwargs),
                 )
             return None
+        except TimeoutError:
+            return "Timeout"
         except Exception as exc:
             return type(exc).__name__
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
 
     illegal_exc = _raises(dict(proposal.get("kwargs_positive") or {}))
     legal_exc = _raises(dict(proposal.get("kwargs_negative") or {}))
-    return (illegal_exc is not None and legal_exc is None), illegal_exc
+    confirmed = illegal_exc is not None and illegal_exc != "Timeout" and legal_exc is None
+    return confirmed, illegal_exc
 
 
 def gate_one_tier_d(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
