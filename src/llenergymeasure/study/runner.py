@@ -499,11 +499,9 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                         PreRunGroup(
                             resolved_config_hash=str(g.get("resolved_config_hash", "")),
                             canonical_config_excerpt=dict(g.get("canonical_config_excerpt", {})),
-                            member_experiment_ids=tuple(g.get("member_experiment_ids", [])),
+                            member_indices=tuple(int(i) for i in g.get("member_indices", [])),
                             member_count=int(g.get("member_count", 0)),
-                            representative_experiment_id=str(
-                                g.get("representative_experiment_id", "")
-                            ),
+                            representative_index=int(g.get("representative_index", -1)),
                             would_dedup=bool(g.get("would_dedup", False)),
                             deduplicated=bool(g.get("deduplicated", False)),
                         )

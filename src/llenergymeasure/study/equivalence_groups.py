@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from llenergymeasure.results.persistence import _atomic_write
-from llenergymeasure.study.library_resolution import DedupResult
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -31,13 +30,21 @@ from llenergymeasure.study.library_resolution import DedupResult
 
 @dataclass(frozen=True)
 class PreRunGroup:
-    """Pre-run equivalence group recorded at sweep-expansion time."""
+    """Pre-run equivalence group recorded at sweep-expansion time.
+
+    Members are identified by their position in the declared sweep-expanded
+    config list (``member_indices``), not by runtime experiment IDs: the groups
+    are computed at config-resolution time, before any experiment ID is
+    assigned at dispatch. This mirrors ``StudyConfig.pre_run_equivalence_groups``,
+    which :func:`llenergymeasure.study.loading.finalise_study` serialises with
+    the same declared-index keys.
+    """
 
     resolved_config_hash: str
     canonical_config_excerpt: dict[str, Any]
-    member_experiment_ids: tuple[str, ...]
+    member_indices: tuple[int, ...]
     member_count: int
-    representative_experiment_id: str
+    representative_index: int
     would_dedup: bool
     deduplicated: bool
 
@@ -64,44 +71,6 @@ class EquivalenceGroups:
     validated_invariants_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
     observed_collision_groups: list[ObservedCollisionGroup] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Pre-run population - from resolve_library_effective output
-# ---------------------------------------------------------------------------
-
-
-def build_pre_run_groups(
-    dedup: DedupResult,
-    *,
-    experiment_ids: list[str],
-) -> list[PreRunGroup]:
-    """Bind :class:`DedupResult` group indices back to caller-supplied IDs.
-
-    ``experiment_ids`` must be parallel to the declared-configs list passed
-    to :func:`resolve_library_effective`. The runner is the natural source - it already
-    assigns per-experiment IDs before dispatch.
-    """
-    if len(experiment_ids) != len(dedup.declared_resolved_hashes):
-        raise ValueError(
-            f"experiment_ids length {len(experiment_ids)} does not match the "
-            f"declared config count {len(dedup.declared_resolved_hashes)}"
-        )
-    pre: list[PreRunGroup] = []
-    for group in dedup.groups:
-        member_ids = tuple(experiment_ids[i] for i in group.member_indices)
-        pre.append(
-            PreRunGroup(
-                resolved_config_hash=group.resolved_config_hash,
-                canonical_config_excerpt=group.canonical_excerpt,
-                member_experiment_ids=member_ids,
-                member_count=group.member_count,
-                representative_experiment_id=experiment_ids[group.representative_index],
-                would_dedup=group.member_count > 1,
-                deduplicated=dedup.deduplicated and group.member_count > 1,
-            )
-        )
-    return pre
 
 
 # ---------------------------------------------------------------------------
@@ -195,9 +164,9 @@ def _pre_from_dict(data: dict[str, Any]) -> PreRunGroup:
     return PreRunGroup(
         resolved_config_hash=str(data["resolved_config_hash"]),
         canonical_config_excerpt=dict(data.get("canonical_config_excerpt", {})),
-        member_experiment_ids=tuple(data.get("member_experiment_ids", [])),
+        member_indices=tuple(int(i) for i in data.get("member_indices", [])),
         member_count=int(data.get("member_count", 0)),
-        representative_experiment_id=str(data.get("representative_experiment_id", "")),
+        representative_index=int(data.get("representative_index", -1)),
         would_dedup=bool(data.get("would_dedup", False)),
         deduplicated=bool(data.get("deduplicated", False)),
     )

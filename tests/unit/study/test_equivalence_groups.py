@@ -4,23 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.equivalence_groups import (
     EquivalenceGroups,
     ObservedCollisionGroup,
     PreRunGroup,
-    build_pre_run_groups,
+    _pre_from_dict,
     find_observed_collisions,
     load_equivalence_groups,
     write_equivalence_groups,
 )
-from llenergymeasure.study.library_resolution import resolve_library_effective
-
-
-def _mk_config(**overrides):
-    base = {"task": {"model": "gpt2"}, "engine": "transformers"}
-    base.update(overrides)
-    return ExperimentConfig(**base)
 
 
 class TestRoundTripSerialisation:
@@ -33,9 +25,9 @@ class TestRoundTripSerialisation:
                 PreRunGroup(
                     resolved_config_hash="sha256:abc",
                     canonical_config_excerpt={"engine": "transformers"},
-                    member_experiment_ids=("exp_0001", "exp_0002"),
+                    member_indices=(0, 2),
                     member_count=2,
-                    representative_experiment_id="exp_0001",
+                    representative_index=0,
                     would_dedup=True,
                     deduplicated=True,
                 )
@@ -61,50 +53,35 @@ class TestRoundTripSerialisation:
         assert loaded.validated_invariants_version.startswith("transformers:")
         assert len(loaded.groups) == 1
         assert loaded.groups[0].member_count == 2
+        assert loaded.groups[0].member_indices == (0, 2)
+        assert loaded.groups[0].representative_index == 0
         assert loaded.groups[0].would_dedup is True
         assert len(loaded.observed_collision_groups) == 1
         assert loaded.observed_collision_groups[0].gap_detected is True
 
 
-class TestBuildPreRunGroups:
-    def test_binds_indices_to_experiment_ids(self):
-        cfg_a = _mk_config(
-            transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}}
-        )
-        cfg_b = _mk_config(
-            transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}}
-        )
-        result = resolve_library_effective([cfg_a, cfg_b])
-        # Both collapse via the real corpus' greedy invariants.
-        pre = build_pre_run_groups(result, experiment_ids=["exp_a", "exp_b"])
-        assert len(pre) == 1
-        assert pre[0].member_experiment_ids == ("exp_a", "exp_b")
-        assert pre[0].representative_experiment_id == "exp_a"
-        assert pre[0].would_dedup is True
-        assert pre[0].deduplicated is True
+class TestFinaliseStudyDictShape:
+    def test_deserialises_finalise_study_serialisation(self):
+        """The runner reconstructs ``PreRunGroup`` from the exact dict shape
+        ``finalise_study`` writes into ``StudyConfig.pre_run_equivalence_groups``.
 
-    def test_without_dedup_groups_record_would_dedup(self):
-        cfg_a = _mk_config(
-            transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}}
-        )
-        cfg_b = _mk_config(
-            transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}}
-        )
-        result = resolve_library_effective([cfg_a, cfg_b], deduplicate=False)
-        pre = build_pre_run_groups(result, experiment_ids=["exp_a", "exp_b"])
-        assert len(pre) == 1
-        assert pre[0].would_dedup is True
-        assert pre[0].deduplicated is False
-
-    def test_id_length_mismatch_raises(self):
-        cfg = _mk_config()
-        result = resolve_library_effective([cfg])
-        try:
-            build_pre_run_groups(result, experiment_ids=[])
-        except ValueError as exc:
-            assert "does not match" in str(exc)
-            return
-        raise AssertionError("expected ValueError")
+        Regression guard: the two sides keyed on different fields
+        (``member_indices`` written vs ``member_experiment_ids`` read), so every
+        reconstructed group silently lost its members.
+        """
+        serialised = {
+            "resolved_config_hash": "sha256:abc",
+            "canonical_config_excerpt": {"engine": "transformers"},
+            "member_indices": [0, 2, 5],
+            "member_count": 3,
+            "representative_index": 0,
+            "would_dedup": True,
+            "deduplicated": True,
+        }
+        group = _pre_from_dict(serialised)
+        assert group.member_indices == (0, 2, 5)
+        assert group.representative_index == 0
+        assert group.member_count == 3
 
 
 class TestFindObservedCollisions:
