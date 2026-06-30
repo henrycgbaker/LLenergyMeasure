@@ -48,6 +48,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.ssot import ENGINES  # noqa: E402
+from scripts.engine_producers import _regen_harness  # noqa: E402
 from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
 # Engines with config generation enabled. All three engines now generate their
@@ -577,53 +578,38 @@ def sync_engine(engine: str, *, write: bool) -> list[str]:
     return [f"{engine}/config.py drift:\n{_file_diff(generated, target)}"]
 
 
+def _sync_engine(engine: str, args: argparse.Namespace) -> tuple[list[str], list[str]]:
+    """Adapter onto the shared harness: (drift, changed) per engine.
+
+    On ``--write`` every selected engine's config.py is (re)generated and reported
+    (no in-sync short-circuit), so ``changed`` always carries it.
+    """
+    drift = sync_engine(engine, write=args.write)
+    changed = [f"{engine}/config.py"] if args.write else []
+    return drift, changed
+
+
+def _report_written(changed: list[str]) -> None:
+    for entry in changed:
+        print(f"[regen-configs] wrote: {entry}")
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+    return _regen_harness.run(
+        argv=argv,
         description=(
             "Generate per-engine Pydantic config.py from schema.discovered.json "
             "+ curated.yaml (+ optional overlay.yaml) via datamodel-code-generator."
         ),
-    )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--check",
-        action="store_true",
-        help="Verify generated/committed config.py parity; exit 1 with a diff. Default mode.",
-    )
-    mode.add_argument(
-        "--write",
-        action="store_true",
-        help="Regenerate config.py (mutates the working tree) and report what changed.",
-    )
-    parser.add_argument(
-        "--engine",
-        action="append",
-        choices=ENGINES,
-        help="Restrict to one or more engines (repeatable). Default: all enabled.",
-    )
-    args = parser.parse_args(argv)
-
-    engines = tuple(args.engine) if args.engine else ENGINES
-    all_drift: list[str] = []
-    for engine in engines:
-        drift = sync_engine(engine, write=args.write)
-        all_drift.extend(drift)
-        if args.write:
-            print(f"[regen-configs] wrote: {engine}/config.py")
-
-    if args.write:
-        return 0
-    if all_drift:
-        for entry in all_drift:
-            print(entry, file=sys.stderr)
-        print(
+        engines=ENGINES,
+        sync_engine=_sync_engine,
+        report_written=_report_written,
+        check_footer=(
             "\nDrift between generated config.py and the committed shadow.\n"
             "Regenerate:\n"
-            "  uv run python scripts/engine_producers/regen_engine_configs.py --write",
-            file=sys.stderr,
-        )
-        return 1
-    return 0
+            "  uv run python scripts/engine_producers/regen_engine_configs.py --write"
+        ),
+    )
 
 
 if __name__ == "__main__":

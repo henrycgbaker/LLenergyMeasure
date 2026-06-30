@@ -114,6 +114,7 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -807,6 +808,43 @@ def fold_diagnose_into_proposed(diagnose_doc: dict[str, Any], proposed_path: Pat
     return _fold_payloads_into_proposed(payloads, proposed_path)
 
 
+@dataclass(frozen=True)
+class _FoldMode:
+    """One persist-mode fold handler: an ``args`` attribute + its fold callback.
+
+    The two writeback flags (``--fold-reclassified`` CR1, ``--fold-diagnose`` P2b)
+    share an identical CLI shape - validate not ``--check``, require
+    ``--canonical-out``, load the YAML doc, call a ``_fold_*_into_proposed``, print
+    a count - and differ only in the wording fields below.
+    """
+
+    attr: str  # args attribute holding the input path (None => mode not selected)
+    flag: str  # CLI flag name, for the mutually-exclusive / requires errors
+    not_mapping_noun: str  # subject of the "... is not a mapping" parse error
+    count_noun: str  # noun in the "folded N <noun> into <path>" report
+    fold: Callable[[dict[str, Any], Path], int]
+
+
+# Persist modes are post-writeback steps (no mine): fold a payload into the SSOT
+# proposed corpus, then exit. Order is irrelevant - the two flags are independent.
+_FOLD_MODES: tuple[_FoldMode, ...] = (
+    _FoldMode(
+        attr="fold_reclassified",
+        flag="--fold-reclassified",
+        not_mapping_noun="Re-gate report",
+        count_noun="reclassified-dormant rule(s)",
+        fold=fold_reclassified_into_proposed,
+    ),
+    _FoldMode(
+        attr="fold_diagnose",
+        flag="--fold-diagnose",
+        not_mapping_noun="Diagnose fragment",
+        count_noun="gate-confirmed diagnose proposal(s)",
+        fold=fold_diagnose_into_proposed,
+    ),
+)
+
+
 def _preserve_added_at(invariants: list[dict[str, Any]], prior: dict[bytes, str]) -> None:
     """Restore each invariant's prior ``added_at`` if its fingerprint matches.
 
@@ -1298,40 +1336,23 @@ def main(argv: list[str] | None = None) -> int:
 
     corpus_root: Path = args.corpus_root
 
-    # Persist mode (CR1): fold the decay alarm's reclassified-dormant payloads
+    # Persist modes (CR1 reclassified, P2b diagnose): fold a writeback payload
     # into the SSOT proposed corpus, then exit. Mining/extraction is skipped -
-    # this is a post-re-gate writeback step, not a mine.
-    if args.fold_reclassified is not None:
+    # these are post-writeback steps, not a mine.
+    for mode in _FOLD_MODES:
+        source: Path | None = getattr(args, mode.attr)
+        if source is None:
+            continue
         if args.check:
-            parser.error("--fold-reclassified is mutually exclusive with --check")
+            parser.error(f"{mode.flag} is mutually exclusive with --check")
         if args.canonical_out is None:
-            parser.error("--fold-reclassified requires --canonical-out (the target proposed.yaml)")
-        report = yaml.safe_load(args.fold_reclassified.read_text())
-        if not isinstance(report, dict):
-            parser.error(f"Re-gate report at {args.fold_reclassified} is not a JSON object")
-        folded = fold_reclassified_into_proposed(report, args.canonical_out)
+            parser.error(f"{mode.flag} requires --canonical-out (the target proposed.yaml)")
+        doc = yaml.safe_load(source.read_text())
+        if not isinstance(doc, dict):
+            parser.error(f"{mode.not_mapping_noun} at {source} is not a mapping")
+        folded = mode.fold(doc, args.canonical_out)
         print(
-            f"[build_corpus] folded {folded} reclassified-dormant rule(s) into "
-            f"{args.canonical_out}",
-            file=sys.stderr,
-        )
-        return 0
-
-    # Persist mode (P2b): fold gate-confirmed Stage-1 diagnose proposals into the
-    # SSOT proposed corpus, then exit. Like --fold-reclassified, this is a
-    # post-diagnose writeback step, not a mine.
-    if args.fold_diagnose is not None:
-        if args.check:
-            parser.error("--fold-diagnose is mutually exclusive with --check")
-        if args.canonical_out is None:
-            parser.error("--fold-diagnose requires --canonical-out (the target proposed.yaml)")
-        diagnose_doc = yaml.safe_load(args.fold_diagnose.read_text())
-        if not isinstance(diagnose_doc, dict):
-            parser.error(f"Diagnose fragment at {args.fold_diagnose} is not a YAML mapping")
-        folded = fold_diagnose_into_proposed(diagnose_doc, args.canonical_out)
-        print(
-            f"[build_corpus] folded {folded} gate-confirmed diagnose proposal(s) into "
-            f"{args.canonical_out}",
+            f"[build_corpus] folded {folded} {mode.count_noun} into {args.canonical_out}",
             file=sys.stderr,
         )
         return 0

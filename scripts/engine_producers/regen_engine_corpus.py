@@ -46,6 +46,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.ssot import ENGINES  # noqa: E402
+from scripts.engine_producers import _regen_harness  # noqa: E402
 from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
 # Files always synced. overlay.yaml is handled separately: it is optional
@@ -136,30 +137,7 @@ def sync_engine(
     return drift, changed
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Sync the per-pin engine corpus from engine_versions/ (SSOT) into "
-            "src/llenergymeasure/engines/ (data shadow)."
-        ),
-    )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--check",
-        action="store_true",
-        help="Verify SSOT/shadow parity; exit 1 with a per-file drift report. Default mode.",
-    )
-    mode.add_argument(
-        "--write",
-        action="store_true",
-        help="Copy SSOT -> shadow (mutates the working tree) and report what changed.",
-    )
-    parser.add_argument(
-        "--engine",
-        action="append",
-        choices=ENGINES,
-        help="Restrict to one or more engines (repeatable). Default: all engines.",
-    )
+def _add_only_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--only",
         choices=tuple(SCOPES),
@@ -170,36 +148,34 @@ def main(argv: list[str] | None = None) -> int:
             "cell's SSOT output existing yet. Default: full corpus."
         ),
     )
-    args = parser.parse_args(argv)
 
-    engines = tuple(args.engine) if args.engine else ENGINES
-    all_drift: list[str] = []
-    all_changed: list[str] = []
-    for engine in engines:
-        drift, changed = sync_engine(engine, write=args.write, only=args.only)
-        all_drift.extend(drift)
-        all_changed.extend(changed)
 
-    if args.write:
-        if all_changed:
-            for entry in all_changed:
-                print(f"[regen-corpus] wrote: {entry}")
-        else:
-            print("[regen-corpus] shadow already in sync; nothing written.")
-        return 0
+def _report_written(changed: list[str]) -> None:
+    if changed:
+        for entry in changed:
+            print(f"[regen-corpus] wrote: {entry}")
+    else:
+        print("[regen-corpus] shadow already in sync; nothing written.")
 
-    if all_drift:
-        for entry in all_drift:
-            print(entry, file=sys.stderr)
-        print(
+
+def main(argv: list[str] | None = None) -> int:
+    return _regen_harness.run(
+        argv=argv,
+        description=(
+            "Sync the per-pin engine corpus from engine_versions/ (SSOT) into "
+            "src/llenergymeasure/engines/ (data shadow)."
+        ),
+        engines=ENGINES,
+        configure_parser=_add_only_arg,
+        sync_engine=lambda engine, args: sync_engine(engine, write=args.write, only=args.only),
+        report_written=_report_written,
+        check_footer=(
             "\nDrift between engine_versions/<engine>/v<pin>/outputs/ and "
             "src/llenergymeasure/engines/<engine>/.\n"
             "Resync the shadow from the SSOT:\n"
-            "  uv run python scripts/engine_producers/regen_engine_corpus.py --write",
-            file=sys.stderr,
-        )
-        return 1
-    return 0
+            "  uv run python scripts/engine_producers/regen_engine_corpus.py --write"
+        ),
+    )
 
 
 if __name__ == "__main__":
