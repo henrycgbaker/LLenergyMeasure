@@ -331,24 +331,26 @@ def run_extractors(engine: str, corpus_root: Path) -> None:
 
 
 def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
-    """Return all staging YAMLs for ``engine``, sorted alphabetically.
+    """Return the registered extractors' staging YAMLs for ``engine``, sorted.
 
-    The sort makes merger output deterministic when two staging files have
-    the same fingerprint at the same priority rank - first-seen wins, and
-    the alphabetical order makes "first-seen" predictable across machines.
+    Only the basenames declared by :data:`_ENGINE_EXTRACTORS` are considered -
+    NOT a glob of the staging dir. A glob (``{engine}_*.yaml``) would re-ingest
+    an ORPHANED staging file left by a since-removed / since-renamed / not-yet-
+    registered extractor (the dir is not cleaned between runs; CI is masked only
+    because ``_staging/*`` is gitignored, so a fresh checkout starts empty). That
+    feeds stale candidates back into the merge and breaks byte-identical re-mine
+    reproduction on a local re-run. Pinning to the registry also drops the need
+    to special-case the merger's own ``{engine}_merged_candidates.yaml`` output -
+    it is not a registered extractor basename, so it is never picked up.
 
-    The merger's own previous output (``{engine}_merged_candidates.yaml``)
-    is excluded explicitly: globbing the staging dir would otherwise feed
-    the merger's previous run back into itself, masking extractor-side
-    fixes (the previous merged file's stale kwargs would dominate the
-    re-merge under fingerprint dedup) and giving every successive run
-    monotonically older data.
+    The sort makes fingerprint-dedup tie-breaks deterministic across machines
+    (same fingerprint at the same priority rank -> first-seen wins).
     """
     staging = _staging_dir(corpus_root, engine)
     if not staging.is_dir():
         return []
-    merged_self = _MERGED_CANDIDATES_BASENAME.format(engine=engine)
-    return sorted(p for p in staging.glob(f"{engine}_*.yaml") if p.name != merged_self)
+    candidates = [staging / ex.staging_basename for ex in _ENGINE_EXTRACTORS.get(engine, ())]
+    return sorted(p for p in candidates if p.is_file())
 
 
 def _load_staging(path: Path) -> dict[str, Any]:

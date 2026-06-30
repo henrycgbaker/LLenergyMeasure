@@ -456,12 +456,15 @@ def relabel_or_skip_dead_path(
     re-mine. So the WHOLE candidate is skipped (``None``) when any leaf is dead.
 
     Drift backstop: a *previously routable, in-corpus* rule whose leaf turns dead
-    (a genuine Config regression) is dropped here too, which surfaces as a corpus
-    byte-diff in ``regen_engine_corpus --check`` / ``build_corpus --check`` - the
-    durable CI gate that already guards the corpus. Mine-time crash-on-dead-path
-    is redundant with that gate and only aborts the re-mine on the first dead
-    candidate; the byte-diff names exactly which rule moved. The LLM/Tier-D path
-    keeps :func:`assert_path_resolves` fail-loud directly (it has no such gate).
+    (a genuine Config regression) is dropped here too. That is caught fail-loud by
+    the host test ``test_committed_corpus_paths_all_resolve`` (every committed
+    rule path must still resolve against the generated Config), which runs on
+    every CI - NOT by ``regen_engine_corpus --check``, which only byte-compares
+    the committed SSOT vs shadow and never re-mines. Mine-time crash-on-dead-path
+    is therefore redundant with that test and only aborts the re-mine on the first
+    dead *new* candidate; the test names exactly which committed rule went dead.
+    The LLM/Tier-D path keeps :func:`assert_path_resolves` fail-loud directly (it
+    has no committed corpus to gate).
     """
     try:
         relabelled, dropped = relabel_match_fields_with_drops(

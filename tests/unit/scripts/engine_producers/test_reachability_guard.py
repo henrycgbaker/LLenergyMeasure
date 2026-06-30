@@ -21,11 +21,13 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 from scripts.engine_producers._section_classifier import (  # noqa: E402
     UnknownNativeClassError,
     UnreachableMatchPathError,
@@ -267,3 +269,41 @@ def test_skip_dead_path_drops_whole_candidate_on_one_dead_leaf(
         curated_sections=curated["vllm"],
     )
     assert fields is None
+
+
+# ---------------------------------------------------------------------------
+# Committed-corpus integrity: the fail-loud backstop for a genuine regression
+# ---------------------------------------------------------------------------
+
+
+def _committed_match_paths(engine: str) -> list[tuple[str, str]]:
+    doc = yaml.safe_load((current_outputs_dir(engine) / "rules.proposed.yaml").read_text())
+    return [
+        (inv["id"], path)
+        for inv in (doc.get("invariants") or [])
+        for path in (inv.get("match", {}).get("fields") or {})
+    ]
+
+
+@pytest.mark.parametrize("engine", ["vllm", "transformers", "tensorrt"])
+def test_committed_corpus_paths_all_resolve(engine: str) -> None:
+    """Every committed corpus rule's match path must still resolve against the
+    generated Config + discovered schema.
+
+    This is the fail-loud backstop for a genuine Config/schema regression that
+    turns an *in-corpus* rule path-dead. A fresh static re-mine would silently
+    DROP such a rule (``relabel_or_skip_dead_path``), and the everyday byte gate
+    (``regen_engine_corpus --check``) never re-mines, so without this host check
+    the drift would surface only as a non-gating bump-PR data diff. Host-only,
+    torch-free, no GPU - runs on every CI.
+    """
+    dead = []
+    for rule_id, path in _committed_match_paths(engine):
+        try:
+            assert_path_resolves(engine, path)
+        except UnresolvableMatchPathError as exc:
+            dead.append(f"  {rule_id}: {path} -> {exc}")
+    assert not dead, (
+        f"{engine}: committed corpus rule path(s) no longer resolve against the "
+        f"generated Config - a fresh re-mine would silently drop them:\n" + "\n".join(dead)
+    )
