@@ -975,6 +975,54 @@ def is_msgspec_type_error(error_details: Iterable[ErrorDetail]) -> bool:
     return any(detail.error_type == _MSGSPEC_TYPE_ERROR for detail in error_details)
 
 
+# Pydantic's structural validation codes: a wrong-type input or an out-of-set
+# Literal/enum value fails HERE, before any imperative ``__post_init__`` /
+# ``model_validator`` value rule, exactly as msgspec's parse check does. A
+# structural invariant (a type assertion, or an enum/Literal allowlist) confirms
+# THROUGH this channel, so its descriptive ``message_template`` is the miner's
+# AST-derived rendering, not the library's exact string, and is template-exempt.
+_PYDANTIC_STRUCTURAL_ERROR_TYPES: frozenset[str] = frozenset(
+    {
+        "literal_error",
+        "enum",
+        "string_type",
+        "int_type",
+        "float_type",
+        "bool_type",
+        "model_type",
+        "dataclass_type",
+        "is_instance_of",
+    }
+)
+
+
+def is_enum_membership_invariant(invariant: dict[str, Any]) -> bool:
+    """True iff the invariant asserts a field's value lies in an allowlist.
+
+    Detected structurally from the ``in`` predicate operator in ``match.fields``
+    (a Literal/enum allowlist mined off the source annotation). Like a type
+    check, its positive probe legitimately fires the library's literal/enum
+    validation error, so the descriptive ``message_template`` is exempt from the
+    library-string match (the constraint is AST ground-truth, not a claim about
+    the exact pydantic message).
+    """
+    match = invariant.get("match")
+    fields = match.get("fields") if isinstance(match, dict) else None
+    if not isinstance(fields, dict):
+        return False
+    return any(isinstance(spec, dict) and "in" in spec for spec in fields.values())
+
+
+def is_structural_validation_error(error_details: Iterable[ErrorDetail]) -> bool:
+    """True iff any captured locus is a pydantic structural (type/enum) error.
+
+    The pydantic analogue of :func:`is_msgspec_type_error`: lets the message
+    template check exempt a structural invariant confirming through pydantic's
+    own type/Literal validation (see :data:`_PYDANTIC_STRUCTURAL_ERROR_TYPES`).
+    """
+    return any(detail.error_type in _PYDANTIC_STRUCTURAL_ERROR_TYPES for detail in error_details)
+
+
 def is_type_coercion_artifact(
     error_details: Iterable[ErrorDetail],
     *,

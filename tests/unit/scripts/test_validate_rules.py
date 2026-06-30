@@ -817,6 +817,62 @@ class TestComputeGateSoundnessDivergences:
             d.check_failed == validate_rules.CHECK_NEGATIVE_DOES_NOT_RAISE for d in divergences
         )
 
+    def test_tensorrt_construct_noise_matches_parallel_size_deprecation(self) -> None:
+        """The per-construction noise filter must strip TRT-LLM's parallel-size
+        DeprecationWarning (else every negative probe observes a spurious warn)
+        without swallowing a real constraint warning."""
+        noise = validate_rules._TENSORRT_CONSTRUCT_NOISE
+        assert noise.search("Use tensor_parallel_size/pipeline_parallel_size/xxx instead.")
+        assert noise.search("builtin type swigvarlink has no __module__ attribute")
+        assert not noise.search("max_seq_len is redundant with build_config.max_seq_len")
+
+    def test_enum_membership_template_exempt_on_pydantic_literal(self) -> None:
+        """A static-mined enum/Literal allowlist confirms through pydantic's
+        literal_error; its descriptive template is AST ground-truth, not the
+        library string, so it is template-exempt (the pydantic analogue of the
+        msgspec type-check exemption)."""
+        invariant = {
+            "id": "trt_load_format_in_2_values",
+            "severity": "error",
+            "kwargs_positive": {"load_format": "<invalid>"},
+            "kwargs_negative": {"load_format": "auto"},
+            "message_template": "`load_format` must be one of ['auto', 'dummy']",
+            "match": {"fields": {"tensorrt.engine_params.load_format": {"in": ["auto", "dummy"]}}},
+        }
+        pos = _capture(
+            exception_type="ValidationError",
+            exception_message="Input should be 'auto' or 'dummy'",
+            error_details=(ErrorDetail(loc=("load_format",), error_type="literal_error"),),
+        )
+        neg = _capture(observed_state={"load_format": "auto"})
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert all(
+            d.check_failed != validate_rules.CHECK_MESSAGE_TEMPLATE_MATCH for d in divergences
+        )
+
+    def test_value_rule_not_template_exempt_on_literal_error(self) -> None:
+        """The exemption is narrow: a non-allowlist value rule whose template
+        mismatches still flags, even if a literal_error happens to be captured -
+        it lacks the `in` predicate that marks an enum-membership invariant."""
+        invariant = {
+            "id": "r_value_rule",
+            "severity": "error",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "field `a` must be non-zero",
+            "match": {"fields": {"x.a": {">": 0}}},
+        }
+        pos = _capture(
+            exception_type="ValidationError",
+            exception_message="totally different message",
+            error_details=(ErrorDetail(loc=("a",), error_type="literal_error"),),
+        )
+        neg = _capture(observed_state={"a": 0})
+        divergences = validate_rules.compute_gate_soundness_divergences(invariant, pos, neg)
+        assert any(
+            d.check_failed == validate_rules.CHECK_MESSAGE_TEMPLATE_MATCH for d in divergences
+        )
+
     def test_divergence_dict_includes_check_failed_field(self) -> None:
         invariant = {
             "id": "r8",

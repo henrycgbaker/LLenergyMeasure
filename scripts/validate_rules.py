@@ -62,7 +62,9 @@ from scripts._rules_validation_common import (  # noqa: E402  (late import after
     compare_expected_vs_observed,
     diff_input_vs_state,
     invariant_claimed_fields,
+    is_enum_membership_invariant,
     is_msgspec_type_error,
+    is_structural_validation_error,
     is_type_check_invariant,
     is_type_coercion_artifact,
     locus_confirms_invariant,
@@ -347,6 +349,18 @@ _TRTLLM_LLMARGS_TYPES: frozenset[str] = frozenset(
 _TRTLLM_MODEL_PLACEHOLDER = "/tmp/llem-validation-gate-model-placeholder"
 
 
+# TRT-LLM 1.0.0 emits this DeprecationWarning on EVERY TrtLlmArgs construction
+# (the legacy ``*_parallel_size`` aliases on BaseLlmArgs), plus SWIG import-probe
+# noise. Both are unrelated to the invariant under test, so without stripping
+# them every negative probe observes a spurious ``warn`` (negative_does_not_raise)
+# and every error invariant's emission_channel is misclassified. Mirrors the vLLM
+# bootstrap-noise filter.
+_TENSORRT_CONSTRUCT_NOISE = re.compile(
+    r"Use tensor_parallel_size/pipeline_parallel_size|"
+    r"builtin type \w+ has no __module__ attribute"
+)
+
+
 def _run_tensorrt(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
 ) -> CaptureBuffers:
@@ -355,6 +369,10 @@ def _run_tensorrt(
     ``strict_validate`` is accepted for parity with the transformers runner
     but is not consulted - TRT-LLM has no `.validate(strict=...)` analogue;
     the constructor itself runs all `model_validator` passes.
+
+    The per-construction ``*_parallel_size`` DeprecationWarning is stripped from
+    the captured warnings (see :data:`_TENSORRT_CONSTRUCT_NOISE`) so it does not
+    masquerade as the invariant's own emission.
     """
     del strict_validate  # signature parity only
     logger_names = (
@@ -362,11 +380,15 @@ def _run_tensorrt(
         "tensorrt_llm.llmapi",
         "tensorrt_llm.llmapi.llm_args",
     )
-    return run_case(
+    result = run_case(
         lambda: _construct_trtllm(native_type, kwargs),
         logger_names=logger_names,
         private_allowlist=TENSORRT_PRIVATE_FIELD_ALLOWLIST,
     )
+    filtered = tuple(w for w in result.warnings_captured if not _TENSORRT_CONSTRUCT_NOISE.search(w))
+    if filtered != result.warnings_captured:
+        result = dataclass_replace(result, warnings_captured=filtered)
+    return result
 
 
 def _construct_trtllm(native_type: str, kwargs: dict[str, Any]) -> Any:
@@ -676,9 +698,17 @@ def compute_gate_soundness_divergences(
     #    type rule is firing. This mirrors the coercion-guard's type-check
     #    exemption below.
     template = str(invariant.get("message_template") or "")
-    template_exempt = is_type_check_invariant(invariant) and is_msgspec_type_error(
+    # A structural invariant (type assertion or enum/Literal allowlist) confirms
+    # through the library's own type/Literal validation, whose exact string the
+    # miner's descriptive template is not claiming to be. Exempt it - msgspec
+    # (vLLM) or pydantic (tensorrt) structural channel alike.
+    structural_invariant = is_type_check_invariant(invariant) or is_enum_membership_invariant(
+        invariant
+    )
+    structural_error = is_msgspec_type_error(pos.error_details) or is_structural_validation_error(
         pos.error_details
     )
+    template_exempt = structural_invariant and structural_error
     if pos.exception_type is not None and template and not template_exempt:
         matched, fragment = message_matches_template(pos.exception_message or "", template)
         if not fragment:
