@@ -554,7 +554,10 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 result[declared_h] = resolved_h
             return result
         except Exception as exc:
-            logger.debug("_build_resolved_hashes failed (non-fatal): %s", exc)
+            # Best-effort: a failure here means resolved-config-hash dedup
+            # silently degrades. Surface it as a warning (with the exception)
+            # so the drift is visible, but do not crash the run.
+            logger.warning("_build_resolved_hashes failed (non-fatal): %s", exc)
             return {}
 
     def _mark_remaining_skipped(

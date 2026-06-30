@@ -7,7 +7,7 @@ studies. These tests verify it without GPU hardware (uses monkeypatching).
 from __future__ import annotations
 
 from llenergymeasure import ExperimentConfig, ExperimentResult, StudyConfig
-from llenergymeasure.study.single import run_single_experiment
+from llenergymeasure.study.single import _resolved_config_hash, run_single_experiment
 from tests.conftest import make_result
 
 
@@ -105,3 +105,64 @@ def test_run_single_experiment_calls_gpu_memory_check(monkeypatch, tmp_path):
     assert len(gpu_check_calls) == 1, (
         f"Expected check_gpu_memory_residual to be called once, got {len(gpu_check_calls)}"
     )
+
+
+def test_resolved_config_hash_matches_runner_pipeline():
+    """The single-path resolved_config_hash matches StudyRunner's computation.
+
+    Regression for Bug 1: the single-experiment path saved config.json without a
+    resolved_config_hash, so a degenerate single-experiment study could not be
+    deduped consistently with multi-experiment studies. Both paths must derive
+    the same hash for the same config.
+    """
+    from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    single_hash = _resolved_config_hash(config)
+    runner_hash = hash_config(build_resolved_view(config))
+    assert single_hash is not None
+    assert single_hash == runner_hash
+
+
+def test_run_single_experiment_writes_resolved_config_hash(monkeypatch, tmp_path):
+    """run_single_experiment passes a non-None resolved_config_hash to _save_and_record."""
+    import llenergymeasure.engines as engines_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.single as single_module
+
+    captured: dict[str, object] = {}
+
+    def _capture_save_and_record(*args, **kwargs):
+        captured["resolved_config_hash"] = kwargs.get("resolved_config_hash")
+
+    mock_result = make_result(experiment_id="resolved-hash-test")
+    mock_engine = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
+    _patch_harness(monkeypatch, mock_result)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
+        lambda device_index=0, threshold_mb=1024.0: None,
+    )
+    # _save_and_record lives in study.runner; single.py imports it lazily inside
+    # run_single_experiment, so patch it at the source module.
+    import llenergymeasure.study.runner as runner_module
+
+    monkeypatch.setattr(runner_module, "_save_and_record", _capture_save_and_record)
+
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.study.manifest import ManifestWriter
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+
+    run_single_experiment(study, mock_manifest, tmp_path, runner_specs=None)
+
+    assert captured.get("resolved_config_hash") is not None, (
+        "single path must pass a resolved_config_hash to _save_and_record"
+    )
+    assert captured["resolved_config_hash"] == single_module._resolved_config_hash(config)

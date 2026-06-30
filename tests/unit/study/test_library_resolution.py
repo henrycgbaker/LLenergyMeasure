@@ -18,6 +18,8 @@ from llenergymeasure.study.hashing import build_resolved_view, hash_config
 from llenergymeasure.study.library_resolution import (
     LibraryResolutionCycleError,
     _apply_invariants_fixpoint,
+    _canonical_excerpt,
+    _rule_normalisations,
     resolve_library_effective,
 )
 
@@ -329,6 +331,89 @@ class TestDedupSweep:
         r2 = resolve_library_effective([cfg], invariants=[invariant])
         assert r1.declared_resolved_hashes == r2.declared_resolved_hashes
         assert r1.groups[0].resolved_config_hash == r2.groups[0].resolved_config_hash
+
+
+# ---------------------------------------------------------------------------
+# _canonical_excerpt() - display-only excerpt of the canonical form
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalExcerpt:
+    def test_excerpt_includes_sampling_param_fields(self):
+        """The excerpt must surface the engine's sampling_params fields.
+
+        Regression: the excerpt read ``section.sampling`` but the engine section
+        sub-model exposes ``sampling_params``, so every sampling field was
+        silently dropped from the display excerpt.
+        """
+        cfg = _mk_config(transformers={"sampling_params": {"do_sample": True, "temperature": 0.7}})
+        excerpt = _canonical_excerpt(cfg)
+        assert excerpt["engine"] == "transformers"
+        assert excerpt["task.model"] == "gpt2"
+        # The sampling field must appear in the excerpt under the sampling_params key.
+        assert excerpt.get("transformers.sampling_params.temperature") == 0.7
+
+    def test_excerpt_no_sampling_params_section(self):
+        """No sampling_params section -> excerpt still carries engine + model."""
+        cfg = _mk_config()
+        excerpt = _canonical_excerpt(cfg)
+        assert excerpt["engine"] == "transformers"
+        assert excerpt["task.model"] == "gpt2"
+
+
+# ---------------------------------------------------------------------------
+# Cross-check: runtime projection vs mine-side fixpoint-test projection
+# ---------------------------------------------------------------------------
+
+
+class TestProjectionParity:
+    """Bind the two canonical-projection implementations together.
+
+    The runtime projection (:func:`_rule_normalisations`) and the mine-side
+    fixpoint-test projection (``_ProjectedInvariant.apply`` in
+    ``scripts.engine_producers._fixpoint_test``) were bound only by docstring.
+    For dormant invariants that declare explicit ``normalised_fields``, both
+    must strip exactly the same set of fields to ``None``; this test pins that
+    shared contract so the two cannot silently diverge.
+    """
+
+    def test_explicit_normalised_fields_projection_matches(self):
+        from scripts.engine_producers._fixpoint_test import _ProjectedInvariant
+
+        # Dotted paths so the loader's bare-name rewrite is a no-op and both
+        # implementations operate on identical field paths.
+        normalised = [
+            "transformers.sampling_params.temperature",
+            "transformers.sampling_params.top_p",
+        ]
+        match_fields = {
+            "transformers.sampling_params.do_sample": False,
+            "transformers.sampling_params.temperature": {"present": True, "not_equal": 1.0},
+            "transformers.sampling_params.top_p": {"present": True},
+        }
+
+        runtime_invariant = _mk_rule(
+            invariant_id="parity_rule",
+            match_fields=match_fields,
+            normalised_fields=normalised,
+        )
+        runtime_projection = _rule_normalisations(runtime_invariant)
+
+        mine_invariant = _ProjectedInvariant(
+            id="parity_rule",
+            severity="dormant",
+            match_fields=match_fields,
+            normalised_fields=tuple(normalised),
+        )
+        # apply() strips each normalised field to None; the resulting delta is
+        # the projection the mine-side enforces.
+        seed = {p: "non-default" for p in normalised}
+        applied = mine_invariant.apply(seed)
+        mine_projection = {p: applied[p] for p in normalised}
+
+        # Both must strip exactly the declared normalised fields to None.
+        assert runtime_projection == {p: None for p in normalised}
+        assert mine_projection == runtime_projection
 
 
 # ---------------------------------------------------------------------------

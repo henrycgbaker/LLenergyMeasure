@@ -13,6 +13,7 @@ body to ``run_single_experiment`` here.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 from pathlib import Path
@@ -25,8 +26,29 @@ from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.progress import ProgressCallback
 
 if TYPE_CHECKING:
+    from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
+
+logger = logging.getLogger(__name__)
+
+
+def _resolved_config_hash(config: ExperimentConfig) -> str | None:
+    """Compute the resolved-config-hash for ``config`` (best-effort).
+
+    Mirrors ``StudyRunner._build_resolved_hashes``: runs the config through the
+    same resolved-view + hashing pipeline used at sweep-expansion time so the
+    single-experiment ``config.json`` carries a hash consistent with the
+    multi-experiment path. Returns ``None`` on any failure - dedup treats a
+    missing hash as best-effort rather than crashing the run.
+    """
+    try:
+        from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+        return hash_config(build_resolved_view(config))
+    except Exception as exc:
+        logger.warning("resolved_config_hash computation failed (non-fatal): %s", exc)
+        return None
 
 
 def run_single_experiment(
@@ -52,6 +74,7 @@ def run_single_experiment(
 
     config = study.experiments[0]
     config_hash = compute_declared_config_hash(config)
+    resolved_config_hash = _resolved_config_hash(config)
     cycle = 1
 
     # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
@@ -189,6 +212,7 @@ def run_single_experiment(
         ts_source_dir=ts_tmpdir,
         environment_snapshot=snapshot,
         resolution_log=(resolution_logs or {}).get(config_hash),
+        resolved_config_hash=resolved_config_hash,
     )
 
     # Clean up temp dirs

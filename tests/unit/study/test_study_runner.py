@@ -2381,3 +2381,35 @@ def test_no_lock_skips_gpu_lock_acquisition(study_config: StudyConfig) -> None:
         runner.run()
 
     mock_acquire.assert_not_called()
+
+
+# =============================================================================
+# _build_resolved_hashes failure visibility (Bug 2)
+# =============================================================================
+
+
+def test_build_resolved_hashes_logs_warning_on_failure(caplog) -> None:
+    """A failure inside _build_resolved_hashes logs a WARNING (not silent), returns {}.
+
+    Regression for Bug 2: the helper swallowed all exceptions at DEBUG level, so
+    resolved-config-hash dedup could silently degrade with no operator-visible
+    signal. The failure must now surface as a warning carrying the exception,
+    while still keeping best-effort semantics (no crash, empty mapping).
+    """
+    exp = ExperimentConfig(task={"model": "test/model"}, engine="transformers")
+    study = StudyConfig(experiments=[exp])
+
+    with (
+        patch(
+            "llenergymeasure.study.hashing.build_resolved_view",
+            side_effect=RuntimeError("boom-resolved-view"),
+        ),
+        caplog.at_level("WARNING", logger="llenergymeasure.study.runner"),
+    ):
+        result = StudyRunner._build_resolved_hashes(study)
+
+    assert result == {}, "best-effort: failure returns an empty mapping, not a crash"
+    assert any(
+        "boom-resolved-view" in rec.getMessage() and rec.levelname == "WARNING"
+        for rec in caplog.records
+    ), "the exception must be surfaced at WARNING level"
