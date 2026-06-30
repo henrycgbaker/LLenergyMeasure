@@ -224,9 +224,11 @@ class TestFingerprint:
 class TestCrossValidation:
     def test_two_sources_one_fingerprint_merged_to_one_rule(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
-            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
+        _write_staging(
+            staging, "transformers_dynamic_invariant_miner.yaml", _envelope([_introspection_rule()])
         )
 
         invariants, _envelope_out = build_corpus.merge_staging(
@@ -243,12 +245,12 @@ class TestCrossValidation:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(message="AST-derived placeholder.")]),
         )
         _write_staging(
             staging,
-            "transformers_dynamic_miner.yaml",
+            "transformers_dynamic_invariant_miner.yaml",
             _envelope([_introspection_rule(message="`max_new_tokens` must be > 0, but is -1.")]),
         )
 
@@ -265,7 +267,7 @@ class TestCrossValidation:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope(
                 [
                     _ast_rule(
@@ -278,7 +280,7 @@ class TestCrossValidation:
         intro = _introspection_rule()
         intro["kwargs_positive"] = {"max_new_tokens": -1}
         intro["kwargs_negative"] = {"max_new_tokens": 16}
-        _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
+        _write_staging(staging, "transformers_dynamic_invariant_miner.yaml", _envelope([intro]))
 
         invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
@@ -289,10 +291,12 @@ class TestCrossValidation:
 
     def test_observed_messages_carry_over_from_introspection(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+        _write_staging(
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
         _write_staging(
             staging,
-            "transformers_dynamic_miner.yaml",
+            "transformers_dynamic_invariant_miner.yaml",
             _envelope(
                 [
                     _introspection_rule(
@@ -313,12 +317,12 @@ class TestCrossValidation:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(references=["AST ref 1"])]),
         )
         intro = _introspection_rule()
         intro["references"] = ["Introspection ref 2"]
-        _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
+        _write_staging(staging, "transformers_dynamic_invariant_miner.yaml", _envelope([intro]))
 
         invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
@@ -344,8 +348,8 @@ class TestDistinctFingerprints:
         intro = _introspection_rule(
             fields={"transformers.sampling.max_new_tokens": {"<": 0}},
         )
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([ast]))
-        _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
+        _write_staging(staging, "transformers_static_invariant_miner.yaml", _envelope([ast]))
+        _write_staging(staging, "transformers_dynamic_invariant_miner.yaml", _envelope([intro]))
 
         invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
@@ -368,7 +372,7 @@ class TestStability:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope(
                 [
                     _ast_rule(
@@ -379,7 +383,7 @@ class TestStability:
             ),
         )
         _write_staging(
-            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_dynamic_invariant_miner.yaml", _envelope([_introspection_rule()])
         )
 
         first = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
@@ -397,11 +401,11 @@ class TestStability:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule()], engine_version="4.56.0"),
         )
         _write_staging(
-            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_dynamic_invariant_miner.yaml", _envelope([_introspection_rule()])
         )
 
         frozen = "2026-04-23T12:34:56+00:00"
@@ -420,7 +424,7 @@ class TestStability:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope(
                 [
                     _ast_rule(invariant_id="zzz_late", fields={"f1": 1}),
@@ -442,9 +446,11 @@ class TestStability:
 class TestCheckMode:
     def test_check_passes_when_corpus_matches_staging(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
-            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
+        _write_staging(
+            staging, "transformers_dynamic_invariant_miner.yaml", _envelope([_introspection_rule()])
         )
 
         # Build then immediately check -> should pass.
@@ -454,14 +460,16 @@ class TestCheckMode:
 
     def test_check_fails_with_diff_on_drift(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+        _write_staging(
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
 
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
         # Mutate staging to introduce drift.
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(message="Different message - drift!")]),
         )
         code, diff = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
@@ -470,7 +478,9 @@ class TestCheckMode:
 
     def test_check_returns_2_when_canonical_corpus_missing(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+        _write_staging(
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
         # No write_corpus call - canonical YAML missing.
         code, msg = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
         assert code == 2
@@ -511,7 +521,9 @@ class TestCanonicalOutOverride:
         """``canonical_out`` redirects the written corpus; staging stays under
         ``corpus_root``. This is the SSOT redirection the CI cell uses."""
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+        _write_staging(
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
 
         ssot = tmp_path / "ssot_outputs" / "rules.proposed.yaml"
         build_corpus.write_corpus(
@@ -522,11 +534,13 @@ class TestCanonicalOutOverride:
         assert ssot.exists()
         assert not (tmp_path / "transformers" / "rules.proposed.yaml").exists()
         # Staging still lives under corpus_root.
-        assert (staging / "transformers_static_miner.yaml").exists()
+        assert (staging / "transformers_static_invariant_miner.yaml").exists()
 
     def test_check_compares_against_canonical_out(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+        _write_staging(
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
         ssot = tmp_path / "ssot_outputs" / "rules.proposed.yaml"
 
         build_corpus.write_corpus(
@@ -550,14 +564,14 @@ class TestCanonicalOutOverride:
 
         first = _ast_rule()
         first["added_at"] = "2026-04-01"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([first]))
+        _write_staging(staging, "transformers_static_invariant_miner.yaml", _envelope([first]))
         build_corpus.write_corpus(
             "transformers", tmp_path, skip_validation=True, canonical_out=ssot
         )
 
         second = _ast_rule()
         second["added_at"] = "2026-05-09"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([second]))
+        _write_staging(staging, "transformers_static_invariant_miner.yaml", _envelope([second]))
         build_corpus.write_corpus(
             "transformers", tmp_path, skip_validation=True, canonical_out=ssot
         )
@@ -574,9 +588,11 @@ class TestCanonicalOutOverride:
 class TestLoaderRoundTrip:
     def test_merger_output_loads_via_engine_rules_loader(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
-            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
+        _write_staging(
+            staging, "transformers_dynamic_invariant_miner.yaml", _envelope([_introspection_rule()])
         )
 
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
@@ -665,7 +681,7 @@ class TestAddedAtPreservation:
         # First run: produce canonical with added_at "2026-04-01".
         first_rule = _ast_rule()
         first_rule["added_at"] = "2026-04-01"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([first_rule]))
+        _write_staging(staging, "transformers_static_invariant_miner.yaml", _envelope([first_rule]))
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
         prior_path = tmp_path / "transformers" / "rules.proposed.yaml"
@@ -675,7 +691,9 @@ class TestAddedAtPreservation:
         # Second run: re-stage with same fingerprint but today's date.
         second_rule = _ast_rule()
         second_rule["added_at"] = "2026-05-03"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([second_rule]))
+        _write_staging(
+            staging, "transformers_static_invariant_miner.yaml", _envelope([second_rule])
+        )
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
         rebuilt = yaml.safe_load(prior_path.read_text())
@@ -737,7 +755,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(invariant_id="rule_kept")]),
         )
 
@@ -764,7 +782,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope(
                 [
                     _ast_rule(invariant_id="rule_bad", fields={"f1": 1}),
@@ -799,7 +817,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope(
                 [
                     _ast_rule(invariant_id="invariant_a", fields={"f1": 1}),
@@ -839,7 +857,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(invariant_id="rule_bad")]),
         )
 
@@ -880,7 +898,9 @@ class TestVendorValidationGate:
         stale.write_text("schema_version: 1.0.0\nengine: transformers\nquarantined_rules: []\n")
 
         monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
+        _write_staging(
+            staging, "transformers_static_invariant_miner.yaml", _envelope([_ast_rule()])
+        )
 
         build_corpus.write_corpus("transformers", tmp_path)
         assert not stale.exists(), (
@@ -902,7 +922,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope(
                 [
                     _ast_rule(invariant_id="rule_bad", fields={"f1": 1}),
@@ -940,7 +960,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(invariant_id="rule_real")]),
         )
 
@@ -951,7 +971,7 @@ class TestVendorValidationGate:
 
         discovered = build_corpus.discover_staging_files("transformers", tmp_path)
         assert merged_candidates not in discovered
-        assert (staging / "transformers_static_miner.yaml") in discovered
+        assert (staging / "transformers_static_invariant_miner.yaml") in discovered
 
 
 # ---------------------------------------------------------------------------
@@ -1123,7 +1143,7 @@ class TestSeededCarry:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(invariant_id="mined", fields={"f_mined": 1})]),
         )
         # Seed the prior committed corpus with two manual seeds.
@@ -1164,7 +1184,7 @@ class TestSeededCarry:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
-            "transformers_static_miner.yaml",
+            "transformers_static_invariant_miner.yaml",
             _envelope([_ast_rule(invariant_id="mined", fields={"f_mined": 1})]),
         )
         # The prior pin's committed corpus holds a reclassified-dormant rule the
