@@ -166,13 +166,22 @@ def main(argv: list[str] | None = None) -> int:
         help="Model context window (raise alongside --budget-chars for a wider source).",
     )
     parser.add_argument(
+        "--num-predict",
+        type=int,
+        default=12288,
+        help="Max model output tokens (the default 4096 truncates large candidate batches).",
+    )
+    parser.add_argument(
         "--out", type=Path, help="Where to write confirmed advisories (else stdout)."
     )
     parser.add_argument("--workdir", type=Path, default=Path("/tmp/llem-tier-d"))
     args = parser.parse_args(argv)
 
     model = OllamaDiagnoseModel(
-        model=args.model, response_schema=TIER_D_RESPONSE_SCHEMA, num_ctx=args.num_ctx
+        model=args.model,
+        response_schema=TIER_D_RESPONSE_SCHEMA,
+        num_ctx=args.num_ctx,
+        num_predict=args.num_predict,
     )
     gate_runner = ContainerGateRunner(
         image=args.image,

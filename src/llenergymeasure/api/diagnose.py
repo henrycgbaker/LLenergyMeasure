@@ -187,15 +187,19 @@ TIER_D_RESPONSE_SCHEMA: dict[str, Any] = {
                     "reason": {"type": "string"},
                     "citation": {"type": "string"},
                     "constraint": {"type": "string"},
-                    "fires_when": {"type": "object"},
+                    "fires_when": {"type": "object", "minProperties": 1, "maxProperties": 1},
                     "kwargs_positive": {"type": "object"},
                     "kwargs_negative": {"type": "object"},
                 },
+                # fires_when is REQUIRED: the model reliably emits good kwargs but
+                # drops the optional predicate under a large candidate batch (the
+                # bound is then lost). Forcing presence keeps the match predicate.
                 "required": [
                     "rule_id",
                     "classification",
                     "reason",
                     "citation",
+                    "fires_when",
                     "kwargs_positive",
                     "kwargs_negative",
                 ],
