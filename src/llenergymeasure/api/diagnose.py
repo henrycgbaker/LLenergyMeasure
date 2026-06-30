@@ -498,6 +498,35 @@ def config_surface_symbol_requests(
     return requests
 
 
+def _class_owned_fields(cls: ast.ClassDef) -> set[str]:
+    """Field names a config class OWNS: class-level annotations/assignments PLUS
+    ``self.<field> = ...`` set in ``__init__`` / ``__post_init__``.
+
+    Dataclass / pydantic / msgspec configs declare fields at class level, but
+    transformers ``GenerationConfig`` sets them in ``__init__`` via
+    ``self.x = kwargs.pop("x", default)`` - so a class-level-only scan misses every
+    transformers candidate. Both forms count as ownership for native_type
+    resolution + cited-field windowing.
+    """
+    owned: set[str] = set()
+    for stmt in cls.body:
+        owned |= _assign_targets(stmt)
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name in {
+            "__init__",
+            "__post_init__",
+        }:
+            for sub in ast.walk(stmt):
+                if isinstance(sub, ast.Assign):
+                    for tgt in sub.targets:
+                        if (
+                            isinstance(tgt, ast.Attribute)
+                            and isinstance(tgt.value, ast.Name)
+                            and tgt.value.id == "self"
+                        ):
+                            owned.add(tgt.attr)
+    return owned
+
+
 def _is_validator_member(name: str) -> bool:
     """True for method names that can carry a CONSTRUCTION raise on a field.
 
@@ -542,10 +571,7 @@ def tier_d_symbol_requests(
         except SyntaxError:
             continue
         for cls in _iter_config_classes(module):
-            declared: set[str] = set()
-            for stmt in cls.body:
-                declared |= _assign_targets(stmt)
-            cls_leaves = tuple(sorted(leaves & declared))
+            cls_leaves = tuple(sorted(leaves & _class_owned_fields(cls)))
             if cls_leaves:
                 requests.append(SymbolRequest(file=rel, class_name=cls.name, fields=cls_leaves))
     return requests
@@ -581,10 +607,9 @@ def tier_d_native_types(
         module_path = _module_from_file(rel)
         for cls in _iter_config_classes(module):
             native_type = f"{module_path}.{cls.name}" if module_path else cls.name
-            for stmt in cls.body:
-                for target in _assign_targets(stmt):
-                    if target in leaves and target not in out:
-                        out[target] = native_type
+            for target in _class_owned_fields(cls):
+                if target in leaves and target not in out:
+                    out[target] = native_type
     return out
 
 
