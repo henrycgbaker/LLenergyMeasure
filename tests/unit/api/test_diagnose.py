@@ -29,6 +29,7 @@ from llenergymeasure.api.diagnose import (
     TIER_D_CLASSIFICATIONS,
     DiagnoseError,
     Diagnosis,
+    _fires_when_consistent_with_probes,
     build_carried_triage_prompt,
     build_gap_diagnose_prompt,
     build_tier_d_prompt,
@@ -1173,3 +1174,102 @@ def test_tier_d_requires_candidates() -> None:
             model=_StubModel("{}"),
             gate_runner=_gate_stub({}),
         )
+
+
+class TestFiresWhenConsistency:
+    """The match predicate must select the illegal probe and reject the legal one.
+
+    The construction gate only checks that the illegal value raises and the legal
+    value constructs; it never re-evaluates the predicate. These cases (drawn from
+    a live vLLM mine) cover a model that supplies correct probes but an inverted or
+    self-referential ``fires_when``, which would otherwise warn on valid configs.
+    """
+
+    def test_literal_bound_consistent(self) -> None:
+        # logprobs < -1 is the illegal region; -2 illegal, -1 legal sentinel.
+        assert _fires_when_consistent_with_probes(
+            "logprobs", {"<": -1}, {"logprobs": -2}, {"logprobs": -1}
+        )
+
+    def test_cross_field_ref_consistent(self) -> None:
+        # max_cpu_loras < max_loras raises -> fires_when "<@max_loras" is the illegal region.
+        assert _fires_when_consistent_with_probes(
+            "max_cpu_loras",
+            {"<": "@max_loras"},
+            {"max_cpu_loras": 1, "max_loras": 8},
+            {"max_cpu_loras": 8, "max_loras": 8},
+        )
+
+    def test_inverted_cross_field_rejected(self) -> None:
+        # parallel.py raises when rank >= count, so the illegal region is ">=",
+        # but the model emitted "<" (the legal region). The illegal probe
+        # (rank=1,count=1) does NOT satisfy "<", so the predicate is inconsistent.
+        assert not _fires_when_consistent_with_probes(
+            "_api_process_rank",
+            {"<": "@_api_process_count"},
+            {"_api_process_rank": 1, "_api_process_count": 1},
+            {"_api_process_rank": 0, "_api_process_count": 2},
+        )
+
+    def test_self_referential_rejected(self) -> None:
+        # A field compared against itself can never fire (x < x is always False).
+        assert not _fires_when_consistent_with_probes(
+            "_api_process_count",
+            {"<": "@_api_process_count"},
+            {"_api_process_count": 1, "_api_process_rank": 1},
+            {"_api_process_count": 2, "_api_process_rank": 0},
+        )
+
+    def test_indeterminate_probe_rejected(self) -> None:
+        # A probe missing the subject leaf yields None -> not consistent.
+        assert not _fires_when_consistent_with_probes("logprobs", {"<": -1}, {}, {"logprobs": -1})
+
+
+def test_tier_d_drops_inverted_fires_when_before_gating(tmp_path: Path) -> None:
+    """An inverted-predicate diagnosis is dropped on the host, never reaching the gate."""
+    src = tmp_path / "cfg.py"
+    src.write_text(
+        "class ParallelConfig:\n"
+        "    _api_process_count: int = 1\n"
+        "    _api_process_rank: int = 0\n"
+        "    def _validate(self):\n"
+        "        if self._api_process_rank >= self._api_process_count:\n"
+        "            raise ValueError('bad rank')\n"
+    )
+    rule_id = tier_d_rule_id("vllm", "engine_params", "_api_process_rank")
+    raw = json.dumps(
+        {
+            "diagnoses": [
+                {
+                    "rule_id": rule_id,
+                    "classification": "bounded",
+                    "reason": "raises if rank >= count",
+                    "citation": "cfg.py",
+                    "fires_when": {"<": "@_api_process_count"},
+                    "kwargs_positive": {"_api_process_rank": 1, "_api_process_count": 1},
+                    "kwargs_negative": {"_api_process_rank": 0, "_api_process_count": 2},
+                }
+            ]
+        }
+    )
+    gate_calls: list[Any] = []
+
+    def _recording_gate(engine: str, proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        gate_calls.append(proposals)
+        return [{"rule_id": p["rule_id"], "verdict": "confirmed"} for p in proposals]
+
+    result = diagnose_tier_d(
+        engine="vllm",
+        new_version="0.19.1",
+        candidates=[
+            {"section": "engine_params", "leaf": "_api_process_rank", "type": "int", "default": 0}
+        ],
+        source_root=tmp_path,
+        config_surface_files=["cfg.py"],
+        model=_StubModel(raw),
+        gate_runner=_recording_gate,
+    )
+
+    assert result.confirmed == []
+    assert gate_calls == []  # dropped before the gate ran
+    assert any(r.get("verdict") == "fires_when_inconsistent" for r in result.unconfirmed)

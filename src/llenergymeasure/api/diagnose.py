@@ -58,7 +58,7 @@ from llenergymeasure.api._source_window import (
     _iter_config_classes,
     windowed_source,
 )
-from llenergymeasure.config.engine_rules import VALID_SEVERITY
+from llenergymeasure.config.engine_rules import VALID_SEVERITY, evaluate_predicate
 
 __all__ = [
     "CLASSIFICATIONS",
@@ -1367,6 +1367,54 @@ def _tier_d_match_fields(engine: str, candidate: dict[str, Any], diag: Diagnosis
     return {path: diag.fires_when}
 
 
+# Mirrors ``loader._FIELD_REF_PREFIX`` (a stable 1-char protocol token): a
+# ``fires_when`` operand of the form ``@sibling`` compares the subject field
+# against another field in the same config.
+_FIELD_REF_PREFIX = "@"
+
+
+def _fires_when_holds(
+    subject_leaf: str, fires_when: dict[str, Any], probe: dict[str, Any]
+) -> bool | None:
+    """Evaluate the one-key ``fires_when`` predicate against a flat constructor probe.
+
+    Returns ``True``/``False`` when the probe carries the subject leaf (and the
+    sibling, for an ``@ref`` operand); ``None`` when a needed key is absent, so
+    the caller treats it as indeterminate rather than a silent ``False``.
+    """
+    if subject_leaf not in probe:
+        return None
+    ((op, operand),) = fires_when.items()
+    if isinstance(operand, str) and operand.startswith(_FIELD_REF_PREFIX):
+        sibling = operand[len(_FIELD_REF_PREFIX) :].rsplit(".", 1)[-1]
+        if sibling not in probe:
+            return None
+        operand = probe[sibling]
+    return evaluate_predicate(probe[subject_leaf], {op: operand})
+
+
+def _fires_when_consistent_with_probes(
+    subject_leaf: str,
+    fires_when: dict[str, Any],
+    kwargs_positive: dict[str, Any],
+    kwargs_negative: dict[str, Any],
+) -> bool:
+    """The match predicate must select the illegal probe and reject the legal one.
+
+    ``fires_when`` describes the ILLEGAL region, so it must hold for the illegal
+    ``kwargs_positive`` and must NOT hold for the legal ``kwargs_negative``. The
+    construction gate only verifies that the illegal value RAISES and the legal one
+    CONSTRUCTS; it never re-evaluates the predicate. So a model that inverts
+    ``fires_when`` (describes the legal region instead) or emits a self-referential
+    ``@self`` ref still passes construction while producing an advisory that warns
+    on valid configs. Re-deriving the predicate here on the host closes that hole:
+    the warn fires iff the field is genuinely out of bound.
+    """
+    pos = _fires_when_holds(subject_leaf, fires_when, kwargs_positive)
+    neg = _fires_when_holds(subject_leaf, fires_when, kwargs_negative)
+    return pos is True and neg is False
+
+
 def _tier_d_proposal(
     engine: str,
     candidate: dict[str, Any],
@@ -1514,6 +1562,23 @@ def diagnose_tier_d(
                     "classification": diag.classification,
                     "malformed": diag.kwargs_malformed or {"fires_when": ["missing"]},
                     "reason": "type-malformed probe or missing fires_when predicate",
+                }
+            )
+            continue
+        if not _fires_when_consistent_with_probes(
+            str(candidate["leaf"]), diag.fires_when, diag.kwargs_positive, diag.kwargs_negative
+        ):
+            # The construction gate would still confirm this (the illegal probe
+            # raises), but the fires_when predicate is inverted or self-referential,
+            # so the advisory would warn on valid configs. Drop it before gating.
+            result.unconfirmed.append(
+                {
+                    "rule_id": diag.rule_id,
+                    "verdict": "fires_when_inconsistent",
+                    "reason": (
+                        "fires_when does not select the illegal probe or fails to "
+                        "reject the legal probe (inverted or self-referential bound)"
+                    ),
                 }
             )
             continue
