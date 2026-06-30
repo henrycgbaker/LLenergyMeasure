@@ -12,9 +12,8 @@ recipes.
 GPU etiquette is the operator's: pass ``--docker-flag '--gpus' --docker-flag
 'device=1'`` (or 2/3, NEVER device 0) to pin the gate container; the vLLM gate
 runs CPU-only (``--gpus none``). Only construction-CONFIRMED advisories are
-written; the rich unconfirmed report (constructs_legal / illegal_raises /
-illegal_is_sentinel) is printed so the maintainer can see what a more permissive
-keep-policy would additionally retain.
+written; the unconstrained (model-rejected) candidates and budget-truncation
+notes are printed so the maintainer can see what the mine declined and why.
 
     python3 scripts/engine_producers/diagnose_tier_d_mine.py \
         --engine vllm --image llenergymeasure:vllm-0.19.1 --new-version 0.19.1 \
@@ -107,25 +106,6 @@ def _report(result: DiagnoseResult) -> None:
         f"{len(result.dropped_malformed)} dropped (malformed)",
         file=sys.stderr,
     )
-    # The permissive-policy view: of the not-confirmed, how many constructed the
-    # legal value and are NOT a sentinel / coercion artefact (a more permissive
-    # keep-policy would retain these as UNVERIFIED warn advisories).
-    permissive_extra = [
-        r
-        for r in result.unconfirmed
-        if isinstance(r.get("gate"), dict)
-        and r["gate"].get("constructs_legal")
-        and not r["gate"].get("illegal_is_sentinel")
-        and not r["gate"].get("coercion_artifact")
-    ]
-    if permissive_extra:
-        print(
-            f"  [permissive policy would additionally keep {len(permissive_extra)} "
-            "unverified advisory(ies): construct-clean, non-sentinel, non-coercion]",
-            file=sys.stderr,
-        )
-        for r in permissive_extra:
-            print(f"    unverified: {r['rule_id']}", file=sys.stderr)
     for r in result.tier_d_unconstrained:
         print(f"  unconstrained: {r['rule_id']} ({r['reason']})", file=sys.stderr)
     for note in result.source_truncated:
