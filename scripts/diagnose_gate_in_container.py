@@ -31,14 +31,10 @@ A proposal tagged ``tier_d`` takes the CONSTRUCTION-VIOLATION path
 negative must construct, with the same coercion/locus soundness guards - the
 empirical sentinel guard for the Tier-D pure-inference advisories. The advisory
 is always EMITTED at warn (the universal safety gate); the gate only decides
-whether the bound is real, and reports rich per-probe fields so the host can
-apply a stricter or more permissive keep-policy without re-running the gate. The
-verdict records the GRAIN it confirmed at. Some engines enforce generation
-bounds at generate()-time, not config construction (transformers ``num_beams>=1``
-raises only inside ``model.generate()``); for those, a GENERATE-grain fallback
-(``_generate_grain_confirms`` on a tiny CPU model) runs when construction did not
-confirm, so the gate is not blind to the bounds the LLM is uniquely good at
-finding.
+whether the bound is real. A raise attributable to the runtime device/topology
+(GPU count, distributed world size) rather than the candidate field's value is
+NOT a real bound: it is box-dependent, so confirming on it would break gate
+determinism. ``_is_env_dependent_raise`` rejects exactly that class.
 
 Invoked by :class:`llenergymeasure.api.diagnose.ContainerGateRunner`:
 
@@ -139,88 +135,50 @@ def _is_sentinel_value(value: Any) -> bool:
     return value in (-1, 0) and not isinstance(value, bool)
 
 
-# Engines whose generation bounds are enforced at generate()-time, not at config
-# construction, so the construction gate is structurally blind to them and a
-# generate-grain probe is needed (e.g. transformers num_beams>=1).
-_GENERATE_GRAIN_ENGINES = {"transformers"}
-_TINY_LM: Any = None
+# Substrings (lowercased) marking a raise attributable to the runtime DEVICE /
+# distributed TOPOLOGY rather than the candidate field's value. Such a raise is
+# environment-dependent - it fires on a box with too few GPUs but not on a box
+# with enough - so confirming a bound on it would be box-dependent and break the
+# gate-determinism guarantee. vLLM's ParallelConfig.__post_init__ raises
+# "World size (N) is larger than the number of available GPUs (M)" exactly this
+# way (vllm/config/parallel.py:719); a Tier-D probe for prefill_context_parallel_size
+# trips it on the CPU gate box and would otherwise falsely confirm. Keyed on the
+# STABLE phrase (the GPU-count numbers vary box to box, the phrase does not), so
+# the reject verdict itself is identical on any box.
+_ENV_DEPENDENT_RAISE_MARKERS: tuple[str, ...] = (
+    "available gpus",
+    "available devices",
+    "number of available",
+    "world size",
+    "visible devices",
+    "no cuda gpus",
+)
 
 
-def _tiny_causal_lm() -> Any:
-    """A tiny random CPU model for the generate()-grain probe (built once).
+def _is_env_dependent_raise(message: str | None) -> bool:
+    """True iff a raise concerns runtime device/topology, not the field value.
 
-    From config only - no checkpoint, no download, no GPU. Generation bounds like
-    ``num_beams>=1`` raise inside ``model.generate()`` (beam-tensor allocation),
-    never at ``GenerationConfig`` construction, so a one-token generate on this
-    model is the only grain that surfaces them.
+    The discriminator for the gate-determinism (NN2) guard: a raise whose cause
+    is the box's GPU count / distributed world size is not a reproducible field
+    bound, so a Tier-D confirm must never rest on it.
     """
-    global _TINY_LM
-    if _TINY_LM is None:
-        from transformers import AutoConfig, AutoModelForCausalLM
-
-        cfg = AutoConfig.for_model(
-            "gpt2", n_layer=1, n_head=1, n_embd=8, vocab_size=64, n_positions=64
-        )
-        _TINY_LM = AutoModelForCausalLM.from_config(cfg).eval()
-    return _TINY_LM
-
-
-def _generate_grain_confirms(proposal: dict[str, Any]) -> tuple[bool, str | None]:
-    """Confirm a transformers bound at GENERATE()-time.
-
-    Returns ``(confirmed, illegal_exception_name)``: confirmed iff the illegal
-    kwargs make ``model.generate()`` raise and the legal kwargs do not.
-    """
-    import signal
-
-    import torch
-    from transformers import GenerationConfig
-
-    model = _tiny_causal_lm()
-    ids = torch.tensor([[1, 2, 3]])
-
-    def _raises(kwargs: dict[str, Any]) -> str | None:
-        # A huge illegal value (e.g. max_length=2**31) would make generate() emit
-        # billions of tokens; a hard wall-clock alarm makes that inconclusive
-        # ("Timeout"), never a hang. A Timeout is NOT counted as a clean raise.
-        def _on_alarm(signum: int, frame: Any) -> None:
-            raise TimeoutError("generate exceeded the probe budget")
-
-        old = signal.signal(signal.SIGALRM, _on_alarm)
-        signal.alarm(15)
-        try:
-            with torch.no_grad():
-                model.generate(
-                    ids,
-                    generation_config=GenerationConfig(max_new_tokens=2, pad_token_id=0, **kwargs),
-                )
-            return None
-        except TimeoutError:
-            return "Timeout"
-        except Exception as exc:
-            return type(exc).__name__
-        finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old)
-
-    illegal_exc = _raises(dict(proposal.get("kwargs_positive") or {}))
-    legal_exc = _raises(dict(proposal.get("kwargs_negative") or {}))
-    confirmed = illegal_exc is not None and illegal_exc != "Timeout" and legal_exc is None
-    return confirmed, illegal_exc
+    low = (message or "").lower()
+    return any(marker in low for marker in _ENV_DEPENDENT_RAISE_MARKERS)
 
 
 def gate_one_tier_d(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
     """Construction-violation gate for a Tier-D pure-inference advisory.
 
-    The confirmation grain is CONSTRUCTION, not firing/emission: the
-    claimed-illegal ``kwargs_positive`` must actually RAISE and the legal
-    ``kwargs_negative`` must construct cleanly, with the SAME coercion/locus
-    soundness guards production uses - the empirical sentinel guard that kills the
-    `max_logprobs=-1`-is-legal class of hallucination. The advisory is EMITTED at
-    warn regardless (the universal safety gate); the gate only decides whether the
-    bound is real. The rich ``constructs_legal`` / ``illegal_raises`` /
-    ``coercion_artifact`` / ``illegal_is_sentinel`` fields let the host apply a
-    more permissive keep-policy without re-running the gate.
+    The confirmation grain is CONSTRUCTION: the claimed-illegal ``kwargs_positive``
+    must actually RAISE and the legal ``kwargs_negative`` must construct cleanly,
+    with the SAME coercion/locus soundness guards production uses - the empirical
+    sentinel guard that kills the `max_logprobs=-1`-is-legal class of
+    hallucination. The advisory is EMITTED at warn regardless (the universal
+    safety gate); the gate only decides whether the bound is real. A raise
+    attributable to the runtime device/topology (``_is_env_dependent_raise``) is
+    rejected as box-dependent, never confirmed (gate determinism). The per-probe
+    fields (``illegal_raises`` / ``constructs_legal`` / ``illegal_message`` /
+    ``env_dependent``) are diagnostics for inspecting a mine's verdicts.
     """
     rule_id = proposal["rule_id"]
     # severity=error routes the strict positive-MUST-raise soundness branch.
@@ -276,39 +234,27 @@ def gate_one_tier_d(engine: str, proposal: dict[str, Any]) -> dict[str, Any]:
     soundness_failed = [d.check_failed for d in soundness if d.check_failed is not None]
     constructs_legal = neg.exception_type is None
     illegal_raises = pos.exception_type is not None
-    coercion_artifact = V.CHECK_TYPE_COERCION_ARTIFACT in soundness_failed
-    # STRICT default: the bound is real iff the illegal value raises, the legal
-    # value constructs, and the raise is attributable to the claimed field (no
-    # coercion artefact / locus mismatch / dead negative). soundness empty implies
-    # all of those for a severity=error, no-template inv.
-    confirmed = illegal_raises and constructs_legal and not soundness
+    # Gate-determinism guard: a raise caused by the box's device/topology (GPU
+    # count, world size) is not a field bound - it would confirm here on a CPU
+    # gate box but not on a box with enough GPUs. Reject it.
+    env_dependent = illegal_raises and _is_env_dependent_raise(pos.exception_message)
+    # STRICT keep-policy: the bound is real iff the illegal value raises, the
+    # legal value constructs, the raise is attributable to the claimed field (no
+    # coercion artefact / locus mismatch / dead negative; soundness empty for a
+    # severity=error, no-template inv), and the raise is not environment-dependent.
+    confirmed = illegal_raises and constructs_legal and not soundness and not env_dependent
     out.update(
         {
             "constructs_legal": constructs_legal,
             "illegal_raises": illegal_raises,
             "illegal_exc_type": pos.exception_type,
             "illegal_message": (pos.exception_message or "")[:160],
-            "coercion_artifact": coercion_artifact,
+            "env_dependent": env_dependent,
             "verdict": "confirmed" if confirmed else "not_confirmed",
-            "grain": "construction" if confirmed else None,
         }
     )
     if soundness_failed:
         out["soundness_failed"] = soundness_failed
-
-    # Generate-grain fallback: a bound enforced at generate()-time (transformers
-    # num_beams>=1) is invisible to the construction gate. If construction did not
-    # confirm but the legal probe at least constructs, try the generate grain for
-    # engines that enforce there. The advisory stays warn; only the grain differs.
-    if not confirmed and constructs_legal and engine in _GENERATE_GRAIN_ENGINES:
-        try:
-            gen_confirmed, gen_illegal_exc = _generate_grain_confirms(proposal)
-        except Exception as exc:  # model build / generate infra failure
-            out["generate_grain_error"] = f"{type(exc).__name__}: {exc}"
-        else:
-            out["generate_illegal_exc"] = gen_illegal_exc
-            if gen_confirmed:
-                out.update({"verdict": "confirmed", "grain": "generate"})
     return out
 
 

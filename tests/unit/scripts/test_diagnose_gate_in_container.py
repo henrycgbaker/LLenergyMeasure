@@ -288,7 +288,7 @@ def test_tier_d_coercion_artefact_is_not_confirmed(monkeypatch: pytest.MonkeyPat
 
     out = gate.gate_one_tier_d("vllm", _tier_d_proposal(kwargs_positive={"max_logprobs": "bad"}))
     assert out["verdict"] == "not_confirmed"
-    assert out["coercion_artifact"] is True
+    assert "type_coercion_artifact" in out["soundness_failed"]
 
 
 def test_tier_d_dead_negative_is_not_confirmed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -306,51 +306,61 @@ def test_tier_d_dead_negative_is_not_confirmed(monkeypatch: pytest.MonkeyPatch) 
     assert out["constructs_legal"] is False
 
 
-def test_tier_d_generate_grain_confirms_when_construction_blind(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A bound enforced at generate()-time (transformers num_beams>=1) does not
-    raise at construction, so the construction grain returns not_confirmed; the
-    generate-grain fallback then confirms it with grain=generate."""
-    case = CaseResult(id="x", outcome="no_op", emission_channel="none")
-    # Construction: illegal value constructs cleanly (no raise), legal constructs.
-    _stub_captures(monkeypatch, case=case, pos=_capture(), neg=_capture())
-    monkeypatch.setattr(gate, "_generate_grain_confirms", lambda p: (True, "ZeroDivisionError"))
+def test_tier_d_env_dependent_raise_is_not_confirmed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A raise attributable to the box's device/topology (GPU count, world size),
+    not the field value, is box-dependent and must NOT confirm - even though the
+    illegal value raises and the legal value constructs. Guards gate determinism
+    (the prefill_context_parallel_size 'World size > available GPUs' false positive)."""
+    case = CaseResult(id="x", outcome="error", emission_channel="none")
+    pos = _capture(
+        exception_type="ValueError",
+        exception_message=(
+            "World size (8) is larger than the number of available GPUs (0) in this node."
+        ),
+    )
+    neg = _capture()  # legal value constructs cleanly
+    _stub_captures(monkeypatch, case=case, pos=pos, neg=neg)
 
     out = gate.gate_one_tier_d(
-        "transformers",
-        {
-            "rule_id": "transformers_tier_d_sampling_params_num_beams",
-            "tier_d": True,
-            "native_type": "transformers.GenerationConfig",
-            "severity": "warn",
-            "kwargs_positive": {"num_beams": 0},
-            "kwargs_negative": {"num_beams": 1},
-            "match": {"fields": {"transformers.sampling_params.num_beams": {"<": 1}}},
-        },
+        "vllm",
+        _tier_d_proposal(
+            rule_id="vllm_tier_d_engine_params_prefill_context_parallel_size",
+            kwargs_positive={"prefill_context_parallel_size": 8},
+            kwargs_negative={"prefill_context_parallel_size": 1},
+            match={"fields": {"vllm.engine_params.prefill_context_parallel_size": {">": 1}}},
+        ),
     )
-    assert out["verdict"] == "confirmed"
-    assert out["grain"] == "generate"
-    assert out["generate_illegal_exc"] == "ZeroDivisionError"
+    assert out["verdict"] == "not_confirmed"
+    assert out["illegal_raises"] is True and out["constructs_legal"] is True
+    assert out["env_dependent"] is True
 
 
-def test_tier_d_generate_grain_not_tried_for_construction_engines(
+def test_tier_d_field_value_raise_with_empty_loc_still_confirms(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """vllm/tensorrt enforce at construction; the generate grain must NOT run for
-    them even if construction did not confirm."""
-    case = CaseResult(id="x", outcome="no_op", emission_channel="none")
-    _stub_captures(monkeypatch, case=case, pos=_capture(), neg=_capture())
-    called = {"gen": False}
+    """A genuine field-value bound that raises with NO recoverable locus (a plain
+    ValueError from _verify_args, like vllm logprobs) must still confirm - the
+    env-dependence guard keys on the message, not the absence of a locus, so it
+    does not regress real empty-loc bounds."""
+    case = CaseResult(id="x", outcome="error", emission_channel="none")
+    pos = _capture(
+        exception_type="ValueError",
+        exception_message="logprobs must be non-negative or -1",
+    )  # no error_details -> empty loc, as _verify_args raises produce
+    neg = _capture()
+    _stub_captures(monkeypatch, case=case, pos=pos, neg=neg)
 
-    def _boom(p: dict[str, Any]):
-        called["gen"] = True
-        return (True, "X")
-
-    monkeypatch.setattr(gate, "_generate_grain_confirms", _boom)
-    out = gate.gate_one_tier_d("vllm", _tier_d_proposal())
-    assert out["verdict"] == "not_confirmed"
-    assert called["gen"] is False
+    out = gate.gate_one_tier_d(
+        "vllm",
+        _tier_d_proposal(
+            rule_id="vllm_tier_d_sampling_params_logprobs",
+            kwargs_positive={"logprobs": -2},
+            kwargs_negative={"logprobs": 5},
+            match={"fields": {"vllm.sampling_params.logprobs": {"<": -1}}},
+        ),
+    )
+    assert out["verdict"] == "confirmed"
+    assert out["env_dependent"] is False
 
 
 def test_tier_d_infra_error_when_construction_blows_up(monkeypatch: pytest.MonkeyPatch) -> None:
