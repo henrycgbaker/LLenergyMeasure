@@ -211,17 +211,34 @@ def test_tier_d_illegal_constructs_cleanly_is_not_confirmed(
     assert out["illegal_raises"] is False and out["constructs_legal"] is True
 
 
-def test_tier_d_sentinel_flagged_when_illegal_value_is_minus_one(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("sentinel", [-1, 0])
+def test_tier_d_sentinel_flagged_when_illegal_value_is_a_sentinel(
+    monkeypatch: pytest.MonkeyPatch, sentinel: int
 ) -> None:
-    """A -1 'illegal' value that constructs cleanly is reported as a sentinel
-    (the max_logprobs=-1-is-legal hallucination), and not confirmed."""
+    """A -1 (unlimited) or 0 (disabled/auto) 'illegal' value that constructs
+    cleanly is reported as a sentinel (the max_logprobs=-1-is-legal class of
+    hallucination), and not confirmed."""
     case = CaseResult(id="x", outcome="no_op", emission_channel="none")
     _stub_captures(monkeypatch, case=case, pos=_capture(), neg=_capture())
 
-    out = gate.gate_one_tier_d("vllm", _tier_d_proposal(kwargs_positive={"max_logprobs": -1}))
+    out = gate.gate_one_tier_d("vllm", _tier_d_proposal(kwargs_positive={"max_logprobs": sentinel}))
     assert out["illegal_is_sentinel"] is True
     assert out["verdict"] == "not_confirmed"
+
+
+def test_tier_d_empty_native_type_is_infra_error_not_confirmed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A citation that did not resolve leaves native_type empty; the gate cannot
+    construct it, so the proposal is an infra_error - never a silent confirm."""
+
+    def _unresolvable(engine: str, inv: dict[str, Any]):
+        assert inv["native_type"] == ""  # the unresolved-citation case
+        raise ValueError("native_type unresolved: ''")
+
+    monkeypatch.setattr(gate.V, "_validate_invariant_with_captures", _unresolvable)
+    out = gate.gate_one_tier_d("vllm", _tier_d_proposal(native_type=""))
+    assert out["verdict"] == "infra_error"
 
 
 def test_tier_d_coercion_artefact_is_not_confirmed(monkeypatch: pytest.MonkeyPatch) -> None:
