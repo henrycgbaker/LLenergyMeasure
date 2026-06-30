@@ -620,3 +620,74 @@ invariants:
   - scheduler.py:274 (vllm.config.SchedulerConfig.__post_init__)
   added_by: static_miner
   added_at: '2026-06-22'
+- id: vllm_tier_d_engine_params_max_cpu_loras
+  engine: vllm
+  library: vllm
+  invariant_under_test: '_validate_lora_config: raises if max_cpu_loras < max_loras'
+  severity: warn
+  native_type: vllm.config.lora.LoRAConfig
+  match:
+    engine: vllm
+    fields:
+      vllm.engine_params.max_cpu_loras:
+        <: '@max_loras'
+  kwargs_positive:
+    max_cpu_loras: 1
+    max_loras: 8
+  kwargs_negative:
+    max_cpu_loras: 8
+    max_loras: 8
+  expected_outcome:
+    outcome: warn
+    emission_channel: none
+  references:
+  - 'llm_advisory: _validate_lora_config: raises if max_cpu_loras < max_loras'
+  - 'citation: vllm/config/lora.py -- LoRAConfig._validate_lora_config (lines 97-112)'
+  added_by: llm_advisory
+  llm_proposed: true
+- id: vllm_tier_d_sampling_params_logprobs
+  engine: vllm
+  library: vllm
+  invariant_under_test: '_verify_args: raises if logprobs < -1 and not equal to -1'
+  severity: warn
+  native_type: vllm.sampling_params.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling_params.logprobs:
+        <: -1
+  kwargs_positive:
+    logprobs: -2
+  kwargs_negative:
+    logprobs: -1
+  expected_outcome:
+    outcome: warn
+    emission_channel: none
+  references:
+  - 'llm_advisory: _verify_args: raises if logprobs < -1 and not equal to -1'
+  - 'citation: vllm/sampling_params.py: lines 475-512'
+  added_by: llm_advisory
+  llm_proposed: true
+- id: vllm_tier_d_sampling_params_prompt_logprobs
+  engine: vllm
+  library: vllm
+  invariant_under_test: '_verify_args: raises if prompt_logprobs < -1 and not equal to -1'
+  severity: warn
+  native_type: vllm.sampling_params.SamplingParams
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling_params.prompt_logprobs:
+        <: -1
+  kwargs_positive:
+    prompt_logprobs: -2
+  kwargs_negative:
+    prompt_logprobs: -1
+  expected_outcome:
+    outcome: warn
+    emission_channel: none
+  references:
+  - 'llm_advisory: _verify_args: raises if prompt_logprobs < -1 and not equal to -1'
+  - 'citation: vllm/sampling_params.py: lines 475-512'
+  added_by: llm_advisory
+  llm_proposed: true
