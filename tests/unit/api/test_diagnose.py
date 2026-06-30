@@ -947,13 +947,43 @@ def test_parse_tier_d_classifications_and_bad_fires_when() -> None:
                     "kwargs_negative": {},
                 },
                 {
+                    # Cross-field: max_cpu_loras must be >= max_loras. Now ACCEPTED
+                    # (single-key + supported op; the loader resolves the @ref).
+                    "rule_id": "vllm_tier_d_engine_params_max_cpu_loras",
+                    "classification": "bounded",
+                    "reason": "must be >= max_loras",
+                    "citation": "config.py:5",
+                    "fires_when": {"<": "@max_loras"},
+                    "kwargs_positive": {"max_cpu_loras": 1, "max_loras": 8},
+                    "kwargs_negative": {"max_cpu_loras": 8, "max_loras": 8},
+                },
+                {
+                    # Cross-field divisibility, now an accepted Tier-D operator.
+                    "rule_id": "vllm_tier_d_engine_params_tp_size",
+                    "classification": "bounded",
+                    "reason": "must divide decode_context_parallel_size",
+                    "citation": "config.py:7",
+                    "fires_when": {"not_divisible_by": "@decode_context_parallel_size"},
+                    "kwargs_positive": {"tp_size": 3, "decode_context_parallel_size": 4},
+                    "kwargs_negative": {"tp_size": 2, "decode_context_parallel_size": 4},
+                },
+                {
                     "rule_id": "vllm_tier_d_sampling_params_logprobs",
                     "classification": "bounded",
                     "reason": "x",
                     "citation": "c.py:1",
-                    "fires_when": {"divisible_by": 2},  # unsupported Tier-D operator
+                    "fires_when": {"nonsense": 1},  # unknown op -> still malformed
                     "kwargs_positive": {"logprobs": 3},
                     "kwargs_negative": {"logprobs": 2},
+                },
+                {
+                    "rule_id": "vllm_tier_d_sampling_params_n",
+                    "classification": "bounded",
+                    "reason": "x",
+                    "citation": "c.py:2",
+                    "fires_when": {"<": 0, ">": 8},  # >1 key -> still malformed
+                    "kwargs_positive": {"n": -1},
+                    "kwargs_negative": {"n": 1},
                 },
             ]
         }
@@ -961,9 +991,20 @@ def test_parse_tier_d_classifications_and_bad_fires_when() -> None:
     diags = {d.rule_id: d for d in parse_diagnoses(raw, classifications=TIER_D_CLASSIFICATIONS)}
     assert diags["vllm_tier_d_engine_params_max_logprobs"].fires_when == {"<": 0}
     assert diags["vllm_tier_d_engine_params_master_port"].classification == "unknown"
-    bad = diags["vllm_tier_d_sampling_params_logprobs"]
-    assert bad.fires_when is None
-    assert "fires_when" in bad.kwargs_malformed
+    # Cross-field @ref predicates are ACCEPTED (single-key, supported op); the
+    # @ref value is preserved verbatim for the loader to resolve at pre-flight.
+    assert diags["vllm_tier_d_engine_params_max_cpu_loras"].fires_when == {"<": "@max_loras"}
+    assert diags["vllm_tier_d_engine_params_tp_size"].fires_when == {
+        "not_divisible_by": "@decode_context_parallel_size"
+    }
+    # A genuinely bad fires_when is still malformed: unknown op...
+    unknown_op = diags["vllm_tier_d_sampling_params_logprobs"]
+    assert unknown_op.fires_when is None
+    assert "fires_when" in unknown_op.kwargs_malformed
+    # ...or more than one key (no AND-combined dict).
+    multi_key = diags["vllm_tier_d_sampling_params_n"]
+    assert multi_key.fires_when is None
+    assert "fires_when" in multi_key.kwargs_malformed
 
 
 def _tier_d_response() -> str:
@@ -1042,6 +1083,56 @@ def test_tier_d_end_to_end_splits_by_classification_and_gate(tmp_path: Path) -> 
         "vllm_tier_d_sampling_params_logprobs"
     ]
     assert result.proposed_yaml is not None and "llm_advisory" in result.proposed_yaml
+
+
+def test_tier_d_cross_field_advisory_preserves_at_ref(tmp_path: Path) -> None:
+    # A cross-field bound (max_cpu_loras must be >= max_loras) flows through to an
+    # emitted advisory whose match preserves the "@max_loras" sibling ref, so the
+    # loader resolves it against the sibling at pre-flight.
+    (tmp_path / "config.py").write_text(
+        "class ModelConfig:\n"
+        "    max_loras: int = 1\n"
+        "    max_cpu_loras: int = 1\n"
+        "\n"
+        "    def __post_init__(self) -> None:\n"
+        "        if self.max_cpu_loras < self.max_loras:\n"
+        '            raise ValueError("max_cpu_loras must be >= max_loras")\n'
+    )
+    candidates = [
+        {"section": "engine_params", "leaf": "max_cpu_loras", "type": "int", "default": 1},
+    ]
+    raw = json.dumps(
+        {
+            "diagnoses": [
+                {
+                    "rule_id": "vllm_tier_d_engine_params_max_cpu_loras",
+                    "classification": "bounded",
+                    "reason": "post_init raises if max_cpu_loras < max_loras",
+                    "citation": "config.py:5",
+                    "constraint": "must be >= max_loras",
+                    "fires_when": {"<": "@max_loras"},
+                    "kwargs_positive": {"max_cpu_loras": 1, "max_loras": 8},
+                    "kwargs_negative": {"max_cpu_loras": 8, "max_loras": 8},
+                },
+            ]
+        }
+    )
+    result = diagnose_tier_d(
+        engine="vllm",
+        new_version="0.19.1",
+        candidates=candidates,
+        source_root=tmp_path,
+        config_surface_files=["config.py"],
+        model=_StubModel(raw),
+        gate_runner=_gate_stub({"vllm_tier_d_engine_params_max_cpu_loras": "confirmed"}),
+    )
+    assert [e["id"] for e in result.confirmed] == ["vllm_tier_d_engine_params_max_cpu_loras"]
+    entry = result.confirmed[0]
+    # The @ref survives verbatim into the emitted advisory's match.
+    assert entry["match"]["fields"] == {"vllm.engine_params.max_cpu_loras": {"<": "@max_loras"}}
+    # Both fields are carried on the gate probes so the gate can construct + confirm.
+    assert entry["kwargs_positive"] == {"max_cpu_loras": 1, "max_loras": 8}
+    assert entry["kwargs_negative"] == {"max_cpu_loras": 8, "max_loras": 8}
 
 
 def test_tier_d_path_validator_drops_unresolved(tmp_path: Path) -> None:

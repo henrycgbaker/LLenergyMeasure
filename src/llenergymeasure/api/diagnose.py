@@ -43,7 +43,7 @@ import json
 import re
 import subprocess
 import urllib.request
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -249,12 +249,29 @@ class Diagnosis:
 _STRINGLY_TYPED_SENTINELS = frozenset({"true", "false", "none", "null"})
 
 # Match operators a Tier-D ``fires_when`` predicate may use: single-field
-# numeric bounds, membership, and presence. These are the subset of the loader's
-# operator vocabulary (``loader._OPERATOR_HANDLERS``) that a per-field advisory
-# can express without a cross-field ``@ref``. A ``fires_when`` outside this set
-# is recorded malformed and the diagnosis dropped before gating.
+# numeric bounds, membership, presence, and cross-field divisibility. These are
+# the subset of the loader's operator vocabulary (``loader._OPERATOR_HANDLERS``)
+# a one-key advisory can express. The comparison ops and the divisibility ops
+# all accept a cross-field ``@sibling`` ref as their value: the loader resolves
+# it against a same-container sibling before evaluating (see
+# ``loader._resolve_field_refs_in_spec``), so a single-key predicate can encode
+# a relation like ``max_cpu_loras < @max_loras``. A ``fires_when`` outside this
+# set is recorded malformed and the diagnosis dropped before gating.
 _TIER_D_OPERATORS = frozenset(
-    {"<", "<=", ">", ">=", "==", "!=", "in", "not_in", "present", "absent"}
+    {
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "==",
+        "!=",
+        "in",
+        "not_in",
+        "present",
+        "absent",
+        "divisible_by",
+        "not_divisible_by",
+    }
 )
 
 
@@ -382,6 +399,10 @@ class OllamaDiagnoseModel:
     model: str = DEFAULT_MODEL
     endpoint: str = _OLLAMA_GENERATE
     num_ctx: int = 16384
+    # Default sized for mode 1a/1b single-call triage. Tier-D callers MUST raise
+    # this (the driver passes 12288): a 28-candidate batch JSON response overruns
+    # 4096 tokens and the silent truncation drops advisories. Do not bump the
+    # default blind - a higher cap costs wall-time/VRAM for the 1a/1b callers.
     num_predict: int = 4096
     timeout_s: int = 1800
     response_schema: dict[str, Any] = field(default_factory=lambda: RESPONSE_SCHEMA)
@@ -540,6 +561,34 @@ def _is_validator_member(name: str) -> bool:
     return any(tok in name for tok in ("verify", "validat", "check"))
 
 
+def _iter_surface_config_classes(
+    source_root: Path,
+    config_surface_files: Sequence[str],
+) -> Iterator[tuple[str, str, ast.ClassDef]]:
+    """Walk every config class on the config surface.
+
+    Reads + parses each surface file once through the shared guard ladder
+    (is_file / non-empty / parseable) and yields ``(rel, module_path, cls)`` for
+    each config-like class :func:`_iter_config_classes` finds. ``module_path`` is
+    the dotted import prefix (:func:`_module_from_file`) so callers that need a
+    fully-qualified native_type can build one without re-parsing.
+    """
+    for rel in config_surface_files:
+        path = source_root / rel
+        if not path.is_file():
+            continue
+        body = path.read_text()
+        if not body.strip():
+            continue
+        try:
+            module = ast.parse(body)
+        except SyntaxError:
+            continue
+        module_path = _module_from_file(rel)
+        for cls in _iter_config_classes(module):
+            yield rel, module_path, cls
+
+
 def tier_d_symbol_requests(
     *,
     source_root: Path,
@@ -559,21 +608,10 @@ def tier_d_symbol_requests(
     """
     leaves = set(candidate_leaves)
     requests: list[SymbolRequest] = []
-    for rel in config_surface_files:
-        path = source_root / rel
-        if not path.is_file():
-            continue
-        body = path.read_text()
-        if not body.strip():
-            continue
-        try:
-            module = ast.parse(body)
-        except SyntaxError:
-            continue
-        for cls in _iter_config_classes(module):
-            cls_leaves = tuple(sorted(leaves & _class_owned_fields(cls)))
-            if cls_leaves:
-                requests.append(SymbolRequest(file=rel, class_name=cls.name, fields=cls_leaves))
+    for rel, _module_path, cls in _iter_surface_config_classes(source_root, config_surface_files):
+        cls_leaves = tuple(sorted(leaves & _class_owned_fields(cls)))
+        if cls_leaves:
+            requests.append(SymbolRequest(file=rel, class_name=cls.name, fields=cls_leaves))
     return requests
 
 
@@ -593,23 +631,11 @@ def tier_d_native_types(
     """
     leaves = set(candidate_leaves)
     out: dict[str, str] = {}
-    for rel in config_surface_files:
-        path = source_root / rel
-        if not path.is_file():
-            continue
-        body = path.read_text()
-        if not body.strip():
-            continue
-        try:
-            module = ast.parse(body)
-        except SyntaxError:
-            continue
-        module_path = _module_from_file(rel)
-        for cls in _iter_config_classes(module):
-            native_type = f"{module_path}.{cls.name}" if module_path else cls.name
-            for target in _class_owned_fields(cls):
-                if target in leaves and target not in out:
-                    out[target] = native_type
+    for _rel, module_path, cls in _iter_surface_config_classes(source_root, config_surface_files):
+        native_type = f"{module_path}.{cls.name}" if module_path else cls.name
+        for target in _class_owned_fields(cls):
+            if target in leaves and target not in out:
+                out[target] = native_type
     return out
 
 
@@ -810,9 +836,9 @@ For EACH field emit one diagnosis object:
   - reason: WHERE the raise is (e.g. "_verify_args: raises if logprobs < -1") or why it is unconstrained.
   - citation: file and line number(s) of the OWNING CLASS / the raise in the source above (so the gate can construct it).
   - constraint: for `bounded` only - a short human statement of the bound (e.g. "must be >= -1").
-  - fires_when: for `bounded` only - a ONE-KEY predicate over THIS field describing the ILLEGAL (rejected) region, using one of: "<", "<=", ">", ">=", "==", "!=", "in", "not_in". E.g. a field rejected when below -1 fires_when {{"<": -1}}; a field that must be <= 1.0 fires_when {{">": 1.0}}.
-  - kwargs_positive: for `bounded` only - constructor keyword args setting THIS field to an ILLEGAL value (one satisfying fires_when, and NOT a legal sentinel). NATIVE JSON types (numbers, not strings).
-  - kwargs_negative: for `bounded` only - constructor keyword args setting THIS field to a LEGAL value (one NOT satisfying fires_when).
+  - fires_when: for `bounded` only - a ONE-KEY predicate describing the ILLEGAL (rejected) region, using one of: "<", "<=", ">", ">=", "==", "!=", "in", "not_in", "divisible_by", "not_divisible_by". E.g. a field rejected when below -1 fires_when {{"<": -1}}; a field that must be <= 1.0 fires_when {{">": 1.0}}. The value is usually a literal, but it MAY be a CROSS-FIELD reference: write "@<sibling_field_name>" to compare THIS field against another field in the same config (the illegal region relative to that sibling). E.g. a field that must be >= another field `max_loras` fires_when {{"<": "@max_loras"}}; a field that must divide evenly into `decode_context_parallel_size` fires_when {{"not_divisible_by": "@decode_context_parallel_size"}}.
+  - kwargs_positive: for `bounded` only - constructor keyword args setting THIS field to an ILLEGAL value (one satisfying fires_when, and NOT a legal sentinel). NATIVE JSON types (numbers, not strings). If fires_when uses an "@sibling" reference, set BOTH this field and the sibling field to concrete native values so the gate can construct and check the relation. E.g. for max_cpu_loras must be >= max_loras (fires_when {{"<": "@max_loras"}}): kwargs_positive {{"max_cpu_loras": 1, "max_loras": 8}}.
+  - kwargs_negative: for `bounded` only - constructor keyword args setting THIS field to a LEGAL value (one NOT satisfying fires_when). If fires_when uses an "@sibling" reference, set BOTH fields here too. E.g. for the max_cpu_loras case: kwargs_negative {{"max_cpu_loras": 8, "max_loras": 8}}.
 
 These probes are CONSTRUCTED by a deterministic gate: the illegal kwargs must actually make the library raise and the legal kwargs must construct cleanly, or the proposal is dropped (so a wrong bound costs nothing - but a missed real bound is a missed advisory). Emit a JSON object with a diagnoses array containing one object per field above."""
 
