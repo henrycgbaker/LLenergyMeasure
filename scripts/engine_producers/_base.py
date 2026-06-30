@@ -25,6 +25,8 @@ import ast
 from dataclasses import dataclass, field
 from typing import Any, Literal, get_args, get_origin
 
+from scripts.engine_producers._section_classifier import relabel_or_skip_dead_path
+
 # ---------------------------------------------------------------------------
 # Public types
 # ---------------------------------------------------------------------------
@@ -308,6 +310,65 @@ def extract_loop_literal_iterable(loop: ast.For) -> list[Any] | None:
     return values
 
 
+COMPARE_OP_NAMES: dict[type[ast.cmpop], str] = {
+    ast.Eq: "==",
+    ast.NotEq: "!=",
+    ast.Lt: "<",
+    ast.LtE: "<=",
+    ast.Gt: ">",
+    ast.GtE: ">=",
+    ast.In: "in",
+    ast.NotIn: "not_in",
+}
+
+
+INVERSE_OPS: dict[str, str] = {
+    "==": "!=",
+    "!=": "==",
+    "<": ">=",
+    "<=": ">",
+    ">": "<=",
+    ">=": "<",
+    "in": "not_in",
+    "not_in": "in",
+    "present": "absent",
+    "absent": "present",
+    "type_is": "type_is_not",
+    "type_is_not": "type_is",
+}
+
+
+def self_attr_name(node: ast.expr) -> str | None:
+    """If ``node`` is ``self.<name>``, return ``<name>``; else None."""
+    if (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+    ):
+        return node.attr
+    return None
+
+
+def literal_value(node: ast.expr) -> tuple[bool, Any]:
+    if isinstance(node, ast.Constant):
+        return True, node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        ok, v = literal_value(node.operand)
+        if ok and isinstance(v, (int, float)):
+            return True, -v
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        out: list[Any] = []
+        for elt in node.elts:
+            ok, v = literal_value(elt)
+            if not ok:
+                return False, None
+            out.append(v)
+        return True, list(out)
+    if isinstance(node, ast.Name) and node.id in {"True", "False", "None"}:
+        return True, {"True": True, "False": False, "None": None}[node.id]
+    return False, None
+
+
 # ---------------------------------------------------------------------------
 # Class helpers
 # ---------------------------------------------------------------------------
@@ -380,3 +441,48 @@ def extract_literal_values(annotation: Any) -> tuple[Any, ...] | None:
             if inner is not None:
                 return inner
     return None
+
+
+# ---------------------------------------------------------------------------
+# YAML emission
+# ---------------------------------------------------------------------------
+
+
+def candidate_to_dict(
+    c: InvariantCandidate, engine: str, curated_sections: dict[str, str]
+) -> dict[str, Any] | None:
+    # D2: re-key onto classified {engine}.{section}.{field} paths (curation
+    # first, then per-engine native origin). A candidate whose
+    # match path is a dead end (unreachable or unresolvable) is skipped whole.
+    fields = relabel_or_skip_dead_path(
+        c.match_fields,
+        engine=engine,
+        native_type=c.native_type,
+        curated_sections=curated_sections,
+    )
+    if fields is None:
+        return None
+    return {
+        "id": c.id,
+        "engine": c.engine,
+        "library": c.library,
+        "invariant_under_test": c.invariant_under_test,
+        "severity": c.severity,
+        "native_type": c.native_type,
+        "miner_source": {
+            "path": c.miner_source.path,
+            "method": c.miner_source.method,
+            "line_at_scan": c.miner_source.line_at_scan,
+        },
+        "match": {
+            "engine": c.engine,
+            "fields": fields,
+        },
+        "kwargs_positive": c.kwargs_positive,
+        "kwargs_negative": c.kwargs_negative,
+        "expected_outcome": c.expected_outcome,
+        "message_template": c.message_template,
+        "references": c.references,
+        "added_by": c.added_by,
+        "added_at": c.added_at,
+    }

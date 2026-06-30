@@ -70,12 +70,15 @@ sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).res
 sys.path[:] = [p for p in sys.path if p != ""]
 
 from scripts.engine_producers._base import (  # noqa: E402  (late import after sys.path)
+    COMPARE_OP_NAMES,
     call_func_path,
     find_class,
     find_method,
     first_string_arg,
     format_call_template,
+    literal_value,
     render_binop_concat_template,
+    self_attr_name,
 )
 from scripts.engine_producers._current import current_version  # noqa: E402
 from scripts.engine_producers._landmarks import load_landmarks  # noqa: E402
@@ -231,56 +234,6 @@ class InvariantCandidate:
 # ---------------------------------------------------------------------------
 
 
-_COMPARE_OP_NAMES: dict[type[ast.cmpop], str] = {
-    ast.Eq: "==",
-    ast.NotEq: "!=",
-    ast.Lt: "<",
-    ast.LtE: "<=",
-    ast.Gt: ">",
-    ast.GtE: ">=",
-    ast.In: "in",
-    ast.NotIn: "not_in",
-}
-
-
-def _self_attr_name(node: ast.expr) -> str | None:
-    """If ``node`` is ``self.<name>``, return ``<name>``; else None."""
-    if (
-        isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "self"
-    ):
-        return node.attr
-    return None
-
-
-def _literal_value(node: ast.expr) -> tuple[bool, Any]:
-    """Try to resolve ``node`` to a Python literal.
-
-    Returns ``(True, value)`` on success, ``(False, None)`` otherwise.
-    Supports ``ast.Constant``, ``ast.UnaryOp(USub, Constant)``, and tuples /
-    lists / sets of constants (closed-set membership shapes).
-    """
-    if isinstance(node, ast.Constant):
-        return True, node.value
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-        ok, v = _literal_value(node.operand)
-        if ok and isinstance(v, (int, float)):
-            return True, -v
-    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
-        values: list[Any] = []
-        for elt in node.elts:
-            ok, v = _literal_value(elt)
-            if not ok:
-                return False, None
-            values.append(v)
-        return True, list(values)
-    if isinstance(node, ast.Name) and node.id in {"True", "False", "None"}:
-        # Python 3.10 always uses ast.Constant for these, kept defensively.
-        return True, {"True": True, "False": False, "None": None}[node.id]
-    return False, None
-
-
 def _rhs_from_node(node: ast.expr) -> tuple[bool, Any, int]:
     """Resolve ``node`` into a corpus-loader RHS value.
 
@@ -289,11 +242,11 @@ def _rhs_from_node(node: ast.expr) -> tuple[bool, Any, int]:
     penalty (0 if clean, 1 if we made a permissive guess).
     """
     # Literal
-    ok, v = _literal_value(node)
+    ok, v = literal_value(node)
     if ok:
         return True, v, 0
     # Cross-field reference: self.<name>
-    name = _self_attr_name(node)
+    name = self_attr_name(node)
     if name is not None:
         return True, f"@{name}", 0
     # ast.Name resolved as a module-level constant (e.g. ALL_CACHE_IMPLEMENTATIONS):
@@ -307,8 +260,8 @@ def _rhs_from_node(node: ast.expr) -> tuple[bool, Any, int]:
 def _modulo_field_pair(node: ast.expr) -> tuple[str, str] | None:
     """If ``node`` is ``self.<a> % self.<b>``, return ``(a, b)``."""
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
-        a = _self_attr_name(node.left)
-        b = _self_attr_name(node.right)
+        a = self_attr_name(node.left)
+        b = self_attr_name(node.right)
         if a is not None and b is not None:
             return a, b
     return None
@@ -334,7 +287,7 @@ def _extract_compare(cmp: ast.Compare) -> tuple[list[FieldPredicate], list[str]]
         right = cmp.comparators[0]
         pair = _modulo_field_pair(cmp.left)
         if pair is not None and isinstance(op, (ast.NotEq, ast.Eq)):
-            ok, rhs = _literal_value(right)
+            ok, rhs = literal_value(right)
             if ok and rhs == 0:
                 a, b = pair
                 # ``a % b != 0`` -> not_divisible_by; ``a % b == 0`` -> divisible_by.
@@ -356,8 +309,8 @@ def _extract_compare(cmp: ast.Compare) -> tuple[list[FieldPredicate], list[str]]
         # `is`/`is not` - corpus loader has no `is` operator. Map `is None` to
         # `absent`, `is not None` to `present`.
         if isinstance(op, (ast.Is, ast.IsNot)):
-            field_name = _self_attr_name(left)
-            ok, rhs = _literal_value(right)
+            field_name = self_attr_name(left)
+            ok, rhs = literal_value(right)
             if field_name is not None and ok and rhs is None:
                 preds.append(
                     FieldPredicate(
@@ -369,14 +322,14 @@ def _extract_compare(cmp: ast.Compare) -> tuple[list[FieldPredicate], list[str]]
                 continue
             unparseable.append(ast.unparse(cmp))
             continue
-        op_name = _COMPARE_OP_NAMES.get(type(op))
+        op_name = COMPARE_OP_NAMES.get(type(op))
         if op_name is None:
             unparseable.append(ast.unparse(cmp))
             continue
 
         # Identify which side is the self.<field>
-        left_field = _self_attr_name(left)
-        right_field = _self_attr_name(right)
+        left_field = self_attr_name(left)
+        right_field = self_attr_name(right)
 
         if left_field is not None:
             ok, rhs, penalty = _rhs_from_node(right)
@@ -425,7 +378,7 @@ def _extract_call_predicate(call: ast.Call) -> tuple[list[FieldPredicate], list[
     if head == "isinstance" and len(call.args) == 2:
         target = call.args[0]
         type_arg = call.args[1]
-        field_name = _self_attr_name(target)
+        field_name = self_attr_name(target)
         if field_name is None:
             return [], [ast.unparse(call)]
         # Type names (single class or tuple thereof)
@@ -548,7 +501,7 @@ def extract_predicates(condition: ast.expr) -> tuple[list[FieldPredicate], list[
     if isinstance(condition, ast.UnaryOp) and isinstance(condition.op, ast.Not):
         return _extract_unary_not(condition)
     # Bare ``self.x`` truthiness ≈ "present" - degrade confidence.
-    field_name = _self_attr_name(condition)
+    field_name = self_attr_name(condition)
     if field_name is not None:
         return [
             FieldPredicate(

@@ -35,21 +35,23 @@ from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._base import (
+    COMPARE_OP_NAMES,
+    INVERSE_OPS,
     InvariantCandidate,
     MinerLandmarkMissingError,
     MinerSource,
     call_func_path,
+    candidate_to_dict,
     find_class,
     find_method,
     first_string_arg,
+    literal_value,
+    self_attr_name,
 )
 from scripts.engine_producers._current import current_version
 from scripts.engine_producers._landmarks import load_landmarks
 from scripts.engine_producers._msgspec_lift import recover_field_types
-from scripts.engine_producers._section_classifier import (
-    load_curated_sections,
-    relabel_or_skip_dead_path,
-)
+from scripts.engine_producers._section_classifier import load_curated_sections
 
 # ---------------------------------------------------------------------------
 # Engine + namespace conventions
@@ -297,17 +299,6 @@ class _Predicate:
     confidence_penalty: int = 0
 
 
-_COMPARE_OPS: dict[type[ast.cmpop], str] = {
-    ast.Eq: "==",
-    ast.NotEq: "!=",
-    ast.Lt: "<",
-    ast.LtE: "<=",
-    ast.Gt: ">",
-    ast.GtE: ">=",
-    ast.In: "in",
-    ast.NotIn: "not_in",
-}
-
 _FLIPPED_OPS: dict[str, str] = {
     "<": ">",
     "<=": ">=",
@@ -316,31 +307,6 @@ _FLIPPED_OPS: dict[str, str] = {
     "==": "==",
     "!=": "!=",
 }
-
-_INVERSE_OPS: dict[str, str] = {
-    "==": "!=",
-    "!=": "==",
-    "<": ">=",
-    "<=": ">",
-    ">": "<=",
-    ">=": "<",
-    "in": "not_in",
-    "not_in": "in",
-    "present": "absent",
-    "absent": "present",
-    "type_is": "type_is_not",
-    "type_is_not": "type_is",
-}
-
-
-def _self_attr(node: ast.expr) -> str | None:
-    if (
-        isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "self"
-    ):
-        return node.attr
-    return None
 
 
 def _self_method_name(node: ast.expr) -> str | None:
@@ -360,31 +326,11 @@ def _self_method_name(node: ast.expr) -> str | None:
     return None
 
 
-def _literal(node: ast.expr) -> tuple[bool, Any]:
-    if isinstance(node, ast.Constant):
-        return True, node.value
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-        ok, v = _literal(node.operand)
-        if ok and isinstance(v, (int, float)):
-            return True, -v
-    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
-        out: list[Any] = []
-        for elt in node.elts:
-            ok, v = _literal(elt)
-            if not ok:
-                return False, None
-            out.append(v)
-        return True, list(out)
-    if isinstance(node, ast.Name) and node.id in {"True", "False", "None"}:
-        return True, {"True": True, "False": False, "None": None}[node.id]
-    return False, None
-
-
 def _rhs_value(node: ast.expr, field_refs: frozenset[str]) -> tuple[bool, Any]:
-    ok, v = _literal(node)
+    ok, v = literal_value(node)
     if ok:
         return True, v
-    name = _self_attr(node)
+    name = self_attr_name(node)
     if name is not None:
         return True, f"@{name}"
     if isinstance(node, ast.Name) and node.id in field_refs:
@@ -400,8 +346,8 @@ def _extract_compare(cmp: ast.Compare, field_refs: frozenset[str]) -> list[_Pred
     operands = [cmp.left, *cmp.comparators]
     for left, op, right in zip(operands, cmp.ops, cmp.comparators, strict=False):
         if isinstance(op, (ast.Is, ast.IsNot)):
-            field_name = _self_attr(left)
-            ok, rhs = _literal(right)
+            field_name = self_attr_name(left)
+            ok, rhs = literal_value(right)
             if field_name is not None and ok and rhs is None:
                 preds.append(
                     _Predicate(
@@ -411,11 +357,11 @@ def _extract_compare(cmp: ast.Compare, field_refs: frozenset[str]) -> list[_Pred
                     )
                 )
             continue
-        op_name = _COMPARE_OPS.get(type(op))
+        op_name = COMPARE_OP_NAMES.get(type(op))
         if op_name is None:
             continue
-        left_field = _self_attr(left)
-        right_field = _self_attr(right)
+        left_field = self_attr_name(left)
+        right_field = self_attr_name(right)
         if left_field is not None:
             ok, rhs = _rhs_value(right, field_refs)
             if ok:
@@ -436,7 +382,7 @@ def _extract_call(call: ast.Call) -> list[_Predicate]:
     if head == "isinstance" and len(call.args) == 2:
         target = call.args[0]
         type_arg = call.args[1]
-        field_name = _self_attr(target)
+        field_name = self_attr_name(target)
         if field_name is None:
             return []
         names: list[str] = []
@@ -471,11 +417,11 @@ def _extract_predicates(condition: ast.expr, field_refs: frozenset[str]) -> list
         return _extract_call(condition)
     if isinstance(condition, ast.UnaryOp) and isinstance(condition.op, ast.Not):
         inner = _extract_predicates(condition.operand, field_refs)
-        if len(inner) == 1 and inner[0].op in _INVERSE_OPS:
+        if len(inner) == 1 and inner[0].op in INVERSE_OPS:
             p = inner[0]
-            return [_Predicate(field=p.field, op=_INVERSE_OPS[p.op], rhs=p.rhs)]
+            return [_Predicate(field=p.field, op=INVERSE_OPS[p.op], rhs=p.rhs)]
         return []
-    field_name = _self_attr(condition)
+    field_name = self_attr_name(condition)
     if field_name is not None:
         return [_Predicate(field=field_name, op="present", rhs=True, confidence_penalty=1)]
     return []
@@ -633,7 +579,7 @@ def _negate_predicates(preds: list[_Predicate]) -> list[_Predicate]:
     if not preds:
         return []
     last = preds[-1]
-    flipped_op = _INVERSE_OPS.get(last.op, last.op)
+    flipped_op = INVERSE_OPS.get(last.op, last.op)
     return [
         *preds[:-1],
         _Predicate(field=last.field, op=flipped_op, rhs=last.rhs),
@@ -1141,46 +1087,6 @@ def walk_vllm_static(*, today: str | None = None) -> tuple[list[InvariantCandida
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(
-    c: InvariantCandidate, curated_sections: dict[str, str]
-) -> dict[str, Any] | None:
-    # D2: re-key onto classified {engine}.{section}.{field} paths (curation
-    # first, then SamplingParams/EngineArgs native origin). A candidate whose
-    # match path is a dead end (unreachable or unresolvable) is skipped whole.
-    fields = relabel_or_skip_dead_path(
-        c.match_fields,
-        engine=ENGINE,
-        native_type=c.native_type,
-        curated_sections=curated_sections,
-    )
-    if fields is None:
-        return None
-    return {
-        "id": c.id,
-        "engine": c.engine,
-        "library": c.library,
-        "invariant_under_test": c.invariant_under_test,
-        "severity": c.severity,
-        "native_type": c.native_type,
-        "miner_source": {
-            "path": c.miner_source.path,
-            "method": c.miner_source.method,
-            "line_at_scan": c.miner_source.line_at_scan,
-        },
-        "match": {
-            "engine": c.engine,
-            "fields": fields,
-        },
-        "kwargs_positive": c.kwargs_positive,
-        "kwargs_negative": c.kwargs_negative,
-        "expected_outcome": c.expected_outcome,
-        "message_template": c.message_template,
-        "references": c.references,
-        "added_by": c.added_by,
-        "added_at": c.added_at,
-    }
-
-
 def emit_yaml(candidates: list[InvariantCandidate], engine_version: str) -> str:
     import yaml
 
@@ -1189,7 +1095,9 @@ def emit_yaml(candidates: list[InvariantCandidate], engine_version: str) -> str:
     mined_at = frozen if frozen else dt.date.today().isoformat()
     curated_sections = load_curated_sections(ENGINE)
     rows = [
-        d for c in sorted_candidates if (d := _candidate_to_dict(c, curated_sections)) is not None
+        d
+        for c in sorted_candidates
+        if (d := candidate_to_dict(c, ENGINE, curated_sections)) is not None
     ]
     skipped = len(sorted_candidates) - len(rows)
     if skipped:

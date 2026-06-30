@@ -180,7 +180,7 @@ def _own_methods(cls: type) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]
         return None
     if not isinstance(node, ast.ClassDef):
         return None
-    return {n.name: n for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    return _own_methods_ast(node)
 
 
 def _effective_covered(
