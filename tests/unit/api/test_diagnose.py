@@ -39,7 +39,9 @@ from llenergymeasure.api.diagnose import (
     diagnose_tier_d,
     parse_diagnoses,
     render_proposed_yaml,
+    tier_d_native_types,
     tier_d_rule_id,
+    tier_d_symbol_requests,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "diagnose"
@@ -828,6 +830,44 @@ def _write_tier_d_surface(path: Path) -> None:
         "class SamplingParams:\n"
         "    logprobs: int | None = None\n"
     )
+
+
+def _write_validator_surface(path: Path) -> None:
+    """A config class whose validator (with the raise) sits far below the 40-line
+    surface cap, so only the cited-field window can reach it."""
+    lines = ["class SamplingParams:", "    logprobs: int | None = None"]
+    lines += [f"    pad{i}: int = {i}" for i in range(60)]  # push the validator down
+    lines += [
+        "    def _verify_args(self) -> None:",
+        "        if self.logprobs is not None and self.logprobs != -1 and self.logprobs < 0:",
+        '            raise ValueError("logprobs must be non-negative or -1")',
+    ]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def test_tier_d_cited_field_windowing_admits_the_validator_body(tmp_path: Path) -> None:
+    # The fix: the mode-1b 40-line surface window misses a validator 60 lines below
+    # the header; the cited-field path surfaces it so the model can find the bound.
+    _write_validator_surface(tmp_path / "sp.py")
+    requests = tier_d_symbol_requests(
+        source_root=tmp_path, config_surface_files=["sp.py"], candidate_leaves=["logprobs"]
+    )
+    assert [(r.class_name, r.fields) for r in requests] == [("SamplingParams", ("logprobs",))]
+    report = windowed_source(source_root=tmp_path, requests=requests, budget_chars=12_000)
+    assert "_verify_args" in report.source
+    assert "logprobs must be non-negative or -1" in report.source
+
+
+def test_tier_d_native_types_resolves_declaring_class(tmp_path: Path) -> None:
+    # native_type comes from the candidate's DECLARING class (deterministic), not
+    # the model's citation - the model often emits an unparseable citation.
+    _write_validator_surface(tmp_path / "sp.py")
+    types = tier_d_native_types(
+        source_root=tmp_path,
+        config_surface_files=["sp.py"],
+        candidate_leaves=["logprobs", "absent"],
+    )
+    assert types == {"logprobs": "sp.SamplingParams"}
 
 
 def test_tier_d_prompt_lists_candidates_and_bound_contract() -> None:

@@ -54,6 +54,7 @@ from llenergymeasure.api._source_window import (
     DEFAULT_BUDGET_CHARS,
     SymbolRequest,
     WindowReport,
+    _assign_targets,
     _iter_config_classes,
     windowed_source,
 )
@@ -80,7 +81,9 @@ __all__ = [
     "diagnose_tier_d",
     "parse_diagnoses",
     "render_proposed_yaml",
+    "tier_d_native_types",
     "tier_d_rule_id",
+    "tier_d_symbol_requests",
 ]
 
 
@@ -491,6 +494,83 @@ def config_surface_symbol_requests(
     return requests
 
 
+def tier_d_symbol_requests(
+    *,
+    source_root: Path,
+    config_surface_files: Sequence[str],
+    candidate_leaves: Sequence[str],
+) -> list[SymbolRequest]:
+    """Per-class CITED-FIELD windowing requests for Tier-D.
+
+    The mode-1b surface window (a 40-line leading slice of each class) shows the
+    docstring + field declarations but NOT the ``__post_init__`` / ``_verify_args``
+    / ``validate`` / ``@field_validator`` body where a CONSTRUCTION bound's raise
+    actually lives (typically 100-400 lines below the header). Tier-D needs that
+    body, so it windows each config class with the candidate leaves it DECLARES as
+    cited fields - the cited-field path (:func:`_windows_for_class`) then admits
+    each field's annotation span AND any same-class method body that references it
+    (the validator). A class that declares no candidate leaf is skipped.
+    """
+    leaves = set(candidate_leaves)
+    requests: list[SymbolRequest] = []
+    for rel in config_surface_files:
+        path = source_root / rel
+        if not path.is_file():
+            continue
+        body = path.read_text()
+        if not body.strip():
+            continue
+        try:
+            module = ast.parse(body)
+        except SyntaxError:
+            continue
+        for cls in _iter_config_classes(module):
+            declared: set[str] = set()
+            for stmt in cls.body:
+                declared |= _assign_targets(stmt)
+            cls_leaves = tuple(sorted(leaves & declared))
+            if cls_leaves:
+                requests.append(SymbolRequest(file=rel, class_name=cls.name, fields=cls_leaves))
+    return requests
+
+
+def tier_d_native_types(
+    *,
+    source_root: Path,
+    config_surface_files: Sequence[str],
+    candidate_leaves: Sequence[str],
+) -> dict[str, str]:
+    """Map each candidate leaf to the fully-qualified native_type that DECLARES it.
+
+    Tier-D knows each candidate's owning class deterministically (the config class
+    on the surface that declares the leaf), so the gate's construction target does
+    not depend on the model formatting a ``file:line`` citation correctly (which
+    it often does not). Returns ``{leaf: "<module>.<Class>"}``; the first declaring
+    class wins on the rare cross-class collision.
+    """
+    leaves = set(candidate_leaves)
+    out: dict[str, str] = {}
+    for rel in config_surface_files:
+        path = source_root / rel
+        if not path.is_file():
+            continue
+        body = path.read_text()
+        if not body.strip():
+            continue
+        try:
+            module = ast.parse(body)
+        except SyntaxError:
+            continue
+        module_path = _module_from_file(rel)
+        for cls in _iter_config_classes(module):
+            native_type = f"{module_path}.{cls.name}" if module_path else cls.name
+            for stmt in cls.body:
+                for target in _assign_targets(stmt):
+                    if target in leaves and target not in out:
+                        out[target] = native_type
+    return out
+
+
 def _module_from_file(rel: str) -> str:
     """Dotted module path for a source-relative file path.
 
@@ -666,9 +746,9 @@ Only flag gaps you can ground in the source above. If mining looks complete, emi
 
 _TIER_D_PROMPT = """You are auditing config-parameter bounds in an inference-engine library: {engine} {new_version}.
 
-Below is a list of NUMERIC config fields that carry NO machine-enforced bound (no pydantic Field(ge/le), no Literal enum, no mined rule). For each, your job is the SEMANTIC-BOUND check: read the SOURCE and decide whether the field has a REAL constraint stated only in semantics - a docstring "Args" note, an imperative `if x < 0: raise`, a validator, or a documented valid range. The deterministic miner cannot see these.
+Below is a list of NUMERIC config fields with no declarative bound (no pydantic Field(ge/le), no Literal enum, no mined rule). For each, decide whether the library ENFORCES a bound on it. Look hard in the SOURCE below - not just the docstring, but the method bodies shown beneath each field: `__post_init__`, `_verify_args`, `validate`, `@field_validator`, or any `if <field> ...: raise`. The bound usually lives in a validator, not the declaration.
 
-BE CONSERVATIVE. Most of these fields are unconstrained free integers (counters, ports, ranks, sizes, timeouts). Do NOT invent a bound. In PARTICULAR, a sentinel value the library explicitly accepts (commonly `-1` = unlimited / `0` = disabled / `None` = auto) means the field is NOT bounded there - classify it `unconstrained`, never `bounded`. A wrong `bounded` call produces a false warning on a valid config.
+A field is `bounded` if a construction-time raise constrains it. Pick the ILLEGAL value carefully: it must land in the region the library REJECTS. Watch for explicit legal SENTINELS - if the source accepts a special value (commonly `-1` = unlimited / `0` = disabled, e.g. a guard like `x != -1 and x < 0`), that sentinel is LEGAL, so do NOT use it as your illegal value; pick a value clearly outside the legal set (if `-1` is the legal sentinel and `x < -1` is rejected, use `-2`, never `-1`). A field with no validator raise is `unconstrained`.
 
 FIELDS TO AUDIT (use the given rule_id verbatim for each):
 {candidates}
@@ -678,15 +758,15 @@ NEW {new_version} SOURCE (cite real file:line from it):
 
 For EACH field emit one diagnosis object:
   - rule_id: the exact rule_id given for that field.
-  - classification: `bounded` if the source states a real constraint; `unconstrained` if it is a free value or sentinel-accepting; `unknown` if the source does not let you decide.
-  - reason: WHERE the bound is stated (e.g. "docstring Args: must be >= 1") or why it is unconstrained.
-  - citation: file and line number(s) of the OWNING CLASS / the constraint in the source above (so the gate can construct it).
-  - constraint: for `bounded` only - a short human statement of the bound (e.g. "must be >= 0").
-  - fires_when: for `bounded` only - a ONE-KEY predicate over THIS field describing the ILLEGAL region, using one of: "<", "<=", ">", ">=", "==", "!=", "in", "not_in". E.g. a field that must be >= 0 fires_when {{"<": 0}}; a field that must be <= 1.0 fires_when {{">": 1.0}}.
-  - kwargs_positive: for `bounded` only - constructor keyword args for the field's native_type that set THIS field to an ILLEGAL value (one satisfying fires_when). NATIVE JSON types (numbers, not strings).
+  - classification: `bounded` if a construction-time raise constrains it; `unconstrained` if no validator constrains it (a free counter / port / rank, or a value the library accepts including its sentinels); `unknown` if the source does not let you decide.
+  - reason: WHERE the raise is (e.g. "_verify_args: raises if logprobs < -1") or why it is unconstrained.
+  - citation: file and line number(s) of the OWNING CLASS / the raise in the source above (so the gate can construct it).
+  - constraint: for `bounded` only - a short human statement of the bound (e.g. "must be >= -1").
+  - fires_when: for `bounded` only - a ONE-KEY predicate over THIS field describing the ILLEGAL (rejected) region, using one of: "<", "<=", ">", ">=", "==", "!=", "in", "not_in". E.g. a field rejected when below -1 fires_when {{"<": -1}}; a field that must be <= 1.0 fires_when {{">": 1.0}}.
+  - kwargs_positive: for `bounded` only - constructor keyword args setting THIS field to an ILLEGAL value (one satisfying fires_when, and NOT a legal sentinel). NATIVE JSON types (numbers, not strings).
   - kwargs_negative: for `bounded` only - constructor keyword args setting THIS field to a LEGAL value (one NOT satisfying fires_when).
 
-These probes will be CONSTRUCTED by a deterministic gate: the illegal kwargs must actually make the library raise, the legal kwargs must construct cleanly, or the proposal is dropped. Emit a JSON object with a diagnoses array containing one object per field above."""
+These probes are CONSTRUCTED by a deterministic gate: the illegal kwargs must actually make the library raise and the legal kwargs must construct cleanly, or the proposal is dropped (so a wrong bound costs nothing - but a missed real bound is a missed advisory). Emit a JSON object with a diagnoses array containing one object per field above."""
 
 
 def _compact_carried(carried: Sequence[dict[str, Any]]) -> str:
@@ -1325,8 +1405,13 @@ def diagnose_tier_d(
     if not candidates:
         raise DiagnoseError("tier-d diagnose requires at least one candidate field")
 
-    requests = config_surface_symbol_requests(
-        source_root=source_root, config_surface_files=config_surface_files
+    # Cited-field windowing: show the model each candidate's validator body (where
+    # a construction bound's raise lives), not just the 40-line class header.
+    candidate_leaves = [str(c["leaf"]) for c in candidates]
+    requests = tier_d_symbol_requests(
+        source_root=source_root,
+        config_surface_files=config_surface_files,
+        candidate_leaves=candidate_leaves,
     )
     window = _assemble_source(
         source_root=source_root,
@@ -1345,8 +1430,13 @@ def diagnose_tier_d(
     # Map each diagnosis back to the candidate it was asked about (by the
     # deterministic rule_id); ignore any fabricated ids the model invents.
     cand_by_id = {tier_d_rule_id(engine, str(c["section"]), str(c["leaf"])): c for c in candidates}
-    class_index = _config_class_index(
-        source_root=source_root, config_surface_files=config_surface_files
+    # Resolve the gate's construction target from the candidate's DECLARING class
+    # (deterministic), not the model's citation - the model often emits an
+    # unparseable citation, which left native_type empty -> spurious infra_error.
+    native_by_leaf = tier_d_native_types(
+        source_root=source_root,
+        config_surface_files=config_surface_files,
+        candidate_leaves=candidate_leaves,
     )
 
     gateable: list[tuple[dict[str, Any], Diagnosis, str]] = []
@@ -1373,7 +1463,7 @@ def diagnose_tier_d(
                 }
             )
             continue
-        native_type = _native_type_for_citation(diag.citation, class_index)
+        native_type = native_by_leaf.get(str(candidate["leaf"]), "")
         proposal = _tier_d_proposal(engine, candidate, diag, native_type=native_type)
         if path_validator is not None:
             (path,) = _tier_d_match_fields(engine, candidate, diag)
