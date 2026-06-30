@@ -250,9 +250,16 @@ class InvariantMatch:
     """Result of a invariant matching a concrete config.
 
     ``declared_value`` is the user-set value for the *trigger* field (the first
-    non-trivially-predicated field in the match spec). ``effective_value``
-    populates only when the invariant's ``expected_outcome`` lists the invariant as
-    ``dormant_silent`` with a ``normalised_fields`` mapping.
+    non-trivially-predicated field in the match spec).
+
+    ``effective_value`` is reserved for the *Overridden* dormancy case (the
+    engine remaps a declared value to a different effective one; see
+    :class:`llenergymeasure.config.probe.DormantField`). It is always ``None``
+    today: ``try_match`` does not populate it, because no miner yet emits a
+    populated ``expected_outcome.normalised_fields`` mapping - every dormant
+    invariant in the corpus is the *Stripped* case, for which ``None`` is the
+    correct effective value. The field stays in the serialised schema so the
+    distinction is available once a miner surfaces remapped values.
     """
 
     invariant: Invariant
