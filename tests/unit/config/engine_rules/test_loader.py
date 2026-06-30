@@ -459,8 +459,10 @@ def test_overlay_applied_when_validated_yaml_present(
     result = EngineRulesLoader(corpus_root=tmp_path).load_rules("transformers")
     assert len(result.invariants) == 1
     expected = result.invariants[0].expected_outcome
-    assert expected["observed_outcome"] == "dormant_announced"
-    assert expected["observed_emission_channel"] == "logger_warning"
+    # Only observed_messages is overlaid; the gate computes its own observed
+    # outcome / emission channel, so those keys are not written to the corpus.
+    assert "observed_outcome" not in expected
+    assert "observed_emission_channel" not in expected
     assert expected["observed_messages"] == ["library emitted this"]
 
 

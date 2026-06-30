@@ -32,6 +32,8 @@ from typing import Any, Literal, get_args
 
 import yaml
 
+from llenergymeasure.config._version import parse_major
+
 
 class _LiteralOnUnknown(dict[str, Any]):
     """Mapping that returns the literal ``{key}`` placeholder for unknown keys.
@@ -675,12 +677,12 @@ def resolve_field_path(config: Any, path: str) -> Any:
 
 
 def _major(version: str) -> int:
-    try:
-        return int(version.split(".", 1)[0])
-    except (ValueError, AttributeError) as exc:
+    major = parse_major(version)
+    if major is None:
         raise UnsupportedSchemaVersionError(
             f"Unparseable schema_version {version!r}; expected semver '1.0.0' form."
-        ) from exc
+        )
+    return major
 
 
 def _normalise_normalised_fields(
@@ -940,8 +942,6 @@ def _try_load_validated_yaml(corpus_root: Path, engine: str) -> dict[str, Any] |
 
 
 _OBSERVED_KEY_MAP = {
-    "outcome": "observed_outcome",
-    "emission_channel": "observed_emission_channel",
     "observed_messages": "observed_messages",
 }
 
@@ -949,14 +949,14 @@ _OBSERVED_KEY_MAP = {
 def _overlay_validated_observations(
     parsed: EngineInvariants, validated: dict[str, Any]
 ) -> EngineInvariants:
-    """Overlay observed outcomes from a validated YAML envelope onto the corpus invariants.
+    """Overlay observed messages from a validated YAML envelope onto the corpus invariants.
 
     The corpus carries the declared shape; the validated YAML carries what
-    CI observed. When the validated YAML is present, the loader writes
-    observed-* keys alongside the corpus's declared ``outcome`` /
-    ``emission_channel`` so consumers (the generic ``@model_validator``)
-    can act on CI-validated truth. The declared fields are left untouched
-    - strict validation in :func:`_parse_invariant` is not re-exercised against
+    CI observed. When the validated YAML is present, the loader writes the
+    ``observed_messages`` key alongside the corpus's declared fields so the
+    gap reporter (:mod:`llenergymeasure.api.report_gaps`) can match against
+    CI-observed library wording. The declared fields are left untouched -
+    strict validation in :func:`_parse_invariant` is not re-exercised against
     the observed vocabulary (which is deliberately wider; see
     ``scripts/_rules_validation_common.py``).
     """

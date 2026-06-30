@@ -503,19 +503,8 @@ def config_surface_symbol_requests(
     config module - while staying field-agnostic.
     """
     requests: list[SymbolRequest] = []
-    for rel in config_surface_files:
-        path = source_root / rel
-        if not path.is_file():
-            continue
-        body = path.read_text()
-        if not body.strip():
-            continue
-        try:
-            module = ast.parse(body)
-        except SyntaxError:
-            continue
-        for cls in _iter_config_classes(module):
-            requests.append(SymbolRequest(file=rel, class_name=cls.name))
+    for rel, _module_path, cls in _iter_surface_config_classes(source_root, config_surface_files):
+        requests.append(SymbolRequest(file=rel, class_name=cls.name))
     return requests
 
 
@@ -673,28 +662,14 @@ def _config_class_index(
     path - the robust route CR3 requires.
     """
     index: dict[str, list[_ClassSpan]] = {}
-    for rel in config_surface_files:
-        path = source_root / rel
-        if not path.is_file():
-            continue
-        body = path.read_text()
-        if not body.strip():
-            continue
-        try:
-            module = ast.parse(body)
-        except SyntaxError:
-            continue
-        module_path = _module_from_file(rel)
-        spans = [
+    for rel, module_path, cls in _iter_surface_config_classes(source_root, config_surface_files):
+        index.setdefault(rel, []).append(
             _ClassSpan(
                 start=cls.lineno,
                 end=cls.end_lineno or cls.lineno,
                 native_type=f"{module_path}.{cls.name}" if module_path else cls.name,
             )
-            for cls in _iter_config_classes(module)
-        ]
-        if spans:
-            index[rel] = spans
+        )
     return index
 
 

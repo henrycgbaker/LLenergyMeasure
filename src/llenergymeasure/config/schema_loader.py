@@ -21,6 +21,7 @@ from datetime import datetime
 from importlib import resources
 from typing import Any
 
+from llenergymeasure.config._version import parse_major
 from llenergymeasure.config.ssot import Engine
 
 SUPPORTED_MAJOR_VERSION = 1
@@ -189,12 +190,12 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
 
 def _major_version(version: str) -> int:
     """Parse major from a semver-ish string. ``"1.0.0"`` -> ``1``."""
-    try:
-        return int(version.split(".", 1)[0])
-    except (ValueError, AttributeError) as exc:
+    major = parse_major(version)
+    if major is None:
         raise UnsupportedSchemaVersionError(
             f"Unparseable schema_version {version!r}: expected semver like '1.0.0'."
-        ) from exc
+        )
+    return major
 
 
 def _parse_iso(value: str) -> datetime:
