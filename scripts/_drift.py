@@ -123,6 +123,11 @@ class DriftReport:
     statically analyzed - surfaced, not dropped (the false-negative guard).
     Both are populated only for the "invariants" producer, and only when the
     producer module exposes an optional ``probe_uncovered_validators`` callable.
+
+    ``fingerprint_drift`` names the specific landmark(s) whose source coordinates
+    moved since the cached run (diffed via ``landmark_fingerprints``), not every
+    resolved landmark. ``landmark_fingerprints`` is the per-landmark hash map
+    cached for that diff on the next run.
     """
 
     engine: str
@@ -132,6 +137,7 @@ class DriftReport:
     verdict: Literal["pass", "fail"]
     fingerprint: str
     fingerprint_drift: list[str] = field(default_factory=list)
+    landmark_fingerprints: dict[str, str] = field(default_factory=dict)
     landmarks_missing: list[str] = field(default_factory=list)
     landmarks_aliased: list[str] = field(default_factory=list)
     validators_uncovered: list[str] = field(default_factory=list)
@@ -214,12 +220,24 @@ def _resolve_landmark(landmark: str) -> _ResolvedLandmark:
     )
 
 
+def _landmark_coord(r: _ResolvedLandmark) -> str:
+    """The fingerprint coordinate string for a single resolved landmark."""
+    return f"{r.landmark}|{r.qualname}|{r.filename or ''}|{r.lineno or 0}"
+
+
 def _fingerprint(resolved: list[_ResolvedLandmark]) -> str:
     """Stable hash of the resolved landmarks' (qualname, filename, lineno) tuples."""
-    parts = sorted(
-        f"{r.landmark}|{r.qualname}|{r.filename or ''}|{r.lineno or 0}" for r in resolved
-    )
+    parts = sorted(_landmark_coord(r) for r in resolved)
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _landmark_fingerprints(resolved: list[_ResolvedLandmark]) -> dict[str, str]:
+    """Per-landmark hashes keyed by landmark name.
+
+    Lets the drift check name the specific landmark(s) that moved, instead of
+    blaming every resolved landmark when the aggregate fingerprint shifts.
+    """
+    return {r.landmark: hashlib.sha256(_landmark_coord(r).encode()).hexdigest() for r in resolved}
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +312,37 @@ def _read_cached_fingerprint(
         return None
     fp = entry.get("fingerprint")
     return str(fp) if isinstance(fp, str) else None
+
+
+def _read_cached_landmark_fingerprints(
+    engine: str, producer: ProducerKind, current_version: str
+) -> dict[str, str] | None:
+    """Return the previous-run per-landmark fingerprints, or ``None``.
+
+    Same cross-version + malformed-cache miss semantics as
+    :func:`_read_cached_fingerprint`. Older cache entries written before
+    per-landmark fingerprints existed return ``None`` (the caller falls back to
+    reporting all resolved landmarks for that one transitional run).
+    """
+    path = _compat_path(engine)
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return None
+    try:
+        cache = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    entry = (cache.get(producer) if isinstance(cache, dict) else None) or {}
+    if not isinstance(entry, dict):
+        return None
+    cached_version = entry.get("current_version") or entry.get("library_version")
+    if cached_version != current_version:
+        return None
+    per_landmark = entry.get("landmark_fingerprints")
+    if not isinstance(per_landmark, dict):
+        return None
+    return {str(k): str(v) for k, v in per_landmark.items()}
 
 
 def _write_cached_report(engine: str, report: DriftReport) -> None:
@@ -379,14 +428,26 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
             missing.append(landmark)
 
     fingerprint = _fingerprint(resolved)
+    landmark_fingerprints = _landmark_fingerprints(resolved)
     cached = _read_cached_fingerprint(engine, producer, current_version)
     drift: list[str] = []
     if cached is not None and cached != fingerprint:
-        # Per-landmark drift would require caching per-landmark hashes;
-        # the binary "fingerprint shifted at all" signal is what the
-        # writeback comment surfaces, so the list captures the affected
-        # landmarks, not the cause.
-        drift = [r.landmark for r in resolved]
+        # The aggregate fingerprint shifted. Name the specific landmark(s) that
+        # moved by diffing per-landmark fingerprints, so the CI human-attention
+        # comment points at the cause rather than every resolved landmark.
+        cached_per_landmark = _read_cached_landmark_fingerprints(engine, producer, current_version)
+        if cached_per_landmark is not None:
+            moved = sorted(
+                lm for lm, fp in landmark_fingerprints.items() if cached_per_landmark.get(lm) != fp
+            )
+            # A landmark present last run but gone now (or vice versa) is also a move.
+            moved += sorted(set(cached_per_landmark) - set(landmark_fingerprints))
+            drift = moved
+        else:
+            # Transitional: a cache entry predating per-landmark fingerprints.
+            # Fall back to reporting all resolved landmarks for this one run;
+            # the fresh cache written below carries per-landmark hashes.
+            drift = [r.landmark for r in resolved]
 
     aliased = [r.landmark for r in resolved if r.aliased]
 
@@ -415,6 +476,7 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         verdict=verdict,
         fingerprint=fingerprint,
         fingerprint_drift=drift,
+        landmark_fingerprints=landmark_fingerprints,
         landmarks_missing=missing,
         landmarks_aliased=aliased,
         validators_uncovered=validators_uncovered,

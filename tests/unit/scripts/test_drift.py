@@ -213,6 +213,53 @@ def test_drift_fingerprint_drift_listed_on_change(
     assert second.fingerprint_drift  # non-empty
 
 
+def test_drift_names_only_the_moved_landmark(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """fingerprint_drift names the specific moved landmark, not every landmark.
+
+    Regression for Bug 5: when the aggregate fingerprint shifted, the report
+    listed ALL resolved landmarks, so the CI human-attention comment could never
+    point at the field that actually moved. With two landmarks where only one
+    changes source coordinates, only that one must appear in fingerprint_drift.
+    """
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("pkg.Stable", "pkg.Moved"),
+    )
+
+    # Coordinates per landmark; the second run bumps only "pkg.Moved"'s lineno.
+    coords = {"pkg.Stable": 10, "pkg.Moved": 20}
+
+    def _fake_resolve(landmark: str) -> _drift._ResolvedLandmark:
+        return _drift._ResolvedLandmark(
+            landmark=landmark,
+            qualname=landmark.rsplit(".", 1)[-1],
+            filename="pkg.py",
+            lineno=coords[landmark],
+            aliased=False,
+        )
+
+    monkeypatch.setattr(_drift, "_resolve_landmark", _fake_resolve)
+
+    first = _drift.run(engine="transformers", producer="invariants")
+    assert first.fingerprint_drift == []  # no cache yet
+    assert set(first.landmark_fingerprints) == {"pkg.Stable", "pkg.Moved"}
+    _drift._write_cached_report("transformers", first)
+
+    # Move only pkg.Moved (lineno 20 -> 99); pkg.Stable is untouched.
+    coords["pkg.Moved"] = 99
+    second = _drift.run(engine="transformers", producer="invariants")
+
+    assert second.fingerprint != first.fingerprint
+    assert second.fingerprint_drift == ["pkg.Moved"], (
+        "only the landmark whose coordinates moved must be named"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Cache + diagnostics
 # ---------------------------------------------------------------------------
