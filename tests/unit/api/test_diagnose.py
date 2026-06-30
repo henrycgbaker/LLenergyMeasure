@@ -1224,6 +1224,15 @@ class TestFiresWhenConsistency:
         # A probe missing the subject leaf yields None -> not consistent.
         assert not _fires_when_consistent_with_probes("logprobs", {"<": -1}, {}, {"logprobs": -1})
 
+    def test_type_malformed_operand_rejected_not_raised(self) -> None:
+        # A live mine emitted {"not_in": 4} - operator valid, operand a bare int.
+        # The loader's evaluate_predicate raises TypeError on this; the check must
+        # treat it as indeterminate (drop), not crash the mine, and never let such
+        # a predicate reach the corpus where try_match would crash config validation.
+        assert not _fires_when_consistent_with_probes(
+            "best_of", {"not_in": 4}, {"best_of": 5}, {"best_of": 1}
+        )
+
 
 def test_tier_d_drops_inverted_fires_when_before_gating(tmp_path: Path) -> None:
     """An inverted-predicate diagnosis is dropped on the host, never reaching the gate."""

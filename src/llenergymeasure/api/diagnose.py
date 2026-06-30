@@ -1390,7 +1390,15 @@ def _fires_when_holds(
         if sibling not in probe:
             return None
         operand = probe[sibling]
-    return evaluate_predicate(probe[subject_leaf], {op: operand})
+    try:
+        return evaluate_predicate(probe[subject_leaf], {op: operand})
+    except (TypeError, ValueError):
+        # The operand type is incompatible with the operator (e.g. ``not_in: 4``
+        # where the operator needs a list). ``_fires_when_malformed`` only checks
+        # the operator name, so such a predicate reaches here; it is malformed and
+        # would crash the loader's own ``evaluate_predicate`` at config-validation
+        # time. Treat as indeterminate so the advisory is dropped, not committed.
+        return None
 
 
 def _fires_when_consistent_with_probes(
