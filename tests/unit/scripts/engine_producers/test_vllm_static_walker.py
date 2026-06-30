@@ -178,6 +178,57 @@ class C:
     assert len(candidates) == 1
 
 
+def test_walk_function_drops_candidate_keyed_on_computed_property() -> None:
+    """A validator comparing a computed @property yields no candidate.
+
+    Mirrors vLLM ParallelConfig.world_size_across_dp (TPxPPxDP), referenced in a
+    __post_init__ guard but absent from __pydantic_fields__: it is never a
+    user-set knob, so its config-time match path cannot resolve against the
+    generated Config and a probe cannot set it. ``field_names`` excludes it, so
+    the miner drops the whole candidate (rather than emitting a dead match path
+    that later crashes the resolves-net). The sibling settable field alone is
+    not enough to keep a candidate whose firing also depends on the property.
+    """
+    src = """
+class ParallelConfig:
+    def __post_init__(self):
+        if self.data_parallel_size > 1 and self.world_size_across_dp > 1:
+            raise ValueError("needs an executor backend")
+"""
+    cls = ast.parse(src).body[0]
+    assert isinstance(cls, ast.ClassDef)
+    methods = {n.name: n for n in cls.body if isinstance(n, ast.FunctionDef)}
+    target = sm._ASTTarget(
+        module_attr="config.parallel.ParallelConfig",
+        method="__post_init__",
+        namespace="vllm.config.parallel",
+        native_type="vllm.config.ParallelConfig",
+    )
+    kwargs = dict(
+        class_methods=methods,
+        target_methods=frozenset({"__post_init__"}),
+        rel_source_path="config/parallel.py",
+        today="2026-06-23",
+    )
+    # world_size_across_dp is a @property (not in field_names) -> candidate dropped.
+    dropped = sm._walk_function(
+        methods["__post_init__"],
+        target=target,
+        field_names=frozenset({"data_parallel_size"}),
+        **kwargs,
+    )
+    assert dropped == []
+    # Contrast: were world_size_across_dp a settable field, the candidate stands -
+    # proving field_names membership (not some other filter) drives the drop.
+    kept = sm._walk_function(
+        methods["__post_init__"],
+        target=target,
+        field_names=frozenset({"data_parallel_size", "world_size_across_dp"}),
+        **kwargs,
+    )
+    assert len(kept) == 1
+
+
 # ---------------------------------------------------------------------------
 # type-aware dormancy negative-probe synthesiser (BUMP-4)
 # ---------------------------------------------------------------------------

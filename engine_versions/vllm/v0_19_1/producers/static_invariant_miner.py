@@ -719,6 +719,7 @@ def _walk_function(
                 target=target,
                 preds=local.predicates,
                 detected=det,
+                field_names=field_names,
                 rel_source_path=rel_source_path,
                 today=today,
             )
@@ -747,6 +748,7 @@ def _build_rule(
     target: _ASTTarget,
     preds: list[_Predicate],
     detected: _Detected,
+    field_names: frozenset[str],
     rel_source_path: str,
     today: str,
 ) -> InvariantCandidate | None:
@@ -756,6 +758,18 @@ def _build_rule(
         effective_preds.append(_Predicate(field=subject_field, op="present", rhs=True))
 
     if not effective_preds:
+        return None
+
+    # A predicate keyed on a name absent from the class's settable surface
+    # addresses a computed ``@property`` (e.g. ``ParallelConfig.world_size_across_dp``,
+    # which is TPxPPxDP), never a user-set knob. Its config-time match path cannot
+    # resolve against the generated Config and a probe cannot set it, so the
+    # candidate is not a faithful config-time invariant - drop it here, where the
+    # miner knows the settable surface. ``assert_path_resolves`` stays fail-loud
+    # for a *settable* field that unexpectedly fails to resolve (genuine drift).
+    # ``field_names`` is empty only when introspection failed, in which case the
+    # filter degrades to no-op (recall over precision, as the rest of the miner).
+    if field_names and any(p.field not in field_names for p in effective_preds):
         return None
 
     match_fields = _build_match_fields(effective_preds, target.namespace)
