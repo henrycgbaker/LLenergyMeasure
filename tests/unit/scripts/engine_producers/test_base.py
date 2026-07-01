@@ -27,6 +27,8 @@ from scripts.engine_producers._base import (  # noqa: E402
     first_string_arg,
     render_binop_concat_template,
     resolve_local_assign,
+    self_attr_name,
+    self_attr_path,
 )
 
 
@@ -69,6 +71,29 @@ def test_call_func_path_opaque_returns_none() -> None:
     call = _parse_expr("foo()()")
     assert isinstance(call, ast.Call)
     assert call_func_path(call) is None
+
+
+def test_self_attr_name_flat_only() -> None:
+    assert self_attr_name(_parse_expr("self.max_batch_size")) == "max_batch_size"
+    # Nested attribute is not a flat self.<name>, so the flat helper returns None.
+    assert self_attr_name(_parse_expr("self.build_config.max_batch_size")) is None
+    assert self_attr_name(_parse_expr("other.max_batch_size")) is None
+
+
+def test_self_attr_path_flat_and_nested() -> None:
+    assert self_attr_path(_parse_expr("self.max_batch_size")) == ("max_batch_size",)
+    assert self_attr_path(_parse_expr("self.build_config.max_batch_size")) == (
+        "build_config",
+        "max_batch_size",
+    )
+    # Three-deep chain rooted at self.
+    assert self_attr_path(_parse_expr("self.a.b.c")) == ("a", "b", "c")
+
+
+def test_self_attr_path_rejects_non_self() -> None:
+    assert self_attr_path(_parse_expr("other.build_config.max_batch_size")) is None
+    assert self_attr_path(_parse_expr("max_batch_size")) is None
+    assert self_attr_path(_parse_expr("foo().bar")) is None
 
 
 def test_first_string_arg_constant() -> None:

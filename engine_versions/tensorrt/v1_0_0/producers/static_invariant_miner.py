@@ -73,6 +73,7 @@ from scripts.engine_producers._base import (
     first_string_arg,
     literal_value,
     self_attr_name,
+    self_attr_path,
 )
 from scripts.engine_producers._current import current_version
 from scripts.engine_producers._landmarks import load_landmarks
@@ -246,6 +247,16 @@ def _extract_compare(cmp: ast.Compare) -> list[_Predicate]:
             elif right_field is not None:
                 # Cross-field compare: ``self.a OP self.b`` -> ``a OP @b``.
                 out.append(_Predicate(field=left_field, op=op_name, rhs=f"@{right_field}"))
+            else:
+                # Nested object-valued cross-field compare: ``self.a OP self.b.c``
+                # -> ``a OP @b.c``. The dotted ref names a sub-config attribute
+                # (e.g. ``build_config.max_batch_size``); the gate materialises a
+                # divergent ``b`` so the relation actually fires (P0).
+                right_path = self_attr_path(right)
+                if right_path is not None and len(right_path) >= 2:
+                    out.append(
+                        _Predicate(field=left_field, op=op_name, rhs="@" + ".".join(right_path))
+                    )
         elif right_field is not None:
             flipped = {
                 "<": ">",
@@ -308,10 +319,15 @@ def _detect_logger_warning(stmt: ast.stmt) -> _DetectedBody | None:
     if path is None or len(path) != 2 or path[0] != "logger":
         return None
     method = path[-1]
+    # A logger.warning is an announced (not silent) dormancy signal: the gate's
+    # classify_outcome maps ANY logger message to ``dormant_announced`` (only a
+    # ``warnings.warn`` classifies as ``warn``). Matching that here keeps the mined
+    # outcome consistent with the committed convention (transformers logger.warning
+    # invariants all record ``dormant_announced``) so the gate confirms them.
     if method == "warning":
         return _DetectedBody(
             severity="warn",
-            outcome="warn",
+            outcome="dormant_announced",
             emission_channel="logger_warning",
             message_template=first_string_arg(stmt.value),
             detail="logger.warning",
@@ -319,7 +335,7 @@ def _detect_logger_warning(stmt: ast.stmt) -> _DetectedBody | None:
     if method == "warning_once":
         return _DetectedBody(
             severity="warn",
-            outcome="warn",
+            outcome="dormant_announced",
             emission_channel="logger_warning_once",
             message_template=first_string_arg(stmt.value),
             detail="logger.warning_once",
@@ -537,9 +553,27 @@ class _Emitter:
     def _synthesise_kwargs(self, preds: list[_Predicate], *, sense: str) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for p in preds:
+            ref = p.rhs[1:] if isinstance(p.rhs, str) and p.rhs.startswith("@") else None
+            if ref is not None and "." in ref:
+                # Nested object-valued ref (``@build_config.max_batch_size``): build a
+                # divergent sub-config dict so ``self.X op self.Y.Z`` actually fires.
+                # The gate materialises this dict into a real sub-config instance;
+                # setting the sub-config EXPLICITLY (not None) defeats tensorrt's
+                # ``init_build_config`` auto-mirror, which would otherwise copy the
+                # runtime param into the sub-config and leave the two operands equal.
+                # The subject value is assigned (not ``setdefault``) so it overrides
+                # any ``present`` placeholder queued for the same field - the
+                # comparison, not the placeholder, must drive the probe.
+                container, _, leaf = ref.partition(".")
+                leaf_val = _nested_leaf_value(leaf)
+                sub = out.setdefault(container, {})
+                if isinstance(sub, dict):
+                    sub.setdefault(leaf, leaf_val)
+                out[p.field] = _value_satisfying(p.op, leaf_val)
+                continue
             out.setdefault(p.field, _value_for(p, out))
-            if isinstance(p.rhs, str) and p.rhs.startswith("@"):
-                ref_field = p.rhs[1:].split(".")[-1]
+            if ref is not None:
+                ref_field = ref.split(".")[-1]
                 out.setdefault(ref_field, _companion_value(p))
         return out
 
@@ -623,6 +657,23 @@ def _companion_value(p: _Predicate) -> Any:
     if p.op in {">", ">=", "<", "<="}:
         return 2
     return 1
+
+
+# Base value for a nested sub-config leaf in an object-valued cross-field probe.
+# It must (a) keep the materialised sub-config internally valid - BuildConfig runs
+# its own consistency checks at construction (e.g. max_input_len <= max_seq_len) -
+# and (b) leave room for the subject runtime param to diverge via _value_satisfying.
+# Count-style leaves take a small floor; length/token leaves carry a larger floor so
+# BuildConfig's internal length checks pass. Tuned against the in-container gate.
+_NESTED_LEAF_FLOORS: dict[str, int] = {
+    "max_seq_len": 2048,
+    "max_input_len": 2048,
+    "max_num_tokens": 2048,
+}
+
+
+def _nested_leaf_value(leaf: str) -> int:
+    return _NESTED_LEAF_FLOORS.get(leaf, 2)
 
 
 def _value_satisfying(op: str, rhs: Any) -> Any:

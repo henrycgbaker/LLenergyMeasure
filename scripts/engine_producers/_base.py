@@ -349,6 +349,28 @@ def self_attr_name(node: ast.expr) -> str | None:
     return None
 
 
+def self_attr_path(node: ast.expr) -> tuple[str, ...] | None:
+    """Walk a ``self.<a>.<b>...`` attribute chain rooted at ``ast.Name('self')``.
+
+    ``self.max_batch_size`` -> ``('max_batch_size',)``;
+    ``self.build_config.max_batch_size`` -> ``('build_config', 'max_batch_size')``;
+    any non-``self`` or opaque expression -> ``None``.
+
+    Complements :func:`self_attr_name`, which only matches the flat single-attribute
+    case (it returns ``None`` for a nested attribute because ``node.value`` is itself
+    an ``ast.Attribute``, not ``ast.Name('self')``). A multi-segment result is the
+    producer's signal to emit a dotted ``@build_config.<leaf>`` cross-field ref.
+    """
+    parts: list[str] = []
+    cur: ast.expr = node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if isinstance(cur, ast.Name) and cur.id == "self":
+        return tuple(reversed(parts))
+    return None
+
+
 def literal_value(node: ast.expr) -> tuple[bool, Any]:
     if isinstance(node, ast.Constant):
         return True, node.value

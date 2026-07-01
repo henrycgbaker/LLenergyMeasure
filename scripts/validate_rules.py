@@ -186,10 +186,10 @@ def _construct_bitsandbytes_config(kwargs: dict[str, Any]) -> Any:
 
 def _construct_generic(engine: str, native_type: str, kwargs: dict[str, Any]) -> Any:
     cls = resolve_native_type(engine, native_type)
-    return _construct_probe(cls, kwargs)
+    return _construct_probe(cls, kwargs, engine=engine)
 
 
-def _construct_probe(cls: Any, kwargs: dict[str, Any]) -> Any:
+def _construct_probe(cls: Any, kwargs: dict[str, Any], *, engine: str) -> Any:
     """Construct a probe instance of ``cls``, firing the engine's field validation.
 
     Pydantic models and dataclasses validate on direct ``cls(**kwargs)``
@@ -207,7 +207,10 @@ def _construct_probe(cls: Any, kwargs: dict[str, Any]) -> Any:
     if _is_msgspec_struct(cls):
         import msgspec  # type: ignore[import-not-found]
 
+        # msgspec.convert recurses into nested Struct sub-configs from plain dicts,
+        # so an object-valued probe needs no pre-materialisation on this path.
         return msgspec.convert(kwargs, cls)
+    kwargs = _materialise_nested_configs(cls, kwargs, engine=engine)
     scaffold = _scaffold_required_args(cls, kwargs)
     return cls(**{**scaffold, **kwargs})
 
@@ -306,6 +309,137 @@ def _scaffold_value_for_annotation(annotation: Any) -> Any:
     return 1
 
 
+def _unwrap_optional(annotation: Any) -> Any:
+    """Strip ``Optional[X]`` / ``X | None`` down to ``X`` (else return as-is).
+
+    Handles both the ``typing.Union`` form and the PEP 604 ``types.UnionType``
+    (``X | None``) form, so a sub-config field declared either way resolves.
+    """
+    import types
+    import typing
+
+    origin = typing.get_origin(annotation)
+    if origin is typing.Union or origin is getattr(types, "UnionType", ()):
+        non_none = [a for a in typing.get_args(annotation) if a is not type(None)]
+        if len(non_none) == 1:
+            return non_none[0]
+    return annotation
+
+
+def _is_constructible_config(target: Any) -> bool:
+    """True iff ``target`` is a config class the gate should build from a dict.
+
+    Pydantic models, stdlib dataclasses, and msgspec Structs are materialisable
+    sub-configs. A plain ``dict`` / ``Mapping`` annotation is a legitimately
+    dict-typed field and must be left as-is, so it is excluded.
+    """
+    import dataclasses as _dc
+    from collections.abc import Mapping
+
+    if not isinstance(target, type):
+        return False
+    if issubclass(target, (dict, Mapping)):
+        return False
+    if _dc.is_dataclass(target):
+        return True
+    if getattr(target, "__pydantic_fields__", None) is not None:
+        return True
+    return _is_msgspec_struct(target)
+
+
+def _subconfig_class_name(type_repr: str) -> str | None:
+    """Extract the sub-config class name from a ``json_schema_extra['type']`` string.
+
+    Some libraries erase a sub-config field's annotation to ``object`` and record the
+    real type as a repr string (tensorrt: ``'Optional[tensorrt_llm.builder.BuildConfig]'``).
+    This peels a single ``Optional[...]`` / ``Union[...]`` wrapper and drops a trailing
+    ``, None`` union member, returning the (possibly dotted) inner class name for
+    :func:`resolve_native_type`. Returns ``None`` for a non-class repr (``list[int]`` etc.).
+    """
+    s = type_repr.strip()
+    for wrapper in ("Optional[", "Union["):
+        if s.startswith(wrapper) and s.endswith("]"):
+            s = s[len(wrapper) : -1].strip()
+            break
+    s = s.split(",")[0].strip()
+    if not s or "[" in s or " " in s:
+        return None
+    return s
+
+
+def _resolve_subconfig_type(cls: Any, name: str, engine: str) -> Any:
+    """Resolve the constructible sub-config class for field ``name`` on ``cls``.
+
+    Tries the field annotation first (works when it is a real config class, e.g. a
+    vLLM pydantic sub-config); falls back to the pydantic field's
+    ``json_schema_extra['type']`` repr string when the annotation is erased to
+    ``object`` (tensorrt build_config), resolving the named class through the live
+    library via :func:`resolve_native_type`. Returns ``None`` when no constructible
+    config class can be resolved (the kwarg is then left as a plain dict).
+    """
+    import dataclasses as _dc
+
+    pyd = getattr(cls, "__pydantic_fields__", None)
+    field_info = pyd.get(name) if pyd is not None else None
+
+    annotation: Any = None
+    if field_info is not None:
+        annotation = field_info.annotation
+    elif _dc.is_dataclass(cls):
+        import typing
+
+        annotation = typing.get_type_hints(cls).get(name)
+    if annotation is not None:
+        target = _unwrap_optional(annotation)
+        if _is_constructible_config(target):
+            return target
+
+    extra = getattr(field_info, "json_schema_extra", None) if field_info is not None else None
+    if isinstance(extra, dict):
+        type_repr = extra.get("type")
+        if isinstance(type_repr, str):
+            class_name = _subconfig_class_name(type_repr)
+            if class_name is not None:
+                try:
+                    target = resolve_native_type(engine, class_name)
+                except Exception:
+                    return None
+                if _is_constructible_config(target):
+                    return target
+    return None
+
+
+def _materialise_nested_configs(cls: Any, kwargs: dict[str, Any], *, engine: str) -> dict[str, Any]:
+    """Build a real sub-config instance for any dict-valued kwarg whose target field
+    is a config class (the P0 object-valued cross-field probe).
+
+    An object-valued probe carries a divergent sub-config as a plain dict so the
+    corpus stays JSON/YAML-native, e.g. ``build_config={'max_batch_size': 8}``. The
+    cross-field relation ``self.X op self.Y.Z`` fires only when ``self.Y`` is a real
+    sub-config object with a divergent ``Z``; a bare dict either type-errors (pydantic
+    does not coerce a dataclass-typed field from a dict, and tensorrt asserts
+    ``isinstance(build_config, BuildConfig)``) or is silently ignored. This resolves
+    each such kwarg's sub-config class and constructs it before the outer
+    construction runs.
+
+    Only kwargs whose field resolves to a constructible config class are
+    materialised; a legitimately dict-typed field is left untouched. On any
+    introspection failure the kwargs are returned unchanged (degrade to prior
+    behaviour), so a non-object-valued probe is byte-for-byte unaffected.
+    """
+    try:
+        out = dict(kwargs)
+        for name, value in list(out.items()):
+            if not isinstance(value, dict):
+                continue
+            target = _resolve_subconfig_type(cls, name, engine)
+            if target is not None:
+                out[name] = target(**value)
+        return out
+    except Exception:
+        return kwargs
+
+
 def _is_msgspec_struct(cls: Any) -> bool:
     """True iff ``cls`` is a ``msgspec.Struct`` subclass.
 
@@ -379,6 +513,12 @@ def _run_tensorrt(
         "tensorrt_llm",
         "tensorrt_llm.llmapi",
         "tensorrt_llm.llmapi.llm_args",
+        # TRT-LLM routes logger.warning(...) through its OWN Logger wrapper whose
+        # backing stdlib logger is named "TRT-LLM" with propagate=False and a
+        # private stdout handler - so a warning (e.g. the build_config override
+        # warns in validate_build_config_with_runtime_params) never reaches the
+        # module-named loggers above nor the root. Hook it by name to capture it.
+        "TRT-LLM",
     )
     result = run_case(
         lambda: _construct_trtllm(native_type, kwargs),
@@ -400,7 +540,7 @@ def _construct_trtllm(native_type: str, kwargs: dict[str, Any]) -> Any:
     types when the corpus kwargs don't set it.
     """
     cls = resolve_native_type("tensorrt", native_type)
-    use_kwargs = dict(kwargs)
+    use_kwargs = _materialise_nested_configs(cls, dict(kwargs), engine="tensorrt")
     if native_type in _TRTLLM_LLMARGS_TYPES and "model" not in use_kwargs:
         use_kwargs["model"] = _TRTLLM_MODEL_PLACEHOLDER
     return cls(**use_kwargs)
@@ -1266,6 +1406,33 @@ def _case_to_dict(case: CaseResult) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _yaml_safe(obj: Any) -> Any:
+    """Recursively coerce a value into a ``yaml.safe_dump``-representable form.
+
+    The gate captures values read off a constructed native config (observed field
+    values, silent normalisations). Constructing a full config (e.g. a tensorrt
+    ``TrtLlmArgs`` for an object-valued build_config probe) auto-populates sibling
+    fields whose values are library enums or other opaque objects that
+    ``yaml.safe_dump`` cannot represent, which would abort the whole envelope dump.
+    Enums collapse to their scalar ``.value`` (or ``.name`` when the value is itself
+    opaque); any other non-native object falls back to ``str``. Native scalars and
+    containers pass through structurally unchanged, so an envelope that was already
+    YAML-native serialises byte-for-byte as before.
+    """
+    import enum as _enum
+
+    if isinstance(obj, dict):
+        return {_yaml_safe(k): _yaml_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_yaml_safe(v) for v in obj]
+    if isinstance(obj, _enum.Enum):
+        val = obj.value
+        return val if (val is None or isinstance(val, (str, int, float, bool))) else obj.name
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    return str(obj)
+
+
 def validate_engine(
     *,
     engine: str,
@@ -1346,7 +1513,9 @@ def validate_engine(
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(yaml.safe_dump(envelope, sort_keys=False, default_flow_style=False))
+    out_path.write_text(
+        yaml.safe_dump(_yaml_safe(envelope), sort_keys=False, default_flow_style=False)
+    )
 
     return envelope, divergences
 

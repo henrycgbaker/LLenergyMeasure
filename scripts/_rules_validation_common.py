@@ -220,6 +220,14 @@ def diff_input_vs_state(
     for field_name, declared in kwargs.items():
         if field_name not in observed_state:
             continue
+        # Object-valued probe (P0): a dict-declared kwarg is a construct-spec the
+        # gate materialises into a real sub-config object, so declared (dict) vs
+        # observed (object) always differs. That delta is the materialisation, not a
+        # library silent normalisation, and must not mask the invariant's real
+        # outcome via ``classify_outcome``. Silent-normalisation detection targets
+        # scalar coercions (null -> [], etc.), not sub-config objects.
+        if isinstance(declared, dict):
+            continue
         observed = observed_state[field_name]
         if declared != observed:
             diffs[field_name] = {

@@ -164,6 +164,81 @@ class TestDiffInputVsState:
         state = {"other": "thing"}
         assert diff_input_vs_state(kwargs, state) == {}
 
+    def test_dict_declared_kwarg_skipped(self) -> None:
+        # An object-valued construct-spec (dict-declared kwarg) is materialised into
+        # a sub-config object, so declared-dict vs observed-object always differs;
+        # that delta is the materialisation, not a silent normalisation, and must be
+        # ignored so it cannot mask the real outcome.
+        kwargs = {"build_config": {"max_batch_size": 8}, "max_batch_size": 3}
+        state = {"build_config": object(), "max_batch_size": 3}
+        assert diff_input_vs_state(kwargs, state) == {}
+
+
+class TestYamlSafe:
+    def test_enum_scalar_value_collapses_to_value(self) -> None:
+        import enum
+
+        class Colour(enum.Enum):
+            RED = 1
+            GREEN = "green"
+
+        assert validate_rules._yaml_safe(Colour.RED) == 1
+        assert validate_rules._yaml_safe(Colour.GREEN) == "green"
+
+    def test_enum_opaque_value_falls_back_to_name(self) -> None:
+        import enum
+
+        class Mode(enum.Enum):
+            NONE = object()
+
+        assert validate_rules._yaml_safe(Mode.NONE) == "NONE"
+
+    def test_nested_structures_and_opaque_objects(self) -> None:
+        obj = object()
+        out = validate_rules._yaml_safe({"a": [1, ("x", obj)], "b": None})
+        assert out == {"a": [1, ["x", str(obj)]], "b": None}
+
+    def test_native_values_pass_through(self) -> None:
+        val = {"k": [1, 2.0, "s", True, None]}
+        assert validate_rules._yaml_safe(val) == val
+
+
+class TestMaterialiseNestedConfigs:
+    def test_pydantic_subconfig_dict_becomes_instance(self) -> None:
+        pydantic = pytest.importorskip("pydantic")
+
+        class _Sub(pydantic.BaseModel):
+            k: int = 0
+
+        class _Outer(pydantic.BaseModel):
+            sub: _Sub | None = None
+            n: int = 0
+
+        out = validate_rules._materialise_nested_configs(
+            _Outer, {"sub": {"k": 7}, "n": 3}, engine="vllm"
+        )
+        assert isinstance(out["sub"], _Sub)
+        assert out["sub"].k == 7
+        assert out["n"] == 3  # scalar untouched
+
+    def test_non_config_dict_field_left_as_dict(self) -> None:
+        pydantic = pytest.importorskip("pydantic")
+
+        class _Outer(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+            meta: dict = pydantic.Field(default_factory=dict)
+
+        out = validate_rules._materialise_nested_configs(_Outer, {"meta": {"a": 1}}, engine="vllm")
+        assert out["meta"] == {"a": 1}
+
+    def test_subconfig_class_name_strips_optional(self) -> None:
+        assert (
+            validate_rules._subconfig_class_name("Optional[tensorrt_llm.builder.BuildConfig]")
+            == "tensorrt_llm.builder.BuildConfig"
+        )
+        assert validate_rules._subconfig_class_name("BuildConfig") == "BuildConfig"
+        assert validate_rules._subconfig_class_name("list[int]") is None
+
 
 # ---------------------------------------------------------------------------
 # run_case
@@ -1052,7 +1127,7 @@ class TestMsgspecConstructionDispatch:
         assert _SP(bound=0).bound == 0
         # The gate's construction seam must fire it.
         with pytest.raises(msgspec.ValidationError):
-            validate_rules._construct_probe(_SP, {"bound": 0})
+            validate_rules._construct_probe(_SP, {"bound": 0}, engine="vllm")
 
     def test_construct_probe_runs_post_init_under_convert(self) -> None:
         msgspec = pytest.importorskip("msgspec")
@@ -1067,7 +1142,7 @@ class TestMsgspecConstructionDispatch:
         # convert still invokes __post_init__, so imperative _verify_args-style
         # raises keep firing on the same probe path.
         with pytest.raises(ValueError, match="at least 1"):
-            validate_rules._construct_probe(_SP, {"n": 0})
+            validate_rules._construct_probe(_SP, {"n": 0}, engine="vllm")
 
     def test_construct_probe_leaves_pydantic_path_unchanged(self) -> None:
         pydantic = pytest.importorskip("pydantic")
@@ -1077,7 +1152,7 @@ class TestMsgspecConstructionDispatch:
 
         # Pydantic validates on direct construction; the seam must NOT route it
         # through msgspec.convert (which would fail to handle a BaseModel).
-        obj = validate_rules._construct_probe(_M, {"x": 5})
+        obj = validate_rules._construct_probe(_M, {"x": 5}, engine="vllm")
         assert isinstance(obj, _M)
         assert obj.x == 5
 
@@ -1140,7 +1215,9 @@ class TestConstructScaffold:
         # Without the scaffold this raises "is_encoder_decoder field required"
         # before the rule's own validator runs; with it, the validator fires.
         with pytest.raises(ValueError, match="max_num_seqs"):
-            validate_rules._construct_probe(cls, {"max_num_seqs": 2, "max_num_batched_tokens": 1})
+            validate_rules._construct_probe(
+                cls, {"max_num_seqs": 2, "max_num_batched_tokens": 1}, engine="vllm"
+            )
 
     def test_scaffold_empty_on_introspection_failure(self) -> None:
         # A class with no pydantic fields / dataclass fields yields no scaffold,

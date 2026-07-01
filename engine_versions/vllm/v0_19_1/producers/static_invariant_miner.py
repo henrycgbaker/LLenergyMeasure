@@ -47,6 +47,7 @@ from scripts.engine_producers._base import (
     first_string_arg,
     literal_value,
     self_attr_name,
+    self_attr_path,
 )
 from scripts.engine_producers._current import current_version
 from scripts.engine_producers._landmarks import load_landmarks
@@ -338,6 +339,12 @@ def _rhs_value(node: ast.expr, field_refs: frozenset[str]) -> tuple[bool, Any]:
         # comparing self.<field> against the max_model_len InitVar parameter)
         # resolves to the same ``@`` cross-field reference as ``self.<field>``.
         return True, f"@{node.id}"
+    path = self_attr_path(node)
+    if path is not None and len(path) >= 2:
+        # Nested attribute ``self.b.c`` -> dotted ``@b.c`` object-valued cross-field
+        # ref (a sub-config attribute); the gate materialises a divergent ``b`` so the
+        # relation actually fires (P0).
+        return True, "@" + ".".join(path)
     return False, None
 
 
@@ -566,8 +573,21 @@ def _typed_present_value(target: _ASTTarget, field_name: str) -> tuple[bool, Any
 def _synthesise_kwargs(preds: list[_Predicate]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for p in preds:
-        if isinstance(p.rhs, str) and p.rhs.startswith("@"):
-            companion = p.rhs[1:].split(".")[-1]
+        ref = p.rhs[1:] if isinstance(p.rhs, str) and p.rhs.startswith("@") else None
+        if ref is not None and "." in ref:
+            # Nested object-valued ref (``@eplb_config.num_redundant_experts``): build a
+            # divergent sub-config dict so ``self.X op self.Y.Z`` fires. The gate
+            # materialises (or msgspec/pydantic coerces) the dict into a real sub-config.
+            # The subject value is assigned (not ``setdefault``) so the comparison, not
+            # any placeholder, drives the probe.
+            container, _, leaf = ref.partition(".")
+            leaf_val = 2
+            sub = out.setdefault(container, {})
+            if isinstance(sub, dict):
+                sub.setdefault(leaf, leaf_val)
+            out[p.field] = _value_satisfying(p.op, leaf_val)
+        elif ref is not None:
+            companion = ref.split(".")[-1]
             out.setdefault(companion, 2)
             out.setdefault(p.field, _value_satisfying(p.op, out[companion]))
         else:
