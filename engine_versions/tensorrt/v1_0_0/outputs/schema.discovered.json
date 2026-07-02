@@ -20,7 +20,7 @@
       "fields": [
         "cp_config"
       ],
-      "reason": "cp_config is a bare dict (context-parallel settings) with no Pydantic/dataclass schema class; leaves are not introspectable and must come from overlay.yaml if exposed"
+      "reason": "cp_config is a bare dict (context-parallel settings) with no Pydantic/dataclass schema class; leaves are not introspectable and must come from curated overrides if exposed"
     },
     {
       "section": "sampling_params",
