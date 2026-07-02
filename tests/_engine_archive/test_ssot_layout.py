@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from packaging.version import Version
 
 from engine_versions import _outputs
 
@@ -70,14 +71,10 @@ def test_curated_parses_and_self_identifies(engine: str, version: str) -> None:
 
 @pytest.mark.parametrize(("engine", "versions"), ACTIVE_PINS.items())
 def test_workspace_versions_matches_active_pins(engine: str, versions: tuple[str, ...]) -> None:
-    assert _outputs.workspace_versions(engine) == sorted(versions, key=_version_key)
+    assert _outputs.workspace_versions(engine) == sorted(versions, key=Version)
 
 
 def test_outputs_dir_is_under_the_workspace() -> None:
     resolved = _outputs.outputs_dir("vllm", "0.7.3").resolve()
     workspace = (Path(_outputs.__file__).resolve().parent).resolve()
     assert workspace in resolved.parents
-
-
-def _version_key(version: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in version.split("."))
