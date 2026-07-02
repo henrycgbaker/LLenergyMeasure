@@ -44,14 +44,6 @@ today, under `library.current_version`. It is the pointer; the version
 directories are the snapshots it can point at. Renovate updates this pointer
 when a new engine release lands.
 
-## Active snapshots
-
-| engine       | versions in the workspace |
-| ------------ | ------------------------- |
-| vllm         | 0.7.3, 0.19.1             |
-| tensorrt     | 0.21.0, 1.0.0             |
-| transformers | 5.7.0                     |
-
 ## Resolving paths in code
 
 `_outputs.py` is the one module that knows this layout. It is a plain path
