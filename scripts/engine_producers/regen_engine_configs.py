@@ -279,7 +279,9 @@ def _load_curated(outputs: Path) -> dict[str, list[str]]:
     curated.yaml is part of the synced SSOT (always present in a complete
     snapshot); a missing section just exposes nothing.
     """
-    raw: dict[str, Any] = yaml.safe_load((outputs / "curated.yaml").read_text("utf-8")) or {}
+    raw: dict[str, Any] = (
+        yaml.safe_load((outputs / _outputs.CURATED_FILENAME).read_text("utf-8")) or {}
+    )
     exposed = raw.get("exposed_fields", {})
     return {section: list(exposed.get(section) or []) for section in SECTIONS}
 
@@ -369,7 +371,7 @@ def _ruff_normalise(path: Path) -> None:
 
 def generate_config(engine: str, version: str, outputs: Path) -> bytes:
     """Generate one engine snapshot's config.py bytes (ruff-normalised)."""
-    discovered = json.loads((outputs / "schema.discovered.json").read_text(encoding="utf-8"))
+    discovered = json.loads((outputs / _outputs.SCHEMA_FILENAME).read_text(encoding="utf-8"))
     curated = _load_curated(outputs)
     synthetic = compose_schema(engine, discovered, curated)
     safe_version = _outputs.safe_version(str(discovered.get("engine_version", version)))
