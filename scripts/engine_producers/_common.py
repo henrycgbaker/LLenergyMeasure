@@ -203,6 +203,28 @@ def _sorted_stable(items: list[Any]) -> list[Any]:
         return sorted(items, key=lambda x: (x is None, str(x)))
 
 
+def _coerce_json(value: Any, *, opaque: Any) -> Any:
+    """Recursively coerce *value* into json-safe data.
+
+    Shared traversal for :func:`jsonable` and :func:`exposable_default`: both
+    pass through primitives, recurse structures (list/tuple/set/dict), and render
+    a ``type`` as its name - they differ ONLY in how an opaque leaf is handled,
+    supplied here as ``opaque(value)`` (``str`` to stringify, ``lambda _: None``
+    to drop it).
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_coerce_json(v, opaque=opaque) for v in value]
+    if isinstance(value, set):
+        return _sorted_stable([_coerce_json(v, opaque=opaque) for v in value])
+    if isinstance(value, dict):
+        return {str(k): _coerce_json(v, opaque=opaque) for k, v in value.items()}
+    if isinstance(value, type):
+        return value.__name__
+    return opaque(value)
+
+
 def jsonable(value: Any) -> Any:
     """Coerce a value into something json.dumps can handle without default=str.
 
@@ -210,17 +232,7 @@ def jsonable(value: Any) -> Any:
     str(value) for anything else. This keeps the output deterministic and
     free of object repr noise.
     """
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, (list, tuple)):
-        return [jsonable(v) for v in value]
-    if isinstance(value, set):
-        return _sorted_stable([jsonable(v) for v in value])
-    if isinstance(value, dict):
-        return {str(k): jsonable(v) for k, v in value.items()}
-    if isinstance(value, type):
-        return value.__name__
-    return str(value)
+    return _coerce_json(value, opaque=str)
 
 
 def exposable_default(value: Any) -> Any:
@@ -235,17 +247,7 @@ def exposable_default(value: Any) -> Any:
     the user sets it. Pin this contract in tests so the str() regression can't
     return silently.
     """
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, (list, tuple)):
-        return [exposable_default(v) for v in value]
-    if isinstance(value, set):
-        return _sorted_stable([exposable_default(v) for v in value])
-    if isinstance(value, dict):
-        return {str(k): exposable_default(v) for k, v in value.items()}
-    if isinstance(value, type):
-        return value.__name__
-    return None
+    return _coerce_json(value, opaque=lambda _value: None)
 
 
 def _single_candidate(annotation: Any) -> Any | None:
