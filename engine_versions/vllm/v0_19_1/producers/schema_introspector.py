@@ -1,25 +1,36 @@
-"""Schema-introspector machinery for vLLM 0.19.1.
+"""Schema introspector for vLLM 0.19.1.
 
-Vendored machinery: the full ``discover`` body lives here, version-pinned.
-The global ``scripts/engine_producers/vllm_introspector.py`` is a
-thin dispatcher that resolves ``library.current_version`` from the SSOT
-and delegates to this module.
+Vendored machinery: the full ``discover`` body lives here, version-pinned. The
+global ``scripts/engine_producers/vllm_schema_introspector.py`` is a thin
+dispatcher that resolves ``library.current_version`` from the SSOT and delegates
+to this module.
 
-vLLM 0.19.1 retains the runtime-introspection surface contract from
-0.16.0: ``vllm.engine.arg_utils.EngineArgs`` is a stdlib dataclass and
-``vllm.SamplingParams`` is msgspec-typed. The introspector emits the
-common envelope with engine + sampling parameter specs.
+vLLM 0.19.1 keeps the same runtime-introspection surface as 0.7.3 -
+``vllm.engine.arg_utils.EngineArgs`` is a stdlib dataclass and
+``vllm.SamplingParams`` is msgspec-typed - so the dataclass/msgspec discovery
+path is unchanged. What moved is the *declarative constraint surface*: 0.7.3's
+flat ``vllm/config.py`` became the ``vllm/config/*.py`` subpackage (cache,
+scheduler, parallel, model, ...) and the per-concern config classes migrated to
+pydantic-dataclass ``Field(ge/le/...)`` bounds and ``Literal[...]`` membership
+sets. The source-constraint overlay below therefore globs the whole ``config/``
+subpackage rather than the single flat file, so the declarative walk reaches the
+bounds and enums that no longer live in the imperative ``_verify_*`` bodies.
 """
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
+    fold_dict_typed_subconfig,
     make_envelope,
+    merge_source_constraints,
+    recover_field_types,
 )
+from scripts.engine_producers._source_walker import expand_files
 
 LANDMARKS: tuple[str, ...] = (
     "vllm.SamplingParams",
@@ -28,7 +39,7 @@ LANDMARKS: tuple[str, ...] = (
 
 
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
-    """Discover vLLM engine and sampling schemas.
+    """Discover vLLM 0.19.1 engine and sampling schemas.
 
     engine_params:   dataclasses.fields(EngineArgs)
     sampling_params: msgspec.json.schema(SamplingParams)
@@ -37,18 +48,50 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     from vllm.engine.arg_utils import EngineArgs  # type: ignore[import-not-found]
 
     limitations: list[dict[str, Any]] = []
-    engine_params = dataclass_fields_to_specs(EngineArgs)
+    # Shared ``$defs`` accumulator: EngineArgs' Pydantic-typed sub-configs and
+    # SamplingParams' nested msgspec definitions both land here so every ``$ref``
+    # in the envelope resolves.
+    defs: dict[str, Any] = {}
+    engine_params = dataclass_fields_to_specs(EngineArgs, defs=defs)
+
+    # speculative_config is annotated ``dict[str, Any] | None`` on EngineArgs but
+    # is coerced to ``SpeculativeConfig(**dict)`` in
+    # ``EngineArgs.create_speculative_config``; carry that field->class hint so
+    # the speculative-decoding leaves (num_speculative_tokens, method,
+    # draft_tensor_parallel_size, ...) are discoverable rather than hidden behind
+    # one opaque dict. Version-pinned to 0.19.1's import path; failure degrades
+    # to the dict spec plus a recorded limitation rather than aborting discovery.
+    try:
+        from vllm.config.speculative import (  # type: ignore[import-not-found]
+            SpeculativeConfig,
+        )
+
+        fold_dict_typed_subconfig(engine_params, "speculative_config", SpeculativeConfig, defs)
+    except Exception as exc:  # pragma: no cover - defensive: version-path drift
+        limitations.append(
+            {
+                "section": "engine_params",
+                "fields": ["speculative_config"],
+                "reason": f"SpeculativeConfig class-hint resolution failed ({exc!r}); "
+                "speculative_config left as dict[str, Any]",
+            }
+        )
 
     sampling_params: dict[str, Any] = {}
     try:
         import msgspec  # type: ignore[import-not-found]
 
         raw_schema = msgspec.json.schema(vllm.SamplingParams)
+        raw_defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
         props = raw_schema.get("properties")
         if not props:
-            defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
-            sp_def: Any = defs.get("SamplingParams") or next(iter(defs.values()), {})
+            sp_def: Any = raw_defs.get("SamplingParams") or next(iter(raw_defs.values()), {})
             props = sp_def.get("properties", {}) if isinstance(sp_def, dict) else {}
+        # Carry the nested sub-definitions (SamplingParams' own root is flattened
+        # into ``sampling_params`` above, so skip it to avoid a redundant def).
+        for def_name, def_body in raw_defs.items():
+            if def_name != "SamplingParams":
+                defs.setdefault(def_name, def_body)
         for name, spec in (props or {}).items():
             type_repr: Any = spec.get("type", "unknown")
             if isinstance(type_repr, list):
@@ -57,6 +100,16 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 "type": type_repr,
                 "default": spec.get("default"),
             }
+        # msgspec.json.schema renders union / enum / nested-struct sampling
+        # fields as an untyped anyOf, so the loop above labels them "unknown".
+        # recover_field_types resolves those same fields' concrete types, so fold
+        # the recovered type onto every field still marked "unknown" - augmenting
+        # the schema, never overwriting a type json.schema already rendered.
+        recovered_types = recover_field_types(vllm.SamplingParams)
+        for name, type_str in recovered_types.items():
+            spec = sampling_params.get(name)
+            if spec is not None and spec.get("type") == "unknown":
+                spec["type"] = type_str
     except Exception as exc:
         limitations.append(
             {
@@ -65,6 +118,28 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 "reason": f"msgspec.json.schema(SamplingParams) failed: {exc!r}",
             }
         )
+
+    # Fold source-text Field(...) bounds + Literal[...] membership onto the
+    # discovered fields. On 0.19.1 the per-concern config classes (CacheConfig,
+    # SchedulerConfig, ParallelConfig, ...) live in the ``vllm/config/*.py``
+    # subpackage and carry their constraints declaratively, so the overlay globs
+    # the WHOLE subpackage rather than the single ``config/__init__.py`` that
+    # ``inspect.getsourcefile(vllm.config)`` resolves to. The flat single-file
+    # walk (0.7.3) would miss every per-concern module.
+    try:
+        import vllm.config as _vllm_config  # type: ignore[import-not-found]
+        import vllm.sampling_params as _vllm_sp  # type: ignore[import-not-found]
+
+        config_init = inspect.getsourcefile(_vllm_config)
+        config_paths = (
+            expand_files(Path(config_init).parent, ["*.py"]) if config_init is not None else []
+        )
+        merge_source_constraints(engine_params, config_paths)
+        sp_src = inspect.getsourcefile(_vllm_sp)
+        if sp_src is not None:
+            merge_source_constraints(sampling_params, [Path(sp_src)])
+    except Exception:  # pragma: no cover - defensive: discovery proceeds without bounds
+        pass
 
     limitations.append(
         {
@@ -88,8 +163,12 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         engine_commit_sha=getattr(vllm, "__commit__", None),
         image_ref=image_ref,
         base_image_ref=None,
-        discovery_method="dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
+        discovery_method=(
+            "dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams) "
+            "+ config/*.py declarative-constraint overlay"
+        ),
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        defs=defs,
     )
