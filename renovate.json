@@ -2,6 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
   "enabledManagers": ["dockerfile", "custom.regex", "pep621", "github-actions"],
+  "gitIgnoredAuthors": ["llem-ci-bot[bot]"],
   "dockerfile": {
     "fileMatch": ["docker/Dockerfile\\..*"]
   },
@@ -67,13 +68,9 @@
       "rangeStrategy": "replace"
     },
     {
-      "description": "Only auto-PR when Mend merge-confidence signal is high or very-high. Filters out releases that other repos have flagged as unstable via CI / revert patterns.",
+      "description": "Only auto-PR when Mend merge-confidence is high or very-high. Applied ONLY to transformers and pytorch, which have dense merge-confidence data. vllm and tensorrt-llm have sparse merge-confidence (releases rarely score high), so this gate silently suppressed every PR for them; they are excluded here and rely on the 14-day minimumReleaseAge for stability instead.",
       "matchPackageNames": [
         "transformers",
-        "vllm",
-        "tensorrt-llm",
-        "vllm/vllm-openai",
-        "nvcr.io/nvidia/tensorrt-llm/release",
         "pytorch/pytorch"
       ],
       "matchConfidence": ["high", "very high"]
