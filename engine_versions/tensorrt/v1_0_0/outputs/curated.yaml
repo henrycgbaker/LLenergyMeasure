@@ -1,0 +1,42 @@
+# Exposure allowlist for tensorrt-llm 0.21.0 (Move 2: curation as data).
+#
+# Field names llem exposes as first-class typed fields on the generated
+# Config class. Non-curated engine fields stay reachable through the
+# extra="allow" passthrough with soft validation against the full
+# discovered schema. Curation is an exposure-time decision; mining never
+# narrows.
+#
+# Originally bootstrapped from the TensorRTConfig / TensorRTSamplingConfig
+# field sets in the deleted hand-written engine config classes (pre-v0.10).
+# TensorRT-LLM has
+# no llem-orchestration residual (HarnessConfig is empty for tensorrt).
+#
+# Each entry is cross-checked against schema.discovered.json for this pin.
+# Every curated field is present in the discovered schema; this pin carries
+# no discovery debt.
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 1.0.0
+exposed_fields:
+  engine_params:
+    - max_batch_size
+    - tensor_parallel_size
+    - pipeline_parallel_size
+    - max_input_len
+    - max_seq_len
+    - max_num_tokens
+    - dtype
+    - fast_build
+    - backend
+    - quant_config
+    - kv_cache_config
+    - scheduler_config
+  sampling_params:
+    - temperature
+    - top_k
+    - top_p
+    - repetition_penalty
+    - min_p
+    - min_tokens
+    - n
+    - ignore_eos

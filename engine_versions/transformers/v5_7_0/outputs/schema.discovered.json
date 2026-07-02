@@ -1,0 +1,372 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "transformers",
+  "engine_version": "5.7.0",
+  "engine_commit_sha": null,
+  "image_ref": "llenergymeasure:transformers-5.7.0",
+  "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
+  "discovered_at": "2026-06-12T10:04:46+02:00",
+  "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict() with docstring-Args type recovery",
+  "discovery_limitations": [
+    {
+      "section": "engine_params",
+      "fields": [
+        "AutoModelForCausalLM.from_pretrained.**model_args",
+        "AutoModelForCausalLM.from_pretrained.**kwargs",
+        "PreTrainedModel.from_pretrained.**model_args",
+        "PreTrainedModel.from_pretrained.**kwargs"
+      ],
+      "reason": "from_pretrained accepts **kwargs; kwargs are not in the signature (documented kwargs live in the class docstring only)"
+    },
+    {
+      "section": "sampling_params",
+      "fields": [
+        "stop_strings",
+        "cache_config",
+        "bad_words_ids",
+        "exponential_decay_length_penalty",
+        "suppress_tokens",
+        "begin_suppress_tokens",
+        "sequence_bias",
+        "watermarking_config",
+        "eos_token_id",
+        "compile_config",
+        "continuous_batching_config",
+        "low_memory",
+        "penalty_alpha",
+        "dola_layers",
+        "diversity_penalty",
+        "num_beam_groups",
+        "constraints",
+        "force_words_ids",
+        "prefill_chunk_size",
+        "_from_model_config"
+      ],
+      "reason": "GenerationConfig field is None-defaulted and undocumented in the docstring Args block; type='unknown'"
+    }
+  ],
+  "engine_params": {
+    "config": {
+      "type": "PreTrainedConfig | str | PathLike | None",
+      "default": null
+    },
+    "cache_dir": {
+      "type": "str | PathLike | None",
+      "default": null
+    },
+    "ignore_mismatched_sizes": {
+      "type": "bool",
+      "default": false
+    },
+    "force_download": {
+      "type": "bool",
+      "default": false
+    },
+    "local_files_only": {
+      "type": "bool",
+      "default": false
+    },
+    "token": {
+      "type": "str | bool | None",
+      "default": null
+    },
+    "revision": {
+      "type": "str",
+      "default": "main"
+    },
+    "use_safetensors": {
+      "type": "bool | None",
+      "default": null
+    },
+    "weights_only": {
+      "type": "bool",
+      "default": true
+    },
+    "fusion_config": {
+      "type": "dict[str, bool | dict[str, Any]] | None",
+      "default": null
+    },
+    "disable_mmap": {
+      "type": "bool | None",
+      "default": null
+    }
+  },
+  "sampling_params": {
+    "max_length": {
+      "type": "int",
+      "default": null
+    },
+    "max_new_tokens": {
+      "type": "int",
+      "default": null
+    },
+    "min_length": {
+      "type": "int",
+      "default": null
+    },
+    "min_new_tokens": {
+      "type": "int",
+      "default": null
+    },
+    "early_stopping": {
+      "type": "bool",
+      "default": null
+    },
+    "max_time": {
+      "type": "float",
+      "default": null
+    },
+    "stop_strings": {
+      "type": "unknown",
+      "default": null
+    },
+    "do_sample": {
+      "type": "bool",
+      "default": null
+    },
+    "num_beams": {
+      "type": "int",
+      "default": null
+    },
+    "use_cache": {
+      "type": "bool",
+      "default": null
+    },
+    "cache_implementation": {
+      "type": "str",
+      "default": null
+    },
+    "cache_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "temperature": {
+      "type": "float",
+      "default": null
+    },
+    "top_k": {
+      "type": "int",
+      "default": null
+    },
+    "top_p": {
+      "type": "float",
+      "default": null
+    },
+    "min_p": {
+      "type": "float",
+      "default": null
+    },
+    "top_h": {
+      "type": "float",
+      "default": null
+    },
+    "typical_p": {
+      "type": "float",
+      "default": null
+    },
+    "epsilon_cutoff": {
+      "type": "float",
+      "default": null
+    },
+    "eta_cutoff": {
+      "type": "float",
+      "default": null
+    },
+    "repetition_penalty": {
+      "type": "float",
+      "default": null
+    },
+    "encoder_repetition_penalty": {
+      "type": "float",
+      "default": null
+    },
+    "length_penalty": {
+      "type": "float",
+      "default": null
+    },
+    "no_repeat_ngram_size": {
+      "type": "int",
+      "default": null
+    },
+    "bad_words_ids": {
+      "type": "unknown",
+      "default": null
+    },
+    "renormalize_logits": {
+      "type": "bool",
+      "default": null
+    },
+    "forced_bos_token_id": {
+      "type": "int",
+      "default": null
+    },
+    "forced_eos_token_id": {
+      "type": "int",
+      "default": null
+    },
+    "remove_invalid_values": {
+      "type": "bool",
+      "default": null
+    },
+    "exponential_decay_length_penalty": {
+      "type": "unknown",
+      "default": null
+    },
+    "suppress_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "begin_suppress_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "sequence_bias": {
+      "type": "unknown",
+      "default": null
+    },
+    "token_healing": {
+      "type": "bool",
+      "default": null
+    },
+    "guidance_scale": {
+      "type": "float",
+      "default": null
+    },
+    "watermarking_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "num_return_sequences": {
+      "type": "int",
+      "default": null
+    },
+    "output_attentions": {
+      "type": "bool",
+      "default": null
+    },
+    "output_hidden_states": {
+      "type": "bool",
+      "default": null
+    },
+    "output_scores": {
+      "type": "bool",
+      "default": null
+    },
+    "output_logits": {
+      "type": "bool",
+      "default": null
+    },
+    "return_dict_in_generate": {
+      "type": "bool",
+      "default": null
+    },
+    "pad_token_id": {
+      "type": "int",
+      "default": null
+    },
+    "bos_token_id": {
+      "type": "int",
+      "default": null
+    },
+    "eos_token_id": {
+      "type": "unknown",
+      "default": null
+    },
+    "encoder_no_repeat_ngram_size": {
+      "type": "int",
+      "default": null
+    },
+    "decoder_start_token_id": {
+      "type": "int",
+      "default": null
+    },
+    "is_assistant": {
+      "type": "bool",
+      "default": null
+    },
+    "num_assistant_tokens": {
+      "type": "int",
+      "default": null
+    },
+    "num_assistant_tokens_schedule": {
+      "type": "str",
+      "default": null
+    },
+    "assistant_confidence_threshold": {
+      "type": "float",
+      "default": null
+    },
+    "prompt_lookup_num_tokens": {
+      "type": "int",
+      "default": null
+    },
+    "max_matching_ngram_size": {
+      "type": "int",
+      "default": null
+    },
+    "assistant_early_exit": {
+      "type": "int",
+      "default": null
+    },
+    "assistant_lookbehind": {
+      "type": "int",
+      "default": null
+    },
+    "target_lookbehind": {
+      "type": "int",
+      "default": null
+    },
+    "compile_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "disable_compile": {
+      "type": "bool",
+      "default": null
+    },
+    "continuous_batching_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "low_memory": {
+      "type": "unknown",
+      "default": null
+    },
+    "penalty_alpha": {
+      "type": "unknown",
+      "default": null
+    },
+    "dola_layers": {
+      "type": "unknown",
+      "default": null
+    },
+    "diversity_penalty": {
+      "type": "unknown",
+      "default": null
+    },
+    "num_beam_groups": {
+      "type": "unknown",
+      "default": null
+    },
+    "constraints": {
+      "type": "unknown",
+      "default": null
+    },
+    "force_words_ids": {
+      "type": "unknown",
+      "default": null
+    },
+    "prefill_chunk_size": {
+      "type": "unknown",
+      "default": null
+    },
+    "_from_model_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "transformers_version": {
+      "type": "str",
+      "default": "5.7.0"
+    }
+  }
+}
