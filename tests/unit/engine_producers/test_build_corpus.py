@@ -16,7 +16,6 @@ Coverage:
 - Stability: byte-identical YAML on re-runs.
 - ``--check`` mode: drift surfaces as exit 1 with a diff.
 - Empty staging: error gracefully (no canonical write).
-- ``cross_validated_by`` parses round-trip via the loader.
 """
 
 from __future__ import annotations
@@ -33,7 +32,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from llenergymeasure.config.engine_invariants import EngineInvariantsLoader  # noqa: E402
 from scripts.engine_producers import build_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -498,46 +496,6 @@ class TestEmptyStaging:
             build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
 
         assert canonical.read_text() == ("schema_version: 1.0.0\nengine: transformers\nrules: []\n")
-
-
-# ---------------------------------------------------------------------------
-# Loader round-trip - cross_validated_by parses correctly
-# ---------------------------------------------------------------------------
-
-
-class TestLoaderRoundTrip:
-    def test_merger_output_loads_via_engine_invariants_loader(self, tmp_path: Path) -> None:
-        staging = tmp_path / "transformers" / "_staging"
-        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
-        _write_staging(
-            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
-        )
-
-        build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
-
-        loader = EngineInvariantsLoader(corpus_root=tmp_path)
-        parsed = loader.load_invariants("transformers")
-        assert len(parsed.invariants) == 1
-        invariant = parsed.invariants[0]
-        assert invariant.added_by == "static_miner"
-        assert invariant.cross_validated_by == ("dynamic_miner",)
-
-    def test_loader_rejects_unknown_cross_validated_by_value(self, tmp_path: Path) -> None:
-        # Bypass the merger's single-source normalisation by writing a
-        # corpus YAML directly with a bad cross_validated_by entry - the
-        # loader must reject it, since the closed-enum guard is the
-        # whole point of validating cross-validation provenance.
-        from llenergymeasure.config.engine_invariants import UnknownAddedByError
-
-        invariant = _ast_rule()
-        invariant["cross_validated_by"] = ["NOT_A_REAL_PROVENANCE"]
-        canonical = tmp_path / "transformers" / "invariants.proposed.yaml"
-        canonical.parent.mkdir(parents=True, exist_ok=True)
-        canonical.write_text(yaml.safe_dump(_envelope([invariant]), sort_keys=False))
-
-        loader = EngineInvariantsLoader(corpus_root=tmp_path)
-        with pytest.raises(UnknownAddedByError):
-            loader.load_invariants("transformers")
 
 
 # ---------------------------------------------------------------------------

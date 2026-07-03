@@ -1,0 +1,49 @@
+# Shipped engine validation rules. Single runtime source per engine.
+# Schema + loader: src/llenergymeasure/config/engine_rules/loader.py
+# severity is closed {error, dormant}; provenance is metadata only.
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 0.21.0
+rules:
+- id: tensorrt_raises_max_ngram_size_le_0_positive_values
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.max_ngram_size:
+        <=: 0
+  message_template: Value must be positive, got {v}
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.21.0
+    citation: llmapi/llm_args.py:577
+    date: '2026-05-06'
+- id: tensorrt_raises_max_verification_set_size_le_0_positive_values
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.max_verification_set_size:
+        <=: 0
+  message_template: Value must be positive, got {v}
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.21.0
+    citation: llmapi/llm_args.py:577
+    date: '2026-05-06'
+- id: tensorrt_raises_max_window_size_le_0_positive_values
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.max_window_size:
+        <=: 0
+  message_template: Value must be positive, got {v}
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.21.0
+    citation: llmapi/llm_args.py:577
+    date: '2026-05-06'

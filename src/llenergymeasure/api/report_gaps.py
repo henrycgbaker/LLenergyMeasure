@@ -9,13 +9,13 @@ templates the existing invariants corpus does not already match.
 Design:
 
 - **No corpus mutation.** We emit YAML *fragments* to ``--out PATH``; the
-  live ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` is never touched.
+  live ``src/llenergymeasure/engines/{engine}/rules.yaml`` is never touched.
 - **Severity is mechanical.** ``warn`` for log-channel emissions;
   ``error`` when ``include_exceptions=True`` and the record is an
   exception. Invariant fragments are always ``added_by: runtime_warning``.
-- **Round-trip safe.** Fragments parse through
-  :func:`llenergymeasure.config.engine_invariants.loader._parse_invariant`;
-  placeholders carry ``# TODO: human`` markers.
+- **Emission channels.** ``EmissionChannel`` is this module's own runtime
+  taxonomy (which channel a captured record came through); it is not part of
+  the shipped rules schema.
 - **Sentinel filtering.** ``subprocess_died`` / ``exception`` records
   don't prove "rule didn't fire" - excluded from B always; excluded from
   A unless ``include_exceptions=True``.
@@ -41,8 +41,7 @@ from typing import Any, Literal
 
 import yaml
 
-from llenergymeasure.config.engine_invariants import (
-    EmissionChannel,
+from llenergymeasure.config.engine_rules import (
     EngineInvariants,
     EngineInvariantsLoader,
 )
@@ -60,6 +59,23 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+EmissionChannel = Literal[
+    "warnings_warn",
+    "logger_warning",
+    "logger_warning_once",
+    "minor_issues_dict",
+    "none",
+    "runtime_exception",
+]
+"""How an engine user-visibly signals an issue in a captured runtime record.
+
+This is the gap-proposer's own runtime taxonomy, not part of the shipped
+rules schema (the closed severity enum lives in
+:mod:`llenergymeasure.config.engine_rules`). It classifies the channel a
+captured warning/log/exception came through so a proposed fragment can note
+it for the human reviewer.
+"""
 
 #: Eight-hex-char prefix used as the fallback key when ``manifest.json``
 #: is missing. Collision risk ~10^-9 per pair at study scale; the manifest
@@ -667,7 +683,7 @@ def _field_value_distribution(
 
 _BANNER = (
     "# Invariant fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
-    "# src/llenergymeasure/engines/{engine}/invariants.proposed.yaml under the 'rules:' key.\n"
+    "# src/llenergymeasure/engines/{engine}/rules.yaml under the 'rules:' key.\n"
     "# ----------------------------------------------------------------------\n"
     "# added_by: runtime_warning - always, for runtime-derived rules.\n"
     "# needs_generalisation_review: set when the predicate is narrow or\n"
@@ -680,7 +696,7 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
     """Render one :class:`GapProposal` as a YAML document.
 
     The output always parses through
-    :func:`llenergymeasure.config.engine_invariants.loader._parse_invariant` -
+    :func:`llenergymeasure.config.engine_rules.loader._parse_rule` -
     placeholder fields are enum-valid so the round-trip test passes while
     the ``# TODO: human`` markers make stubs obvious to reviewers.
     """

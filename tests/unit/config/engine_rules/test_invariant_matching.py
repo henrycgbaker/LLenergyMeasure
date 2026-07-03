@@ -7,10 +7,19 @@ from typing import Any
 
 import pytest
 
-from llenergymeasure.config.engine_invariants import (
+from llenergymeasure.config.engine_rules import (
     Invariant,
+    Provenance,
     evaluate_predicate,
     resolve_field_path,
+)
+
+_PROVENANCE = Provenance(
+    source="deterministic_miner",
+    verified="construction",
+    engine_version="4.57.3",
+    citation="configuration_utils.py:42",
+    date="2026-04-23",
 )
 
 # ---------------------------------------------------------------------------
@@ -47,24 +56,10 @@ def _make_invariant(
     return Invariant(
         id=id,
         engine="transformers",
-        library="transformers",
-        invariant_under_test="test",
         severity=severity,
-        native_type="transformers.GenerationConfig",
-        match_engine="transformers",
         match_fields=match_fields or {},
-        kwargs_positive={},
-        kwargs_negative={},
-        expected_outcome={
-            "outcome": "dormant_announced",
-            "emission_channel": "minor_issues_dict",
-            "normalised_fields": [],
-        },
+        provenance=_PROVENANCE,
         message_template=message,
-        miner_source={},
-        references=(),
-        added_by="static_miner",
-        added_at="2026-04-23",
     )
 
 

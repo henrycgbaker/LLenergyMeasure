@@ -256,7 +256,7 @@ def read_bundled_engine_version(engine: str) -> str | None:
     experiment time - the SSOT version describes the build's INTENT;
     the bundled envelope describes what shipped.
     """
-    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+    from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
     from llenergymeasure.config.schema_loader import SchemaLoader
 
     try:

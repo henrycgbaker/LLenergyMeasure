@@ -20,8 +20,8 @@ from llenergymeasure.api.report_gaps import (
     find_runtime_gaps,
     render_yaml_fragment,
 )
-from llenergymeasure.config.engine_invariants import EngineInvariants
-from llenergymeasure.config.engine_invariants.loader import _parse_envelope
+from llenergymeasure.config.engine_rules import EngineInvariants
+from llenergymeasure.config.engine_rules.loader import _parse_envelope
 from tests.helpers.runtime_obs import (
     fake_hash as _fake_hash,
 )
@@ -39,38 +39,7 @@ from tests.helpers.runtime_obs import (
 
 def _build_empty_invariants() -> dict[str, EngineInvariants]:
     """Return an empty invariants corpus for transformers (so nothing suppresses gaps)."""
-    envelope = "schema_version: 1.0.0\nengine: transformers\ninvariants: []\n"
-    return {"transformers": _parse_envelope("transformers", envelope)}
-
-
-def _build_invariants_with_matching(template_regex: str) -> dict[str, EngineInvariants]:
-    """Corpus with one invariant whose ``observed_messages_regex`` matches ``template_regex``.
-
-    Uses the minimal set of required fields expected by ``_parse_invariant``.
-    """
-    envelope = f"""
-schema_version: 1.0.0
-engine: transformers
-invariants:
-- id: t_runtime_existing
-  engine: transformers
-  severity: warn
-  native_type: transformers.Fixture
-  match:
-    engine: transformers
-    fields:
-      transformers.sampling.do_sample:
-        equals: false
-  kwargs_positive:
-    do_sample: false
-  kwargs_negative: {{}}
-  expected_outcome:
-    outcome: warn
-    emission_channel: logger_warning
-    observed_messages_regex:
-    - {json.dumps(template_regex)}
-  added_by: manual_seed
-"""
+    envelope = "schema_version: 1.0.0\nengine: transformers\nrules: []\n"
     return {"transformers": _parse_envelope("transformers", envelope)}
 
 
@@ -251,31 +220,13 @@ def test_exception_records_excluded_by_default(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Corpus suppression + engine filter
+# Engine filter
 # ---------------------------------------------------------------------------
-
-
-def test_existing_corpus_rule_suppresses_gap(tmp_path: Path) -> None:
-    """Templates matched by corpus ``observed_messages_regex`` don't produce gaps."""
-    study = tmp_path / "study-3"
-    study.mkdir()
-
-    h_a = _fake_hash("covered_a")
-    h_b = _fake_hash("covered_b")
-    _write_resolution(study, 1, 1, "transformers", h_a, {"do_sample": False})
-    _write_resolution(study, 2, 1, "transformers", h_b, {"do_sample": True})
-    _write_jsonl_record(
-        study,
-        config_hash=h_a,
-        warnings_emitted=["temperature is ignored when do_sample is False"],
-    )
-    _write_jsonl_record(study, config_hash=h_b)
-
-    # The normaliser strips numbers/paths but leaves text intact; this raw
-    # message has no numerics so the template equals the literal string.
-    corpus = _build_invariants_with_matching(r"\Atemperature is ignored when do_sample is False\Z")
-    gaps = find_runtime_gaps([study], engine_invariants=corpus)
-    assert gaps == []
+# NOTE: the observed-messages corpus-suppression tests died with the
+# validated-YAML overlay - the shipped rules schema carries no observed
+# message samples, so no rule can suppress a template. The gap tool's
+# replacement (observed-collision mining over results bundles) rebuilds
+# matching on config hashes instead of message text.
 
 
 def test_engine_filter(tmp_path: Path) -> None:
@@ -389,8 +340,13 @@ def test_study_path_not_a_directory_raises(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_round_trip_through_loader(tmp_path: Path) -> None:
-    """Emitted proposal parses through load_invariants without error."""
+def test_rendered_fragment_is_valid_yaml(tmp_path: Path) -> None:
+    """Emitted proposal is parseable YAML carrying the review-relevant keys.
+
+    Fragments are human-review candidates, not shipped rules - they no
+    longer round-trip through the runtime loader (proposals carry ``warn``
+    severity and legacy provenance, both outside the closed shipped schema).
+    """
     study = tmp_path / "rt-study"
     study.mkdir()
 
@@ -409,30 +365,17 @@ def test_round_trip_through_loader(tmp_path: Path) -> None:
     assert len(gaps) == 1
     yaml_body = render_yaml_fragment(gaps[0])
 
-    # Wrap the fragment in a minimum-valid corpus envelope so the loader can
-    # parse it alongside its own required top-level keys.
-    # Re-parse the rendered YAML so we can inject it as a list item cleanly.
     rule_doc = yaml.safe_load(yaml_body)
-    corpus_yaml = yaml.safe_dump(
-        {
-            "schema_version": "1.0.0",
-            "engine": "transformers",
-            "invariants": [rule_doc],
-        },
-        sort_keys=False,
-    )
-    parsed = _parse_envelope("transformers", corpus_yaml)
-    assert len(parsed.invariants) == 1
-    invariant = parsed.invariants[0]
-    assert invariant.added_by == "runtime_warning"
-    assert invariant.severity == "warn"
-    assert invariant.expected_outcome["emission_channel"] == "warnings_warn"
+    assert rule_doc["added_by"] == "runtime_warning"
+    assert rule_doc["severity"] == "warn"
+    assert rule_doc["expected_outcome"]["emission_channel"] == "warnings_warn"
+    assert rule_doc["match"]["fields"]
     # Banner comment present at top of raw YAML fragment output.
     assert "Invariant fragment proposed by 'llem report-gaps'" in yaml_body
 
 
-def test_render_yaml_error_severity_roundtrip(tmp_path: Path) -> None:
-    """Proposal with severity=error parses back through the loader."""
+def test_render_yaml_error_severity(tmp_path: Path) -> None:
+    """Exception-derived proposal carries severity=error in the fragment."""
     study = tmp_path / "rt-err"
     study.mkdir()
 
@@ -460,14 +403,8 @@ def test_render_yaml_error_severity_roundtrip(tmp_path: Path) -> None:
     assert len(gaps) == 1
     body = render_yaml_fragment(gaps[0])
     rule_doc = yaml.safe_load(body)
-    parsed = _parse_envelope(
-        "transformers",
-        yaml.safe_dump(
-            {"schema_version": "1.0.0", "engine": "transformers", "invariants": [rule_doc]}
-        ),
-    )
-    assert parsed.invariants[0].severity == "error"
-    assert parsed.invariants[0].expected_outcome["outcome"] == "error"
+    assert rule_doc["severity"] == "error"
+    assert rule_doc["expected_outcome"]["outcome"] == "error"
 
 
 # ---------------------------------------------------------------------------
@@ -475,50 +412,49 @@ def test_render_yaml_error_severity_roundtrip(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_template_matched_by_corpus_via_observed_messages() -> None:
-    """Invariants using plain observed_messages (validated YAML overlay) also suppress gaps."""
+def test_template_never_matched_by_shipped_corpus() -> None:
+    """The shipped rules schema carries no observed message samples.
+
+    The suppression indexes are therefore always empty and no template is
+    ever suppressed - every unmatched emission surfaces as a gap until the
+    observed-collision replacement lands.
+    """
     envelope = """
 schema_version: 1.0.0
 engine: transformers
-invariants:
+rules:
 - id: t_fixture
   engine: transformers
-  severity: warn
-  native_type: transformers.Fixture
+  severity: dormant
   match:
-    engine: transformers
     fields:
       do_sample:
         equals: false
-  kwargs_positive: {do_sample: false}
-  kwargs_negative: {}
-  expected_outcome:
-    outcome: warn
-    emission_channel: logger_warning
-    observed_messages:
-    - "You have set temperature=0.5 which is below the minimum"
-  added_by: manual_seed
+  provenance:
+    source: manual
+    verified: human
+    engine_version: "4.57.3"
+    date: "2026-07-02"
 """
     corpus = _parse_envelope("transformers", envelope)
-    # A different-temperature raw message normalises to the same template.
     from llenergymeasure.api.report_gaps import (
         _build_observed_template_index,
         _build_regex_index,
     )
-    from llenergymeasure.study.message_normalise import normalise
 
-    other_template = normalise("You have set temperature=0.9 which is below the minimum").template
     corpus_map = {"transformers": corpus}
     observed_idx = _build_observed_template_index(corpus_map)
     regex_idx = _build_regex_index(corpus_map)
+    assert observed_idx["transformers"] == {}
+    assert regex_idx["transformers"] == {}
     assert (
         _template_matched_by_corpus(
-            other_template,
+            "any template at all",
             corpus,
             observed_idx["transformers"],
             regex_idx["transformers"],
         )
-        is True
+        is False
     )
 
 

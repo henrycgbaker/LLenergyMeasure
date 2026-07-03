@@ -264,7 +264,7 @@ class TestReadBundledEngineVersion:
         """Bundled artefact disagreement is a build-time bundling bug; raise loud."""
         from dataclasses import replace
 
-        from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+        from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
         from llenergymeasure.config.schema_loader import SchemaLoader
 
         original_load_invariants = EngineInvariantsLoader.load_invariants

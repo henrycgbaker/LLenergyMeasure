@@ -17,11 +17,12 @@ from typing import Any
 
 import pytest
 
-from llenergymeasure.config.engine_invariants import (
+from llenergymeasure.config.engine_rules import (
     Invariant,
+    Provenance,
     evaluate_predicate,
 )
-from llenergymeasure.config.engine_invariants.loader import (
+from llenergymeasure.config.engine_rules.loader import (
     _is_int_pair,
     _resolve_field_refs_in_spec,
 )
@@ -53,24 +54,16 @@ def _make_invariant(*, match_fields: dict[str, Any]) -> Invariant:
     return Invariant(
         id="rule_x",
         engine="transformers",
-        library="transformers",
-        invariant_under_test="test",
         severity="error",
-        native_type="transformers.GenerationConfig",
-        match_engine="transformers",
         match_fields=match_fields,
-        kwargs_positive={},
-        kwargs_negative={},
-        expected_outcome={
-            "outcome": "error",
-            "emission_channel": "runtime_exception",
-            "normalised_fields": [],
-        },
+        provenance=Provenance(
+            source="manual",
+            verified="human",
+            engine_version="4.57.3",
+            citation=None,
+            date="2026-04-25",
+        ),
         message_template="msg {declared_value}",
-        miner_source={},
-        references=(),
-        added_by="manual_seed",
-        added_at="2026-04-25",
     )
 
 

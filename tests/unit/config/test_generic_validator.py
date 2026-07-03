@@ -1,8 +1,9 @@
 """Tests for the generic ``_apply_invariants`` model validator.
 
-Covers the three severity paths (error / warn / dormant) plus the
-no-match / missing-corpus fallbacks. Invariant loading is exercised by
-``tests/unit/config/engine_invariants/test_loader.py``; this module focuses on
+Covers the severity dispatch paths (error / dormant, plus the warn branch
+that survives in the validator until its B-phase rework) and the no-match /
+missing-corpus fallbacks. Rule loading is exercised by
+``tests/unit/config/engine_rules/test_loader.py``; this module focuses on
 the validator's dispatch and the ``_dormant_observations`` contract.
 """
 
@@ -18,7 +19,7 @@ from llenergymeasure.config.engine_configs import (
     TransformersConfig,
     TransformersSamplingConfig,
 )
-from llenergymeasure.config.engine_invariants.loader import EngineInvariants, Invariant
+from llenergymeasure.config.engine_rules.loader import EngineInvariants, Invariant, Provenance
 from llenergymeasure.config.models import (
     ExperimentConfig,
     _reset_invariants_loader_cache,
@@ -32,26 +33,25 @@ def _make_invariant(
     severity: str,
     match_fields: dict[str, Any],
     message_template: str | None = "test invariant fired ({declared_value})",
-    outcome: str = "error",
 ) -> Invariant:
-    """Build a minimal Invariant for validator-path testing."""
+    """Build a minimal Invariant for validator-path testing.
+
+    Severity is deliberately unvalidated here (direct construction bypasses
+    the loader's closed-enum check) so the dispatch fallbacks stay testable.
+    """
     return Invariant(
         id=invariant_id,
         engine="transformers",
-        library="transformers",
-        invariant_under_test="unit test invariant",
         severity=severity,
-        native_type="transformers.GenerationConfig",
-        match_engine="transformers",
         match_fields=match_fields,
-        kwargs_positive={},
-        kwargs_negative={},
-        expected_outcome={"outcome": outcome, "emission_channel": "none"},
+        provenance=Provenance(
+            source="manual",
+            verified="human",
+            engine_version="test",
+            citation=None,
+            date="2026-04-23",
+        ),
         message_template=message_template,
-        miner_source={},
-        references=(),
-        added_by="manual_seed",
-        added_at="2026-04-23",
     )
 
 
@@ -182,7 +182,6 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
         "test_dormant_rule",
         "dormant",
         {"transformers.sampling.temperature": {"present": True, "not_equal": 1.0}},
-        outcome="dormant_announced",
     )
     _install_test_invariants(monkeypatch, [invariant])
 
