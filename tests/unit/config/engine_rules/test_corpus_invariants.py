@@ -112,6 +112,51 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     )
 
 
+def test_cross_section_field_refs_fire(corpora) -> None:
+    """Cross-section @field_ref rules resolve and fire (firing regression guard).
+
+    Bare @refs resolve as siblings within the anchor field's parent section
+    only. When the nested re-home split num_beams (engine_params) from
+    num_return_sequences (sampling_params), sibling-form refs silently
+    resolved to None and the rules went dead without any test noticing -
+    the presence check above cannot catch a rule that exists but never
+    fires. Refs that cross sections must use the root-dotted form.
+    """
+    invariants = corpora["transformers"].invariants
+
+    violating = {
+        "transformers": {
+            "engine_params": {"num_beams": 2},
+            "sampling_params": {"num_return_sequences": 4},
+        }
+    }
+    fired = {inv.id for inv in invariants if inv.try_match(violating)}
+    assert "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences" in fired
+
+    not_divisible = {
+        "transformers": {
+            "engine_params": {"num_beams": 5},
+            "sampling_params": {"num_return_sequences": 2},
+        }
+    }
+    fired = {inv.id for inv in invariants if inv.try_match(not_divisible)}
+    assert (
+        "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences" in fired
+    )
+
+    clean = {
+        "transformers": {
+            "engine_params": {"num_beams": 4},
+            "sampling_params": {"num_return_sequences": 2},
+        }
+    }
+    fired = {inv.id for inv in invariants if inv.try_match(clean)}
+    assert not fired & {
+        "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences",
+        "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences",
+    }
+
+
 @pytest.mark.parametrize("engine", ENGINES)
 def test_corpus_schema_version_is_current(corpora, engine: str) -> None:
     assert corpora[engine].schema_version.startswith("1.")

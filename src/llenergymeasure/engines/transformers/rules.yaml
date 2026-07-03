@@ -468,7 +468,7 @@ rules:
   match:
     fields:
       transformers.engine_params.num_beams:
-        <: '@num_return_sequences'
+        <: '@transformers.sampling_params.num_return_sequences'
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   provenance:
     source: deterministic_miner
@@ -482,7 +482,7 @@ rules:
   match:
     fields:
       transformers.engine_params.num_beams:
-        not_divisible_by: '@num_return_sequences'
+        not_divisible_by: '@transformers.sampling_params.num_return_sequences'
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   provenance:
     source: deterministic_miner
