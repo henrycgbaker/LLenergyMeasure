@@ -447,7 +447,7 @@ def _route_key_value(
     """Route a single fully-qualified key into *config_dict*.
 
     Routing rules:
-    - Engine-prefixed dotted key (``transformers.batch_size``) → merge into engine section.
+    - Engine-prefixed dotted key (``transformers.engine_params.dtype``) → merge into engine section.
     - Other dotted key (``task.dataset.source``) → unflatten at top level.
     - Simple key → direct assignment.
 
