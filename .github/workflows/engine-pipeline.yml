@@ -495,9 +495,11 @@ jobs:
           git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"
 
           # Stage only the paths writeback artefacts may produce.
+          # The legacy invariants.{proposed,validated}.yaml corpus files are
+          # deliberately NOT staged: the runtime rules corpus is the single
+          # shipped rules.yaml per engine, and a writeback must never
+          # resurrect the removed two-file topology.
           git add \
-            'src/llenergymeasure/engines/*/invariants.proposed.yaml' \
-            'src/llenergymeasure/engines/*/invariants.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
             'engine_versions/*/current.yaml' \
             'docs/reference/engines/invariants-*.md' \
