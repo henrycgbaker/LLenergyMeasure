@@ -1,0 +1,151 @@
+# Shipped engine validation rules. Single runtime source per engine.
+# Schema + loader: src/llenergymeasure/config/engine_rules/loader.py
+# severity is closed {error, dormant}; provenance is metadata only.
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.7.3
+rules:
+- id: vllm_samplingparams_dormant_seed_eq_neg1
+  engine: vllm
+  severity: dormant
+  match:
+    fields:
+      vllm.sampling.seed: -1
+  normalised_fields:
+  - seed
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: sampling_params.py:311
+    date: '2026-04-27'
+- id: vllm_samplingparams_raises_best_of_lt_ref_n
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling.best_of:
+        present: true
+        <: '@n'
+  message_template: best_of must be greater than or equal to n, got n={n} and best_of={best_of}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: sampling_params.py:296
+    date: '2026-05-13'
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling.max_tokens:
+        present: true
+      vllm.sampling.min_tokens:
+        '>': '@max_tokens'
+  message_template: min_tokens must be less than or equal to max_tokens={max_tokens}, got {min_tokens}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: sampling_params.py:388
+    date: '2026-04-27'
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  message_template: min_tokens must be greater than or equal to 0, got {min_tokens}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: sampling_params.py:385
+    date: '2026-04-27'
+- id: vllm_samplingparams_raises_n_lt_1
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling.n:
+        <: 1
+  message_template: n must be at least 1, got {n}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: sampling_params.py:357
+    date: '2026-04-27'
+- id: vllm_samplingparams_raises_n_not_type_int
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling.n:
+        type_is_not: int
+  message_template: n must be an int, but is of type {type(self.n)}
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: sampling_params.py:354
+    date: '2026-04-27'
+- id: vllm_samplingparams_raises_temperature_lt_0p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling.temperature:
+        <: 0.0
+  message_template: temperature must be non-negative, got {temperature}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: sampling_params.py:368
+    date: '2026-05-13'
+- id: vllm_schedulerconfig_raises_max_num_partial_prefills_lt_1
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine.max_num_partial_prefills:
+        <: 1
+  message_template: max_num_partial_prefills ({max_num_partial_prefills}) must be greater than or equal
+    to 1.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: config.py:1604
+    date: '2026-05-13'
+- id: vllm_schedulerconfig_raises_num_lookahead_slots_lt_0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine.num_lookahead_slots:
+        <: 0
+  message_template: num_lookahead_slots ({num_lookahead_slots}) must be greater than or equal to 0.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: config.py:1592
+    date: '2026-05-13'
+- id: vllm_schedulerconfig_raises_num_scheduler_steps_lt_1
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine.num_scheduler_steps:
+        <: 1
+  message_template: num_scheduler_steps ({num_scheduler_steps}) must be greater than or equal to 1.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.7.3
+    citation: config.py:1598
+    date: '2026-05-13'

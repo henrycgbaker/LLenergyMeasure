@@ -25,8 +25,7 @@ engines/
   transformers/
     __init__.py        # Re-exports TransformersEngine from plugin
     plugin.py          # HuggingFace Transformers engine
-    invariants.proposed.yaml    # Mined proposed invariants
-    invariants.validated.yaml   # Validation-confirmed observations
+    rules.yaml         # Shipped validation rules (single runtime source)
     schema.discovered.json      # Introspected parameter schema
     _staging/          # Per-engine miner staging (gitkeep'd)
 
@@ -34,12 +33,14 @@ engines/
   tensorrt/            # Same shape: TensorRT-LLM engine (NGC Docker)
 ```
 
-The runtime data files (`invariants.*.yaml`, `schema.discovered.json`) are
-loaded by `llenergymeasure.config.engine_invariants.EngineInvariantsLoader` and
-`llenergymeasure.config.SchemaLoader` respectively. CI workflows
-(`update-engine-{invariants,schemas}.yml`) regenerate them via Renovate-driven
-library bumps and commit-back. See `INVARIANTS_README.md` for the corpus
-schema specification.
+The runtime data files (`rules.yaml`, `schema.discovered.json`) are loaded by
+`llenergymeasure.config.engine_rules.EngineInvariantsLoader` and
+`llenergymeasure.config.SchemaLoader` respectively. `rules.yaml` is the ONE
+shipped rules file per engine: severity is a closed `{error, dormant}` enum,
+every rule carries a provenance block (source / verified / citation /
+engine_version / date), and the runtime reads nothing else - no
+proposed/validated split. The schema and field vocabulary are documented in
+`llenergymeasure/config/engine_rules/loader.py`.
 
 ## EnginePlugin protocol
 
@@ -57,7 +58,7 @@ class MyEngine:
     def check_hardware(self, config: ExperimentConfig) -> list[str]: ...
 ```
 
-`check_hardware()` returns a list of error strings (empty means compatible). Called via `engines.probe_adapter.build_config_probe()` at preflight to catch host-GPU mismatches (e.g., FP8 on A100, SM below the engine's floor). Framework-invariant validation (library-semantics) lives in the validated corpus consumed by `ExperimentConfig._apply_invariants`.
+`check_hardware()` returns a list of error strings (empty means compatible). Called via `engines.probe_adapter.build_config_probe()` at preflight to catch host-GPU mismatches (e.g., FP8 on A100, SM below the engine's floor). Framework-invariant validation (library-semantics) lives in the shipped rules corpus consumed by `ExperimentConfig._apply_invariants`.
 
 `InferenceOutput` carries the minimal data the harness needs:
 

@@ -41,14 +41,14 @@ if TYPE_CHECKING:
         TransformersConfig,
         VLLMConfig,
     )
-    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+    from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
 
 
 @lru_cache(maxsize=1)
 def _get_invariants_loader() -> EngineInvariantsLoader:
     # Lazy import so module load doesn't read YAML off disk. Tests substitute
     # via ``monkeypatch.setattr(models, "_get_invariants_loader", ...)``.
-    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+    from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
 
     return EngineInvariantsLoader()
 

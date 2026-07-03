@@ -24,7 +24,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from llenergymeasure.config.engine_invariants.loader import (
+from llenergymeasure.config.engine_rules.loader import (
     EngineInvariantsLoader,
     Invariant,
     resolve_field_path,

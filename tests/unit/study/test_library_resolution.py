@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.config.engine_invariants.loader import Invariant
+from llenergymeasure.config.engine_rules.loader import Invariant, Provenance
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.hashing import build_resolved_view, hash_config
 from llenergymeasure.study.library_resolution import (
@@ -33,20 +33,17 @@ def _mk_rule(
     return Invariant(
         id=invariant_id,
         engine="transformers",
-        library="transformers",
-        invariant_under_test="",
         severity=severity,
-        native_type="transformers.GenerationConfig",
-        match_engine="transformers",
         match_fields=match_fields,
-        kwargs_positive={},
-        kwargs_negative={},
-        expected_outcome={"normalised_fields": normalised_fields or []},
+        provenance=Provenance(
+            source="manual",
+            verified="human",
+            engine_version="test",
+            citation=None,
+            date="2026-04-23",
+        ),
         message_template=None,
-        miner_source={},
-        references=(),
-        added_by="test",
-        added_at="2026-04-23",
+        normalised_fields=tuple(normalised_fields or ()),
     )
 
 
@@ -253,7 +250,7 @@ class TestDedupSweep:
         # End-to-end with the actual validated invariants - the original motivating
         # example: do_sample x temperature = [T,F] x [0.5, 1.0, 1.5] -> 6 configs,
         # library-resolution mechanism collapses to 4 (1 greedy canonical + 3 sampling variants).
-        from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+        from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
 
         loader = EngineInvariantsLoader()
         invariants = loader.load_invariants("transformers").invariants

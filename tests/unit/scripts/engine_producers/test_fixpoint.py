@@ -30,7 +30,6 @@ from scripts.engine_producers._fixpoint_test import (  # noqa: E402
     assert_idempotent,
     assert_shuffle_stable,
     construct_seed_states,
-    fixpoint_test_corpus,
     load_dormant_invariants,
     synthesise_malformed_invariant_cases,
 )
@@ -201,21 +200,6 @@ class TestShuffleStability:
 
 
 class TestCorpusIntegration:
-    def test_seeded_transformers_corpus_converges(self) -> None:
-        import yaml
-
-        corpus_path = (
-            _PROJECT_ROOT
-            / "src"
-            / "llenergymeasure"
-            / "engines"
-            / "transformers"
-            / "invariants.proposed.yaml"
-        )
-        corpus = yaml.safe_load(corpus_path.read_text())
-        # Should not raise.
-        fixpoint_test_corpus(corpus)
-
     def test_load_dormant_rules_filters(self) -> None:
         corpus = {
             "invariants": [
