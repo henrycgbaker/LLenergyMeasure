@@ -60,12 +60,14 @@ def test_field_name_model():
 
 
 def test_field_name_dtype():
-    """dtype is per-engine (lives on the active engine's config section)."""
+    """dtype is per-engine; transformers nests it under engine_params."""
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "float16"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "float16"}},
     )
     assert config.transformers is not None
-    assert config.transformers.dtype == "float16"
+    assert config.transformers.engine_params.dtype == "float16"
 
 
 def test_field_name_n():
@@ -129,43 +131,46 @@ def test_tensorrt_engine_accepted():
 
 
 def test_pytorch_config_section_composition():
-    """config with transformers={batch_size: 4} engine section is accepted."""
+    """config with transformers engine_params section is accepted.
+
+    batch_size moved to harness.transformers (HarnessConfig); the engine
+    section carries engine-native fields under engine_params.
+    """
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers={"batch_size": 4},
+        transformers={"engine_params": {"device_map": "auto"}},
     )
     assert config.transformers is not None
-    assert config.transformers.batch_size == 4
+    assert config.transformers.engine_params.device_map == "auto"
 
 
 # ---------------------------------------------------------------------------
-# TransformersConfig.num_processes removal (M3 audit fix)
+# Generated transformers Config: no num_processes field
 # ---------------------------------------------------------------------------
 
 
 def test_pytorch_config_has_no_num_processes_field():
-    """TransformersConfig does not have a num_processes field (removed in M3 audit)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+    """The generated transformers EngineParams has no num_processes field."""
+    from llenergymeasure.engines.transformers.config import EngineParams
 
-    assert "num_processes" not in TransformersConfig.model_fields
+    assert "num_processes" not in EngineParams.model_fields
 
 
 def test_pytorch_config_num_processes_not_a_declared_field():
-    """num_processes is not a declared field on TransformersConfig.
+    """num_processes is not a declared field on the generated EngineParams.
 
-    TransformersConfig uses extra='allow' for HuggingFace passthrough, so passing
-    num_processes as an extra kwarg does not raise a ValidationError, but it
-    is NOT a typed model field and will not be type-checked or validated.
+    The generated Config uses extra='allow' for HuggingFace passthrough, so an
+    unknown kwarg is accepted into model_extra but is NOT a typed model field.
     """
-    from llenergymeasure.config.engine_configs import TransformersConfig
+    from llenergymeasure.engines.transformers.config import EngineParams
 
     # Verify it is absent from the declared model fields
-    assert "num_processes" not in TransformersConfig.model_fields
+    assert "num_processes" not in EngineParams.model_fields
     # Extra kwargs are accepted (extra='allow') but go into __pydantic_extra__
-    config = TransformersConfig(num_processes=4)  # type: ignore[call-arg]
+    params = EngineParams(num_processes=4)  # type: ignore[call-arg]
     # Not a typed field - no attribute access by name on the typed model
-    assert "num_processes" not in type(config).model_fields
+    assert "num_processes" not in type(params).model_fields
 
 
 def test_pytorch_section_with_wrong_engine_rejected():
@@ -203,43 +208,56 @@ def test_tensorrt_section_with_wrong_engine_rejected():
 # ---------------------------------------------------------------------------
 
 
-def test_invalid_dtype_raises_validation_error():
-    """Invalid dtype value raises ValidationError."""
-    with pytest.raises(ValidationError):
-        ExperimentConfig(
-            task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "fp16"}
-        )  # old shorthand
+def test_transformers_dtype_no_longer_literal_validated():
+    """transformers engine_params.dtype is a curated Any passthrough after migration.
+
+    The hand-written TransformersConfig typed dtype as a 3-value Literal that
+    rejected 'fp16'; the generated engine_params.dtype is Any (HF **kwargs
+    discovery debt), so any string is accepted and the engine validates at load.
+    """
+    config = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "fp16"}},
+    )
+    assert config.transformers.engine_params.dtype == "fp16"
 
 
 def test_valid_dtype_float32():
-    """dtype='float32' is valid on TransformersConfig."""
+    """dtype='float32' is valid on the generated transformers engine_params."""
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "float32"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "float32"}},
     )
-    assert config.transformers.dtype == "float32"
+    assert config.transformers.engine_params.dtype == "float32"
 
 
 def test_valid_dtype_float16():
-    """dtype='float16' is valid on TransformersConfig."""
+    """dtype='float16' is valid on the generated transformers engine_params."""
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "float16"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "float16"}},
     )
-    assert config.transformers.dtype == "float16"
+    assert config.transformers.engine_params.dtype == "float16"
 
 
 def test_valid_dtype_bfloat16():
-    """dtype='bfloat16' is valid on TransformersConfig."""
+    """dtype='bfloat16' is valid on the generated transformers engine_params."""
     config = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "bfloat16"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "bfloat16"}},
     )
-    assert config.transformers.dtype == "bfloat16"
+    assert config.transformers.engine_params.dtype == "bfloat16"
 
 
 @pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
 def test_all_pytorch_dtypes_valid(dt):
     """Schema-driven: all SSOT DTYPE_SUPPORT['transformers'] values are valid."""
     config = make_config(dtype=dt)
-    assert config.transformers.dtype == dt
+    assert config.transformers.engine_params.dtype == dt
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +301,7 @@ def test_make_config_override():
     """make_config(**overrides) applies overrides over defaults (dtype -> engine section)."""
     config = make_config(model="bert-base", dtype="float32")
     assert config.task.model == "bert-base"
-    assert config.transformers.dtype == "float32"
+    assert config.transformers.engine_params.dtype == "float32"
 
 
 # ---------------------------------------------------------------------------
@@ -340,67 +358,89 @@ def test_save_timeseries_false_accepted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# TransformersConfig tensor parallelism fields (tp_plan, tp_size)
+# Transformers tensor parallelism fields (tp_plan, tp_size) on generated config
+#
+# After migration these are curated Any-typed engine_params fields (no Literal /
+# ge constraint - that typing was lost to discovery debt). The V5 rule
+# (tp_plan XOR device_map) is a conscious drop: enforcement is from_pretrained-
+# side (execution grain), where the engine raises at model load, so it is no
+# longer a config-parse validator.
 # ---------------------------------------------------------------------------
 
 
 def test_pytorch_config_tp_plan_accepts_auto():
-    """TransformersConfig(tp_plan='auto') succeeds."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+    """tp_plan='auto' is accepted on the generated engine_params."""
+    from llenergymeasure.engines.transformers.config import EngineParams
 
-    cfg = TransformersConfig(tp_plan="auto")
-    assert cfg.tp_plan == "auto"
+    ep = EngineParams(tp_plan="auto")
+    assert ep.tp_plan == "auto"
 
 
-def test_pytorch_config_tp_plan_rejects_invalid():
-    """TransformersConfig(tp_plan='custom') raises ValidationError (Literal enforcement)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+def test_pytorch_config_tp_plan_accepts_any_string():
+    """tp_plan is a curated Any passthrough: arbitrary strings are accepted.
 
-    with pytest.raises(ValidationError):
-        TransformersConfig(tp_plan="custom")  # type: ignore[arg-type]
+    The hand-written TransformersConfig typed tp_plan as Literal['auto'] and
+    rejected other values; the generated engine_params.tp_plan is Any (discovery
+    debt), so any value passes and the engine validates at load.
+    """
+    from llenergymeasure.engines.transformers.config import EngineParams
+
+    ep = EngineParams(tp_plan="custom")  # type: ignore[arg-type]
+    assert ep.tp_plan == "custom"
 
 
 def test_pytorch_config_tp_size_accepts_positive():
-    """TransformersConfig(tp_plan='auto', tp_size=4) succeeds."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+    """tp_plan='auto', tp_size=4 is accepted on the generated engine_params."""
+    from llenergymeasure.engines.transformers.config import EngineParams
 
-    cfg = TransformersConfig(tp_plan="auto", tp_size=4)
-    assert cfg.tp_plan == "auto"
-    assert cfg.tp_size == 4
-
-
-def test_pytorch_config_tp_size_rejects_zero():
-    """TransformersConfig(tp_size=0) raises ValidationError (ge=1)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    with pytest.raises(ValidationError):
-        TransformersConfig(tp_size=0)
+    ep = EngineParams(tp_plan="auto", tp_size=4)
+    assert ep.tp_plan == "auto"
+    assert ep.tp_size == 4
 
 
-def test_pytorch_config_tp_plan_device_map_exclusive():
-    """TransformersConfig(tp_plan='auto', device_map='auto') raises ValidationError."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+def test_pytorch_config_tp_size_accepts_zero():
+    """tp_size=0 is accepted on the generated engine_params (tp_size is Any, no ge=1).
 
-    with pytest.raises(ValidationError, match="mutually exclusive"):
-        TransformersConfig(tp_plan="auto", device_map="auto")
+    The hand-written TransformersConfig had ge=1 on tp_size; the generated
+    engine_params.tp_size is Any (discovery debt), so 0 passes at parse and the
+    engine validates at load.
+    """
+    from llenergymeasure.engines.transformers.config import EngineParams
+
+    ep = EngineParams(tp_size=0)
+    assert ep.tp_size == 0
+
+
+def test_pytorch_config_tp_plan_and_device_map_can_coexist():
+    """tp_plan and device_map no longer raise at parse (V5 cross-validator dropped).
+
+    The hand-written TransformersConfig raised with 'mutually exclusive'; the
+    validator was from_pretrained-side enforcement (execution grain), not a
+    config-parse invariant. Both values now parse; the engine raises at model load.
+    """
+    from llenergymeasure.engines.transformers.config import EngineParams
+
+    ep = EngineParams(tp_plan="auto", device_map="auto")
+    assert ep.tp_plan == "auto"
+    assert ep.device_map == "auto"
 
 
 def test_pytorch_config_tp_plan_without_device_map_ok():
-    """TransformersConfig(tp_plan='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+    """tp_plan='auto' without device_map succeeds."""
+    from llenergymeasure.engines.transformers.config import EngineParams
 
-    cfg = TransformersConfig(tp_plan="auto")
-    assert cfg.tp_plan == "auto"
-    assert cfg.device_map is None
+    ep = EngineParams(tp_plan="auto")
+    assert ep.tp_plan == "auto"
+    assert ep.device_map is None
 
 
 def test_pytorch_config_device_map_without_tp_plan_ok():
-    """TransformersConfig(device_map='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
+    """device_map='auto' without tp_plan succeeds."""
+    from llenergymeasure.engines.transformers.config import EngineParams
 
-    cfg = TransformersConfig(device_map="auto")
-    assert cfg.device_map == "auto"
-    assert cfg.tp_plan is None
+    ep = EngineParams(device_map="auto")
+    assert ep.device_map == "auto"
+    assert ep.tp_plan is None
 
 
 # ---------------------------------------------------------------------------
@@ -408,60 +448,60 @@ def test_pytorch_config_device_map_without_tp_plan_ok():
 # ---------------------------------------------------------------------------
 
 
-def test_vllm_dtype_float32_rejected():
-    """VLLMConfig.dtype Literal rejects float32 (vLLM does not support fp32)."""
-    from llenergymeasure.config.engine_configs import VLLMConfig
+def test_vllm_dtype_float32_parses():
+    """vllm dtype Literal widened to include float32; vLLM rejects fp32 at runtime.
 
-    with pytest.raises(ValidationError):
-        VLLMConfig(dtype="float32")  # type: ignore[arg-type]
+    The generated vllm EngineParams dtype Literal now includes 'float32' (the
+    mined enum is wider than the previous hand-written restriction). vLLM itself
+    raises at runtime; float32 parses cleanly at config validation.
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"dtype": "float32"}},
+    )
+    assert cfg.vllm.engine_params.dtype == "float32"
 
 
 def test_vllm_fp8_float16_accepted():
     """fp8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16", engine=VLLMEngineConfig(quantization="fp8")),
+        vllm={"engine_params": {"dtype": "float16", "quantization": "fp8"}},
     )
-    assert cfg.vllm.dtype == "float16"
+    assert cfg.vllm.engine_params.dtype == "float16"
 
 
 def test_vllm_fp8_bfloat16_accepted():
     """fp8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="bfloat16", engine=VLLMEngineConfig(quantization="fp8")),
+        vllm={"engine_params": {"dtype": "bfloat16", "quantization": "fp8"}},
     )
-    assert cfg.vllm.dtype == "bfloat16"
+    assert cfg.vllm.engine_params.dtype == "bfloat16"
 
 
 def test_vllm_non_fp8_float16_accepted():
     """Non-fp8 quantization (awq) with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16", engine=VLLMEngineConfig(quantization="awq")),
+        vllm={"engine_params": {"dtype": "float16", "quantization": "awq"}},
     )
-    assert cfg.vllm.dtype == "float16"
+    assert cfg.vllm.engine_params.dtype == "float16"
 
 
 def test_vllm_no_quantization_default_dtype_accepted():
     """No quantization set, no explicit dtype, is accepted (engine default applies)."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(engine=VLLMEngineConfig()),
+        vllm={"engine_params": {}},
     )
-    assert cfg.vllm.dtype is None
+    # dtype defaults to "auto" on the generated EngineParams
+    assert cfg.vllm.engine_params.dtype == "auto"
 
 
 # ---------------------------------------------------------------------------
@@ -470,37 +510,50 @@ def test_vllm_no_quantization_default_dtype_accepted():
 
 
 def test_vllm_batched_tokens_less_than_model_len_rejected():
-    """max_num_batched_tokens < max_model_len raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
+    """max_num_batched_tokens < max_model_len raises ValidationError (mined error rule).
 
-    with pytest.raises(ValidationError, match=r"max_num_batched_tokens.*must be >="):
-        VLLMEngineConfig(max_num_batched_tokens=512, max_model_len=1024)
+    The mined rule ``vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len``
+    fires at ExperimentConfig construction when max_num_batched_tokens < max_model_len
+    and enable_chunked_prefill is absent.
+    """
+    with pytest.raises(ValidationError, match=r"smaller than"):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {"max_num_batched_tokens": 512, "max_model_len": 1024}},
+        )
 
 
 def test_vllm_batched_tokens_equal_model_len_accepted():
     """max_num_batched_tokens == max_model_len is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=1024, max_model_len=1024)
-    assert cfg.max_num_batched_tokens == 1024
-    assert cfg.max_model_len == 1024
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"max_num_batched_tokens": 1024, "max_model_len": 1024}},
+    )
+    assert cfg.vllm.engine_params.max_num_batched_tokens == 1024
+    assert cfg.vllm.engine_params.max_model_len == 1024
 
 
 def test_vllm_batched_tokens_greater_accepted():
     """max_num_batched_tokens > max_model_len is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=2048, max_model_len=1024)
-    assert cfg.max_num_batched_tokens == 2048
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"max_num_batched_tokens": 2048, "max_model_len": 1024}},
+    )
+    assert cfg.vllm.engine_params.max_num_batched_tokens == 2048
 
 
 def test_vllm_batched_tokens_one_none_accepted():
     """Only one of max_num_batched_tokens / max_model_len set is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=512)
-    assert cfg.max_num_batched_tokens == 512
-    assert cfg.max_model_len is None
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": {"max_num_batched_tokens": 512}},
+    )
+    assert cfg.vllm.engine_params.max_num_batched_tokens == 512
+    assert cfg.vllm.engine_params.max_model_len is None
 
 
 # ---------------------------------------------------------------------------
@@ -510,121 +563,110 @@ def test_vllm_batched_tokens_one_none_accepted():
 
 def test_pytorch_flash_attn2_float32_rejected():
     """flash_attention_2 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     with pytest.raises(ValidationError, match=r"flash_attention_2.*requires.*float16"):
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(
-                dtype="float32", attn_implementation="flash_attention_2"
-            ),
+            transformers={
+                "engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_2"}
+            },
         )
 
 
 def test_pytorch_flash_attn3_float32_rejected():
     """flash_attention_3 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     with pytest.raises(ValidationError, match=r"flash_attention_3.*requires.*float16"):
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(
-                dtype="float32", attn_implementation="flash_attention_3"
-            ),
+            transformers={
+                "engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_3"}
+            },
         )
 
 
 def test_pytorch_flash_attn2_bfloat16_accepted():
     """flash_attention_2 with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="bfloat16", attn_implementation="flash_attention_2"),
+        transformers={
+            "engine_params": {"dtype": "bfloat16", "attn_implementation": "flash_attention_2"}
+        },
     )
-    assert cfg.transformers.dtype == "bfloat16"
+    assert cfg.transformers.engine_params.dtype == "bfloat16"
 
 
 def test_pytorch_eager_float32_accepted():
     """attn_implementation=eager with dtype=float32 is accepted."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="float32", attn_implementation="eager"),
+        transformers={"engine_params": {"dtype": "float32", "attn_implementation": "eager"}},
     )
-    assert cfg.transformers.dtype == "float32"
+    assert cfg.transformers.engine_params.dtype == "float32"
 
 
 def test_pytorch_no_attn_impl_float32_accepted():
     """No attn_implementation set with dtype=float32 is accepted."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="float32"),
+        transformers={"engine_params": {"dtype": "float32"}},
     )
-    assert cfg.transformers.dtype == "float32"
+    assert cfg.transformers.engine_params.dtype == "float32"
 
 
 # ---------------------------------------------------------------------------
-# TRT FP8+float32 cross-validator
+# TRT dtype (plain str passthrough, no Literal enforcement)
 # ---------------------------------------------------------------------------
 
 
-def test_trt_dtype_float32_rejected() -> None:
-    """TensorRTConfig.dtype Literal rejects float32 (TRT-LLM does not support fp32)."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
+def test_trt_dtype_float32_accepted() -> None:
+    """tensorrt dtype is a plain str passthrough; float32 is accepted at parse.
 
-    with pytest.raises(ValidationError):
-        TensorRTConfig(dtype="float32")  # type: ignore[arg-type]
+    The hand-written TensorRTConfig had Literal['float16', 'bfloat16'] that
+    rejected float32. The generated engine_params.dtype is a plain str (the mined
+    schema did not surface TRT-LLM's internal dtype enum). TRT-LLM itself rejects
+    fp32 at runtime; the constraint will be restored when a container re-mine
+    surfaces the real enum.
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="tensorrt",
+        tensorrt={"engine_params": {"dtype": "float32"}},
+    )
+    assert cfg.tensorrt.engine_params.dtype == "float32"
 
 
 def test_trt_fp8_accepts_float16() -> None:
     """FP8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
-        ),
+        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "FP8"}}},
     )
-    assert cfg.tensorrt.dtype == "float16"
+    assert cfg.tensorrt.engine_params.dtype == "float16"
 
 
 def test_trt_fp8_accepts_bfloat16() -> None:
     """FP8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="bfloat16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
-        ),
+        tensorrt={"engine_params": {"dtype": "bfloat16", "quant_config": {"quant_algo": "FP8"}}},
     )
-    assert cfg.tensorrt.dtype == "bfloat16"
+    assert cfg.tensorrt.engine_params.dtype == "bfloat16"
 
 
 def test_trt_non_fp8_accepts_float16() -> None:
     """Non-FP8 quantization (INT8) with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="INT8")
-        ),
+        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "INT8"}}},
     )
-    assert cfg.tensorrt.dtype == "float16"
+    assert cfg.tensorrt.engine_params.dtype == "float16"
 
 
 # ---------------------------------------------------------------------------
