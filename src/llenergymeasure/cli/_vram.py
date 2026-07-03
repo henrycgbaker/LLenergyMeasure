@@ -18,11 +18,11 @@ DTYPE_BYTES: dict[str, float] = {
     "int4": 0.5,
 }
 
-# Per-engine field that carries the effective inference batch size. transformers
-# uses a fixed batch; vLLM/tensorrt expose their max concurrency knob, which
-# bounds the KV cache the same way for a worst-case estimate.
+# Per-engine engine_params field that carries the effective inference batch
+# size for vLLM/tensorrt (their max concurrency knob, which bounds the KV
+# cache the same way for a worst-case estimate). transformers prompt-batching
+# is an llem-orchestration knob and lives on harness.transformers.batch_size.
 _BATCH_FIELDS: dict[str, str] = {
-    "transformers": "batch_size",
     "vllm": "max_num_seqs",
     "tensorrt": "max_batch_size",
 }
@@ -30,10 +30,15 @@ _BATCH_FIELDS: dict[str, str] = {
 
 def _effective_batch_size(config: ExperimentConfig) -> int:
     """Return the configured batch size for the active engine (defaults to 1)."""
-    engine_section = getattr(config, config.engine, None)
+    if str(config.engine) == "transformers":
+        harness = config.active_harness()
+        if harness is not None and harness.batch_size is not None:
+            return int(harness.batch_size)
+        return 1
+    engine_params = config.active_engine_params()
     field = _BATCH_FIELDS.get(str(config.engine))
-    if engine_section is not None and field is not None:
-        value = getattr(engine_section, field, None)
+    if engine_params is not None and field is not None:
+        value = getattr(engine_params, field, None)
         if value is not None:
             return int(value)
     return 1
@@ -94,8 +99,7 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
         return None
 
     # Weights memory
-    engine_section = getattr(config, config.engine, None)
-    dtype = getattr(engine_section, "dtype", None)
+    dtype = getattr(config.active_engine_params(), "dtype", None)
     bytes_per_param = DTYPE_BYTES.get(dtype or "bfloat16", 2)
     weights_gb = (param_count * bytes_per_param) / 1e9
 

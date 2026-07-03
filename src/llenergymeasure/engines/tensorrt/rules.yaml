@@ -3,47 +3,201 @@
 # severity is closed {error, dormant}; provenance is metadata only.
 schema_version: 1.0.0
 engine: tensorrt
-engine_version: 0.21.0
+engine_version: 1.0.0
 rules:
-- id: tensorrt_raises_max_ngram_size_le_0_positive_values
+- id: tensorrt_engineparams_raises_max_input_len_lt_1
   engine: tensorrt
   severity: error
   match:
     fields:
-      tensorrt.max_ngram_size:
-        <=: 0
-  message_template: Value must be positive, got {v}
+      tensorrt.engine_params.max_input_len:
+        <: 1
+  message_template: max_input_len must be >= 1, got {declared_value}.
   provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 0.21.0
-    citation: llmapi/llm_args.py:577
-    date: '2026-05-06'
-- id: tensorrt_raises_max_verification_set_size_le_0_positive_values
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_engineparams_raises_max_num_tokens_lt_1
   engine: tensorrt
   severity: error
   match:
     fields:
-      tensorrt.max_verification_set_size:
-        <=: 0
-  message_template: Value must be positive, got {v}
+      tensorrt.engine_params.max_num_tokens:
+        <: 1
+  message_template: max_num_tokens must be >= 1, got {declared_value}.
   provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 0.21.0
-    citation: llmapi/llm_args.py:577
-    date: '2026-05-06'
-- id: tensorrt_raises_max_window_size_le_0_positive_values
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_engineparams_raises_max_seq_len_lt_1
   engine: tensorrt
   severity: error
   match:
     fields:
-      tensorrt.max_window_size:
-        <=: 0
-  message_template: Value must be positive, got {v}
+      tensorrt.engine_params.max_seq_len:
+        <: 1
+  message_template: max_seq_len must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_engineparams_raises_pipeline_parallel_size_lt_1
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.engine_params.pipeline_parallel_size:
+        <: 1
+  message_template: pipeline_parallel_size must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_engineparams_raises_tensor_parallel_size_lt_1
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.engine_params.tensor_parallel_size:
+        <: 1
+  message_template: tensor_parallel_size must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_raises_max_batch_size_lt_0_cuda_graph_max_batch_size
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.engine_params.max_batch_size:
+        <: 0
+  message_template: cuda_graph_config.max_batch_size must be non-negative
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.21.0
-    citation: llmapi/llm_args.py:577
-    date: '2026-05-06'
+    engine_version: 1.0.0
+    citation: llmapi/llm_args.py:129
+    date: '2026-06-22T20:11:29.656816+00:00'
+- id: tensorrt_samplingparams_raises_min_p_gt_1p0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.min_p:
+        '>': 1.0
+  message_template: min_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_min_p_lt_0p0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.min_p:
+        <: 0.0
+  message_template: min_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_min_tokens_lt_0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.min_tokens:
+        <: 0
+  message_template: min_tokens must be >= 0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_n_lt_1
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.n:
+        <: 1
+  message_template: n must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_repetition_penalty_le_0p0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.repetition_penalty:
+        <=: 0.0
+  message_template: repetition_penalty must be >= 0.0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_temperature_lt_0p0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.temperature:
+        <: 0.0
+  message_template: temperature must be >= 0.0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_top_k_lt_0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.top_k:
+        <: 0
+  message_template: top_k must be >= 0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_top_p_gt_1p0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.top_p:
+        '>': 1.0
+  message_template: top_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'
+- id: tensorrt_samplingparams_raises_top_p_lt_0p0
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.sampling_params.top_p:
+        <: 0.0
+  message_template: top_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.0.0
+    date: '2026-07-02'

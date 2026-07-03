@@ -144,13 +144,18 @@ def test_load_all_schemas_returns_all_known() -> None:
 @pytest.mark.parametrize("engine", KNOWN_ENGINES)
 def test_discovered_schema_has_expected_shape(engine: str) -> None:
     schema = SchemaLoader().load_schema(engine)
-    # Every param entry must be a dict with a 'type' key (common contract)
+    # Every param entry must be a dict carrying either an inline 'type' or a
+    # '$ref' to a nested-config entry in $defs (common contract).
     for name, spec in schema.engine_params.items():
         assert isinstance(spec, dict), f"{engine}.engine_params[{name}] is not a dict"
-        assert "type" in spec, f"{engine}.engine_params[{name}] has no 'type' key"
+        assert "type" in spec or "$ref" in spec, (
+            f"{engine}.engine_params[{name}] has neither 'type' nor '$ref'"
+        )
     for name, spec in schema.sampling_params.items():
         assert isinstance(spec, dict), f"{engine}.sampling_params[{name}] is not a dict"
-        assert "type" in spec, f"{engine}.sampling_params[{name}] has no 'type' key"
+        assert "type" in spec or "$ref" in spec, (
+            f"{engine}.sampling_params[{name}] has neither 'type' nor '$ref'"
+        )
 
 
 def test_vllm_has_expected_field_floor() -> None:

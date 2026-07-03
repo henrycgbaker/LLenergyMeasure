@@ -111,18 +111,22 @@ class TransformersEngine:
         if on_substep is not None:
             on_substep("model weights loaded", time.perf_counter() - t0)
 
+        # allow_tf32 + torch.compile are llem-orchestration knobs (HarnessConfig),
+        # not engine-native config.
+        harness = config.active_harness()
+
         # Apply allow_tf32 (Ampere+ TF32 toggle)
-        if config.transformers is not None and config.transformers.allow_tf32 is not None:
+        if harness is not None and harness.allow_tf32 is not None:
             import torch as _torch
 
-            _torch.backends.cuda.matmul.allow_tf32 = config.transformers.allow_tf32
+            _torch.backends.cuda.matmul.allow_tf32 = harness.allow_tf32
 
         # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
-        if config.transformers is not None and config.transformers.torch_compile:
+        if harness is not None and harness.torch_compile:
             import torch as _torch
 
-            mode = config.transformers.torch_compile_mode or "default"
-            backend = config.transformers.torch_compile_backend or "inductor"
+            mode = harness.torch_compile_mode or "default"
+            backend = harness.torch_compile_backend or "inductor"
             try:
                 t0 = time.perf_counter()
                 model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
@@ -183,9 +187,10 @@ class TransformersEngine:
         """
         hf_model, tokenizer = model
 
+        harness = config.active_harness()
         batch_size = 1
-        if config.transformers is not None and config.transformers.batch_size is not None:
-            batch_size = config.transformers.batch_size
+        if harness is not None and harness.batch_size is not None:
+            batch_size = harness.batch_size
         else:
             logger.debug("Transformers batch_size not set, defaulting to 1")
 
@@ -195,11 +200,8 @@ class TransformersEngine:
         # fall back to the non-profiled path when num_beams > 1.
         profiling = config.measurement.latency_profiling
         profiling_forced_batch_size = False
-        num_beams = (
-            config.transformers.num_beams
-            if config.transformers is not None and config.transformers.num_beams is not None
-            else 1
-        )
+        _ep = config.active_engine_params()
+        num_beams = _ep.num_beams if _ep is not None and _ep.num_beams is not None else 1
         if profiling and num_beams > 1:
             logger.warning(
                 "latency_profiling requested but num_beams=%d > 1; beam search is "
@@ -405,7 +407,7 @@ class TransformersEngine:
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
-        pt = config.transformers
+        pt = config.active_engine_params()
 
         # Record the RESOLVED dtype the model actually ran in (D2). With dtype unset
         # we pass torch_dtype="auto" so transformers infers from the checkpoint; the
@@ -489,7 +491,7 @@ class TransformersEngine:
         Returns:
             Dict of kwargs ready for from_pretrained().
         """
-        pt = config.transformers
+        pt = config.active_engine_params()
         dtype = pt.dtype if pt is not None else None
         # When dtype is unset, do NOT force a default - pass "auto" so transformers
         # infers from the checkpoint, matching vllm/tensorrt which forward nothing
@@ -677,14 +679,14 @@ class TransformersEngine:
         # Padding tokens: total tensor positions minus real (attended) tokens.
         padding_tokens = int(inputs["input_ids"].numel()) - input_token_count
 
-        # Determine autocast settings
+        # Determine autocast settings (autocast is an llem-orchestration knob).
         from contextlib import nullcontext
 
-        _pt = config.transformers
-        if _pt is not None and _pt.autocast_enabled is True and torch.cuda.is_available():
+        _hn = config.active_harness()
+        if _hn is not None and _hn.autocast_enabled is True and torch.cuda.is_available():
             _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
             _amp_ctx = torch.autocast(
-                device_type="cuda", dtype=_dtype_map[_pt.autocast_dtype or "bfloat16"]
+                device_type="cuda", dtype=_dtype_map[_hn.autocast_dtype or "bfloat16"]
             )
         else:
             _amp_ctx = nullcontext()  # type: ignore[assignment]
@@ -728,14 +730,14 @@ class TransformersEngine:
         return input_token_count, output_token_count, elapsed, padding_tokens
 
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build generation kwargs from TransformersSamplingConfig and TransformersConfig.
+        """Build generation kwargs from the generated sampling_params + engine_params.
 
         None values mean "use HF's default"; only explicit fields are forwarded.
         Greedy decoding (temperature=0 or do_sample=False) strips sampling params
         and forces do_sample=False, matching HF's own greedy semantics.
         """
-        pt = config.transformers
-        sampling = pt.sampling if pt is not None else None
+        sampling = config.active_sampling_params()
+        pt = config.active_engine_params()
 
         kwargs: dict[str, Any] = (
             sampling.model_dump(exclude_none=True) if sampling is not None else {}

@@ -140,8 +140,10 @@ def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
     if config.engine != Engine.TENSORRT:
         return None
 
-    trt = config.tensorrt
-    if trt is not None and getattr(trt, "engine_path", None):
+    # engine_path is an extra="allow" passthrough inside engine_params (matches
+    # the tensorrt plugin's read in _build_llm_kwargs).
+    engine_params = config.active_engine_params()
+    if engine_params is not None and getattr(engine_params, "engine_path", None):
         return None
 
     method = _read_model_quant_method(config.task.model)
@@ -151,8 +153,8 @@ def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
     return (
         f"{config.task.model} is an HF {method.upper()} checkpoint; TRT-LLM cannot "
         f"load it directly. Pre-build a TRT-LLM engine (`trtllm-build --checkpoint_dir "
-        f"<converted> ...`) and set `tensorrt.engine_path` to the build output. "
-        f"See docs/how-to/run-with-tensorrt-llm.md#hf-pre-quantised-checkpoints."
+        f"<converted> ...`) and set `tensorrt.engine_params.engine_path` to the build "
+        f"output. See docs/how-to/run-with-tensorrt-llm.md#hf-pre-quantised-checkpoints."
     )
 
 

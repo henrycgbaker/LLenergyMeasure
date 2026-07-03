@@ -143,14 +143,14 @@ class TestExpandGridSweep:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "task.dataset.n_prompts": [50, 100],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 4
         assert len(skipped) == 0
-        dtypes_set = {c.transformers.dtype for c in valid}
+        dtypes_set = {c.transformers.engine_params.dtype for c in valid}
         ns = {c.task.dataset.n_prompts for c in valid}
         assert dtypes_set == {"float16", "bfloat16"}
         assert ns == {50, 100}
@@ -175,18 +175,18 @@ class TestExpandGridSweep:
         assert len(hashes) == 2
 
     def test_engine_scoped_sweep_routes_to_section(self):
-        """transformers.batch_size routes to the transformers section, not top-level."""
+        """harness.transformers.batch_size routes to the transformers section, not top-level."""
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.batch_size": [1, 8],
+                "harness.transformers.batch_size": [1, 8],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 2
         assert len(skipped) == 0
-        batch_sizes = {c.transformers.batch_size for c in valid}
+        batch_sizes = {c.harness.transformers.batch_size for c in valid}
         assert batch_sizes == {1, 8}
 
     def test_multi_engine_scoped_sweep(self):
@@ -195,10 +195,10 @@ class TestExpandGridSweep:
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
-                "vllm.dtype": ["float16", "bfloat16"],
-                "transformers.batch_size": [1, 8],
-                "vllm.engine.max_num_seqs": [64, 256],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
+                "vllm.engine_params.dtype": ["float16", "bfloat16"],
+                "harness.transformers.batch_size": [1, 8],
+                "vllm.engine_params.max_num_seqs": [64, 256],
             },
         }
         valid, skipped = expand_grid(raw)
@@ -217,8 +217,8 @@ class TestExpandGridSweep:
         for c in vllm_configs:
             assert c.transformers is None
             assert c.vllm is not None
-            assert c.vllm.engine is not None
-            assert c.vllm.engine.max_num_seqs in (64, 256)
+            assert c.vllm.engine_params is not None
+            assert c.vllm.engine_params.max_num_seqs in (64, 256)
 
 
 # =============================================================================
@@ -252,7 +252,7 @@ class TestExpandGridCombined:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
             },
             "experiments": [
                 {"task": {"model": "gpt2-xl"}, "engine": "transformers"},
@@ -264,7 +264,10 @@ class TestExpandGridCombined:
         # Sweep configs first
         sweep_configs = valid[:2]
         explicit_config = valid[2]
-        assert {c.transformers.dtype for c in sweep_configs} == {"float16", "bfloat16"}
+        assert {c.transformers.engine_params.dtype for c in sweep_configs} == {
+            "float16",
+            "bfloat16",
+        }
         assert explicit_config.task.model == "gpt2-xl"
 
 
@@ -285,7 +288,7 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
@@ -301,7 +304,7 @@ class TestExpandGridBase:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             # These should be stripped
-            "sweep": {"transformers.dtype": ["float32"]},
+            "sweep": {"transformers.engine_params.dtype": ["float32"]},
             "experiments": [{"model": "other"}],
             "study_execution": {"n_cycles": 5},
             "base": "another.yaml",
@@ -313,19 +316,19 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "transformers.dtype": ["float16"],
+                "transformers.engine_params.dtype": ["float16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
         valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 1
-        assert valid[0].transformers.dtype == "float16"
+        assert valid[0].transformers.engine_params.dtype == "float16"
         assert valid[0].task.model == "gpt2"
 
     def test_missing_base_file_raises(self, tmp_path: Path):
         raw = {
             "base": "nonexistent.yaml",
-            "sweep": {"transformers.dtype": ["float16"]},
+            "sweep": {"transformers.engine_params.dtype": ["float16"]},
         }
         study_yaml = tmp_path / "study.yaml"
         with pytest.raises(ConfigError, match="base"):
@@ -344,7 +347,7 @@ class TestExpandGridInvalidHandling:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
             },
             "experiments": [
                 # This will fail: vllm section + engine=transformers
@@ -372,19 +375,25 @@ class TestExpandGridInvalidHandling:
 
     def test_skipped_config_short_label(self):
         sc = SkippedConfig(
-            raw_config={"engine": "transformers", "transformers": {"dtype": "float32"}},
+            raw_config={
+                "engine": "transformers",
+                "transformers": {"engine_params": {"dtype": "float32"}},
+            },
             reason="some validation error",
         )
         assert sc.short_label == "transformers, float32"
 
     def test_skipped_config_to_dict(self):
         sc = SkippedConfig(
-            raw_config={"engine": "vllm", "vllm": {"dtype": "float16"}},
+            raw_config={"engine": "vllm", "vllm": {"engine_params": {"dtype": "float16"}}},
             reason="cross-validation error",
             errors=[{"loc": ["engine"], "msg": "test"}],
         )
         d = sc.to_dict()
-        assert d["raw_config"] == {"engine": "vllm", "vllm": {"dtype": "float16"}}
+        assert d["raw_config"] == {
+            "engine": "vllm",
+            "vllm": {"engine_params": {"dtype": "float16"}},
+        }
         assert d["reason"] == "cross-validation error"
         assert d["short_label"] == "vllm, float16"
         assert len(d["errors"]) == 1
@@ -403,12 +412,12 @@ class TestMultiBackendSectionStripping:
         """A top-level tensorrt: section must not leak into pytorch/vllm sweep configs."""
         raw = {
             "task": {"model": "gpt2"},
-            "tensorrt": {"max_input_len": 1024},
+            "tensorrt": {"engine_params": {"max_input_len": 1024}},
             "sweep": {
-                "transformers.dtype": ["bfloat16"],
-                "tensorrt.dtype": ["bfloat16"],
-                "transformers.batch_size": [1],
-                "tensorrt.max_batch_size": [4],
+                "transformers.engine_params.dtype": ["bfloat16"],
+                "tensorrt.engine_params.dtype": ["bfloat16"],
+                "harness.transformers.batch_size": [1],
+                "tensorrt.engine_params.max_batch_size": [4],
             },
         }
         valid, skipped = expand_grid(raw)
@@ -422,12 +431,12 @@ class TestMultiBackendSectionStripping:
         assert pytorch_configs[0].tensorrt is None
         # Tensorrt config inherits the top-level tensorrt section
         assert tensorrt_configs[0].tensorrt is not None
-        assert tensorrt_configs[0].tensorrt.max_input_len == 1024
+        assert tensorrt_configs[0].tensorrt.engine_params.max_input_len == 1024
 
     def test_explicit_experiment_strips_inherited_not_explicit(self):
         """Inherited engine sections are stripped; explicitly written ones still fail."""
         raw = {
-            "tensorrt": {"max_input_len": 1024},
+            "tensorrt": {"engine_params": {"max_input_len": 1024}},
             "experiments": [
                 # Inherited tensorrt: should be stripped for this pytorch experiment
                 {"task": {"model": "gpt2"}, "engine": "transformers"},
@@ -435,7 +444,7 @@ class TestMultiBackendSectionStripping:
                 {
                     "task": {"model": "gpt2"},
                     "engine": "transformers",
-                    "vllm": {"engine": {"max_num_seqs": 64}},
+                    "vllm": {"engine_params": {"max_num_seqs": 64}},
                 },
             ],
         }
@@ -450,11 +459,11 @@ class TestMultiBackendSectionStripping:
         """Three-engine sweep with a shared tensorrt section produces valid configs for all."""
         raw = {
             "task": {"model": "gpt2"},
-            "tensorrt": {"max_input_len": 512},
+            "tensorrt": {"engine_params": {"max_input_len": 512}},
             "sweep": {
-                "transformers.batch_size": [1],
-                "vllm.engine.max_num_seqs": [64],
-                "tensorrt.max_batch_size": [4],
+                "harness.transformers.batch_size": [1],
+                "vllm.engine_params.max_num_seqs": [64],
+                "tensorrt.engine_params.max_batch_size": [4],
             },
         }
         valid, skipped = expand_grid(raw)
@@ -504,11 +513,15 @@ class TestComputeStudyDesignHash:
         """Same experiments in same order produce same hash (order matters for reproducibility)."""
         exps_a = [
             ExperimentConfig(task={"model": "gpt2"}),
-            ExperimentConfig(task={"model": "gpt2"}, transformers={"dtype": "float16"}),
+            ExperimentConfig(
+                task={"model": "gpt2"}, transformers={"engine_params": {"dtype": "float16"}}
+            ),
         ]
         exps_b = [
             ExperimentConfig(task={"model": "gpt2"}),
-            ExperimentConfig(task={"model": "gpt2"}, transformers={"dtype": "float16"}),
+            ExperimentConfig(
+                task={"model": "gpt2"}, transformers={"engine_params": {"dtype": "float16"}}
+            ),
         ]
         assert compute_study_design_hash(exps_a) == compute_study_design_hash(exps_b)
 
@@ -685,15 +698,15 @@ class TestCountSweepStructure:
     def test_axes_only(self):
         sweep = {
             "engine": ["transformers", "vllm"],
-            "transformers.dtype": ["float16", "bfloat16"],
+            "transformers.engine_params.dtype": ["float16", "bfloat16"],
         }
         assert count_sweep_structure(sweep) == (2, 0)
 
     def test_groups_only(self):
         sweep = {
             "quant_group": [
-                {"transformers.dtype": "float16"},
-                {"transformers.dtype": "bfloat16"},
+                {"transformers.engine_params.dtype": "float16"},
+                {"transformers.engine_params.dtype": "bfloat16"},
             ]
         }
         assert count_sweep_structure(sweep) == (0, 1)
@@ -701,10 +714,10 @@ class TestCountSweepStructure:
     def test_mixed_axes_and_groups(self):
         sweep = {
             "engine": ["transformers", "vllm"],
-            "transformers.dtype": ["float16", "bfloat16"],
+            "transformers.engine_params.dtype": ["float16", "bfloat16"],
             "transformers.compilation": [
-                {"transformers.torch_compile": True},
-                {"transformers.torch_compile": False},
+                {"harness.transformers.torch_compile": True},
+                {"harness.transformers.torch_compile": False},
             ],
         }
         assert count_sweep_structure(sweep) == (2, 1)

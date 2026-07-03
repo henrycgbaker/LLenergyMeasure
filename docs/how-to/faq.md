@@ -83,7 +83,7 @@ See [Reference &gt; Study config](/reference/study-config) for the full YAML sch
 
 ### How do I sweep across implementation parameters without sweeping engines?
 
-Engine-scoped sweep keys: `transformers.batch_size: [1, 4, 16]` only applies to Transformers experiments; the same config running under vLLM ignores it. Use the engine-prefixed form for any engine-specific axis. See the [Multi-engine study tutorial](/tutorials/multi-engine-study) for a worked example.
+Engine-scoped sweep keys: `harness.transformers.batch_size: [1, 4, 16]` only applies to Transformers experiments; the same config running under vLLM ignores it. Use the engine-prefixed form for any engine-specific axis. See the [Multi-engine study tutorial](/tutorials/multi-engine-study) for a worked example.
 
 ### Can I use a custom dataset (not `aienergyscore`)?
 
@@ -102,7 +102,7 @@ Each line is a JSON object with at least a `prompt` field. Optional: `expected_o
 
 ### Does FP8 work on A100?
 
-No. FP8 quantisation (per `tensorrt.quant_config.quant_algo: FP8`, `vllm.engine.kv_cache_dtype: fp8`) requires SM >= 8.9 (Ada Lovelace, Hopper). A100 is SM 8.0 (Ampere). The validation pipeline raises a clear `ConfigurationError` before engine init - you won't waste GPU time on it. Valid A100 quantisation: `INT8`, `W4A16_AWQ`, `W4A16_GPTQ`, `W8A16`. See [Reference &gt; Engine configuration](/reference/engines/configuration).
+No. FP8 quantisation (per `tensorrt.engine_params.quant_config.quant_algo: FP8`, `vllm.engine_params.kv_cache_dtype: fp8`) requires SM >= 8.9 (Ada Lovelace, Hopper). A100 is SM 8.0 (Ampere). The validation pipeline raises a clear `ConfigurationError` before engine init - you won't waste GPU time on it. Valid A100 quantisation: `INT8`, `W4A16_AWQ`, `W4A16_GPTQ`, `W8A16`. See [Reference &gt; Engine configuration](/reference/engines/configuration).
 
 ### Does it work on consumer GPUs (RTX 4090 / 4080)?
 
@@ -110,7 +110,7 @@ Yes for Transformers and vLLM. TensorRT-LLM compilation is supported on Ada Love
 
 ### Multi-GPU?
 
-Tensor parallel is supported via engine-native fields (`tensorrt.tensor_parallel_size`, `vllm.tensor_parallel_size`). `llem` measures aggregate energy across all visible GPUs. Set `CUDA_VISIBLE_DEVICES` to control which GPUs are used. Cross-node distributed is not currently supported.
+Tensor parallel is supported via engine-native fields (`tensorrt.engine_params.tensor_parallel_size`, `vllm.engine_params.tensor_parallel_size`). `llem` measures aggregate energy across all visible GPUs. Set `CUDA_VISIBLE_DEVICES` to control which GPUs are used. Cross-node distributed is not currently supported.
 
 ## Citing and reporting
 

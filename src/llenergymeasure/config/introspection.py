@@ -32,23 +32,6 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 
-def _literal_options(field_info: FieldInfo | None) -> list[str]:
-    """Extract the string options from an ``Optional[Literal[...]]`` field.
-
-    Returns an empty list when the field is missing, unannotated, or not a
-    Literal union.
-    """
-    if not field_info or not field_info.annotation:
-        return []
-    for arg in get_args(field_info.annotation):
-        if arg is type(None):
-            continue
-        inner_args = get_args(arg)
-        if inner_args:
-            return [a for a in inner_args if a is not None]
-    return []
-
-
 # =============================================================================
 # Field Metadata Helpers (SSOT display labels and roles)
 # =============================================================================
@@ -259,48 +242,43 @@ def get_params_from_model(
     return params
 
 
-def _get_custom_test_values() -> dict[str, list[Any]]:
-    """Get custom test value overrides for params that need special handling.
+def get_engine_config_model(engine: str) -> type[BaseModel]:
+    """Return the generated ``Config`` model class for an engine.
 
-    Returns known-invalid values for constrained fields - used by runtime
-    parameter tests to verify validation rejects out-of-range inputs.
-    One invalid value per constrained field (the simplest violation).
+    Raises ``ValueError`` for an unknown engine name.
     """
-    return {
-        # VLLMEngineConfig: one known-invalid value per constrained field
-        "vllm.engine.gpu_memory_utilization": [1.5],  # ge=0.0, lt=1.0: 1.5 violates lt
-        "vllm.engine.swap_space": [-1.0],  # ge=0.0: negative violates ge
-        "vllm.engine.cpu_offload_gb": [-0.5],  # ge=0.0: negative violates ge
-        "vllm.engine.max_num_seqs": [0],  # ge=1: 0 violates ge
-        "vllm.engine.max_num_batched_tokens": [0],  # ge=1: 0 violates ge
-        "vllm.engine.max_model_len": [0],  # ge=1: 0 violates ge
-        "vllm.engine.tensor_parallel_size": [0],  # ge=1: 0 violates ge
-        "vllm.engine.pipeline_parallel_size": [0],  # ge=1: 0 violates ge
-        "vllm.engine.num_speculative_tokens": [0],  # ge=1: 0 violates ge
-        # VLLMSamplingConfig: one known-invalid value per constrained field
-        "vllm.sampling.presence_penalty": [3.0],  # ge=-2.0, le=2.0: 3.0 violates le
-        "vllm.sampling.frequency_penalty": [-3.0],  # ge=-2.0, le=2.0: -3.0 violates ge
-        # VLLMEngineConfig: constrained fields
-        "vllm.engine.offload_num_in_group": [0],  # ge=1: 0 violates ge
-        "vllm.engine.kv_cache_memory_bytes": [0],  # ge=1: 0 violates ge
-        # VLLMSamplingConfig: constrained field
-        "vllm.sampling.n": [0],  # ge=1: 0 violates ge
-        # VLLMBeamSearchConfig: constrained fields
-        "vllm.beam_search.beam_width": [0],  # ge=1: 0 violates ge
-        # TensorRTConfig: compile-time params
-        "tensorrt.max_batch_size": [0],  # ge=1: 0 violates ge
-        "tensorrt.tensor_parallel_size": [0],  # ge=1: 0 violates ge
-        "tensorrt.max_input_len": [0],  # ge=1: 0 violates ge
-        "tensorrt.max_seq_len": [0],  # ge=1: 0 violates ge
-        # TensorRTKvCacheConfig: cache params
-        "tensorrt.kv_cache_config.max_tokens": [0],  # ge=1: 0 violates ge
-        # TensorRTSamplingConfig: sampling params
-        "tensorrt.sampling.n": [0],  # ge=1: 0 violates ge
+    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
+    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
+    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
+
+    engine_models: dict[str, type[BaseModel]] = {
+        "transformers": TransformersConfig,
+        "vllm": VLLMConfig,
+        "tensorrt": TensorRTConfig,
     }
+    if engine not in engine_models:
+        raise ValueError(f"Unknown engine: {engine}. Must be one of {list(engine_models.keys())}")
+    return engine_models[engine]
+
+
+def _engine_params_field_names(engine: str) -> set[str]:
+    """Field names on an engine's generated ``engine_params`` sub-model."""
+    ep_field = get_engine_config_model(engine).model_fields.get("engine_params")
+    if ep_field is None:
+        return set()
+    for arg in get_args(ep_field.annotation) or (ep_field.annotation,):
+        if isinstance(arg, type) and issubclass(arg, BaseModel):
+            return set(arg.model_fields.keys())
+    return set()
 
 
 def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
-    """Get all parameters for an engine from its Pydantic model.
+    """Get all parameters for an engine from its generated ``Config`` model.
+
+    Paths use the generated nested shape: ``<engine>.engine_params.<field>`` and
+    ``<engine>.sampling_params.<field>``. For transformers, the llem-orchestration
+    residual (batch_size, torch_compile, ...) is also included under the engine
+    prefix from ``TransformersHarness``.
 
     Args:
         engine: One of "transformers", "vllm", "tensorrt".
@@ -309,34 +287,16 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
         Dict mapping param paths to metadata. Each param includes
         ``engine_support: list[str]`` indicating which engines expose it.
     """
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        TransformersConfig,
-        VLLMConfig,
-    )
+    model_class = get_engine_config_model(engine)
+    params = get_params_from_model(model_class, prefix=engine)
 
-    engine_models = {
-        "transformers": TransformersConfig,
-        "vllm": VLLMConfig,
-        "tensorrt": TensorRTConfig,
-    }
+    if engine == "transformers":
+        from llenergymeasure.config.harness import TransformersHarness
 
-    if engine not in engine_models:
-        raise ValueError(f"Unknown engine: {engine}. Must be one of {list(engine_models.keys())}")
+        params.update(get_params_from_model(TransformersHarness, prefix=engine))
 
-    model_class = engine_models[engine]
-    # All values are Pydantic BaseModel subclasses, mypy can't infer this from dict
-    params = get_params_from_model(model_class, prefix=engine)  # type: ignore[arg-type]
-
-    # Add engine_support to every param
     for param in params.values():
         param["engine_support"] = [engine]
-
-    # Apply custom test value overrides
-    custom_values = _get_custom_test_values()
-    for param_path, values in custom_values.items():
-        if param_path in params:
-            params[param_path]["test_values"] = values
 
     return params
 
@@ -371,22 +331,22 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         Dict mapping capability names to per-engine support status.
         Values are True/False for simple support, or str for notes.
     """
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        TensorRTQuantConfig,
-        TransformersConfig,
-        VLLMEngineConfig,
-    )
+    from llenergymeasure.config.harness import TransformersHarness
 
-    # Get field names for each engine
-    # VLLMConfig is nested: engine fields are in VLLMEngineConfig
-    transformers_fields = set(TransformersConfig.model_fields.keys())
-    vllm_fields = set(VLLMEngineConfig.model_fields.keys())
-    tensorrt_fields = set(TensorRTConfig.model_fields.keys())
+    # Engine fields live on each generated Config's ``engine_params`` sub-model.
+    transformers_fields = _engine_params_field_names("transformers")
+    vllm_fields = _engine_params_field_names("vllm")
+    tensorrt_fields = _engine_params_field_names("tensorrt")
 
-    # Get quantization Literal values for vLLM and TensorRT
-    vllm_quant_options = _literal_options(VLLMEngineConfig.model_fields.get("quantization"))
-    trt_quant_options = _literal_options(TensorRTQuantConfig.model_fields.get("quant_algo"))
+    # torch.compile is an llem-orchestration knob on TransformersHarness, not an
+    # engine field.
+    transformers_harness_fields = set(TransformersHarness.model_fields.keys())
+
+    # vLLM/TRT quantization are Any-typed in the generated projection (discovery
+    # debt: the mined schema ships no enum), so support is derived from field
+    # presence rather than readable Literal options.
+    vllm_has_quant = "quantization" in vllm_fields
+    trt_has_quant = "quant_config" in tensorrt_fields
 
     return {
         "tensor_parallel": {
@@ -414,8 +374,8 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         },
         "native_quantization": {
             "transformers": False,  # Transformers relies on bitsandbytes, not native
-            "vllm": "AWQ/GPTQ/FP8" if vllm_quant_options else False,
-            "tensorrt": "INT8/W4A16_AWQ/W4A16_GPTQ/FP8" if trt_quant_options else False,
+            "vllm": "AWQ/GPTQ/FP8" if vllm_has_quant else False,
+            "tensorrt": "INT8/W4A16_AWQ/W4A16_GPTQ/FP8" if trt_has_quant else False,
         },
         "float32_precision": {
             "transformers": True,
@@ -440,7 +400,7 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
             "tensorrt": False,
         },
         "torch_compile": {
-            "transformers": "torch_compile" in transformers_fields,
+            "transformers": "torch_compile" in transformers_harness_fields,
             "vllm": False,
             "tensorrt": False,
         },
@@ -537,19 +497,19 @@ def get_validation_rules() -> list[dict[str, str]]:
             "engine": "transformers",
             "combination": "load_in_4bit=True + load_in_8bit=True",
             "reason": "Cannot use both 4-bit and 8-bit quantization simultaneously",
-            "resolution": "Choose one: transformers.load_in_4bit=true OR transformers.load_in_8bit=true",
+            "resolution": "Choose one: transformers.engine_params.load_in_4bit=true OR transformers.engine_params.load_in_8bit=true",
         },
         {
             "engine": "transformers",
             "combination": "torch_compile_mode without torch_compile=True",
             "reason": "torch_compile_mode/torch_compile_backend only take effect when torch_compile=True",
-            "resolution": "Set transformers.torch_compile=true when using torch_compile_mode or torch_compile_backend",
+            "resolution": "Set harness.transformers.torch_compile=true when using torch_compile_mode or torch_compile_backend",
         },
         {
             "engine": "transformers",
             "combination": "bnb_4bit_* without load_in_4bit=True",
             "reason": "BitsAndBytes 4-bit options require 4-bit quantization to be enabled",
-            "resolution": "Set transformers.load_in_4bit=true when using bnb_4bit_compute_dtype, bnb_4bit_quant_type, or bnb_4bit_use_double_quant",
+            "resolution": "Set transformers.engine_params.load_in_4bit=true when using bnb_4bit_compute_dtype, bnb_4bit_quant_type, or bnb_4bit_use_double_quant",
         },
         {
             "engine": "transformers",
@@ -579,7 +539,7 @@ def get_validation_rules() -> list[dict[str, str]]:
             "engine": "vllm",
             "combination": "load_in_4bit or load_in_8bit",
             "reason": "vLLM does not support bitsandbytes quantization",
-            "resolution": "Use vllm.quantization (awq, gptq, fp8) for quantized inference",
+            "resolution": "Use vllm.engine_params.quantization (awq, gptq, fp8) for quantized inference",
         },
     ]
 
@@ -596,43 +556,43 @@ def get_runtime_limitations() -> list[dict[str, str]]:
     return [
         {
             "engine": "transformers",
-            "parameter": "transformers.attn_implementation=flash_attention_2",
+            "parameter": "transformers.engine_params.attn_implementation=flash_attention_2",
             "limitation": "flash-attn requires Ampere+ GPU (SM80+); fails on older architectures",
             "resolution": "Use attn_implementation='sdpa' on pre-Ampere GPUs",
         },
         {
             "engine": "transformers",
-            "parameter": "transformers.attn_implementation=flash_attention_3",
+            "parameter": "transformers.engine_params.attn_implementation=flash_attention_3",
             "limitation": "FA3 requires the flash_attn_3 package (built from flash-attn hopper/ directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built",
             "resolution": "Install flash_attn_3 from source, or use the Docker runner",
         },
         {
             "engine": "vllm",
-            "parameter": "vllm.engine.kv_cache_dtype=fp8",
+            "parameter": "vllm.engine_params.kv_cache_dtype=fp8",
             "limitation": "FP8 KV cache requires Hopper (H100) or newer GPU",
             "resolution": "Use kv_cache_dtype='auto' for automatic selection",
         },
         {
             "engine": "vllm",
-            "parameter": "vllm.engine.attention.backend=flashinfer",
+            "parameter": "vllm.engine_params.attention.backend=flashinfer",
             "limitation": "FlashInfer requires JIT compilation on first use",
             "resolution": "Leave attention.backend unset (auto) or use 'flash_attn'",
         },
         {
             "engine": "vllm",
-            "parameter": "vllm.engine.quantization=awq/gptq",
+            "parameter": "vllm.engine_params.quantization=awq/gptq",
             "limitation": "Requires a pre-quantized model checkpoint",
             "resolution": "Use a quantized model (e.g., TheBloke/*-AWQ) or omit",
         },
         {
             "engine": "tensorrt",
-            "parameter": "tensorrt.quant_config.quant_algo=FP8",
+            "parameter": "tensorrt.engine_params.quant_config.quant_algo=FP8",
             "limitation": "FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback",
             "resolution": "Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100",
         },
         {
             "engine": "tensorrt",
-            "parameter": "tensorrt.quant_config.quant_algo=INT8",
+            "parameter": "tensorrt.engine_params.quant_config.quant_algo=INT8",
             "limitation": "INT8 quantisation requires a calibrated checkpoint; uncalibrated weights degrade accuracy",
             "resolution": "Use a pre-quantised checkpoint or a weight-only algo (W4A16_AWQ, W4A16_GPTQ, W8A16)",
         },

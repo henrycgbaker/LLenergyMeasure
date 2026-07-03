@@ -44,27 +44,32 @@ def test_get_engine_params_pytorch_has_engine_support():
 
 
 def test_get_engine_params_vllm_returns_params():
-    """get_engine_params('vllm') returns params including vllm.engine.max_num_seqs."""
+    """get_engine_params('vllm') returns params on the nested engine_params shape."""
     params = get_engine_params("vllm")
     assert isinstance(params, dict)
-    assert "vllm.engine.max_num_seqs" in params
+    assert "vllm.engine_params.max_num_seqs" in params
 
 
 def test_get_engine_params_tensorrt_returns_params():
-    """get_engine_params('tensorrt') returns params including nested sub-config paths."""
+    """get_engine_params('tensorrt') returns params on the nested engine_params shape.
+
+    quant_config / kv_cache_config / scheduler_config are Any-typed dicts on the
+    generated config, so they register as single opaque paths (not expanded into
+    their inner fields).
+    """
     params = get_engine_params("tensorrt")
     assert isinstance(params, dict)
-    assert "tensorrt.max_batch_size" in params
-    # Verify expanded nested sub-config params are registered
-    assert "tensorrt.quant_config.quant_algo" in params
-    assert "tensorrt.kv_cache_config.free_gpu_memory_fraction" in params
-    assert "tensorrt.scheduler_config.capacity_scheduling_policy" in params
+    assert "tensorrt.engine_params.max_batch_size" in params
+    # Sub-config dicts register as single opaque engine_params paths (not recursed)
+    assert "tensorrt.engine_params.quant_config" in params
+    assert "tensorrt.engine_params.kv_cache_config" in params
+    assert "tensorrt.engine_params.scheduler_config" in params
     # build_cache and calib sub-configs dropped (D1/D3); return_perf_metrics dropped (D1)
     assert "tensorrt.build_cache.max_records" not in params
     assert "tensorrt.sampling.return_perf_metrics" not in params
     # New fields from C.2
-    assert "tensorrt.pipeline_parallel_size" in params
-    assert "tensorrt.max_num_tokens" in params
+    assert "tensorrt.engine_params.pipeline_parallel_size" in params
+    assert "tensorrt.engine_params.max_num_tokens" in params
     assert len(params) >= 10
 
 
@@ -110,7 +115,7 @@ def test_get_experiment_config_schema_contains_engine_field():
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
     config = make_config(dtype=dt)
-    assert config.transformers.dtype == dt
+    assert config.transformers.engine_params.dtype == dt
 
 
 # ---------------------------------------------------------------------------
@@ -194,15 +199,19 @@ def test_get_swept_field_paths_single_experiment():
 
 
 def test_get_swept_field_paths_dtype_swept():
-    """Two experiments with different engine dtypes sweep the engine subconfig path."""
+    """Two experiments with different engine dtypes sweep the engine_params path."""
     exp1 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "float16"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "float16"}},
     )
     exp2 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "bfloat16"}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "bfloat16"}},
     )
     result = get_swept_field_paths([exp1, exp2])
-    assert "transformers.dtype" in result
+    assert "transformers.engine_params.dtype" in result
 
 
 def test_get_swept_field_paths_nested_field():
@@ -222,17 +231,15 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     get_swept_field_paths must handle None values in optional sub-config lists
     rather than raising AttributeError.
     """
-    from llenergymeasure.config.engine_configs import TransformersConfig, VLLMConfig
-
     exp_pt = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="float16", batch_size=4),
+        transformers={"engine_params": {"dtype": "float16"}},
     )
     exp_vllm = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16"),
+        vllm={"engine_params": {"dtype": "float16"}},
     )
     # Must not raise AttributeError
     result = get_swept_field_paths([exp_pt, exp_vllm])
@@ -290,11 +297,11 @@ def test_runtime_limitations_use_real_field_paths():
 
 
 def test_runtime_limitations_reference_corrected_vllm_paths():
-    """Corrected vLLM paths use the real nested engine prefix and backend field."""
+    """Corrected vLLM paths use the nested engine_params prefix."""
     params = [limit["parameter"] for limit in get_runtime_limitations()]
-    assert any("vllm.engine.attention.backend=" in p for p in params)
-    assert any("vllm.engine.quantization=" in p for p in params)
-    assert any("vllm.engine.kv_cache_dtype=" in p for p in params)
+    assert any("vllm.engine_params.attention.backend=" in p for p in params)
+    assert any("vllm.engine_params.quantization=" in p for p in params)
+    assert any("vllm.engine_params.kv_cache_dtype=" in p for p in params)
 
 
 def test_streaming_constraints_removed():

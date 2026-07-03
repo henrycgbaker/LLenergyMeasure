@@ -41,24 +41,51 @@ _SECTION_ORDER = [
     ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
     ("transformers", "Transformers Engine (`transformers:`)"),
-    ("vllm_engine", "vLLM Engine (`vllm.engine:`)"),
-    ("vllm_sampling", "vLLM Sampling (`vllm.sampling:`)"),
-    ("vllm_beam_search", "vLLM Beam Search (`vllm.beam_search:`)"),
-    ("vllm_attention", "vLLM Attention (`vllm.engine.attention:`)"),
+    ("transformers_engine_params", "Transformers Engine Params (`transformers.engine_params:`)"),
+    (
+        "transformers_sampling_params",
+        "Transformers Sampling Params (`transformers.sampling_params:`)",
+    ),
+    ("vllm", "vLLM Engine (`vllm:`)"),
+    ("vllm_engine_params", "vLLM Engine Params (`vllm.engine_params:`)"),
+    ("vllm_sampling_params", "vLLM Sampling Params (`vllm.sampling_params:`)"),
     ("tensorrt", "TensorRT-LLM Engine (`tensorrt:`)"),
+    ("tensorrt_engine_params", "TensorRT-LLM Engine Params (`tensorrt.engine_params:`)"),
+    ("tensorrt_sampling_params", "TensorRT-LLM Sampling Params (`tensorrt.sampling_params:`)"),
+    ("harness", "Harness Overrides (`harness:`)"),
+    ("harness_transformers", "Transformers Harness (`harness.transformers:`)"),
 ]
 
-# Map from JSON schema $defs key to our section key
+# Map from JSON schema $defs key to our section key. The per-engine Config
+# models are code-generated, so Pydantic emits module-qualified $def names
+# (``llenergymeasure__engines__<engine>__config__<Model>``).
 _DEF_TO_SECTION: dict[str, str] = {
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
-    "TransformersConfig": "transformers",
-    "VLLMEngineConfig": "vllm_engine",
-    "VLLMSamplingConfig": "vllm_sampling",
-    "VLLMBeamSearchConfig": "vllm_beam_search",
-    "VLLMAttentionConfig": "vllm_attention",
-    "TensorRTConfig": "tensorrt",
+    "llenergymeasure__engines__transformers__config__Config": "transformers",
+    "llenergymeasure__engines__transformers__config__EngineParams": "transformers_engine_params",
+    "llenergymeasure__engines__transformers__config__SamplingParams": (
+        "transformers_sampling_params"
+    ),
+    "llenergymeasure__engines__vllm__config__Config": "vllm",
+    "llenergymeasure__engines__vllm__config__EngineParams": "vllm_engine_params",
+    "llenergymeasure__engines__vllm__config__SamplingParams": "vllm_sampling_params",
+    "llenergymeasure__engines__tensorrt__config__Config": "tensorrt",
+    "llenergymeasure__engines__tensorrt__config__EngineParams": "tensorrt_engine_params",
+    "llenergymeasure__engines__tensorrt__config__SamplingParams": "tensorrt_sampling_params",
+    "HarnessConfig": "harness",
+    "TransformersHarness": "harness_transformers",
 }
+
+
+def _ref_display_name(ref: str) -> str:
+    """Human-readable name for a ``$ref`` target.
+
+    Code-generated engine models carry module-qualified ``$def`` names
+    (``llenergymeasure__engines__vllm__config__EngineParams``); show only the
+    final class segment in the rendered type column.
+    """
+    return ref.split("/")[-1].split("__")[-1]
 
 
 def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
@@ -69,7 +96,7 @@ def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
     for name, prop in props.items():
         # Resolve $ref to get actual property info
         if "$ref" in prop:
-            section_name = prop["$ref"].split("/")[-1]
+            section_name = _ref_display_name(prop["$ref"])
             # Use field-level description (from ExperimentConfig.Field) not class docstring
             desc = _description(prop)
             lines.append(f"| `{name}` | {section_name} | *(see section)* | {desc} |")
@@ -79,7 +106,7 @@ def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
         any_of = prop.get("anyOf") or []
         ref_in_anyof = next((p for p in any_of if "$ref" in p), None)
         if ref_in_anyof:
-            section_name = ref_in_anyof["$ref"].split("/")[-1]
+            section_name = _ref_display_name(ref_in_anyof["$ref"])
             # Use field-level description (from ExperimentConfig.Field) not class docstring
             desc = _description(prop)
             has_null = any(p.get("type") == "null" for p in any_of)

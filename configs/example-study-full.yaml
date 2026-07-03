@@ -78,10 +78,10 @@ measurement:
     #window_size: 3                # Sliding window for CV calculation. Default: 3
     #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
 
-# --- Sampling preset (expands into the active engine's sampling section) ---
+# --- Sampling preset (expands into the active engine's sampling_params section) ---
 # sampling_preset: deterministic   # deterministic | standard | creative | factual
-# Explicit values written under <engine>.sampling override preset values.
-# Sampling params now live per-engine - see `{transformers|vllm|tensorrt}.sampling`
+# Explicit values written under <engine>.sampling_params override preset values.
+# Sampling params now live per-engine - see `{transformers|vllm|tensorrt}.sampling_params`
 # in the engine-specific experiments below.
 
 # --- Passthrough kwargs ---
@@ -112,9 +112,9 @@ output:
 # See .product/designs/sweep-constraints.md for full design rationale.
 #
 # KNOWN-BAD CROSSES (do not add as independent axes):
-#   - transformers.torch_compile=true  x  bitsandbytes load_in_{4,8}bit
+#   - harness.transformers.torch_compile=true  x  transformers.engine_params load_in_{4,8}bit
 #     (dequant ops trigger per-call recompilation; see transformers.compile_quant group)
-#   - transformers.torch_compile_mode=max-autotune  x  transformers.cache_implementation=static/sliding_window
+#   - harness.transformers.torch_compile_mode=max-autotune  x  transformers.engine_params.cache_implementation=static/sliding_window
 #     (per-shape kernel autotune on every cache reshape; slow but correct - follow-up)
 #   - Any engine x dataset.n_prompts > ~200 without raising
 #     study_execution.experiment_timeout_seconds above its 600s default
@@ -123,13 +123,15 @@ output:
 
 sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- dtype per engine (each axis applies only when its engine is active) ---
-  transformers.dtype: [float32, float16, bfloat16]
-  vllm.dtype: [float16, bfloat16]  # vLLM rejects float32
-  tensorrt.dtype: [float16, bfloat16]  # TRT-LLM rejects float32
+  transformers.engine_params.dtype: [float32, float16, bfloat16]
+  # vLLM/TRT-LLM accept float32, but it doubles memory and roughly halves
+  # throughput with no accuracy gain for inference, so we sweep fp16/bf16 only.
+  vllm.engine_params.dtype: [float16, bfloat16]
+  tensorrt.engine_params.dtype: [float16, bfloat16]
 
   # --- Transformers parameter space ---
-  transformers.batch_size: [1, 4, 8, 16, 32]
-  transformers.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
+  harness.transformers.batch_size: [1, 4, 8, 16, 32]
+  transformers.engine_params.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
 
   # --- Transformers: dependent groups ─────────────────────────────────
 
@@ -143,117 +145,121 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     # Baseline: no compile, no quantisation
     - {}
     # bitsandbytes 8-bit (no compile)
-    - transformers.load_in_8bit: true
+    - transformers.engine_params.load_in_8bit: true
     # bitsandbytes 4-bit, nf4 and fp4 (no compile)
-    - transformers.load_in_4bit: true
-      transformers.bnb_4bit_compute_dtype: float16
-      transformers.bnb_4bit_quant_type: [nf4, fp4]
+    - transformers.engine_params.load_in_4bit: true
+      transformers.engine_params.bnb_4bit_compute_dtype: float16
+      transformers.engine_params.bnb_4bit_quant_type: [nf4, fp4]
     # bitsandbytes 4-bit + double-quant (no compile)
-    - transformers.load_in_4bit: true
-      transformers.bnb_4bit_compute_dtype: float16
-      transformers.bnb_4bit_quant_type: nf4
-      transformers.bnb_4bit_use_double_quant: true
+    - transformers.engine_params.load_in_4bit: true
+      transformers.engine_params.bnb_4bit_compute_dtype: float16
+      transformers.engine_params.bnb_4bit_quant_type: nf4
+      transformers.engine_params.bnb_4bit_use_double_quant: true
     # torch.compile on unquantised weights - all three modes safe here
-    - transformers.torch_compile: true
-      transformers.torch_compile_backend: inductor
-      transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]
+    - harness.transformers.torch_compile: true
+      harness.transformers.torch_compile_backend: inductor
+      harness.transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]
 
   # cache_implementation requires use_cache: true
   transformers.caching:
     - {}                                          # baseline: default caching
-    - transformers.use_cache: true
-      transformers.cache_implementation: [static, offloaded_static, sliding_window]
+    - transformers.engine_params.use_cache: true
+      transformers.engine_params.cache_implementation: [static, offloaded_static, sliding_window]
 
   # beam search requires do_sample: false (cross-section dependency)
   transformers.decoding:
     - {}                                          # baseline: use engine defaults
-    - transformers.sampling.do_sample: false
-      transformers.sampling.temperature: 0.0
-      transformers.num_beams: 4
-      transformers.early_stopping: true
-      transformers.length_penalty: 1.0
-      transformers.no_repeat_ngram_size: 3
+    - transformers.sampling_params.do_sample: false
+      transformers.sampling_params.temperature: 0.0
+      transformers.engine_params.num_beams: 4
+      transformers.engine_params.early_stopping: true
+      transformers.engine_params.length_penalty: 1.0
+      transformers.engine_params.no_repeat_ngram_size: 3
 
   # --- vLLM parameter space ---
   # (vLLM uses continuous batching - no user-facing batch_size parameter)
-  vllm.engine.gpu_memory_utilization: [0.7, 0.85, 0.95]
-  vllm.engine.enforce_eager: [true, false]
-  vllm.engine.max_num_seqs: [64, 128, 256]
-  vllm.engine.enable_chunked_prefill: [true, false]
+  vllm.engine_params.gpu_memory_utilization: [0.7, 0.85, 0.95]
+  vllm.engine_params.enforce_eager: [true, false]
+  vllm.engine_params.max_num_seqs: [64, 128, 256]
+  vllm.engine_params.enable_chunked_prefill: [true, false]
   # Moved from explicit experiments: these are independent single-axis variations
-  vllm.engine.enable_prefix_caching: [true, false]
-  vllm.engine.block_size: [8, 16, 32]
-  vllm.engine.kv_cache_dtype: [auto]  # fp8 requires SM >= 8.9 (Ada Lovelace / Hopper); add fp8 if hardware supports it
-  vllm.engine.quantization: [null]  # fp8 requires SM >= 8.9; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
-  vllm.engine.attention.backend: [flash_attn, flashinfer]  # xformers legacy, deprecated (attention nests under engine)
+  vllm.engine_params.enable_prefix_caching: [true, false]
+  vllm.engine_params.block_size: [8, 16, 32]
+  vllm.engine_params.kv_cache_dtype: [auto]  # fp8 requires SM >= 8.9 (Ada Lovelace / Hopper); add fp8 if hardware supports it
+  vllm.engine_params.quantization: [null]  # fp8 requires SM >= 8.9; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
+  # attention is Any-typed; path cannot continue past this leaf, so backend
+  # is swept via whole-dict variants in a dependent group rather than a
+  # dotted sub-key axis.
+  vllm.attention_backend:
+    - vllm.engine_params.attention: {backend: flash_attn}
+    - vllm.engine_params.attention: {backend: flashinfer}  # xformers legacy, deprecated
 
   # --- vLLM: dependent groups ─────────────────────────────────────
 
   # vLLM requires max_num_batched_tokens >= max_model_len;
   # independent axes would produce invalid combos (e.g. 2048 < 4096)
   vllm.token_limits:
-    - vllm.engine.max_num_batched_tokens: 2048
-      vllm.engine.max_model_len: [1024, 2048]
-    - vllm.engine.max_num_batched_tokens: 4096
-      vllm.engine.max_model_len: [1024, 2048, 4096]
-    - vllm.engine.max_num_batched_tokens: 8192
-      vllm.engine.max_model_len: [1024, 2048, 4096]
+    - vllm.engine_params.max_num_batched_tokens: 2048
+      vllm.engine_params.max_model_len: [1024, 2048]
+    - vllm.engine_params.max_num_batched_tokens: 4096
+      vllm.engine_params.max_model_len: [1024, 2048, 4096]
+    - vllm.engine_params.max_num_batched_tokens: 8192
+      vllm.engine_params.max_model_len: [1024, 2048, 4096]
 
   # beam_search and sampling sections are mutually exclusive;
-  # beam search requires decoder.do_sample: false
+  # beam search requires sampling_params.temperature: 0.0
   vllm.decoding:
     - {}                                          # baseline: use shared decoder settings
     # beam_search requires vLLM >= 0.8; uncomment if installed version supports it:
-    # - decoder.do_sample: false
-    #   decoder.temperature: 0.0
-    #   vllm.beam_search.beam_width: 4
-    #   vllm.beam_search.early_stopping: true
-    #   vllm.beam_search.length_penalty: 1.0
-    #   vllm.beam_search.max_tokens: 256
-    - vllm.sampling.presence_penalty: 0.6
-      vllm.sampling.frequency_penalty: 0.6
+    # - vllm.sampling_params.temperature: 0.0
+    #   vllm.engine_params.beam_search: {beam_width: 4, early_stopping: true, length_penalty: 1.0, max_tokens: 256}
+    - vllm.sampling_params.presence_penalty: 0.6
+      vllm.sampling_params.frequency_penalty: 0.6
 
   # --- TensorRT parameter space ---
-  tensorrt.max_batch_size: [1, 4, 8, 16, 32]
-  tensorrt.max_seq_len: [1536, 2048]
-  # tensorrt.quant_config.quant_algo moved to tensorrt.quant_config group below
-  # (quant_algo has dependent sub-params: kv_cache_quant_algo, calib.*)
-  # TODO: is this not tensorrt.dtype??
-  tensorrt.max_input_len: [512, 1024]
-  tensorrt.scheduler_config.capacity_scheduling_policy: [MAX_UTILIZATION, STATIC_BATCH]
-  # tensorrt.tensor_parallel_size: [1, 2, 4]     # Tensor parallel (requires multi-GPU hardware)
+  tensorrt.engine_params.max_batch_size: [1, 4, 8, 16, 32]
+  tensorrt.engine_params.max_seq_len: [1536, 2048]
+  # tensorrt.engine_params.quant_config handled by tensorrt.quant_config group below
+  # (quant_config is Any-typed; quant_algo has dependent sub-params: kv_cache_quant_algo, calib.*)
+  tensorrt.engine_params.max_input_len: [512, 1024]
+  # scheduler_config is Any-typed; capacity_scheduling_policy swept via whole-dict variants
+  tensorrt.scheduler_policy:
+    - tensorrt.engine_params.scheduler_config: {capacity_scheduling_policy: MAX_UTILIZATION}
+    - tensorrt.engine_params.scheduler_config: {capacity_scheduling_policy: STATIC_BATCH}
+  # tensorrt.engine_params.tensor_parallel_size: [1, 2, 4]     # Tensor parallel (requires multi-GPU hardware)
 
   # --- TensorRT: dependent groups ─────────────────────────────────
 
   # kv_cache_quant_algo requires quant_algo; calib requires quant_algo
   # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
+  # quant_config is Any-typed; sub-fields swept as whole-dict values ending at the
+  # declared quant_config leaf (path cannot continue past an Any-typed field).
   tensorrt.quant_config:
     - {}                                          # baseline: no quantisation
-    - tensorrt.quant_config.quant_algo: INT8
-    - tensorrt.quant_config.quant_algo: INT8
-      tensorrt.quant_config.kv_cache_quant_algo: INT8
+    - tensorrt.engine_params.quant_config: {quant_algo: INT8}
+    - tensorrt.engine_params.quant_config: {quant_algo: INT8, kv_cache_quant_algo: INT8}
     # INT8 calibration sweeps (calib_batches/calib_dataset/calib_max_seq_length)
     # are not yet supported: the TensorRT plugin consumes pre-quantised checkpoints
     # and never reads calibration settings, so any calib.* path would be silently dropped.
-    - tensorrt.quant_config.quant_algo: [W4A16_AWQ, W8A16]
-    # - tensorrt.quant_config.quant_algo: FP8  # Requires SM >= 8.9 (Ada Lovelace / Hopper)
+    - tensorrt.engine_params.quant_config: {quant_algo: W4A16_AWQ}
+    - tensorrt.engine_params.quant_config: {quant_algo: W8A16}
+    # - tensorrt.engine_params.quant_config: {quant_algo: FP8}  # Requires SM >= 8.9 (Ada Lovelace / Hopper)
 
   # KV cache compound settings (block_reuse + memory_fraction travel together)
+  # kv_cache_config is Any-typed; sub-fields swept as whole-dict values.
   tensorrt.kv_cache_config:
     - {}                                          # baseline: default KV cache
-    - tensorrt.kv_cache_config.enable_block_reuse: true
-      tensorrt.kv_cache_config.free_gpu_memory_fraction: 0.9
-    - tensorrt.kv_cache_config.host_cache_size: 1073741824
-    - tensorrt.kv_cache_config.max_tokens: 8192
-      tensorrt.kv_cache_config.free_gpu_memory_fraction: 0.85
+    - tensorrt.engine_params.kv_cache_config: {enable_block_reuse: true, free_gpu_memory_fraction: 0.9}
+    - tensorrt.engine_params.kv_cache_config: {host_cache_size: 1073741824}
+    - tensorrt.engine_params.kv_cache_config: {max_tokens: 8192, free_gpu_memory_fraction: 0.85}
 
 # =====================================================================
 # Explicit experiments (truly unique overrides only)
 # =====================================================================
 # Most dependent experiments are now handled by sweep groups above.
 # This section is reserved for experiments that:
-#   - Override sweep axes (e.g. batch_size: 1 for speculative decoding)
-#   - Use params not in any sweep axis or group (e.g. cpu_offload_gb)
+#   - Override sweep axes (e.g. harness.transformers.batch_size: 1 for speculative decoding)
+#   - Use params not in any sweep axis or group (e.g. engine_params.cpu_offload_gb)
 #   - Require unique combinations spanning multiple unrelated groups
 # See .product/designs/sweep-constraints.md for the design.
 
@@ -263,23 +269,26 @@ experiments:
   # TRANSFORMERS - unique experiments
   # =================================================================
   # torch.compile, quantisation, caching, and beam search are now handled
-  # by sweep groups above (transformers.compilation, transformers.quantization,
-  # transformers.caching, transformers.decoding).
+  # by sweep groups above (transformers.compile_quant, transformers.caching,
+  # transformers.decoding).
 
   # -----------------------------------------------------------------
   # Transformers speculative decoding (prompt-lookup)
   # -----------------------------------------------------------------
-  # Requires batch_size=1, overriding the sweep axis - must remain explicit.
+  # Requires harness.transformers.batch_size=1, overriding the sweep axis - must remain explicit.
   - model: Qwen/Qwen2.5-0.5B
     engine: transformers
     dataset:
       n_prompts: 50
     transformers:
-      dtype: bfloat16
-      batch_size: 1
-      prompt_lookup_num_tokens: 3
-      device_map: auto
-      trust_remote_code: true
+      engine_params:
+        dtype: bfloat16
+        prompt_lookup_num_tokens: 3
+        device_map: auto
+        trust_remote_code: true
+    harness:
+      transformers:
+        batch_size: 1
 
   # -----------------------------------------------------------------
   # Tensor parallelism (requires multi-GPU; tp_plan and device_map are
@@ -290,11 +299,14 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   transformers:
-  #     dtype: bfloat16
-  #     batch_size: 4
-  #     tp_plan: auto
-  #     tp_size: 2
-  #     trust_remote_code: true
+  #     engine_params:
+  #       dtype: bfloat16
+  #       tp_plan: auto
+  #       tp_size: 2
+  #       trust_remote_code: true
+  #   harness:
+  #     transformers:
+  #       batch_size: 4
 
   # -----------------------------------------------------------------
   # Model loading with revision pin + memory limits
@@ -304,14 +316,17 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   transformers:
-  #     dtype: bfloat16
-  #     batch_size: 4
-  #     revision: main
-  #     max_memory:
-  #       0: "10GiB"
-  #       cpu: "50GiB"
-  #     device_map: auto
-  #     trust_remote_code: true
+  #     engine_params:
+  #       dtype: bfloat16
+  #       revision: main
+  #       max_memory:
+  #         0: "10GiB"
+  #         cpu: "50GiB"
+  #       device_map: auto
+  #       trust_remote_code: true
+  #   harness:
+  #     transformers:
+  #       batch_size: 4
 
   # =================================================================
   # VLLM - unique experiments
@@ -327,8 +342,8 @@ experiments:
     dataset:
       n_prompts: 50
     vllm:
-      dtype: bfloat16
-      engine:
+      engine_params:
+        dtype: bfloat16
         tensor_parallel_size: 2
         disable_custom_all_reduce: false  # Disable custom all-reduce for multi-GPU
         gpu_memory_utilization: 0.9
@@ -341,10 +356,10 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   vllm:
-  #     dtype: bfloat16
-  #     engine:
+  #     engine_params:
+  #       dtype: bfloat16
   #       enforce_eager: false
-  #       attention:                       # attention config nests under engine
+  #       attention:                       # attention config nests under engine_params (Any-typed)
   #         backend: flash_attn
   #         flash_attn_version: 2          # Flash attention version (auto-detected)
   #         flash_attn_max_num_splits_for_cuda_graph: 0  # Max splits for CUDA graph
@@ -365,8 +380,8 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   vllm:
-  #     dtype: bfloat16
-  #     engine:
+  #     engine_params:
+  #       dtype: bfloat16
   #       speculative_model: my-org/my-draft-model
   #       num_speculative_tokens: 5
   #       gpu_memory_utilization: 0.9
@@ -379,8 +394,8 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   vllm:
-  #     dtype: bfloat16
-  #     engine:
+  #     engine_params:
+  #       dtype: bfloat16
   #       pipeline_parallel_size: 2
   #       gpu_memory_utilization: 0.9
 
@@ -392,8 +407,8 @@ experiments:
     dataset:
       n_prompts: 50
     vllm:
-      dtype: bfloat16
-      engine:
+      engine_params:
+        dtype: bfloat16
         cpu_offload_gb: 4
         gpu_memory_utilization: 0.9
 
@@ -405,8 +420,8 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   vllm:
-  #     dtype: bfloat16
-  #     engine:
+  #     engine_params:
+  #       dtype: bfloat16
   #       cpu_offload_gb: 8
   #       offload_group_size: 4          # Groups of layers for CPU offloading
   #       offload_num_in_group: 2        # Layers offloaded per group
@@ -422,8 +437,8 @@ experiments:
     dataset:
       n_prompts: 50
     vllm:
-      dtype: bfloat16
-      engine:
+      engine_params:
+        dtype: bfloat16
         swap_space: 8
         gpu_memory_utilization: 0.85
 
@@ -435,8 +450,9 @@ experiments:
     dataset:
       n_prompts: 50
     vllm:
-      dtype: bfloat16
-      sampling:
+      engine_params:
+        dtype: bfloat16
+      sampling_params:
         temperature: 0.8
         max_tokens: 256              # Overrides universal max_output_tokens for this experiment
         min_tokens: 10
@@ -451,8 +467,8 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   vllm:
-  #     dtype: bfloat16
-  #     engine:
+  #     engine_params:
+  #       dtype: bfloat16
   #       compilation_config:
   #         level: 3
   #       enforce_eager: false
@@ -465,8 +481,8 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   vllm:
-  #     dtype: bfloat16
-  #     engine:
+  #     engine_params:
+  #       dtype: bfloat16
   #       kv_cache_memory_bytes: 4294967296    # 4 GiB
   #       enforce_eager: false
 
@@ -484,13 +500,14 @@ experiments:
     dataset:
       n_prompts: 50
     tensorrt:
-      dtype: bfloat16
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      fast_build: true
-      build_cache:
-        max_cache_storage_gb: 256
+      engine_params:
+        dtype: bfloat16
+        max_batch_size: 8
+        max_input_len: 1024
+        max_seq_len: 2048
+        fast_build: true
+        build_cache:
+          max_cache_storage_gb: 256
 
   # PTQ calibration is now handled by tensorrt.quant_config sweep group above.
 
@@ -502,17 +519,18 @@ experiments:
     dataset:
       n_prompts: 50
     tensorrt:
-      dtype: bfloat16
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      sampling:
+      engine_params:
+        dtype: bfloat16
+        max_batch_size: 8
+        max_input_len: 1024
+        max_seq_len: 2048
+        build_cache:
+          max_cache_storage_gb: 256
+      sampling_params:
         min_tokens: 10
         ignore_eos: false
         return_perf_metrics: true
         n: 1
-      build_cache:
-        max_cache_storage_gb: 256
 
   # -----------------------------------------------------------------
   # Tensor parallel (special: requires multi-GPU hardware)
@@ -522,13 +540,14 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   tensorrt:
-  #     dtype: bfloat16
-  #     max_batch_size: 8
-  #     max_input_len: 1024
-  #     max_seq_len: 2048
-  #     tensor_parallel_size: 2
-  #     build_cache:
-  #       max_cache_storage_gb: 256
+  #     engine_params:
+  #       dtype: bfloat16
+  #       max_batch_size: 8
+  #       max_input_len: 1024
+  #       max_seq_len: 2048
+  #       tensor_parallel_size: 2
+  #       build_cache:
+  #         max_cache_storage_gb: 256
 
   # -----------------------------------------------------------------
   # Pre-compiled engine (skip compilation, load existing engine)
@@ -538,10 +557,11 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   tensorrt:
-  #     dtype: bfloat16
-  #     engine_path: /path/to/precompiled/engine
-  #     max_batch_size: 8
-  #     max_seq_len: 2048
+  #     engine_params:
+  #       dtype: bfloat16
+  #       engine_path: /path/to/precompiled/engine
+  #       max_batch_size: 8
+  #       max_seq_len: 2048
 
   # KV cache max_tokens is now handled by tensorrt.kv_cache_config sweep group above.
 
@@ -553,11 +573,12 @@ experiments:
   #   dataset:
   #     n_prompts: 50
   #   tensorrt:
-  #     dtype: bfloat16
-  #     max_batch_size: 8
-  #     max_input_len: 1024
-  #     max_seq_len: 2048
-  #     build_cache:
-  #       cache_root: /tmp/trt_cache
-  #       max_records: 5
-  #       max_cache_storage_gb: 128
+  #     engine_params:
+  #       dtype: bfloat16
+  #       max_batch_size: 8
+  #       max_input_len: 1024
+  #       max_seq_len: 2048
+  #       build_cache:
+  #         cache_root: /tmp/trt_cache
+  #         max_records: 5
+  #         max_cache_storage_gb: 128

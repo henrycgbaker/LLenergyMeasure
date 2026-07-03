@@ -106,8 +106,8 @@ def print_dry_run(
             return f" ({field} default)" if field not in ("engine", "dtype") else " (default)"
         return ""
 
-    engine_section = getattr(config, config.engine, None)
-    engine_dtype = getattr(engine_section, "dtype", None)
+    engine_params = config.active_engine_params()
+    engine_dtype = getattr(engine_params, "dtype", None)
 
     print("Config (resolved)")
     print(f"  Model          {config.task.model}")
@@ -115,10 +115,11 @@ def print_dry_run(
     dtype_display = engine_dtype or "-"
     print(f"  Dtype          {dtype_display}{_annotate('dtype', engine_dtype)}")
 
-    # Batch size - from transformers section if present
+    # Batch size - transformers llem-orchestration knob (HarnessConfig), if present
     batch_size: int | None = None
-    if config.transformers is not None and hasattr(config.transformers, "batch_size"):
-        batch_size = config.transformers.batch_size
+    harness = config.harness.transformers if config.harness is not None else None
+    if harness is not None:
+        batch_size = harness.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")
 
@@ -282,8 +283,8 @@ def print_study_dry_run(
     peak_config: ExperimentConfig | None = None
     vram_cache: dict[tuple[str, str | None], dict[str, float] | None] = {}
     for exp in study_config.experiments:
-        exp_section = getattr(exp, exp.engine, None)
-        cache_key = (exp.task.model, getattr(exp_section, "dtype", None))
+        exp_engine_params = exp.active_engine_params()
+        cache_key = (exp.task.model, getattr(exp_engine_params, "dtype", None))
         if cache_key not in vram_cache:
             vram_cache[cache_key] = estimate_vram(exp)
         vram = vram_cache[cache_key]
@@ -293,8 +294,8 @@ def print_study_dry_run(
 
     print("VRAM estimate (peak)")
     if peak_vram is not None and peak_config is not None:
-        peak_section = getattr(peak_config, peak_config.engine, None)
-        peak_dtype = getattr(peak_section, "dtype", None)
+        peak_engine_params = peak_config.active_engine_params()
+        peak_dtype = getattr(peak_engine_params, "dtype", None)
         print(f"  Weights        {_sig3(peak_vram['weights_gb'])} GB ({peak_dtype or '-'})")
         print(f"  KV cache       {_sig3(peak_vram['kv_cache_gb'])} GB")
         print(f"  Overhead       {_sig3(peak_vram['overhead_gb'])} GB")

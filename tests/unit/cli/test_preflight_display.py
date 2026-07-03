@@ -53,7 +53,9 @@ def _make_panel_study_config(
             for dt in dtypes:
                 experiments.append(
                     ExperimentConfig(
-                        task={"model": model}, engine=engine, **{engine: {"dtype": dt}}
+                        task={"model": model},
+                        engine=engine,
+                        **{engine: {"engine_params": {"dtype": dt}}},
                     )
                 )
 

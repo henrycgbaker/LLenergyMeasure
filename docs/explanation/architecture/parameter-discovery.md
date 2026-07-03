@@ -89,13 +89,13 @@ Field paths are dotted strings resolved against the config model attribute by at
 ```yaml
 match:
   fields:
-    transformers.sampling.num_beams:
-      ">": 1
-    transformers.sampling.num_beam_groups:
+    transformers.engine_params.num_beams:
+      "==": 1
+    transformers.sampling_params.num_return_sequences:
       ">": 1
 ```
 
-- `transformers.sampling.num_beams` resolves as `config.transformers.sampling.num_beams`.
+- `transformers.engine_params.num_beams` resolves as `config.transformers.engine_params.num_beams`.
 - Pydantic models, dataclasses, and plain dicts are all supported.
 - A missing attribute at any path segment yields `None` - the predicate does not fire (rules do not produce false positives on configs that simply lack a field).
 
@@ -106,11 +106,11 @@ Operator values may be `@field_path` strings, which are resolved against the sam
 ```yaml
 match:
   fields:
-    transformers.sampling.num_beams:
-      not_divisible_by: "@num_beam_groups"
+    transformers.engine_params.num_beams:
+      not_divisible_by: "@transformers.sampling_params.num_return_sequences"
 ```
 
-`@num_beam_groups` resolves as a sibling field (relative to `transformers.sampling.num_beams`'s parent namespace). Dotted refs (e.g. `@transformers.sampling.num_beam_groups`) resolve from the config root.
+Bare refs (e.g. `@max_num_seqs`) resolve as sibling fields, relative to the anchor field's parent namespace. Dotted refs (as above) resolve from the config root - required whenever the target lives in a different section than the anchor (here the anchor sits under `engine_params` while the target sits under `sampling_params`); a bare ref would look for the target in the anchor's own section and silently resolve to `None`.
 
 ### Loader grammar examples
 
@@ -118,33 +118,33 @@ match:
 # Single-field range: temperature must be positive
 match:
   fields:
-    vllm.sampling.temperature:
+    vllm.sampling_params.temperature:
       ">": 0.0
 
 # Value allowlist: cache_implementation must be one of these
 match:
   fields:
-    transformers.sampling.cache_implementation:
+    transformers.engine_params.cache_implementation:
       in: ["static", "sliding_window", "hybrid"]
 
-# Cross-field divisibility: num_beams must divide evenly by num_beam_groups
+# Cross-field divisibility: num_beams must divide evenly by num_return_sequences
 match:
   fields:
-    transformers.sampling.num_beams:
-      not_divisible_by: "@num_beam_groups"
+    transformers.engine_params.num_beams:
+      not_divisible_by: "@transformers.sampling_params.num_return_sequences"
 
 # Multi-field gate: rule fires only when both conditions hold
 match:
   fields:
-    transformers.sampling.num_beams:
+    transformers.sampling_params.num_return_sequences:
       ">": 1
-    transformers.sampling.diversity_penalty:
-      "==": 0.0
+    transformers.sampling_params.do_sample:
+      "==": false
 
 # Type check: field must be a float, not an int
 match:
   fields:
-    transformers.sampling.temperature:
+    transformers.sampling_params.temperature:
       type_is_not: "int"
 ```
 
@@ -156,7 +156,7 @@ Each rule has a severity that determines how the loader responds when the predic
 
 | Severity | Engine behaviour | Loader behaviour | Example |
 |---|---|---|---|
-| `error` | The engine raises if the config is submitted as-is. | Raises `ValueError` before engine initialisation. Pydantic surfaces it as a `ValidationError`. Message template is rendered with `declared_value` substituted. | `num_beams (2) is not divisible by num_beam_groups (3)` |
+| `error` | The engine raises if the config is submitted as-is. | Raises `ValueError` before engine initialisation. Pydantic surfaces it as a `ValidationError`. Message template is rendered with `declared_value` substituted. | `num_beams (5) is not divisible by num_return_sequences (2)` |
 | `warn` | The engine announces a suboptimal setting but still proceeds. | Emits a warning to the user. | `temperature=0 with do_sample=True; engine will warn` |
 | `dormant` | The engine silently normalises or ignores the field. The user's declared value is not the effective value. | Annotates the config: "field X will be silently coerced by the engine to Y". | `seed=-1 will be normalised to None by the engine` |
 

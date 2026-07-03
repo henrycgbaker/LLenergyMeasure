@@ -58,10 +58,11 @@ class SkippedConfig:
 
     @property
     def short_label(self) -> str:
-        """Short label for display: 'engine, dtype'. dtype lives under the engine section."""
+        """Short label for display: 'engine, dtype'. dtype lives under engine_params."""
         engine = self.raw_config.get("engine", "unknown")
         section = self.raw_config.get(engine) if isinstance(engine, str) else None
-        dtype = section.get("dtype", "?") if isinstance(section, dict) else "?"
+        engine_params = section.get("engine_params") if isinstance(section, dict) else None
+        dtype = engine_params.get("dtype", "?") if isinstance(engine_params, dict) else "?"
         return f"{engine}, {dtype}"
 
     def to_dict(self) -> dict[str, Any]:
@@ -385,11 +386,17 @@ def _is_group(value: object) -> bool:
 
 
 def _group_engine_scope(group_key: str) -> str | None:
-    """Return engine name if a group key is engine-scoped, else None (universal)."""
-    if "." in group_key:
-        prefix = group_key.split(".", 1)[0]
-        if prefix in ALL_ENGINES:
-            return prefix
+    """Return engine name if a group key is engine-scoped, else None (universal).
+
+    Both engine-native keys (``transformers.engine_params.dtype``) and per-engine
+    harness keys (``harness.transformers.batch_size``) are scoped to that engine;
+    only the latter carries the ``harness.`` prefix.
+    """
+    parts = group_key.split(".")
+    if len(parts) >= 2 and parts[0] in ALL_ENGINES:
+        return parts[0]
+    if len(parts) >= 3 and parts[0] == "harness" and parts[1] in ALL_ENGINES:
+        return parts[1]
     return None
 
 
@@ -440,7 +447,7 @@ def _route_key_value(
     """Route a single fully-qualified key into *config_dict*.
 
     Routing rules:
-    - Engine-prefixed dotted key (``transformers.batch_size``) → merge into engine section.
+    - Engine-prefixed dotted key (``transformers.engine_params.dtype``) → merge into engine section.
     - Other dotted key (``task.dataset.source``) → unflatten at top level.
     - Simple key → direct assignment.
 
@@ -511,7 +518,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
 
     # ── Step 1: Partition sweep into axes and groups ──
     universal_dims: dict[str, list[Any]] = {}
-    scoped_dims: dict[str, dict[str, list[Any]]] = {}  # {engine: {param: [values]}}
+    scoped_dims: dict[str, dict[str, list[Any]]] = {}  # {engine: {fq_key: [values]}}
     groups: dict[str, list[dict[str, Any]]] = {}  # {group_name: [variant_dicts]}
 
     for key, values in sweep.items():
@@ -522,18 +529,19 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
         if not isinstance(values, list):
             values = [values]
 
-        if "." in key:
-            prefix, _param = key.split(".", 1)
-            if prefix in ALL_ENGINES:
-                scoped_dims.setdefault(prefix, {})[_param] = values
-            else:
-                universal_dims[key] = values
+        engine_scope = _group_engine_scope(key)
+        if engine_scope is not None:
+            # Store the full fully-qualified key so routing reconstructs the exact
+            # path (engine-native ``transformers.engine_params.dtype`` and
+            # harness-scoped ``harness.transformers.batch_size`` both round-trip
+            # verbatim).
+            scoped_dims.setdefault(engine_scope, {})[key] = values
         else:
             universal_dims[key] = values
 
     # Derive flat axis key set for collision detection
     axis_keys = set(universal_dims.keys()) | {
-        f"{b}.{p}" for b, params in scoped_dims.items() for p in params
+        fq_key for params in scoped_dims.values() for fq_key in params
     }
     _validate_sweep_groups(groups, axis_keys)
 
@@ -568,7 +576,9 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
 
         # Collect applicable axes - reconstruct fully-qualified keys for routing
         engine_scoped = scoped_dims.get(engine, {})
-        fq_dim_keys = list(universal_dims.keys()) + [f"{engine}.{p}" for p in engine_scoped]
+        # scoped_dims stores fully-qualified keys (engine-native and harness-scoped
+        # alike), so use them verbatim.
+        fq_dim_keys = list(universal_dims.keys()) + list(engine_scoped.keys())
         all_dim_values = list(universal_dims.values()) + list(engine_scoped.values())
 
         # Cross all group variant lists with each other (lazy - iterated once)

@@ -1,15 +1,23 @@
-"""Unit tests for TensorRT-LLM config validation.
+"""Unit tests for the generated TensorRT-LLM config (nested engine_params shape).
 
-Tests cover:
-- CFG-01: Compile-time params (tensor_parallel_size, pipeline_parallel_size, max_batch_size,
-          max_input_len, max_seq_len, max_num_tokens, dtype, fast_build)
-- CFG-02: Quantisation (QuantAlgo Literal type, kv_cache_quant_algo)
-- CFG-03: (Removed) Calibration sub-config dropped - D3 build-only PTQ, project consumes
-          pre-quantised checkpoints. Falls through extra="allow" if needed.
-- CFG-04: KV cache (enable_block_reuse, free_gpu_memory_fraction, max_tokens, host_cache_size)
-- CFG-05: Scheduler (capacity_scheduling_policy Literal)
+The tensorrt section is the generated
+``llenergymeasure.engines.tensorrt.config.Config`` (engine_params /
+sampling_params). Engine fields live on engine_params; quant_config /
+kv_cache_config / scheduler_config round-trip as Any-typed dicts (not pydantic
+sub-models). The fields are permissive (Any-typed or plain str, no Literal /
+Pydantic-bound validators), so this file verifies the nested shape PARSES and
+round-trips, and moves bounds that were re-homed to the mined rules corpus
+into ExperimentConfig-level assertions.
+
+Coverage:
+- CFG-01: Compile-time params (tensor_parallel_size, pipeline_parallel_size,
+          max_batch_size, max_input_len, max_seq_len, max_num_tokens, dtype,
+          fast_build)
+- CFG-02: Quantisation dict (quant_algo, kv_cache_quant_algo)
+- CFG-03: (Removed) Calibration sub-config dropped - D3 build-only PTQ.
+- CFG-04: KV cache dict (enable_block_reuse, free_gpu_memory_fraction, ...)
+- CFG-05: Scheduler dict (capacity_scheduling_policy)
 - CFG-06: (Removed) Build cache sub-config dropped - D1 engine-cache plumbing.
-          Falls through extra="allow" if needed.
 - CFG-07: Sampling (min_tokens, n, ignore_eos; return_perf_metrics dropped D1)
 """
 
@@ -18,14 +26,15 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.config.engine_configs import (
-    TensorRTConfig,
-    TensorRTKvCacheConfig,
-    TensorRTQuantConfig,
-    TensorRTSamplingConfig,
-    TensorRTSchedulerConfig,
-)
 from llenergymeasure.config.models import ExperimentConfig
+
+_TRT_DEFAULTS = {"task": {"model": "gpt2"}, "engine": "tensorrt"}
+
+
+def _make_trt(**engine_params) -> ExperimentConfig:
+    """Build an ExperimentConfig with the given tensorrt engine_params."""
+    return ExperimentConfig(**_TRT_DEFAULTS, tensorrt={"engine_params": engine_params})
+
 
 # ---------------------------------------------------------------------------
 # CFG-01: Compile-time params
@@ -33,11 +42,11 @@ from llenergymeasure.config.models import ExperimentConfig
 
 
 class TestCompileTimeParams:
-    """Tests for TensorRT compile-time parameters."""
+    """Tests for TensorRT compile-time parameters on engine_params."""
 
     def test_tensorrt_compile_params_accepted(self):
         """All compile-time params validate when set together."""
-        config = TensorRTConfig(
+        config = _make_trt(
             max_batch_size=8,
             max_input_len=1024,
             max_seq_len=2048,
@@ -45,46 +54,63 @@ class TestCompileTimeParams:
             dtype="float16",
             fast_build=True,
         )
-        assert config.max_batch_size == 8
-        assert config.max_input_len == 1024
-        assert config.max_seq_len == 2048
-        assert config.tensor_parallel_size == 2
-        assert config.dtype == "float16"
-        assert config.fast_build is True
-
-    def test_tensorrt_dtype_literal_validation(self):
-        """dtype only accepts 'float16' or 'bfloat16', rejects 'float32'."""
-        with pytest.raises(ValidationError):
-            TensorRTConfig(dtype="float32")
+        ep = config.tensorrt.engine_params
+        assert ep.max_batch_size == 8
+        assert ep.max_input_len == 1024
+        assert ep.max_seq_len == 2048
+        assert ep.tensor_parallel_size == 2
+        assert ep.dtype == "float16"
+        assert ep.fast_build is True
 
     def test_tensorrt_dtype_bfloat16_accepted(self):
-        """dtype='bfloat16' is valid."""
-        config = TensorRTConfig(dtype="bfloat16")
-        assert config.dtype == "bfloat16"
+        """dtype='bfloat16' is valid (dtype is a plain str passthrough, not a Literal)."""
+        config = _make_trt(dtype="bfloat16")
+        assert config.tensorrt.engine_params.dtype == "bfloat16"
+
+    def test_tensorrt_dtype_float32_accepted(self):
+        """dtype='float32' is accepted at parse time (plain str, no Literal enforcement).
+
+        The dtype field is now an un-narrowed str (discovery debt: the mined schema
+        did not surface TRT-LLM's internal dtype enum). TRT-LLM itself rejects fp32
+        at runtime; the static constraint will be restored when a container re-mine
+        surfaces the real enum.
+        """
+        config = _make_trt(dtype="float32")
+        assert config.tensorrt.engine_params.dtype == "float32"
 
     def test_tensorrt_tensor_parallel_size_ge_1(self):
-        """tensor_parallel_size=0 raises ValidationError."""
+        """tensor_parallel_size=0 raises ValidationError (re-homed rule fires at ExperimentConfig)."""
         with pytest.raises(ValidationError):
-            TensorRTConfig(tensor_parallel_size=0)
+            _make_trt(tensor_parallel_size=0)
 
-    def test_tensorrt_max_batch_size_ge_1(self):
-        """max_batch_size=0 raises ValidationError."""
+    def test_tensorrt_max_batch_size_nonneg(self):
+        """max_batch_size=0 is accepted (rule fires at < 0, not < 1).
+
+        The mined rule `tensorrt_raises_max_batch_size_lt_0_cuda_graph_max_batch_size`
+        uses `< 0` (TRT-LLM's ``cuda_graph_config.max_batch_size must be non-negative``),
+        so 0 is valid at parse time. Negative values are rejected.
+        """
+        config = _make_trt(max_batch_size=0)
+        assert config.tensorrt.engine_params.max_batch_size == 0
+
+    def test_tensorrt_max_batch_size_negative_rejected(self):
+        """max_batch_size=-1 raises ValidationError (mined rule: must be non-negative)."""
         with pytest.raises(ValidationError):
-            TensorRTConfig(max_batch_size=0)
+            _make_trt(max_batch_size=-1)
 
     def test_tensorrt_max_input_len_ge_1(self):
-        """max_input_len=0 raises ValidationError."""
+        """max_input_len=0 raises ValidationError (re-homed rule fires at ExperimentConfig)."""
         with pytest.raises(ValidationError):
-            TensorRTConfig(max_input_len=0)
+            _make_trt(max_input_len=0)
 
     def test_tensorrt_max_seq_len_ge_1(self):
-        """max_seq_len=0 raises ValidationError."""
+        """max_seq_len=0 raises ValidationError (re-homed rule fires at ExperimentConfig)."""
         with pytest.raises(ValidationError):
-            TensorRTConfig(max_seq_len=0)
+            _make_trt(max_seq_len=0)
 
 
 # ---------------------------------------------------------------------------
-# CFG-02: Quantisation
+# CFG-02: Quantisation (round-trips as an Any-typed dict)
 # ---------------------------------------------------------------------------
 
 
@@ -101,75 +127,88 @@ _ALL_QUANT_ALGOS = [
 
 
 class TestQuantisation:
-    """Tests for TensorRT quantisation config."""
+    """Tests for the TensorRT quant_config dict.
+
+    quant_config is now an Any-typed field: it round-trips as a plain dict
+    without any Pydantic validation on the inner keys. Literal enforcement
+    (quant_algo, kv_cache_quant_algo) was on the hand-written TensorRTQuantConfig
+    which no longer exists.
+    """
 
     @pytest.mark.parametrize("algo", _ALL_QUANT_ALGOS)
     def test_valid_quant_algo_accepted(self, algo: str):
-        """All 8 required QuantAlgo values are accepted."""
-        config = TensorRTQuantConfig(quant_algo=algo)
-        assert config.quant_algo == algo
+        """All 8 required QuantAlgo values are accepted (dict round-trip)."""
+        config = _make_trt(quant_config={"quant_algo": algo})
+        assert config.tensorrt.engine_params.quant_config == {"quant_algo": algo}
 
-    def test_invalid_quant_algo_rejected(self):
-        """Misspelled value like 'fp8' (lowercase) raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTQuantConfig(quant_algo="fp8")
+    def test_quant_config_round_trips_verbatim(self):
+        """quant_config keys round-trip verbatim as a dict on engine_params."""
+        config = _make_trt(quant_config={"quant_algo": "FP8", "kv_cache_quant_algo": "FP8"})
+        quant = config.tensorrt.engine_params.quant_config
+        assert quant == {"quant_algo": "FP8", "kv_cache_quant_algo": "FP8"}
 
-    @pytest.mark.parametrize("algo", ["FP8", "INT8"])
-    def test_kv_cache_quant_algo_accepted(self, algo: str):
-        """FP8 and INT8 accepted for kv_cache_quant_algo."""
-        config = TensorRTQuantConfig(kv_cache_quant_algo=algo)
-        assert config.kv_cache_quant_algo == algo
+    def test_arbitrary_quant_algo_accepted(self):
+        """Arbitrary quant_algo values round-trip (no Literal restriction on the dict).
 
-    def test_invalid_kv_cache_quant_algo_rejected(self):
-        """Invalid kv_cache_quant_algo value raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTQuantConfig(kv_cache_quant_algo="INVALID")
+        The hand-written TensorRTQuantConfig rejected unknown values via Literal;
+        the generated config accepts any dict without Pydantic validation on inner
+        fields (discovery debt for the quant_config sub-schema).
+        """
+        config = _make_trt(quant_config={"quant_algo": "fp8"})  # lowercase
+        quant_config = config.tensorrt.engine_params.quant_config
+        assert quant_config is not None
+        assert quant_config["quant_algo"] == "fp8"
 
 
 # CFG-03: Calibration sub-config dropped (D3) - tests removed.
-# calib fields remain settable via TensorRTConfig extra="allow" passthrough.
+# calib fields remain settable via engine_params extra="allow" passthrough.
 
 
 # ---------------------------------------------------------------------------
-# CFG-04: KV Cache
+# CFG-04: KV Cache (round-trips as an Any-typed dict)
 # ---------------------------------------------------------------------------
 
 
 class TestKvCache:
-    """Tests for TensorRT KV cache config."""
+    """Tests for the TensorRT kv_cache_config dict.
+
+    kv_cache_config is now an Any-typed field: it round-trips as a plain dict.
+    Pydantic bounds (free_gpu_memory_fraction range) that were on the
+    hand-written TensorRTKvCacheConfig are no longer enforced at parse time.
+    """
 
     def test_kv_cache_config_accepted(self):
-        """KV cache section with valid values validates."""
-        config = TensorRTKvCacheConfig(
-            enable_block_reuse=True,
-            free_gpu_memory_fraction=0.85,
-            max_tokens=4096,
-            host_cache_size=1073741824,
+        """KV cache dict with valid values round-trips."""
+        config = _make_trt(
+            kv_cache_config={
+                "enable_block_reuse": True,
+                "free_gpu_memory_fraction": 0.85,
+                "max_tokens": 4096,
+                "host_cache_size": 1073741824,
+            }
         )
-        assert config.enable_block_reuse is True
-        assert config.free_gpu_memory_fraction == 0.85
-        assert config.max_tokens == 4096
-        assert config.host_cache_size == 1073741824
+        kv = config.tensorrt.engine_params.kv_cache_config
+        assert kv is not None
+        assert kv["enable_block_reuse"] is True
+        assert kv["free_gpu_memory_fraction"] == 0.85
+        assert kv["max_tokens"] == 4096
+        assert kv["host_cache_size"] == 1073741824
 
-    def test_kv_cache_free_gpu_memory_fraction_range(self):
-        """free_gpu_memory_fraction must be 0.0-1.0."""
-        # Valid boundary
-        config = TensorRTKvCacheConfig(free_gpu_memory_fraction=0.0)
-        assert config.free_gpu_memory_fraction == 0.0
-        config = TensorRTKvCacheConfig(free_gpu_memory_fraction=1.0)
-        assert config.free_gpu_memory_fraction == 1.0
-
-        # Invalid: above 1.0
-        with pytest.raises(ValidationError):
-            TensorRTKvCacheConfig(free_gpu_memory_fraction=1.5)
-
-        # Invalid: below 0.0
-        with pytest.raises(ValidationError):
-            TensorRTKvCacheConfig(free_gpu_memory_fraction=-0.1)
+    def test_kv_cache_free_gpu_memory_fraction_round_trips(self):
+        """free_gpu_memory_fraction values round-trip (no Pydantic range check on dict)."""
+        # Valid boundaries accepted
+        config = _make_trt(kv_cache_config={"free_gpu_memory_fraction": 0.0})
+        kv = config.tensorrt.engine_params.kv_cache_config
+        assert kv is not None
+        assert kv["free_gpu_memory_fraction"] == 0.0
+        config = _make_trt(kv_cache_config={"free_gpu_memory_fraction": 1.0})
+        kv = config.tensorrt.engine_params.kv_cache_config
+        assert kv is not None
+        assert kv["free_gpu_memory_fraction"] == 1.0
 
 
 # ---------------------------------------------------------------------------
-# CFG-05: Scheduler
+# CFG-05: Scheduler (round-trips as an Any-typed dict)
 # ---------------------------------------------------------------------------
 
 
@@ -181,29 +220,38 @@ _VALID_SCHEDULER_POLICIES = [
 
 
 class TestScheduler:
-    """Tests for TensorRT scheduler config."""
+    """Tests for the TensorRT scheduler_config dict.
+
+    scheduler_config is now an Any-typed field: it round-trips as a plain dict.
+    Literal enforcement on capacity_scheduling_policy was on the hand-written
+    TensorRTSchedulerConfig which no longer exists.
+    """
 
     def test_scheduler_config_accepted(self):
-        """Scheduler section with valid policy validates."""
-        config = TensorRTSchedulerConfig(
-            capacity_scheduling_policy="GUARANTEED_NO_EVICT",
-        )
-        assert config.capacity_scheduling_policy == "GUARANTEED_NO_EVICT"
+        """Scheduler dict with valid policy round-trips."""
+        config = _make_trt(scheduler_config={"capacity_scheduling_policy": "GUARANTEED_NO_EVICT"})
+        sched = config.tensorrt.engine_params.scheduler_config
+        assert sched is not None
+        assert sched["capacity_scheduling_policy"] == "GUARANTEED_NO_EVICT"
 
     @pytest.mark.parametrize("policy", _VALID_SCHEDULER_POLICIES)
     def test_valid_scheduler_policies(self, policy: str):
-        """All valid scheduler policies are accepted."""
-        config = TensorRTSchedulerConfig(capacity_scheduling_policy=policy)
-        assert config.capacity_scheduling_policy == policy
+        """All valid scheduler policies round-trip on the dict."""
+        config = _make_trt(scheduler_config={"capacity_scheduling_policy": policy})
+        sched = config.tensorrt.engine_params.scheduler_config
+        assert sched is not None
+        assert sched["capacity_scheduling_policy"] == policy
 
-    def test_invalid_scheduler_policy_rejected(self):
-        """Invalid policy raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTSchedulerConfig(capacity_scheduling_policy="INVALID_POLICY")
+    def test_arbitrary_scheduler_policy_accepted(self):
+        """Arbitrary scheduler policy values round-trip (no Literal restriction on dict)."""
+        config = _make_trt(scheduler_config={"capacity_scheduling_policy": "INVALID_POLICY"})
+        sched = config.tensorrt.engine_params.scheduler_config
+        assert sched is not None
+        assert sched["capacity_scheduling_policy"] == "INVALID_POLICY"
 
 
 # CFG-06: Build cache sub-config dropped (D1) - tests removed.
-# build_cache fields remain settable via TensorRTConfig extra="allow" passthrough.
+# build_cache fields remain settable via engine_params extra="allow" passthrough.
 
 
 # ---------------------------------------------------------------------------
@@ -212,29 +260,35 @@ class TestScheduler:
 
 
 class TestSampling:
-    """Tests for TensorRT sampling config."""
+    """Tests for TensorRT sampling_params block."""
 
     def test_sampling_config_accepted(self):
         """Sampling section with valid values validates (return_perf_metrics dropped D1)."""
-        config = TensorRTSamplingConfig(
-            min_tokens=10,
-            n=4,
-            ignore_eos=True,
+        config = ExperimentConfig(
+            **_TRT_DEFAULTS,
+            tensorrt={"sampling_params": {"min_tokens": 10, "n": 4, "ignore_eos": True}},
         )
-        assert config.min_tokens == 10
-        assert config.n == 4
-        assert config.ignore_eos is True
+        sp = config.tensorrt.sampling_params
+        assert sp.min_tokens == 10
+        assert sp.n == 4
+        assert sp.ignore_eos is True
 
     def test_sampling_return_perf_metrics_is_extra_allow(self):
         """return_perf_metrics still accepted via extra='allow' passthrough."""
-        config = TensorRTSamplingConfig(return_perf_metrics=True)  # type: ignore[call-arg]  # extra="allow"
+        config = ExperimentConfig(
+            **_TRT_DEFAULTS,
+            tensorrt={"sampling_params": {"return_perf_metrics": True}},
+        )
         # No ValidationError - extra="allow"
-        assert getattr(config, "return_perf_metrics", None) is True
+        assert getattr(config.tensorrt.sampling_params, "return_perf_metrics", None) is True
 
     def test_sampling_n_ge_1(self):
-        """n=0 raises ValidationError."""
+        """n=0 raises ValidationError (re-homed rule fires at ExperimentConfig)."""
         with pytest.raises(ValidationError):
-            TensorRTSamplingConfig(n=0)
+            ExperimentConfig(
+                **_TRT_DEFAULTS,
+                tensorrt={"sampling_params": {"n": 0}},
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -243,31 +297,33 @@ class TestSampling:
 
 
 class TestExperimentConfigIntegration:
-    """Tests for TensorRTConfig integration with ExperimentConfig."""
+    """Tests for the generated tensorrt Config integration with ExperimentConfig."""
 
     def test_experiment_config_with_full_tensorrt(self):
-        """ExperimentConfig with engine='tensorrt' and full tensorrt section validates."""
+        """ExperimentConfig with engine='tensorrt' and a full nested section validates."""
         config = ExperimentConfig(
             task={"model": "gpt2"},
             engine="tensorrt",
             tensorrt={
-                "tensor_parallel_size": 2,
-                "pipeline_parallel_size": 2,
-                "max_batch_size": 8,
-                "max_input_len": 1024,
-                "max_seq_len": 2048,
-                "max_num_tokens": 4096,
-                "dtype": "bfloat16",
-                "fast_build": True,
-                "quant_config": {"quant_algo": "W4A16_AWQ"},
-                "kv_cache_config": {
-                    "enable_block_reuse": True,
-                    "free_gpu_memory_fraction": 0.9,
+                "engine_params": {
+                    "tensor_parallel_size": 2,
+                    "pipeline_parallel_size": 2,
+                    "max_batch_size": 8,
+                    "max_input_len": 1024,
+                    "max_seq_len": 2048,
+                    "max_num_tokens": 4096,
+                    "dtype": "bfloat16",
+                    "fast_build": True,
+                    "quant_config": {"quant_algo": "W4A16_AWQ"},
+                    "kv_cache_config": {
+                        "enable_block_reuse": True,
+                        "free_gpu_memory_fraction": 0.9,
+                    },
+                    "scheduler_config": {
+                        "capacity_scheduling_policy": "MAX_UTILIZATION",
+                    },
                 },
-                "scheduler_config": {
-                    "capacity_scheduling_policy": "MAX_UTILIZATION",
-                },
-                "sampling": {
+                "sampling_params": {
                     "min_tokens": 5,
                     "n": 1,
                     "ignore_eos": False,
@@ -276,48 +332,37 @@ class TestExperimentConfigIntegration:
         )
         assert config.engine == "tensorrt"
         assert config.tensorrt is not None
-        assert config.tensorrt.tensor_parallel_size == 2
-        assert config.tensorrt.pipeline_parallel_size == 2
-        assert config.tensorrt.max_num_tokens == 4096
-        assert config.tensorrt.quant_config is not None
-        assert config.tensorrt.quant_config.quant_algo == "W4A16_AWQ"
-        assert config.tensorrt.kv_cache_config is not None
-        assert config.tensorrt.kv_cache_config.enable_block_reuse is True
-        assert config.tensorrt.scheduler_config is not None
-        assert config.tensorrt.scheduler_config.capacity_scheduling_policy == "MAX_UTILIZATION"
-        assert config.tensorrt.sampling is not None
-        assert config.tensorrt.sampling.n == 1
+        ep = config.tensorrt.engine_params
+        assert ep.tensor_parallel_size == 2
+        assert ep.pipeline_parallel_size == 2
+        assert ep.max_num_tokens == 4096
+        assert ep.quant_config == {"quant_algo": "W4A16_AWQ"}
+        assert ep.kv_cache_config is not None
+        assert ep.kv_cache_config["enable_block_reuse"] is True
+        assert ep.scheduler_config is not None
+        assert ep.scheduler_config["capacity_scheduling_policy"] == "MAX_UTILIZATION"
+        assert config.tensorrt.sampling_params is not None
+        assert config.tensorrt.sampling_params.n == 1
 
     def test_tensorrt_extra_allow_forwards_unknown(self):
-        """Extra fields on TensorRTConfig and sub-configs are accepted (not rejected)."""
-        config = TensorRTConfig(  # type: ignore[call-arg]  # extra="allow"
-            tensor_parallel_size=1,
-            custom_future_field="value",
-        )
-        # Should not raise - extra="allow"
-        assert config.tensor_parallel_size == 1
+        """Extra fields on engine_params are accepted (not rejected)."""
+        config = _make_trt(tensor_parallel_size=1, custom_future_field="value")
+        ep = config.tensorrt.engine_params
+        assert ep.tensor_parallel_size == 1
+        assert getattr(ep, "custom_future_field", None) == "value"
 
-        quant = TensorRTQuantConfig(  # type: ignore[call-arg]  # extra="allow"
-            quant_algo="INT8",
-            custom_quant_field=42,
-        )
-        assert quant.quant_algo == "INT8"
-
-    def test_tensorrt_none_defaults(self):
-        """All typed fields default to None when not specified."""
-        config = TensorRTConfig()
-        assert config.max_batch_size is None
-        assert config.tensor_parallel_size is None
-        assert config.pipeline_parallel_size is None
-        assert config.max_input_len is None
-        assert config.max_seq_len is None
-        assert config.max_num_tokens is None
-        assert config.dtype is None
-        assert config.fast_build is None
-        assert config.quant_config is None
-        assert config.kv_cache_config is None
-        assert config.scheduler_config is None
-        assert config.sampling is None
-        # backend and engine_path are no longer typed fields (D2/D1 drop)
-        # calib and build_cache sub-configs dropped (D3/D1)
-        # all remain passable via extra="allow"
+    def test_tensorrt_sub_configs_default_none(self):
+        """The Any-typed sub-config dicts default to None when not specified."""
+        config = _make_trt()
+        ep = config.tensorrt.engine_params
+        assert ep.max_batch_size is None
+        assert ep.max_input_len is None
+        assert ep.max_seq_len is None
+        assert ep.max_num_tokens is None
+        assert ep.quant_config is None
+        assert ep.kv_cache_config is None
+        assert ep.scheduler_config is None
+        # tensor_parallel_size and pipeline_parallel_size default to 1 (not None)
+        # in the generated config (EngineParams defaults match the engine's own defaults)
+        assert ep.tensor_parallel_size == 1
+        assert ep.pipeline_parallel_size == 1

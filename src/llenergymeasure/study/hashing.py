@@ -35,19 +35,22 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     runs.  Callers pass the resolved config, not the declared one - resolved_config_hash is
     meaningless on a pre-resolved config.
 
-    Engine-specific sub-models carry a ``sampling`` attribute; it is lifted
-    into its own dict so the resolved-config / observed-config ordering separates
-    "how the engine constructs" from "what it generates with".
+    The generated engine sections split into ``engine_params`` /
+    ``sampling_params`` sub-models; each is lifted into its own dict so the
+    resolved-config / observed-config ordering separates "how the engine
+    constructs" from "what it generates with". Any section-level extras merge
+    into the engine-params view.
     """
     engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)
     dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
-    sampling = dump.pop("sampling", None) or {}
+    engine_params = dump.pop("engine_params", None) or {}
+    sampling = dump.pop("sampling_params", None) or {}
 
     return ConfigHashView(
         engine=engine_name,
         task=config.task.model_dump(mode="python"),
-        observed_engine_params=dump,
+        observed_engine_params={**engine_params, **dump},
         observed_sampling_params=sampling,
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
     )

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 from llenergymeasure.engines.tensorrt import TensorRTEngine
 from llenergymeasure.engines.transformers import TransformersEngine
 from llenergymeasure.engines.vllm import VLLMEngine
@@ -101,7 +100,7 @@ def _patch_sm(monkeypatch, sm: tuple[int, int] | None) -> None:
 
 class TestTensorRTCheckHardware:
     def test_sm_none_returns_empty(self, monkeypatch):
-        """SM detection returns None (no GPU visible) → no errors."""
+        """SM detection returns None (no GPU visible) -> no errors."""
         _patch_sm(monkeypatch, None)
         config = make_config(**_TRT_DEFAULTS)
         assert TensorRTEngine.check_hardware(config) == []
@@ -125,7 +124,7 @@ class TestTensorRTCheckHardware:
         _patch_sm(monkeypatch, (8, 0))
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
+            tensorrt={"engine_params": {"quant_config": {"quant_algo": "FP8"}}},
         )
         errors = TensorRTEngine.check_hardware(config)
         assert len(errors) == 1
@@ -137,7 +136,7 @@ class TestTensorRTCheckHardware:
         _patch_sm(monkeypatch, (8, 9))
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
+            tensorrt={"engine_params": {"quant_config": {"quant_algo": "FP8"}}},
         )
         assert TensorRTEngine.check_hardware(config) == []
 
@@ -146,7 +145,7 @@ class TestTensorRTCheckHardware:
         _patch_sm(monkeypatch, (8, 0))
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(kv_cache_quant_algo="FP8")),
+            tensorrt={"engine_params": {"quant_config": {"kv_cache_quant_algo": "FP8"}}},
         )
         errors = TensorRTEngine.check_hardware(config)
         assert len(errors) == 1
@@ -157,9 +156,11 @@ class TestTensorRTCheckHardware:
         _patch_sm(monkeypatch, (8, 0))
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(
-                quant_config=TensorRTQuantConfig(quant_algo="FP8", kv_cache_quant_algo="FP8")
-            ),
+            tensorrt={
+                "engine_params": {
+                    "quant_config": {"quant_algo": "FP8", "kv_cache_quant_algo": "FP8"}
+                }
+            },
         )
         errors = TensorRTEngine.check_hardware(config)
         assert len(errors) == 2
@@ -187,7 +188,7 @@ class TestShortCircuitRegression:
         # _build_llm_kwargs raise ConfigError.
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(engine_path=tmp_path / "does-not-exist"),  # type: ignore[call-arg]  # extra="allow"
+            tensorrt={"engine_params": {"engine_path": str(tmp_path / "does-not-exist")}},
         )
 
         engine = TensorRTEngine()

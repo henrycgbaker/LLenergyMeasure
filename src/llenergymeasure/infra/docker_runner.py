@@ -1012,7 +1012,8 @@ class DockerRunner:
         # Determine TRT-LLM tensor parallel size for MPI injection
         tp_size = None
         if config.engine == Engine.TENSORRT and config.tensorrt is not None:
-            tp_size = config.tensorrt.tensor_parallel_size
+            engine_params = config.active_engine_params()
+            tp_size = engine_params.tensor_parallel_size if engine_params is not None else None
 
         # All engines: bind-mount the host package source + bootstrap (so the
         # package is importable in images that don't ship it) and point

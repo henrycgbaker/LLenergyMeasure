@@ -94,8 +94,8 @@ Below is a complete rule from the transformers corpus with every field annotated
     engine: transformers
     # Must match rule.engine (redundant, for grep-ability).
     fields:
-      transformers.sampling.num_beams:
-        not_divisible_by: "@num_beam_groups"
+      transformers.engine_params.num_beams:
+        not_divisible_by: "@transformers.sampling_params.num_return_sequences"
       # Field paths are dotted, resolved against ExperimentConfig.
       # Operator: not_divisible_by - fires when a % b != 0.
       # @num_beam_groups is a @field_ref: resolved as a sibling field.
@@ -284,8 +284,8 @@ A bare value (not a dict) in the `match.fields` spec is shorthand for equality:
 
 ```yaml
 # These two are equivalent:
-transformers.sampling.num_beams: 1
-transformers.sampling.num_beams:
+transformers.engine_params.num_beams: 1
+transformers.engine_params.num_beams:
   "==": 1
 ```
 
@@ -294,15 +294,16 @@ transformers.sampling.num_beams:
 Any operator value that starts with `@` is resolved as a field reference:
 
 ```yaml
-transformers.sampling.num_beams:
-  not_divisible_by: "@num_beam_groups"
-  # "@num_beam_groups" resolves as a sibling:
-  # config.transformers.sampling.num_beam_groups
+vllm.engine_params.max_num_batched_tokens:
+  "<": "@max_num_seqs"
+  # "@max_num_seqs" resolves as a sibling:
+  # config.vllm.engine_params.max_num_seqs
 
-transformers.sampling.num_beams:
-  not_divisible_by: "@transformers.sampling.num_beam_groups"
-  # Dotted ref resolves from the config root.
-  # Equivalent to the sibling form when the parent namespace is the same.
+transformers.engine_params.num_beams:
+  not_divisible_by: "@transformers.sampling_params.num_return_sequences"
+  # Dotted ref resolves from the config root - required when the target
+  # lives in a different section than the anchor. A bare ref only looks
+  # in the anchor's own section and silently resolves to None.
 ```
 
 ---

@@ -104,7 +104,7 @@ def test_swept_paths_resolve_to_real_fields(config_path: Path) -> None:
 
 def test_example_full_resolver_self_check() -> None:
     """Sanity-check the resolver itself: a known-good and known-bad path."""
-    assert _resolve_path("transformers.batch_size") is None
-    assert _resolve_path("vllm.engine.attention.backend") is None
+    assert _resolve_path("harness.transformers.batch_size") is None
+    assert _resolve_path("vllm.engine_params.enforce_eager") is None
     # Mis-nested attention path (the bug this module guards against).
     assert _resolve_path("vllm.attention.backend") is not None

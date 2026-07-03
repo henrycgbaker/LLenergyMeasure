@@ -1,7 +1,10 @@
 """Configuration models for LLM efficiency measurement experiments (v2.0 schema).
 
 This module defines the Tier 1 (Universal) configuration that applies identically
-across all engines. Engine-specific parameters live in engine_configs.py.
+across all engines. Engine-specific parameters live in the generated
+``llenergymeasure.engines.<engine>.config`` modules (one ``Config`` per engine,
+projected from the mined schema, with ``engine_params`` / ``sampling_params``
+sub-sections).
 
 v2.0 field renames from v1.x:
     model_name         -> model
@@ -17,13 +20,15 @@ v2.0 removals:
 
 from __future__ import annotations
 
+import difflib
 import logging
 import warnings
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, Field, model_validator
 
+from llenergymeasure.config.harness import HarnessConfig
 from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine, engine_str
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
@@ -36,12 +41,10 @@ EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        TransformersConfig,
-        VLLMConfig,
-    )
     from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
+    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
+    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
+    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
 
 
 @lru_cache(maxsize=1)
@@ -56,6 +59,55 @@ def _get_invariants_loader() -> EngineInvariantsLoader:
 def _reset_invariants_loader_cache() -> None:
     """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
     _get_invariants_loader.cache_clear()
+
+
+# Soft-validation cutoff for difflib suggestions on extra keys. 0.8 keeps the
+# suggestion conservative (clear typos like ``dtypee`` -> ``dtype``) without
+# nagging on genuinely-new engine fields that happen to share a prefix.
+_CLOSE_MATCH_CUTOFF = 0.8
+
+
+def _nested_subsection_models(section: BaseModel) -> dict[str, type[BaseModel]]:
+    """Return the ``engine_params`` / ``sampling_params`` sub-model classes.
+
+    Detects the generated nested shape by field presence rather than engine
+    name; a section lacking both sub-fields yields an empty dict.
+    """
+    models: dict[str, type[BaseModel]] = {}
+    for sub_name in ("engine_params", "sampling_params"):
+        field = type(section).model_fields.get(sub_name)
+        if field is None:
+            continue
+        for candidate in get_args(field.annotation) or (field.annotation,):
+            if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+                models[sub_name] = candidate
+                break
+    return models
+
+
+@lru_cache(maxsize=16)
+def _discovered_field_names(engine: str, sub_name: str) -> frozenset[str]:
+    """Discovered-schema field names for a sub-section; empty if no schema ships.
+
+    Broadens the soft-validation vocabulary beyond the curated ``model_fields``
+    so a typo of an un-curated-but-discovered passthrough field is still caught.
+    Memoised per ``(engine, sub_name)`` (the discovered schema is a stable
+    committed artifact) so a sweep validating many configs reads each schema
+    once; tests that mutate the on-disk schema call
+    ``_reset_discovered_field_cache``.
+    """
+    from llenergymeasure.config.schema_loader import SchemaLoader
+
+    try:
+        schema = SchemaLoader().load_schema(engine)
+    except (FileNotFoundError, ValueError):
+        return frozenset()
+    return frozenset(getattr(schema, sub_name, {}) or {})
+
+
+def _reset_discovered_field_cache() -> None:
+    """Clear the memoised discovered-schema vocab; used by tests that mutate it."""
+    _discovered_field_names.cache_clear()
 
 
 # =============================================================================
@@ -437,12 +489,64 @@ class ExperimentConfig(BaseModel):
         description="TensorRT-LLM configuration (only used when engine=tensorrt)",
     )
 
+    # llem-orchestration knobs that have no engine-native API (transformers-only
+    # residual today: prompt-batching, torch.compile, TF32, autocast). Engine
+    # config proper lives in the engine sections above.
+    harness: HarnessConfig | None = Field(
+        default=None,
+        description="Per-engine llem-orchestration knobs (batching, torch.compile, TF32, autocast).",
+    )
+
     # Escape hatch - explicitly declared for extra="forbid" compatibility
     passthrough_kwargs: dict[str, Any] | None = Field(
         default=None,
         description="Extra kwargs passed through to engine at execution time. "
         "Keys must not collide with ExperimentConfig top-level fields.",
     )
+
+    # -------------------------------------------------------------------------
+    # Active-engine accessors (all three engines share the generated nested shape)
+    # -------------------------------------------------------------------------
+
+    def active_engine_params(self) -> Any:
+        """Return the active engine's ``engine_params`` sub-model, or None.
+
+        One config-layer accessor for the nested shape every engine now shares,
+        replacing the per-site ``cfg.<engine>.engine_params if cfg.<engine> is
+        not None else None`` idiom. Returns None when the engine section is
+        absent (``engine: null``).
+        """
+        section = getattr(self, self.engine.value, None)
+        return getattr(section, "engine_params", None) if section is not None else None
+
+    def active_sampling_params(self) -> Any:
+        """Return the active engine's ``sampling_params`` sub-model, or None."""
+        section = getattr(self, self.engine.value, None)
+        return getattr(section, "sampling_params", None) if section is not None else None
+
+    def active_harness(self) -> Any:
+        """Return the active engine's harness block (llem-orchestration knobs), or None.
+
+        Mirrors ``active_engine_params()`` for the hand-written orchestration
+        layer. Only transformers has a harness residual today (batch_size,
+        torch.compile, TF32, autocast); vllm and tensorrt drive those through
+        native engine APIs, so ``harness`` carries no block for them and this
+        returns None.
+        """
+        return getattr(self.harness, self.engine.value, None) if self.harness is not None else None
+
+    def engine_sub_dict(self, name: str) -> dict[str, Any] | None:
+        """Return a non-empty ``engine_params`` sub-config dict by name, or None.
+
+        The curated discovery-debt containers (vllm ``attention`` /
+        ``beam_search``, tensorrt ``quant_config`` / ``kv_cache_config`` /
+        ``scheduler_config``) are Any-typed on the current pins, so they arrive
+        as plain dicts; this is the shared accessor the engine plugins read them
+        through.
+        """
+        engine_params = self.active_engine_params()
+        value = getattr(engine_params, name, None) if engine_params is not None else None
+        return value if isinstance(value, dict) and value else None
 
     # -------------------------------------------------------------------------
     # Pre-validators (run before field parsing)
@@ -464,16 +568,17 @@ class ExperimentConfig(BaseModel):
             return data
         engine = data.get("engine", Engine.TRANSFORMERS)
         engine_key = engine_str(engine)
-        # Ensure the engine section and its sampling sub-dict exist as dicts
-        # (an explicit ``engine: null`` in YAML would otherwise leave None here).
+        # Ensure the engine section and its sampling_params sub-dict exist as
+        # dicts (an explicit ``engine: null`` in YAML would otherwise leave None
+        # here). All three engines use the generated nested shape.
         engine_section = data.get(engine_key)
         if not isinstance(engine_section, dict):
             engine_section = {}
             data[engine_key] = engine_section
-        sampling_section = engine_section.get("sampling")
+        sampling_section = engine_section.get("sampling_params")
         if not isinstance(sampling_section, dict):
             sampling_section = {}
-            engine_section["sampling"] = sampling_section
+            engine_section["sampling_params"] = sampling_section
         for key, value in SAMPLING_PRESETS[preset_name].items():
             sampling_section.setdefault(key, value)
         return data
@@ -510,6 +615,78 @@ class ExperimentConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def validate_engine_section_extras(self) -> ExperimentConfig:
+        """Soft/hard validation of extra keys on the active engine's nested section.
+
+        Two checks against the generated nested shape (``engine_params`` /
+        ``sampling_params`` sub-models):
+
+        - Wrapper-level extras (keys on the section itself) are ERRORS: the
+          engine never sees them, so silently accepting them would let a user
+          measure something other than what they configured. If a key names a
+          known nested field it is a pre-nested-shape flat config, so the
+          message is a migration hint pointing at the correct nested location;
+          otherwise it is a typo and the message carries a ``did you mean``
+          suggestion.
+        - Extras inside ``engine_params`` / ``sampling_params`` DO pass through
+          to the engine (``extra="allow"``), so a genuinely-new engine field is
+          legitimate. We only WARN, and only when the key is a close typo of a
+          known field, using the discovered schema plus generated fields as the
+          vocabulary.
+        """
+        section = getattr(self, self.engine.value, None)
+        if not isinstance(section, BaseModel):
+            return self
+        sub_models = _nested_subsection_models(section)
+        if not sub_models:
+            return self
+
+        nested_field_names = {name for model in sub_models.values() for name in model.model_fields}
+
+        # (1) Wrapper-level extras: always an error.
+        for key in section.model_extra or {}:
+            for sub_name, model in sub_models.items():
+                if key in model.model_fields:
+                    raise ValueError(
+                        f"{self.engine.value}.{key} moved to "
+                        f"{self.engine.value}.{sub_name}.{key} (flat engine config was "
+                        "replaced by the nested shape in v0.10)."
+                    )
+            suggestion = difflib.get_close_matches(key, sorted(nested_field_names), n=1)
+            hint = f"; did you mean engine_params.{suggestion[0]}?" if suggestion else ""
+            raise ValueError(f"unknown field {key!r} on {self.engine.value}{hint}")
+
+        # (2) Sub-section extras: pass through to the engine - warn on close typos.
+        for sub_name, model in sub_models.items():
+            sub_section = getattr(section, sub_name, None)
+            if sub_section is None:
+                continue
+            extras = sub_section.model_extra
+            if not extras:
+                # No extra keys to vet: skip building the vocabulary (which
+                # reads the discovered-schema JSON off disk). The common case.
+                continue
+            vocabulary = sorted(
+                set(model.model_fields) | _discovered_field_names(self.engine.value, sub_name)
+            )
+            for key in extras:
+                if key in vocabulary:
+                    # Discovered-but-uncurated engine field: legitimate
+                    # passthrough, no warning.
+                    continue
+                suggestion = difflib.get_close_matches(
+                    key, vocabulary, n=1, cutoff=_CLOSE_MATCH_CUTOFF
+                )
+                if suggestion:
+                    warnings.warn(
+                        f"unknown field {key!r} in {self.engine.value}.{sub_name}; "
+                        f"did you mean {suggestion[0]}?",
+                        ConfigValidationWarning,
+                        stacklevel=2,
+                    )
+        return self
+
+    @model_validator(mode="after")
     def validate_passthrough_kwargs_no_collision(self) -> ExperimentConfig:
         """passthrough_kwargs keys must not collide with ExperimentConfig fields.
 
@@ -526,9 +703,12 @@ class ExperimentConfig(BaseModel):
                 )
         return self
 
-    # vLLM fp8 + float32 and TRT FP8 + float32 are rejected by the respective
-    # VLLMConfig.dtype / TensorRTConfig.dtype Literal types at field validation
-    # (neither engine accepts float32). No separate cross-validator needed.
+    # The old hand-written vLLM/TRT-LLM dtype Literals rejected float32 at parse
+    # time; that rejection was over-narrow and was dropped with the generated
+    # configs. vLLM's ModelDType genuinely accepts float32, so the generated vLLM
+    # dtype enum (now the authoritative source) includes it; the tensorrt dtype is
+    # un-narrowed (plain str). float32 is a valid-but-rarely-useful choice on these
+    # engines for inference, not an error, so no hand-written rule replaces them.
 
     @model_validator(mode="after")
     def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:
@@ -537,17 +717,16 @@ class ExperimentConfig(BaseModel):
         Retained as a hand-written validator until a ``PreTrainedModel``
         introspection miner can derive this invariant programmatically (the check
         lives in ``_autoset_attn_implementation``, not in
-        ``GenerationConfig.validate``). See memory note
-        ``project_phase_50_pipeline_replan.md``.
+        ``GenerationConfig.validate``).
         """
+        ep = self.active_engine_params() if self.engine == "transformers" else None
         if (
-            self.engine == "transformers"
-            and self.transformers is not None
-            and self.transformers.attn_implementation in self._FLASH_ATTENTION_IMPLS
-            and (self.transformers.dtype or "bfloat16") == "float32"
+            ep is not None
+            and ep.attn_implementation in self._FLASH_ATTENTION_IMPLS
+            and (ep.dtype or "bfloat16") == "float32"
         ):
             raise ValueError(
-                f"attn_implementation='{self.transformers.attn_implementation}' requires "
+                f"attn_implementation='{ep.attn_implementation}' requires "
                 "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
                 "float32 computation."
             )
@@ -598,12 +777,14 @@ class ExperimentConfig(BaseModel):
 
 # Rebuild to resolve forward references for engine configs
 def _rebuild_experiment_config() -> None:
-    """Rebuild ExperimentConfig to resolve forward references."""
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        TransformersConfig,
-        VLLMConfig,
-    )
+    """Rebuild ExperimentConfig to resolve forward references.
+
+    All three engines resolve to their generated nested ``Config``
+    (engine_params / sampling_params shape, projected from the mined schema).
+    """
+    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
+    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
+    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
 
     ExperimentConfig.model_rebuild(
         _types_namespace={

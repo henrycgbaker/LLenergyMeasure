@@ -266,8 +266,12 @@ def test_estimate_vram_kv_cache_is_gqa_aware():
 
 def test_estimate_vram_kv_cache_scales_with_batch_size():
     """KV cache scales linearly with the configured batch size, not a hardcoded 1."""
-    config_b1 = make_config(**_VRAM_DEFAULTS, dtype="float16", transformers={"batch_size": 1})
-    config_b4 = make_config(**_VRAM_DEFAULTS, dtype="float16", transformers={"batch_size": 4})
+    config_b1 = make_config(
+        **_VRAM_DEFAULTS, dtype="float16", harness={"transformers": {"batch_size": 1}}
+    )
+    config_b4 = make_config(
+        **_VRAM_DEFAULTS, dtype="float16", harness={"transformers": {"batch_size": 4}}
+    )
 
     ctx1, _ = _patch_hfapi(model_info_return=_make_model_info())
     with ctx1:
