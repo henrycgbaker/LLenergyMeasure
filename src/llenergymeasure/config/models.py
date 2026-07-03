@@ -524,6 +524,17 @@ class ExperimentConfig(BaseModel):
         section = getattr(self, self.engine.value, None)
         return getattr(section, "sampling_params", None) if section is not None else None
 
+    def active_harness(self) -> Any:
+        """Return the active engine's harness block (llem-orchestration knobs), or None.
+
+        Mirrors ``active_engine_params()`` for the hand-written orchestration
+        layer. Only transformers has a harness residual today (batch_size,
+        torch.compile, TF32, autocast); vllm and tensorrt drive those through
+        native engine APIs, so ``harness`` carries no block for them and this
+        returns None.
+        """
+        return getattr(self.harness, self.engine.value, None) if self.harness is not None else None
+
     def engine_sub_dict(self, name: str) -> dict[str, Any] | None:
         """Return a non-empty ``engine_params`` sub-config dict by name, or None.
 
@@ -692,12 +703,12 @@ class ExperimentConfig(BaseModel):
                 )
         return self
 
-    # vLLM / TRT-LLM reject float32 inside the engine (neither accepts it). The
-    # hand-written dtype Literals that enforced this at parse were dropped with
-    # the generated configs (the vllm projection now ships the full engine enum
-    # including float32; tensorrt dtype is un-narrowed) - this is discovery debt.
-    # The constraint returns as a mined rule when an in-container re-mine surfaces
-    # the real engine dtype enum.
+    # The old hand-written vLLM/TRT-LLM dtype Literals rejected float32 at parse
+    # time; that rejection was over-narrow and was dropped with the generated
+    # configs. vLLM's ModelDType genuinely accepts float32, so the generated vLLM
+    # dtype enum (now the authoritative source) includes it; the tensorrt dtype is
+    # un-narrowed (plain str). float32 is a valid-but-rarely-useful choice on these
+    # engines for inference, not an error, so no hand-written rule replaces them.
 
     @model_validator(mode="after")
     def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:

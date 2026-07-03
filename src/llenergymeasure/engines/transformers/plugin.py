@@ -113,7 +113,7 @@ class TransformersEngine:
 
         # allow_tf32 + torch.compile are llem-orchestration knobs (HarnessConfig),
         # not engine-native config.
-        harness = self._harness(config)
+        harness = config.active_harness()
 
         # Apply allow_tf32 (Ampere+ TF32 toggle)
         if harness is not None and harness.allow_tf32 is not None:
@@ -187,7 +187,7 @@ class TransformersEngine:
         """
         hf_model, tokenizer = model
 
-        harness = self._harness(config)
+        harness = config.active_harness()
         batch_size = 1
         if harness is not None and harness.batch_size is not None:
             batch_size = harness.batch_size
@@ -478,18 +478,6 @@ class TransformersEngine:
         """No preflight hardware rules; BitsAndBytes/FlashAttention self-check at load time."""
         return []
 
-    @staticmethod
-    def _harness(config: ExperimentConfig) -> Any:
-        """Return the transformers HarnessConfig block (llem-orchestration knobs), or None.
-
-        engine_params / sampling_params are read via the shared
-        config.active_engine_params() / config.active_sampling_params() accessors
-        (matching vllm + tensorrt); only the transformers-specific harness
-        residual (batch_size, torch.compile, TF32, autocast) needs a plugin-local
-        accessor.
-        """
-        return config.harness.transformers if config.harness is not None else None
-
     # -------------------------------------------------------------------------
     # Private: model loading helpers
     # -------------------------------------------------------------------------
@@ -694,7 +682,7 @@ class TransformersEngine:
         # Determine autocast settings (autocast is an llem-orchestration knob).
         from contextlib import nullcontext
 
-        _hn = self._harness(config)
+        _hn = config.active_harness()
         if _hn is not None and _hn.autocast_enabled is True and torch.cuda.is_available():
             _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
             _amp_ctx = torch.autocast(

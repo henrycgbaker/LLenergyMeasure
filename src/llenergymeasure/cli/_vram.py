@@ -31,7 +31,7 @@ _BATCH_FIELDS: dict[str, str] = {
 def _effective_batch_size(config: ExperimentConfig) -> int:
     """Return the configured batch size for the active engine (defaults to 1)."""
     if str(config.engine) == "transformers":
-        harness = config.harness.transformers if config.harness is not None else None
+        harness = config.active_harness()
         if harness is not None and harness.batch_size is not None:
             return int(harness.batch_size)
         return 1

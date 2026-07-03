@@ -886,9 +886,9 @@ class MeasurementHarness:
         anything else (incl. vllm continuous batching) -> None
         """
         if engine_name == "transformers":
-            harness = config.harness.transformers if config.harness is not None else None
+            harness = config.active_harness()
             if harness is not None and harness.batch_size is not None:
-                return harness.batch_size
+                return int(harness.batch_size)
             return 1
         if engine_name == "tensorrt" and config.tensorrt is not None:
             engine_params = config.active_engine_params()
