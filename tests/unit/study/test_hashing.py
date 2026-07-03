@@ -103,17 +103,17 @@ class TestHashConfig:
 
 class TestBuildResolvedView:
     def test_extracts_engine_and_task(self):
-        cfg = _mk_config(transformers={"sampling": {"do_sample": False}})
+        cfg = _mk_config(transformers={"sampling_params": {"do_sample": False}})
         view = build_resolved_view(cfg)
         assert view.engine == "transformers"
         assert view.task["model"] == "gpt2"
 
     def test_sampling_lifted_into_sampling_bucket(self):
-        cfg = _mk_config(transformers={"sampling": {"do_sample": True, "temperature": 0.7}})
+        cfg = _mk_config(transformers={"sampling_params": {"do_sample": True, "temperature": 0.7}})
         view = build_resolved_view(cfg)
         assert view.observed_sampling_params["do_sample"] is True
         assert view.observed_sampling_params["temperature"] == 0.7
-        assert "sampling" not in view.observed_engine_params
+        assert "sampling_params" not in view.observed_engine_params
 
     def test_passthrough_kwargs_propagated(self):
         cfg = _mk_config(passthrough_kwargs={"my_key": "my_val"})
@@ -160,7 +160,7 @@ class TestHashStability:
     @pytest.mark.parametrize("_", range(5))
     def test_hash_stable_across_repeat_calls(self, _):
         cfg = _mk_config(
-            transformers={"sampling": {"do_sample": False, "temperature": 1.0}},
+            transformers={"sampling_params": {"do_sample": False, "temperature": 1.0}},
         )
         h1 = hash_config(build_resolved_view(cfg))
         h2 = hash_config(build_resolved_view(cfg))

@@ -38,7 +38,9 @@ def _make_experiment(
 ) -> ExperimentConfig:
     # dtype now lives per-engine; attach it to the matching engine section.
     kwargs = (
-        {engine: {"dtype": "bfloat16"}} if engine in ("transformers", "vllm", "tensorrt") else {}
+        {engine: {"engine_params": {"dtype": "bfloat16"}}}
+        if engine in ("transformers", "vllm", "tensorrt")
+        else {}
     )
     return ExperimentConfig(task={"model": model}, engine=engine, **kwargs)
 
@@ -340,7 +342,7 @@ def test_config_summary_from_experiment() -> None:
     config = ExperimentConfig(
         task={"model": "meta-llama/Llama-3.1-8B"},
         engine="transformers",
-        transformers={"dtype": "bfloat16"},
+        transformers={"engine_params": {"dtype": "bfloat16"}},
     )
     summary = build_config_summary(config)
     # Uses format_experiment_header: "Llama-3.1-8B / pytorch"
