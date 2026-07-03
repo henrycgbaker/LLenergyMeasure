@@ -56,6 +56,7 @@ def _make_mock_config() -> MagicMock:
 
     config = MagicMock(spec=ExperimentConfig)
     config.engine = "transformers"
+    config.active_engine_params.return_value = None
     config.transformers = None  # no engine section → dtype is None (engine default)
 
     # task sub-model
@@ -137,9 +138,9 @@ def test_build_header_nondefault_fields_shown():
     config = _make_mock_config()
     config.task.model = "gpt2"
     config.engine = "transformers"
-    transformers_section = MagicMock()
-    transformers_section.dtype = "float16"
-    config.transformers = transformers_section
+    engine_params = MagicMock()
+    engine_params.dtype = "float16"
+    config.active_engine_params.return_value = engine_params
     config.task.dataset.n_prompts = 50  # non-default - should appear
 
     header = _build_header(config, runner_tag="local")
