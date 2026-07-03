@@ -10,9 +10,9 @@ Design:
 
 - **No corpus mutation.** We emit YAML *fragments* to ``--out PATH``; the
   live ``src/llenergymeasure/engines/{engine}/rules.yaml`` is never touched.
-- **Severity is mechanical.** ``warn`` for log-channel emissions;
-  ``error`` when ``include_exceptions=True`` and the record is an
-  exception. Rule fragments are always ``added_by: runtime_warning``.
+- **Severity is mechanical.** ``dormant`` for log-channel emissions (the
+  engine silently ignored a declared field); ``error`` when
+  ``include_exceptions=True`` and the record is an exception.
 - **Emission channels.** ``EmissionChannel`` is this module's own runtime
   taxonomy (which channel a captured record came through); it is not part of
   the shipped rules schema.
@@ -41,12 +41,7 @@ from typing import Any, Literal
 
 import yaml
 
-from llenergymeasure.config.engine_rules import (
-    EngineRules,
-    EngineRulesLoader,
-)
 from llenergymeasure.config.ssot import Engine
-from llenergymeasure.study.message_normalise import build_template_regex, normalise
 from llenergymeasure.study.runtime_observations import RUNTIME_OBSERVATIONS_FILENAME
 from llenergymeasure.utils.io import load_json
 
@@ -54,7 +49,6 @@ __all__ = [
     "GapProposal",
     "ReportGapsError",
     "find_runtime_gaps",
-    "load_engine_invariants",
     "render_yaml_fragment",
 ]
 
@@ -106,7 +100,7 @@ class GapProposal:
     contrast_count: int
     representative_message: str
     needs_generalisation_review: bool
-    severity: Literal["warn", "error"]
+    severity: Literal["dormant", "error"]
     representative_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -139,103 +133,20 @@ _ALLOWED_ENGINES: frozenset[str] = frozenset(e.value for e in Engine)
 
 
 # ---------------------------------------------------------------------------
-# Corpus loading
-# ---------------------------------------------------------------------------
-
-
-def load_engine_invariants(
-    engines: list[Engine] | list[str] | None = None,
-    loader: EngineRulesLoader | None = None,
-) -> dict[str, EngineRules]:
-    """Load the engine rules corpus for each engine we may emit proposals against.
-
-    When ``loader`` is omitted, the memoised project-wide loader from
-    :func:`llenergymeasure.config.models._get_rules_loader` is used.
-    Tests inject a throwaway loader to sidestep the cache.
-
-    Engines without a YAML corpus are skipped silently - a user scanning
-    only transformers studies shouldn't fail because ``tensorrt.yaml`` is
-    absent.
-    """
-    if loader is None:
-        # Lazy import keeps this module free of a hard ``config.models``
-        # dependency at import time and matches that module's documented
-        # monkeypatch-via-setattr pattern.
-        from llenergymeasure.config.models import _get_rules_loader
-
-        loader = _get_rules_loader()
-    wanted = [e.value for e in Engine] if engines is None else [str(e) for e in engines]
-    out: dict[str, EngineRules] = {}
-    for engine in wanted:
-        try:
-            out[engine] = loader.load_rules(engine)
-        except FileNotFoundError:
-            logger.debug("No rules corpus for engine=%s; skipping match lookup.", engine)
-    return out
-
-
-def _build_observed_template_index(
-    corpus: dict[str, EngineRules],
-) -> dict[str, dict[str, frozenset[str]]]:
-    """Pre-normalise ``observed_messages`` once per rule at corpus-load time.
-
-    Means the hot unmatched-template loop does an O(1) set membership
-    probe rather than re-normalising every sample on every comparison.
-    """
-    index: dict[str, dict[str, frozenset[str]]] = {}
-    for engine_name, vr in corpus.items():
-        per_rule: dict[str, frozenset[str]] = {}
-        for rule in vr.rules:
-            observed = rule.expected_outcome.get("observed_messages")
-            if not isinstance(observed, list):
-                continue
-            templates = frozenset(normalise(s).template for s in observed if isinstance(s, str))
-            if templates:
-                per_rule[rule.id] = templates
-        index[engine_name] = per_rule
-    return index
-
-
-def _build_regex_index(
-    corpus: dict[str, EngineRules],
-) -> dict[str, dict[str, tuple[re.Pattern[str], ...]]]:
-    """Compile ``observed_messages_regex`` once per rule at corpus-load time."""
-    index: dict[str, dict[str, tuple[re.Pattern[str], ...]]] = {}
-    for engine_name, vr in corpus.items():
-        per_rule: dict[str, tuple[re.Pattern[str], ...]] = {}
-        for rule in vr.rules:
-            regexes = rule.expected_outcome.get("observed_messages_regex")
-            if not isinstance(regexes, list):
-                continue
-            compiled: list[re.Pattern[str]] = []
-            for pat in regexes:
-                try:
-                    compiled.append(re.compile(str(pat)))
-                except re.error:
-                    continue
-            if compiled:
-                per_rule[rule.id] = tuple(compiled)
-        index[engine_name] = per_rule
-    return index
-
-
-# ---------------------------------------------------------------------------
 # Core entry point
 # ---------------------------------------------------------------------------
 
 
 def find_runtime_gaps(
     study_dirs: list[Path],
-    engine_invariants: dict[str, EngineRules] | None = None,
     engine: Engine | str | None = None,
     include_exceptions: bool = False,
-    loader: EngineRulesLoader | None = None,
 ) -> list[GapProposal]:
-    """Scan one or more study directories and return unmatched-template proposals.
+    """Scan one or more study directories and return one proposal per template.
 
-    Order sorts by (engine, normalised_template). ``engine`` accepts an
-    :class:`Engine` enum or its string value. ``loader`` is only consulted
-    when ``engine_invariants`` is ``None``.
+    Every distinct ``(engine, normalised_template)`` observed at runtime
+    yields a proposal; output sorts by that key. ``engine`` accepts an
+    :class:`Engine` enum or its string value and filters to a single engine.
     """
     if not study_dirs:
         raise ReportGapsError("No study directories provided. Pass at least one --study-dir.")
@@ -274,14 +185,6 @@ def find_runtime_gaps(
     if not records:
         return []
 
-    corpus = (
-        engine_invariants
-        if engine_invariants is not None
-        else load_engine_invariants(loader=loader)
-    )
-    observed_index = _build_observed_template_index(corpus)
-    regex_index = _build_regex_index(corpus)
-
     # Build unique (engine, template) → emissions map. Key on engine too
     # because the same string emitted by two engines is conceptually two
     # different rules (different native types, different severity).
@@ -299,14 +202,6 @@ def find_runtime_gaps(
 
     proposals: list[GapProposal] = []
     for (eng, template), emissions in sorted(emissions_by_key.items()):
-        if _template_matched_by_corpus(
-            template,
-            corpus.get(eng),
-            observed_index.get(eng, {}),
-            regex_index.get(eng, {}),
-        ):
-            continue
-
         fired_hashes = {e.config_hash for e in emissions}
         collision_configs: list[dict[str, Any]] = []
         contrast_configs: list[dict[str, Any]] = []
@@ -321,8 +216,8 @@ def find_runtime_gaps(
         match_fields = _infer_predicate(collision_configs, contrast_configs)
         evidence = _field_value_distribution(collision_configs, contrast_configs)
         rep = representative_by_key[(eng, template)]
-        severity: Literal["warn", "error"] = (
-            "error" if rep.channel == "runtime_exception" else "warn"
+        severity: Literal["dormant", "error"] = (
+            "error" if rep.channel == "runtime_exception" else "dormant"
         )
         needs_review = match_fields is None or len(match_fields) >= 2
 
@@ -588,36 +483,6 @@ class _PrefixHashLookup(dict):  # type: ignore[type-arg]
 
 
 # ---------------------------------------------------------------------------
-# Corpus template match
-# ---------------------------------------------------------------------------
-
-
-def _template_matched_by_corpus(
-    template: str,
-    corpus: EngineRules | None,
-    observed_templates_by_rule: dict[str, frozenset[str]],
-    regexes_by_rule: dict[str, tuple[re.Pattern[str], ...]],
-) -> bool:
-    """Return True if any corpus rule already captures ``template``.
-
-    Both match strategies use pre-computed indexes:
-    - ``observed_messages_regex`` compiled once at corpus-load time.
-    - ``observed_messages`` pre-normalised once at corpus-load time so
-      the inner probe is O(1) set membership.
-    """
-    if corpus is None:
-        return False
-    for rule in corpus.rules:
-        patterns = regexes_by_rule.get(rule.id)
-        if patterns is not None and any(pat.match(template) for pat in patterns):
-            return True
-        observed = observed_templates_by_rule.get(rule.id)
-        if observed is not None and template in observed:
-            return True
-    return False
-
-
-# ---------------------------------------------------------------------------
 # Predicate inference (arity 1 → 2 → 3 + present:true fallback)
 # ---------------------------------------------------------------------------
 
@@ -685,67 +550,61 @@ _BANNER = (
     "# Rule fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
     "# src/llenergymeasure/engines/{engine}/rules.yaml under the 'rules:' key.\n"
     "# ----------------------------------------------------------------------\n"
-    "# added_by: runtime_warning - always, for runtime-derived rules.\n"
-    "# needs_generalisation_review: set when the predicate is narrow or\n"
-    "# missing. Reviewers must confirm severity, native_type, and predicate\n"
-    "# generalisation before merging.\n"
+    "# provenance.source is a placeholder ('manual'); confirm before merging.\n"
+    "# The evidence block below is a reviewer aid - delete it before appending.\n"
 )
 
 
 def render_yaml_fragment(proposal: GapProposal) -> str:
-    """Render one :class:`GapProposal` as a YAML document.
+    """Render one :class:`GapProposal` as a schema-valid Rule fragment.
 
-    The output always parses through
-    :func:`llenergymeasure.config.engine_rules.loader._parse_rule` -
-    placeholder fields are enum-valid so the round-trip test passes while
-    the ``# TODO: human`` markers make stubs obvious to reviewers.
+    The document parses through
+    :func:`llenergymeasure.config.engine_rules.loader._parse_rule` - every
+    key is a real Rule field with enum-valid placeholders, so the round-trip
+    test passes. A trailing comment block carries the runtime evidence
+    (collision/contrast counts, per-field value distribution) for reviewers.
     """
     template = proposal.normalised_template
     match_fields: dict[str, Any] = dict(proposal.match_fields) if proposal.match_fields else {}
-    outcome_value = "error" if proposal.severity == "error" else "warn"
     engine_str = proposal.engine.value
 
     proposal_doc: dict[str, Any] = {
         "id": _proposed_rule_id(proposal),
         "engine": engine_str,
-        "library": engine_str,
-        "invariant_under_test": (
-            "(runtime-derived) Library emitted normalised template; reviewer to confirm semantic."
-        ),
         "severity": proposal.severity,
-        "native_type": f"{engine_str}.<TODO: human - set concrete native type>",
-        "miner_source": {
-            "path": "<TODO: human - runtime-derived; no AST source>",
-            "method": "<TODO: human - no AST source>",
-            "line_at_scan": 0,
-        },
-        "match": {"engine": engine_str, "fields": match_fields},
-        "kwargs_positive": dict(proposal.representative_kwargs),
-        "kwargs_negative": {},
-        "expected_outcome": {
-            "outcome": outcome_value,
-            "emission_channel": proposal.source_channel,
-            "normalised_fields": [],
-            "observed_messages_regex": [build_template_regex(template)],
-            "observed_messages": [proposal.representative_message],
-        },
+        "match": {"fields": match_fields},
         "message_template": template,
-        "references": [
-            (
-                f"Observed in {proposal.collision_count} configs; "
-                f"absent in {proposal.contrast_count} configs."
-            ),
-            f"Representative raw message: {proposal.representative_message!r}",
-        ],
-        "added_by": "runtime_warning",
-        "added_at": "<TODO: human - YYYY-MM-DD>",
-        "source_channel": proposal.source_channel,
-        "needs_generalisation_review": proposal.needs_generalisation_review,
-        "evidence_field_value_distribution": proposal.evidence_field_value_distribution,
+        "provenance": {
+            "source": "manual",
+            "verified": "runtime",
+            "engine_version": proposal.library_version or "<TODO: human - library version>",
+            "citation": "<TODO: human - runtime-derived; no source citation>",
+            "date": "<TODO: human - YYYY-MM-DD>",
+        },
+        "normalised_fields": [],
     }
 
     body = yaml.safe_dump(proposal_doc, sort_keys=False, default_flow_style=False, width=100)
-    return _BANNER + body
+    return _BANNER + body + _render_evidence_comment(proposal)
+
+
+def _render_evidence_comment(proposal: GapProposal) -> str:
+    """Return a ``#``-prefixed reviewer evidence block (ignored by the loader)."""
+    lines = [
+        "# --- reviewer evidence (delete before appending) ---",
+        f"# source_channel: {proposal.source_channel}",
+        f"# needs_generalisation_review: {proposal.needs_generalisation_review}",
+        (
+            f"# observed in {proposal.collision_count} config(s); "
+            f"absent in {proposal.contrast_count} config(s)"
+        ),
+        f"# representative message: {proposal.representative_message!r}",
+    ]
+    for field_name, dist in sorted(proposal.evidence_field_value_distribution.items()):
+        lines.append(
+            f"#   {field_name}: fired={dist['collision_configs']} silent={dist['contrast_configs']}"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _proposed_rule_id(proposal: GapProposal) -> str:

@@ -753,9 +753,6 @@ class ExperimentConfig(BaseModel):
             annotated = f"[{rule.id}] {rule.render_message(match)}"
             if rule.severity == "error":
                 raise ValueError(annotated)
-            if rule.severity == "warn":
-                warnings.warn(annotated, ConfigValidationWarning, stacklevel=2)
-                continue
             if rule.severity == "dormant":
                 dormant_observations[rule.id] = DormantField(
                     declared_value=match.declared_value,

@@ -1,8 +1,9 @@
 """Load discovered engine schemas produced by ``scripts.engine_producers``.
 
-The discovered JSON files in ``discovered_schemas/`` are the canonical SSOT for
-"what parameters CAN be configured per engine". They are produced by running
-introspection inside each engine's Docker image and committed to the repo.
+The ``src/llenergymeasure/engines/{engine}/schema.discovered.json`` files are the
+canonical SSOT for "what parameters CAN be configured per engine". They are
+produced by running introspection inside each engine's Docker image and
+committed to the repo.
 
 This loader reads them via ``importlib.resources`` so it works in both editable
 installs and installed wheels. Repeated loads are cached per-engine. Major

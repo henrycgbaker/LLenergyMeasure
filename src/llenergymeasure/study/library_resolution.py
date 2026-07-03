@@ -84,7 +84,7 @@ def _apply_rules_fixpoint(
         LibraryResolutionCycleError: If the fixpoint loop exceeds
             :data:`_MAX_ITER` passes - the validated corpus has an rule cycle.
     """
-    dormant_rules = [r for r in rules if r.severity in ("dormant", "dormant_silent")]
+    dormant_rules = [r for r in rules if r.severity == "dormant"]
     if not dormant_rules:
         return config.model_copy(deep=True)
 
@@ -112,8 +112,8 @@ def _rule_normalisations(rule: Rule) -> dict[str, Any]:
 
     Strategy (per sweep-dedup.md §2.1 and the fixpoint test's projection):
 
-    1. If ``expected_outcome["normalised_fields"]`` lists explicit paths, they
-       collapse to ``None`` (the universal "strip this field" sentinel).
+    1. If ``normalised_fields`` lists explicit paths, they collapse to ``None``
+       (the universal "strip this field" sentinel).
     2. Otherwise, fall back to the rule's *match* predicate: any field
        matched with a ``not_equal`` / ``present`` operator is normalised by
        stripping (setting to ``None`` or the ``not_equal`` sentinel if
@@ -126,7 +126,7 @@ def _rule_normalisations(rule: Rule) -> dict[str, Any]:
     """
     out: dict[str, Any] = {}
 
-    explicit = rule.expected_outcome.get("normalised_fields") or []
+    explicit = rule.normalised_fields or ()
     for raw_path in explicit:
         path = str(raw_path)
         out[path] = None

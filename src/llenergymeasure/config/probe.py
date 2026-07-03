@@ -40,9 +40,9 @@ class ConfigProbe:
             constructor (vllm.LLM, AutoModelForCausalLM, tensorrt_llm.LLM).
         observed_sampling_params: Kwargs that would be passed to the
             sampling-params constructor after any greedy stripping.
-        dormant_fields: Keyed by dotted path (e.g. ``"vllm.sampling.top_p"``)
-            - fields the user declared that the engine will silently ignore
-            or override.
+        dormant_fields: Keyed by dotted path (e.g.
+            ``"vllm.sampling_params.top_p"``) - fields the user declared that
+            the engine will silently ignore or override.
         errors: Engine-reported framework errors (T1/T2 construction,
             hardware checks). Non-empty means the config will not run as-is.
         warnings: Non-fatal observations.

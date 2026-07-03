@@ -1,10 +1,10 @@
 """Tests for the generic ``_apply_rules`` model validator.
 
-Covers the severity dispatch paths (error / dormant, plus the warn branch
-that survives in the validator until its B-phase rework) and the no-match /
-missing-corpus fallbacks. Rule loading is exercised by
-``tests/unit/config/engine_rules/test_loader.py``; this module focuses on
-the validator's dispatch and the ``_dormant_observations`` contract.
+Covers the severity dispatch paths (error / dormant), the out-of-enum
+severity fallback, and the no-match / missing-corpus fallbacks. Rule
+loading is exercised by ``tests/unit/config/engine_rules/test_loader.py``;
+this module focuses on the validator's dispatch and the
+``_dormant_observations`` contract.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ class _NoCorpusLoader:
         raise FileNotFoundError(f"no corpus for {engine}")
 
 
-def _install_test_invariants(monkeypatch: pytest.MonkeyPatch, rules: list[Rule]) -> None:
+def _install_test_rules(monkeypatch: pytest.MonkeyPatch, rules: list[Rule]) -> None:
     """Substitute the module's loader accessor with a stub returning *rules*."""
     from llenergymeasure.config import models as models_mod
 
@@ -94,7 +94,7 @@ def test_error_severity_raises_validation_error(monkeypatch: pytest.MonkeyPatch)
         "error",
         {"transformers.engine_params.attn_implementation": "sdpa"},
     )
-    _install_test_invariants(monkeypatch, [rule])
+    _install_test_rules(monkeypatch, [rule])
 
     with pytest.raises(ValidationError) as exc_info:
         ExperimentConfig(
@@ -111,7 +111,7 @@ def test_error_severity_no_raise_when_match_misses(monkeypatch: pytest.MonkeyPat
         "error",
         {"transformers.engine_params.attn_implementation": "flash_attention_2"},
     )
-    _install_test_invariants(monkeypatch, [rule])
+    _install_test_rules(monkeypatch, [rule])
 
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
@@ -122,17 +122,23 @@ def test_error_severity_no_raise_when_match_misses(monkeypatch: pytest.MonkeyPat
 
 
 # ---------------------------------------------------------------------------
-# Severity dispatch - warn
+# Severity dispatch - out-of-enum fallback
 # ---------------------------------------------------------------------------
+#
+# The loader's closed ``{error, dormant}`` enum makes any other severity
+# unreachable in production; direct construction bypasses that check so the
+# defensive fallback branch stays covered.
 
 
-def test_warn_severity_emits_config_validation_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_out_of_enum_severity_emits_config_validation_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     rule = _make_rule(
-        "test_warn_rule",
-        "warn",
+        "test_bogus_rule",
+        "bogus",
         {"transformers.engine_params.attn_implementation": "eager"},
     )
-    _install_test_invariants(monkeypatch, [rule])
+    _install_test_rules(monkeypatch, [rule])
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", ConfigValidationWarning)
@@ -144,19 +150,20 @@ def test_warn_severity_emits_config_validation_warning(monkeypatch: pytest.Monke
 
     matched = [w for w in caught if issubclass(w.category, ConfigValidationWarning)]
     assert matched, "expected a ConfigValidationWarning"
-    assert "test_warn_rule" in str(matched[0].message)
+    assert "test_bogus_rule" in str(matched[0].message)
+    assert "unknown severity" in str(matched[0].message)
 
 
-def test_warn_severity_not_fatal_under_simplefilter_error(
+def test_out_of_enum_severity_not_fatal_under_simplefilter_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``simplefilter('error', ConfigValidationWarning)`` escalates warn to raise."""
+    """``simplefilter('error', ConfigValidationWarning)`` escalates the fallback to raise."""
     rule = _make_rule(
-        "test_warn_rule",
-        "warn",
+        "test_bogus_rule",
+        "bogus",
         {"transformers.engine_params.attn_implementation": "eager"},
     )
-    _install_test_invariants(monkeypatch, [rule])
+    _install_test_rules(monkeypatch, [rule])
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", ConfigValidationWarning)
@@ -179,7 +186,7 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
         "dormant",
         {"transformers.sampling_params.temperature": {"present": True, "not_equal": 1.0}},
     )
-    _install_test_invariants(monkeypatch, [rule])
+    _install_test_rules(monkeypatch, [rule])
 
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
@@ -211,7 +218,7 @@ def test_missing_corpus_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_empty_rule_set_populates_empty_observations(monkeypatch: pytest.MonkeyPatch) -> None:
-    _install_test_invariants(monkeypatch, [])
+    _install_test_rules(monkeypatch, [])
     cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     assert cfg._dormant_observations == {}
 
@@ -226,7 +233,7 @@ def test_multiple_dormant_rules_all_recorded(monkeypatch: pytest.MonkeyPatch) ->
         "a", "dormant", {"transformers.sampling_params.temperature": {"present": True}}
     )
     rule_b = _make_rule("b", "dormant", {"transformers.sampling_params.top_p": {"present": True}})
-    _install_test_invariants(monkeypatch, [rule_a, rule_b])
+    _install_test_rules(monkeypatch, [rule_a, rule_b])
 
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
@@ -243,7 +250,7 @@ def test_error_rule_shortcircuits_later_rules(monkeypatch: pytest.MonkeyPatch) -
         "dormant",
         {"transformers.sampling_params.temperature": {"present": True}},
     )
-    _install_test_invariants(monkeypatch, [err, dormant])
+    _install_test_rules(monkeypatch, [err, dormant])
 
     with pytest.raises(ValidationError):
         ExperimentConfig(
@@ -267,7 +274,7 @@ def test_unknown_severity_emits_warning(monkeypatch: pytest.MonkeyPatch) -> None
         "not_a_real_severity",
         {"transformers.engine_params.attn_implementation": "sdpa"},
     )
-    _install_test_invariants(monkeypatch, [rule])
+    _install_test_rules(monkeypatch, [rule])
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", ConfigValidationWarning)

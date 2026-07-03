@@ -306,11 +306,3 @@ def test_normalised_fields_string_coerces_to_tuple(tmp_path: Path) -> None:
     loader = EngineRulesLoader(corpus_root=tmp_path)
     rule = loader.load_rules("transformers").rules[0]
     assert rule.normalised_fields == ("transformers.sampling.temperature",)
-
-
-def test_expected_outcome_shim_exposes_normalised_fields(tmp_path: Path) -> None:
-    # Deprecated compatibility surface: consumers not yet reworked (B2/B4)
-    # read normalised_fields via the old expected_outcome mapping shape.
-    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    rule = EngineRulesLoader(corpus_root=tmp_path).load_rules("transformers").rules[0]
-    assert rule.expected_outcome == {"normalised_fields": ["transformers.sampling.temperature"]}

@@ -173,30 +173,19 @@ class Rule:
     field-inert configs. Empty for ``error`` rules.
     """
 
-    @property
-    def expected_outcome(self) -> dict[str, Any]:
-        """Deprecated compatibility shim exposing ``normalised_fields``.
-
-        The pre-carve corpus nested ``normalised_fields`` inside an
-        ``expected_outcome`` mapping alongside now-removed outcome/emission
-        vocabulary. Two consumers still read via this shape
-        (``study.library_resolution`` and ``api.report_gaps``); B2/B4 rework
-        them to read :attr:`normalised_fields` directly and drop this shim.
-        """
-        return {"normalised_fields": list(self.normalised_fields)}
-
     def try_match(self, config: Any) -> RuleMatch | None:
         """Return an :class:`RuleMatch` if every predicate in ``match_fields`` holds.
 
-        Field paths are dotted (``"transformers.sampling.temperature"``) and
-        resolve against ``config`` attribute-by-attribute, tolerating Pydantic
-        models, dataclasses, and plain dicts.
+        Field paths are dotted (``"transformers.sampling_params.temperature"``)
+        and resolve against ``config`` attribute-by-attribute, tolerating
+        Pydantic models, dataclasses, and plain dicts.
 
         Predicate specs may carry ``@field_path`` references on the right-hand
         side of any operator. References resolve against the same ``config``
         before predicate evaluation. Bare references (``@num_beams``) resolve
         as siblings of the predicate's field; dotted references
-        (``@transformers.sampling.num_beams``) resolve from the config root.
+        (``@transformers.sampling_params.num_return_sequences``) resolve from
+        the config root.
 
         ``declared_value`` on the returned match is the last field's value -
         corpus convention puts precondition fields first and the subject field

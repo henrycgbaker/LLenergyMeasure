@@ -163,13 +163,13 @@ class TestCanonicalise:
         cfg = _mk_config(transformers={"sampling_params": {"do_sample": True, "temperature": 0.5}})
         rule = _mk_rule(
             invariant_id="not_dormant",
-            severity="warn",
+            severity="error",
             match_fields={
                 "transformers.sampling_params.temperature": {"present": True, "not_equal": 1.0},
             },
         )
         result = _apply_rules_fixpoint(cfg, [rule])
-        # warn severity must not trigger normalisation.
+        # Only dormant rules normalise; an error-severity rule must not.
         assert result.transformers.sampling_params.temperature == 0.5
 
 
