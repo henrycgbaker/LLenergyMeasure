@@ -119,7 +119,7 @@ def save_config_sidecar(
     - ``observed_config_hash`` - library-observation hash computed from the effective
       params at sidecar-write time.
     - ``config_validation_observations`` - DormantField entries that
-      ``_apply_invariants`` attached at load time.
+      ``_apply_rules`` attached at load time.
 
     Any missing optional field is omitted from the sidecar (not written as
     null) so downstream consumers distinguish "not available" from

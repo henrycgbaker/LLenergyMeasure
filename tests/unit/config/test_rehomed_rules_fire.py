@@ -2,7 +2,7 @@
 
 The re-homed bounds (item 6b of the pin-advance) live in the shipped rules.yaml
 rather than as generated Field constraints. Each rule must resolve at
-``Invariant.try_match`` against the generated nested config shape
+``Rule.try_match`` against the generated nested config shape
 (``<engine>.engine_params.<field>`` / ``<engine>.sampling_params.<field>``); a
 path that does not resolve silently never fires. These tests construct a
 violating config through the public ``ExperimentConfig`` path and assert the

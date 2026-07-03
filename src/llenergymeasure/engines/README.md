@@ -34,7 +34,7 @@ engines/
 ```
 
 The runtime data files (`rules.yaml`, `schema.discovered.json`) are loaded by
-`llenergymeasure.config.engine_rules.EngineInvariantsLoader` and
+`llenergymeasure.config.engine_rules.EngineRulesLoader` and
 `llenergymeasure.config.SchemaLoader` respectively. `rules.yaml` is the ONE
 shipped rules file per engine: severity is a closed `{error, dormant}` enum,
 every rule carries a provenance block (source / verified / citation /
@@ -58,7 +58,7 @@ class MyEngine:
     def check_hardware(self, config: ExperimentConfig) -> list[str]: ...
 ```
 
-`check_hardware()` returns a list of error strings (empty means compatible). Called via `engines.probe_adapter.build_config_probe()` at preflight to catch host-GPU mismatches (e.g., FP8 on A100, SM below the engine's floor). Framework-invariant validation (library-semantics) lives in the shipped rules corpus consumed by `ExperimentConfig._apply_invariants`.
+`check_hardware()` returns a list of error strings (empty means compatible). Called via `engines.probe_adapter.build_config_probe()` at preflight to catch host-GPU mismatches (e.g., FP8 on A100, SM below the engine's floor). Framework-invariant validation (library-semantics) lives in the shipped rules corpus consumed by `ExperimentConfig._apply_rules`.
 
 `InferenceOutput` carries the minimal data the harness needs:
 

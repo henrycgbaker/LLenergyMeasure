@@ -1,10 +1,10 @@
-"""``llem report-gaps`` - feedback-loop proposer for the invariants corpus.
+"""``llem report-gaps`` - feedback-loop proposer for the rules corpus.
 
 Reads ``runtime_observations.jsonl`` emitted by
 :mod:`llenergymeasure.study.runtime_observations`, groups captured warnings
 and log records by their normalised message template, partitions configs
-into *collision_configs* (A) and *not collision_configs* (B), and proposes corpus invariants for
-templates the existing invariants corpus does not already match.
+into *collision_configs* (A) and *not collision_configs* (B), and proposes corpus rules for
+templates the existing rules corpus does not already match.
 
 Design:
 
@@ -12,7 +12,7 @@ Design:
   live ``src/llenergymeasure/engines/{engine}/rules.yaml`` is never touched.
 - **Severity is mechanical.** ``warn`` for log-channel emissions;
   ``error`` when ``include_exceptions=True`` and the record is an
-  exception. Invariant fragments are always ``added_by: runtime_warning``.
+  exception. Rule fragments are always ``added_by: runtime_warning``.
 - **Emission channels.** ``EmissionChannel`` is this module's own runtime
   taxonomy (which channel a captured record came through); it is not part of
   the shipped rules schema.
@@ -42,8 +42,8 @@ from typing import Any, Literal
 import yaml
 
 from llenergymeasure.config.engine_rules import (
-    EngineInvariants,
-    EngineInvariantsLoader,
+    EngineRules,
+    EngineRulesLoader,
 )
 from llenergymeasure.config.ssot import Engine
 from llenergymeasure.study.message_normalise import build_template_regex, normalise
@@ -145,12 +145,12 @@ _ALLOWED_ENGINES: frozenset[str] = frozenset(e.value for e in Engine)
 
 def load_engine_invariants(
     engines: list[Engine] | list[str] | None = None,
-    loader: EngineInvariantsLoader | None = None,
-) -> dict[str, EngineInvariants]:
-    """Load the engine invariants corpus for each engine we may emit proposals against.
+    loader: EngineRulesLoader | None = None,
+) -> dict[str, EngineRules]:
+    """Load the engine rules corpus for each engine we may emit proposals against.
 
     When ``loader`` is omitted, the memoised project-wide loader from
-    :func:`llenergymeasure.config.models._get_invariants_loader` is used.
+    :func:`llenergymeasure.config.models._get_rules_loader` is used.
     Tests inject a throwaway loader to sidestep the cache.
 
     Engines without a YAML corpus are skipped silently - a user scanning
@@ -161,21 +161,21 @@ def load_engine_invariants(
         # Lazy import keeps this module free of a hard ``config.models``
         # dependency at import time and matches that module's documented
         # monkeypatch-via-setattr pattern.
-        from llenergymeasure.config.models import _get_invariants_loader
+        from llenergymeasure.config.models import _get_rules_loader
 
-        loader = _get_invariants_loader()
+        loader = _get_rules_loader()
     wanted = [e.value for e in Engine] if engines is None else [str(e) for e in engines]
-    out: dict[str, EngineInvariants] = {}
+    out: dict[str, EngineRules] = {}
     for engine in wanted:
         try:
-            out[engine] = loader.load_invariants(engine)
+            out[engine] = loader.load_rules(engine)
         except FileNotFoundError:
-            logger.debug("No invariants corpus for engine=%s; skipping match lookup.", engine)
+            logger.debug("No rules corpus for engine=%s; skipping match lookup.", engine)
     return out
 
 
 def _build_observed_template_index(
-    corpus: dict[str, EngineInvariants],
+    corpus: dict[str, EngineRules],
 ) -> dict[str, dict[str, frozenset[str]]]:
     """Pre-normalise ``observed_messages`` once per rule at corpus-load time.
 
@@ -185,7 +185,7 @@ def _build_observed_template_index(
     index: dict[str, dict[str, frozenset[str]]] = {}
     for engine_name, vr in corpus.items():
         per_rule: dict[str, frozenset[str]] = {}
-        for rule in vr.invariants:
+        for rule in vr.rules:
             observed = rule.expected_outcome.get("observed_messages")
             if not isinstance(observed, list):
                 continue
@@ -197,13 +197,13 @@ def _build_observed_template_index(
 
 
 def _build_regex_index(
-    corpus: dict[str, EngineInvariants],
+    corpus: dict[str, EngineRules],
 ) -> dict[str, dict[str, tuple[re.Pattern[str], ...]]]:
     """Compile ``observed_messages_regex`` once per rule at corpus-load time."""
     index: dict[str, dict[str, tuple[re.Pattern[str], ...]]] = {}
     for engine_name, vr in corpus.items():
         per_rule: dict[str, tuple[re.Pattern[str], ...]] = {}
-        for rule in vr.invariants:
+        for rule in vr.rules:
             regexes = rule.expected_outcome.get("observed_messages_regex")
             if not isinstance(regexes, list):
                 continue
@@ -226,10 +226,10 @@ def _build_regex_index(
 
 def find_runtime_gaps(
     study_dirs: list[Path],
-    engine_invariants: dict[str, EngineInvariants] | None = None,
+    engine_invariants: dict[str, EngineRules] | None = None,
     engine: Engine | str | None = None,
     include_exceptions: bool = False,
-    loader: EngineInvariantsLoader | None = None,
+    loader: EngineRulesLoader | None = None,
 ) -> list[GapProposal]:
     """Scan one or more study directories and return unmatched-template proposals.
 
@@ -594,7 +594,7 @@ class _PrefixHashLookup(dict):  # type: ignore[type-arg]
 
 def _template_matched_by_corpus(
     template: str,
-    corpus: EngineInvariants | None,
+    corpus: EngineRules | None,
     observed_templates_by_rule: dict[str, frozenset[str]],
     regexes_by_rule: dict[str, tuple[re.Pattern[str], ...]],
 ) -> bool:
@@ -607,7 +607,7 @@ def _template_matched_by_corpus(
     """
     if corpus is None:
         return False
-    for rule in corpus.invariants:
+    for rule in corpus.rules:
         patterns = regexes_by_rule.get(rule.id)
         if patterns is not None and any(pat.match(template) for pat in patterns):
             return True
@@ -682,7 +682,7 @@ def _field_value_distribution(
 
 
 _BANNER = (
-    "# Invariant fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
+    "# Rule fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
     "# src/llenergymeasure/engines/{engine}/rules.yaml under the 'rules:' key.\n"
     "# ----------------------------------------------------------------------\n"
     "# added_by: runtime_warning - always, for runtime-derived rules.\n"

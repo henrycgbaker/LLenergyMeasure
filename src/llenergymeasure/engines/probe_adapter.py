@@ -11,7 +11,7 @@ def build_config_probe(config: ExperimentConfig) -> ConfigProbe:
 
     Composes two disjoint inputs:
       - hardware errors from :meth:`EnginePlugin.check_hardware`
-      - dormancy observations from :meth:`ExperimentConfig._apply_invariants`
+      - dormancy observations from :meth:`ExperimentConfig._apply_rules`
         (via the ``_dormant_observations`` attribute, a ``dict[invariant_id, DormantField]``)
 
     Never raises: hardware-check exceptions are trapped into ``errors``.

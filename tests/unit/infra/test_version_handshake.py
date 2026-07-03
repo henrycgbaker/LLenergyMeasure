@@ -243,14 +243,14 @@ class TestReadSsotEngineVersion:
 
 
 # ---------------------------------------------------------------------------
-# read_bundled_engine_version - reads bundled invariants + schema envelopes
+# read_bundled_engine_version - reads bundled rules + schema envelopes
 # ---------------------------------------------------------------------------
 
 
 class TestReadBundledEngineVersion:
     @pytest.mark.parametrize("engine", sorted(ALL_ENGINES))
     def test_known_engine_returns_envelope_version(self, engine: str) -> None:
-        """Bundled invariants + schema envelopes carry engine_version; both agree."""
+        """Bundled rules + schema envelopes carry engine_version; both agree."""
         version = read_bundled_engine_version(engine)
         assert isinstance(version, str)
         assert version  # non-empty
@@ -264,21 +264,21 @@ class TestReadBundledEngineVersion:
         """Bundled artefact disagreement is a build-time bundling bug; raise loud."""
         from dataclasses import replace
 
-        from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
+        from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
         from llenergymeasure.config.schema_loader import SchemaLoader
 
-        original_load_invariants = EngineInvariantsLoader.load_invariants
+        original_load_rules = EngineRulesLoader.load_rules
         original_load_schema = SchemaLoader.load_schema
 
-        def fake_load_invariants(self, engine):  # type: ignore[no-untyped-def]
-            real = original_load_invariants(self, engine)
+        def fake_load_rules(self, engine):  # type: ignore[no-untyped-def]
+            real = original_load_rules(self, engine)
             return replace(real, engine_version="1.2.3")
 
         def fake_load_schema(self, engine):  # type: ignore[no-untyped-def]
             real = original_load_schema(self, engine)
             return replace(real, engine_version="9.9.9")
 
-        monkeypatch.setattr(EngineInvariantsLoader, "load_invariants", fake_load_invariants)
+        monkeypatch.setattr(EngineRulesLoader, "load_rules", fake_load_rules)
         monkeypatch.setattr(SchemaLoader, "load_schema", fake_load_schema)
 
         with pytest.raises(BundledEngineVersionMismatchError, match=r"1\.2\.3.*9\.9\.9"):

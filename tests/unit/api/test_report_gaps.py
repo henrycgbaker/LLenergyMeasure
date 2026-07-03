@@ -20,7 +20,7 @@ from llenergymeasure.api.report_gaps import (
     find_runtime_gaps,
     render_yaml_fragment,
 )
-from llenergymeasure.config.engine_rules import EngineInvariants
+from llenergymeasure.config.engine_rules import EngineRules
 from llenergymeasure.config.engine_rules.loader import _parse_envelope
 from tests.helpers.runtime_obs import (
     fake_hash as _fake_hash,
@@ -37,8 +37,8 @@ from tests.helpers.runtime_obs import (
 # ---------------------------------------------------------------------------
 
 
-def _build_empty_invariants() -> dict[str, EngineInvariants]:
-    """Return an empty invariants corpus for transformers (so nothing suppresses gaps)."""
+def _build_empty_invariants() -> dict[str, EngineRules]:
+    """Return an empty rules corpus for transformers (so nothing suppresses gaps)."""
     envelope = "schema_version: 1.0.0\nengine: transformers\nrules: []\n"
     return {"transformers": _parse_envelope("transformers", envelope)}
 
@@ -64,7 +64,7 @@ def test_predicate_inference_equality() -> None:
 
 def test_predicate_inference_multi_field() -> None:
     """Arity-2 predicate is recovered when no single field distinguishes."""
-    # temperature=0.0 fires only when do_sample=True (greedy-with-temp-0 invariant).
+    # temperature=0.0 fires only when do_sample=True (greedy-with-temp-0 rule).
     collision_configs = [
         {"do_sample": True, "temperature": 0.0, "top_p": 0.95},
         {"do_sample": True, "temperature": 0.0, "top_p": 1.0},
@@ -253,7 +253,7 @@ def test_engine_filter(tmp_path: Path) -> None:
     )
 
     # No corpus for vllm - engines without a corpus still allow proposals
-    # through (the loader returns no suppressing invariant).
+    # through (the loader returns no suppressing rule).
     gaps = find_runtime_gaps([study], engine_invariants={}, engine="vllm")
     assert len(gaps) == 1
     assert gaps[0].engine == "vllm"
@@ -371,7 +371,7 @@ def test_rendered_fragment_is_valid_yaml(tmp_path: Path) -> None:
     assert rule_doc["expected_outcome"]["emission_channel"] == "warnings_warn"
     assert rule_doc["match"]["fields"]
     # Banner comment present at top of raw YAML fragment output.
-    assert "Invariant fragment proposed by 'llem report-gaps'" in yaml_body
+    assert "Rule fragment proposed by 'llem report-gaps'" in yaml_body
 
 
 def test_render_yaml_error_severity(tmp_path: Path) -> None:
