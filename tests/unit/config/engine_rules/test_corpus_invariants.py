@@ -49,42 +49,45 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
 
     required_fields = (
         # Greedy dormancy: do_sample=False / num_beams=1 strip these.
-        "transformers.sampling.temperature",
-        "transformers.sampling.top_p",
-        "transformers.sampling.top_k",
-        "transformers.sampling.min_p",
-        "transformers.sampling.typical_p",
-        "transformers.sampling.epsilon_cutoff",
-        "transformers.sampling.eta_cutoff",
-        # Single-beam dormancy.
-        "transformers.sampling.early_stopping",
-        "transformers.sampling.length_penalty",
+        "transformers.sampling_params.temperature",
+        "transformers.sampling_params.top_p",
+        "transformers.sampling_params.top_k",
+        "transformers.sampling_params.min_p",
+        "transformers.sampling_params.typical_p",
+        "transformers.sampling_params.epsilon_cutoff",
+        "transformers.sampling_params.eta_cutoff",
+        # Single-beam dormancy (num_beams/early_stopping/length_penalty are
+        # engine-construction knobs under the nested shape).
+        "transformers.engine_params.early_stopping",
+        "transformers.engine_params.length_penalty",
         # Note: num_beam_groups + diversity_penalty validations were softened
         # in transformers 4.57.x (error -> announced or no-op). Coverage loss
         # tracked separately; do NOT re-add without first confirming the
         # library re-introduced enforcement.
         # No-return-dict dormancy.
-        "transformers.sampling.output_scores",
-        "transformers.sampling.output_attentions",
-        "transformers.sampling.output_hidden_states",
+        "transformers.sampling_params.output_scores",
+        "transformers.sampling_params.output_attentions",
+        "transformers.sampling_params.output_hidden_states",
         # GenerationConfig.validate() error rules.
-        "transformers.sampling.max_new_tokens",
-        "transformers.sampling.cache_implementation",
-        "transformers.sampling.num_return_sequences",
-        "transformers.sampling.pad_token_id",
-        "transformers.sampling.compile_config",
+        "transformers.sampling_params.max_new_tokens",
+        "transformers.engine_params.cache_implementation",
+        "transformers.sampling_params.num_return_sequences",
+        "transformers.sampling_params.pad_token_id",
+        "transformers.sampling_params.compile_config",
         # Cross-field beam-search gates.
-        "transformers.sampling.num_beams",
+        "transformers.engine_params.num_beams",
         # Watermarking + BNB type-check paths.
-        "transformers.sampling.watermarking_config",
-        "transformers.load_in_4bit",
-        "transformers.load_in_8bit",
-        "transformers.llm_int8_threshold",
-        "transformers.llm_int8_skip_modules",
-        "transformers.llm_int8_enable_fp32_cpu_offload",
-        "transformers.llm_int8_has_fp16_weight",
-        "transformers.bnb_4bit_quant_type",
-        "transformers.bnb_4bit_use_double_quant",
+        "transformers.sampling_params.watermarking_config",
+        "transformers.engine_params.load_in_4bit",
+        "transformers.engine_params.load_in_8bit",
+        # Note: the four llm_int8_* BitsAndBytesConfig type-check rules shipped
+        # for transformers 4.57.3 dropped out at the 5.7.0 pin - those fields are
+        # no longer on the engine config surface (the generated Config exposes
+        # load_in_8bit + bnb_4bit_* but not llm_int8_*), so a match-field rule on
+        # them is unreachable. Do NOT re-add without confirming the library
+        # re-exposes them.
+        "transformers.engine_params.bnb_4bit_quant_type",
+        "transformers.engine_params.bnb_4bit_use_double_quant",
     )
     missing = [path for path in required_fields if not covers_field(path)]
     assert not missing, (
@@ -94,7 +97,10 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # Cross-field rules - at least one rule must AND-combine the listed
     # fields. Catches regressions that lose the cross-field predicate.
     cross_field_pairs = (
-        ("transformers.sampling.num_beams", "transformers.sampling.num_return_sequences"),
+        (
+            "transformers.engine_params.num_beams",
+            "transformers.sampling_params.num_return_sequences",
+        ),
     )
     missing_pairs = [
         pair

@@ -155,7 +155,9 @@ class TestQuantisation:
         fields (discovery debt for the quant_config sub-schema).
         """
         config = _make_trt(quant_config={"quant_algo": "fp8"})  # lowercase
-        assert config.tensorrt.engine_params.quant_config["quant_algo"] == "fp8"
+        quant_config = config.tensorrt.engine_params.quant_config
+        assert quant_config is not None
+        assert quant_config["quant_algo"] == "fp8"
 
 
 # CFG-03: Calibration sub-config dropped (D3) - tests removed.
@@ -186,6 +188,7 @@ class TestKvCache:
             }
         )
         kv = config.tensorrt.engine_params.kv_cache_config
+        assert kv is not None
         assert kv["enable_block_reuse"] is True
         assert kv["free_gpu_memory_fraction"] == 0.85
         assert kv["max_tokens"] == 4096
@@ -195,9 +198,13 @@ class TestKvCache:
         """free_gpu_memory_fraction values round-trip (no Pydantic range check on dict)."""
         # Valid boundaries accepted
         config = _make_trt(kv_cache_config={"free_gpu_memory_fraction": 0.0})
-        assert config.tensorrt.engine_params.kv_cache_config["free_gpu_memory_fraction"] == 0.0
+        kv = config.tensorrt.engine_params.kv_cache_config
+        assert kv is not None
+        assert kv["free_gpu_memory_fraction"] == 0.0
         config = _make_trt(kv_cache_config={"free_gpu_memory_fraction": 1.0})
-        assert config.tensorrt.engine_params.kv_cache_config["free_gpu_memory_fraction"] == 1.0
+        kv = config.tensorrt.engine_params.kv_cache_config
+        assert kv is not None
+        assert kv["free_gpu_memory_fraction"] == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -224,23 +231,23 @@ class TestScheduler:
         """Scheduler dict with valid policy round-trips."""
         config = _make_trt(scheduler_config={"capacity_scheduling_policy": "GUARANTEED_NO_EVICT"})
         sched = config.tensorrt.engine_params.scheduler_config
+        assert sched is not None
         assert sched["capacity_scheduling_policy"] == "GUARANTEED_NO_EVICT"
 
     @pytest.mark.parametrize("policy", _VALID_SCHEDULER_POLICIES)
     def test_valid_scheduler_policies(self, policy: str):
         """All valid scheduler policies round-trip on the dict."""
         config = _make_trt(scheduler_config={"capacity_scheduling_policy": policy})
-        assert (
-            config.tensorrt.engine_params.scheduler_config["capacity_scheduling_policy"] == policy
-        )
+        sched = config.tensorrt.engine_params.scheduler_config
+        assert sched is not None
+        assert sched["capacity_scheduling_policy"] == policy
 
     def test_arbitrary_scheduler_policy_accepted(self):
         """Arbitrary scheduler policy values round-trip (no Literal restriction on dict)."""
         config = _make_trt(scheduler_config={"capacity_scheduling_policy": "INVALID_POLICY"})
-        assert (
-            config.tensorrt.engine_params.scheduler_config["capacity_scheduling_policy"]
-            == "INVALID_POLICY"
-        )
+        sched = config.tensorrt.engine_params.scheduler_config
+        assert sched is not None
+        assert sched["capacity_scheduling_policy"] == "INVALID_POLICY"
 
 
 # CFG-06: Build cache sub-config dropped (D1) - tests removed.
@@ -330,7 +337,9 @@ class TestExperimentConfigIntegration:
         assert ep.pipeline_parallel_size == 2
         assert ep.max_num_tokens == 4096
         assert ep.quant_config == {"quant_algo": "W4A16_AWQ"}
+        assert ep.kv_cache_config is not None
         assert ep.kv_cache_config["enable_block_reuse"] is True
+        assert ep.scheduler_config is not None
         assert ep.scheduler_config["capacity_scheduling_policy"] == "MAX_UTILIZATION"
         assert config.tensorrt.sampling_params is not None
         assert config.tensorrt.sampling_params.n == 1

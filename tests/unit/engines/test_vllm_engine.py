@@ -747,6 +747,7 @@ class TestBeamSearchParams:
             },
         )
         bs = config.vllm.engine_params.beam_search
+        assert bs is not None
         assert bs["beam_width"] == 8
         assert bs["length_penalty"] == 1.2
         assert bs["early_stopping"] is True

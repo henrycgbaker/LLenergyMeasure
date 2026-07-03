@@ -485,7 +485,7 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
     # pipeline is unchanged (6 declared -> 4 unique below still holds). A value
     # change with those structural assertions intact is a benign schema-surface
     # shift; a change to the dedup counts is not.
-    assert sc.study_design_hash == "3bff73061a555b8d"
+    assert sc.study_design_hash == "d46af75d621fc28a"
     # 6 declared configs collapse to 4 unique under resolved-config dedup.
     assert len(sc.experiments) == 4
     assert len(sc.declared_resolved_config_hashes) == 6
