@@ -199,6 +199,13 @@ ignore_imports = [
     # (needs results.persistence). Import is local-inside-method; no cycle risk.
     # H3 hashing now imports from domain.hashing (L0) - no layer breach.
     "llenergymeasure.harness.measurement -> llenergymeasure.results.persistence",
+    # ExperimentConfig consumes the generated engines.<e>.config.Config (the
+    # nested engine_params / sampling_params shape projected from the mined
+    # schema). The generated config is a pure-data Pydantic class with no engine
+    # logic, so config consuming it is the intended "engines own their shapes,
+    # llem mirrors them" direction, not an upward dependency on engine behaviour.
+    "llenergymeasure.config.models -> llenergymeasure.engines.*.config",
+    "llenergymeasure.config.introspection -> llenergymeasure.engines.*.config",
 ]
 
 [[tool.importlinter.contracts]]
@@ -245,6 +252,14 @@ forbidden_modules = [
     "llenergymeasure.infra",
     "llenergymeasure.results",
     "llenergymeasure.datasets",
+]
+ignore_imports = [
+    # ExperimentConfig consumes the generated engines.<e>.config.Config (pure
+    # data, projected from the mined schema). "Engines own their shapes, llem
+    # mirrors them" - config reads the shape, not engine behaviour. See the
+    # matching main-layers ignore above.
+    "llenergymeasure.config.models -> llenergymeasure.engines.*.config",
+    "llenergymeasure.config.introspection -> llenergymeasure.engines.*.config",
 ]
 
 [[tool.importlinter.contracts]]

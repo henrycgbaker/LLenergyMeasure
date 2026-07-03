@@ -311,10 +311,9 @@ def _canonical_excerpt(config: ExperimentConfig) -> dict[str, Any]:
         "engine": engine,
         "task.model": config.task.model,
     }
-    section = getattr(config, engine, None)
-    sampling = getattr(section, "sampling", None) if section is not None else None
+    sampling = config.active_sampling_params()
     if sampling is not None:
         dumped = sampling.model_dump(mode="python", exclude_none=True)
         for key, value in dumped.items():
-            excerpt[f"{engine}.sampling.{key}"] = value
+            excerpt[f"{engine}.sampling_params.{key}"] = value
     return excerpt

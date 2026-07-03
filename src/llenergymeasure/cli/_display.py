@@ -106,8 +106,8 @@ def print_dry_run(
             return f" ({field} default)" if field not in ("engine", "dtype") else " (default)"
         return ""
 
-    engine_section = getattr(config, config.engine, None)
-    engine_dtype = getattr(engine_section, "dtype", None)
+    engine_params = config.active_engine_params()
+    engine_dtype = getattr(engine_params, "dtype", None)
 
     print("Config (resolved)")
     print(f"  Model          {config.task.model}")
@@ -115,10 +115,11 @@ def print_dry_run(
     dtype_display = engine_dtype or "-"
     print(f"  Dtype          {dtype_display}{_annotate('dtype', engine_dtype)}")
 
-    # Batch size - from transformers section if present
+    # Batch size - transformers llem-orchestration knob (HarnessConfig), if present
     batch_size: int | None = None
-    if config.transformers is not None and hasattr(config.transformers, "batch_size"):
-        batch_size = config.transformers.batch_size
+    harness = config.harness.transformers if config.harness is not None else None
+    if harness is not None:
+        batch_size = harness.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")
 
