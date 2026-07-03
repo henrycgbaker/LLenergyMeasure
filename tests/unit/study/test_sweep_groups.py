@@ -37,7 +37,7 @@ class TestIsGroup:
         assert _is_group(["float16", "bfloat16"]) is False
 
     def test_list_of_dicts_is_group(self):
-        assert _is_group([{"transformers.torch_compile": True}]) is True
+        assert _is_group([{"harness.transformers.torch_compile": True}]) is True
 
     def test_list_with_empty_dict_is_group(self):
         assert _is_group([{}]) is True
@@ -89,24 +89,27 @@ class TestGroupBackendScope:
 
 class TestExpandGroupEntry:
     def test_scalar_entry_passes_through(self):
-        entry = {"transformers.torch_compile": True, "transformers.torch_compile_mode": "default"}
+        entry = {
+            "harness.transformers.torch_compile": True,
+            "harness.transformers.torch_compile_mode": "default",
+        }
         result = _expand_group_entry(entry)
         assert result == [entry]
 
     def test_list_valued_field_expands(self):
         entry = {
-            "transformers.load_in_4bit": True,
-            "transformers.bnb_4bit_quant_type": ["nf4", "fp4"],
+            "transformers.engine_params.load_in_4bit": True,
+            "transformers.engine_params.bnb_4bit_quant_type": ["nf4", "fp4"],
         }
         result = _expand_group_entry(entry)
         assert len(result) == 2
         assert result[0] == {
-            "transformers.load_in_4bit": True,
-            "transformers.bnb_4bit_quant_type": "nf4",
+            "transformers.engine_params.load_in_4bit": True,
+            "transformers.engine_params.bnb_4bit_quant_type": "nf4",
         }
         assert result[1] == {
-            "transformers.load_in_4bit": True,
-            "transformers.bnb_4bit_quant_type": "fp4",
+            "transformers.engine_params.load_in_4bit": True,
+            "transformers.engine_params.bnb_4bit_quant_type": "fp4",
         }
 
     def test_multiple_list_fields_cartesian(self):
@@ -138,8 +141,11 @@ class TestExpandGroupEntry:
 class TestExpandGroup:
     def test_simple_group(self):
         entries = [
-            {"transformers.torch_compile": False},
-            {"transformers.torch_compile": True, "transformers.torch_compile_mode": "default"},
+            {"harness.transformers.torch_compile": False},
+            {
+                "harness.transformers.torch_compile": True,
+                "harness.transformers.torch_compile_mode": "default",
+            },
         ]
         result = _expand_group(entries)
         assert len(result) == 2
@@ -148,8 +154,8 @@ class TestExpandGroup:
         entries = [
             {},
             {
-                "transformers.load_in_4bit": True,
-                "transformers.bnb_4bit_quant_type": ["nf4", "fp4"],
+                "transformers.engine_params.load_in_4bit": True,
+                "transformers.engine_params.bnb_4bit_quant_type": ["nf4", "fp4"],
             },
         ]
         result = _expand_group(entries)
@@ -163,10 +169,10 @@ class TestExpandGroup:
 
 class TestRouteKeyValue:
     def test_engine_scoped_key(self):
-        config = {"engine": "transformers", "transformers": {"batch_size": 4}}
-        result = _route_key_value(dict(config), "transformers.torch_compile", True)
-        assert result["transformers"]["torch_compile"] is True
-        assert result["transformers"]["batch_size"] == 4  # preserved
+        config = {"engine": "transformers", "harness": {"transformers": {"batch_size": 4}}}
+        result = _route_key_value(dict(config), "harness.transformers.torch_compile", True)
+        assert result["harness"]["transformers"]["torch_compile"] is True
+        assert result["harness"]["transformers"]["batch_size"] == 4  # preserved
 
     def test_cross_section_key(self):
         config = {"engine": "transformers", "decoder": {"temperature": 1.0}}
@@ -187,10 +193,10 @@ class TestRouteKeyValue:
 
 class TestApplyGroupOverlay:
     def test_engine_scoped_key(self):
-        config = {"engine": "transformers", "transformers": {"batch_size": 4}}
-        result = _apply_group_overlay(dict(config), {"transformers.torch_compile": True})
-        assert result["transformers"]["torch_compile"] is True
-        assert result["transformers"]["batch_size"] == 4  # preserved
+        config = {"engine": "transformers", "harness": {"transformers": {"batch_size": 4}}}
+        result = _apply_group_overlay(dict(config), {"harness.transformers.torch_compile": True})
+        assert result["harness"]["transformers"]["torch_compile"] is True
+        assert result["harness"]["transformers"]["batch_size"] == 4  # preserved
 
     def test_cross_section_key(self):
         config = {"engine": "transformers", "decoder": {"temperature": 1.0}}
@@ -229,12 +235,12 @@ class TestApplyGroupOverlay:
 class TestValidateSweepGroups:
     def test_no_collision_passes(self):
         groups: dict[str, list[dict[str, object]]] = {"transformers.compilation": [{}]}
-        axis_keys = {"transformers.batch_size"}
+        axis_keys = {"harness.transformers.batch_size"}
         _validate_sweep_groups(groups, axis_keys)  # should not raise
 
     def test_collision_raises(self):
-        groups: dict[str, list[dict[str, object]]] = {"transformers.batch_size": [{}]}
-        axis_keys = {"transformers.batch_size"}
+        groups: dict[str, list[dict[str, object]]] = {"harness.transformers.batch_size": [{}]}
+        axis_keys = {"harness.transformers.batch_size"}
         with pytest.raises(ConfigError, match="collide"):
             _validate_sweep_groups(groups, axis_keys)
 
@@ -251,16 +257,16 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "max-autotune",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "max-autotune",
                     },
                 ],
             },
@@ -268,7 +274,7 @@ class TestExpandGridSweepGroups:
         valid, _skipped = expand_grid(raw)
         assert len(valid) == 6  # 2 dtype x 3 compilation variants
         # Check that compile variants are present
-        compile_values = [c.transformers.torch_compile for c in valid]
+        compile_values = [c.harness.transformers.torch_compile for c in valid]
         assert compile_values.count(False) == 2
         assert compile_values.count(True) == 4
 
@@ -280,7 +286,7 @@ class TestExpandGridSweepGroups:
             "sweep": {
                 "transformers.quantization": [
                     {},  # baseline: no quantisation
-                    {"transformers.load_in_8bit": True},
+                    {"transformers.engine_params.load_in_8bit": True},
                 ],
             },
         }
@@ -288,7 +294,8 @@ class TestExpandGridSweepGroups:
         assert len(valid) == 2
         # One has load_in_8bit, one doesn't
         quant_flags = [
-            c.transformers.load_in_8bit if c.transformers is not None else None for c in valid
+            c.transformers.engine_params.load_in_8bit if c.transformers is not None else None
+            for c in valid
         ]
         assert quant_flags.count(True) == 1
 
@@ -299,15 +306,15 @@ class TestExpandGridSweepGroups:
             "engine": "transformers",
             "sweep": {
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                 ],
                 "transformers.quantization": [
                     {},
-                    {"transformers.load_in_8bit": True},
+                    {"transformers.engine_params.load_in_8bit": True},
                 ],
             },
         }
@@ -320,12 +327,12 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -342,9 +349,9 @@ class TestExpandGridSweepGroups:
                 "transformers.decoding": [
                     {},  # baseline: use engine default sampling
                     {
-                        "transformers.sampling.do_sample": False,
-                        "transformers.sampling.temperature": 0.0,
-                        "transformers.num_beams": 4,
+                        "transformers.sampling_params.do_sample": False,
+                        "transformers.sampling_params.temperature": 0.0,
+                        "transformers.engine_params.num_beams": 4,
                     },
                 ],
             },
@@ -352,11 +359,15 @@ class TestExpandGridSweepGroups:
         valid, _skipped = expand_grid(raw)
         assert len(valid) == 2
         beam_config = next(
-            c for c in valid if c.transformers is not None and c.transformers.num_beams is not None
+            c
+            for c in valid
+            if c.transformers is not None
+            and c.transformers.engine_params is not None
+            and c.transformers.engine_params.num_beams is not None
         )
-        assert beam_config.transformers.sampling.do_sample is False
-        assert beam_config.transformers.sampling.temperature == 0.0
-        assert beam_config.transformers.num_beams == 4
+        assert beam_config.transformers.sampling_params.do_sample is False
+        assert beam_config.transformers.sampling_params.temperature == 0.0
+        assert beam_config.transformers.engine_params.num_beams == 4
 
     def test_group_plus_explicit_experiments(self):
         """Groups and explicit experiments coexist."""
@@ -364,12 +375,12 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -377,7 +388,7 @@ class TestExpandGridSweepGroups:
                 {
                     "task": {"model": "gpt2"},
                     "engine": "transformers",
-                    "transformers": {"dtype": "float32"},
+                    "transformers": {"engine_params": {"dtype": "float32"}},
                 },
             ],
         }
@@ -391,13 +402,13 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
-                "vllm.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
+                "vllm.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -419,8 +430,8 @@ class TestExpandGridSweepGroups:
                 "transformers.quantization": [
                     {},
                     {
-                        "transformers.load_in_4bit": True,
-                        "transformers.bnb_4bit_quant_type": ["nf4", "fp4"],
+                        "transformers.engine_params.load_in_4bit": True,
+                        "transformers.engine_params.bnb_4bit_quant_type": ["nf4", "fp4"],
                     },
                 ],
             },
@@ -429,9 +440,10 @@ class TestExpandGridSweepGroups:
         # 1 baseline + 2 from mini-grid = 3
         assert len(valid) == 3
         quant_types = [
-            c.transformers.bnb_4bit_quant_type
+            c.transformers.engine_params.bnb_4bit_quant_type
             for c in valid
-            if c.transformers is not None and c.transformers.bnb_4bit_quant_type is not None
+            if c.transformers is not None
+            and c.transformers.engine_params.bnb_4bit_quant_type is not None
         ]
         assert set(quant_types) == {"nf4", "fp4"}
 
@@ -442,10 +454,10 @@ class TestExpandGridSweepGroups:
             "engine": "transformers",
             "sweep": {
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -461,18 +473,18 @@ class TestExpandGridSweepGroupsMultiBackend:
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
-                "vllm.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
+                "vllm.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                 ],
                 "vllm.decoding": [
                     {},
-                    {"vllm.sampling.presence_penalty": 0.6},
+                    {"vllm.sampling_params.presence_penalty": 0.6},
                 ],
             },
         }
@@ -494,23 +506,30 @@ class TestCombinatorialWarnings:
     def test_large_study_info_log(self, caplog):
         """Studies with >100 valid experiments log an info message."""
         # 3 dtype x 5 batch x 3 attn x 3 compile = 135 raw combos, minus 15
-        # invalid (flash_attention_2 + float32) = 120 valid experiments
+        # invalid (flash_attention_2 + float32) = 120 valid experiments. Paths use
+        # the nested shape so dtype/attn land on engine_params where the
+        # FA2+float32 cross-validator can see them; batch_size + torch_compile are
+        # harness knobs.
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float32", "float16", "bfloat16"],
-                "transformers.batch_size": [1, 4, 8, 16, 32],
-                "transformers.attn_implementation": ["sdpa", "flash_attention_2", "eager"],
+                "transformers.engine_params.dtype": ["float32", "float16", "bfloat16"],
+                "harness.transformers.batch_size": [1, 4, 8, 16, 32],
+                "transformers.engine_params.attn_implementation": [
+                    "sdpa",
+                    "flash_attention_2",
+                    "eager",
+                ],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "max-autotune",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "max-autotune",
                     },
                 ],
             },
@@ -535,12 +554,12 @@ class TestHashStabilityWithGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                 ],
             },
