@@ -3,149 +3,458 @@
 # severity is closed {error, dormant}; provenance is metadata only.
 schema_version: 1.0.0
 engine: vllm
-engine_version: 0.7.3
+engine_version: 0.19.1
 rules:
+- id: vllm_engineparams_raises_kv_cache_memory_bytes_lt_1
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.kv_cache_memory_bytes:
+        <: 1
+  message_template: kv_cache_memory_bytes must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 0.19.1
+    date: '2026-07-02'
+- id: vllm_engineparams_raises_pipeline_parallel_size_lt_1
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.pipeline_parallel_size:
+        <: 1
+  message_template: pipeline_parallel_size must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 0.19.1
+    date: '2026-07-02'
+- id: vllm_engineparams_raises_tensor_parallel_size_lt_1
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.tensor_parallel_size:
+        <: 1
+  message_template: tensor_parallel_size must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 0.19.1
+    date: '2026-07-02'
+- id: vllm_parallelconfig_dormant_all2all_backend_in
+  engine: vllm
+  severity: dormant
+  match:
+    fields:
+      vllm.engine_params.all2all_backend:
+        in:
+        - pplx
+        - naive
+  normalised_fields:
+  - all2all_backend
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: parallel.py:350
+    date: '2026-06-22'
+- id: vllm_parallelconfig_dormant_data_parallel_rank_set_true
+  engine: vllm
+  severity: dormant
+  match:
+    fields:
+      vllm.engine_params.distributed_executor_backend: external_launcher
+      vllm.engine_params.data_parallel_rank:
+        present: true
+  normalised_fields:
+  - data_parallel_rank
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: parallel.py:662
+    date: '2026-06-22'
+- id: vllm_parallelconfig_raises_data_parallel_external_lb_set_true
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.data_parallel_size:
+        <=: 1
+      vllm.engine_params.data_parallel_external_lb:
+        present: true
+  message_template: data_parallel_external_lb can only be set when data_parallel_size > 1
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: parallel.py:359
+    date: '2026-06-22'
+- id: vllm_parallelconfig_raises_data_parallel_size_local_gt_ref_data_parallel_size
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.data_parallel_size_local:
+        '>': '@data_parallel_size'
+  message_template: data_parallel_size_local ({data_parallel_size_local}) must be <= data_parallel_size
+    ({data_parallel_size})
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: parallel.py:353
+    date: '2026-06-22'
+- id: vllm_samplingparams_dormant_bad_words_unset_true
+  engine: vllm
+  severity: dormant
+  match:
+    fields:
+      vllm.sampling_params.bad_words:
+        absent: true
+  normalised_fields:
+  - bad_words
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: sampling_params.py:396
+    date: '2026-06-22'
 - id: vllm_samplingparams_dormant_seed_eq_neg1
   engine: vllm
   severity: dormant
   match:
     fields:
-      vllm.sampling.seed: -1
+      vllm.sampling_params.seed: -1
   normalised_fields:
   - seed
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: sampling_params.py:311
-    date: '2026-04-27'
-- id: vllm_samplingparams_raises_best_of_lt_ref_n
+    engine_version: 0.19.1
+    citation: sampling_params.py:385
+    date: '2026-06-22'
+- id: vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true
+  engine: vllm
+  severity: dormant
+  match:
+    fields:
+      vllm.sampling_params.skip_reading_prefix_cache:
+        absent: true
+  normalised_fields:
+  - skip_reading_prefix_cache
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: sampling_params.py:425
+    date: '2026-06-22'
+- id: vllm_samplingparams_dormant_stop_token_ids_unset_true
+  engine: vllm
+  severity: dormant
+  match:
+    fields:
+      vllm.sampling_params.stop_token_ids:
+        absent: true
+  normalised_fields:
+  - stop_token_ids
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: sampling_params.py:393
+    date: '2026-06-22'
+- id: vllm_samplingparams_raises_frequency_penalty_gt_2p0
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.sampling.best_of:
-        present: true
-        <: '@n'
-  message_template: best_of must be greater than or equal to n, got n={n} and best_of={best_of}.
+      vllm.sampling_params.frequency_penalty:
+        '>': 2.0
+  message_template: frequency_penalty must be in [-2.0..2.0], got {declared_value}.
   provenance:
-    source: deterministic_miner
+    source: analyst
     verified: construction
-    engine_version: 0.7.3
-    citation: sampling_params.py:296
-    date: '2026-05-13'
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:443
+    date: '2026-07-02'
+- id: vllm_samplingparams_raises_frequency_penalty_lt_neg2p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling_params.frequency_penalty:
+        <: -2.0
+  message_template: frequency_penalty must be in [-2.0..2.0], got {declared_value}.
+  provenance:
+    source: analyst
+    verified: construction
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:443
+    date: '2026-07-02'
+- id: vllm_samplingparams_raises_min_p_gt_1p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling_params.min_p:
+        '>': 1.0
+  message_template: min_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: analyst
+    verified: construction
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:473
+    date: '2026-07-02'
+- id: vllm_samplingparams_raises_min_p_lt_0p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling_params.min_p:
+        <: 0.0
+  message_template: min_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: analyst
+    verified: construction
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:473
+    date: '2026-07-02'
 - id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.sampling.max_tokens:
+      vllm.sampling_params.max_tokens:
         present: true
-      vllm.sampling.min_tokens:
+      vllm.sampling_params.min_tokens:
         '>': '@max_tokens'
   message_template: min_tokens must be less than or equal to max_tokens={max_tokens}, got {min_tokens}.
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: sampling_params.py:388
-    date: '2026-04-27'
+    engine_version: 0.19.1
+    citation: sampling_params.py:486
+    date: '2026-06-22'
 - id: vllm_samplingparams_raises_min_tokens_lt_0
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.sampling.min_tokens:
+      vllm.sampling_params.min_tokens:
         <: 0
   message_template: min_tokens must be greater than or equal to 0, got {min_tokens}.
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: sampling_params.py:385
-    date: '2026-04-27'
+    engine_version: 0.19.1
+    citation: sampling_params.py:482
+    date: '2026-06-22'
 - id: vllm_samplingparams_raises_n_lt_1
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.sampling.n:
+      vllm.sampling_params.n:
         <: 1
   message_template: n must be at least 1, got {n}.
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: sampling_params.py:357
-    date: '2026-04-27'
+    engine_version: 0.19.1
+    citation: sampling_params.py:431
+    date: '2026-06-22'
 - id: vllm_samplingparams_raises_n_not_type_int
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.sampling.n:
+      vllm.sampling_params.n:
         type_is_not: int
   message_template: n must be an int, but is of type {type(self.n)}
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: sampling_params.py:354
-    date: '2026-04-27'
+    engine_version: 0.19.1
+    citation: sampling_params.py:429
+    date: '2026-06-22'
+- id: vllm_samplingparams_raises_presence_penalty_gt_2p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling_params.presence_penalty:
+        '>': 2.0
+  message_template: presence_penalty must be in [-2.0..2.0], got {declared_value}.
+  provenance:
+    source: analyst
+    verified: construction
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:439
+    date: '2026-07-02'
+- id: vllm_samplingparams_raises_presence_penalty_lt_neg2p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling_params.presence_penalty:
+        <: -2.0
+  message_template: presence_penalty must be in [-2.0..2.0], got {declared_value}.
+  provenance:
+    source: analyst
+    verified: construction
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:439
+    date: '2026-07-02'
+- id: vllm_samplingparams_raises_repetition_penalty_le_0p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling_params.repetition_penalty:
+        <=: 0.0
+  message_template: repetition_penalty must be greater than zero, got {repetition_penalty}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: sampling_params.py:448
+    date: '2026-06-22'
 - id: vllm_samplingparams_raises_temperature_lt_0p0
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.sampling.temperature:
+      vllm.sampling_params.temperature:
         <: 0.0
   message_template: temperature must be non-negative, got {temperature}.
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: sampling_params.py:368
-    date: '2026-05-13'
-- id: vllm_schedulerconfig_raises_max_num_partial_prefills_lt_1
+    engine_version: 0.19.1
+    citation: sampling_params.py:453
+    date: '2026-06-22'
+- id: vllm_samplingparams_raises_top_k_lt_neg1
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.engine.max_num_partial_prefills:
-        <: 1
-  message_template: max_num_partial_prefills ({max_num_partial_prefills}) must be greater than or equal
-    to 1.
+      vllm.sampling_params.top_k:
+        <: -1
+  message_template: top_k must be 0 (disable), or at least 1, got {top_k}.
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: config.py:1604
-    date: '2026-05-13'
-- id: vllm_schedulerconfig_raises_num_lookahead_slots_lt_0
+    engine_version: 0.19.1
+    citation: sampling_params.py:466
+    date: '2026-06-22'
+- id: vllm_samplingparams_raises_top_k_not_type_int
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.engine.num_lookahead_slots:
-        <: 0
-  message_template: num_lookahead_slots ({num_lookahead_slots}) must be greater than or equal to 0.
+      vllm.sampling_params.top_k:
+        type_is_not: int
+  message_template: top_k must be an integer, got {type(self.top_k).__name__}
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: config.py:1592
-    date: '2026-05-13'
-- id: vllm_schedulerconfig_raises_num_scheduler_steps_lt_1
+    engine_version: 0.19.1
+    citation: sampling_params.py:470
+    date: '2026-06-22'
+- id: vllm_samplingparams_raises_top_p_gt_1p0
   engine: vllm
   severity: error
   match:
     fields:
-      vllm.engine.num_scheduler_steps:
-        <: 1
-  message_template: num_scheduler_steps ({num_scheduler_steps}) must be greater than or equal to 1.
+      vllm.sampling_params.top_p:
+        '>': 1.0
+  message_template: top_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: analyst
+    verified: construction
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:458
+    date: '2026-07-02'
+- id: vllm_samplingparams_raises_top_p_le_0p0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.sampling_params.top_p:
+        <=: 0.0
+  message_template: top_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: analyst
+    verified: construction
+    engine_version: 0.19.1
+    citation: vllm/sampling_params.py:458
+    date: '2026-07-02'
+- id: vllm_schedulerconfig_raises_long_prefill_token_threshold_gt_ref_max_model_len
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.max_num_partial_prefills:
+        '>': 1
+      vllm.engine_params.long_prefill_token_threshold:
+        '>': '@max_model_len'
+  message_template: long_prefill_token_threshold ({long_prefill_token_threshold}) cannot be greater than
+    the max_model_len ({max_model_len}).
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 0.7.3
-    citation: config.py:1598
-    date: '2026-05-13'
+    engine_version: 0.19.1
+    citation: scheduler.py:296
+    date: '2026-06-22'
+- id: vllm_schedulerconfig_raises_max_long_partial_prefills_gt_ref_max_num_partial_prefills
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.max_long_partial_prefills:
+        '>': '@max_num_partial_prefills'
+  message_template: self.max_long_partial_prefills={max_long_partial_prefills} must be less than or equal
+    to self.max_num_partial_prefills={max_num_partial_prefills}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: scheduler.py:303
+    date: '2026-06-22'
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.max_num_batched_tokens:
+        <: '@max_model_len'
+      vllm.engine_params.enable_chunked_prefill:
+        absent: true
+  message_template: max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}).
+    This effectively limits the maximum sequence length to max_num_batched_tokens and makes vLLM reject
+    longer sequences. Please increase max_num_batched_tokens or decrease max_model_len.
+  provenance:
+    source: manual
+    verified: construction
+    engine_version: 0.19.1
+    citation: scheduler.py:264
+    date: '2026-06-22'
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.max_num_batched_tokens:
+        <: '@max_num_seqs'
+  message_template: max_num_batched_tokens ({max_num_batched_tokens}) must be greater than or equal to
+    max_num_seqs ({max_num_seqs}).
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: scheduler.py:274
+    date: '2026-06-22'

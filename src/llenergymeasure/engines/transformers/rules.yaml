@@ -3,76 +3,91 @@
 # severity is closed {error, dormant}; provenance is metadata only.
 schema_version: 1.0.0
 engine: transformers
-engine_version: 4.57.3
+engine_version: 5.7.0
 rules:
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.num_beams: 1
+      transformers.engine_params.num_beams: 1
   message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `True` -- this flag
     is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:345
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:386
+    date: '2026-06-12T10:04:46+02:00'
+- id: transformers_bnb_load_in_4bit_xor_load_in_8bit
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.engine_params.load_in_4bit: true
+      transformers.engine_params.load_in_8bit: true
+  message_template: load_in_4bit and load_in_8bit are both True, but only one can be used at the same
+    time
+  provenance:
+    source: manual
+    verified: construction
+    engine_version: 5.7.0
+    citation: transformers/utils/quantization_config.py:0
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_cache_choice_cache_implementation_not_in_allowlist
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.cache_implementation:
+      transformers.engine_params.cache_implementation:
         present: true
         not_in:
         - dynamic
         - static
   message_template: 'Invalid `cache_implementation` (nonsense). Choose one of: (''static'', ''offloaded_static'',
     ''sliding_window'', ''hybrid'', ''hybrid_chunked'', ''offloaded_hybrid'', ''offloaded_hybrid_chunked'',
-    ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'')'
+    ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'', ''paged'')'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:349
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:390
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_cache_choice_use_cache_eq_false
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.use_cache: false
-  message_template: You have set `use_cache` to `False`, but cache_implementation is set to static. cache_implementation
+      transformers.engine_params.use_cache: false
+  message_template: You have not set `use_cache` to `True`, but cache_implementation is set to static.cache_implementation
     will have no effect.
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:348
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:389
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_compile_config_type_compile_config_exceeds_zero
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.compile_config:
+      transformers.sampling_params.compile_config:
         '>': 0
   message_template: You provided `compile_config` as an instance of <class 'int'>, but it must be an instance
     of `CompileConfig`.
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:417
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:451
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_compile_config_type_compile_config_type_not_in_CompileConfig
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.compile_config:
+      transformers.sampling_params.compile_config:
         present: true
         type_is_not:
         - CompileConfig
@@ -81,71 +96,70 @@ rules:
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:417
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:451
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_dormant_early_stopping_set_true
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         present: true
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:606
-    date: '2026-04-25'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:731
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_dormant_epsilon_cutoff_ne_0_0
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.epsilon_cutoff:
+      transformers.sampling_params.epsilon_cutoff:
         '!=': 0.0
         present: true
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:591
-    date: '2026-04-25'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:706
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_dormant_eta_cutoff_ne_0_0
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.eta_cutoff:
+      transformers.sampling_params.eta_cutoff:
         '!=': 0.0
         present: true
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:595
-    date: '2026-04-25'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:714
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_early_stopping_type_early_stopping_exceeds_zero
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         '>': 0
   message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:339
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:380
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_early_stopping_type_early_stopping_not_in_allowlist
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         present: true
         not_in:
         - false
@@ -155,15 +169,15 @@ rules:
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:339
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:380
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.early_stopping:
+      transformers.engine_params.early_stopping:
         present: true
         type_is_not:
         - bool
@@ -173,137 +187,190 @@ rules:
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:339
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:380
+    date: '2026-06-12T10:04:46+02:00'
+- id: transformers_engineparams_raises_no_repeat_ngram_size_lt_0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.engine_params.no_repeat_ngram_size:
+        <: 0
+  message_template: no_repeat_ngram_size must be >= 0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_engineparams_raises_num_beams_lt_1
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.engine_params.num_beams:
+        <: 1
+  message_template: num_beams must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_engineparams_raises_prompt_lookup_num_tokens_lt_1
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.engine_params.prompt_lookup_num_tokens:
+        <: 1
+  message_template: prompt_lookup_num_tokens must be >= 1, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.epsilon_cutoff:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.epsilon_cutoff:
         present: true
-        not_equal: 0.0
-  message_template: '`do_sample` is set to `False`. However, `epsilon_cutoff` is set to `{declared_value}`
+  message_template: '`do_sample` is not set to `True`. However, `epsilon_cutoff` is set to `{declared_value}`
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `epsilon_cutoff`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:361
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:400
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_greedy_strips_eta_cutoff
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.eta_cutoff:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.eta_cutoff:
         present: true
-        not_equal: 0.0
-  message_template: '`do_sample` is set to `False`. However, `eta_cutoff` is set to `{declared_value}`
+  message_template: '`do_sample` is not set to `True`. However, `eta_cutoff` is set to `{declared_value}`
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `eta_cutoff`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:362
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:401
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_greedy_strips_min_p
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.min_p:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.min_p:
         present: true
-  message_template: '`do_sample` is set to `False`. However, `min_p` is set to `{declared_value}` -- this
-    flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`.'
+  message_template: '`do_sample` is not set to `True`. However, `min_p` is set to `{declared_value}` --
+    this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `min_p`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:359
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:397
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_greedy_strips_temperature
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.temperature:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.temperature:
         present: true
-        not_equal: 1.0
-  message_template: '`do_sample` is set to `False`. However, `temperature` is set to `{declared_value}`
+  message_template: '`do_sample` is not set to `True`. However, `temperature` is set to `{declared_value}`
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `temperature`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:356
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:394
+    date: '2026-06-12T10:04:46+02:00'
+- id: transformers_greedy_strips_top_h
+  engine: transformers
+  severity: dormant
+  match:
+    fields:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.top_h:
+        present: true
+  message_template: '`do_sample` is not set to `True`. However, `top_h` is set to `{declared_value}` --
+    this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `top_h`.'
+  provenance:
+    source: deterministic_miner
+    verified: runtime
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:398
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_greedy_strips_top_k
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.top_k:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.top_k:
         present: true
-        not_equal: 50
-  message_template: '`do_sample` is set to `False`. However, `top_k` is set to `{declared_value}` -- this
-    flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.'
+  message_template: '`do_sample` is not set to `True`. However, `top_k` is set to `{declared_value}` --
+    this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `top_k`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:357
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:395
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_greedy_strips_top_p
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.top_p:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.top_p:
         present: true
-        not_equal: 1.0
-  message_template: '`do_sample` is set to `False`. However, `top_p` is set to `{declared_value}` -- this
-    flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.'
+  message_template: '`do_sample` is not set to `True`. However, `top_p` is set to `{declared_value}` --
+    this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `top_p`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:358
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:396
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_greedy_strips_typical_p
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.do_sample: false
-      transformers.sampling.typical_p:
+      transformers.sampling_params.do_sample: false
+      transformers.sampling_params.typical_p:
         present: true
-        not_equal: 1.0
-  message_template: '`do_sample` is set to `False`. However, `typical_p` is set to `{declared_value}`
+  message_template: '`do_sample` is not set to `True`. However, `typical_p` is set to `{declared_value}`
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `typical_p`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:360
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:399
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_negative_pad_token_id
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.pad_token_id:
+      transformers.sampling_params.pad_token_id:
         <: 0
   message_template: '`pad_token_id` should be positive but got -1. This will cause errors when batch generating,
     if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID`
@@ -311,125 +378,138 @@ rules:
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:396
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:431
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_no_return_dict_strips_output_attentions
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.return_dict_in_generate: false
-      transformers.sampling.output_attentions:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_attentions:
         present: true
-        not_equal: false
   message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_attentions` is. When
     `return_dict_in_generate` is not `True`, `output_attentions` is ignored.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:389
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:424
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_no_return_dict_strips_output_hidden_states
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.return_dict_in_generate: false
-      transformers.sampling.output_hidden_states:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_hidden_states:
         present: true
-        not_equal: false
   message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states` is. When
     `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:390
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:425
+    date: '2026-06-12T10:04:46+02:00'
+- id: transformers_no_return_dict_strips_output_logits
+  engine: transformers
+  severity: dormant
+  match:
+    fields:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_logits:
+        present: true
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_logits` is. When `return_dict_in_generate`
+    is not `True`, `output_logits` is ignored.'
+  provenance:
+    source: deterministic_miner
+    verified: runtime
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:427
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_no_return_dict_strips_output_scores
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.return_dict_in_generate: false
-      transformers.sampling.output_scores:
+      transformers.sampling_params.return_dict_in_generate: false
+      transformers.sampling_params.output_scores:
         present: true
-        not_equal: false
   message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_scores` is. When `return_dict_in_generate`
     is not `True`, `output_scores` is ignored.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:391
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:426
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.num_return_sequences:
+      transformers.engine_params.num_beams: 1
+      transformers.sampling_params.num_return_sequences:
         '>': 1
-      transformers.sampling.do_sample: false
-  message_template: Greedy methods without beam search do not support `num_return_sequences` different
-    than 1 (got 2).
+      transformers.sampling_params.do_sample: false
+  message_template: Greedy methods (do_sample != True) without beam search do not support `num_return_sequences`
+    different than 1 (got 2).
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:344
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:385
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.num_beams:
+      transformers.engine_params.num_beams:
         <: '@num_return_sequences'
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:345
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:386
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.num_beams:
+      transformers.engine_params.num_beams:
         not_divisible_by: '@num_return_sequences'
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:345
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:386
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_output_token_ids_max_new_tokens_le_zero
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.max_new_tokens:
+      transformers.sampling_params.max_new_tokens:
         <=: 0
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:335
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:376
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.max_new_tokens:
+      transformers.sampling_params.max_new_tokens:
         present: true
         not_in:
         - 1
@@ -438,15 +518,15 @@ rules:
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:335
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:376
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_output_token_ids_pad_token_id_not_in_allowlist
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.pad_token_id:
+      transformers.sampling_params.pad_token_id:
         present: true
         not_in:
         - 0
@@ -457,43 +537,43 @@ rules:
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:396
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:431
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_raises_bnb_4bit_quant_type_not_type_str
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.bnb_4bit_quant_type:
+      transformers.engine_params.bnb_4bit_quant_type:
         type_is_not: str
   message_template: bnb_4bit_quant_type must be a string
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:563
-    date: '2026-04-25'
+    engine_version: 5.7.0
+    citation: transformers/utils/quantization_config.py:545
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_raises_bnb_4bit_use_double_quant_not_type_bool
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.bnb_4bit_use_double_quant:
+      transformers.engine_params.bnb_4bit_use_double_quant:
         type_is_not: bool
   message_template: bnb_4bit_use_double_quant must be a boolean
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:566
-    date: '2026-04-25'
+    engine_version: 5.7.0
+    citation: transformers/utils/quantization_config.py:548
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_raises_compile_config_not_type_compileconfig
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.compile_config:
+      transformers.sampling_params.compile_config:
         type_is_not: CompileConfig
         present: true
   message_template: You provided `compile_config` as an instance of {type(self.compile_config)}, but it
@@ -501,158 +581,218 @@ rules:
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:561
-    date: '2026-04-25'
-- id: transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:653
+    date: '2026-06-12T10:04:46+02:00'
+- id: transformers_raises_early_stopping_not_in_set
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.llm_int8_enable_fp32_cpu_offload:
-        type_is_not: bool
-  message_template: llm_int8_enable_fp32_cpu_offload must be a boolean
+      transformers.engine_params.early_stopping:
+        not_in:
+        - null
+        - true
+        - false
+        - never
+  message_template: '`early_stopping` must be a boolean or ''never'', but is {early_stopping}.'
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:554
-    date: '2026-04-25'
-- id: transformers_raises_llm_int8_has_fp16_weight_not_type_bool
-  engine: transformers
-  severity: error
-  match:
-    fields:
-      transformers.llm_int8_has_fp16_weight:
-        type_is_not: bool
-  message_template: llm_int8_has_fp16_weight must be a boolean
-  provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:557
-    date: '2026-04-25'
-- id: transformers_raises_llm_int8_skip_modules_not_type_list
-  engine: transformers
-  severity: error
-  match:
-    fields:
-      transformers.llm_int8_skip_modules:
-        type_is_not: list
-        present: true
-  message_template: llm_int8_skip_modules must be a list of strings
-  provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:552
-    date: '2026-04-25'
-- id: transformers_raises_llm_int8_threshold_not_type_float
-  engine: transformers
-  severity: error
-  match:
-    fields:
-      transformers.llm_int8_threshold:
-        type_is_not: float
-  message_template: llm_int8_threshold must be a float
-  provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:549
-    date: '2026-04-25'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:633
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_raises_load_in_4bit_not_type_bool
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.load_in_4bit:
+      transformers.engine_params.load_in_4bit:
         type_is_not: bool
   message_template: load_in_4bit must be a boolean
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:543
-    date: '2026-04-25'
+    engine_version: 5.7.0
+    citation: transformers/utils/quantization_config.py:525
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_raises_load_in_8bit_not_type_bool
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.load_in_8bit:
+      transformers.engine_params.load_in_8bit:
         type_is_not: bool
   message_template: load_in_8bit must be a boolean
   provenance:
     source: deterministic_miner
     verified: construction
-    engine_version: 4.57.3
-    citation: transformers/utils/quantization_config.py:546
-    date: '2026-04-25'
-- id: transformers_raises_num_beams_eq_1
+    engine_version: 5.7.0
+    citation: transformers/utils/quantization_config.py:528
+    date: '2026-06-12T10:04:46+02:00'
+- id: transformers_samplingparams_raises_min_new_tokens_lt_1
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.num_return_sequences:
-        '!=': 1
-      transformers.sampling.num_beams: 1
-  message_template: Greedy methods without beam search do not support `num_return_sequences` different
-    than 1 (got {num_return_sequences}).
+      transformers.sampling_params.min_new_tokens:
+        <: 1
+  message_template: min_new_tokens must be >= 1, got {declared_value}.
   provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:618
-    date: '2026-04-25'
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_samplingparams_raises_min_p_gt_1p0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.min_p:
+        '>': 1.0
+  message_template: min_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_samplingparams_raises_min_p_lt_0p0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.min_p:
+        <: 0.0
+  message_template: min_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_samplingparams_raises_repetition_penalty_le_0p0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.repetition_penalty:
+        <=: 0.0
+  message_template: repetition_penalty must be >= 0.0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_samplingparams_raises_temperature_lt_0p0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.temperature:
+        <: 0.0
+  message_template: temperature must be >= 0.0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_samplingparams_raises_top_k_lt_0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.top_k:
+        <: 0
+  message_template: top_k must be >= 0, got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_samplingparams_raises_top_p_gt_1p0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.top_p:
+        '>': 1.0
+  message_template: top_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
+- id: transformers_samplingparams_raises_top_p_lt_0p0
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.top_p:
+        <: 0.0
+  message_template: top_p must be in [0.0..1.0], got {declared_value}.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 5.7.0
+    date: '2026-07-02'
 - id: transformers_single_beam_strips_early_stopping
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.early_stopping:
+      transformers.engine_params.num_beams: 1
+      transformers.engine_params.early_stopping:
         present: true
-        not_equal: false
   message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `{declared_value}` --
     this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:339
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:380
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
   severity: dormant
   match:
     fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.length_penalty:
+      transformers.engine_params.num_beams: 1
+      transformers.engine_params.length_penalty:
         present: true
-        not_equal: 1.0
   message_template: '`num_beams` is set to 1. However, `length_penalty` is set to `{declared_value}` --
     this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`.'
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:365
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:404
+    date: '2026-06-12T10:04:46+02:00'
+- id: transformers_watermarking_type_watermarking_config_exceeds_zero
+  engine: transformers
+  severity: error
+  match:
+    fields:
+      transformers.sampling_params.watermarking_config:
+        '>': 0
+  message_template: '''int'' object has no attribute ''validate'''
+  provenance:
+    source: deterministic_miner
+    verified: runtime
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:418
+    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.sampling.watermarking_config:
+      transformers.sampling_params.watermarking_config:
         present: true
         type_is_not:
         - WatermarkingConfig
-  message_template: transformers.generation.configuration_utils.WatermarkingConfig() argument after **
-    must be a mapping, not int
+  message_template: '''int'' object has no attribute ''validate'''
   provenance:
     source: deterministic_miner
     verified: runtime
-    engine_version: 4.57.3
-    citation: transformers/generation/configuration_utils.py:381
-    date: '2026-04-30'
+    engine_version: 5.7.0
+    citation: transformers/generation/configuration_utils.py:418
+    date: '2026-06-12T10:04:46+02:00'
