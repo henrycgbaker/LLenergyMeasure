@@ -170,6 +170,10 @@ def _diff_field_map(old_map: dict[str, Any], new_map: dict[str, Any]) -> dict[st
     return {"added": added, "removed": removed, "changed": changed}
 
 
+def _map_has_changes(diff: dict[str, Any]) -> bool:
+    return bool(diff["added"] or diff["removed"] or diff["changed"])
+
+
 def _diff_defs(old_defs: dict[str, Any], new_defs: dict[str, Any]) -> dict[str, Any]:
     """Diff the ``$defs`` class inventory: added / removed / changed classes.
 
@@ -195,16 +199,12 @@ def _diff_defs(old_defs: dict[str, Any], new_defs: dict[str, Any]) -> dict[str, 
                 old_props if isinstance(old_props, dict) else {},
                 new_props if isinstance(new_props, dict) else {},
             )
-            if props_delta["added"] or props_delta["removed"] or props_delta["changed"]:
+            if _map_has_changes(props_delta):
                 entry["properties"] = props_delta
 
         if entry:
             changed[name] = entry
     return {"added": added, "removed": removed, "changed": changed}
-
-
-def _map_has_changes(diff: dict[str, Any]) -> bool:
-    return bool(diff["added"] or diff["removed"] or diff["changed"])
 
 
 def build_report(old_schema: dict[str, Any], new_schema: dict[str, Any]) -> dict[str, Any]:
@@ -232,6 +232,16 @@ def build_report(old_schema: dict[str, Any], new_schema: dict[str, Any]) -> dict
 # ---------------------------------------------------------------------------
 
 
+def _render_enum_delta(enum: dict[str, list[Any]]) -> str:
+    """Render an enum-membership delta as ``+[added] -[removed]``."""
+    parts = []
+    if enum["added"]:
+        parts.append(f"+{enum['added']}")
+    if enum["removed"]:
+        parts.append(f"-{enum['removed']}")
+    return " ".join(parts)
+
+
 def _render_field_changes(name: str, changes: dict[str, Any], indent: str) -> list[str]:
     lines = [f"{indent}~ {name}"]
     if "type" in changes:
@@ -245,13 +255,7 @@ def _render_field_changes(name: str, changes: dict[str, Any], indent: str) -> li
             f"{indent}    bounds:  {changes['bounds']['old']} -> {changes['bounds']['new']}"
         )
     if "enum" in changes:
-        enum = changes["enum"]
-        parts = []
-        if enum["added"]:
-            parts.append(f"+{enum['added']}")
-        if enum["removed"]:
-            parts.append(f"-{enum['removed']}")
-        lines.append(f"{indent}    enum:    {' '.join(parts)}")
+        lines.append(f"{indent}    enum:    {_render_enum_delta(changes['enum'])}")
     return lines
 
 
@@ -297,13 +301,7 @@ def render_text(report: dict[str, Any]) -> str:
     for name, entry in changed.items():
         lines.append(f"  ~ {name}")
         if "enum" in entry:
-            enum = entry["enum"]
-            parts = []
-            if enum["added"]:
-                parts.append(f"+{enum['added']}")
-            if enum["removed"]:
-                parts.append(f"-{enum['removed']}")
-            lines.append(f"      enum: {' '.join(parts)}")
+            lines.append(f"      enum: {_render_enum_delta(entry['enum'])}")
         if "properties" in entry:
             lines.append(f"      properties: {_counts(entry['properties'])}")
             lines.extend(_render_field_map(entry["properties"], "        "))
