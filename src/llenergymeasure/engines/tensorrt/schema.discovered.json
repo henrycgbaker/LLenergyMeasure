@@ -1,19 +1,26 @@
 {
   "schema_version": "1.0.0",
   "engine": "tensorrt",
-  "engine_version": "0.21.0",
+  "engine_version": "1.0.0",
   "engine_commit_sha": null,
-  "image_ref": "llenergymeasure:tensorrt-0.21.0",
+  "image_ref": "nvcr.io/nvidia/tensorrt-llm/release:1.0.0",
   "base_image_ref": null,
-  "discovered_at": "2026-07-02T18:02:56+02:00",
+  "discovered_at": "2026-06-22T20:11:44.265856+00:00",
   "discovery_method": "TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
   "discovery_limitations": [
     {
       "section": "engine_params",
       "fields": [
-        "build_config"
+        "decoding_config"
       ],
-      "reason": "BuildConfig is not a Pydantic model; appears as Optional[object] in the schema"
+      "reason": "DecodingConfig is a plain (non-Pydantic, non-dataclass) class; not introspectable by the dataclass-lift, and superseded by the mined speculative_config decoding union"
+    },
+    {
+      "section": "engine_params",
+      "fields": [
+        "cp_config"
+      ],
+      "reason": "cp_config is a bare dict (context-parallel settings) with no Pydantic/dataclass schema class; leaves are not introspectable and must come from curated overrides if exposed"
     },
     {
       "section": "sampling_params",
@@ -130,52 +137,22 @@
       "description": "The format to load the model.",
       "deprecated": false
     },
+    "fail_fast_on_attention_window_too_large": {
+      "type": "boolean",
+      "default": false,
+      "description": "Fail fast when attention window is too large to fit even a single sequence in the KV cache.",
+      "deprecated": false
+    },
     "enable_lora": {
       "type": "boolean",
       "default": false,
       "description": "Enable LoRA.",
       "deprecated": false
     },
-    "max_lora_rank": {
-      "type": "integer | None",
-      "default": null,
-      "description": "The maximum LoRA rank.",
-      "deprecated": true
-    },
-    "max_loras": {
-      "type": "integer",
-      "default": 4,
-      "description": "The maximum number of LoRA.",
-      "deprecated": true
-    },
-    "max_cpu_loras": {
-      "type": "integer",
-      "default": 4,
-      "description": "The maximum number of LoRA on CPU.",
-      "deprecated": true
-    },
     "lora_config": {
       "type": "LoraConfig | None",
       "default": null,
       "description": "LoRA configuration for the model.",
-      "deprecated": false
-    },
-    "enable_prompt_adapter": {
-      "type": "boolean",
-      "default": false,
-      "description": "Enable prompt adapter.",
-      "deprecated": false
-    },
-    "max_prompt_adapter_token": {
-      "type": "integer",
-      "default": 0,
-      "description": "The maximum number of prompt adapter tokens.",
-      "deprecated": false
-    },
-    "quant_config": {
-      "type": "QuantConfig | None",
-      "default": null,
-      "description": "Quantization config.",
       "deprecated": false
     },
     "kv_cache_config": {
@@ -193,7 +170,7 @@
     "guided_decoding_backend": {
       "type": "string | None",
       "default": null,
-      "description": "Guided decoding backend.",
+      "description": "Guided decoding backend. llguidance is supported in PyTorch backend only.",
       "deprecated": false
     },
     "batched_logits_processor": {
@@ -233,21 +210,9 @@
       "deprecated": false
     },
     "speculative_config": {
-      "type": "LookaheadDecodingConfig | MedusaDecodingConfig | EagleDecodingConfig | MTPDecodingConfig | NGramDecodingConfig | DraftTargetDecodingConfig | None",
+      "type": "DraftTargetDecodingConfig | EagleDecodingConfig | LookaheadDecodingConfig | MedusaDecodingConfig | MTPDecodingConfig | NGramDecodingConfig | UserProvidedDecodingConfig | AutoDecodingConfig | None",
       "default": null,
       "description": "Speculative decoding config.",
-      "deprecated": false
-    },
-    "batching_type": {
-      "type": "BatchingType | None",
-      "default": null,
-      "description": "Batching type.",
-      "deprecated": false
-    },
-    "normalize_log_probs": {
-      "type": "boolean",
-      "default": false,
-      "description": "Normalize log probabilities.",
       "deprecated": false
     },
     "max_batch_size": {
@@ -304,14 +269,8 @@
       "description": "The parser to separate reasoning content from output.",
       "deprecated": false
     },
-    "garbage_collection_gen0_threshold": {
-      "type": "integer",
-      "default": 20000,
-      "description": "Threshold for Python garbage collection of generation 0 objects.Lower values trigger more frequent garbage collection.",
-      "deprecated": false
-    },
     "decoding_config": {
-      "type": "Optional[DecodingConfig]",
+      "type": "Optional[tensorrt_llm.llmapi.llm_args.DecodingConfig]",
       "default": null,
       "description": "The decoding config.",
       "deprecated": true
@@ -364,6 +323,12 @@
       "description": "Calibration config.",
       "deprecated": false
     },
+    "quant_config": {
+      "type": "QuantConfig | None",
+      "default": null,
+      "description": "Quantization config.",
+      "deprecated": false
+    },
     "embedding_parallel_mode": {
       "type": "string",
       "default": "SHARDING_ALONG_VOCAB",
@@ -377,9 +342,31 @@
       "deprecated": false
     },
     "build_config": {
-      "type": "Optional[tensorrt_llm.builder.BuildConfig]",
+      "$ref": "#/$defs/BuildConfig",
+      "default": null
+    },
+    "enable_prompt_adapter": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable prompt adapter.",
+      "deprecated": false
+    },
+    "max_prompt_adapter_token": {
+      "type": "integer",
+      "default": 0,
+      "description": "The maximum number of prompt adapter tokens.",
+      "deprecated": false
+    },
+    "batching_type": {
+      "type": "BatchingType | None",
       "default": null,
-      "description": "Build config.",
+      "description": "Batching type.",
+      "deprecated": false
+    },
+    "normalize_log_probs": {
+      "type": "boolean",
+      "default": false,
+      "description": "Normalize log probabilities.",
       "deprecated": false
     }
   },
@@ -571,6 +558,1621 @@
     "spaces_between_special_tokens": {
       "type": "bool",
       "default": true
+    }
+  },
+  "$defs": {
+    "AutoDecodingConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for auto speculative decoding.\n\nThis config is used to automatically select the best speculative decoding algorithm.\n\nAccording to benchmark results, the best algorithm in general is NGRAM with low concurrency <= 32.\nDefault heuristic:\n    With concurrency <= 4, max_draft_len = 5, max_matching_ngram_size = 3\n    With concurrency <= 32, max_draft_len = 3, max_matching_ngram_size = 5\n    With concurrency > 32, speculative decoding is disabled.",
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        }
+      },
+      "title": "AutoDecodingConfig",
+      "type": "object"
+    },
+    "BatchingType": {
+      "enum": [
+        "STATIC",
+        "INFLIGHT"
+      ],
+      "title": "BatchingType",
+      "type": "string"
+    },
+    "CacheTransceiverConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for the cache transceiver.",
+      "properties": {
+        "backend": {
+          "anyOf": [
+            {
+              "enum": [
+                "DEFAULT",
+                "UCX",
+                "NIXL",
+                "MPI"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The communication backend type to use for the cache transceiver.",
+          "title": "Backend"
+        },
+        "max_tokens_in_buffer": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The max number of tokens the transfer buffer can fit.",
+          "title": "Max Tokens In Buffer"
+        }
+      },
+      "title": "CacheTransceiverConfig",
+      "type": "object"
+    },
+    "CalibConfig": {
+      "additionalProperties": false,
+      "description": "Calibration configuration.",
+      "properties": {
+        "device": {
+          "default": "cuda",
+          "description": "The device to run calibration.",
+          "enum": [
+            "cuda",
+            "cpu"
+          ],
+          "title": "Device",
+          "type": "string"
+        },
+        "calib_dataset": {
+          "default": "cnn_dailymail",
+          "description": "The name or local path of calibration dataset.",
+          "title": "Calib Dataset",
+          "type": "string"
+        },
+        "calib_batches": {
+          "default": 512,
+          "description": "The number of batches that the calibration runs.",
+          "title": "Calib Batches",
+          "type": "integer"
+        },
+        "calib_batch_size": {
+          "default": 1,
+          "description": "The batch size that the calibration runs.",
+          "title": "Calib Batch Size",
+          "type": "integer"
+        },
+        "calib_max_seq_length": {
+          "default": 512,
+          "description": "The maximum sequence length that the calibration runs.",
+          "title": "Calib Max Seq Length",
+          "type": "integer"
+        },
+        "random_seed": {
+          "default": 1234,
+          "description": "The random seed used for calibration.",
+          "title": "Random Seed",
+          "type": "integer"
+        },
+        "tokenizer_max_seq_length": {
+          "default": 2048,
+          "description": "The maximum sequence length to initialize tokenizer for calibration.",
+          "title": "Tokenizer Max Seq Length",
+          "type": "integer"
+        }
+      },
+      "title": "CalibConfig",
+      "type": "object"
+    },
+    "CapacitySchedulerPolicy": {
+      "enum": [
+        "MAX_UTILIZATION",
+        "GUARANTEED_NO_EVICT",
+        "STATIC_BATCH"
+      ],
+      "title": "CapacitySchedulerPolicy",
+      "type": "string"
+    },
+    "ContextChunkingPolicy": {
+      "description": "Context chunking policy. ",
+      "enum": [
+        "FIRST_COME_FIRST_SERVED",
+        "EQUAL_PROGRESS"
+      ],
+      "title": "ContextChunkingPolicy",
+      "type": "string"
+    },
+    "DraftTargetDecodingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        }
+      },
+      "title": "DraftTargetDecodingConfig",
+      "type": "object"
+    },
+    "DynamicBatchConfig": {
+      "additionalProperties": false,
+      "description": "Dynamic batch configuration.\n\nControls how batch size and token limits are dynamically adjusted at runtime.",
+      "properties": {
+        "enable_batch_size_tuning": {
+          "description": "Controls if the batch size should be tuned dynamically",
+          "title": "Enable Batch Size Tuning",
+          "type": "boolean"
+        },
+        "enable_max_num_tokens_tuning": {
+          "description": "Controls if the max num tokens should be tuned dynamically",
+          "title": "Enable Max Num Tokens Tuning",
+          "type": "boolean"
+        },
+        "dynamic_batch_moving_average_window": {
+          "description": "The window size for moving average of input and output length which is used to calculate dynamic batch size and max num tokens",
+          "title": "Dynamic Batch Moving Average Window",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "enable_batch_size_tuning",
+        "enable_max_num_tokens_tuning",
+        "dynamic_batch_moving_average_window"
+      ],
+      "title": "DynamicBatchConfig",
+      "type": "object"
+    },
+    "EagleDecodingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        },
+        "eagle_choices": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eagle Choices"
+        },
+        "greedy_sampling": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": true,
+          "title": "Greedy Sampling"
+        },
+        "posterior_threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Posterior Threshold"
+        },
+        "use_dynamic_tree": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "title": "Use Dynamic Tree"
+        },
+        "dynamic_tree_max_topK": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dynamic Tree Max Topk"
+        },
+        "num_eagle_layers": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Num Eagle Layers"
+        },
+        "max_non_leaves_per_layer": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Non Leaves Per Layer"
+        },
+        "eagle3_one_model": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": true,
+          "title": "Eagle3 One Model"
+        }
+      },
+      "title": "EagleDecodingConfig",
+      "type": "object"
+    },
+    "ExtendedRuntimePerfKnobConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for extended runtime performance knobs.",
+      "properties": {
+        "multi_block_mode": {
+          "default": true,
+          "description": "Whether to use multi-block mode.",
+          "title": "Multi Block Mode",
+          "type": "boolean"
+        },
+        "enable_context_fmha_fp32_acc": {
+          "default": false,
+          "description": "Whether to enable context FMHA FP32 accumulation.",
+          "title": "Enable Context Fmha Fp32 Acc",
+          "type": "boolean"
+        },
+        "cuda_graph_mode": {
+          "default": false,
+          "description": "Whether to use CUDA graph mode.",
+          "title": "Cuda Graph Mode",
+          "type": "boolean"
+        },
+        "cuda_graph_cache_size": {
+          "default": 0,
+          "description": "Number of cuda graphs to be cached in the runtime. The larger the cache, the better the perf, but more GPU memory is consumed.",
+          "title": "Cuda Graph Cache Size",
+          "type": "integer"
+        }
+      },
+      "title": "ExtendedRuntimePerfKnobConfig",
+      "type": "object"
+    },
+    "KvCacheConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for the KV cache.",
+      "properties": {
+        "enable_block_reuse": {
+          "default": true,
+          "description": "Controls if KV cache blocks can be reused for different requests.",
+          "title": "Enable Block Reuse",
+          "type": "boolean"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The maximum number of tokens that should be stored in the KV cache. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used.",
+          "title": "Max Tokens"
+        },
+        "max_attention_window": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Size of the attention window for each sequence. Only the last tokens will be stored in the KV cache. If the number of elements in `max_attention_window` is less than the number of layers, `max_attention_window` will be repeated multiple times to the number of layers.",
+          "title": "Max Attention Window"
+        },
+        "sink_token_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of sink tokens (tokens to always keep in attention window).",
+          "title": "Sink Token Length"
+        },
+        "free_gpu_memory_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fraction of GPU memory fraction that should be allocated for the KV cache. Default is 90%. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used.",
+          "title": "Free Gpu Memory Fraction"
+        },
+        "host_cache_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Size of the host cache in bytes. If both `max_tokens` and `host_cache_size` are specified, memory corresponding to the minimum will be used.",
+          "title": "Host Cache Size"
+        },
+        "onboard_blocks": {
+          "default": true,
+          "description": "Controls if blocks are onboarded.",
+          "title": "Onboard Blocks",
+          "type": "boolean"
+        },
+        "cross_kv_cache_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fraction of the KV Cache memory should be reserved for cross attention. If set to p, self attention will use 1-p of KV Cache memory and cross attention will use p of KV Cache memory. Default is 50%. Should only be set when using encoder-decoder model.",
+          "title": "Cross Kv Cache Fraction"
+        },
+        "secondary_offload_min_priority": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only blocks with priority > mSecondaryOfflineMinPriority can be offloaded to secondary memory.",
+          "title": "Secondary Offload Min Priority"
+        },
+        "event_buffer_max_size": {
+          "default": 0,
+          "description": "Maximum size of the event buffer. If set to 0, the event buffer will not be used.",
+          "title": "Event Buffer Max Size",
+          "type": "integer"
+        },
+        "enable_partial_reuse": {
+          "default": true,
+          "description": "Whether blocks that are only partially matched can be reused.",
+          "title": "Enable Partial Reuse",
+          "type": "boolean"
+        },
+        "copy_on_partial_reuse": {
+          "default": true,
+          "description": "Whether partially matched blocks that are in use can be reused after copying them.",
+          "title": "Copy On Partial Reuse",
+          "type": "boolean"
+        },
+        "use_uvm": {
+          "default": false,
+          "description": "Whether to use UVM for the KV cache.",
+          "title": "Use Uvm",
+          "type": "boolean"
+        },
+        "dtype": {
+          "default": "auto",
+          "description": "The data type to use for the KV cache.",
+          "title": "Dtype",
+          "type": "string"
+        }
+      },
+      "title": "KvCacheConfig",
+      "type": "object"
+    },
+    "LookaheadDecodingConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for lookahead speculative decoding.",
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        },
+        "max_window_size": {
+          "default": 4,
+          "description": "Number of NGrams in lookahead branch per step.",
+          "title": "Max Window Size",
+          "type": "integer"
+        },
+        "max_ngram_size": {
+          "default": 3,
+          "description": "Number of tokens per NGram.",
+          "title": "Max Ngram Size",
+          "type": "integer"
+        },
+        "max_verification_set_size": {
+          "default": 4,
+          "description": "Number of NGrams in verification branch per step.",
+          "title": "Max Verification Set Size",
+          "type": "integer"
+        }
+      },
+      "title": "LookaheadDecodingConfig",
+      "type": "object"
+    },
+    "LoraConfig": {
+      "properties": {
+        "lora_dir": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lora Dir",
+          "type": "array"
+        },
+        "lora_ckpt_source": {
+          "default": "hf",
+          "title": "Lora Ckpt Source",
+          "type": "string"
+        },
+        "max_lora_rank": {
+          "default": 64,
+          "title": "Max Lora Rank",
+          "type": "integer"
+        },
+        "lora_target_modules": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lora Target Modules",
+          "type": "array"
+        },
+        "trtllm_modules_to_hf_modules": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Trtllm Modules To Hf Modules",
+          "type": "object"
+        },
+        "max_loras": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Loras"
+        },
+        "max_cpu_loras": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Cpu Loras"
+        },
+        "swap_gate_up_proj_lora_b_weight": {
+          "default": true,
+          "title": "Swap Gate Up Proj Lora B Weight",
+          "type": "boolean"
+        }
+      },
+      "title": "LoraConfig",
+      "type": "object"
+    },
+    "MTPDecodingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        },
+        "num_nextn_predict_layers": {
+          "default": 1,
+          "title": "Num Nextn Predict Layers",
+          "type": "integer"
+        },
+        "use_relaxed_acceptance_for_thinking": {
+          "default": false,
+          "title": "Use Relaxed Acceptance For Thinking",
+          "type": "boolean"
+        },
+        "relaxed_topk": {
+          "default": 1,
+          "title": "Relaxed Topk",
+          "type": "integer"
+        },
+        "relaxed_delta": {
+          "default": 0.0,
+          "title": "Relaxed Delta",
+          "type": "number"
+        },
+        "use_mtp_vanilla": {
+          "default": false,
+          "title": "Use Mtp Vanilla",
+          "type": "boolean"
+        },
+        "num_nextn_predict_layers_from_model_config": {
+          "default": 1,
+          "title": "Num Nextn Predict Layers From Model Config",
+          "type": "integer"
+        },
+        "BEGIN_THINKING_PHASE_TOKEN": {
+          "default": 128798,
+          "title": "Begin Thinking Phase Token",
+          "type": "integer"
+        },
+        "END_THINKING_PHASE_TOKEN": {
+          "default": 128799,
+          "title": "End Thinking Phase Token",
+          "type": "integer"
+        }
+      },
+      "title": "MTPDecodingConfig",
+      "type": "object"
+    },
+    "MedusaDecodingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        },
+        "medusa_choices": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Medusa Choices"
+        },
+        "num_medusa_heads": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Num Medusa Heads"
+        }
+      },
+      "title": "MedusaDecodingConfig",
+      "type": "object"
+    },
+    "NGramDecodingConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for NGram drafter speculative decoding.\n\nArguments:\n    max_draft_len: int\n            The length maximum of draft tokens (can be understood as length maximum of output draft tokens).\n\n    max_matching_ngram_size: int\n        The length maximum of searching tokens (can be understood as length maximum of input tokens to search).\n\n    is_keep_all: bool = True\n        Whether to keep all candidate pattern-matches pairs, only one match is kept for each pattern if False.\n\n    is_use_oldest: bool = True\n        Whether to provide the oldest match when pattern is hit, the newest one is provided if False.\n\n    is_public_pool: bool = True\n        Whether to use a common pool for all requests, or the pool is private for each request if False.",
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        },
+        "max_matching_ngram_size": {
+          "default": 0,
+          "title": "Max Matching Ngram Size",
+          "type": "integer"
+        },
+        "is_keep_all": {
+          "default": true,
+          "title": "Is Keep All",
+          "type": "boolean"
+        },
+        "is_use_oldest": {
+          "default": true,
+          "title": "Is Use Oldest",
+          "type": "boolean"
+        },
+        "is_public_pool": {
+          "default": true,
+          "title": "Is Public Pool",
+          "type": "boolean"
+        },
+        "is_auto_heuristic": {
+          "default": false,
+          "title": "Is Auto Heuristic",
+          "type": "boolean"
+        }
+      },
+      "title": "NGramDecodingConfig",
+      "type": "object"
+    },
+    "PeftCacheConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for the PEFT cache.",
+      "properties": {
+        "num_host_module_layer": {
+          "default": 0,
+          "description": "number of max sized 1-layer 1-module adapterSize=1 sets of weights that can be stored in host cache, affects host cache size and overrides value of host_cache_size",
+          "title": "Num Host Module Layer",
+          "type": "integer"
+        },
+        "num_device_module_layer": {
+          "default": 0,
+          "description": "number of max sized 1-layer 1-module sets of weights that can be stored in device cache, affects device cache size and overrides value of device_cache_percent",
+          "title": "Num Device Module Layer",
+          "type": "integer"
+        },
+        "optimal_adapter_size": {
+          "default": 8,
+          "description": "optimal adapter size used to set page width",
+          "title": "Optimal Adapter Size",
+          "type": "integer"
+        },
+        "max_adapter_size": {
+          "default": 64,
+          "description": "max supported adapter size. Used to compute minimum",
+          "title": "Max Adapter Size",
+          "type": "integer"
+        },
+        "num_put_workers": {
+          "default": 1,
+          "description": "number of worker threads used to put weights into host cache",
+          "title": "Num Put Workers",
+          "type": "integer"
+        },
+        "num_ensure_workers": {
+          "default": 1,
+          "description": "number of worker threads used to copy weights from host to device",
+          "title": "Num Ensure Workers",
+          "type": "integer"
+        },
+        "num_copy_streams": {
+          "default": 1,
+          "description": "number of streams used to copy weights from host to device",
+          "title": "Num Copy Streams",
+          "type": "integer"
+        },
+        "max_pages_per_block_host": {
+          "default": 24,
+          "description": "Number of cache pages per allocation block (host)",
+          "title": "Max Pages Per Block Host",
+          "type": "integer"
+        },
+        "max_pages_per_block_device": {
+          "default": 8,
+          "description": "Number of cache pages per allocation block (device)",
+          "title": "Max Pages Per Block Device",
+          "type": "integer"
+        },
+        "device_cache_percent": {
+          "default": 0.02,
+          "description": "Proportion of free device memory after engine load to use for cache, as a fraction from 0 to 1",
+          "title": "Device Cache Percent",
+          "type": "number"
+        },
+        "host_cache_size": {
+          "default": 1073741824,
+          "description": "size in bytes to use for host cache",
+          "title": "Host Cache Size",
+          "type": "integer"
+        },
+        "lora_prefetch_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "folder to store the LoRA weights we hope to load during engine initialization, currently not supported",
+          "title": "Lora Prefetch Dir"
+        }
+      },
+      "title": "PeftCacheConfig",
+      "type": "object"
+    },
+    "QuantAlgo": {
+      "enum": [
+        "W8A16",
+        "W4A16",
+        "W4A16_AWQ",
+        "W4A8_AWQ",
+        "W8A16_GPTQ",
+        "W4A16_GPTQ",
+        "W8A8_SQ_PER_CHANNEL",
+        "W8A8_SQ_PER_TENSOR_PLUGIN",
+        "W8A8_SQ_PER_CHANNEL_PER_TOKEN_PLUGIN",
+        "W8A8_SQ_PER_CHANNEL_PER_TENSOR_PLUGIN",
+        "W8A8_SQ_PER_TENSOR_PER_TOKEN_PLUGIN",
+        "W4A8_QSERVE_PER_GROUP",
+        "W4A8_QSERVE_PER_CHANNEL",
+        "FP8",
+        "FP8_PER_CHANNEL_PER_TOKEN",
+        "FP8_BLOCK_SCALES",
+        "INT8",
+        "MIXED_PRECISION",
+        "NVFP4",
+        "W4A8_MXFP4_FP8",
+        "NO_QUANT"
+      ],
+      "title": "QuantAlgo",
+      "type": "string"
+    },
+    "QuantConfig": {
+      "properties": {
+        "quant_algo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuantAlgo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kv_cache_quant_algo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuantAlgo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "group_size": {
+          "default": 128,
+          "title": "Group Size",
+          "type": "integer"
+        },
+        "smoothquant_val": {
+          "default": 0.5,
+          "title": "Smoothquant Val",
+          "type": "number"
+        },
+        "clamp_val": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clamp Val"
+        },
+        "use_meta_recipe": {
+          "default": false,
+          "title": "Use Meta Recipe",
+          "type": "boolean"
+        },
+        "has_zero_point": {
+          "default": false,
+          "title": "Has Zero Point",
+          "type": "boolean"
+        },
+        "pre_quant_scale": {
+          "default": false,
+          "title": "Pre Quant Scale",
+          "type": "boolean"
+        },
+        "exclude_modules": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclude Modules"
+        }
+      },
+      "title": "QuantConfig",
+      "type": "object"
+    },
+    "SchedulerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "capacity_scheduler_policy": {
+          "$ref": "#/$defs/CapacitySchedulerPolicy",
+          "default": "GUARANTEED_NO_EVICT",
+          "description": "The capacity scheduler policy to use"
+        },
+        "context_chunking_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContextChunkingPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The context chunking policy to use"
+        },
+        "dynamic_batch_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicBatchConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The dynamic batch config to use"
+        }
+      },
+      "title": "SchedulerConfig",
+      "type": "object"
+    },
+    "UserProvidedDecodingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model Dir"
+        },
+        "drafter": {
+          "title": "Drafter"
+        },
+        "resource_manager": {
+          "default": null,
+          "title": "Resource Manager"
+        }
+      },
+      "required": [
+        "drafter"
+      ],
+      "title": "UserProvidedDecodingConfig",
+      "type": "object"
+    },
+    "BuildConfig": {
+      "title": "BuildConfig",
+      "type": "object",
+      "properties": {
+        "max_input_len": {
+          "type": "int",
+          "default": 1024
+        },
+        "max_seq_len": {
+          "type": "int",
+          "default": null
+        },
+        "opt_batch_size": {
+          "type": "int",
+          "default": 8
+        },
+        "max_batch_size": {
+          "type": "int",
+          "default": 2048
+        },
+        "max_beam_width": {
+          "type": "int",
+          "default": 1
+        },
+        "max_num_tokens": {
+          "type": "int",
+          "default": 8192
+        },
+        "opt_num_tokens": {
+          "type": "int | None",
+          "default": null
+        },
+        "max_prompt_embedding_table_size": {
+          "type": "int",
+          "default": 0
+        },
+        "kv_cache_type": {
+          "type": "KVCacheType",
+          "default": null
+        },
+        "gather_context_logits": {
+          "type": "int",
+          "default": false
+        },
+        "gather_generation_logits": {
+          "type": "int",
+          "default": false
+        },
+        "strongly_typed": {
+          "type": "bool",
+          "default": true
+        },
+        "force_num_profiles": {
+          "type": "int | None",
+          "default": null
+        },
+        "profiling_verbosity": {
+          "type": "str",
+          "default": "layer_names_only"
+        },
+        "enable_debug_output": {
+          "type": "bool",
+          "default": false
+        },
+        "max_draft_len": {
+          "type": "int",
+          "default": 0
+        },
+        "speculative_decoding_mode": {
+          "type": "SpeculativeDecodingMode",
+          "default": 1
+        },
+        "use_refit": {
+          "type": "bool",
+          "default": false
+        },
+        "input_timing_cache": {
+          "type": "str",
+          "default": null
+        },
+        "output_timing_cache": {
+          "type": "str",
+          "default": "model.cache"
+        },
+        "lora_config": {
+          "$ref": "#/$defs/LoraConfig",
+          "default": null
+        },
+        "auto_parallel_config": {
+          "$ref": "#/$defs/AutoParallelConfig",
+          "default": null
+        },
+        "weight_sparsity": {
+          "type": "bool",
+          "default": false
+        },
+        "weight_streaming": {
+          "type": "bool",
+          "default": false
+        },
+        "plugin_config": {
+          "$ref": "#/$defs/PluginConfig",
+          "default": null
+        },
+        "use_strip_plan": {
+          "type": "bool",
+          "default": false
+        },
+        "max_encoder_input_len": {
+          "type": "int",
+          "default": 1024
+        },
+        "dry_run": {
+          "type": "bool",
+          "default": false
+        },
+        "visualize_network": {
+          "type": "str",
+          "default": null
+        },
+        "monitor_memory": {
+          "type": "bool",
+          "default": false
+        },
+        "use_mrope": {
+          "type": "bool",
+          "default": false
+        }
+      }
+    },
+    "AutoParallelConfig": {
+      "title": "AutoParallelConfig",
+      "type": "object",
+      "properties": {
+        "world_size": {
+          "type": "int",
+          "default": 1
+        },
+        "gpus_per_node": {
+          "type": "int",
+          "default": 8
+        },
+        "cluster_key": {
+          "type": "str",
+          "default": null
+        },
+        "cluster_info": {
+          "$ref": "#/$defs/ClusterInfo",
+          "default": null
+        },
+        "sharding_cost_model": {
+          "type": "str",
+          "default": "alpha_beta"
+        },
+        "comm_cost_model": {
+          "type": "str",
+          "default": "alpha_beta"
+        },
+        "enable_pipeline_parallelism": {
+          "type": "bool",
+          "default": false
+        },
+        "enable_shard_unbalanced_shape": {
+          "type": "bool",
+          "default": false
+        },
+        "enable_shard_dynamic_shape": {
+          "type": "bool",
+          "default": false
+        },
+        "enable_reduce_scatter": {
+          "type": "bool",
+          "default": true
+        },
+        "builder_flags": {
+          "type": "int | None",
+          "default": null
+        },
+        "debug_mode": {
+          "type": "bool",
+          "default": false
+        },
+        "infer_shape": {
+          "type": "bool",
+          "default": true
+        },
+        "validation_mode": {
+          "type": "bool",
+          "default": false
+        },
+        "same_buffer_io": {
+          "type": "dict[str, str]",
+          "default": {}
+        },
+        "same_spec_io": {
+          "type": "dict[str, str]",
+          "default": {}
+        },
+        "sharded_io_allowlist": {
+          "type": "list[str]",
+          "default": []
+        },
+        "fill_weights": {
+          "type": "bool",
+          "default": false
+        },
+        "parallel_config_cache": {
+          "type": "str | None",
+          "default": null
+        },
+        "profile_cache": {
+          "type": "str | None",
+          "default": null
+        },
+        "dump_path": {
+          "type": "str | None",
+          "default": null
+        },
+        "debug_outputs": {
+          "type": "list[str] | str",
+          "default": []
+        }
+      }
+    },
+    "ClusterInfo": {
+      "title": "ClusterInfo",
+      "type": "object",
+      "properties": {
+        "inter_node_bw_per_device": {
+          "type": "int",
+          "default": 25
+        },
+        "intra_node_bw_per_device": {
+          "type": "int",
+          "default": 0
+        },
+        "inter_node_latency": {
+          "type": "int",
+          "default": 10
+        },
+        "intra_node_latency": {
+          "type": "int",
+          "default": 10
+        },
+        "intra_node_sharp": {
+          "type": "bool",
+          "default": false
+        },
+        "inter_node_sharp": {
+          "type": "bool",
+          "default": true
+        },
+        "memory_bw": {
+          "type": "int",
+          "default": 0
+        },
+        "memory_budget_per_device": {
+          "type": "int",
+          "default": 0
+        },
+        "math_throughput": {
+          "$ref": "#/$defs/MathThroughput",
+          "default": null
+        },
+        "memory_efficiency": {
+          "type": "float",
+          "default": 1.0
+        },
+        "math_efficiency": {
+          "type": "float",
+          "default": 1.0
+        },
+        "communication_efficiency": {
+          "type": "float",
+          "default": 1.0
+        }
+      }
+    },
+    "MathThroughput": {
+      "title": "MathThroughput",
+      "type": "object",
+      "properties": {
+        "int4": {
+          "type": "int",
+          "default": 0
+        },
+        "int8": {
+          "type": "int",
+          "default": 0
+        },
+        "fp8": {
+          "type": "int",
+          "default": 0
+        },
+        "float16": {
+          "type": "int",
+          "default": 0
+        },
+        "bfloat16": {
+          "type": "int",
+          "default": 0
+        },
+        "float32": {
+          "type": "int",
+          "default": 0
+        }
+      }
+    },
+    "PluginConfig": {
+      "title": "PluginConfig",
+      "type": "object",
+      "properties": {
+        "_dtype": {
+          "type": "str",
+          "default": "float16"
+        },
+        "_bert_attention_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_gpt_attention_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_explicitly_disable_gemm_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_gemm_swiglu_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_fp8_rowwise_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_qserve_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_identity_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_nccl_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_lora_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_dora_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_weight_only_groupwise_quant_matmul_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_weight_only_quant_matmul_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_smooth_quant_plugins": {
+          "type": "bool",
+          "default": true
+        },
+        "_smooth_quant_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_layernorm_quantization_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_rmsnorm_quantization_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_quantize_per_token_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_quantize_tensor_plugin": {
+          "type": "bool",
+          "default": false
+        },
+        "_moe_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_mamba_conv1d_plugin": {
+          "type": "str | None",
+          "default": "auto"
+        },
+        "_low_latency_gemm_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_low_latency_gemm_swiglu_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_gemm_allreduce_plugin": {
+          "type": "str | None",
+          "default": null
+        },
+        "_context_fmha": {
+          "type": "bool",
+          "default": true
+        },
+        "_bert_context_fmha_fp32_acc": {
+          "type": "bool",
+          "default": false
+        },
+        "_paged_kv_cache": {
+          "type": "bool | None",
+          "default": null
+        },
+        "_remove_input_padding": {
+          "type": "bool",
+          "default": true
+        },
+        "_norm_quant_fusion": {
+          "type": "bool",
+          "default": false
+        },
+        "_reduce_fusion": {
+          "type": "bool",
+          "default": false
+        },
+        "_user_buffer": {
+          "type": "bool",
+          "default": false
+        },
+        "_tokens_per_block": {
+          "type": "int",
+          "default": 32
+        },
+        "_use_paged_context_fmha": {
+          "type": "bool",
+          "default": true
+        },
+        "_use_fp8_context_fmha": {
+          "type": "bool",
+          "default": true
+        },
+        "_fuse_fp4_quant": {
+          "type": "bool",
+          "default": false
+        },
+        "_multiple_profiles": {
+          "type": "bool",
+          "default": false
+        },
+        "_paged_state": {
+          "type": "bool",
+          "default": true
+        },
+        "_streamingllm": {
+          "type": "bool",
+          "default": false
+        },
+        "_manage_weights": {
+          "type": "bool",
+          "default": false
+        },
+        "_use_fused_mlp": {
+          "type": "bool",
+          "default": true
+        },
+        "_pp_reduce_scatter": {
+          "type": "bool",
+          "default": false
+        }
+      }
     }
   }
 }

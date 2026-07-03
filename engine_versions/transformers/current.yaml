@@ -1,17 +1,12 @@
-# Per-engine version-bundle SSOT for transformers. Renovate-writable input only.
+# Per-engine version pin for transformers. Renovate-writable input only.
 #
-# Renovate updates `library.current_version` on each upstream release; the
-# dispatcher (engine_versions/_dispatcher.load_producer) resolves which
-# vendored producer to run, falling back to the most-recent prior version
-# when no exact-match archive exists at the bumped version. The probe
-# (scripts/_drift.py) verifies the dispatched producer's LANDMARKS still
-# resolve under the live library; probe verdict is the runtime gate.
-#
-# Cross-run fingerprint state lives in engine_versions/<engine>.compat.json
-# (cache, not SSOT). GitHub Actions records per-run probe history; this
-# file stays input-only so Renovate is the sole writer.
+# Renovate updates `library.current_version` on each upstream release. The
+# codegen and schema tooling reads the pin to select which mined snapshot under
+# `engine_versions/transformers/v<version>/outputs/` to project into the shipped
+# typed models and schema shadow. This file stays input-only so Renovate is the
+# sole writer.
 schema_version: 1
 engine: transformers
 library:
   pep503_name: transformers
-  current_version: "4.57.3"
+  current_version: "5.7.0"
