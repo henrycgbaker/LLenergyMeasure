@@ -197,7 +197,7 @@ generation.
 KV-cache size grows linearly with sequence length and batch size. It is a major
 consumer of GPU VRAM for large models. [vLLM](#engine) uses paged attention to
 manage the KV-cache as a pool of fixed-size blocks, reducing fragmentation.
-`vllm.engine.gpu_memory_utilization` controls how much VRAM is pre-allocated for
+`vllm.engine_params.gpu_memory_utilization` controls how much VRAM is pre-allocated for
 the KV-cache.
 
 Energy relevance: a larger KV-cache increases VRAM traffic and therefore memory

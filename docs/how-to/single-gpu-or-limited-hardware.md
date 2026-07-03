@@ -151,7 +151,7 @@ and flexibility.
 
 **vLLM** - higher throughput via continuous batching and paged attention, but
 pre-allocates most VRAM for the KV cache at startup. Reduce
-`vllm.engine.gpu_memory_utilization` (e.g. `0.7`) to leave headroom:
+`vllm.engine_params.gpu_memory_utilization` (e.g. `0.7`) to leave headroom:
 
 ```yaml
 vllm:

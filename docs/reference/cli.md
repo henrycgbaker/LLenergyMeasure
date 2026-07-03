@@ -73,3 +73,4 @@ Propose invariants corpus entries from runtime observations
 | `--engine` |  | str |  | Filter: only propose rules for this engine (transformers/vllm/tensorrt). |
 | `--out` |  | path |  | Output path for proposed YAML fragments (one YAML document per gap, separated by '---'). |
 | `--include-exceptions` |  | flag | `false` | Also propose rules from runtime exceptions. Disabled by default; exceptions ship through a different review path. |
+| `--verbose` | `-v` | int | `0` | Increase verbosity (-v=INFO, -vv=DEBUG) |

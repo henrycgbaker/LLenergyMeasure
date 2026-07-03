@@ -135,33 +135,34 @@ The sweep section is where the implementation parameters live:
 ```yaml
 sweep:
   # 1. Numerical precision - applies to all three engines.
-  transformers.dtype: [float16, bfloat16]
-  vllm.dtype: [float16, bfloat16]
-  tensorrt.dtype: [float16, bfloat16]
+  transformers.engine_params.dtype: [float16, bfloat16]
+  vllm.engine_params.dtype: [float16, bfloat16]
+  tensorrt.engine_params.dtype: [float16, bfloat16]
 
   # 2. Batching strategy - engine-native parameter names.
-  transformers.batch_size: [4, 16]
-  vllm.engine.max_num_seqs: [64, 256]
-  tensorrt.max_batch_size: [4, 16]
+  harness.transformers.batch_size: [4, 16]
+  vllm.engine_params.max_num_seqs: [64, 256]
+  tensorrt.engine_params.max_batch_size: [4, 16]
 
   # 3. Attention backend - measurable energy effect on prefill-heavy work.
-  transformers.attn_implementation: [sdpa, flash_attention_2]
-  vllm.attention.backend: [flash_attn, flashinfer]
+  transformers.engine_params.attn_implementation: [sdpa, flash_attention_2]
+  vllm.engine_params.attention.backend: [flash_attn, flashinfer]
 
   # 4. KV-cache reuse - affects steady-state throughput and energy.
-  vllm.engine.enable_prefix_caching: [true, false]
+  vllm.engine_params.enable_prefix_caching: [true, false]
   tensorrt.kv_cache_reuse:
     - {}
-    - tensorrt.kv_cache_config.enable_block_reuse: true
-      tensorrt.kv_cache_config.free_gpu_memory_fraction: 0.9
+    - tensorrt.engine_params.kv_cache_config.enable_block_reuse: true
+      tensorrt.engine_params.kv_cache_config.free_gpu_memory_fraction: 0.9
 ```
 
 A subtle but important point: each axis is **engine-scoped** by its
-key prefix (`transformers.`, `vllm.`, `tensorrt.`). When the sweep
+key prefix (`transformers.`, `vllm.`, `tensorrt.` - or `harness.<engine>.`
+for per-engine harness knobs like batch size). When the sweep
 expander processes an experiment cell whose engine is `vllm`, only
 `vllm.*` axes are applied to it; the `transformers.*` and
 `tensorrt.*` axes are skipped. This is what makes cross-engine sweeps
-sensible - you don't end up with `vllm.engine.max_num_seqs=64` mixed
+sensible - you don't end up with `vllm.engine_params.max_num_seqs=64` mixed
 into a Transformers experiment.
 
 The `tensorrt.kv_cache_reuse` group illustrates a **dependent group**:

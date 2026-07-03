@@ -10,11 +10,16 @@ All fields except `model` are optional and have sensible defaults.
 - [Warmup (`warmup:`)](#warmup-warmup)
 - [Baseline (`baseline:`)](#baseline-baseline)
 - [Transformers Engine (`transformers:`)](#transformers-engine-transformers)
-- [vLLM Engine (`vllm.engine:`)](#vllm-engine-vllm-engine)
-- [vLLM Sampling (`vllm.sampling:`)](#vllm-sampling-vllm-sampling)
-- [vLLM Beam Search (`vllm.beam_search:`)](#vllm-beam-search-vllm-beam_search)
-- [vLLM Attention (`vllm.engine.attention:`)](#vllm-attention-vllm-engine-attention)
+- [Transformers Engine Params (`transformers.engine_params:`)](#transformers-engine-params-transformers-engine_params)
+- [Transformers Sampling Params (`transformers.sampling_params:`)](#transformers-sampling-params-transformers-sampling_params)
+- [vLLM Engine (`vllm:`)](#vllm-engine-vllm)
+- [vLLM Engine Params (`vllm.engine_params:`)](#vllm-engine-params-vllm-engine_params)
+- [vLLM Sampling Params (`vllm.sampling_params:`)](#vllm-sampling-params-vllm-sampling_params)
 - [TensorRT-LLM Engine (`tensorrt:`)](#tensorrt-llm-engine-tensorrt)
+- [TensorRT-LLM Engine Params (`tensorrt.engine_params:`)](#tensorrt-llm-engine-params-tensorrt-engine_params)
+- [TensorRT-LLM Sampling Params (`tensorrt.sampling_params:`)](#tensorrt-llm-sampling-params-tensorrt-sampling_params)
+- [Harness Overrides (`harness:`)](#harness-overrides-harness)
+- [Transformers Harness (`harness.transformers:`)](#transformers-harness-harness-transformers)
 
 ### Top-Level Fields
 
@@ -24,9 +29,10 @@ All fields except `model` are optional and have sensible defaults.
 | `engine` | Engine | *(see section)* | Inference engine |
 | `measurement` | MeasurementConfig | *(see section)* | Measurement methodology: warmup, baseline, energy sampling |
 | `sampling_preset` | 'deterministic' | 'standard' | 'creative' | 'factual' | None | `null` | Sampling preset. When set, preset values are merged into the active engine's sampling section at parse time; explicit YAML values take precedence over preset values. |
-| `transformers` | TransformersConfig | None | `null` | HuggingFace Transformers engine configuration (only used when engine=transformers) |
-| `vllm` | VLLMConfig | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
-| `tensorrt` | TensorRTConfig | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
+| `transformers` | Config | None | `null` | HuggingFace Transformers engine configuration (only used when engine=transformers) |
+| `vllm` | Config | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
+| `tensorrt` | Config | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
+| `harness` | HarnessConfig | None | `null` | Per-engine llem-orchestration knobs (batching, torch.compile, TF32, autocast). |
 | `passthrough_kwargs` | dict | None | `null` | Extra kwargs passed through to engine at execution time. Keys must not collide with ExperimentConfig top-level fields. |
 
 ### Warmup (`warmup:`)
@@ -57,117 +63,148 @@ All fields except `model` are optional and have sensible defaults.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `batch_size` | integer | None | `null` | Batch size (None -> 1) |
-| `dtype` | 'float32' | 'float16' | 'bfloat16' | None | `null` | Model dtype for inference (None -> bfloat16). |
-| `attn_implementation` | 'sdpa' | 'flash_attention_2' | 'flash_attention_3' | 'eager' | None | `null` | Attention implementation (None -> sdpa) |
-| `torch_compile` | boolean | None | `null` | Enable torch.compile (None -> False) |
-| `torch_compile_mode` | string | None | `null` | torch.compile mode: 'default', 'reduce-overhead', 'max-autotune' (None -> 'default') |
-| `torch_compile_backend` | string | None | `null` | torch.compile backend (None -> 'inductor') |
-| `load_in_4bit` | boolean | None | `null` | BitsAndBytes 4-bit quantization |
-| `load_in_8bit` | boolean | None | `null` | BitsAndBytes 8-bit quantization |
-| `bnb_4bit_compute_dtype` | 'float32' | 'float16' | 'bfloat16' | None | `null` | Compute dtype for 4-bit (None -> float32, usually want bfloat16) |
-| `bnb_4bit_quant_type` | 'nf4' | 'fp4' | None | `null` | 4-bit quantization type (None -> 'nf4') |
-| `bnb_4bit_use_double_quant` | boolean | None | `null` | Double quantization saves ~0.4 bits/param (None -> False) |
-| `use_cache` | boolean | None | `null` | Use KV cache during generation (None -> True) |
-| `cache_implementation` | 'static' | 'offloaded_static' | 'sliding_window' | None | `null` | KV cache strategy; 'static' enables CUDA graphs (None -> dynamic) |
-| `num_beams` | integer | None | `null` | Beam search width (None -> 1, greedy/sampling) |
-| `early_stopping` | boolean | None | `null` | Stop beam search when all beams hit EOS (None -> False) |
-| `length_penalty` | number | None | `null` | Beam length penalty: >1 shorter, <1 longer (None -> 1.0) |
-| `no_repeat_ngram_size` | integer | None | `null` | Prevent n-gram repetition (None -> 0, disabled) |
-| `prompt_lookup_num_tokens` | integer | None | `null` | Prompt-lookup speculative decoding tokens (None -> disabled) |
-| `device_map` | string | None | `null` | Device placement strategy (None -> 'auto') |
-| `max_memory` | dict | None | `null` | Per-device memory limits, e.g. {0: '10GiB', 'cpu': '50GiB'} |
-| `allow_tf32` | boolean | None | `null` | Allow TF32 on Ampere GPUs (None -> PyTorch default) |
-| `autocast_enabled` | boolean | None | `null` | Enable torch.autocast mixed precision (None -> False) |
-| `autocast_dtype` | 'float16' | 'bfloat16' | None | `null` | torch.autocast dtype (None -> bfloat16 on Ampere) |
-| `low_cpu_mem_usage` | boolean | None | `null` | Low CPU memory usage during model loading (None -> False) |
-| `tp_plan` | string | None | `null` | Tensor parallelism plan for native HF TP (None -> disabled). Only 'auto' is currently supported by Transformers. Mutually exclusive with device_map. Requires torchrun launch. |
-| `tp_size` | integer | None | `null` | Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set. Field name preserved to match HuggingFace accelerate convention (distinct from TensorRTConfig.tensor_parallel_size which aligns with TrtLlmArgs). |
-| `sampling` | TransformersSamplingConfig | None | `null` | Sampling configuration for model.generate(); fields mirror HuggingFace native generate() kwargs. |
+| `engine_params` | EngineParams | None | `null` |  |
+| `sampling_params` | SamplingParams | None | `null` |  |
 
-### vLLM Engine (`vllm.engine:`)
+### Transformers Engine Params (`transformers.engine_params:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `gpu_memory_utilization` | number | None | `null` | GPU memory fraction for KV cache (None -> 0.9). Higher = more KV cache, less headroom. |
-| `swap_space` | number | None | `null` | CPU swap space in GiB for KV cache offloading (None -> 4). Enables model weight offload to prevent OOM. |
-| `cpu_offload_gb` | number | None | `null` | CPU RAM in GiB to offload model weights to (None -> 0, disabled). Reduces VRAM pressure at throughput cost. |
-| `block_size` | 8 | 16 | 32 | None | `null` | KV cache block size in tokens (None -> 16). Affects KV cache fragmentation and memory efficiency. |
-| `kv_cache_dtype` | 'auto' | 'fp8' | 'fp8_e5m2' | 'fp8_e4m3' | None | `null` | KV cache storage dtype (None -> auto = model dtype). fp8 variants halve KV cache VRAM on Ampere+. |
-| `enforce_eager` | boolean | None | `null` | Disable CUDA graphs, always use eager mode (None -> False). Eager mode: predictable latency, no graph compilation overhead. |
-| `enable_chunked_prefill` | boolean | None | `null` | Chunk large prefills across multiple scheduler iterations (None -> False). Affects scheduling latency and throughput. |
-| `max_num_seqs` | integer | None | `null` | Max concurrent sequences per scheduler iteration (None -> 256). Affects batch size and KV cache usage. |
-| `max_num_batched_tokens` | integer | None | `null` | Max tokens processed per scheduler iteration (None -> auto). Controls per-step compute budget. |
-| `max_model_len` | integer | None | `null` | Max sequence length in tokens (input + output). Overrides model config (None -> model default). Caps KV cache allocation. |
-| `num_scheduler_steps` | integer | None | `null` | Number of scheduler steps per iteration (multi-step scheduling, None -> 1). |
-| `tensor_parallel_size` | integer | None | `null` | Tensor parallel degree - number of GPUs to shard the model across (None -> 1). |
-| `pipeline_parallel_size` | integer | None | `null` | Pipeline parallel stages - memory per GPU changes with PP (None -> 1). |
-| `distributed_executor_backend` | 'mp' | 'ray' | None | `null` | Multi-GPU executor backend: 'mp' (multiprocessing) or 'ray' (None -> mp). |
-| `enable_prefix_caching` | boolean | None | `null` | Automatic prefix caching for repeated shared prompts (None -> False). |
-| `quantization` | 'awq' | 'gptq' | 'fp8' | 'fp8_e5m2' | 'fp8_e4m3' | 'marlin' | 'bitsandbytes' | None | `null` | Quantization method. Requires pre-quantized model checkpoint. |
-| `max_seq_len_to_capture` | integer | None | `null` | Maximum sequence length for CUDA graph capture (None -> 8192). |
-| `speculative_config` | VLLMSpeculativeConfig | None | `null` | Speculative decoding configuration. Mirrors vLLM native EngineArgs.speculative_config shape. |
-| `offload_group_size` | integer | None | `null` | Groups of layers for CPU offloading (None -> 0). |
-| `offload_num_in_group` | integer | None | `null` | Number of layers offloaded per group (None -> 1). |
-| `offload_prefetch_step` | integer | None | `null` | Prefetch steps ahead for CPU offload (None -> 1). |
-| `offload_params` | list[string] | None | `null` | Specific parameter names to offload to CPU (None -> all eligible). |
-| `disable_custom_all_reduce` | boolean | None | `null` | Disable custom all-reduce for multi-GPU (None -> False). |
-| `kv_cache_memory_bytes` | integer | None | `null` | Absolute KV cache size in bytes (None -> use gpu_memory_utilization). Mutually exclusive with gpu_memory_utilization. |
-| `compilation_config` | dict | None | `null` | Full passthrough to vLLM CompilationConfig (~30 fields). No validation - passed directly. |
-| `attention` | VLLMAttentionConfig | None | `null` | Attention implementation configuration. |
+| `dtype` | any | None | `null` |  |
+| `attn_implementation` | any | None | `null` |  |
+| `load_in_4bit` | any | None | `null` |  |
+| `load_in_8bit` | any | None | `null` |  |
+| `bnb_4bit_compute_dtype` | any | None | `null` |  |
+| `bnb_4bit_quant_type` | any | None | `null` |  |
+| `bnb_4bit_use_double_quant` | any | None | `null` |  |
+| `use_cache` | boolean | None | `null` |  |
+| `cache_implementation` | string | None | `null` |  |
+| `num_beams` | integer | None | `null` |  |
+| `early_stopping` | boolean | None | `null` |  |
+| `length_penalty` | number | None | `null` |  |
+| `no_repeat_ngram_size` | integer | None | `null` |  |
+| `prompt_lookup_num_tokens` | integer | None | `null` |  |
+| `device_map` | any | None | `null` |  |
+| `max_memory` | any | None | `null` |  |
+| `low_cpu_mem_usage` | any | None | `null` |  |
+| `tp_plan` | any | None | `null` |  |
+| `tp_size` | any | None | `null` |  |
 
-### vLLM Sampling (`vllm.sampling:`)
+### Transformers Sampling Params (`transformers.sampling_params:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `temperature` | number | None | `null` | Sampling temperature (0=greedy) |
-| `top_k` | integer | None | `null` | Top-k sampling (vLLM convention: -1 = disabled, None -> -1). |
-| `top_p` | number | None | `null` | Top-p nucleus sampling (1.0 = disabled) |
-| `repetition_penalty` | number | None | `null` | Repetition penalty (1.0 = no penalty) |
-| `min_p` | number | None | `null` | Minimum probability filter (None -> disabled) |
-| `min_tokens` | integer | None | `null` | Minimum output tokens before EOS is allowed (None -> 0, no minimum). |
-| `presence_penalty` | number | None | `null` | Presence penalty: penalises tokens that appear at all (None -> 0.0). Affects generation diversity. |
-| `frequency_penalty` | number | None | `null` | Frequency penalty: penalises tokens proportional to frequency (None -> 0.0). Affects repetition. |
-| `ignore_eos` | boolean | None | `null` | Continue generating past EOS token (None -> False). Forces max_tokens generation every time - affects total token count. |
-| `n` | integer | None | `null` | Number of output sequences per prompt (None -> 1). |
+| `temperature` | number | None | `null` |  |
+| `do_sample` | boolean | None | `null` |  |
+| `top_k` | integer | None | `null` |  |
+| `top_p` | number | None | `null` |  |
+| `repetition_penalty` | number | None | `null` |  |
+| `min_p` | number | None | `null` |  |
+| `min_new_tokens` | integer | None | `null` |  |
 
-### vLLM Beam Search (`vllm.beam_search:`)
+### vLLM Engine (`vllm:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `beam_width` | integer | None | `null` | Number of beams (ge=1). |
-| `length_penalty` | number | None | `null` | Length penalty: >1 favours shorter, <1 longer (None -> 1.0). |
-| `early_stopping` | boolean | None | `null` | Stop when beam_width complete sequences found (None -> False). |
+| `engine_params` | EngineParams | None | `null` |  |
+| `sampling_params` | SamplingParams | None | `null` |  |
 
-### vLLM Attention (`vllm.engine.attention:`)
+### vLLM Engine Params (`vllm.engine_params:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `backend` | string | None | `null` | Attention backend: flash_attn, flashinfer, etc. (None -> auto). |
-| `flash_attn_version` | integer | None | `null` | Flash attention version (None -> auto). |
-| `flash_attn_max_num_splits_for_cuda_graph` | integer | None | `null` | Max splits for CUDA graph with flash attention (None -> auto). |
-| `use_prefill_decode_attention` | boolean | None | `null` | Use prefill-decode attention (None -> True). |
-| `use_prefill_query_quantization` | boolean | None | `null` | Quantize queries during prefill (None -> False). |
-| `use_cudnn_prefill` | boolean | None | `null` | Use cuDNN for prefill (None -> False). |
-| `disable_flashinfer_prefill` | boolean | None | `null` | Disable FlashInfer for prefill (None -> False). |
-| `disable_flashinfer_q_quantization` | boolean | None | `null` | Disable FlashInfer query quantization (None -> False). |
-| `use_trtllm_attention` | boolean | None | `null` | Use TensorRT-LLM attention backend (None -> False). |
-| `use_trtllm_ragged_deepseek_prefill` | boolean | None | `null` | Use TRT-LLM ragged DeepSeek prefill (None -> False). |
+| `dtype` | 'auto' | 'half' | 'float16' | 'bfloat16' | 'float' | 'float32' | None | `auto` |  |
+| `gpu_memory_utilization` | number | None | `0.9` |  |
+| `cpu_offload_gb` | number | None | `0` |  |
+| `block_size` | integer | None | `null` |  |
+| `kv_cache_dtype` | 'auto' | 'float16' | 'bfloat16' | 'fp8' | 'fp8_e4m3' | 'fp8_e5m2' | 'fp8_inc' | 'fp8_ds_mla' | None | `auto` |  |
+| `enforce_eager` | boolean | None | `false` |  |
+| `enable_chunked_prefill` | boolean | None | `null` |  |
+| `max_num_seqs` | integer | None | `null` |  |
+| `max_num_batched_tokens` | integer | None | `null` |  |
+| `max_model_len` | integer | None | `null` |  |
+| `tensor_parallel_size` | integer | None | `1` |  |
+| `pipeline_parallel_size` | integer | None | `1` |  |
+| `distributed_executor_backend` | any | None | `null` |  |
+| `enable_prefix_caching` | boolean | None | `null` |  |
+| `quantization` | any | None | `null` |  |
+| `speculative_config` | SpeculativeConfig | None | `null` |  |
+| `offload_group_size` | integer | None | `0` |  |
+| `offload_num_in_group` | integer | None | `1` |  |
+| `offload_prefetch_step` | integer | None | `1` |  |
+| `offload_params` | any | None | `[]` |  |
+| `disable_custom_all_reduce` | boolean | None | `false` |  |
+| `kv_cache_memory_bytes` | integer | None | `null` |  |
+| `compilation_config` | CompilationConfig | None | `null` |  |
+| `attention` | any | None | `null` |  |
+| `beam_search` | any | None | `null` |  |
+
+### vLLM Sampling Params (`vllm.sampling_params:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `temperature` | number | None | `1.0` |  |
+| `top_k` | integer | None | `0` |  |
+| `top_p` | number | None | `1.0` |  |
+| `repetition_penalty` | number | None | `1.0` |  |
+| `min_p` | number | None | `0.0` |  |
+| `min_tokens` | integer | None | `0` |  |
+| `presence_penalty` | number | None | `0.0` |  |
+| `frequency_penalty` | number | None | `0.0` |  |
+| `ignore_eos` | boolean | None | `false` |  |
+| `n` | integer | None | `1` |  |
 
 ### TensorRT-LLM Engine (`tensorrt:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `max_batch_size` | integer | None | `null` | Max batch size (compile-time constant, None -> 8) |
-| `tensor_parallel_size` | integer | None | `null` | Tensor parallel size - number of GPUs to shard across (None -> 1). Aligns with TrtLlmArgs.tensor_parallel_size. Note: TransformersConfig.tp_size follows accelerate convention and is preserved. |
-| `pipeline_parallel_size` | integer | None | `null` | Pipeline parallel stages (None -> 1). |
-| `max_input_len` | integer | None | `null` | Max input sequence length (compile-time constant, None -> 1024) |
-| `max_seq_len` | integer | None | `null` | Max total sequence length (input + output, compile-time constant, None -> 2048) |
-| `max_num_tokens` | integer | None | `null` | Maximum number of tokens the engine can handle per iteration (None -> auto). |
-| `dtype` | 'float16' | 'bfloat16' | None | `null` | Model dtype (None -> auto). TRT-LLM is optimised for fp16/bf16; fp32 not supported. |
-| `fast_build` | boolean | None | `null` | Enable fast engine build mode (reduced optimisation, None -> False) |
-| `backend` | 'trt' | 'pytorch' | '_autodeploy' | None | `null` | TRT-LLM runtime backend - a measurement axis, not a per-host knob. 'trt' = AOT-compiled TensorRT engine (best steady-state, minutes-hours compile); 'pytorch' = TRT-LLM's eager runtime (same scheduler/KV cache, no compile, supports newer model archs without hand-written converters); '_autodeploy' = experimental autoporter. None -> TRT-LLM auto-picks (respects TLLM_USE_TRT_ENGINE env). |
-| `quant_config` | TensorRTQuantConfig | None | `null` | Quantisation configuration. Mirrors native TrtLlmArgs.quant_config. |
-| `kv_cache_config` | TensorRTKvCacheConfig | None | `null` | KV cache configuration. Mirrors native TrtLlmArgs.kv_cache_config. |
-| `scheduler_config` | TensorRTSchedulerConfig | None | `null` | Scheduler configuration. Mirrors native TrtLlmArgs.scheduler_config. |
-| `sampling` | TensorRTSamplingConfig | None | `null` | Sampling configuration (TRT-LLM-specific SamplingParams extensions) |
+| `engine_params` | EngineParams | None | `null` |  |
+| `sampling_params` | SamplingParams | None | `null` |  |
+
+### TensorRT-LLM Engine Params (`tensorrt.engine_params:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_batch_size` | integer | None | `null` | The maximum batch size. |
+| `tensor_parallel_size` | integer | None | `1` | The tensor parallel size. |
+| `pipeline_parallel_size` | integer | None | `1` | The pipeline parallel size. |
+| `max_input_len` | integer | None | `null` | The maximum input length. |
+| `max_seq_len` | integer | None | `null` | The maximum sequence length. |
+| `max_num_tokens` | integer | None | `null` | The maximum number of tokens. |
+| `dtype` | string | None | `auto` | The data type to use for the model. |
+| `fast_build` | boolean | None | `false` | Enable fast build. |
+| `backend` | string | None | `null` | The backend to use for this LLM instance. |
+| `quant_config` | any | None | `null` | Quantization config. |
+| `kv_cache_config` | any | None | `null` | KV cache config. |
+| `scheduler_config` | any | None | `null` | Scheduler config. |
+
+### TensorRT-LLM Sampling Params (`tensorrt.sampling_params:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `temperature` | number | None | `null` |  |
+| `top_k` | integer | None | `null` |  |
+| `top_p` | number | None | `null` |  |
+| `repetition_penalty` | number | None | `null` |  |
+| `min_p` | number | None | `null` |  |
+| `min_tokens` | integer | None | `null` |  |
+| `n` | integer | None | `1` |  |
+| `ignore_eos` | boolean | None | `false` |  |
+
+### Harness Overrides (`harness:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `transformers` | TransformersHarness | None | `null` |  |
+
+### Transformers Harness (`harness.transformers:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `batch_size` | integer | None | `null` | Prompt-batching size for llem's runner loop (None -> 1). |
+| `torch_compile` | boolean | None | `null` | Enable torch.compile on the loaded model (None -> False). |
+| `torch_compile_mode` | string | None | `null` | torch.compile mode: 'default', 'reduce-overhead', 'max-autotune' (None -> 'default'). |
+| `torch_compile_backend` | string | None | `null` | torch.compile backend (None -> 'inductor'). |
+| `allow_tf32` | boolean | None | `null` | Allow TF32 on Ampere GPUs via torch.backends (None -> PyTorch default). |
+| `autocast_enabled` | boolean | None | `null` | Wrap generation in torch.autocast mixed precision (None -> False). |
+| `autocast_dtype` | 'float16' | 'bfloat16' | None | `null` | torch.autocast dtype (None -> bfloat16 on Ampere). |
