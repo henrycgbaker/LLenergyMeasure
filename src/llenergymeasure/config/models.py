@@ -20,10 +20,11 @@ v2.0 removals:
 
 from __future__ import annotations
 
+import difflib
 import logging
 import warnings
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -58,6 +59,55 @@ def _get_invariants_loader() -> EngineInvariantsLoader:
 def _reset_invariants_loader_cache() -> None:
     """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
     _get_invariants_loader.cache_clear()
+
+
+# Soft-validation cutoff for difflib suggestions on extra keys. 0.8 keeps the
+# suggestion conservative (clear typos like ``dtypee`` -> ``dtype``) without
+# nagging on genuinely-new engine fields that happen to share a prefix.
+_CLOSE_MATCH_CUTOFF = 0.8
+
+
+def _nested_subsection_models(section: BaseModel) -> dict[str, type[BaseModel]]:
+    """Return the ``engine_params`` / ``sampling_params`` sub-model classes.
+
+    Detects the generated nested shape by field presence rather than engine
+    name; a section lacking both sub-fields yields an empty dict.
+    """
+    models: dict[str, type[BaseModel]] = {}
+    for sub_name in ("engine_params", "sampling_params"):
+        field = type(section).model_fields.get(sub_name)
+        if field is None:
+            continue
+        for candidate in get_args(field.annotation) or (field.annotation,):
+            if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+                models[sub_name] = candidate
+                break
+    return models
+
+
+@lru_cache(maxsize=16)
+def _discovered_field_names(engine: str, sub_name: str) -> frozenset[str]:
+    """Discovered-schema field names for a sub-section; empty if no schema ships.
+
+    Broadens the soft-validation vocabulary beyond the curated ``model_fields``
+    so a typo of an un-curated-but-discovered passthrough field is still caught.
+    Memoised per ``(engine, sub_name)`` (the discovered schema is a stable
+    committed artifact) so a sweep validating many configs reads each schema
+    once; tests that mutate the on-disk schema call
+    ``_reset_discovered_field_cache``.
+    """
+    from llenergymeasure.config.schema_loader import SchemaLoader
+
+    try:
+        schema = SchemaLoader().load_schema(engine)
+    except (FileNotFoundError, ValueError):
+        return frozenset()
+    return frozenset(getattr(schema, sub_name, {}) or {})
+
+
+def _reset_discovered_field_cache() -> None:
+    """Clear the memoised discovered-schema vocab; used by tests that mutate it."""
+    _discovered_field_names.cache_clear()
 
 
 # =============================================================================
@@ -551,6 +601,78 @@ class ExperimentConfig(BaseModel):
                 f"tensorrt: config section provided but engine={self.engine!r}. "
                 "Remove the tensorrt: section or set engine: tensorrt."
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_engine_section_extras(self) -> ExperimentConfig:
+        """Soft/hard validation of extra keys on the active engine's nested section.
+
+        Two checks against the generated nested shape (``engine_params`` /
+        ``sampling_params`` sub-models):
+
+        - Wrapper-level extras (keys on the section itself) are ERRORS: the
+          engine never sees them, so silently accepting them would let a user
+          measure something other than what they configured. If a key names a
+          known nested field it is a pre-nested-shape flat config, so the
+          message is a migration hint pointing at the correct nested location;
+          otherwise it is a typo and the message carries a ``did you mean``
+          suggestion.
+        - Extras inside ``engine_params`` / ``sampling_params`` DO pass through
+          to the engine (``extra="allow"``), so a genuinely-new engine field is
+          legitimate. We only WARN, and only when the key is a close typo of a
+          known field, using the discovered schema plus generated fields as the
+          vocabulary.
+        """
+        section = getattr(self, self.engine.value, None)
+        if not isinstance(section, BaseModel):
+            return self
+        sub_models = _nested_subsection_models(section)
+        if not sub_models:
+            return self
+
+        nested_field_names = {name for model in sub_models.values() for name in model.model_fields}
+
+        # (1) Wrapper-level extras: always an error.
+        for key in section.model_extra or {}:
+            for sub_name, model in sub_models.items():
+                if key in model.model_fields:
+                    raise ValueError(
+                        f"{self.engine.value}.{key} moved to "
+                        f"{self.engine.value}.{sub_name}.{key} (flat engine config was "
+                        "replaced by the nested shape in v0.10)."
+                    )
+            suggestion = difflib.get_close_matches(key, sorted(nested_field_names), n=1)
+            hint = f"; did you mean engine_params.{suggestion[0]}?" if suggestion else ""
+            raise ValueError(f"unknown field {key!r} on {self.engine.value}{hint}")
+
+        # (2) Sub-section extras: pass through to the engine - warn on close typos.
+        for sub_name, model in sub_models.items():
+            sub_section = getattr(section, sub_name, None)
+            if sub_section is None:
+                continue
+            extras = sub_section.model_extra
+            if not extras:
+                # No extra keys to vet: skip building the vocabulary (which
+                # reads the discovered-schema JSON off disk). The common case.
+                continue
+            vocabulary = sorted(
+                set(model.model_fields) | _discovered_field_names(self.engine.value, sub_name)
+            )
+            for key in extras:
+                if key in vocabulary:
+                    # Discovered-but-uncurated engine field: legitimate
+                    # passthrough, no warning.
+                    continue
+                suggestion = difflib.get_close_matches(
+                    key, vocabulary, n=1, cutoff=_CLOSE_MATCH_CUTOFF
+                )
+                if suggestion:
+                    warnings.warn(
+                        f"unknown field {key!r} in {self.engine.value}.{sub_name}; "
+                        f"did you mean {suggestion[0]}?",
+                        ConfigValidationWarning,
+                        stacklevel=2,
+                    )
         return self
 
     @model_validator(mode="after")

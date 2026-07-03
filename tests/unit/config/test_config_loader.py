@@ -55,23 +55,27 @@ def test_load_valid_yaml(tmp_path):
 
 
 def test_load_yaml_with_dtype(tmp_path):
-    """YAML with per-engine dtype loads correctly (dtype is nested under the engine section)."""
+    """YAML with per-engine dtype loads correctly (dtype nests under engine_params)."""
     path = _write_yaml(
         tmp_path,
-        "task:\n  model: gpt2\nengine: transformers\ntransformers:\n  dtype: float16\n",
+        "task:\n  model: gpt2\nengine: transformers\n"
+        "transformers:\n  engine_params:\n    dtype: float16\n",
     )
     config = load_experiment_config(path)
     assert config.transformers is not None
-    assert config.transformers.dtype == "float16"
+    assert config.transformers.engine_params.dtype == "float16"
 
 
 def test_load_yaml_with_pytorch_section(tmp_path):
-    """YAML with nested pytorch: section loads correctly."""
-    yaml_content = "task:\n  model: gpt2\nengine: transformers\ntransformers:\n  batch_size: 4\n"
+    """YAML with a nested transformers: engine section loads correctly."""
+    yaml_content = (
+        "task:\n  model: gpt2\nengine: transformers\n"
+        "transformers:\n  engine_params:\n    num_beams: 4\n"
+    )
     path = _write_yaml(tmp_path, yaml_content)
     config = load_experiment_config(path)
     assert config.transformers is not None
-    assert config.transformers.batch_size == 4
+    assert config.transformers.engine_params.num_beams == 4
 
 
 def test_load_yaml_with_version_field_stripped(tmp_path):
@@ -147,7 +151,7 @@ def test_cli_overrides_none_values_ignored(tmp_path):
     """None values in cli_overrides are ignored (unset CLI flags)."""
     path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
     config = load_experiment_config(
-        path, cli_overrides={"task.model": None, "transformers.dtype": None}
+        path, cli_overrides={"task.model": None, "transformers.engine_params.dtype": None}
     )
     assert config.task.model == "gpt2"  # file value retained
 
@@ -167,10 +171,10 @@ def test_cli_override_dotted_key(tmp_path):
     path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
     config = load_experiment_config(
         path,
-        cli_overrides={"transformers.batch_size": 8},
+        cli_overrides={"transformers.engine_params.num_beams": 8},
     )
     assert config.transformers is not None
-    assert config.transformers.batch_size == 8
+    assert config.transformers.engine_params.num_beams == 8
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +247,7 @@ def test_load_study_config_grid_sweep(tmp_path):
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                     "task.dataset.n_prompts": [50, 100],
                 },
             }
@@ -273,12 +277,12 @@ def test_load_study_config_explicit_experiments(tmp_path):
                     {
                         "task": {"model": "gpt2"},
                         "engine": "transformers",
-                        "transformers": {"dtype": "float16"},
+                        "transformers": {"engine_params": {"dtype": "float16"}},
                     },
                     {
                         "task": {"model": "gpt2"},
                         "engine": "transformers",
-                        "transformers": {"dtype": "bfloat16"},
+                        "transformers": {"engine_params": {"dtype": "bfloat16"}},
                     },
                 ],
             }
@@ -297,7 +301,7 @@ def test_load_study_config_combined_mode(tmp_path):
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
                 "experiments": [
                     {"task": {"model": "gpt2-xl"}, "engine": "transformers"},
@@ -319,7 +323,7 @@ def test_load_study_config_with_execution_block(tmp_path):
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
                 "study_execution": {
                     "n_cycles": 3,
@@ -343,7 +347,7 @@ def test_load_study_config_cli_overrides(tmp_path):
             {
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
-                "sweep": {"transformers.dtype": ["float16", "bfloat16"]},
+                "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
                 "study_execution": {"n_cycles": 1},
             }
         )
@@ -371,7 +375,7 @@ def test_load_study_config_with_base(tmp_path):
             {
                 "base": "experiment.yaml",
                 "sweep": {
-                    "transformers.dtype": ["float16", "bfloat16"],
+                    "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
             }
         )
@@ -411,13 +415,13 @@ def test_load_study_config_all_invalid_raises(tmp_path):
                     {
                         "task": {"model": "gpt2"},
                         "engine": "vllm",
-                        "transformers": {"batch_size": 4},
+                        "transformers": {"engine_params": {"device_map": "auto"}},
                     },
                     # Invalid: vllm section with pytorch engine
                     {
                         "task": {"model": "gpt2"},
                         "engine": "transformers",
-                        "vllm": {"max_num_seqs": 64},
+                        "vllm": {"engine_params": {"max_num_seqs": 64}},
                     },
                 ],
             }
@@ -440,7 +444,7 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     sweep_content = {
         "task": {"model": "gpt2"},
         "engine": "transformers",
-        "sweep": {"transformers.dtype": ["float16", "bfloat16"]},
+        "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
     }
     study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))
     study_yaml_b.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 5}}))
@@ -467,8 +471,8 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
                 "engine": "transformers",
                 "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
                 "sweep": {
-                    "transformers.sampling.do_sample": [True, False],
-                    "transformers.sampling.temperature": [0.5, 1.0, 1.5],
+                    "transformers.sampling_params.do_sample": [True, False],
+                    "transformers.sampling_params.temperature": [0.5, 1.0, 1.5],
                 },
             }
         )

@@ -443,9 +443,8 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     model = config.task.model.split("/")[-1] if "/" in config.task.model else config.task.model
     parts = [f"{model} | {config.engine}"]
     # Deviation fields (only when non-default/explicit)
-    # dtype now lives per-engine; only show when set explicitly.
-    engine_section = getattr(config, config.engine, None)
-    engine_dtype = getattr(engine_section, "dtype", None)
+    # dtype lives on the active engine's engine_params; only show when set.
+    engine_dtype = getattr(config.active_engine_params(), "dtype", None)
     if engine_dtype is not None:
         parts.append(engine_dtype)
     if config.task.dataset.n_prompts != default_n:

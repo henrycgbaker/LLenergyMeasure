@@ -58,10 +58,11 @@ class SkippedConfig:
 
     @property
     def short_label(self) -> str:
-        """Short label for display: 'engine, dtype'. dtype lives under the engine section."""
+        """Short label for display: 'engine, dtype'. dtype lives under engine_params."""
         engine = self.raw_config.get("engine", "unknown")
         section = self.raw_config.get(engine) if isinstance(engine, str) else None
-        dtype = section.get("dtype", "?") if isinstance(section, dict) else "?"
+        engine_params = section.get("engine_params") if isinstance(section, dict) else None
+        dtype = engine_params.get("dtype", "?") if isinstance(engine_params, dict) else "?"
         return f"{engine}, {dtype}"
 
     def to_dict(self) -> dict[str, Any]:
