@@ -3,9 +3,9 @@
   "engine": "tensorrt",
   "engine_version": "1.0.0",
   "engine_commit_sha": null,
-  "image_ref": "nvcr.io/nvidia/tensorrt-llm/release:1.0.0",
+  "image_ref": "llenergymeasure:tensorrt-1.0.0",
   "base_image_ref": null,
-  "discovered_at": "2026-06-22T20:11:44.265856+00:00",
+  "discovered_at": "2026-07-03T16:25:37+02:00",
   "discovery_method": "TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
   "discovery_limitations": [
     {
