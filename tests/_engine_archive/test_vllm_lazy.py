@@ -1,10 +1,10 @@
-"""Per-engine lazy-LANDMARKS tests for vLLM at v0.7.3.
+"""Per-engine lazy-LANDMARKS tests for vLLM at v0.19.1.
 
 Asserts that the producer modules' PEP 562 ``__getattr__`` hooks resolve
 ``LANDMARKS`` to the same tuple that ``load_producer`` returns directly
 from the per-version archive subpackage. This catches drift between the
 producer-side wiring (script ``_get_landmarks`` + dispatcher call) and
-the archive contents (``_engine_archive/vllm/v0_7_3/producers/*.py``).
+the archive contents (``_engine_archive/vllm/v0_19_1/producers/*.py``).
 
 Mirror of ``tests/_engine_archive/test_dispatcher.py`` style: pytest,
 parametrize across producer kinds, no fixtures.
@@ -56,9 +56,9 @@ def test_producer_landmarks_matches_dispatcher(module_path: str, producer: str) 
 
     Drift between these two means the producer module's ``_get_landmarks``
     is resolving a different version (or wiring) than the per-version
-    archive at v0.7.3 actually contains - exactly the failure mode the
+    archive at v0.19.1 actually contains - exactly the failure mode the
     archive subpackage is meant to prevent.
     """
     module = _import_producer(module_path)
-    direct = load_producer(engine="vllm", version="0.7.3", producer=producer).LANDMARKS
+    direct = load_producer(engine="vllm", version="0.19.1", producer=producer).LANDMARKS
     assert direct == module.LANDMARKS

@@ -1,4 +1,4 @@
-"""Per-engine LANDMARKS resolution tests for transformers v4.57.3.
+"""Per-engine LANDMARKS resolution tests for transformers v5.7.0.
 
 Engine-specific complement to ``tests/_engine_archive/test_dispatcher.py``:
 asserts the two transformers producer modules expose ``LANDMARKS`` lazily
@@ -15,7 +15,7 @@ import importlib
 
 from engine_versions._dispatcher import load_producer
 
-_TRANSFORMERS_VERSION = "4.57.3"
+_TRANSFORMERS_VERSION = "5.7.0"
 
 
 def _assert_landmark_shape(landmarks: object) -> tuple[str, ...]:
