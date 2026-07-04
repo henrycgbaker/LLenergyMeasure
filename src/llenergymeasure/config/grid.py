@@ -7,6 +7,7 @@ import itertools
 import json
 import logging
 import random
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,6 +56,13 @@ class SkippedConfig:
     raw_config: dict[str, Any]
     reason: str
     errors: list[dict[str, Any]] = field(default_factory=list)
+    rule_id: str | None = None
+    """Engine rule that rejected this config, or None for a non-rule failure.
+
+    Populated from the ValidationError entries via :func:`_extract_rule_id`;
+    None when the config failed on a type error, unknown field, or any other
+    validation that is not an engine-rule rejection.
+    """
 
     @property
     def short_label(self) -> str:
@@ -65,6 +73,11 @@ class SkippedConfig:
         dtype = engine_params.get("dtype", "?") if isinstance(engine_params, dict) else "?"
         return f"{engine}, {dtype}"
 
+    @property
+    def display_reason(self) -> str:
+        """Compact reason for digests: the rejecting rule id, or the raw reason."""
+        return f"rule {self.rule_id}" if self.rule_id is not None else self.reason
+
     def to_dict(self) -> dict[str, Any]:
         """Serialise for StudyConfig.skipped_configs."""
         return {
@@ -72,7 +85,48 @@ class SkippedConfig:
             "reason": self.reason,
             "short_label": self.short_label,
             "errors": self.errors,
+            "rule_id": self.rule_id,
         }
+
+
+_RULE_ID_MARKER = re.compile(r"^\[([a-z0-9_]+)\]")
+
+
+def _raw_rule_message(err: dict[str, Any]) -> str:
+    """Return a value_error entry's message with the ``[rule_id]`` marker leading.
+
+    Prefer the original exception carried in ``ctx`` (its str keeps the marker
+    at position 0); fall back to stripping Pydantic's ``Value error, `` prefix
+    from ``msg`` when no exception object is present.
+    """
+    ctx = err.get("ctx")
+    if isinstance(ctx, dict):
+        original = ctx.get("error")
+        if isinstance(original, BaseException):
+            return str(original)
+    msg = str(err.get("msg", ""))
+    prefix = "Value error, "
+    return msg[len(prefix) :] if msg.startswith(prefix) else msg
+
+
+def _extract_rule_id(errors: list[dict[str, Any]]) -> str | None:
+    """Return the engine-rule id that rejected a config, or None.
+
+    Engine rules raise ``ValueError(f"[{rule.id}] {message}")`` in
+    ``ExperimentConfig._apply_rules``; Pydantic wraps that as a ``value_error``
+    entry whose original exception carries the leading ``[rule_id]`` marker.
+    Rule ids are snake_case, so the anchored regex stays conservative and never
+    matches bracketed prose later in a message. Only one rule fires per config
+    (``_apply_rules`` raises on the first error match), so the first marker
+    found is authoritative.
+    """
+    for err in errors:
+        if err.get("type") != "value_error":
+            continue
+        match = _RULE_ID_MARKER.match(_raw_rule_message(err))
+        if match is not None:
+            return match.group(1)
+    return None
 
 
 # =============================================================================
@@ -142,13 +196,20 @@ def expand_grid(
             errors: list[dict[str, Any]] = []
             if isinstance(exc, ValidationError):
                 errors = [dict(e) for e in exc.errors()]
-            skipped.append(SkippedConfig(raw_config=raw_config, reason=reason, errors=errors))
+            skipped.append(
+                SkippedConfig(
+                    raw_config=raw_config,
+                    reason=reason,
+                    errors=errors,
+                    rule_id=_extract_rule_id(errors),
+                )
+            )
 
     total = len(valid) + len(skipped)
 
     # Guard: all configs invalid
     if len(valid) == 0:
-        first_reasons = "; ".join(s.reason[:120] for s in skipped[:5])
+        first_reasons = "; ".join(s.display_reason[:120] for s in skipped[:5])
         raise ConfigError(
             f"nothing to run - all {total} generated config(s) are invalid. "
             f"First failures: {first_reasons}"
@@ -163,7 +224,7 @@ def expand_grid(
             total,
         )
         for s in skipped:
-            logger.warning("  Skipped (%s): %s", s.short_label, s.reason[:200])
+            logger.warning("  Skipped (%s): %s", s.short_label, s.display_reason[:200])
 
     # Combinatorial explosion warnings (tiered)
     n_valid = len(valid)
