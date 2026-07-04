@@ -3,8 +3,8 @@
 Reads ``runtime_observations.jsonl`` emitted by
 :mod:`llenergymeasure.study.runtime_observations`, groups captured warnings
 and log records by their normalised message template, partitions configs
-into *collision_configs* (A) and *not collision_configs* (B), and proposes corpus rules for
-templates the existing rules corpus does not already match.
+into *collision_configs* (A) and *not collision_configs* (B), and proposes one
+corpus rule per observed template.
 
 Design:
 
@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Literal
@@ -101,7 +101,6 @@ class GapProposal:
     representative_message: str
     needs_generalisation_review: bool
     severity: Literal["dormant", "error"]
-    representative_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +233,6 @@ def find_runtime_gaps(
                 representative_message=rep.representative_message,
                 needs_generalisation_review=needs_review,
                 severity=severity,
-                representative_kwargs=collision_configs[0] if collision_configs else {},
             )
         )
     return proposals

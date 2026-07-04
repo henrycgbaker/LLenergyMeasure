@@ -928,7 +928,7 @@ class ExecutionConfig(BaseModel):
         description=(
             "When true (default), sweep expansion applies library resolution to each declared "
             "ExperimentConfig via engine-rules dormant-rule application and drops "
-            "duplicates that share an resolved_config_hash. When false, every declared "
+            "duplicates that share a resolved_config_hash. When false, every declared "
             "config runs - the library-resolution mechanism still populates equivalence-group "
             "metadata for the sidecar but no configs are elided. The --no-dedup "
             "CLI flag is the equivalent. See sweep-dedup.md §2.3.1."

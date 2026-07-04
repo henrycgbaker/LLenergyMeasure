@@ -82,7 +82,7 @@ def _apply_rules_fixpoint(
 
     Raises:
         LibraryResolutionCycleError: If the fixpoint loop exceeds
-            :data:`_MAX_ITER` passes - the validated corpus has an rule cycle.
+            :data:`_MAX_ITER` passes - the validated corpus has a rule cycle.
     """
     dormant_rules = [r for r in rules if r.severity == "dormant"]
     if not dormant_rules:
