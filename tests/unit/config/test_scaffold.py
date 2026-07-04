@@ -50,6 +50,7 @@ def _field_entries(text: str, *, defaults: bool) -> list[tuple[str, str]]:
 @pytest.mark.parametrize(
     ("field_name", "expected"),
     [
+        # engine_params
         ("dtype", "auto  # one of [auto, half, float16, bfloat16, float, float32], default auto"),
         ("gpu_memory_utilization", "0.9  # float >0.0 <=1.0, default 0.9"),
         ("cpu_offload_gb", "0  # float >=0.0, default 0"),
@@ -57,6 +58,9 @@ def _field_entries(text: str, *, defaults: bool) -> list[tuple[str, str]]:
         ("enforce_eager", "false  # bool, default false"),
         ("speculative_config", "null  # object, default null"),
         ("distributed_executor_backend", "null  # any, default null"),
+        # sampling_params
+        ("temperature", "1.0  # float, default 1.0"),
+        ("top_k", "0  # int, default 0"),
     ],
 )
 def test_annotation_formats(field_name: str, expected: str) -> None:
@@ -64,14 +68,6 @@ def test_annotation_formats(field_name: str, expected: str) -> None:
     text = render_study_scaffold(MODEL, ["vllm"], defaults=True)
     entries = dict(_field_entries(text, defaults=True))
     assert entries[field_name] == expected
-
-
-def test_sampling_literal_and_defaults() -> None:
-    """A sampling field carries its default value and type annotation."""
-    text = render_study_scaffold(MODEL, ["vllm"], defaults=True)
-    entries = dict(_field_entries(text, defaults=True))
-    assert entries["temperature"] == "1.0  # float, default 1.0"
-    assert entries["top_k"] == "0  # int, default 0"
 
 
 # ---------------------------------------------------------------------------
