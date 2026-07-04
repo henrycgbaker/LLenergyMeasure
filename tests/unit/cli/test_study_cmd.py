@@ -57,6 +57,30 @@ def test_init_defaults_uncomments_fields(tmp_path: Path) -> None:
     assert "        dtype:" in live.read_text()
 
 
+def test_init_bounds_writes_sweep_file(tmp_path: Path) -> None:
+    """--bounds emits a sweep: block of value lists instead of experiments:."""
+    out = tmp_path / "study.yaml"
+    result = runner.invoke(
+        app, ["study", "init", "-m", MODEL, "-e", "vllm", "--bounds", "-o", str(out)]
+    )
+    assert result.exit_code == 0
+    text = out.read_text()
+    assert "sweep:" in text
+    assert "experiments:" not in text
+    assert "vllm.engine_params.dtype:" in text
+
+
+def test_init_bounds_and_defaults_are_mutually_exclusive(tmp_path: Path) -> None:
+    """Combining --bounds with --defaults is a usage error and writes nothing."""
+    out = tmp_path / "study.yaml"
+    result = runner.invoke(
+        app, ["study", "init", "-m", MODEL, "--bounds", "--defaults", "-o", str(out)]
+    )
+    assert result.exit_code != 0
+    assert "mutually exclusive" in result.output
+    assert not out.exists()
+
+
 def test_init_refuses_to_overwrite(tmp_path: Path) -> None:
     """A second write to the same path is refused with a non-zero exit."""
     out = tmp_path / "study.yaml"
