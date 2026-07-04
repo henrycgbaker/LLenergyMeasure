@@ -1,0 +1,94 @@
+"""``llem study`` - tools for writing study files.
+
+The ``study`` group holds commands that help you author a study file. A study
+file is the complete, explicit specification of what runs; ``llem run`` stays
+the sole executor. Today the group has one command, ``init``, which writes a
+starter study file for a model.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Annotated
+
+import typer
+
+__all__ = ["study_app"]
+
+study_app = typer.Typer(
+    name="study",
+    help="Write and prepare study files (llem run stays the executor).",
+    add_completion=False,
+    no_args_is_help=True,
+)
+
+
+@study_app.command("init")  # type: ignore[misc, untyped-decorator]
+def study_init(
+    model: Annotated[
+        str,
+        typer.Option("--model", "-m", help="Model id or HuggingFace path for the study."),
+    ],
+    engine: Annotated[
+        str | None,
+        typer.Option(
+            "--engine",
+            "-e",
+            help="Engine to write (transformers, vllm, tensorrt). Omit to write all engines.",
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Where to write the study file (default: study.yaml). Will not overwrite.",
+        ),
+    ] = None,
+    defaults: Annotated[
+        bool,
+        typer.Option(
+            "--defaults",
+            help="Set every field to its default (a runnable baseline) instead of "
+            "leaving them commented out.",
+        ),
+    ] = False,
+) -> None:
+    """Write a study file for a model, ready to edit and run with ``llem run``.
+
+    Without ``--defaults`` the tuning fields are present but commented out, each
+    annotated with its type, range, and default - uncomment the ones you want.
+    With ``--defaults`` those fields are filled in at their defaults, giving a
+    reproducible baseline you can run as-is.
+    """
+    from llenergymeasure.config.scaffold import all_engine_names, render_study_scaffold
+    from llenergymeasure.config.ssot import Engine
+
+    if not model.strip():
+        raise typer.BadParameter("Model must not be empty.", param_hint="--model")
+
+    if engine is not None:
+        valid = [e.value for e in Engine]
+        if engine not in valid:
+            raise typer.BadParameter(
+                f"Unknown engine {engine!r}. Choose one of: {', '.join(valid)}.",
+                param_hint="--engine",
+            )
+        engines = [engine]
+    else:
+        engines = all_engine_names()
+
+    text = render_study_scaffold(model, engines, defaults=defaults)
+
+    out_path = output if output is not None else Path("study.yaml")
+    if out_path.exists():
+        typer.echo(
+            f"Refusing to overwrite existing file: {out_path}. "
+            "Pass -o <path> to write elsewhere, or remove it first.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    out_path.write_text(text)
+    typer.echo(f"Wrote study file: {out_path}")
+    typer.echo(f"Edit it, then run: llem run {out_path}")

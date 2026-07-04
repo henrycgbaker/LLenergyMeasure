@@ -1,0 +1,90 @@
+"""Tests for the ``llem study init`` CLI command."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from llenergymeasure.cli import app
+
+runner = CliRunner()
+
+MODEL = "Qwen/Qwen2.5-0.5B"
+
+
+def test_study_group_in_top_level_help() -> None:
+    """The `study` group is registered on the top-level app."""
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "study" in result.output
+
+
+def test_study_no_args_shows_help() -> None:
+    """`llem study` with no subcommand shows its help and lists `init`."""
+    result = runner.invoke(app, ["study"])
+    assert result.exit_code != 0
+    assert "init" in result.output
+
+
+def test_init_single_engine_writes_file(tmp_path: Path) -> None:
+    """`init -e vllm` writes a runnable single-engine study file."""
+    out = tmp_path / "study.yaml"
+    result = runner.invoke(app, ["study", "init", "-m", MODEL, "-e", "vllm", "-o", str(out)])
+    assert result.exit_code == 0
+    assert out.exists()
+    text = out.read_text()
+    assert text.startswith("# llem study file - vllm")
+    assert "engine: vllm" in text
+    assert str(out) in result.output
+
+
+def test_init_all_engines_when_engine_omitted(tmp_path: Path) -> None:
+    """Omitting -e scaffolds one experiment per engine."""
+    out = tmp_path / "study.yaml"
+    result = runner.invoke(app, ["study", "init", "-m", MODEL, "-o", str(out)])
+    assert result.exit_code == 0
+    assert out.read_text().count("  - engine:") == 3
+
+
+def test_init_defaults_uncomments_fields(tmp_path: Path) -> None:
+    """--defaults produces live (uncommented) field lines."""
+    bare = tmp_path / "bare.yaml"
+    live = tmp_path / "live.yaml"
+    runner.invoke(app, ["study", "init", "-m", MODEL, "-e", "vllm", "-o", str(bare)])
+    runner.invoke(app, ["study", "init", "-m", MODEL, "-e", "vllm", "--defaults", "-o", str(live)])
+    assert "        # dtype:" in bare.read_text()
+    assert "        dtype:" in live.read_text()
+
+
+def test_init_refuses_to_overwrite(tmp_path: Path) -> None:
+    """A second write to the same path is refused with a non-zero exit."""
+    out = tmp_path / "study.yaml"
+    first = runner.invoke(app, ["study", "init", "-m", MODEL, "-e", "vllm", "-o", str(out)])
+    assert first.exit_code == 0
+    second = runner.invoke(app, ["study", "init", "-m", MODEL, "-e", "vllm", "-o", str(out)])
+    assert second.exit_code == 1
+    assert "Refusing to overwrite" in second.output
+
+
+def test_init_rejects_unknown_engine(tmp_path: Path) -> None:
+    """An unknown engine name is a usage error and writes nothing."""
+    out = tmp_path / "study.yaml"
+    result = runner.invoke(app, ["study", "init", "-m", MODEL, "-e", "bogus", "-o", str(out)])
+    assert result.exit_code != 0
+    assert "Unknown engine" in result.output
+    assert not out.exists()
+
+
+def test_init_rejects_empty_model(tmp_path: Path) -> None:
+    """A blank model is a usage error."""
+    out = tmp_path / "study.yaml"
+    result = runner.invoke(app, ["study", "init", "-m", "   ", "-o", str(out)])
+    assert result.exit_code != 0
+    assert not out.exists()
+
+
+def test_init_requires_model(tmp_path: Path) -> None:
+    """The model option is required."""
+    result = runner.invoke(app, ["study", "init", "-o", str(tmp_path / "study.yaml")])
+    assert result.exit_code != 0
