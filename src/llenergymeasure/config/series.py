@@ -58,8 +58,8 @@ from pydantic.fields import FieldInfo
 
 from llenergymeasure.config.engine_rules.loader import (
     Rule,
-    _spec_has_field_ref,
     evaluate_predicate,
+    spec_has_field_ref,
 )
 
 __all__ = [
@@ -210,7 +210,7 @@ def drop_known_rejected(
         for rule in rules
         if rule.severity == "error"
         and set(rule.match_fields) == {field_path}
-        and not _spec_has_field_ref(rule.match_fields[field_path])
+        and not spec_has_field_ref(rule.match_fields[field_path])
     ]
     if not specs:
         return list(candidates)
@@ -335,6 +335,10 @@ def _finish(
         points = points[:-1]
     if lo_strict:
         points = points[1:]
+    # Latent edge: an interior point can round onto a dropped strict bound
+    # (e.g. gt=0 lt=1 as int -> 0 and 1), a value the model would reject. No
+    # shipped field is this narrow, so the round-trip tests stay green; widen
+    # here if one ever appears.
     if as_int:
         ints: list[int] = []
         for p in points:
@@ -342,6 +346,10 @@ def _finish(
             if r not in ints:
                 ints.append(r)
         return ints
+    # Round to decimal places, not significant digits: these land in a
+    # human-facing YAML file as sweep starting points, so clean numbers like
+    # 0.25 read better than the significant-digit form used by the run-time
+    # grid expander (config.sweep_idioms).
     floats: list[float] = []
     for p in points:
         f = round(p, 6)

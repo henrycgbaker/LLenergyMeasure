@@ -226,9 +226,7 @@ def _experiment_block(
     engine: str, model: str, *, defaults: bool, overrides_root: Path | None
 ) -> list[str]:
     """Return one ``experiments:`` list entry for a single engine."""
-    overrides = load_study_overrides(engine, overrides_root)
-    sub_models = _sub_models(engine)
-    _check_override_paths(engine, overrides, sub_models)
+    overrides, sub_models = _load_overrides_and_models(engine, overrides_root)
     lines = [
         f"  - engine: {engine}",
         "    task:",
@@ -291,9 +289,7 @@ def _engine_bounds_plan(
     engine: str, rules_loader: EngineRulesLoader, overrides_root: Path | None
 ) -> _EngineBoundsPlan:
     """Derive the pinned/series partition for one engine."""
-    overrides = load_study_overrides(engine, overrides_root)
-    sub_models = _sub_models(engine)
-    _check_override_paths(engine, overrides, sub_models)
+    overrides, sub_models = _load_overrides_and_models(engine, overrides_root)
     rules: tuple[Rule, ...]
     try:
         rules = rules_loader.load_rules(engine).rules
@@ -332,6 +328,16 @@ def _check_override_paths(
         raise StudyOverridesError(
             f"study_overrides.yaml for {engine!r} names unknown field path(s): {sorted(unknown)}."
         )
+
+
+def _load_overrides_and_models(
+    engine: str, overrides_root: Path | None
+) -> tuple[dict[str, FieldOverride], dict[str, type[BaseModel]]]:
+    """Load an engine's curated overrides and sub-models, rejecting stray paths."""
+    overrides = load_study_overrides(engine, overrides_root)
+    sub_models = _sub_models(engine)
+    _check_override_paths(engine, overrides, sub_models)
+    return overrides, sub_models
 
 
 # ---------------------------------------------------------------------------
