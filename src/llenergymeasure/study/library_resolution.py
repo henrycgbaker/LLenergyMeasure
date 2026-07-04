@@ -42,6 +42,17 @@ PoC-F (sweep-dedup.md §10) converged every seeded-corpus case within 2
 passes; 10 is generous headroom that still surfaces a rule cycle quickly.
 """
 
+_STRIP = object()
+"""Marker: drive a dormant field back to *absent* (its library default).
+
+Distinct from ``None``. The resolved-config hash deliberately keeps ``None``
+and missing keys distinguishable (see :mod:`llenergymeasure.domain.hashing`),
+so a field the engine silently ignores (e.g. vLLM ``seed=-1``) must be driven
+to absent - not ``None`` - for it to collapse with a config that never set it.
+The vLLM dormant fields are all pydantic extras, so "absent" means removing the
+extra key.
+"""
+
 
 class LibraryResolutionCycleError(RuntimeError):
     """The library-resolution mechanism did not reach a fixpoint within :data:`_MAX_ITER` passes.
@@ -99,7 +110,13 @@ def _apply_rules_fixpoint(
             if not updates:
                 continue
             for field_path, target_value in updates.items():
-                if resolve_field_path(current, field_path) != target_value:
+                current_value = resolve_field_path(current, field_path)
+                if target_value is _STRIP:
+                    # Canonical form is *absent*; only fire while a value lingers.
+                    already_canonical = current_value is None
+                else:
+                    already_canonical = current_value == target_value
+                if not already_canonical:
                     _assign_field_path(current, field_path, target_value)
                     fired = True
         if not fired:
@@ -107,13 +124,38 @@ def _apply_rules_fixpoint(
     raise LibraryResolutionCycleError(current, _MAX_ITER)
 
 
+def _resolve_normalised_field(name: str, match_fields: dict[str, Any]) -> str:
+    """Resolve a ``normalised_fields`` entry to a dotted config path.
+
+    A dotted entry passes through unchanged. A bare leaf name (the vLLM corpus
+    convention - it stores ``seed``, ``all2all_backend``, ... not the fully
+    dotted paths) is anchored as a *sibling* of the rule's subject match field.
+    Corpus convention orders ``match_fields`` preconditions-first, subject-last,
+    so the anchor is the parent path of the LAST match-field key. This mirrors
+    the bare-``@field_ref`` sibling semantics in the loader's ``_resolve_one_ref``.
+
+    A bare name with no match fields to anchor against passes through unchanged
+    rather than guessing - assignment against config root then no-ops silently,
+    preserving today's behaviour for that (corpus-absent) shape.
+    """
+    if "." in name or not match_fields:
+        return name
+    subject_path = next(reversed(match_fields))
+    parent_parts = subject_path.split(".")[:-1]
+    if not parent_parts:
+        return name
+    return ".".join([*parent_parts, name])
+
+
 def _rule_normalisations(rule: Rule) -> dict[str, Any]:
     """Return ``{field_path: canonical_value}`` the rule normalises to.
 
     Strategy (per sweep-dedup.md §2.1 and the fixpoint test's projection):
 
-    1. If ``normalised_fields`` lists explicit paths, they collapse to ``None``
-       (the universal "strip this field" sentinel).
+    1. If ``normalised_fields`` lists explicit paths, each resolves to a dotted
+       config path (see :func:`_resolve_normalised_field`) and collapses to
+       :data:`_STRIP` - the field is driven back to *absent* (its library
+       default), so a config that set it equals one that never did.
     2. Otherwise, fall back to the rule's *match* predicate: any field
        matched with a ``not_equal`` / ``present`` operator is normalised by
        stripping (setting to ``None`` or the ``not_equal`` sentinel if
@@ -127,9 +169,9 @@ def _rule_normalisations(rule: Rule) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
     explicit = rule.normalised_fields or ()
-    for raw_path in explicit:
-        path = str(raw_path)
-        out[path] = None
+    for raw_name in explicit:
+        path = _resolve_normalised_field(str(raw_name), rule.match_fields)
+        out[path] = _STRIP
 
     if out:
         return out
@@ -165,6 +207,21 @@ def _assign_field_path(config: ExperimentConfig, path: str, value: Any) -> None:
     if parent is None:
         return
     leaf = parts[-1]
+    if value is _STRIP:
+        # Drive the field back to *absent* so it collapses with a config that
+        # never set it. vLLM's dormant fields are pydantic extras; removing the
+        # extra makes the resolved-config view identical to the unset case.
+        if isinstance(parent, dict):
+            parent.pop(leaf, None)
+            return
+        extra = getattr(parent, "__pydantic_extra__", None)
+        if isinstance(extra, dict) and leaf in extra:
+            del extra[leaf]
+            return
+        # Declared field: it cannot be removed, so reset to None as a
+        # best-effort strip - enough to reach a fixpoint (it will not collapse
+        # with a truly-absent field, but no shipped rule hits this branch).
+        value = None
     try:
         if isinstance(parent, dict):
             parent[leaf] = value
