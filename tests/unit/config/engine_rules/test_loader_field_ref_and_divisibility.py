@@ -24,6 +24,7 @@ from llenergymeasure.config.engine_rules import (
 )
 from llenergymeasure.config.engine_rules.loader import (
     _is_int_pair,
+    _ordered,
     _resolve_field_refs_in_spec,
 )
 
@@ -213,6 +214,67 @@ def test_is_int_pair_helper() -> None:
     assert _is_int_pair(1, False) is False
     assert _is_int_pair(6.0, 3) is False
     assert _is_int_pair(None, 3) is False
+
+
+# ---------------------------------------------------------------------------
+# Ordering operators - type-incomparable operands are no-match, not a crash
+#
+# A mined numeric bound can land on a field that naturally holds a non-numeric
+# value (e.g. transformers ``compile_config``, a dict / CompileConfig shape).
+# The raw ``<`` / ``<=`` / ``>`` / ``>=`` comparison raises TypeError on such a
+# pair; the handler must treat it as no-match so config construction never
+# crashes on a corpus artifact. The generated pydantic model stays the
+# authority on the field's type validity.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("op", ["<", "<=", ">", ">="])
+@pytest.mark.parametrize("actual", [{"backend": "inductor"}, "inductor", ["a"], (1,)])
+def test_ordering_incomparable_actual_is_no_match(op: str, actual: Any) -> None:
+    # dict / str / list / tuple vs an int bound: no TypeError, rule does not fire.
+    assert evaluate_predicate(actual, {op: 0}) is False
+
+
+@pytest.mark.parametrize(
+    "op, actual, bound, expected",
+    [
+        (">", 5, 0, True),
+        (">", 0, 5, False),
+        ("<", 0, 5, True),
+        ("<", 5, 0, False),
+        (">=", 5, 5, True),
+        ("<=", 5, 5, True),
+    ],
+)
+def test_ordering_numeric_still_matches(op: str, actual: Any, bound: Any, expected: bool) -> None:
+    # Guarding incomparable types must not weaken real numeric matching.
+    assert evaluate_predicate(actual, {op: bound}) is expected
+
+
+@pytest.mark.parametrize("op", ["<", "<=", ">", ">="])
+def test_ordering_none_operands_are_no_match(op: str) -> None:
+    # None on either side (unset field / unresolved @field_ref) never fires.
+    assert evaluate_predicate(None, {op: 0}) is False
+    assert evaluate_predicate(5, {op: None}) is False
+
+
+def test_ordering_comparable_non_numeric_still_compares() -> None:
+    # Same-type ordering (str vs str) stays live - only cross-type pairs no-match.
+    assert evaluate_predicate("b", {">": "a"}) is True
+    assert evaluate_predicate("a", {">": "b"}) is False
+
+
+def test_ordered_helper() -> None:
+    # Direct unit on the helper for a tight regression guard.
+    import operator
+
+    assert _ordered(5, 0, operator.gt) is True
+    assert _ordered(0, 5, operator.gt) is False
+    assert _ordered(None, 0, operator.gt) is False
+    assert _ordered(5, None, operator.gt) is False
+    # Type-incomparable pair: TypeError swallowed, treated as no-match.
+    assert _ordered({"backend": "inductor"}, 0, operator.gt) is False
+    assert _ordered("inductor", 0, operator.lt) is False
 
 
 # ---------------------------------------------------------------------------

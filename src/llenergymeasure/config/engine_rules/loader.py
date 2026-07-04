@@ -31,6 +31,8 @@ per-instance caching for test isolation, same lazy load pattern.
 
 from __future__ import annotations
 
+import operator
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, get_args
@@ -309,12 +311,16 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # to `False` for any non-None `x`, so they naturally don't fire on None.
     # ``equals`` / ``not_equal`` are word-form aliases of ``==`` / ``!=``
     # and MUST match their symbol forms exactly - corpus authors swap them.
+    # The four ordering operators route through :func:`_ordered`, which also
+    # treats a type-incomparable pair (e.g. a mined numeric bound landing on a
+    # dict-valued field) as no-match instead of letting the raw ``<`` raise a
+    # TypeError out of config construction.
     "==": lambda a, b: a == b,
     "!=": lambda a, b: a is not None and b is not None and a != b,
-    "<": lambda a, b: a is not None and b is not None and a < b,
-    "<=": lambda a, b: a is not None and b is not None and a <= b,
-    ">": lambda a, b: a is not None and b is not None and a > b,
-    ">=": lambda a, b: a is not None and b is not None and a >= b,
+    "<": lambda a, b: _ordered(a, b, operator.lt),
+    "<=": lambda a, b: _ordered(a, b, operator.le),
+    ">": lambda a, b: _ordered(a, b, operator.gt),
+    ">=": lambda a, b: _ordered(a, b, operator.ge),
     "equals": lambda a, b: a == b,
     "not_equal": lambda a, b: a is not None and b is not None and a != b,
     # Membership operators: None-safe on the asymmetric one (``not_in``)
@@ -346,6 +352,28 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     "divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b == 0,
     "not_divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b != 0,
 }
+
+
+def _ordered(a: Any, b: Any, op: Callable[[Any, Any], bool]) -> bool:
+    """Apply an ordering comparison, treating None and incomparable types as no-match.
+
+    ``a`` may be None when the predicate's field is unset; ``b`` may be None
+    when a ``@field_ref`` resolves against a missing target - both yield False.
+
+    A mined numeric bound can land on a field that naturally holds a non-numeric
+    value (e.g. transformers ``compile_config``, a dict / CompileConfig shape).
+    Comparing such a pair with ``<`` / ``<=`` / ``>`` / ``>=`` raises TypeError;
+    that would escape config construction as an uncaught crash. Since the bound
+    is a corpus artifact rather than a user error - the generated pydantic model
+    remains the authority on the field's type validity - the rule simply does
+    not fire (False) on a type-incomparable pair.
+    """
+    if a is None or b is None:
+        return False
+    try:
+        return op(a, b)
+    except TypeError:
+        return False
 
 
 def _is_int_pair(a: Any, b: Any) -> bool:
