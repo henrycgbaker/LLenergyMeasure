@@ -53,16 +53,36 @@ def study_init(
             "leaving them commented out.",
         ),
     ] = False,
+    bounds: Annotated[
+        bool,
+        typer.Option(
+            "--bounds",
+            help="Emit every field with a derivable value range as an explicit "
+            "value list under sweep: - a maximal grid to prune before running.",
+        ),
+    ] = False,
 ) -> None:
     """Write a study file for a model, ready to edit and run with ``llem run``.
 
     Without ``--defaults`` the tuning fields are present but commented out, each
     annotated with its type, range, and default - uncomment the ones you want.
     With ``--defaults`` those fields are filled in at their defaults, giving a
-    reproducible baseline you can run as-is.
+    reproducible baseline you can run as-is. With ``--bounds`` every field with
+    a derivable value range becomes an explicit value list under ``sweep:``,
+    forming a maximal grid you prune down to the study you want.
     """
-    from llenergymeasure.config.scaffold import all_engine_names, render_study_scaffold
+    from llenergymeasure.config.scaffold import (
+        all_engine_names,
+        render_study_bounds,
+        render_study_scaffold,
+    )
     from llenergymeasure.config.ssot import Engine
+
+    if defaults and bounds:
+        raise typer.BadParameter(
+            "--defaults and --bounds are mutually exclusive; pick one.",
+            param_hint="--bounds",
+        )
 
     if not model.strip():
         raise typer.BadParameter("Model must not be empty.", param_hint="--model")
@@ -78,7 +98,10 @@ def study_init(
     else:
         engines = all_engine_names()
 
-    text = render_study_scaffold(model, engines, defaults=defaults)
+    if bounds:
+        text = render_study_bounds(model, engines)
+    else:
+        text = render_study_scaffold(model, engines, defaults=defaults)
 
     out_path = output if output is not None else Path("study.yaml")
     if out_path.exists():
@@ -91,4 +114,7 @@ def study_init(
 
     out_path.write_text(text)
     typer.echo(f"Wrote study file: {out_path}")
-    typer.echo(f"Edit it, then run: llem run {out_path}")
+    if bounds:
+        typer.echo(f"Prune the sweep value lists, then run: llem run {out_path}")
+    else:
+        typer.echo(f"Edit it, then run: llem run {out_path}")

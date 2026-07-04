@@ -1,0 +1,10 @@
+# Curated study-scaffold overrides for vllm, consumed by `llem study init`.
+# Optional package data: an absent or empty file means no overrides. Each
+# entry maps a section-relative field path to any of a closed key set:
+# study_default (pin value), sweep_hint (span | log | pow2), sweep_values
+# (explicit list, wins over any policy).
+
+engine_params.gpu_memory_utilization:
+  # Interior points only: 1.0 leaves no headroom for non-KV allocations (OOM
+  # prone) and the low quantiles of (0, 1] rarely fit a real KV cache.
+  sweep_values: [0.5, 0.7, 0.8, 0.9]
