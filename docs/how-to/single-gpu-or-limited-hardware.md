@@ -50,12 +50,6 @@ task:
     n_prompts: 10
 ```
 
-Or via the CLI flag:
-
-```bash
-llem run study.yaml --n-prompts 10
-```
-
 Fewer prompts reduces statistical stability. For publication-quality measurements,
 use at least 50-100 prompts and set `study_execution.n_cycles: 3` to run the full
 workload three times and report the median.

@@ -346,23 +346,6 @@ class TestCLIE2ESingleExperiment:
         assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}:\n{result.output}"
         assert "Result:" in result.output
 
-    def test_cli_e2e_model_flag(self, tmp_path: Path, monkeypatch: Any) -> None:
-        """CLI run --model gpt2 via CliRunner exits 0."""
-        from typer.testing import CliRunner
-
-        import llenergymeasure.cli.run as cli_run_mod
-        from llenergymeasure.cli import app
-
-        mock_result = make_result(experiment_id="cli-flag-001")
-
-        monkeypatch.setattr(cli_run_mod, "run_experiment", lambda config, **kw: mock_result)
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "transformers"])
-
-        assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}:\n{result.output}"
-        assert "Result:" in result.output
-
 
 class TestCLIE2EStudy:
     """Test 6: llem run <study.yaml> via CliRunner with patched run_study."""

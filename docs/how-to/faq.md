@@ -64,13 +64,13 @@ Use `mj_per_tok_adjusted` (energy per token) or `total_inference_time_sec` (wall
 
 `llem` deduplicates measurement-equivalent configs before running. If your sweep generates two cells whose effective `ExperimentConfig` hashes are identical (e.g. a sampling parameter is `dormant` for the active engine), they collapse into one cell. `total_experiments` is the number actually *run* (after dedup x `n_cycles`); `unique_configurations` is the distinct configs.
 
-To inspect what was deduplicated: read `_study-artefacts/equivalence_groups.json` in the study directory. To disable dedup: pass `--no-dedup` to `llem run`.
+To inspect what was deduplicated: read `_study-artefacts/equivalence_groups.json` in the study directory. To disable dedup: set `study_execution.deduplicate_equivalent: false` in the study YAML.
 
 ## Configuration
 
 ### Top-level `n: 50` doesn't work - what's the canonical YAML?
 
-`n` is a CLI flag (`-n / --n-prompts`), not a YAML field. The YAML form is:
+`n` is not a top-level YAML field. Prompt count lives under `task.dataset`:
 
 ```yaml
 task:

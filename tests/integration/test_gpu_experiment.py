@@ -82,20 +82,20 @@ class TestM1ExitCriteria:
         assert len(parquet_files) >= 1
 
     def test_cli_run_produces_valid_output(self, tmp_path):
-        """llem run --model gpt2 --engine transformers via CLI produces valid output."""
+        """llem run <experiment.yaml> via CLI produces valid output."""
         from typer.testing import CliRunner
 
         from llenergymeasure.cli import app
+
+        exp_yaml = tmp_path / "experiment.yaml"
+        exp_yaml.write_text("task:\n  model: gpt2\nengine: transformers\n")
 
         runner = CliRunner()
         result = runner.invoke(
             app,
             [
                 "run",
-                "--model",
-                "gpt2",
-                "--engine",
-                "transformers",
+                str(exp_yaml),
                 "--output",
                 str(tmp_path),
             ],

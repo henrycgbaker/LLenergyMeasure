@@ -14,7 +14,8 @@ import TabItem from '@theme/TabItem';
 <TabItem value="cli" label="CLI">
 
 ```bash
-llem run --model gpt2 --engine transformers
+llem study init -m gpt2 --defaults   # author a runnable study.yaml
+llem run study.yaml
 ```
 
 </TabItem>

@@ -45,7 +45,7 @@ If you have MLPerf throughput results, you can run LLenergyMeasure on the same m
 LLenergyMeasure includes the AI Energy Score benchmark dataset as a built-in option. When you run:
 
 ```bash
-llem run --model gpt2 -e transformers
+llem run study.yaml
 ```
 
 the default dataset used is the AI Energy Score prompt set. This means LLenergyMeasure results are directly comparable to AI Energy Score benchmarks run on the same hardware.

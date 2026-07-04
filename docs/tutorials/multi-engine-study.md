@@ -365,7 +365,7 @@ your question.
 ### Reference
 
 - [Study config](/reference/study-config) - full sweep / runner / measurement field listing
-- [CLI](/reference/cli) - every `llem run` flag (resume, fail-fast, etc.)
+- [CLI](/reference/cli) - every `llem run` session flag (resume, output, etc.)
 - [Engine configuration](/reference/engines/configuration) - per-engine parameter spaces
 
 ### Conceptual depth (Explanation)

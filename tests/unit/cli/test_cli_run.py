@@ -76,6 +76,17 @@ def _make_mock_config() -> MagicMock:
     return config
 
 
+def _make_experiment_yaml(tmp_path: Path) -> Path:
+    """Write a minimal single-experiment YAML (no sweep/experiments keys).
+
+    The run command reads the file for study detection before delegating to
+    ``load_experiment_config`` (which callers mock), so the path must exist.
+    """
+    path = tmp_path / "experiment.yaml"
+    path.write_text("task:\n  model: gpt2\nengine: transformers\n")
+    return path
+
+
 def _make_capture_load() -> tuple:
     """Return (capture_fn, captured_overrides) for study routing tests.
 
@@ -154,13 +165,13 @@ def test_build_header_nondefault_fields_shown():
 
 
 def test_run_help():
-    """llem run --help exits 0 and shows expected flags."""
+    """llem run --help exits 0 and shows the retained session flags."""
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
     plain = _strip_ansi(result.output)
-    assert "--model" in plain
-    assert "--engine" in plain
+    assert "--output" in plain
     assert "--dry-run" in plain
+    assert "--resume" in plain
 
 
 def test_run_version():
@@ -197,28 +208,31 @@ def test_run_config_error_exits_2():
     assert "ConfigError" in result.output
 
 
-def test_run_validation_error_exits_2():
+def test_run_validation_error_exits_2(tmp_path):
     """Pydantic ValidationError from a bad field value exits with code 2."""
     # "pytorh" is a misspelled engine - Pydantic will raise ValidationError
-    result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "pytorh"])
+    bad_yaml = tmp_path / "experiment.yaml"
+    bad_yaml.write_text("task:\n  model: gpt2\nengine: pytorh\n")
+    result = runner.invoke(app, ["run", str(bad_yaml)])
     assert result.exit_code == 2, (
         f"Expected exit 2, got {result.exit_code}. Output: {result.output}"
     )
     assert "Config validation failed" in result.output
 
 
-def test_run_preflight_error_exits_1():
+def test_run_preflight_error_exits_1(tmp_path):
     """PreFlightError raised by run_experiment exits with code 1."""
     from llenergymeasure.utils.exceptions import PreFlightError
 
     mock_config = _make_mock_config()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
         patch.object(cli_run_mod, "run_experiment") as mock_run,
     ):
         mock_run.side_effect = PreFlightError("no GPU available")
-        result = runner.invoke(app, ["run", "--model", "gpt2"])
+        result = runner.invoke(app, ["run", str(exp_yaml)])
 
     assert result.exit_code == 1, (
         f"Expected exit 1, got {result.exit_code}. Output: {result.output}"
@@ -226,18 +240,19 @@ def test_run_preflight_error_exits_1():
     assert "PreFlightError" in result.output
 
 
-def test_run_experiment_error_exits_1():
+def test_run_experiment_error_exits_1(tmp_path):
     """ExperimentError raised during run exits with code 1."""
     from llenergymeasure.utils.exceptions import ExperimentError
 
     mock_config = _make_mock_config()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
         patch.object(cli_run_mod, "run_experiment") as mock_run,
     ):
         mock_run.side_effect = ExperimentError("inference crashed")
-        result = runner.invoke(app, ["run", "--model", "gpt2"])
+        result = runner.invoke(app, ["run", str(exp_yaml)])
 
     assert result.exit_code == 1, (
         f"Expected exit 1, got {result.exit_code}. Output: {result.output}"
@@ -250,9 +265,10 @@ def test_run_experiment_error_exits_1():
 # ---------------------------------------------------------------------------
 
 
-def test_run_dry_run_exits_0():
+def test_run_dry_run_exits_0(tmp_path):
     """--dry-run exits 0 and calls print_dry_run with resolved config."""
     mock_config = _make_mock_config()
+    exp_yaml = _make_experiment_yaml(tmp_path)
     mock_vram = {
         "weights_gb": 0.24,
         "kv_cache_gb": 0.01,
@@ -266,7 +282,7 @@ def test_run_dry_run_exits_0():
         patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None),
         patch.object(cli_run_mod, "print_dry_run") as mock_print_dry,
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run"])
+        result = runner.invoke(app, ["run", str(exp_yaml), "--dry-run"])
 
     assert result.exit_code == 0, (
         f"Expected exit 0, got {result.exit_code}. Output: {result.output}"
@@ -274,9 +290,10 @@ def test_run_dry_run_exits_0():
     mock_print_dry.assert_called_once()
 
 
-def test_run_dry_run_calls_estimate_vram():
+def test_run_dry_run_calls_estimate_vram(tmp_path):
     """--dry-run calls estimate_vram and get_gpu_vram_gb with the resolved config."""
     mock_config = _make_mock_config()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
@@ -284,7 +301,7 @@ def test_run_dry_run_calls_estimate_vram():
         patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None) as mock_gpu_vram,
         patch.object(cli_run_mod, "print_dry_run"),
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run"])
+        result = runner.invoke(app, ["run", str(exp_yaml), "--dry-run"])
 
     assert result.exit_code == 0
     mock_vram.assert_called_once_with(mock_config)
@@ -296,9 +313,10 @@ def test_run_dry_run_calls_estimate_vram():
 # ---------------------------------------------------------------------------
 
 
-def test_single_run_warns_on_study_only_flag():
-    """--cycles on a single-experiment run warns that the flag is ignored."""
+def test_single_run_warns_on_study_only_flag(tmp_path):
+    """--resume on a single-experiment run warns that the flag is ignored."""
     mock_config = _make_mock_config()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
@@ -306,17 +324,18 @@ def test_single_run_warns_on_study_only_flag():
         patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None),
         patch.object(cli_run_mod, "print_dry_run"),
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run", "--cycles", "5"])
+        result = runner.invoke(app, ["run", str(exp_yaml), "--dry-run", "--resume"])
 
     assert result.exit_code == 0
     out = _strip_ansi(result.output).lower()
     assert "study-only" in out
-    assert "--cycles" in out
+    assert "--resume" in out
 
 
-def test_single_run_no_warning_without_study_flags():
+def test_single_run_no_warning_without_study_flags(tmp_path):
     """A clean single-experiment run emits no study-only-flag warning."""
     mock_config = _make_mock_config()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
@@ -324,14 +343,14 @@ def test_single_run_no_warning_without_study_flags():
         patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None),
         patch.object(cli_run_mod, "print_dry_run"),
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run"])
+        result = runner.invoke(app, ["run", str(exp_yaml), "--dry-run"])
 
     assert result.exit_code == 0
     assert "study-only" not in _strip_ansi(result.output).lower()
 
 
 def test_study_run_does_not_warn_on_study_flags(tmp_path):
-    """A study run with --cycles does not emit the single-run ignored-flag warning."""
+    """A study run with --no-lock does not emit the single-run ignored-flag warning."""
     from tests.conftest import make_study_result
 
     study_yaml = tmp_path / "study.yaml"
@@ -350,7 +369,7 @@ def test_study_run_does_not_warn_on_study_flags(tmp_path):
         mock_config.study_execution.n_cycles = 1
         mock_config.skipped_configs = []
         mock_load.return_value = mock_config
-        result = runner.invoke(app, ["run", str(study_yaml), "--cycles", "5"])
+        result = runner.invoke(app, ["run", str(study_yaml), "--no-lock"])
 
     assert result.exit_code == 0, f"Output: {result.output}"
     assert "study-only" not in _strip_ansi(result.output).lower()
@@ -361,17 +380,18 @@ def test_study_run_does_not_warn_on_study_flags(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_run_quiet_flag_accepted():
+def test_run_quiet_flag_accepted(tmp_path):
     """--quiet suppresses step progress display (progress=None passed to run_experiment)."""
     mock_config = _make_mock_config()
     mock_result = _make_mock_result()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
         patch.object(cli_run_mod, "run_experiment", return_value=mock_result) as mock_run,
         patch.object(cli_run_mod, "print_result_summary"),
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--quiet"])
+        result = runner.invoke(app, ["run", str(exp_yaml), "--quiet"])
 
     assert result.exit_code == 0, (
         f"Expected exit 0, got {result.exit_code}. Output: {result.output}"
@@ -387,17 +407,18 @@ def test_run_quiet_flag_accepted():
 # ---------------------------------------------------------------------------
 
 
-def test_run_success_prints_summary():
+def test_run_success_prints_summary(tmp_path):
     """Successful run calls print_result_summary with the returned result."""
     mock_config = _make_mock_config()
     mock_result = _make_mock_result()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
         patch.object(cli_run_mod, "run_experiment", return_value=mock_result),
         patch.object(cli_run_mod, "print_result_summary") as mock_summary,
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2"])
+        result = runner.invoke(app, ["run", str(exp_yaml)])
 
     assert result.exit_code == 0, (
         f"Expected exit 0, got {result.exit_code}. Output: {result.output}"
@@ -440,14 +461,35 @@ experiments:
     assert "experiments" in raw
 
 
-def test_cli_flags_present():
-    """llem run --help output includes --cycles, --order, and --no-gaps flags."""
+def test_removed_flags_absent_from_help():
+    """Removed semantic-override flags no longer appear in llem run --help."""
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
     plain = _strip_ansi(result.output)
-    assert "--cycles" in plain
-    assert "--order" in plain
-    assert "--no-gaps" in plain
+    for flag in (
+        "--model",
+        "--engine",
+        "--dataset",
+        "--n-prompts",
+        "--cycles",
+        "--order",
+        "--no-gaps",
+        "--timeout",
+        "--no-circuit-breaker",
+        "--fail-fast",
+        "--no-dedup",
+    ):
+        assert flag not in plain, f"{flag} should have been removed from run --help"
+
+
+def test_removed_flag_exits_2(tmp_path):
+    """A removed flag gets Typer's standard 'No such option' (exit 2), no shim."""
+    exp_yaml = _make_experiment_yaml(tmp_path)
+    result = runner.invoke(app, ["run", str(exp_yaml), "--cycles", "5"])
+    assert result.exit_code == 2, (
+        f"Expected exit 2, got {result.exit_code}. Output: {result.output}"
+    )
+    assert "No such option" in _strip_ansi(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -519,13 +561,14 @@ def test_run_saves_to_output_dir(tmp_path):
     mock_result = _make_mock_result()
     mock_result.timeseries = None
     output_dir = tmp_path / "out"
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
         patch.object(cli_run_mod, "run_experiment", return_value=mock_result) as mock_run,
         patch.object(cli_run_mod, "print_result_summary"),
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--output", str(output_dir)])
+        result = runner.invoke(app, ["run", str(exp_yaml), "--output", str(output_dir)])
 
     assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
     mock_run.assert_called_once()
@@ -561,25 +604,42 @@ def test_run_study_cli_defaults_applied(tmp_path):
     assert overrides["study_execution"]["experiment_order"] == "shuffle"
 
 
-def test_run_no_model_no_config_error_message():
-    """Error message for missing model/config mentions 'Provide a config file or --model flag'."""
+def test_run_no_config_error_points_to_study_init():
+    """Missing-config error exits 2 and points the user at `llem study init`."""
     result = runner.invoke(app, ["run"])
     assert result.exit_code == 2
-    assert "Provide a config file or --model flag" in result.output
+    out = _strip_ansi(result.output)
+    assert "config file is required" in out
+    assert "llem study init" in out
 
 
-def test_run_engine_error_exits_1():
+def test_run_resume_without_config_requires_config():
+    """--resume without a config still requires a config file (exit 2, study-init hint).
+
+    Resume runs today only when the study YAML is supplied (the resume flow lives
+    in the study path, which is reached only for a real config). This preserves
+    that contract: `llem run --resume` alone points at `llem study init`.
+    """
+    result = runner.invoke(app, ["run", "--resume"])
+    assert result.exit_code == 2
+    out = _strip_ansi(result.output)
+    assert "config file is required" in out
+    assert "llem study init" in out
+
+
+def test_run_engine_error_exits_1(tmp_path):
     """EngineError raised by run_experiment exits with code 1."""
     from llenergymeasure.utils.exceptions import EngineError
 
     mock_config = _make_mock_config()
+    exp_yaml = _make_experiment_yaml(tmp_path)
 
     with (
         patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
         patch.object(cli_run_mod, "run_experiment") as mock_run,
     ):
         mock_run.side_effect = EngineError("OOM during forward pass")
-        result = runner.invoke(app, ["run", "--model", "gpt2"])
+        result = runner.invoke(app, ["run", str(exp_yaml)])
 
     assert result.exit_code == 1
     assert "EngineError" in result.output
@@ -605,82 +665,6 @@ def _make_mock_study_result():
     from tests.conftest import make_study_result
 
     return make_study_result()
-
-
-def test_fail_fast_sets_max_consecutive_failures(tmp_path):
-    """--fail-fast sets max_consecutive_failures=1 in study_execution overrides."""
-    study_yaml = _make_study_yaml(tmp_path)
-    mock_study_result = _make_mock_study_result()
-    _capture_load, captured_overrides = _make_capture_load()
-
-    with (
-        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
-        patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-    ):
-        result = runner.invoke(app, ["run", str(study_yaml), "--fail-fast"])
-
-    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    overrides = captured_overrides[0]
-    assert overrides is not None
-    assert overrides["study_execution"]["max_consecutive_failures"] == 1
-    assert overrides["study_execution"]["circuit_breaker_cooldown_seconds"] == 0
-
-
-def test_no_circuit_breaker_sets_max_failures_zero(tmp_path):
-    """--no-circuit-breaker sets max_consecutive_failures=0 in study_execution overrides."""
-    study_yaml = _make_study_yaml(tmp_path)
-    mock_study_result = _make_mock_study_result()
-    _capture_load, captured_overrides = _make_capture_load()
-
-    with (
-        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
-        patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-    ):
-        result = runner.invoke(app, ["run", str(study_yaml), "--no-circuit-breaker"])
-
-    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    overrides = captured_overrides[0]
-    assert overrides is not None
-    assert overrides["study_execution"]["max_consecutive_failures"] == 0
-
-
-def test_timeout_flag_sets_wall_clock_timeout(tmp_path):
-    """--timeout 24 sets wall_clock_timeout_hours=24.0 in study_execution overrides."""
-    study_yaml = _make_study_yaml(tmp_path)
-    mock_study_result = _make_mock_study_result()
-    _capture_load, captured_overrides = _make_capture_load()
-
-    with (
-        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
-        patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-    ):
-        result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "24"])
-
-    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    overrides = captured_overrides[0]
-    assert overrides is not None
-    assert overrides["study_execution"]["wall_clock_timeout_hours"] == 24.0
-
-
-def test_timeout_flag_fractional(tmp_path):
-    """--timeout 1.5 sets wall_clock_timeout_hours=1.5."""
-    study_yaml = _make_study_yaml(tmp_path)
-    mock_study_result = _make_mock_study_result()
-    _capture_load, captured_overrides = _make_capture_load()
-
-    with (
-        patch("llenergymeasure.api.load_study", side_effect=_capture_load),
-        patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.cli._preflight_display.build_preflight_panel"),
-    ):
-        result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "1.5"])
-
-    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    overrides = captured_overrides[0]
-    assert overrides["study_execution"]["wall_clock_timeout_hours"] == 1.5
 
 
 def test_resume_flag_passes_resume_to_api(tmp_path):
@@ -739,13 +723,10 @@ def test_resume_dir_flag_passes_path_to_api(tmp_path):
     assert call_kwargs["resume_dir"] == explicit_dir
 
 
-def test_new_flags_visible_in_help():
-    """--resume, --fail-fast, --no-circuit-breaker, --timeout, --no-lock appear in --help."""
+def test_session_flags_visible_in_help():
+    """The retained session flags appear in llem run --help."""
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
     plain = _strip_ansi(result.output)
-    assert "--resume" in plain
-    assert "--fail-fast" in plain
-    assert "--no-circuit-breaker" in plain
-    assert "--timeout" in plain
-    assert "--no-lock" in plain
+    for flag in ("--resume", "--resume-dir", "--no-lock", "--skip-preflight", "--output"):
+        assert flag in plain, f"{flag} should be present in run --help"
