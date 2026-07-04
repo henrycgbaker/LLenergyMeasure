@@ -405,6 +405,64 @@ class TestExpandGridInvalidHandling:
             expand_grid(raw)
 
 
+class TestSkippedConfigRuleAttribution:
+    """expand_grid records which engine rule rejected which config."""
+
+    def test_rule_rejection_records_rule_id(self):
+        """A sweep point that violates a corpus rule carries the rejecting rule id.
+
+        num_beams=2 with num_return_sequences=4 fires the transformers
+        cross-section rule; the num_return_sequences=1 point stays valid.
+        """
+        raw = {
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "transformers": {"engine_params": {"num_beams": 2}},
+            "sweep": {"transformers.sampling_params.num_return_sequences": [1, 4]},
+        }
+        valid, skipped = expand_grid(raw)
+
+        assert len(valid) == 1
+        assert len(skipped) == 1
+        assert (
+            skipped[0].rule_id
+            == "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences"
+        )
+
+    def test_non_rule_failure_has_no_rule_id(self):
+        """A non-rule rejection (wrong engine section) leaves rule_id None."""
+        raw = {
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "sweep": {"transformers.engine_params.dtype": ["float16"]},
+            "experiments": [
+                {"task": {"model": "gpt2"}, "engine": "transformers", "vllm": {"max_num_seqs": 64}},
+            ],
+        }
+        valid, skipped = expand_grid(raw)
+
+        assert len(valid) == 1
+        assert len(skipped) == 1
+        assert skipped[0].rule_id is None
+
+    def test_to_dict_includes_rule_id(self):
+        """rule_id round-trips through the serialised form."""
+        sc = SkippedConfig(
+            raw_config={"engine": "transformers", "transformers": {}},
+            reason="[some_rule_id] boom",
+            rule_id="some_rule_id",
+        )
+        assert sc.to_dict()["rule_id"] == "some_rule_id"
+
+    def test_to_dict_rule_id_none_by_default(self):
+        """A skipped config with no rule attribution serialises rule_id as None."""
+        sc = SkippedConfig(
+            raw_config={"engine": "vllm", "vllm": {}},
+            reason="type error",
+        )
+        assert sc.to_dict()["rule_id"] is None
+
+
 class TestMultiBackendSectionStripping:
     """Top-level engine sections are stripped for non-matching engines in multi-engine studies."""
 
