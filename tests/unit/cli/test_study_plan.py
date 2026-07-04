@@ -1,0 +1,161 @@
+"""Tests for the ``llem study plan`` funnel (``cli/_study_plan.py``).
+
+These exercise the real machinery: a crafted study YAML is loaded through the
+public ``load_study`` entry point (the same one ``llem run`` uses), so the
+expansion, validation, and dedup are genuine, then the funnel is computed and
+rendered.
+"""
+
+from __future__ import annotations
+
+from math import prod
+from pathlib import Path
+
+import yaml
+
+from llenergymeasure.api import load_study
+from llenergymeasure.cli._study_plan import build_funnel, render_funnel
+
+MODEL = "Qwen/Qwen2.5-0.5B"
+
+# A crafted vLLM study with a known shape:
+#   sweep = top_p(2) x latency_profiling(2) = 4 declared grid points
+#   top_p = 2.0 is rejected by a shipped engine rule (2 points)
+#   the 2 valid points differ only in latency_profiling, a measurement dial
+#     excluded from the resolved-config hash, so they dedup to 1 unique
+#   n_cycles = 3 -> 3 runs; gaps: 2 x 30s experiment + 2 x 120s cycle = 300s
+_CRAFTED = f"""
+study_name: crafted-demo
+task:
+  model: {MODEL}
+engine: vllm
+study_execution:
+  n_cycles: 3
+  experiment_gap_seconds: 30
+  cycle_gap_seconds: 120
+sweep:
+  vllm.sampling_params.top_p: [0.9, 2.0]
+  measurement.latency_profiling: [false, true]
+"""
+
+_TOP_P_RULE = "vllm_samplingparams_raises_top_p_gt_1p0"
+
+
+def _load(tmp_path: Path, text: str) -> object:
+    path = tmp_path / "study.yaml"
+    path.write_text(text)
+    return load_study(path)
+
+
+def test_funnel_arithmetic_full(tmp_path: Path) -> None:
+    """Declared / pruned / dedup / runs all reconcile on a crafted study."""
+    funnel = build_funnel(_load(tmp_path, _CRAFTED))  # type: ignore[arg-type]
+
+    assert funnel.declared_total == 4
+    assert funnel.skipped == 2
+    assert funnel.valid == 2
+    assert funnel.dedup_enabled is True
+    assert funnel.merged_away == 1
+    assert funnel.unique == 1
+    assert funnel.n_cycles == 3
+    assert funnel.runs == 3
+
+
+def test_funnel_rule_attribution(tmp_path: Path) -> None:
+    """The rejecting engine-rule id is attributed with the right count."""
+    funnel = build_funnel(_load(tmp_path, _CRAFTED))  # type: ignore[arg-type]
+
+    by_rule = {a.rule_id: a for a in funnel.attributions}
+    assert _TOP_P_RULE in by_rule
+    assert by_rule[_TOP_P_RULE].count == 2
+    # The rendered value survives; no leftover [rule_id] marker in the message.
+    message = by_rule[_TOP_P_RULE].message
+    assert "top_p" in message
+    assert not message.startswith("[")
+    assert _TOP_P_RULE not in message
+
+
+def test_render_shows_rule_id_and_counts(tmp_path: Path) -> None:
+    """The rendered preview names the rule id and the funnel counts."""
+    out = render_funnel(build_funnel(_load(tmp_path, _CRAFTED)), "crafted-demo")  # type: ignore[arg-type]
+
+    assert "Study plan: crafted-demo" in out
+    assert _TOP_P_RULE in out
+    assert "runs" in out
+    # Gap-only wall-clock lower bound: 2*30 + 2*120 = 300s = 5m 00s.
+    assert "5m 00s" in out
+
+
+def test_non_rule_failures_grouped(tmp_path: Path) -> None:
+    """Pydantic field failures (rule_id None) collapse to one 'other' line."""
+    text = f"""
+task:
+  model: {MODEL}
+engine: vllm
+sweep:
+  vllm.engine_params.max_num_seqs: [4, 0]
+"""
+    funnel = build_funnel(_load(tmp_path, text))  # type: ignore[arg-type]
+    assert funnel.skipped == 1
+    none_lines = [a for a in funnel.attributions if a.rule_id is None]
+    assert len(none_lines) == 1
+    assert none_lines[0].message == "other validation errors"
+
+
+def test_dedup_disabled_skips_stage(tmp_path: Path) -> None:
+    """With deduplicate_equivalent false, the dedup stage is not applied."""
+    text = f"""
+task:
+  model: {MODEL}
+engine: vllm
+study_execution:
+  deduplicate_equivalent: false
+sweep:
+  measurement.latency_profiling: [false, true]
+"""
+    funnel = build_funnel(_load(tmp_path, text))  # type: ignore[arg-type]
+    assert funnel.dedup_enabled is False
+    assert funnel.merged_away == 0
+    assert funnel.valid == 2
+    assert funnel.runs == 2  # both declared configs run, no cycles
+    out = render_funnel(funnel, "no-dedup")
+    assert "dedup disabled" in out
+
+
+def test_bounds_scaffold_round_trip(tmp_path: Path) -> None:
+    """A bounds scaffold's declared count equals the product of its sweep lists."""
+    from llenergymeasure.config.scaffold import render_study_bounds
+
+    text = render_study_bounds(MODEL, ["vllm"])
+    raw = yaml.safe_load(text)
+
+    # The full bounds grid is large; keep two axes so the round-trip stays fast
+    # while still asserting declared == the Cartesian product of the sweep lists.
+    axes = list(raw["sweep"].items())[:2]
+    raw["sweep"] = dict(axes)
+    expected = prod(len(values) for _key, values in axes)
+
+    funnel = build_funnel(_load(tmp_path, yaml.safe_dump(raw)))  # type: ignore[arg-type]
+    # Bounds scaffolds exclude engine-rejected values, so nothing is pruned.
+    assert funnel.skipped == 0
+    assert funnel.declared_total == expected
+    assert funnel.valid == expected
+
+
+def test_vocabulary_no_invariant(tmp_path: Path) -> None:
+    """The user-facing preview never uses the word 'invariant'."""
+    out = render_funnel(build_funnel(_load(tmp_path, _CRAFTED)), "crafted-demo")  # type: ignore[arg-type]
+    assert "invariant" not in out.lower()
+    assert "known-invalid" in out
+    assert "engine rule" in out
+
+
+def test_wall_clock_single_run(tmp_path: Path) -> None:
+    """A one-run study reports no gaps rather than a bogus lower bound."""
+    text = f"""
+task:
+  model: {MODEL}
+engine: vllm
+"""
+    out = render_funnel(build_funnel(_load(tmp_path, text)), "single")  # type: ignore[arg-type]
+    assert "single run" in out

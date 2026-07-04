@@ -112,3 +112,68 @@ def test_init_requires_model(tmp_path: Path) -> None:
     """The model option is required."""
     result = runner.invoke(app, ["study", "init", "-o", str(tmp_path / "study.yaml")])
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# llem study plan
+# ---------------------------------------------------------------------------
+
+_PLAN_STUDY = f"""
+study_name: plan-smoke
+task:
+  model: {MODEL}
+engine: vllm
+study_execution:
+  n_cycles: 3
+sweep:
+  vllm.sampling_params.top_p: [0.9, 2.0]
+  measurement.latency_profiling: [false, true]
+"""
+
+
+def test_plan_help() -> None:
+    """`llem study plan --help` documents the preview command."""
+    result = runner.invoke(app, ["study", "plan", "--help"])
+    assert result.exit_code == 0
+    assert "plan" in result.output
+    assert "preview" in result.output.lower()
+
+
+def test_plan_happy_path(tmp_path: Path) -> None:
+    """A valid study renders the funnel and exits 0, even with skips."""
+    study = tmp_path / "study.yaml"
+    study.write_text(_PLAN_STUDY)
+    result = runner.invoke(app, ["study", "plan", str(study)])
+    assert result.exit_code == 0
+    assert "Study plan: plan-smoke" in result.output
+    assert "declared" in result.output
+    assert "runs" in result.output
+    # The rejecting engine rule is attributed by id.
+    assert "vllm_samplingparams_raises_top_p_gt_1p0" in result.output
+
+
+def test_plan_output_has_no_invariant_vocab(tmp_path: Path) -> None:
+    """The command output never uses the word 'invariant'."""
+    study = tmp_path / "study.yaml"
+    study.write_text(_PLAN_STUDY)
+    result = runner.invoke(app, ["study", "plan", str(study)])
+    assert result.exit_code == 0
+    assert "invariant" not in result.output.lower()
+
+
+def test_plan_missing_file_exits_nonzero(tmp_path: Path) -> None:
+    """A missing study file exits nonzero with a clean message (no traceback)."""
+    result = runner.invoke(app, ["study", "plan", str(tmp_path / "nope.yaml")])
+    assert result.exit_code != 0
+    assert "not found" in result.output.lower()
+    assert "Traceback" not in result.output
+
+
+def test_plan_zero_experiments_exits_nonzero(tmp_path: Path) -> None:
+    """A study that produces no experiments exits nonzero with a clean message."""
+    study = tmp_path / "empty.yaml"
+    study.write_text("study_name: empty\n")
+    result = runner.invoke(app, ["study", "plan", str(study)])
+    assert result.exit_code != 0
+    assert "no experiments" in result.output.lower()
+    assert "Traceback" not in result.output
