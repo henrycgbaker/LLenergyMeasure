@@ -1,6 +1,6 @@
 """Tests for the study-scaffold renderer (``llem study init`` backend).
 
-Two things are under test:
+Three things are under test:
 
 1. Rendering: annotations are derived only from the generated Pydantic models,
    bare and defaults modes differ solely by a comment prefix, field order is the
@@ -8,19 +8,30 @@ Two things are under test:
 2. Round-trip: every emitted file loads through the public study loader (the
    same path ``llem run`` uses) with the expected experiment count and no
    ``ConfigValidationWarning``.
+3. Bounds mode: sweepable fields become explicit value lists under ``sweep:``,
+   known-rejected values are dropped, curated overrides apply, and the file
+   expands to exactly the product of the emitted series lengths.
 """
 
 from __future__ import annotations
 
+import math
 import re
 import warnings
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 
 from llenergymeasure.api import load_study
 from llenergymeasure.config.introspection import get_engine_config_model
-from llenergymeasure.config.scaffold import all_engine_names, render_study_scaffold
+from llenergymeasure.config.scaffold import (
+    all_engine_names,
+    render_study_bounds,
+    render_study_scaffold,
+)
+from llenergymeasure.config.series import OVERRIDES_FILENAME, StudyOverridesError
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
 MODEL = "Qwen/Qwen2.5-0.5B"
@@ -172,3 +183,131 @@ def test_all_engines_round_trips(defaults: bool, tmp_path: Path) -> None:
     path.write_text(text)
     study = _load_without_config_warnings(path)
     assert [e.engine for e in study.experiments] == engines
+
+
+# ---------------------------------------------------------------------------
+# Bounds mode - value lists under sweep:, pinned fields, round-trip counts
+# ---------------------------------------------------------------------------
+
+
+def _sweep_block(text: str) -> dict[str, list[Any]]:
+    """Parse the rendered YAML and return its sweep: mapping."""
+    sweep = yaml.safe_load(text)["sweep"]
+    assert isinstance(sweep, dict)
+    return sweep
+
+
+def test_bounds_emits_series_for_derivable_fields() -> None:
+    """Literals get all members, bools both values, curated lists win."""
+    sweep = _sweep_block(render_study_bounds(MODEL, ["vllm"]))
+    assert sweep["vllm.engine_params.dtype"] == [
+        "auto",
+        "half",
+        "float16",
+        "bfloat16",
+        "float",
+        "float32",
+    ]
+    assert sweep["vllm.engine_params.enforce_eager"] == [False, True]
+    # Curated override (shipped study_overrides.yaml) beats the span floor.
+    assert sweep["vllm.engine_params.gpu_memory_utilization"] == [0.5, 0.7, 0.8, 0.9]
+
+
+def test_bounds_pins_fields_without_derivable_range() -> None:
+    """One-sided/unbounded fields stay pinned at their defaults, not swept."""
+    text = render_study_bounds(MODEL, ["vllm"])
+    raw = yaml.safe_load(text)
+    assert "experiments" not in raw
+    sweep = raw["sweep"]
+    assert "vllm.engine_params.max_num_seqs" not in sweep  # one-sided bound
+    assert "vllm.sampling_params.temperature" not in sweep  # unbounded float
+    assert raw["vllm"]["engine_params"]["max_num_seqs"] is None
+    assert raw["vllm"]["sampling_params"]["temperature"] == 1.0
+
+
+def test_bounds_drops_known_rejected_values() -> None:
+    """early_stopping's series collapses to [false] via a corpus rule, so it pins."""
+    text = render_study_bounds(MODEL, ["transformers"])
+    raw = yaml.safe_load(text)
+    sweep = raw["sweep"]
+    assert "transformers.engine_params.early_stopping" not in sweep
+    assert raw["transformers"]["engine_params"]["early_stopping"] is None
+    assert sweep["transformers.engine_params.use_cache"] == [False, True]
+    assert sweep["transformers.sampling_params.do_sample"] == [False, True]
+
+
+def test_bounds_render_is_byte_deterministic() -> None:
+    a = render_study_bounds(MODEL, all_engine_names())
+    b = render_study_bounds(MODEL, all_engine_names())
+    assert a == b
+    assert a.endswith("\n")
+
+
+@pytest.mark.parametrize("engine", all_engine_names())
+def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> None:
+    """A bounds file expands to exactly the product of its series lengths."""
+    text = render_study_bounds(MODEL, [engine])
+    path = tmp_path / "study.yaml"
+    path.write_text(text)
+    sweep = _sweep_block(text)
+    expected = math.prod(len(v) for v in sweep.values())
+    study = _load_without_config_warnings(path)
+    assert expected > 1
+    assert len(study.experiments) == expected
+    assert all(e.engine == engine for e in study.experiments)
+
+
+def test_bounds_all_engines_round_trips_to_sum_of_products(tmp_path: Path) -> None:
+    """A multi-engine bounds file expands to the sum of per-engine products."""
+    text = render_study_bounds(MODEL, all_engine_names())
+    path = tmp_path / "study.yaml"
+    path.write_text(text)
+    per_engine: dict[str, list[int]] = {}
+    for key, values in _sweep_block(text).items():
+        per_engine.setdefault(key.split(".")[0], []).append(len(values))
+    assert set(per_engine) == set(all_engine_names())
+    expected = sum(math.prod(lengths) for lengths in per_engine.values())
+    study = _load_without_config_warnings(path)
+    assert len(study.experiments) == expected
+
+
+# ---------------------------------------------------------------------------
+# Curated overrides in the renderers
+# ---------------------------------------------------------------------------
+
+
+def _write_vllm_overrides(tmp_path: Path, text: str) -> Path:
+    engine_dir = tmp_path / "vllm"
+    engine_dir.mkdir()
+    (engine_dir / OVERRIDES_FILENAME).write_text(text)
+    return tmp_path
+
+
+def test_study_default_applies_to_every_mode(tmp_path: Path) -> None:
+    """A curated study_default pins the field in bare, defaults, and bounds."""
+    root = _write_vllm_overrides(
+        tmp_path, "engine_params.tensor_parallel_size:\n  study_default: 2\n"
+    )
+    expected = "tensor_parallel_size: 2  # int, default 1"
+    bare = render_study_scaffold(MODEL, ["vllm"], defaults=False, overrides_root=root)
+    live = render_study_scaffold(MODEL, ["vllm"], defaults=True, overrides_root=root)
+    bounds = render_study_bounds(MODEL, ["vllm"], overrides_root=root)
+    assert f"        # {expected}" in bare
+    assert f"        {expected}" in live
+    assert f"    {expected}" in bounds
+    # The bare/defaults invariant still holds with overrides applied.
+    assert _field_entries(bare, defaults=False) == _field_entries(live, defaults=True)
+
+
+def test_sweep_values_override_wins_in_bounds(tmp_path: Path) -> None:
+    root = _write_vllm_overrides(tmp_path, "engine_params.dtype:\n  sweep_values: [auto, half]\n")
+    sweep = _sweep_block(render_study_bounds(MODEL, ["vllm"], overrides_root=root))
+    assert sweep["vllm.engine_params.dtype"] == ["auto", "half"]
+
+
+def test_unknown_override_path_fails_loud(tmp_path: Path) -> None:
+    root = _write_vllm_overrides(tmp_path, "engine_params.bogus:\n  study_default: 1\n")
+    with pytest.raises(StudyOverridesError, match="unknown field path"):
+        render_study_bounds(MODEL, ["vllm"], overrides_root=root)
+    with pytest.raises(StudyOverridesError, match="unknown field path"):
+        render_study_scaffold(MODEL, ["vllm"], defaults=True, overrides_root=root)
