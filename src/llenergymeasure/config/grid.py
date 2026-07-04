@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import ALL_ENGINES
+from llenergymeasure.config.sweep_idioms import expand_axis_idiom
 from llenergymeasure.utils.compat import StrEnum
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -568,6 +569,11 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
       a group are alternatives (unioned, not crossed).
 
     Type-based disambiguation: ``list[scalar]`` = axis, ``list[dict]`` = group.
+
+    An axis value may also be a numeric idiom mapping (see
+    :mod:`llenergymeasure.config.sweep_idioms`); it is expanded to a plain
+    list here, at load time, so downstream consumers only see lists. Any
+    other mapping-valued axis is rejected with ConfigError.
     """
     if not sweep:
         task = fixed.get("task")
@@ -587,7 +593,12 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
             groups[key] = _expand_group(values)
             continue
 
-        if not isinstance(values, list):
+        if isinstance(values, dict):
+            try:
+                values = expand_axis_idiom(values)
+            except ValueError as exc:
+                raise ConfigError(f"sweep axis '{key}': {exc}") from exc
+        elif not isinstance(values, list):
             values = [values]
 
         engine_scope = _group_engine_scope(key)
