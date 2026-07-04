@@ -18,7 +18,7 @@ Two-tier handshake:
    tautological for upstream-direct images that have no label. The
    meaningful drift surface is whether the engine library installed in
    the image (e.g. ``vllm.__version__``) matches the version that our
-   vendored invariants and discovered schemas in
+   vendored rules and discovered schemas in
    ``src/llenergymeasure/engines/{engine}/`` were generated against
    (recorded in ``engine_versions/{engine}/current.yaml::library.current_version``).
    The probe is run only when the label-based check is inconclusive
@@ -221,7 +221,7 @@ def probe_image_engine_version(
 
 
 class BundledEngineVersionMismatchError(RuntimeError):
-    """Raised when the bundled invariants and schema artefacts disagree on engine_version.
+    """Raised when the bundled rules and schema artefacts disagree on engine_version.
 
     Both artefacts are sourced from the same per-version
     ``engine_versions/<engine>/v<safe>/outputs/`` directory at wheel build
@@ -233,11 +233,11 @@ class BundledEngineVersionMismatchError(RuntimeError):
 
 
 def read_bundled_engine_version(engine: str) -> str | None:
-    """Return the engine_version field from the loaded invariants + schema artefacts.
+    """Return the engine_version field from the loaded rules + schema artefacts.
 
     The wheel ships per-engine machine artefacts whose envelope carries the
     engine_version they were mined for. This function reads through
-    :class:`EngineInvariantsLoader` and :class:`SchemaLoader` (so the
+    :class:`EngineRulesLoader` and :class:`SchemaLoader` (so the
     primary read goes via the same mechanism the runtime experiment path
     uses), cross-checks that both bundled artefacts agree on
     engine_version, and returns the version string.
@@ -256,13 +256,13 @@ def read_bundled_engine_version(engine: str) -> str | None:
     experiment time - the SSOT version describes the build's INTENT;
     the bundled envelope describes what shipped.
     """
-    from llenergymeasure.config.engine_rules.loader import EngineInvariantsLoader
+    from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
     from llenergymeasure.config.schema_loader import SchemaLoader
 
     try:
-        invariants = EngineInvariantsLoader().load_invariants(engine)
+        rules = EngineRulesLoader().load_rules(engine)
     except FileNotFoundError as exc:
-        logger.debug("Bundled invariants read failed for %s: %s", engine, exc)
+        logger.debug("Bundled rules read failed for %s: %s", engine, exc)
         return None
     try:
         schema = SchemaLoader().load_schema(engine)
@@ -271,12 +271,12 @@ def read_bundled_engine_version(engine: str) -> str | None:
         logger.debug("Bundled schema read failed for %s: %s", engine, exc)
         return None
 
-    inv_version = invariants.engine_version.strip()
+    inv_version = rules.engine_version.strip()
     sch_version = schema.engine_version.strip()
     if inv_version != sch_version:
         raise BundledEngineVersionMismatchError(
             f"Bundled artefacts for {engine!r} disagree on engine_version: "
-            f"invariants envelope says {inv_version!r}, schema envelope says "
+            f"rules envelope says {inv_version!r}, schema envelope says "
             f"{sch_version!r}. This indicates a build-time bundling bug - "
             f"both artefacts must be sourced from the same per-version "
             f"engine_versions/<engine>/v<safe>/outputs/ directory. Check "

@@ -16,12 +16,10 @@ import yaml
 from llenergymeasure.api.report_gaps import (
     _field_value_distribution,
     _infer_predicate,
-    _template_matched_by_corpus,
     find_runtime_gaps,
     render_yaml_fragment,
 )
-from llenergymeasure.config.engine_rules import EngineInvariants
-from llenergymeasure.config.engine_rules.loader import _parse_envelope
+from llenergymeasure.config.engine_rules.loader import _parse_rule
 from tests.helpers.runtime_obs import (
     fake_hash as _fake_hash,
 )
@@ -31,17 +29,6 @@ from tests.helpers.runtime_obs import (
 from tests.helpers.runtime_obs import (
     write_resolution as _write_resolution,
 )
-
-# ---------------------------------------------------------------------------
-# Fixture helpers
-# ---------------------------------------------------------------------------
-
-
-def _build_empty_invariants() -> dict[str, EngineInvariants]:
-    """Return an empty invariants corpus for transformers (so nothing suppresses gaps)."""
-    envelope = "schema_version: 1.0.0\nengine: transformers\nrules: []\n"
-    return {"transformers": _parse_envelope("transformers", envelope)}
-
 
 # ---------------------------------------------------------------------------
 # Predicate inference
@@ -64,7 +51,7 @@ def test_predicate_inference_equality() -> None:
 
 def test_predicate_inference_multi_field() -> None:
     """Arity-2 predicate is recovered when no single field distinguishes."""
-    # temperature=0.0 fires only when do_sample=True (greedy-with-temp-0 invariant).
+    # temperature=0.0 fires only when do_sample=True (greedy-with-temp-0 rule).
     collision_configs = [
         {"do_sample": True, "temperature": 0.0, "top_p": 0.95},
         {"do_sample": True, "temperature": 0.0, "top_p": 1.0},
@@ -175,7 +162,7 @@ def test_sentinel_records_excluded_from_b(tmp_path: Path) -> None:
         exit_code=-9,
     )
 
-    gaps = find_runtime_gaps([study], engine_invariants=_build_empty_invariants())
+    gaps = find_runtime_gaps([study])
     assert len(gaps) == 1
     gap = gaps[0]
     assert gap.collision_count == 2
@@ -210,7 +197,7 @@ def test_exception_records_excluded_by_default(tmp_path: Path) -> None:
         },
     )
 
-    gaps = find_runtime_gaps([study], engine_invariants=_build_empty_invariants())
+    gaps = find_runtime_gaps([study])
     assert len(gaps) == 1
     # exc record is excluded from B (would have had do_sample=False, breaking predicate).
     # Predicate still resolves cleanly.
@@ -253,8 +240,8 @@ def test_engine_filter(tmp_path: Path) -> None:
     )
 
     # No corpus for vllm - engines without a corpus still allow proposals
-    # through (the loader returns no suppressing invariant).
-    gaps = find_runtime_gaps([study], engine_invariants={}, engine="vllm")
+    # through (the loader returns no suppressing rule).
+    gaps = find_runtime_gaps([study], engine="vllm")
     assert len(gaps) == 1
     assert gaps[0].engine == "vllm"
     assert "vllm-only" in gaps[0].normalised_template
@@ -287,9 +274,7 @@ def test_include_exceptions_emits_error_severity(tmp_path: Path) -> None:
     )
     _write_jsonl_record(study, config_hash=h_ok, outcome="success")
 
-    gaps = find_runtime_gaps(
-        [study], engine_invariants=_build_empty_invariants(), include_exceptions=True
-    )
+    gaps = find_runtime_gaps([study], include_exceptions=True)
     assert len(gaps) == 1
     assert gaps[0].severity == "error"
     assert gaps[0].source_channel == "runtime_exception"
@@ -304,7 +289,7 @@ def test_empty_study_dir_returns_no_gaps(tmp_path: Path) -> None:
     """Study dir with no JSONL returns [] with no exception."""
     study = tmp_path / "empty"
     study.mkdir()
-    gaps = find_runtime_gaps([study], engine_invariants=_build_empty_invariants())
+    gaps = find_runtime_gaps([study])
     assert gaps == []
 
 
@@ -313,7 +298,7 @@ def test_empty_study_dir_list_raises() -> None:
     from llenergymeasure.api.report_gaps import ReportGapsError
 
     with pytest.raises(ReportGapsError):
-        find_runtime_gaps([], engine_invariants={})
+        find_runtime_gaps([])
 
 
 def test_nonexistent_study_dir_raises(tmp_path: Path) -> None:
@@ -322,7 +307,7 @@ def test_nonexistent_study_dir_raises(tmp_path: Path) -> None:
 
     missing = tmp_path / "does-not-exist"
     with pytest.raises(ReportGapsError, match="does not exist"):
-        find_runtime_gaps([missing], engine_invariants=_build_empty_invariants())
+        find_runtime_gaps([missing])
 
 
 def test_study_path_not_a_directory_raises(tmp_path: Path) -> None:
@@ -332,7 +317,7 @@ def test_study_path_not_a_directory_raises(tmp_path: Path) -> None:
     not_a_dir = tmp_path / "afile.txt"
     not_a_dir.write_text("x", encoding="utf-8")
     with pytest.raises(ReportGapsError, match="not a directory"):
-        find_runtime_gaps([not_a_dir], engine_invariants=_build_empty_invariants())
+        find_runtime_gaps([not_a_dir])
 
 
 # ---------------------------------------------------------------------------
@@ -340,12 +325,12 @@ def test_study_path_not_a_directory_raises(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rendered_fragment_is_valid_yaml(tmp_path: Path) -> None:
-    """Emitted proposal is parseable YAML carrying the review-relevant keys.
+def test_rendered_fragment_round_trips_through_loader(tmp_path: Path) -> None:
+    """Emitted proposal parses back through ``_parse_rule`` as a valid Rule.
 
-    Fragments are human-review candidates, not shipped rules - they no
-    longer round-trip through the runtime loader (proposals carry ``warn``
-    severity and legacy provenance, both outside the closed shipped schema).
+    The renderer now emits real Rule schema fields (enum-valid placeholder
+    provenance), so a reviewer can append a fragment with minimal editing.
+    Reviewer evidence rides along as a trailing comment block.
     """
     study = tmp_path / "rt-study"
     study.mkdir()
@@ -361,21 +346,27 @@ def test_rendered_fragment_is_valid_yaml(tmp_path: Path) -> None:
     _write_jsonl_record(study, config_hash=h_b, warnings_emitted=["round-trip test warning"])
     _write_jsonl_record(study, config_hash=h_c)
 
-    gaps = find_runtime_gaps([study], engine_invariants=_build_empty_invariants())
+    gaps = find_runtime_gaps([study])
     assert len(gaps) == 1
     yaml_body = render_yaml_fragment(gaps[0])
 
     rule_doc = yaml.safe_load(yaml_body)
-    assert rule_doc["added_by"] == "runtime_warning"
-    assert rule_doc["severity"] == "warn"
-    assert rule_doc["expected_outcome"]["emission_channel"] == "warnings_warn"
+    assert rule_doc["severity"] == "dormant"
     assert rule_doc["match"]["fields"]
-    # Banner comment present at top of raw YAML fragment output.
-    assert "Invariant fragment proposed by 'llem report-gaps'" in yaml_body
+    assert rule_doc["provenance"]["verified"] == "runtime"
+
+    rule = _parse_rule(rule_doc)
+    assert rule.severity == "dormant"
+    assert rule.match_fields == rule_doc["match"]["fields"]
+
+    # Banner + reviewer evidence comment present in the raw fragment output.
+    assert "Rule fragment proposed by 'llem report-gaps'" in yaml_body
+    assert "reviewer evidence" in yaml_body
+    assert "source_channel: warnings_warn" in yaml_body
 
 
 def test_render_yaml_error_severity(tmp_path: Path) -> None:
-    """Exception-derived proposal carries severity=error in the fragment."""
+    """Exception-derived proposal carries severity=error and still round-trips."""
     study = tmp_path / "rt-err"
     study.mkdir()
 
@@ -397,65 +388,12 @@ def test_render_yaml_error_severity(tmp_path: Path) -> None:
     )
     _write_jsonl_record(study, config_hash=h_b)
 
-    gaps = find_runtime_gaps(
-        [study], engine_invariants=_build_empty_invariants(), include_exceptions=True
-    )
+    gaps = find_runtime_gaps([study], include_exceptions=True)
     assert len(gaps) == 1
     body = render_yaml_fragment(gaps[0])
     rule_doc = yaml.safe_load(body)
     assert rule_doc["severity"] == "error"
-    assert rule_doc["expected_outcome"]["outcome"] == "error"
-
-
-# ---------------------------------------------------------------------------
-# Corpus matcher helper
-# ---------------------------------------------------------------------------
-
-
-def test_template_never_matched_by_shipped_corpus() -> None:
-    """The shipped rules schema carries no observed message samples.
-
-    The suppression indexes are therefore always empty and no template is
-    ever suppressed - every unmatched emission surfaces as a gap until the
-    observed-collision replacement lands.
-    """
-    envelope = """
-schema_version: 1.0.0
-engine: transformers
-rules:
-- id: t_fixture
-  engine: transformers
-  severity: dormant
-  match:
-    fields:
-      do_sample:
-        equals: false
-  provenance:
-    source: manual
-    verified: human
-    engine_version: "4.57.3"
-    date: "2026-07-02"
-"""
-    corpus = _parse_envelope("transformers", envelope)
-    from llenergymeasure.api.report_gaps import (
-        _build_observed_template_index,
-        _build_regex_index,
-    )
-
-    corpus_map = {"transformers": corpus}
-    observed_idx = _build_observed_template_index(corpus_map)
-    regex_idx = _build_regex_index(corpus_map)
-    assert observed_idx["transformers"] == {}
-    assert regex_idx["transformers"] == {}
-    assert (
-        _template_matched_by_corpus(
-            "any template at all",
-            corpus,
-            observed_idx["transformers"],
-            regex_idx["transformers"],
-        )
-        is False
-    )
+    assert _parse_rule(rule_doc).severity == "error"
 
 
 # ---------------------------------------------------------------------------
@@ -498,7 +436,7 @@ def test_manifest_path_resolves_full_hash(tmp_path: Path) -> None:
     _write_jsonl_record(study, config_hash=h_fire, warnings_emitted=["manifest-path warn"])
     _write_jsonl_record(study, config_hash=h_nf)
 
-    gaps = find_runtime_gaps([study], engine_invariants=_build_empty_invariants())
+    gaps = find_runtime_gaps([study])
     assert len(gaps) == 1
     assert gaps[0].collision_count == 1
     assert gaps[0].contrast_count == 1
@@ -524,7 +462,7 @@ def test_multiple_study_dirs_aggregate(tmp_path: Path) -> None:
     _write_jsonl_record(s2, config_hash=h2, warnings_emitted=["cross-study warn"])
     _write_jsonl_record(s2, config_hash=h3)
 
-    gaps = find_runtime_gaps([s1, s2], engine_invariants=_build_empty_invariants())
+    gaps = find_runtime_gaps([s1, s2])
     assert len(gaps) == 1
     assert gaps[0].collision_count == 2
     assert gaps[0].contrast_count == 1

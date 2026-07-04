@@ -1,13 +1,13 @@
-"""Firing tests for the re-homed single-field bound rules.
+"""Firing tests for shipped rules.yaml rules against the nested config shape.
 
-The re-homed bounds (item 6b of the pin-advance) live in the shipped rules.yaml
-rather than as generated Field constraints. Each rule must resolve at
-``Invariant.try_match`` against the generated nested config shape
+Covers the re-homed single-field bounds (item 6b of the pin-advance) and the
+transformers cross-section ``@field_ref`` rules. Each rule must resolve at
+``Rule.try_match`` against the generated nested config shape
 (``<engine>.engine_params.<field>`` / ``<engine>.sampling_params.<field>``); a
 path that does not resolve silently never fires. These tests construct a
 violating config through the public ``ExperimentConfig`` path and assert the
 rule rejects it, covering every engine and both sub-sections so the path shape
-is proven for the whole re-homed set.
+is proven for the whole set.
 """
 
 from __future__ import annotations
@@ -67,3 +67,55 @@ def test_in_range_value_is_accepted():
         },
     )
     assert cfg.active_sampling_params().top_p == 0.9
+
+
+# ---------------------------------------------------------------------------
+# Cross-section @field_ref rules
+#
+# These rules compare a field in one section against a root-dotted reference
+# into the other (engine_params.num_beams vs
+# @transformers.sampling_params.num_return_sequences). A reference that fails
+# to resolve silently never fires, so presence in the corpus proves nothing -
+# each rule must be driven to fire through the public ExperimentConfig path.
+# ---------------------------------------------------------------------------
+
+
+def test_cross_section_num_beams_lt_num_return_sequences_fires():
+    """num_beams below sampling_params.num_return_sequences is rejected."""
+    with pytest.raises(
+        ValueError, match="transformers_num_return_vs_beams_num_beams_lt_num_return_sequences"
+    ):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers={
+                "engine_params": {"num_beams": 2},
+                "sampling_params": {"num_return_sequences": 4},
+            },
+        )
+
+
+def test_cross_section_num_beams_not_divisible_by_num_return_sequences_fires():
+    """num_beams not divisible by sampling_params.num_return_sequences is rejected."""
+    with pytest.raises(ValueError, match="not_divisible_by_num_return_sequences"):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers={
+                "engine_params": {"num_beams": 5},
+                "sampling_params": {"num_return_sequences": 2},
+            },
+        )
+
+
+def test_cross_section_compatible_beam_and_return_counts_accepted():
+    """num_beams >= and divisible by num_return_sequences constructs cleanly."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={
+            "engine_params": {"num_beams": 4},
+            "sampling_params": {"num_return_sequences": 2},
+        },
+    )
+    assert cfg.active_engine_params().num_beams == 4

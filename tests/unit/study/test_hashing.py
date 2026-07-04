@@ -115,6 +115,26 @@ class TestBuildResolvedView:
         assert view.observed_sampling_params["temperature"] == 0.7
         assert "sampling_params" not in view.observed_engine_params
 
+    def test_both_sections_lift_into_matching_buckets(self):
+        # Regression for the sampling -> sampling_params alias bug: the resolved
+        # view used to read a legacy flat "sampling" attribute, so the generated
+        # sections' content could miss its bucket and resolved hashes would not
+        # line up with the observed pipeline (which populates the same
+        # ConfigHashView buckets). Prove each section lands in its own bucket
+        # and no section-wrapper key leaks through.
+        cfg = _mk_config(
+            transformers={
+                "engine_params": {"num_beams": 2},
+                "sampling_params": {"do_sample": True, "temperature": 0.7},
+            }
+        )
+        view = build_resolved_view(cfg)
+        assert view.observed_engine_params["num_beams"] == 2
+        assert view.observed_sampling_params["temperature"] == 0.7
+        for stale_key in ("sampling", "sampling_params", "engine_params"):
+            assert stale_key not in view.observed_engine_params
+            assert stale_key not in view.observed_sampling_params
+
     def test_passthrough_kwargs_propagated(self):
         cfg = _mk_config(passthrough_kwargs={"my_key": "my_val"})
         view = build_resolved_view(cfg)

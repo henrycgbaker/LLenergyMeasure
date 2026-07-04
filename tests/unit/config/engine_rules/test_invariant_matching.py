@@ -1,4 +1,4 @@
-"""Tests for :class:`Invariant.try_match`, the predicate engine, and message rendering."""
+"""Tests for :class:`Rule.try_match`, the predicate engine, and message rendering."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from typing import Any
 import pytest
 
 from llenergymeasure.config.engine_rules import (
-    Invariant,
     Provenance,
+    Rule,
     evaluate_predicate,
     resolve_field_path,
 )
@@ -46,14 +46,14 @@ class _Config:
     transformers: _Transformers
 
 
-def _make_invariant(
+def _make_rule(
     *,
     id: str = "rule_x",
     match_fields: dict[str, Any] | None = None,
     severity: str = "dormant",
     message: str | None = "Declared {declared_value}",
-) -> Invariant:
-    return Invariant(
+) -> Rule:
+    return Rule(
         id=id,
         engine="transformers",
         severity=severity,
@@ -127,7 +127,7 @@ def test_comparison_operators_are_none_safe() -> None:
 def test_neq_and_not_equal_agree_on_none_safety() -> None:
     # Regression guard: `!=` and `not_equal` MUST produce the same verdict on
     # None actual. Corpus authors swap between the two spellings freely; a
-    # None-safety divergence would mean two-invariants-with-identical-predicate
+    # None-safety divergence would mean two-rules-with-identical-predicate
     # behave differently based on spelling. Both should NOT fire on a missing
     # field.
     assert evaluate_predicate(None, {"!=": 1}) is False
@@ -234,7 +234,7 @@ def test_resolve_field_path_skips_bound_methods() -> None:
     # Regression guard: a plain object with a method named like a would-be
     # field ("items", "copy", "json", etc.) must NOT return the bound method.
     # The predicate engine would otherwise match on `method_is_not_None` and
-    # a corpus invariant targeting the field would silently always-fire.
+    # a corpus rule targeting the field would silently always-fire.
 
     class HasItemsMethod:
         def items(self) -> list[str]:  # resembles a Pydantic-style name
@@ -246,7 +246,7 @@ def test_resolve_field_path_skips_bound_methods() -> None:
 
 def test_resolve_field_path_pydantic_field_wins_over_method_name() -> None:
     # Pydantic models carry a .model_fields mapping that is the authoritative
-    # field set. If a corpus invariant targets a field whose name collides with a
+    # field set. If a corpus rule targets a field whose name collides with a
     # method on the model, the field lookup wins.
     pydantic = pytest.importorskip("pydantic")
 
@@ -277,20 +277,18 @@ def test_resolve_field_path_dataclass_field_wins_over_method_name() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Invariant.try_match
+# Rule.try_match
 # ---------------------------------------------------------------------------
 
 
 def test_try_match_returns_none_when_no_predicate() -> None:
-    invariant = _make_invariant(
-        match_fields={"transformers.sampling.temperature": {"present": True}}
-    )
+    rule = _make_rule(match_fields={"transformers.sampling.temperature": {"present": True}})
     config = _Config(transformers=_Transformers(sampling=_Sampling()))
-    assert invariant.try_match(config) is None
+    assert rule.try_match(config) is None
 
 
 def test_try_match_returns_match_object_when_all_predicates_hold() -> None:
-    invariant = _make_invariant(
+    rule = _make_rule(
         match_fields={
             "transformers.sampling.do_sample": False,
             "transformers.sampling.temperature": {
@@ -302,7 +300,7 @@ def test_try_match_returns_match_object_when_all_predicates_hold() -> None:
     config = _Config(
         transformers=_Transformers(sampling=_Sampling(do_sample=False, temperature=0.9))
     )
-    match = invariant.try_match(config)
+    match = rule.try_match(config)
     assert match is not None
     # declared_value is the last field's value - the subject the user cares about.
     assert match.declared_value == 0.9
@@ -313,7 +311,7 @@ def test_try_match_returns_match_object_when_all_predicates_hold() -> None:
 
 
 def test_try_match_stops_at_first_failing_predicate() -> None:
-    invariant = _make_invariant(
+    rule = _make_rule(
         match_fields={
             "transformers.sampling.do_sample": True,  # won't match
             "transformers.sampling.temperature": {"present": True},
@@ -322,7 +320,7 @@ def test_try_match_stops_at_first_failing_predicate() -> None:
     config = _Config(
         transformers=_Transformers(sampling=_Sampling(do_sample=False, temperature=0.9))
     )
-    assert invariant.try_match(config) is None
+    assert rule.try_match(config) is None
 
 
 # ---------------------------------------------------------------------------
@@ -331,38 +329,38 @@ def test_try_match_stops_at_first_failing_predicate() -> None:
 
 
 def test_render_message_substitutes_declared_value() -> None:
-    invariant = _make_invariant(
+    rule = _make_rule(
         match_fields={"transformers.sampling.temperature": {"present": True}},
-        message="Dormant: temperature={declared_value} invariant={invariant_id}",
+        message="Dormant: temperature={declared_value} rule={invariant_id}",
     )
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
-    match = invariant.try_match(config)
+    match = rule.try_match(config)
     assert match is not None
-    msg = invariant.render_message(match)
+    msg = rule.render_message(match)
     assert "0.7" in msg
     assert "rule_x" in msg
 
 
 def test_render_message_missing_template_returns_fallback() -> None:
-    invariant = _make_invariant(
+    rule = _make_rule(
         match_fields={"transformers.sampling.temperature": {"present": True}},
         message=None,
     )
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
-    match = invariant.try_match(config)
+    match = rule.try_match(config)
     assert match is not None
-    assert "rule_x" in invariant.render_message(match)
+    assert "rule_x" in rule.render_message(match)
 
 
 def test_render_message_with_missing_format_key_falls_back_gracefully() -> None:
     # Template refers to a field not populated in the match.
-    invariant = _make_invariant(
+    rule = _make_rule(
         match_fields={"transformers.sampling.temperature": {"present": True}},
         message="Field {not_in_match_or_declared}",
     )
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
-    match = invariant.try_match(config)
+    match = rule.try_match(config)
     assert match is not None
-    # Should not raise; should fall back to invariant-id + raw template.
-    out = invariant.render_message(match)
+    # Should not raise; should fall back to rule-id + raw template.
+    out = rule.render_message(match)
     assert "rule_x" in out

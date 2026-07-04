@@ -4,7 +4,7 @@ Each engine ships exactly one rules file at
 ``src/llenergymeasure/engines/{engine}/rules.yaml``. That file is the sole
 runtime source of engine-correctness knowledge: the loader reads nothing else
 (no proposed/validated split, no overlay merge). Every rule is parsed into a
-typed :class:`Invariant` entry carrying a match predicate (operators defined in
+typed :class:`Rule` entry carrying a match predicate (operators defined in
 :func:`evaluate_predicate`), an optional message template, and a
 :class:`Provenance` block.
 
@@ -132,7 +132,7 @@ class Provenance:
 
 
 @dataclass(frozen=True)
-class InvariantMatch:
+class RuleMatch:
     """Result of a rule matching a concrete config.
 
     ``declared_value`` is the user-set value for the subject field (corpus
@@ -145,14 +145,14 @@ class InvariantMatch:
     remap.
     """
 
-    invariant: Invariant
+    rule: Rule
     declared_value: Any
     effective_value: Any | None = None
     matched_fields: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
-class Invariant:
+class Rule:
     """One engine validation rule parsed from ``rules.yaml``.
 
     Construction goes through :func:`_parse_rule`; tests may instantiate
@@ -173,30 +173,19 @@ class Invariant:
     field-inert configs. Empty for ``error`` rules.
     """
 
-    @property
-    def expected_outcome(self) -> dict[str, Any]:
-        """Deprecated compatibility shim exposing ``normalised_fields``.
+    def try_match(self, config: Any) -> RuleMatch | None:
+        """Return an :class:`RuleMatch` if every predicate in ``match_fields`` holds.
 
-        The pre-carve corpus nested ``normalised_fields`` inside an
-        ``expected_outcome`` mapping alongside now-removed outcome/emission
-        vocabulary. Two consumers still read via this shape
-        (``study.library_resolution`` and ``api.report_gaps``); B2/B4 rework
-        them to read :attr:`normalised_fields` directly and drop this shim.
-        """
-        return {"normalised_fields": list(self.normalised_fields)}
-
-    def try_match(self, config: Any) -> InvariantMatch | None:
-        """Return an :class:`InvariantMatch` if every predicate in ``match_fields`` holds.
-
-        Field paths are dotted (``"transformers.sampling.temperature"``) and
-        resolve against ``config`` attribute-by-attribute, tolerating Pydantic
-        models, dataclasses, and plain dicts.
+        Field paths are dotted (``"transformers.sampling_params.temperature"``)
+        and resolve against ``config`` attribute-by-attribute, tolerating
+        Pydantic models, dataclasses, and plain dicts.
 
         Predicate specs may carry ``@field_path`` references on the right-hand
         side of any operator. References resolve against the same ``config``
         before predicate evaluation. Bare references (``@num_beams``) resolve
         as siblings of the predicate's field; dotted references
-        (``@transformers.sampling.num_beams``) resolve from the config root.
+        (``@transformers.sampling_params.num_return_sequences``) resolve from
+        the config root.
 
         ``declared_value`` on the returned match is the last field's value -
         corpus convention puts precondition fields first and the subject field
@@ -211,9 +200,9 @@ class Invariant:
                 return None
             matched[path] = actual
             last_value = actual
-        return InvariantMatch(invariant=self, declared_value=last_value, matched_fields=matched)
+        return RuleMatch(rule=self, declared_value=last_value, matched_fields=matched)
 
-    def render_message(self, match: InvariantMatch) -> str:
+    def render_message(self, match: RuleMatch) -> str:
         """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
 
         Uses ``str.format`` with permissive defaults - templates that reference
@@ -234,13 +223,13 @@ class Invariant:
 
 
 @dataclass(frozen=True)
-class EngineInvariants:
+class EngineRules:
     """Parsed rules corpus for one engine."""
 
     engine: str
     schema_version: str
     engine_version: str
-    invariants: tuple[Invariant, ...]
+    rules: tuple[Rule, ...]
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +246,7 @@ def _spec_has_field_ref(spec: Any) -> bool:
     Used to short-circuit :func:`_resolve_field_refs_in_spec` on the hot
     path: most predicates are literal (no cross-field refs), so paying a
     cheap pre-scan to skip the substitution-recursion's allocations is
-    a win - every ``Invariant.try_match`` runs this on every match_fields
+    a win - every ``Rule.try_match`` runs this on every match_fields
     spec on every config construction.
     """
     if isinstance(spec, str):
@@ -514,7 +503,7 @@ def _parse_provenance(rule_id: str, raw: Any) -> Provenance:
     )
 
 
-def _parse_rule(raw: dict[str, Any]) -> Invariant:
+def _parse_rule(raw: dict[str, Any]) -> Rule:
     for key in ("id", "engine", "severity", "match", "provenance"):
         if key not in raw:
             raise RuleCorpusError(f"Rule {raw.get('id', '<unknown>')} missing field: {key}")
@@ -530,7 +519,7 @@ def _parse_rule(raw: dict[str, Any]) -> Invariant:
     normalised = raw.get("normalised_fields") or ()
     if isinstance(normalised, str):
         normalised = (normalised,)
-    return Invariant(
+    return Rule(
         id=rule_id,
         engine=str(raw["engine"]),
         severity=severity,
@@ -541,7 +530,7 @@ def _parse_rule(raw: dict[str, Any]) -> Invariant:
     )
 
 
-def _parse_envelope(engine: str, raw_text: str) -> EngineInvariants:
+def _parse_envelope(engine: str, raw_text: str) -> EngineRules:
     data = yaml.safe_load(raw_text)
     if not isinstance(data, dict):
         raise RuleCorpusError(
@@ -558,11 +547,11 @@ def _parse_envelope(engine: str, raw_text: str) -> EngineInvariants:
         )
     raw_rules = data.get("rules") or []
     rules = tuple(_parse_rule(r) for r in raw_rules)
-    return EngineInvariants(
+    return EngineRules(
         engine=engine,
         schema_version=schema_version,
         engine_version=str(data.get("engine_version", "")),
-        invariants=rules,
+        rules=rules,
     )
 
 
@@ -576,8 +565,8 @@ _DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[2] / "engines"
 RULES_FILENAME = "rules.yaml"
 
 
-class EngineInvariantsLoader:
-    """Load, cache, and serve :class:`EngineInvariants` per engine.
+class EngineRulesLoader:
+    """Load, cache, and serve :class:`EngineRules` per engine.
 
     Binds to exactly one file per engine:
     ``src/llenergymeasure/engines/{engine}/rules.yaml``. There is no
@@ -591,9 +580,9 @@ class EngineInvariantsLoader:
 
     def __init__(self, corpus_root: Path | None = None) -> None:
         self.corpus_root: Path = corpus_root or _DEFAULT_CORPUS_ROOT
-        self._cache: dict[str, EngineInvariants] = {}
+        self._cache: dict[str, EngineRules] = {}
 
-    def load_invariants(self, engine: str) -> EngineInvariants:
+    def load_rules(self, engine: str) -> EngineRules:
         """Return the parsed rules corpus for ``engine``, parsing once per engine."""
         cached = self._cache.get(engine)
         if cached is not None:

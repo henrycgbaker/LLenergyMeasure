@@ -17,7 +17,7 @@ from llenergymeasure.config.engine_rules import (
     VALID_SEVERITY,
     VALID_SOURCE,
     VALID_VERIFIED,
-    EngineInvariantsLoader,
+    EngineRulesLoader,
 )
 
 ENGINES = ("transformers", "vllm", "tensorrt")
@@ -25,8 +25,8 @@ ENGINES = ("transformers", "vllm", "tensorrt")
 
 @pytest.fixture(scope="module")
 def corpora():
-    loader = EngineInvariantsLoader()
-    return {engine: loader.load_invariants(engine) for engine in ENGINES}
+    loader = EngineRulesLoader()
+    return {engine: loader.load_rules(engine) for engine in ENGINES}
 
 
 @pytest.fixture(scope="module")
@@ -35,17 +35,17 @@ def transformers_corpus(corpora):
 
 
 def test_corpus_covers_required_invariants(transformers_corpus) -> None:
-    """Coverage-by-invariant: every required field surface has at least one rule.
+    """Coverage-by-rule: every required field surface has at least one rule.
 
     Pins SEMANTIC coverage, not specific rule IDs. Renames don't break this
     test; regressions that drop coverage of a real constraint do. If a path
     drops out, investigate WHY (real extraction regression, real library
     change, or verification gap) before weakening this list.
     """
-    invariants = transformers_corpus.invariants
+    rules = transformers_corpus.rules
 
     def covers_field(field_path: str) -> bool:
-        return any(field_path in invariant.match_fields for invariant in invariants)
+        return any(field_path in rule.match_fields for rule in rules)
 
     required_fields = (
         # Greedy dormancy: do_sample=False / num_beams=1 strip these.
@@ -105,7 +105,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     missing_pairs = [
         pair
         for pair in cross_field_pairs
-        if not any(all(p in invariant.match_fields for p in pair) for invariant in invariants)
+        if not any(all(p in rule.match_fields for p in pair) for rule in rules)
     ]
     assert not missing_pairs, (
         f"corpus missing cross-field rules for {len(missing_pairs)} constraints: {missing_pairs}"
@@ -122,7 +122,7 @@ def test_cross_section_field_refs_fire(corpora) -> None:
     the presence check above cannot catch a rule that exists but never
     fires. Refs that cross sections must use the root-dotted form.
     """
-    invariants = corpora["transformers"].invariants
+    rules = corpora["transformers"].rules
 
     violating = {
         "transformers": {
@@ -130,7 +130,7 @@ def test_cross_section_field_refs_fire(corpora) -> None:
             "sampling_params": {"num_return_sequences": 4},
         }
     }
-    fired = {inv.id for inv in invariants if inv.try_match(violating)}
+    fired = {inv.id for inv in rules if inv.try_match(violating)}
     assert "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences" in fired
 
     not_divisible = {
@@ -139,7 +139,7 @@ def test_cross_section_field_refs_fire(corpora) -> None:
             "sampling_params": {"num_return_sequences": 2},
         }
     }
-    fired = {inv.id for inv in invariants if inv.try_match(not_divisible)}
+    fired = {inv.id for inv in rules if inv.try_match(not_divisible)}
     assert (
         "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences" in fired
     )
@@ -150,7 +150,7 @@ def test_cross_section_field_refs_fire(corpora) -> None:
             "sampling_params": {"num_return_sequences": 2},
         }
     }
-    fired = {inv.id for inv in invariants if inv.try_match(clean)}
+    fired = {inv.id for inv in rules if inv.try_match(clean)}
     assert not fired & {
         "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences",
         "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences",
@@ -169,32 +169,32 @@ def test_corpus_engine_version_present(corpora, engine: str) -> None:
 
 @pytest.mark.parametrize("engine", ENGINES)
 def test_corpus_ids_unique(corpora, engine: str) -> None:
-    ids = [invariant.id for invariant in corpora[engine].invariants]
+    ids = [rule.id for rule in corpora[engine].rules]
     assert len(ids) == len(set(ids))
 
 
 @pytest.mark.parametrize("engine", ENGINES)
 def test_corpus_match_fields_non_empty(corpora, engine: str) -> None:
-    for invariant in corpora[engine].invariants:
-        assert invariant.match_fields, f"Rule {invariant.id} has empty match.fields"
+    for rule in corpora[engine].rules:
+        assert rule.match_fields, f"Rule {rule.id} has empty match.fields"
 
 
 @pytest.mark.parametrize("engine", ENGINES)
 def test_corpus_severity_values_are_valid(corpora, engine: str) -> None:
     # Redundant with the loader's UnknownSeverityError (defence-in-depth):
     # the shipped files carry only the closed {error, dormant} set.
-    for invariant in corpora[engine].invariants:
-        assert invariant.severity in VALID_SEVERITY, invariant.id
+    for rule in corpora[engine].rules:
+        assert rule.severity in VALID_SEVERITY, rule.id
 
 
 @pytest.mark.parametrize("engine", ENGINES)
 def test_corpus_provenance_complete(corpora, engine: str) -> None:
-    for invariant in corpora[engine].invariants:
-        prov = invariant.provenance
-        assert prov.source in VALID_SOURCE, f"{invariant.id}: source={prov.source!r}"
-        assert prov.verified in VALID_VERIFIED, f"{invariant.id}: verified={prov.verified!r}"
-        assert prov.engine_version, f"{invariant.id}: provenance missing engine_version"
-        assert prov.date, f"{invariant.id}: provenance missing date"
+    for rule in corpora[engine].rules:
+        prov = rule.provenance
+        assert prov.source in VALID_SOURCE, f"{rule.id}: source={prov.source!r}"
+        assert prov.verified in VALID_VERIFIED, f"{rule.id}: verified={prov.verified!r}"
+        assert prov.engine_version, f"{rule.id}: provenance missing engine_version"
+        assert prov.date, f"{rule.id}: provenance missing date"
 
 
 @pytest.mark.parametrize("engine", ENGINES)
@@ -202,9 +202,9 @@ def test_corpus_provenance_pinned_to_envelope_version(corpora, engine: str) -> N
     # Rule-level verdicts are version-scoped: a shipped rule verified against a
     # different engine version than the envelope's would be stale knowledge.
     envelope_version = corpora[engine].engine_version
-    for invariant in corpora[engine].invariants:
-        assert invariant.provenance.engine_version == envelope_version, (
-            f"{invariant.id}: verified at {invariant.provenance.engine_version!r} "
+    for rule in corpora[engine].rules:
+        assert rule.provenance.engine_version == envelope_version, (
+            f"{rule.id}: verified at {rule.provenance.engine_version!r} "
             f"but envelope pins {envelope_version!r}"
         )
 
@@ -214,11 +214,9 @@ def test_dormant_rules_carry_normalised_fields(corpora, engine: str) -> None:
     # A dormant rule's runtime action is canonicalise-for-dedup; without
     # normalised_fields the dedup consumer falls back to predicate projection.
     # Error rules must never carry normalisation targets.
-    for invariant in corpora[engine].invariants:
-        if invariant.severity == "error":
-            assert not invariant.normalised_fields, (
-                f"{invariant.id}: error rule carries normalised_fields"
-            )
+    for rule in corpora[engine].rules:
+        if rule.severity == "error":
+            assert not rule.normalised_fields, f"{rule.id}: error rule carries normalised_fields"
 
 
 @pytest.mark.parametrize("engine", ENGINES)

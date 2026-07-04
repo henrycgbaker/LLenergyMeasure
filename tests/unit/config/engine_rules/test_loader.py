@@ -1,4 +1,4 @@
-"""Tests for :class:`EngineInvariantsLoader` and rules corpus envelope parsing."""
+"""Tests for :class:`EngineRulesLoader` and rules corpus envelope parsing."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from llenergymeasure.config.engine_rules import (
     VALID_SEVERITY,
     VALID_SOURCE,
     VALID_VERIFIED,
-    EngineInvariants,
-    EngineInvariantsLoader,
+    EngineRules,
+    EngineRulesLoader,
     RuleCorpusError,
     UnknownEnumValueError,
     UnknownSeverityError,
@@ -52,14 +52,14 @@ def _write_corpus(root: Path, engine: str, text: str) -> None:
 
 def test_load_rules_returns_parsed_corpus(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    corpus = loader.load_invariants("transformers")
-    assert isinstance(corpus, EngineInvariants)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    corpus = loader.load_rules("transformers")
+    assert isinstance(corpus, EngineRules)
     assert corpus.engine == "transformers"
     assert corpus.schema_version == "1.0.0"
     assert corpus.engine_version == "4.57.3"
-    assert len(corpus.invariants) == 1
-    rule = corpus.invariants[0]
+    assert len(corpus.rules) == 1
+    rule = corpus.rules[0]
     assert rule.id == "transformers_test_rule"
     assert rule.severity == "dormant"
     assert rule.normalised_fields == ("transformers.sampling.temperature",)
@@ -72,36 +72,36 @@ def test_load_rules_returns_parsed_corpus(tmp_path: Path) -> None:
 
 def test_load_rules_per_instance_cache(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    corpus1 = loader.load_invariants("transformers")
-    corpus2 = loader.load_invariants("transformers")
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    corpus1 = loader.load_rules("transformers")
+    corpus2 = loader.load_rules("transformers")
     # Same identity: pulled from cache on second call.
     assert corpus1 is corpus2
 
 
 def test_invalidate_clears_cache(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    first = loader.load_invariants("transformers")
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    first = loader.load_rules("transformers")
     loader.invalidate("transformers")
-    second = loader.load_invariants("transformers")
+    second = loader.load_rules("transformers")
     # Different instances: cache was cleared.
     assert first is not second
 
 
 def test_invalidate_all_clears_all(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    loader.load_invariants("transformers")
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    loader.load_rules("transformers")
     assert loader._cache
     loader.invalidate()
     assert not loader._cache
 
 
 def test_missing_corpus_raises_file_not_found(tmp_path: Path) -> None:
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(FileNotFoundError):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_loader_reads_only_rules_yaml(tmp_path: Path) -> None:
@@ -110,19 +110,19 @@ def test_loader_reads_only_rules_yaml(tmp_path: Path) -> None:
     # resurrect the two-file topology this loader exists to remove.
     engine_dir = tmp_path / "transformers"
     engine_dir.mkdir(parents=True)
-    (engine_dir / "invariants.proposed.yaml").write_text("schema_version: '1.0.0'\nrules: []\n")
-    (engine_dir / "invariants.validated.yaml").write_text("schema_version: '1.0.0'\ncases: []\n")
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    (engine_dir / "rules.proposed.yaml").write_text("schema_version: '1.0.0'\nrules: []\n")
+    (engine_dir / "rules.validated.yaml").write_text("schema_version: '1.0.0'\ncases: []\n")
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(FileNotFoundError, match=r"rules\.yaml"):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_unsupported_major_version_raises(tmp_path: Path) -> None:
     bad_corpus = _CORPUS_MINIMAL.replace('"1.0.0"', '"2.0.0"', 1)
     _write_corpus(tmp_path, "transformers", bad_corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(UnsupportedSchemaVersionError):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_missing_schema_version_raises(tmp_path: Path) -> None:
@@ -132,16 +132,16 @@ engine_version: "4.57.3"
 rules: []
 """
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(UnsupportedSchemaVersionError):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_non_mapping_root_raises(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", "- just a list")
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(RuleCorpusError, match="must be a YAML mapping"):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_empty_rules_list_is_valid(tmp_path: Path) -> None:
@@ -152,14 +152,14 @@ engine_version: "4.57.3"
 rules: []
 """
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    result = loader.load_invariants("transformers")
-    assert result.invariants == ()
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    result = loader.load_rules("transformers")
+    assert result.rules == ()
 
 
 def test_default_corpus_root_resolves_to_engines(tmp_path: Path) -> None:
     # Constructing without corpus_root uses the repo's src/llenergymeasure/engines/.
-    loader = EngineInvariantsLoader()
+    loader = EngineRulesLoader()
     assert loader.corpus_root.name == "engines"
     assert loader.corpus_root.parent.name == "llenergymeasure"
 
@@ -177,8 +177,8 @@ def test_valid_severity_set_is_closed_two_value() -> None:
 def test_both_severities_round_trip(tmp_path: Path, severity: str) -> None:
     corpus = _CORPUS_MINIMAL.replace("severity: dormant", f"severity: {severity}")
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    assert loader.load_invariants("transformers").invariants[0].severity == severity
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    assert loader.load_rules("transformers").rules[0].severity == severity
 
 
 @pytest.mark.parametrize(
@@ -194,9 +194,9 @@ def test_both_severities_round_trip(tmp_path: Path, severity: str) -> None:
 def test_non_closed_severity_raises_at_load(tmp_path: Path, severity: str) -> None:
     bad_corpus = _CORPUS_MINIMAL.replace("severity: dormant", f"severity: {severity}")
     _write_corpus(tmp_path, "transformers", bad_corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownSeverityError, match=severity):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 # ---------------------------------------------------------------------------
@@ -216,42 +216,42 @@ def test_valid_verified_set_matches_design_spec() -> None:
 def test_all_sources_round_trip(tmp_path: Path, source: str) -> None:
     corpus = _CORPUS_MINIMAL.replace("source: deterministic_miner", f"source: {source}")
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    assert loader.load_invariants("transformers").invariants[0].provenance.source == source
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    assert loader.load_rules("transformers").rules[0].provenance.source == source
 
 
 @pytest.mark.parametrize("verified", sorted(VALID_VERIFIED))
 def test_all_verified_values_round_trip(tmp_path: Path, verified: str) -> None:
     corpus = _CORPUS_MINIMAL.replace("verified: runtime", f"verified: {verified}")
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    assert loader.load_invariants("transformers").invariants[0].provenance.verified == verified
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    assert loader.load_rules("transformers").rules[0].provenance.verified == verified
 
 
 def test_unknown_source_raises(tmp_path: Path) -> None:
     # Old added_by vocabulary must not silently pass as a source.
     bad = _CORPUS_MINIMAL.replace("source: deterministic_miner", "source: static_miner")
     _write_corpus(tmp_path, "transformers", bad)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownSourceError, match="static_miner"):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_unknown_verified_raises(tmp_path: Path) -> None:
     bad = _CORPUS_MINIMAL.replace("verified: runtime", "verified: vibes")
     _write_corpus(tmp_path, "transformers", bad)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownVerifiedError, match="vibes"):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_provenance_must_be_mapping(tmp_path: Path) -> None:
     data = yaml.safe_load(_CORPUS_MINIMAL)
     data["rules"][0]["provenance"] = "static_miner"
     _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(RuleCorpusError, match="provenance"):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_citation_is_optional(tmp_path: Path) -> None:
@@ -260,8 +260,8 @@ def test_citation_is_optional(tmp_path: Path) -> None:
         line for line in _CORPUS_MINIMAL.splitlines(keepends=True) if "citation:" not in line
     )
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    assert loader.load_invariants("transformers").invariants[0].provenance.citation is None
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    assert loader.load_rules("transformers").rules[0].provenance.citation is None
 
 
 def test_enum_value_errors_share_common_base_class() -> None:
@@ -285,34 +285,24 @@ def test_missing_required_rule_field_raises(tmp_path: Path, missing: str) -> Non
     data = yaml.safe_load(_CORPUS_MINIMAL)
     del data["rules"][0][missing]
     _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(RuleCorpusError, match=f"missing field: {missing}"):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_match_without_fields_raises(tmp_path: Path) -> None:
     data = yaml.safe_load(_CORPUS_MINIMAL)
     data["rules"][0]["match"] = {"engine": "transformers"}
     _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
     with pytest.raises(RuleCorpusError, match="malformed match"):
-        loader.load_invariants("transformers")
+        loader.load_rules("transformers")
 
 
 def test_normalised_fields_string_coerces_to_tuple(tmp_path: Path) -> None:
     data = yaml.safe_load(_CORPUS_MINIMAL)
     data["rules"][0]["normalised_fields"] = "transformers.sampling.temperature"
     _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
-    loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    rule = loader.load_invariants("transformers").invariants[0]
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    rule = loader.load_rules("transformers").rules[0]
     assert rule.normalised_fields == ("transformers.sampling.temperature",)
-
-
-def test_expected_outcome_shim_exposes_normalised_fields(tmp_path: Path) -> None:
-    # Deprecated compatibility surface: consumers not yet reworked (B2/B4)
-    # read normalised_fields via the old expected_outcome mapping shape.
-    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    rule = (
-        EngineInvariantsLoader(corpus_root=tmp_path).load_invariants("transformers").invariants[0]
-    )
-    assert rule.expected_outcome == {"normalised_fields": ["transformers.sampling.temperature"]}

@@ -18,8 +18,8 @@ from typing import Any
 import pytest
 
 from llenergymeasure.config.engine_rules import (
-    Invariant,
     Provenance,
+    Rule,
     evaluate_predicate,
 )
 from llenergymeasure.config.engine_rules.loader import (
@@ -50,8 +50,8 @@ class _Config:
     transformers: _Transformers
 
 
-def _make_invariant(*, match_fields: dict[str, Any]) -> Invariant:
-    return Invariant(
+def _make_rule(*, match_fields: dict[str, Any]) -> Rule:
+    return Rule(
         id="rule_x",
         engine="transformers",
         severity="error",
@@ -159,10 +159,10 @@ def test_spec_walk_passes_through_bare_value() -> None:
 @pytest.mark.parametrize(
     "spec, actual, expected",
     [
-        # not_divisible_by: positive case (invariant fires)
+        # not_divisible_by: positive case (rule fires)
         ({"not_divisible_by": 4}, 6, True),  # 6 % 4 == 2 → fires
         ({"not_divisible_by": 3}, 6, False),  # 6 % 3 == 0 → does not fire
-        # divisible_by: positive case (invariant fires)
+        # divisible_by: positive case (rule fires)
         ({"divisible_by": 3}, 6, True),  # 6 % 3 == 0 → fires
         ({"divisible_by": 4}, 6, False),  # 6 % 4 == 2 → does not fire
     ],
@@ -172,7 +172,7 @@ def test_divisibility_basic(spec: dict[str, Any], actual: int, expected: bool) -
 
 
 def test_divisibility_zero_divisor_does_not_fire() -> None:
-    # b == 0: never fires (avoids ZeroDivisionError, no invariant should match).
+    # b == 0: never fires (avoids ZeroDivisionError, no rule should match).
     assert evaluate_predicate(6, {"not_divisible_by": 0}) is False
     assert evaluate_predicate(6, {"divisible_by": 0}) is False
 
@@ -216,14 +216,14 @@ def test_is_int_pair_helper() -> None:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end via Invariant.try_match - corpus-shape predicate
+# End-to-end via Rule.try_match - corpus-shape predicate
 # ---------------------------------------------------------------------------
 
 
 def test_try_match_with_field_ref_fires_when_left_exceeds_right() -> None:
     # Mirrors the rewritten transformers_num_return_sequences_exceeds_num_beams
-    # invariant: fires when num_return_sequences > num_beams.
-    invariant = _make_invariant(
+    # rule: fires when num_return_sequences > num_beams.
+    rule = _make_rule(
         match_fields={
             "transformers.sampling.num_return_sequences": {">": "@num_beams"},
         }
@@ -231,14 +231,14 @@ def test_try_match_with_field_ref_fires_when_left_exceeds_right() -> None:
     config = _Config(
         transformers=_Transformers(sampling=_Sampling(num_beams=2, num_return_sequences=4))
     )
-    match = invariant.try_match(config)
+    match = rule.try_match(config)
     assert match is not None
     assert match.declared_value == 4
 
 
 def test_try_match_with_field_ref_does_not_fire_when_left_le_right() -> None:
-    # The valid case (num_return_sequences=2, num_beams=4) - invariant must not fire.
-    invariant = _make_invariant(
+    # The valid case (num_return_sequences=2, num_beams=4) - rule must not fire.
+    rule = _make_rule(
         match_fields={
             "transformers.sampling.num_return_sequences": {">": "@num_beams"},
         }
@@ -246,31 +246,31 @@ def test_try_match_with_field_ref_does_not_fire_when_left_le_right() -> None:
     config = _Config(
         transformers=_Transformers(sampling=_Sampling(num_beams=4, num_return_sequences=2))
     )
-    assert invariant.try_match(config) is None
+    assert rule.try_match(config) is None
 
 
 def test_try_match_with_not_divisible_by_field_ref_fires() -> None:
-    # Mirrors the new transformers_num_beams_not_divisible_by_groups invariant.
-    invariant = _make_invariant(
+    # Mirrors the new transformers_num_beams_not_divisible_by_groups rule.
+    rule = _make_rule(
         match_fields={
             "transformers.sampling.num_beam_groups": {">": 1},
             "transformers.sampling.num_beams": {"not_divisible_by": "@num_beam_groups"},
         }
     )
     config = _Config(transformers=_Transformers(sampling=_Sampling(num_beams=6, num_beam_groups=4)))
-    match = invariant.try_match(config)
+    match = rule.try_match(config)
     assert match is not None
     # Last predicate's field is the subject (num_beams).
     assert match.declared_value == 6
 
 
 def test_try_match_with_not_divisible_by_field_ref_does_not_fire_on_valid() -> None:
-    invariant = _make_invariant(
+    rule = _make_rule(
         match_fields={
             "transformers.sampling.num_beam_groups": {">": 1},
             "transformers.sampling.num_beams": {"not_divisible_by": "@num_beam_groups"},
         }
     )
-    # 6 % 3 == 0 → divisible → invariant does not fire.
+    # 6 % 3 == 0 → divisible → rule does not fire.
     config = _Config(transformers=_Transformers(sampling=_Sampling(num_beams=6, num_beam_groups=3)))
-    assert invariant.try_match(config) is None
+    assert rule.try_match(config) is None

@@ -82,7 +82,7 @@ def test_report_gaps_writes_yaml(tmp_path: Path) -> None:
     assert out.exists()
     body = out.read_text(encoding="utf-8")
     assert "CLI smoke warning" in body
-    assert "added_by: runtime_warning" in body
+    assert "severity: dormant" in body
     # Summary line printed.
     assert "1 gap" in result.output
 

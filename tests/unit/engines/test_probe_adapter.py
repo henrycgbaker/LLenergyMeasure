@@ -1,7 +1,7 @@
 """Unit tests for ``engines.probe_adapter.build_config_probe``.
 
 The adapter composes hardware errors (from ``EnginePlugin.check_hardware``)
-with dormancy observations (from ``ExperimentConfig._apply_invariants``)
+with dormancy observations (from ``ExperimentConfig._apply_rules``)
 into a :class:`ConfigProbe`. M1 leaves effective-params placeholders empty;
 they come to life when the M2 introspection miner supplies the surface.
 """
@@ -129,7 +129,7 @@ def test_effective_params_empty_in_m1():
 
 
 # ---------------------------------------------------------------------------
-# Preflight-substitution invariant: build_config_probe(c).errors ==
+# Preflight-substitution rule: build_config_probe(c).errors ==
 # check_hardware(c) when hardware is the only error source.
 # ---------------------------------------------------------------------------
 
