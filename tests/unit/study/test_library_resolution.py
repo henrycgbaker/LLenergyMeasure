@@ -18,6 +18,7 @@ from llenergymeasure.study.hashing import build_resolved_view, hash_config
 from llenergymeasure.study.library_resolution import (
     LibraryResolutionCycleError,
     _apply_rules_fixpoint,
+    _resolve_normalised_field,
     resolve_library_effective,
 )
 
@@ -298,6 +299,79 @@ class TestDedupSweep:
 # ---------------------------------------------------------------------------
 # resolved_config_hashing symmetry
 # ---------------------------------------------------------------------------
+
+
+class TestResolveNormalisedField:
+    """Unit coverage for bare-vs-dotted ``normalised_fields`` path resolution."""
+
+    def test_bare_name_anchors_to_last_match_field_parent(self):
+        # Subject field is last per corpus convention; a bare leaf resolves as
+        # its sibling (parent path of the last match key + the bare name).
+        match = {
+            "vllm.engine_params.distributed_executor_backend": "external_launcher",
+            "vllm.engine_params.data_parallel_rank": {"present": True},
+        }
+        assert (
+            _resolve_normalised_field("data_parallel_rank", match)
+            == "vllm.engine_params.data_parallel_rank"
+        )
+
+    def test_dotted_name_passes_through_untouched(self):
+        match = {"transformers.sampling_params.temperature": {"not_equal": 1.0}}
+        assert (
+            _resolve_normalised_field("transformers.sampling_params.top_p", match)
+            == "transformers.sampling_params.top_p"
+        )
+
+    def test_bare_name_without_match_fields_passes_through(self):
+        assert _resolve_normalised_field("seed", {}) == "seed"
+
+
+class TestVllmDormantDedup:
+    """Real-corpus regressions: bare ``normalised_fields`` now canonicalise.
+
+    On main the corpus's bare leaf names (``seed``, ``all2all_backend``) were
+    handed straight to root-level assignment, no-oped silently, and the dormant
+    vLLM fields never collapsed. These drive the public dedup path end to end.
+    """
+
+    def _vllm(self, sampling=None, engine=None):
+        payload: dict = {}
+        if sampling is not None:
+            payload["sampling_params"] = sampling
+        if engine is not None:
+            payload["engine_params"] = engine
+        return ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm=payload)
+
+    def test_seed_neg1_and_unset_collapse(self):
+        # seed=-1 is dormant (vLLM treats it as "no seed"); it must collapse
+        # with a config that never set seed.
+        cfg_seeded = self._vllm(sampling={"seed": -1})
+        cfg_unset = self._vllm(sampling={})
+
+        deduped = resolve_library_effective([cfg_seeded, cfg_unset], deduplicate=True)
+        assert len(deduped.canonical_configs) == 1
+        assert deduped.would_dedup is True
+        assert deduped.deduplicated is True
+
+        kept = resolve_library_effective([cfg_seeded, cfg_unset], deduplicate=False)
+        assert len(kept.canonical_configs) == 2
+        assert kept.would_dedup is True
+
+    def test_all2all_backend_set_and_unset_collapse(self):
+        # engine_params-scoped dormant field: all2all_backend in {pplx, naive}
+        # is ignored, so it must collapse with the unset config.
+        cfg_set = self._vllm(engine={"all2all_backend": "pplx"})
+        cfg_unset = self._vllm(engine={})
+
+        deduped = resolve_library_effective([cfg_set, cfg_unset], deduplicate=True)
+        assert len(deduped.canonical_configs) == 1
+        assert deduped.would_dedup is True
+        assert deduped.deduplicated is True
+
+        kept = resolve_library_effective([cfg_set, cfg_unset], deduplicate=False)
+        assert len(kept.canonical_configs) == 2
+        assert kept.would_dedup is True
 
 
 class TestH1HashSymmetry:
