@@ -119,3 +119,47 @@ def test_cross_section_compatible_beam_and_return_counts_accepted():
         },
     )
     assert cfg.active_engine_params().num_beams == 4
+
+
+# ---------------------------------------------------------------------------
+# Type-incomparable predicate values are no-match, not an uncaught crash
+#
+# The shipped transformers corpus carries a mined numeric bound on
+# ``compile_config`` (rule ``..._compile_config_exceeds_zero`` with predicate
+# ``{">": 0}``). That bound is a corpus artifact: the field naturally holds a
+# dict / CompileConfig shape, not a number. Before the fix, a non-numeric
+# compile_config let a raw TypeError
+# (``'>' not supported between instances of 'dict' and 'int'``) escape config
+# construction. The ordering comparison must instead treat the incomparable
+# pair as no-match, so the ordering rule silently declines. A *separate*,
+# legitimate ``type_is_not: [CompileConfig]`` rule then cleanly rejects the
+# non-CompileConfig value with a ValueError - a clean rule rejection, never a
+# TypeError. The generated pydantic model stays the authority on type validity.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "compile_config",
+    [{"backend": "inductor"}, "inductor", ["inductor"]],
+)
+def test_non_numeric_compile_config_no_uncaught_typeerror(compile_config):
+    """A dict / str / list compile_config yields a clean rejection, not a TypeError."""
+    with pytest.raises(ValueError, match="type_not_in_CompileConfig") as excinfo:
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers={"sampling_params": {"compile_config": compile_config}},
+        )
+    # The bug was an uncaught TypeError from the mined ``{">": 0}`` bound; the
+    # surviving rejection must be the clean type rule, never a TypeError.
+    assert not isinstance(excinfo.value, TypeError)
+
+
+def test_numeric_bound_still_fires_after_incomparable_guard():
+    """Control: guarding incomparable types must not suppress real numeric matches."""
+    with pytest.raises(ValueError, match="min_new_tokens"):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers={"sampling_params": {"min_new_tokens": 0}},
+        )
