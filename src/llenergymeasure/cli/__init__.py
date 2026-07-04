@@ -109,6 +109,10 @@ app.command(
     help="Propose invariants corpus entries from runtime observations",
 )(_report_gaps_cmd)
 
+from llenergymeasure.cli.study_cmd import study_app as _study_app  # noqa: E402
+
+app.add_typer(_study_app, name="study")
+
 __all__ = ["app"]
 
 if __name__ == "__main__":
