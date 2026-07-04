@@ -272,6 +272,41 @@ class TestExpandGridCombined:
 
 
 # =============================================================================
+# expand_grid() - inline-model baseline vs phantom baseline
+# =============================================================================
+
+
+class TestExpandGridInlineBaseline:
+    def test_inline_model_form_yields_single_baseline(self):
+        """No sweep, no experiments, top-level task.model -> exactly one baseline."""
+        raw = {"study_name": "inline", "task": {"model": "gpt2"}}
+        valid, _skipped = expand_grid(raw)
+        assert len(valid) == 1
+        assert valid[0].engine == "transformers"
+        assert valid[0].task.model == "gpt2"
+
+    def test_experiments_with_shared_task_no_phantom_baseline(self):
+        """A shared top-level task: plus an explicit experiments: list (no sweep)
+        must yield exactly the user's entries, not an extra synthesized
+        default-engine baseline.
+        """
+        raw = {
+            "study_name": "shared-task",
+            "task": {"model": "gpt2"},
+            "experiments": [
+                {"engine": "transformers"},
+                {"engine": "vllm"},
+            ],
+        }
+        valid, _skipped = expand_grid(raw)
+        assert len(valid) == 2
+        assert [c.engine for c in valid] == ["transformers", "vllm"]
+        # None of them is a synthesized baseline: every entry carries the engine
+        # the user wrote, and there is no duplicate transformers baseline.
+        assert all(c.task.model == "gpt2" for c in valid)
+
+
+# =============================================================================
 # expand_grid() - base: resolution
 # =============================================================================
 

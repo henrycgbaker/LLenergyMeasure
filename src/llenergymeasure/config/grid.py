@@ -144,7 +144,9 @@ def expand_grid(
     Resolution order:
     1. Load base: file (optional DRY inheritance)
     2. Build fixed dict from non-sweep/non-experiments/non-study_execution/non-base/non-study_name keys
-    3. Expand sweep: block into raw config dicts
+    3. Expand sweep: block into raw config dicts. An empty sweep synthesises one
+       inline-model baseline from a top-level task.model, but only when there is
+       no explicit experiments: list (otherwise it contributes nothing).
     4. Append explicit experiments: list entries
     5. Pydantic-validate each raw dict, collecting valid + skipped
 
@@ -158,15 +160,19 @@ def expand_grid(
     fixed = _extract_fixed(raw_study)
     merged_fixed = {**base_dict, **fixed}  # inline fields override base
 
-    # Step 3: Expand sweep: block into raw config dicts
+    # Step 3: Expand sweep: block into raw config dicts. The inline-model
+    # baseline (an empty sweep synthesising one experiment from a top-level
+    # task.model) fires only when there is no explicit experiments: list.
+    # With explicit entries an empty sweep contributes nothing, so it never
+    # adds a phantom default-engine baseline the user never wrote.
     sweep = raw_study.get("sweep", {})
-    sweep_raw_configs = _expand_sweep(sweep, merged_fixed)
+    explicit_entries = raw_study.get("experiments", [])
+    sweep_raw_configs = _expand_sweep(sweep, merged_fixed, synthesize_baseline=not explicit_entries)
 
     # Step 4: Append explicit experiments: list entries
     # Strip non-matching engine sections *inherited from fixed*, but preserve
     # any the user wrote directly in the experiment entry (those are genuine
     # misconfigurations and should fail Pydantic validation).
-    explicit_entries = raw_study.get("experiments", [])
     explicit_raw_configs = []
     for exp in explicit_entries:
         merged = {**merged_fixed, **exp}
@@ -558,7 +564,11 @@ def _validate_sweep_groups(
 # =============================================================================
 
 
-def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str, Any]]:
+def _expand_sweep(
+    sweep: dict[str, Any],
+    fixed: dict[str, Any],
+    synthesize_baseline: bool = True,
+) -> list[dict[str, Any]]:
     """Expand a sweep: block into a flat list of raw experiment config dicts.
 
     Supports two entry types under ``sweep:``:
@@ -574,8 +584,17 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     :mod:`llenergymeasure.config.sweep_idioms`); it is expanded to a plain
     list here, at load time, so downstream consumers only see lists. Any
     other mapping-valued axis is rejected with ConfigError.
+
+    When ``sweep`` is empty this synthesises a single inline-model baseline from
+    ``fixed`` (the no-sweep, no-experiments study form) using ``fixed``'s engine
+    or a ``transformers`` default. That synthesis fires only when
+    ``synthesize_baseline`` is True; the caller passes False whenever an explicit
+    experiments: list is present, so an empty sweep never adds a phantom
+    default-engine baseline alongside the user's entries.
     """
     if not sweep:
+        if not synthesize_baseline:
+            return []
         task = fixed.get("task")
         has_model = isinstance(task, dict) and task.get("model")
         if has_model:
