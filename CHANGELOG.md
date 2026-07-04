@@ -40,7 +40,7 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
 
   Retained session flags: `--output`, `--quiet`, `--verbose`, `--resume`, `--resume-dir`,
   `--dry-run`, `--no-lock`, `--skip-preflight`. Passing a removed flag now gives Typer's standard
-  "No such option" (exit 2). ([#PRNUM])
+  "No such option" (exit 2). ([#749])
 
 - **`engine: pytorch` renamed to `engine: transformers`** throughout YAML, CLI, and Python API.
   The `pytorch` identifier has been renamed to `transformers` - the engine runs HuggingFace
@@ -488,3 +488,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#570]: https://github.com/henrycgbaker/llenergymeasure/pull/570
 [#573]: https://github.com/henrycgbaker/llenergymeasure/pull/573
 [#575]: https://github.com/henrycgbaker/llenergymeasure/pull/575
+[#749]: https://github.com/henrycgbaker/llenergymeasure/pull/749
