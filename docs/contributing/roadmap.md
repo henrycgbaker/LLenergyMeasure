@@ -63,8 +63,9 @@ without a deprecation notice:
 - **Study config top-level keys** - `task`, `sweep`, `experiments`,
   `study_execution`, `runners`. Key names and their structural role will
   not change.
-- **CLI commands** - `llem run` and `llem config` are stable. Flag names
-  (`--model`, `--engine`, `--dtype`) are stable.
+- **CLI commands** - `llem run` and `llem config` are stable. `llem run` takes
+  a config path plus session flags (`--output`, `--resume`, `--dry-run`);
+  experiment parameters live in the YAML config, not in flags.
 
 Pre-1.0 disclaimer: minor-version bumps (0.10 to 0.11 etc.) may include
 breaking changes to internal APIs, engine plugin interfaces, and sampler

@@ -35,7 +35,8 @@ Engine code (Transformers, vLLM, TensorRT-LLM) runs inside per-engine Docker ima
 Run your first measurement (host dispatches the appropriate engine container):
 
 ```bash
-llem run --model gpt2 --engine transformers
+llem study init -m gpt2 --defaults   # author a runnable study.yaml
+llem run study.yaml
 ```
 
 See the [documentation site](https://henrycgbaker.github.io/llenergymeasure/) for the full guide - tutorials, how-to recipes, reference (CLI, study config, library API, engines), conceptual explanation (methodology, energy measurement, architecture), and a contributing guide for internals.

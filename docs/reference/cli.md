@@ -20,31 +20,20 @@ Run an LLM efficiency experiment
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `config` | path | no | Path to experiment YAML config |
+| `config` | path | no | Path to the experiment or study YAML config |
 
 **Options:**
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--model` | `-m` | str |  | Model name or HuggingFace path |
-| `--engine` | `-e` | str |  | Inference engine (transformers, vllm, tensorrt) |
-| `--dataset` | `-d` | str |  | Dataset name |
-| `--n-prompts` | `-n` | int |  | Number of prompts to run |
 | `--output` | `-o` | str |  | Output directory for results |
 | `--dry-run` |  | flag | `false` | Validate config and estimate VRAM without running |
 | `--quiet` | `-q` | flag | `false` | Suppress progress bars |
 | `--verbose` | `-v` | int | `0` | Increase verbosity (-v=INFO, -vv=DEBUG) |
-| `--cycles` |  | int |  | Number of cycles (study mode) |
-| `--order` |  | str |  | Experiment ordering: sequential, interleave, shuffle, reverse, latin_square (study mode) |
-| `--no-gaps` |  | flag | `false` | Disable thermal gaps between experiments (study mode) |
 | `--skip-preflight` |  | flag | `false` | Skip Docker pre-flight checks (GPU visibility, CUDA/driver compatibility) |
 | `--resume` |  | flag | `false` | Resume most recent interrupted study |
 | `--resume-dir` |  | path |  | Resume a specific study directory |
-| `--fail-fast` |  | flag | `false` | Abort study on first failure (circuit breaker threshold=1) |
-| `--no-circuit-breaker` |  | flag | `false` | Disable circuit breaker entirely |
-| `--timeout` |  | float |  | Study wall-clock timeout in hours (e.g. 24, 1.5) |
 | `--no-lock` |  | flag | `false` | Disable GPU lock files (advanced) |
-| `--no-dedup` |  | flag | `false` | Disable library-resolution mechanism sweep dedup. Every declared config runs regardless of measurement equivalence (study mode). |
 
 ### `llem config`
 
@@ -74,3 +63,7 @@ Propose invariants corpus entries from runtime observations
 | `--out` |  | path |  | Output path for proposed YAML fragments (one YAML document per gap, separated by '---'). |
 | `--include-exceptions` |  | flag | `false` | Also propose rules from runtime exceptions. Disabled by default; exceptions ship through a different review path. |
 | `--verbose` | `-v` | int | `0` | Increase verbosity (-v=INFO, -vv=DEBUG) |
+
+### `llem study`
+
+Write and prepare study files (llem run stays the executor).

@@ -44,23 +44,7 @@ if TYPE_CHECKING:
 def run(
     config: Annotated[
         Path | None,
-        typer.Argument(help="Path to experiment YAML config"),
-    ] = None,
-    model: Annotated[
-        str | None,
-        typer.Option("--model", "-m", help="Model name or HuggingFace path"),
-    ] = None,
-    engine: Annotated[
-        str | None,
-        typer.Option("--engine", "-e", help="Inference engine (transformers, vllm, tensorrt)"),
-    ] = None,
-    dataset: Annotated[
-        str | None,
-        typer.Option("--dataset", "-d", help="Dataset name"),
-    ] = None,
-    n_prompts: Annotated[
-        int | None,
-        typer.Option("--n-prompts", "-n", help="Number of prompts to run"),
+        typer.Argument(help="Path to the experiment or study YAML config"),
     ] = None,
     output: Annotated[
         str | None,
@@ -78,21 +62,6 @@ def run(
         int,
         typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
     ] = 0,
-    cycles: Annotated[
-        int | None,
-        typer.Option("--cycles", help="Number of cycles (study mode)"),
-    ] = None,
-    order: Annotated[
-        str | None,
-        typer.Option(
-            "--order",
-            help="Experiment ordering: sequential, interleave, shuffle, reverse, latin_square (study mode)",
-        ),
-    ] = None,
-    no_gaps: Annotated[
-        bool,
-        typer.Option("--no-gaps", help="Disable thermal gaps between experiments (study mode)"),
-    ] = False,
     skip_preflight: Annotated[
         bool,
         typer.Option(
@@ -108,36 +77,17 @@ def run(
         Path | None,
         typer.Option("--resume-dir", help="Resume a specific study directory"),
     ] = None,
-    fail_fast: Annotated[
-        bool,
-        typer.Option(
-            "--fail-fast", help="Abort study on first failure (circuit breaker threshold=1)"
-        ),
-    ] = False,
-    no_circuit_breaker: Annotated[
-        bool,
-        typer.Option("--no-circuit-breaker", help="Disable circuit breaker entirely"),
-    ] = False,
-    timeout: Annotated[
-        float | None,
-        typer.Option("--timeout", help="Study wall-clock timeout in hours (e.g. 24, 1.5)"),
-    ] = None,
     no_lock: Annotated[
         bool,
         typer.Option("--no-lock", help="Disable GPU lock files (advanced)"),
     ] = False,
-    no_dedup: Annotated[
-        bool,
-        typer.Option(
-            "--no-dedup",
-            help=(
-                "Disable library-resolution mechanism sweep dedup. Every declared "
-                "config runs regardless of measurement equivalence (study mode)."
-            ),
-        ),
-    ] = False,
 ) -> None:
-    """Run an LLM efficiency experiment."""
+    """Run an LLM efficiency experiment or study.
+
+    The flags describe the session (output location, verbosity, resume,
+    locking); the YAML config describes the experiment (model, engine, dataset,
+    cycles, ordering, ...). Author a config first with ``llem study init``.
+    """
 
     from llenergymeasure.cli import _setup_logging
 
@@ -154,25 +104,14 @@ def run(
     try:
         _run_impl(
             config=config,
-            model=model,
-            engine=engine,
-            dataset=dataset,
-            n_prompts=n_prompts,
             output=output,
             dry_run=dry_run,
             quiet=quiet,
             verbose=verbose_on,
-            cycles=cycles,
-            order=order,
-            no_gaps=no_gaps,
             skip_preflight=skip_preflight,
             resume=resume,
             resume_dir=resume_dir,
-            fail_fast=fail_fast,
-            no_circuit_breaker=no_circuit_breaker,
-            timeout=timeout,
             no_lock=no_lock,
-            no_dedup=no_dedup,
         )
     except ConfigError as e:
         print(format_error(e, verbose=verbose_on), file=sys.stderr)
@@ -195,68 +134,42 @@ def run(
 
 def _run_impl(
     config: Path | None,
-    model: str | None,
-    engine: str | None,
-    dataset: str | None,
-    n_prompts: int | None,
     output: str | None,
     dry_run: bool,
     quiet: bool,
     verbose: bool,
-    cycles: int | None = None,
-    order: str | None = None,
-    no_gaps: bool = False,
     skip_preflight: bool = False,
     resume: bool = False,
     resume_dir: Path | None = None,
-    fail_fast: bool = False,
-    no_circuit_breaker: bool = False,
-    timeout: float | None = None,
     no_lock: bool = False,
-    no_dedup: bool = False,
 ) -> None:
     """Core implementation - separated for clean error handling in run()."""
-    # Build CLI overrides dict - only include flags the user explicitly passed
-    cli_overrides: dict[str, Any] = {}
-    if model is not None:
-        cli_overrides["task.model"] = model
-    if engine is not None:
-        cli_overrides["engine"] = engine
-    if dataset is not None:
-        cli_overrides["task.dataset.source"] = dataset
-    if n_prompts is not None:
-        cli_overrides["task.dataset.n_prompts"] = n_prompts
-
-    # Validate we have enough information to resolve a config
-    if config is None and model is None:
+    # A config file is required: experiment semantics live in the YAML, not in
+    # flags. Author one with `llem study init` (see the message below).
+    if config is None:
         raise ConfigError(
-            "Provide a config file or --model flag.\n"
-            "  Examples:\n"
-            "    llem run experiment.yaml\n"
-            "    llem run --model gpt2 --engine transformers"
+            "A config file is required.\n"
+            "  Create one with:\n"
+            "    llem study init -m <model> --defaults\n"
+            "  Then run it:\n"
+            "    llem run study.yaml"
         )
 
     # Study detection: YAML with sweep: or experiments: keys is a study
-    is_study = False
-    if config is not None:
-        import yaml
+    import yaml
 
-        try:
-            raw = yaml.safe_load(config.read_text())
-            if isinstance(raw, dict) and ("sweep" in raw or "experiments" in raw):
-                is_study = True
-        except Exception:
-            pass  # Fall through to normal experiment path - loader will raise if invalid
+    is_study = False
+    try:
+        raw = yaml.safe_load(config.read_text())
+        if isinstance(raw, dict) and ("sweep" in raw or "experiments" in raw):
+            is_study = True
+    except Exception:
+        pass  # Fall through to normal experiment path - loader will raise if invalid
 
     # Route to study execution path
     if is_study:
-        assert config is not None  # Guarded by study detection above
         _run_study_impl(
             config=config,
-            cli_overrides=cli_overrides,
-            cycles=cycles,
-            order=order,
-            no_gaps=no_gaps,
             quiet=quiet,
             verbose=verbose,
             skip_preflight=skip_preflight,
@@ -264,35 +177,20 @@ def _run_impl(
             output=output,
             resume=resume,
             resume_dir=resume_dir,
-            fail_fast=fail_fast,
-            no_circuit_breaker=no_circuit_breaker,
-            timeout=timeout,
             no_lock=no_lock,
-            no_dedup=no_dedup,
         )
         return
 
     # Single-experiment path: warn about any study-only flags the user set.
-    # These are parsed by run() for study mode but silently ignored here, so
-    # --cycles 5 on a single experiment would run once with no feedback.
+    # These take effect only in study mode and are silently ignored here.
     _warn_ignored_study_flags(
-        cycles=cycles,
-        order=order,
-        no_gaps=no_gaps,
         resume=resume,
         resume_dir=resume_dir,
-        fail_fast=fail_fast,
-        no_circuit_breaker=no_circuit_breaker,
-        timeout=timeout,
         no_lock=no_lock,
-        no_dedup=no_dedup,
     )
 
     # Load/resolve the experiment config
-    experiment_config = load_experiment_config(
-        path=config,
-        cli_overrides=cli_overrides if cli_overrides else None,
-    )
+    experiment_config = load_experiment_config(path=config)
 
     # --- Dry-run branch ---
     if dry_run:
@@ -358,36 +256,22 @@ def _run_impl(
 
 def _warn_ignored_study_flags(
     *,
-    cycles: int | None,
-    order: str | None,
-    no_gaps: bool,
     resume: bool,
     resume_dir: Path | None,
-    fail_fast: bool,
-    no_circuit_breaker: bool,
-    timeout: float | None,
     no_lock: bool,
-    no_dedup: bool,
 ) -> None:
     """Warn when study-only flags are set on a single-experiment run.
 
     These flags only take effect in study mode (a YAML with ``sweep:`` or
     ``experiments:``). On a single experiment they are silently ignored, which
-    hides mistakes like ``--cycles 5`` on a one-off run.
+    hides mistakes like ``--resume`` on a one-off run.
     """
     set_flags = [
         name
         for name, is_set in (
-            ("--cycles", cycles is not None),
-            ("--order", order is not None),
-            ("--no-gaps", no_gaps),
             ("--resume", resume),
             ("--resume-dir", resume_dir is not None),
-            ("--fail-fast", fail_fast),
-            ("--no-circuit-breaker", no_circuit_breaker),
-            ("--timeout", timeout is not None),
             ("--no-lock", no_lock),
-            ("--no-dedup", no_dedup),
         )
         if is_set
     ]
@@ -500,58 +384,23 @@ def _resolve_resume_target(
     return resume_dir, resume_manifest, is_resume
 
 
-def _build_study_cli_overrides(
-    cli_overrides: dict[str, Any],
-    cycles: int | None,
-    order: str | None,
-    no_gaps: bool,
-    fail_fast: bool,
-    no_circuit_breaker: bool,
-    timeout: float | None,
-    no_dedup: bool,
-    yaml_execution: dict[str, Any],
-) -> dict[str, Any]:
-    """Merge CLI flags into the study override dict passed to load_study.
+def _build_study_cli_overrides(yaml_execution: dict[str, Any]) -> dict[str, Any]:
+    """Apply the CLI-layer research-appropriate effective defaults for a study.
 
-    Applies the CLI-layer effective defaults (n_cycles=3, experiment_order="shuffle")
-    only when neither the YAML study_execution block nor a CLI flag sets them; the
-    Pydantic defaults are intentionally more conservative (n_cycles=1).
+    ``n_cycles=3`` and ``experiment_order="shuffle"`` are injected only when the
+    YAML ``study_execution`` block does not set them; the Pydantic model defaults
+    are intentionally more conservative (n_cycles=1). These are unconditional
+    research defaults, not flag overrides - the semantic-override flags were
+    removed and the YAML is the source of truth for anything it declares.
     """
     exec_overrides: dict[str, Any] = {}
-
-    if cycles is not None:
-        exec_overrides["n_cycles"] = cycles
-    elif "n_cycles" not in yaml_execution:
-        exec_overrides["n_cycles"] = 3  # CLI effective default
-
-    if order is not None:
-        exec_overrides["experiment_order"] = order
-    elif "experiment_order" not in yaml_execution:
-        exec_overrides["experiment_order"] = "shuffle"  # CLI effective default
-
-    if no_gaps:
-        exec_overrides["experiment_gap_seconds"] = 0
-        exec_overrides["cycle_gap_seconds"] = 0
-
-    # Robustness overrides: circuit breaker, timeout
-    if fail_fast:
-        exec_overrides["max_consecutive_failures"] = 1
-        exec_overrides["circuit_breaker_cooldown_seconds"] = 0
-    if no_circuit_breaker:
-        exec_overrides["max_consecutive_failures"] = 0
-    if timeout is not None:
-        exec_overrides["wall_clock_timeout_hours"] = timeout
-
-    # --no-dedup disables library-resolution mechanism sweep dedup (runs every declared config)
-    if no_dedup:
-        exec_overrides["deduplicate_equivalent"] = False
-
-    study_cli_overrides: dict[str, Any] = {}
-    if cli_overrides:
-        study_cli_overrides.update(cli_overrides)
-    if exec_overrides:
-        study_cli_overrides["study_execution"] = exec_overrides
-    return study_cli_overrides
+    if "n_cycles" not in yaml_execution:
+        exec_overrides["n_cycles"] = 3
+    if "experiment_order" not in yaml_execution:
+        exec_overrides["experiment_order"] = "shuffle"
+    if not exec_overrides:
+        return {}
+    return {"study_execution": exec_overrides}
 
 
 def _print_config_summary(
@@ -641,10 +490,6 @@ def _build_historical_rows(resume_manifest: Any) -> list[_CompletedRow]:
 
 def _run_study_impl(
     config: Path,
-    cli_overrides: dict[str, Any],
-    cycles: int | None,
-    order: str | None,
-    no_gaps: bool,
     quiet: bool,
     verbose: bool,
     skip_preflight: bool = False,
@@ -652,11 +497,7 @@ def _run_study_impl(
     output: str | None = None,
     resume: bool = False,
     resume_dir: Path | None = None,
-    fail_fast: bool = False,
-    no_circuit_breaker: bool = False,
-    timeout: float | None = None,
     no_lock: bool = False,
-    no_dedup: bool = False,
 ) -> None:
     """Study execution path - separated for clean error handling."""
     import yaml
@@ -675,18 +516,9 @@ def _run_study_impl(
     raw = yaml.safe_load(config.read_text()) or {}
     yaml_execution = raw.get("study_execution", {}) or {}
 
-    # Merge CLI flags (with CLI-layer effective defaults) into the load_study overrides
-    study_cli_overrides = _build_study_cli_overrides(
-        cli_overrides,
-        cycles,
-        order,
-        no_gaps,
-        fail_fast,
-        no_circuit_breaker,
-        timeout,
-        no_dedup,
-        yaml_execution,
-    )
+    # Apply the CLI-layer research-appropriate effective defaults (n_cycles=3,
+    # shuffle) unless the YAML study_execution block already sets them.
+    study_cli_overrides = _build_study_cli_overrides(yaml_execution)
 
     # Load study config with overrides - show step-format spinner during expansion
     from rich.console import Console as _ExpandConsole
@@ -841,7 +673,6 @@ def _run_study_impl(
             output_dir=Path(output) if output else None,
             no_lock=no_lock,
             config_path=config.resolve(),
-            cli_overrides=cli_overrides or None,
             preresolved=preresolved,
         )
     finally:
