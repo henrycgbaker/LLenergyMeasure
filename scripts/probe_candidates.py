@@ -7,23 +7,37 @@ the REAL engine and writes a verdict back:
 
 - A ``severity: error`` claim earns a CONSTRUCTION PROBE. We build the offending
   config inside the engine and require both legs: a violating value must raise,
-  and a satisfying value must construct cleanly. Only then is the error real.
-- A ``severity: dormant`` claim earns an IDENTITY PROBE. We construct the config
-  at two or more distinct declared values for the field and compare the
-  engine-resolved state. Identical resolved state means the declared variation
-  was inert - dormant confirmed. No inference runs, no energy is measured.
+  and a satisfying value must construct cleanly. Only then is the error
+  confirmed at this grain.
+- A ``severity: dormant`` claim earns an IDENTITY PROBE, which has two shapes.
+  Value-alias (the match field itself is the normalised subject): construct at
+  two or more distinct declared values and compare the engine-resolved state -
+  identical resolved state confirms the declared variation was inert.
+  Condition-inert (``normalised_fields`` name fields OUTSIDE ``match.fields``):
+  hold every match field at its firing value so the condition is satisfied,
+  then vary each named field against its engine-resolved default - if the
+  engine rewrites every one back to its default, the dormancy is confirmed.
+  No inference runs, no energy is measured.
 
 Probe values are derived DETERMINISTICALLY from the predicate spec (straddle a
 threshold; a member and a non-member of a set; the declared values an observed
-collision recorded). Nothing is guessed: if a satisfying/violating pair or two
-distinct declared values cannot be derived, the verdict is ``unprobeable``.
+collision recorded; an engine-resolved default and its contrast). Nothing is
+guessed: if a satisfying/violating pair or two distinct values cannot be
+derived, the verdict is ``unprobeable``.
 
-Closed verdict vocabulary: ``confirmed`` (claim proven), ``refuted`` (probe
-contradicted the claim), ``unprobeable`` (no deterministic probe exists for this
+Closed verdict vocabulary: ``confirmed`` (the probe proved the claim at
+construction grain), ``unconfirmed`` (the probe RAN, but the construction-grain
+observation neither proves nor disproves the claim - e.g. the violating value
+constructed cleanly because the engine validates at init or generation time),
+``unprobeable`` (no deterministic probe could be derived or run for this
 claim), ``infra_error`` (a probe leg failed for reasons that do not isolate the
 claim - e.g. the satisfying value also raised, or the engine is not importable
-here). Candidates are never dropped; the verdict plus a short transcript is
-written back so a refuted or unprobeable candidate stays visible.
+here). Candidates start ``unverified`` and are never dropped; the verdict plus
+a short transcript is written back so an unconfirmed or unprobeable candidate
+stays visible. There is deliberately NO ``refuted``: a claim is minted at the
+grain where the engine acts (init, generation, the runtime), and pure config
+construction can never prove the engine accepts a config end-to-end, so no
+honest earner of ``refuted`` exists at this tier.
 
 Runs INSIDE the engine container (imports the live engine via
 ``_engine_constructors``); stdlib + PyYAML only. Exit 0 when the run completed
@@ -237,7 +251,7 @@ def _fire_value(spec: Any, leaf: str, ref_of: Any, referenced: set[str]) -> Any:
     if name == ">=":
         return _resolve(raw, ref_of)
     if name == "==":
-        return raw
+        return _resolve(raw, ref_of)
     if name == "!=":
         return _contrast(_resolve(raw, ref_of))
     if name == "in":
@@ -278,7 +292,7 @@ def _nofire_value(spec: Any, leaf: str, ref_of: Any, referenced: set[str]) -> An
         t = _resolve(raw, ref_of)
         return t - _step(t)
     if name == "==":
-        return _contrast(raw)
+        return _contrast(_resolve(raw, ref_of))
     if name == "!=":
         return _resolve(raw, ref_of)
     if name == "in":
@@ -395,9 +409,10 @@ def probe_construction(cand: Candidate, engine: str) -> Verdict:
         )
     if not positive:
         return Verdict(
-            "refuted",
+            "unconfirmed",
             "construction",
-            f"violating {v_show} constructed cleanly - offending value accepted",
+            f"violating {v_show} constructed cleanly at construction grain; "
+            "validation may fire at engine init or generation",
         )
     return Verdict(
         "infra_error",
@@ -441,7 +456,7 @@ def identity_values(cand: Candidate, subject_path: str) -> list[Any]:
     if name == "!=":
         return [_bump(_resolve(raw, ref_of), 1), _bump(_resolve(raw, ref_of), 2)]
     if name == "==":
-        return [raw, _DEFAULT]
+        return [_resolve(raw, ref_of), _DEFAULT]
     if name in ("<", "<=", ">", ">="):
         t = _resolve(raw, ref_of)
         s = _step(t)
@@ -454,8 +469,13 @@ def identity_values(cand: Candidate, subject_path: str) -> list[Any]:
     raise Unprobeable(f"cannot derive identity values for operator {name!r}")
 
 
-def build_identity_base(fields: dict[str, Any], subject_path: str) -> dict[str, Any]:
-    """Kwargs for every field except the subject, held at firing values."""
+def build_identity_base(fields: dict[str, Any], subject_path: str | None) -> dict[str, Any]:
+    """Kwargs holding every field (except the subject, if any) at firing values.
+
+    ``subject_path=None`` keeps all match fields: the condition-inert shape
+    varies fields OUTSIDE ``match.fields``, so the whole match is the held
+    condition.
+    """
     referenced = _referenced_leaves(fields)
     ref_of = _ref_of(fields, referenced)
     named = {ec.leaf_of(p) for p in fields}
@@ -472,7 +492,39 @@ def build_identity_base(fields: dict[str, Any], subject_path: str) -> dict[str, 
     return base
 
 
+def _inert_subjects(cand: Candidate) -> list[str]:
+    """Normalised fields outside ``match.fields``: the condition-inert subjects.
+
+    Value-alias rules normalise the match field itself, so this is empty and the
+    last match field stays the subject. A field that is both normalised and
+    matched belongs to the held condition, so it is never varied here.
+    """
+    match_leaves = {ec.leaf_of(p) for p in cand.fields}
+    return [n for n in cand.normalised if ec.leaf_of(n) not in match_leaves]
+
+
+def _resolve_class(cand: Candidate, engine: str, leaves: list[str]) -> type | Verdict:
+    """The first constructor class accepting ``leaves``, or an unprobeable Verdict."""
+    try:
+        classes = ec.candidate_classes(engine, next(iter(cand.fields)), leaves)
+    except ec.ConstructorResolutionError as exc:
+        return Verdict("unprobeable", "identity", str(exc))
+    cls = _pick_class(classes, leaves)
+    if cls is None:
+        return Verdict("unprobeable", "identity", f"no constructor accepts fields {leaves}")
+    return cls
+
+
 def probe_identity(cand: Candidate, engine: str) -> Verdict:
+    is_collision = cand.source == "observed_collision" and bool(cand.declared_values)
+    subjects = [] if is_collision else _inert_subjects(cand)
+    if subjects:
+        return _probe_inert(cand, engine, subjects)
+    return _probe_alias(cand, engine)
+
+
+def _probe_alias(cand: Candidate, engine: str) -> Verdict:
+    """Value-alias dormancy: the (last) match field itself over declared values."""
     subject_path = list(cand.fields)[-1]
     try:
         values = identity_values(cand, subject_path)
@@ -482,15 +534,11 @@ def probe_identity(cand: Candidate, engine: str) -> Verdict:
 
     subject_leaf = ec.leaf_of(subject_path)
     leaves = [ec.leaf_of(p) for p in cand.fields]
-    try:
-        classes = ec.candidate_classes(engine, next(iter(cand.fields)), leaves)
-    except ec.ConstructorResolutionError as exc:
-        return Verdict("unprobeable", "identity", str(exc))
-    cls = _pick_class(classes, leaves)
-    if cls is None:
-        return Verdict("unprobeable", "identity", f"no constructor accepts fields {leaves}")
+    cls = _resolve_class(cand, engine, leaves)
+    if isinstance(cls, Verdict):
+        return cls
 
-    snap_leaves = _distinct([subject_leaf, *cand.normalised])
+    snap_leaves = _distinct([subject_leaf, *[ec.leaf_of(n) for n in cand.normalised]])
     snapshots: list[tuple[str, ...]] = []
     for value in values:
         kwargs = dict(base)
@@ -518,7 +566,83 @@ def probe_identity(cand: Candidate, engine: str) -> Verdict:
             f"{subject_leaf} over {shown} -> resolved {list(snapshots[0])} identical",
         )
     return Verdict(
-        "refuted", "identity", f"{subject_leaf} over {shown} -> resolved states differ {snapshots}"
+        "unconfirmed",
+        "identity",
+        f"{subject_leaf} over {shown} -> construction-grain resolved states differ {snapshots}; "
+        "identity may still hold at engine init grain",
+    )
+
+
+def _probe_inert(cand: Candidate, engine: str, subjects: list[str]) -> Verdict:
+    """Condition-inert dormancy: hold the match, vary each normalised field.
+
+    Each subject is probed independently (the others stay omitted, i.e. at
+    default) against its engine-resolved default D: set contrast(D) under the
+    condition and check whether the engine rewrites it back to D. Confirmed
+    only if EVERY subject collapses; any subject the engine keeps verbatim is
+    unconfirmed (inertness may live at a later grain).
+    """
+    try:
+        base = build_identity_base(cand.fields, None)
+    except Unprobeable as exc:
+        return Verdict("unprobeable", "identity", str(exc))
+
+    subject_leaves = [ec.leaf_of(s) for s in subjects]
+    leaves = _distinct([*[ec.leaf_of(p) for p in cand.fields], *subject_leaves])
+    cls = _resolve_class(cand, engine, leaves)
+    if isinstance(cls, Verdict):
+        return cls
+
+    try:  # one condition-only construction serves every subject's default read
+        default_instance = ec.construct(engine, cls, base, validate=False)
+    except Exception as exc:
+        return Verdict(
+            "infra_error",
+            "identity",
+            f"constructing the condition base {_show_kwargs(base)} raised "
+            f"{type(exc).__name__}: {exc}"[:200],
+        )
+
+    notes: list[str] = []
+    underivable: list[str] = []
+    kept = False
+    for leaf in subject_leaves:
+        default = ec.resolved_value(default_instance, leaf)
+        if default is ec.MISSING:
+            underivable.append(f"{leaf}: no engine-resolved default to contrast against")
+            continue
+        try:
+            alt = _contrast(default)
+        except Unprobeable as exc:
+            underivable.append(f"{leaf}: {exc}")
+            continue
+        try:
+            instance = ec.construct(engine, cls, {**base, leaf: alt}, validate=False)
+        except Exception as exc:
+            return Verdict(
+                "infra_error",
+                "identity",
+                f"constructing {leaf}={alt!r} under the condition raised "
+                f"{type(exc).__name__}: {exc}"[:200],
+            )
+        resolved = ec.resolved_value(instance, leaf)
+        if _stable(resolved) == _stable(default):
+            notes.append(f"{leaf}: {alt!r} -> {_stable(default)} (collapsed to default)")
+        else:
+            kept = True
+            notes.append(f"{leaf}: kept {_stable(resolved)} vs default {_stable(default)}")
+    detail = "; ".join([*notes, *underivable])
+    if kept:
+        return Verdict(
+            "unconfirmed",
+            "identity",
+            f"constructor keeps declared values under the condition ({detail}); "
+            "inertness may hold at a later grain",
+        )
+    if underivable:
+        return Verdict("unprobeable", "identity", detail)
+    return Verdict(
+        "confirmed", "identity", f"condition held; every inert field collapsed ({detail})"
     )
 
 
@@ -632,6 +756,8 @@ def write_verdicts(
     out_path: Path,
 ) -> None:
     for raw, verdict in zip(entries, verdicts, strict=True):
+        if not isinstance(raw, dict):  # unparseable entry: verdict lives in the summary only
+            continue
         raw["verdict"] = {
             "status": verdict.status,
             "tier": verdict.tier,
@@ -698,7 +824,9 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 cand = parse_candidate(raw, index)
             except Unprobeable as exc:
-                verdicts.append(Verdict("unprobeable", None, str(exc)))
+                verdict = Verdict("unprobeable", None, str(exc))
+                verdicts.append(verdict)
+                all_rows.append((f"#{index}", verdict))
                 continue
             verdict = probe_candidate(cand, args.engine, engine_ready)
             verdicts.append(verdict)

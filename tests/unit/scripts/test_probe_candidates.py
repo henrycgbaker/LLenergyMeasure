@@ -131,6 +131,14 @@ def test_threshold_against_field_ref() -> None:
     assert _nofire({">": "@max_tokens"}) == 4  # the referenced base itself
 
 
+def test_equality_against_field_ref_resolves_not_literal() -> None:
+    # The fire value must be the REFERENCED FIELD'S value, never the "@..." string.
+    assert _fire({"==": "@max_tokens"}) == 4
+    assert _nofire({"==": "@max_tokens"}) == 5  # contrast of the resolved value
+    assert _fire({"!=": "@max_tokens"}) == 5
+    assert _nofire({"!=": "@max_tokens"}) == 4
+
+
 # ---------------------------------------------------------------------------
 # Construction-probe kwargs assembly
 # ---------------------------------------------------------------------------
@@ -163,6 +171,17 @@ def test_cross_field_named_present_operand() -> None:
     assert satisfying == {"max_tokens": 4, "min_tokens": 4}
 
 
+def test_cross_field_equality_kwargs_use_resolved_operand() -> None:
+    fields = {
+        "vllm.engine_params.data_parallel_size": {">": 1},
+        "vllm.engine_params.data_parallel_size_local": {"==": "@data_parallel_size"},
+    }
+    violating, satisfying, subject = pc.build_construction_kwargs(fields)
+    assert violating == {"data_parallel_size": 2, "data_parallel_size_local": 2}
+    assert satisfying == {"data_parallel_size": 2, "data_parallel_size_local": 3}
+    assert subject == "data_parallel_size_local"
+
+
 def test_absent_precondition_flips_subject_to_set() -> None:
     fields = {
         "vllm.engine_params.max_num_batched_tokens": {"<": "@max_model_len"},
@@ -183,13 +202,15 @@ def test_absent_precondition_flips_subject_to_set() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _dormant(fields: dict[str, Any], **prov: Any) -> pc.Candidate:
+def _dormant(
+    fields: dict[str, Any], normalised: list[str] | None = None, **prov: Any
+) -> pc.Candidate:
     return pc.Candidate(
         id="d",
         engine="vllm",
         severity="dormant",
         fields=fields,
-        normalised=[],
+        normalised=normalised or [],
         source=prov.get("source"),
         declared_values=prov.get("declared_values"),
         raw={},
@@ -292,12 +313,15 @@ def test_construction_confirmed(monkeypatch: pytest.MonkeyPatch, fake_engine: No
     assert verdict.tier == "construction"
 
 
-def test_construction_refuted_when_violating_builds(
+def test_construction_unconfirmed_when_violating_builds(
     monkeypatch: pytest.MonkeyPatch, fake_engine: None
 ) -> None:
-    monkeypatch.setattr(ec, "construct", lambda *a, **k: object())  # nothing ever raises
+    # Nothing raises at construction: that does NOT contradict the claim (the
+    # engine may validate at init or generation), so the verdict is unconfirmed.
+    monkeypatch.setattr(ec, "construct", lambda *a, **k: object())
     verdict = pc.probe_candidate(_error_cand({"vllm.sampling_params.n": {"<": 1}}), "vllm", True)
-    assert verdict.status == "refuted"
+    assert verdict.status == "unconfirmed"
+    assert "construction grain" in verdict.evidence
 
 
 def test_construction_infra_error_when_satisfying_also_raises(
@@ -338,7 +362,7 @@ def test_identity_confirmed_when_resolved_state_identical(
     assert verdict.tier == "identity"
 
 
-def test_identity_refuted_when_resolved_state_differs(
+def test_identity_unconfirmed_when_resolved_state_differs(
     monkeypatch: pytest.MonkeyPatch, fake_engine: None
 ) -> None:
     class Obj:
@@ -349,7 +373,10 @@ def test_identity_refuted_when_resolved_state_differs(
     monkeypatch.setattr(ec, "resolved_value", lambda obj, leaf: obj.kwargs.get(leaf, "<unset>"))
     cand = _dormant({"vllm.sampling_params.seed": -1})
     verdict = pc.probe_candidate(cand, "vllm", True)
-    assert verdict.status == "refuted"
+    # Differing constructor-grain state does not disprove effective-config
+    # identity at the grain the collision was observed - unconfirmed, not refuted.
+    assert verdict.status == "unconfirmed"
+    assert "differ" in verdict.evidence
 
 
 def test_identity_infra_error_when_a_leg_raises(
@@ -365,6 +392,74 @@ def test_identity_infra_error_when_a_leg_raises(
     cand = _dormant({"vllm.sampling_params.seed": -1})
     verdict = pc.probe_candidate(cand, "vllm", True)
     assert verdict.status == "infra_error"
+
+
+def test_inert_subjects_are_normalised_fields_outside_match() -> None:
+    inert = _dormant({"transformers.engine_params.num_beams": 1}, normalised=["early_stopping"])
+    assert pc._inert_subjects(inert) == ["early_stopping"]
+    alias = _dormant({"vllm.sampling_params.seed": -1}, normalised=["seed"])
+    assert pc._inert_subjects(alias) == []  # normalises the match field: value-alias
+
+
+class _Kwargs:
+    def __init__(self, kwargs: dict[str, Any]) -> None:
+        self.kwargs = kwargs
+
+
+def _inert_cand(normalised: list[str]) -> pc.Candidate:
+    return _dormant({"transformers.engine_params.num_beams": 1}, normalised=normalised)
+
+
+def test_condition_inert_confirmed_when_engine_rewrites_to_default(
+    monkeypatch: pytest.MonkeyPatch, fake_engine: None
+) -> None:
+    monkeypatch.setattr(ec, "construct", lambda engine, cls, kwargs, *, validate: _Kwargs(kwargs))
+    # The engine normalises early_stopping to False whatever was passed.
+    monkeypatch.setattr(
+        ec, "resolved_value", lambda obj, leaf: False if leaf == "early_stopping" else 1
+    )
+    verdict = pc.probe_candidate(_inert_cand(["early_stopping"]), "transformers", True)
+    assert verdict.status == "confirmed"
+    assert "collapsed" in verdict.evidence
+
+
+def test_condition_inert_unconfirmed_when_constructor_keeps_value(
+    monkeypatch: pytest.MonkeyPatch, fake_engine: None
+) -> None:
+    monkeypatch.setattr(ec, "construct", lambda engine, cls, kwargs, *, validate: _Kwargs(kwargs))
+    # The constructor stores whatever was passed (default False when omitted).
+    monkeypatch.setattr(ec, "resolved_value", lambda obj, leaf: obj.kwargs.get(leaf, False))
+    verdict = pc.probe_candidate(_inert_cand(["early_stopping"]), "transformers", True)
+    assert verdict.status == "unconfirmed"
+    assert "kept True" in verdict.evidence
+
+
+def test_condition_inert_multiple_subjects_all_must_collapse(
+    monkeypatch: pytest.MonkeyPatch, fake_engine: None
+) -> None:
+    monkeypatch.setattr(ec, "construct", lambda engine, cls, kwargs, *, validate: _Kwargs(kwargs))
+
+    def resolved(obj: _Kwargs, leaf: str) -> Any:
+        if leaf == "early_stopping":  # rewritten to its default
+            return False
+        return obj.kwargs.get(leaf, 1.0)  # length_penalty stored verbatim
+
+    monkeypatch.setattr(ec, "resolved_value", resolved)
+    verdict = pc.probe_candidate(
+        _inert_cand(["early_stopping", "length_penalty"]), "transformers", True
+    )
+    assert verdict.status == "unconfirmed"
+    assert "early_stopping" in verdict.evidence  # per-subject evidence, both named
+    assert "length_penalty" in verdict.evidence
+
+
+def test_condition_inert_unprobeable_when_default_has_no_contrast(
+    monkeypatch: pytest.MonkeyPatch, fake_engine: None
+) -> None:
+    monkeypatch.setattr(ec, "construct", lambda engine, cls, kwargs, *, validate: _Kwargs(kwargs))
+    monkeypatch.setattr(ec, "resolved_value", lambda obj, leaf: None)  # no contrast for None
+    verdict = pc.probe_candidate(_inert_cand(["early_stopping"]), "transformers", True)
+    assert verdict.status == "unprobeable"
 
 
 def test_engine_not_importable_is_infra_error() -> None:
@@ -480,6 +575,27 @@ def test_main_writes_to_out_and_returns_zero(
     assert code == 0
     written = yaml.safe_load(out.read_text())
     assert written["candidates"][0]["verdict"]["status"] == "confirmed"
+
+
+def test_main_unparseable_entry_appears_in_summary_table(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(ec, "engine_importable", lambda engine: False)
+    candidates = tmp_path / "cands.yaml"
+    candidates.write_text(
+        "engine: vllm\ncandidates:\n- not_a_mapping\n"
+        "- id: ok\n  severity: error\n  match:\n    fields:\n      vllm.sampling_params.n: 1\n"
+    )
+    code = pc.main(["--engine", "vllm", "--candidates", str(candidates), "--date", "2026-07-06"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "#0" in out  # the unparseable entry is a visible table row, not silence
+    assert "ok" in out
+    written = yaml.safe_load(candidates.read_text())
+    assert written["candidates"][0] == "not_a_mapping"  # preserved, no verdict to attach
+    assert written["candidates"][1]["verdict"]["status"] == "infra_error"
 
 
 def test_main_hard_error_on_unreadable_returns_two(tmp_path: Path) -> None:
