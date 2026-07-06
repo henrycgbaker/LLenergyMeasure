@@ -16,6 +16,7 @@ import contextlib
 import queue
 import signal
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -98,6 +99,42 @@ def _make_mock_context(
     ctx.Queue.return_value = queue.SimpleQueue()
 
     return ctx
+
+
+@pytest.fixture(autouse=True)
+def _stub_baseline_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the real GPU/container baseline sampling leaves with instant stubs.
+
+    StudyRunner defaults to baseline strategy "validated", so ``run()`` drives
+    the runner's baseline orchestration (resolve -> measure -> cache -> persist)
+    on every dispatch. The leaf primitives it eventually calls perform a real
+    ~30s NVML power-sampling loop (``measure_baseline_power`` / ``measure_spot_check``)
+    or spawn a real ``docker run`` baseline container (``run_baseline_container``).
+    Those are hardware/Docker concerns covered by their own unit tests; here they
+    only add wall-clock. Stubbing the leaves keeps every runner code path exercised
+    while removing the real waiting - the same source-level patch pattern used by
+    test_baseline_strategy.py.
+    """
+    from llenergymeasure.harness.baseline import BaselineCache
+
+    def _fake_baseline(*_args: object, **kwargs: object) -> BaselineCache:
+        gpu_indices = kwargs.get("gpu_indices") or [0]
+        duration = kwargs.get("duration_sec", 0.0)
+        return BaselineCache(
+            power_w=200.0,
+            timestamp=time.time(),
+            gpu_indices=list(gpu_indices),  # type: ignore[arg-type]
+            sample_count=1,
+            duration_sec=float(duration),  # type: ignore[arg-type]
+        )
+
+    monkeypatch.setattr("llenergymeasure.harness.baseline.measure_baseline_power", _fake_baseline)
+    monkeypatch.setattr(
+        "llenergymeasure.harness.baseline.measure_spot_check", lambda *_a, **_kw: 200.0
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.study.baseline_container.run_baseline_container", _fake_baseline
+    )
 
 
 # =============================================================================
