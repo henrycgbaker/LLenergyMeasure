@@ -65,9 +65,7 @@ def fake_tree(tmp_path: Path) -> tuple[Path, dict[str, list[str]], list[Any]]:
     return tmp_path, sources, acr.build_chunks(cluster_files, sources)
 
 
-def _build(
-    chunk: Any, sources: dict[str, list[str]], rule: dict[str, Any]
-) -> dict[str, Any] | None:
+def _build(chunk: Any, sources: dict[str, list[str]], rule: dict[str, Any]) -> dict[str, Any] | str:
     return acr.build_candidate(
         chunk, sources, rule, engine="vllm", version="0.19.1", model="m", samples=3, run_date="d"
     )
@@ -196,7 +194,7 @@ def test_resolve_citation_rejects_bad_reference(fake_tree: Any, raw: str) -> Non
 def test_candidate_has_unified_schema(fake_tree: Any) -> None:
     _, sources, chunks = fake_tree
     cand = _build(chunks[0], sources, _N_RULE)
-    assert cand is not None
+    assert isinstance(cand, dict)
     assert cand["engine"] == "vllm" and cand["engine_version"] == "0.19.1"
     assert cand["severity"] == "error"
     assert cand["match"]["fields"] == {"n": {"<": 1}}
@@ -206,11 +204,15 @@ def test_candidate_has_unified_schema(fake_tree: Any) -> None:
 
 
 @pytest.mark.parametrize(
-    "rule", [{"citation": "sampling_params.py:3"}, dict(_N_RULE, citation="ghost.py:1")]
+    ("rule", "reason"),
+    [
+        ({"citation": "sampling_params.py:3"}, "no_field"),
+        (dict(_N_RULE, citation="ghost.py:1"), "unresolved_citation"),
+    ],
 )
-def test_candidate_dropped_when_unusable(fake_tree: Any, rule: dict[str, Any]) -> None:
-    _, sources, chunks = fake_tree  # no fields, or an unresolvable citation
-    assert _build(chunks[0], sources, rule) is None
+def test_candidate_dropped_when_unusable(fake_tree: Any, rule: dict[str, Any], reason: str) -> None:
+    _, sources, chunks = fake_tree
+    assert _build(chunks[0], sources, rule) == reason  # the drop reason run_analyst counts
 
 
 @pytest.fixture
@@ -218,7 +220,7 @@ def emitted(fake_tree: Any, tmp_path: Path) -> tuple[Path, Path]:
     """Build the _N_RULE candidate and write the pool file; return (src_root, pool_path)."""
     src_root, sources, chunks = fake_tree
     cand = _build(chunks[0], sources, _N_RULE)
-    assert cand is not None
+    assert isinstance(cand, dict)
     out = acr.write_candidates(
         [cand],
         tmp_path / "pool",
@@ -260,11 +262,12 @@ def test_union_dedups_identical_rules_across_samples(fake_tree: Any) -> None:
     def stub(prompt: str, temperature: float) -> Any:
         return _gen(_rules_json(_N_RULE, other))  # every sample proposes the same two rules
 
-    candidates = acr.run_analyst(
+    candidates, drops = acr.run_analyst(
         chunks, sources, stub, engine="vllm", version="0.19.1", model="m", samples=3, run_date="d"
     )
     assert len(candidates) == 2  # union collapses the duplicates
     assert {next(iter(c["match"]["fields"])) for c in candidates} == {"n", "temperature"}
+    assert drops == {"dedup_collapsed": 4}  # 3 samples x 2 rules -> 2 kept, 4 collapsed
 
 
 def test_cap_hit_splits_and_reruns() -> None:

@@ -10,7 +10,8 @@ precision (~77-80% content-correct on the parity experiment) the analyst never
 self-certifies. A pure completion loop over line-numbered source chunks: one
 exhaustive-extraction prompt, self-consistency union across samples, a salvage
 parser for truncated output. No agentic access, no repair loops, no retries.
-Design and ratification: .product/research/oss-analyst-parity-2026-07-02/.
+Design ratified by the 2026-07-02 OSS analyst parity experiment
+(qwen2.5-coder:32b measured against the frontier bump-analyst reference).
 
 --source-root is the engine's top-level package directory at the pinned version
 (for vllm, the ``vllm/`` folder) - an explicit maintainer input, as it is for
@@ -466,15 +467,20 @@ def build_candidate(
     model: str,
     samples: int,
     run_date: str,
-) -> dict[str, Any] | None:
-    """Assemble one unified candidate, or None if the rule is unusable.
+) -> dict[str, Any] | str:
+    """Assemble one unified candidate, or the drop reason when unusable.
 
-    Dropped when it names no field or its citation resolves to no real file:line
-    (a hallucination). All the analyst said is kept under provenance.
+    Returns "no_field" when the rule names no usable field, "unresolved_citation"
+    when its citation points at no real file:line (a hallucination); run_analyst
+    counts these as the per-bump analyst-health signal. All the analyst said is
+    kept under provenance. A "warning" severity_suggestion (logs+continues)
+    deliberately still mints an error claim: recall-preserving, and contained by
+    the ladder - a warn-only guard never raises at construction, so the
+    candidate stays unconfirmed and is never promoted. Do not "fix" it here.
     """
     fields = [f for f in (rule.get("fields") or []) if isinstance(f, str) and _leaf(f)]
     if not fields:
-        return None
+        return "no_field"
     kind = str(rule.get("kind") or "other")
     predicate = str(rule.get("predicate") or "")
     suggestion = str(rule.get("severity_suggestion") or "")
@@ -482,7 +488,7 @@ def build_candidate(
 
     citation = resolve_citation(chunk, sources, str(rule.get("citation") or ""))
     if citation is None:
-        return None
+        return "unresolved_citation"
 
     match_fields, normalised = predicate_to_match(kind, fields, predicate, severity)
     digest = hashlib.sha1(
@@ -574,9 +580,16 @@ def run_analyst(
     model: str,
     samples: int,
     run_date: str,
-) -> list[dict[str, Any]]:
-    """Cold-read every chunk, build candidates, and union-dedup the pool."""
+) -> tuple[list[dict[str, Any]], Counter[str]]:
+    """Cold-read every chunk, build candidates, and union-dedup the pool.
+
+    Also returns the drop counters (no_field / unresolved_citation /
+    dedup_collapsed): the per-bump analyst-health signal - citation-resolution
+    rate is the parity experiment's headline quality metric - which the absorb
+    workflow reads to judge whether a cold read degraded.
+    """
     seen: set[str] = set()
+    drops: Counter[str] = Counter()
     candidates: list[dict[str, Any]] = []
     for position, chunk in enumerate(chunks, start=1):
         logger.info("chunk %d/%d %s", position, len(chunks), chunk.chunk_id)
@@ -593,14 +606,16 @@ def run_analyst(
                 samples=samples,
                 run_date=run_date,
             )
-            if candidate is None:
+            if isinstance(candidate, str):
+                drops[candidate] += 1
                 continue
             key = dedup_key(candidate)
             if key in seen:
+                drops["dedup_collapsed"] += 1
                 continue
             seen.add(key)
             candidates.append(candidate)
-    return candidates
+    return candidates, drops
 
 
 # Manifest, version, source loading, emission.
@@ -738,11 +753,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         manifest = load_manifest(args.engine)
-    except FileNotFoundError as exc:
+        version = resolve_version(args.engine)
+    except (FileNotFoundError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    version = resolve_version(args.engine)
     run_date = args.date or date.today().isoformat()
     cluster_files, sources = load_sources(args.source_root, manifest)
     chunks = build_chunks(cluster_files, sources)
@@ -752,7 +767,7 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.time()
     generate = ollama_generator(args.ollama_host, args.model)
-    candidates = run_analyst(
+    candidates, drops = run_analyst(
         chunks,
         sources,
         generate,
@@ -772,9 +787,11 @@ def main(argv: list[str] | None = None) -> int:
         run_date=run_date,
     )
     by_kind = Counter(c["provenance"]["kind"] for c in candidates)
+    drop_note = " ".join(f"{reason}={count}" for reason, count in sorted(drops.items())) or "none"
     print(
         f"analyst cold read: {len(candidates)} candidates "
-        f"({dict(sorted(by_kind.items()))}) in {time.time() - started:.0f}s\nwrote {path}",
+        f"({dict(sorted(by_kind.items()))}), drops: {drop_note}, "
+        f"in {time.time() - started:.0f}s\nwrote {path}",
         file=sys.stderr,
     )
     return 0
