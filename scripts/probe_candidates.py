@@ -79,7 +79,7 @@ _BUILTIN_VALUES: dict[str, Any] = {"bool": True, "int": 1, "float": 1.0, "str": 
 
 
 class Unprobeable(Exception):
-    """No deterministic probe can be derived for this candidate's claim."""
+    """No deterministic probe can be derived or run for this candidate's claim."""
 
 
 @dataclass
@@ -330,6 +330,31 @@ def _ref_of(fields: dict[str, Any], referenced: set[str]) -> Any:
     return lambda leaf: env.get(leaf, REF_BASE)
 
 
+def _firing_kwargs(
+    fields: dict[str, Any],
+    ref_of: Any,
+    referenced: set[str],
+    skip_path: str | None = None,
+) -> dict[str, Any]:
+    """Constructor kwargs with every field (except ``skip_path``, if any) firing.
+
+    Fields referenced by an ``@field_ref`` but not named in ``fields`` are
+    scaffolded to :data:`REF_BASE` so a cross-field comparison has both operands.
+    """
+    named = {ec.leaf_of(p) for p in fields}
+    kwargs: dict[str, Any] = {}
+    for path, spec in fields.items():
+        if path == skip_path:
+            continue
+        value = _fire_value(spec, ec.leaf_of(path), ref_of, referenced)
+        if value is not _OMIT:
+            kwargs[ec.leaf_of(path)] = value
+    for rleaf in referenced:
+        if rleaf not in named and rleaf not in kwargs:
+            kwargs[rleaf] = ref_of(rleaf)
+    return kwargs
+
+
 # ---------------------------------------------------------------------------
 # Construction probe (severity: error)
 # ---------------------------------------------------------------------------
@@ -345,19 +370,10 @@ def build_construction_kwargs(fields: dict[str, Any]) -> tuple[dict[str, Any], d
     """
     referenced = _referenced_leaves(fields)
     ref_of = _ref_of(fields, referenced)
-    named = {ec.leaf_of(p) for p in fields}
     subject_path = list(fields)[-1]
     subject_leaf = ec.leaf_of(subject_path)
 
-    violating: dict[str, Any] = {}
-    for path, spec in fields.items():
-        value = _fire_value(spec, ec.leaf_of(path), ref_of, referenced)
-        if value is not _OMIT:
-            violating[ec.leaf_of(path)] = value
-    for rleaf in referenced:
-        if rleaf not in named and rleaf not in violating:
-            violating[rleaf] = ref_of(rleaf)
-
+    violating = _firing_kwargs(fields, ref_of, referenced)
     nofire = _nofire_value(fields[subject_path], subject_leaf, ref_of, referenced)
     satisfying = dict(violating)
     if nofire is _OMIT:
@@ -367,11 +383,21 @@ def build_construction_kwargs(fields: dict[str, Any]) -> tuple[dict[str, Any], d
     return violating, satisfying, subject_leaf
 
 
-def _pick_class(classes: list[type], leaves: list[str]) -> type | None:
+def _resolve_class(cand: Candidate, engine: str, leaves: list[str]) -> type:
+    """The first constructor class accepting every leaf in ``leaves``.
+
+    Raises :class:`Unprobeable` when the engine/section is unknown here or no
+    importable class accepts all the rule's fields; the caller's handler turns
+    that into the tier-appropriate verdict.
+    """
+    try:
+        classes = ec.candidate_classes(engine, next(iter(cand.fields)), leaves)
+    except ec.ConstructorResolutionError as exc:
+        raise Unprobeable(str(exc)) from exc
     for cls in classes:
         if all(ec.accepts(cls, leaf) for leaf in leaves):
             return cls
-    return None
+    raise Unprobeable(f"no constructor accepts fields {leaves}")
 
 
 def _run_leg(engine: str, cls: type, kwargs: dict[str, Any]) -> str | None:
@@ -380,23 +406,16 @@ def _run_leg(engine: str, cls: type, kwargs: dict[str, Any]) -> str | None:
         ec.construct(engine, cls, kwargs, validate=True)
         return None
     except Exception as exc:
-        return f"{type(exc).__name__}: {exc}"[:200]
+        return _clip(f"{type(exc).__name__}: {exc}")
 
 
 def probe_construction(cand: Candidate, engine: str) -> Verdict:
-    try:
-        violating, satisfying, _ = build_construction_kwargs(cand.fields)
-    except Unprobeable as exc:
-        return Verdict("unprobeable", "construction", str(exc))
-
     leaves = [ec.leaf_of(p) for p in cand.fields]
     try:
-        classes = ec.candidate_classes(engine, next(iter(cand.fields)), leaves)
-    except ec.ConstructorResolutionError as exc:
+        violating, satisfying, _ = build_construction_kwargs(cand.fields)
+        cls = _resolve_class(cand, engine, leaves)
+    except Unprobeable as exc:
         return Verdict("unprobeable", "construction", str(exc))
-    cls = _pick_class(classes, leaves)
-    if cls is None:
-        return Verdict("unprobeable", "construction", f"no constructor accepts fields {leaves}")
 
     positive = _run_leg(engine, cls, violating)
     negative = _run_leg(engine, cls, satisfying)
@@ -478,18 +497,7 @@ def build_identity_base(fields: dict[str, Any], subject_path: str | None) -> dic
     """
     referenced = _referenced_leaves(fields)
     ref_of = _ref_of(fields, referenced)
-    named = {ec.leaf_of(p) for p in fields}
-    base: dict[str, Any] = {}
-    for path, spec in fields.items():
-        if path == subject_path:
-            continue
-        value = _fire_value(spec, ec.leaf_of(path), ref_of, referenced)
-        if value is not _OMIT:
-            base[ec.leaf_of(path)] = value
-    for rleaf in referenced:
-        if rleaf not in named and rleaf not in base:
-            base[rleaf] = ref_of(rleaf)
-    return base
+    return _firing_kwargs(fields, ref_of, referenced, skip_path=subject_path)
 
 
 def _inert_subjects(cand: Candidate) -> list[str]:
@@ -503,18 +511,6 @@ def _inert_subjects(cand: Candidate) -> list[str]:
     return [n for n in cand.normalised if ec.leaf_of(n) not in match_leaves]
 
 
-def _resolve_class(cand: Candidate, engine: str, leaves: list[str]) -> type | Verdict:
-    """The first constructor class accepting ``leaves``, or an unprobeable Verdict."""
-    try:
-        classes = ec.candidate_classes(engine, next(iter(cand.fields)), leaves)
-    except ec.ConstructorResolutionError as exc:
-        return Verdict("unprobeable", "identity", str(exc))
-    cls = _pick_class(classes, leaves)
-    if cls is None:
-        return Verdict("unprobeable", "identity", f"no constructor accepts fields {leaves}")
-    return cls
-
-
 def probe_identity(cand: Candidate, engine: str) -> Verdict:
     is_collision = cand.source == "observed_collision" and bool(cand.declared_values)
     subjects = [] if is_collision else _inert_subjects(cand)
@@ -526,17 +522,14 @@ def probe_identity(cand: Candidate, engine: str) -> Verdict:
 def _probe_alias(cand: Candidate, engine: str) -> Verdict:
     """Value-alias dormancy: the (last) match field itself over declared values."""
     subject_path = list(cand.fields)[-1]
+    subject_leaf = ec.leaf_of(subject_path)
+    leaves = [ec.leaf_of(p) for p in cand.fields]
     try:
         values = identity_values(cand, subject_path)
         base = build_identity_base(cand.fields, subject_path)
+        cls = _resolve_class(cand, engine, leaves)
     except Unprobeable as exc:
         return Verdict("unprobeable", "identity", str(exc))
-
-    subject_leaf = ec.leaf_of(subject_path)
-    leaves = [ec.leaf_of(p) for p in cand.fields]
-    cls = _resolve_class(cand, engine, leaves)
-    if isinstance(cls, Verdict):
-        return cls
 
     snap_leaves = _distinct([subject_leaf, *[ec.leaf_of(n) for n in cand.normalised]])
     snapshots: list[tuple[str, ...]] = []
@@ -552,9 +545,9 @@ def _probe_alias(cand: Candidate, engine: str) -> Verdict:
             return Verdict(
                 "infra_error",
                 "identity",
-                f"constructing {subject_leaf}={_show(value)} raised {type(exc).__name__}: {exc}"[
-                    :200
-                ],
+                _clip(
+                    f"constructing {subject_leaf}={_show(value)} raised {type(exc).__name__}: {exc}"
+                ),
             )
         snapshots.append(tuple(_stable(ec.resolved_value(instance, leaf)) for leaf in snap_leaves))
 
@@ -582,16 +575,13 @@ def _probe_inert(cand: Candidate, engine: str, subjects: list[str]) -> Verdict:
     only if EVERY subject collapses; any subject the engine keeps verbatim is
     unconfirmed (inertness may live at a later grain).
     """
-    try:
-        base = build_identity_base(cand.fields, None)
-    except Unprobeable as exc:
-        return Verdict("unprobeable", "identity", str(exc))
-
     subject_leaves = [ec.leaf_of(s) for s in subjects]
     leaves = _distinct([*[ec.leaf_of(p) for p in cand.fields], *subject_leaves])
-    cls = _resolve_class(cand, engine, leaves)
-    if isinstance(cls, Verdict):
-        return cls
+    try:
+        base = build_identity_base(cand.fields, None)
+        cls = _resolve_class(cand, engine, leaves)
+    except Unprobeable as exc:
+        return Verdict("unprobeable", "identity", str(exc))
 
     try:  # one condition-only construction serves every subject's default read
         default_instance = ec.construct(engine, cls, base, validate=False)
@@ -599,8 +589,10 @@ def _probe_inert(cand: Candidate, engine: str, subjects: list[str]) -> Verdict:
         return Verdict(
             "infra_error",
             "identity",
-            f"constructing the condition base {_show_kwargs(base)} raised "
-            f"{type(exc).__name__}: {exc}"[:200],
+            _clip(
+                f"constructing the condition base {_show_kwargs(base)} raised "
+                f"{type(exc).__name__}: {exc}"
+            ),
         )
 
     notes: list[str] = []
@@ -622,8 +614,10 @@ def _probe_inert(cand: Candidate, engine: str, subjects: list[str]) -> Verdict:
             return Verdict(
                 "infra_error",
                 "identity",
-                f"constructing {leaf}={alt!r} under the condition raised "
-                f"{type(exc).__name__}: {exc}"[:200],
+                _clip(
+                    f"constructing {leaf}={alt!r} under the condition raised "
+                    f"{type(exc).__name__}: {exc}"
+                ),
             )
         resolved = ec.resolved_value(instance, leaf)
         if _stable(resolved) == _stable(default):
@@ -725,6 +719,11 @@ def _distinct(seq: list[Any]) -> list[Any]:
             seen.add(key)
             out.append(item)
     return out
+
+
+def _clip(evidence: str) -> str:
+    """Engine exception text can be enormous; cap it for the transcript."""
+    return evidence[:200]
 
 
 def _show(value: Any) -> str:
