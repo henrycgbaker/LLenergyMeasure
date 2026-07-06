@@ -77,17 +77,17 @@ typecheck: ## Run mypy on src/ and tests/
 
 check: lint typecheck ## lint + typecheck (no tests)
 
-test: ## Host tests (excludes gpu and docker markers)
-	uv run pytest tests/ -m "not gpu and not docker" -x -q --tb=short
+test: ## Host tests (excludes gpu, docker, and slow markers)
+	uv run pytest tests/ -m "not gpu and not docker and not slow" -n auto -x -q --tb=short
 
 test-unit: ## Unit tests with verbose output
-	uv run pytest tests/unit/ -v
+	uv run pytest tests/unit/ -n auto -v
 
 test-integration: ## Integration tests with verbose output
-	uv run pytest tests/integration/ -v
+	uv run pytest tests/integration/ -n auto -v
 
 test-all: ## All tests (excludes tests/runtime/)
-	uv run pytest tests/ -v --ignore=tests/runtime/
+	uv run pytest tests/ -n auto -v --ignore=tests/runtime/
 
 install: ## uv sync (runtime deps only, no dev tooling)
 	uv sync
