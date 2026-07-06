@@ -18,6 +18,7 @@ import signal
 import threading
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -117,15 +118,15 @@ def _stub_baseline_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     from llenergymeasure.harness.baseline import BaselineCache
 
-    def _fake_baseline(*_args: object, **kwargs: object) -> BaselineCache:
+    def _fake_baseline(*_args: Any, **kwargs: Any) -> BaselineCache:
         gpu_indices = kwargs.get("gpu_indices") or [0]
         duration = kwargs.get("duration_sec", 0.0)
         return BaselineCache(
             power_w=200.0,
             timestamp=time.time(),
-            gpu_indices=list(gpu_indices),  # type: ignore[arg-type]
+            gpu_indices=list(gpu_indices),
             sample_count=1,
-            duration_sec=float(duration),  # type: ignore[arg-type]
+            duration_sec=float(duration),
         )
 
     monkeypatch.setattr("llenergymeasure.harness.baseline.measure_baseline_power", _fake_baseline)
