@@ -3,6 +3,7 @@
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
+.PHONY: check-citations probe-candidates
 .PHONY: package-check
 .PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
@@ -160,6 +161,12 @@ refresh-invariants-all: ## Mine invariants for all three engines in sequence
 check-citations: ## Verify candidate citations (CANDIDATES=file.yaml SRC=path/to/source)
 	@test -n "$(CANDIDATES)" && test -n "$(SRC)" || (echo "Usage: make check-citations CANDIDATES=candidates.yaml SRC=engine-src/" && exit 1)
 	uv run python scripts/check_citations.py "$(CANDIDATES)" --source-root "$(SRC)"
+
+# Verification-ladder tiers 2-3: run construction/identity probes against the
+# real engine inside its Docker image. ARGS forwards to the kernel (e.g. --out).
+probe-candidates: ## Probe candidate rules in-engine (ENGINE=vllm|tensorrt|transformers CANDIDATES=file.yaml [ARGS=...])
+	@test -n "$(ENGINE)" && test -n "$(CANDIDATES)" || (echo "Usage: make probe-candidates ENGINE={vllm|tensorrt|transformers} CANDIDATES=candidates.yaml [ARGS='--out /tmp/verdicts.yaml']" && exit 1)
+	./scripts/probe_candidates.sh $(ENGINE) --candidates "$(CANDIDATES)" $(ARGS)
 
 # Build wheel + validate package install + check version consistency
 package-check: ## Build wheel, validate install, and check pyproject/_version sync

@@ -177,7 +177,15 @@ def _make_candidate(
     members: list[_Sidecar],
     flats: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Build one dormant-rule candidate for a single differing field."""
+    """Build one dormant-rule candidate for a single differing field.
+
+    Shape is the unified candidate schema the verification ladder consumes:
+    the constrained field lives under ``match.fields`` with a ``present`` spec
+    (the identity probe reads the recorded ``declared_values`` from provenance),
+    and the (unverified) ``verdict`` block is filled in by the probe kernel. No
+    ``citation`` key: observed-collision candidates cite runtime evidence, not
+    source, so ``check_citations.py`` skips rather than fails them.
+    """
     engine = members[0].engine
     version = members[0].library_version
     observed_hash = members[0].observed_config_hash
@@ -187,14 +195,7 @@ def _make_candidate(
         "engine": engine,
         "engine_version": version,
         "severity": "dormant",
-        "fields": [field_path],
-        "predicate": "value_variation_inert",
-        "condition": (
-            f"Declared field '{field_path}' varied across experiments that "
-            "resolved to an identical observed configuration; the variation "
-            "left the engine-effective state unchanged."
-        ),
-        "co_occurring_fields": co_occurring,
+        "match": {"fields": {field_path: {"present": True}}},
         "provenance": {
             "source": "observed_collision",
             "engine": engine,
@@ -202,8 +203,9 @@ def _make_candidate(
             "observed_config_hash": observed_hash,
             "colliding_experiments": experiment_dirs,
             "declared_values": _distinct_values(field_path, flats),
+            "co_occurring_fields": co_occurring,
         },
-        "verdict": "unverified",
+        "verdict": {"status": "unverified", "tier": None, "date": None, "evidence": None},
     }
 
 
