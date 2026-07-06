@@ -146,7 +146,7 @@ jobs:
         # via pytest.importorskip and are skipped on the host runner.
         # Coverage threshold is enforced via fail_under in [tool.coverage.report]
         # (pytest-cov reads it automatically); no CLI flag needed.
-        run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
+        run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --durations=10 --cov=llenergymeasure --cov-report=xml:coverage.xml
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v6
