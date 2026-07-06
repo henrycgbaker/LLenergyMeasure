@@ -770,6 +770,15 @@ class MeasurementHarness:
             )
             obs_hash = hash_config(observed_view)
 
+            # Full user-declared config, recorded so the observed-collision
+            # miner can attribute a shared observed_config_hash to the declared
+            # fields that varied. Guarded separately: a declared-dump failure
+            # must not cost us the observed hash written below.
+            try:
+                declared_config: dict[str, object] | None = config.model_dump(mode="json")
+            except Exception:  # pragma: no cover - declared dump is best-effort
+                declared_config = None
+
             save_config_sidecar(
                 output_dir,
                 experiment_id=result.experiment_id,
@@ -779,6 +788,7 @@ class MeasurementHarness:
                 observed_engine_params=obs_engine if obs_engine else None,
                 observed_sampling_params=obs_sampling if obs_sampling else None,
                 observed_config_hash=obs_hash,
+                declared_config=declared_config,
             )
         except Exception as exc:
             logger.debug("Config sidecar write failed (non-fatal): %s", exc)
