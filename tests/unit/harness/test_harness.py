@@ -763,6 +763,13 @@ def test_write_config_sidecar_creates_config_json(minimal_config, tmp_path: Path
     )
     assert len(payload["observed_config_hash"]) == 64
 
+    # The full declared config must be recorded so the observed-collision miner
+    # can attribute a shared observed hash to declared field differences.
+    declared = payload.get("declared_config")
+    assert isinstance(declared, dict), "declared_config must be recorded in full"
+    assert declared["engine"] == "transformers"
+    assert declared["task"]["model"] == "fake/model"
+
 
 # ---------------------------------------------------------------------------
 # Bug 3 fix: capture_observed_params called post-window

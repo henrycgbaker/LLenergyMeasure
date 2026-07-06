@@ -455,3 +455,47 @@ def test_environment_field_excluded_from_result_json(
     # model_dump_json drops the excluded field, so the re-serialised result
     # matches the on-disk result.json (no environment leakage).
     assert "environment" not in loaded.model_dump_json()
+
+
+def test_save_config_sidecar_roundtrips_declared_config(tmp_path: Path) -> None:
+    """The declared config survives a write/read round trip verbatim."""
+    import json
+
+    from llenergymeasure.results.persistence import save_config_sidecar
+
+    declared = {
+        "engine": "vllm",
+        "task": {"model": "fake/model", "seed": 7},
+        "vllm": {"engine_params": {"enforce_eager": True}},
+    }
+    path = save_config_sidecar(
+        tmp_path,
+        experiment_id="exp-1",
+        config_hash="a" * 16,
+        engine="vllm",
+        library_version="0.19.1",
+        observed_config_hash="b" * 64,
+        declared_config=declared,
+    )
+
+    payload = json.loads(path.read_text())
+    assert payload["declared_config"] == declared
+
+
+def test_save_config_sidecar_omits_declared_config_when_absent(tmp_path: Path) -> None:
+    """A call without declared_config omits the key (not written as null)."""
+    import json
+
+    from llenergymeasure.results.persistence import save_config_sidecar
+
+    path = save_config_sidecar(
+        tmp_path,
+        experiment_id="exp-1",
+        config_hash="a" * 16,
+        engine="vllm",
+        library_version="0.19.1",
+        observed_config_hash="b" * 64,
+    )
+
+    payload = json.loads(path.read_text())
+    assert "declared_config" not in payload
