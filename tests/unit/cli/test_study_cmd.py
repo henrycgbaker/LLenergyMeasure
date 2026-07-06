@@ -152,6 +152,28 @@ def test_plan_happy_path(tmp_path: Path) -> None:
     assert "vllm_samplingparams_raises_top_p_gt_1p0" in result.output
 
 
+def test_plan_previews_run_effective_cycles(tmp_path: Path) -> None:
+    """A study omitting n_cycles previews run's effective 3 cycles, not Pydantic 1."""
+    import re
+
+    study = tmp_path / "study.yaml"
+    study.write_text(
+        f"""
+study_name: default-cycles
+task:
+  model: {MODEL}
+engine: vllm
+sweep:
+  measurement.latency_profiling: [false, true]
+"""
+    )
+    result = runner.invoke(app, ["study", "plan", str(study)])
+    assert result.exit_code == 0
+    # 2 measurement-only configs dedup to 1 unique x 3 cycles = 3 runs.
+    assert re.search(r"cycles\s+3", result.output)
+    assert re.search(r"runs\s+3", result.output)
+
+
 def test_plan_output_has_no_invariant_vocab(tmp_path: Path) -> None:
     """The command output never uses the word 'invariant'."""
     study = tmp_path / "study.yaml"

@@ -139,11 +139,15 @@ def study_plan(
     from pydantic import ValidationError
 
     from llenergymeasure.api import load_study
+    from llenergymeasure.cli._study_defaults import study_cli_overrides_for_file
     from llenergymeasure.cli._study_plan import build_funnel, render_funnel
     from llenergymeasure.utils.exceptions import ConfigError
 
+    # Apply the same CLI-layer effective defaults llem run applies, so the
+    # preview matches exactly what a run would execute (e.g. n_cycles=3 when the
+    # file omits it) rather than the conservative Pydantic default.
     try:
-        study = load_study(study_file)
+        study = load_study(study_file, cli_overrides=study_cli_overrides_for_file(study_file))
     except (ConfigError, ValidationError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from None

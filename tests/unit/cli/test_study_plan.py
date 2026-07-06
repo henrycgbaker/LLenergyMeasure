@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 from llenergymeasure.api import load_study
+from llenergymeasure.cli._study_defaults import study_cli_overrides_for_file
 from llenergymeasure.cli._study_plan import build_funnel, render_funnel
 
 MODEL = "Qwen/Qwen2.5-0.5B"
@@ -45,6 +46,17 @@ def _load(tmp_path: Path, text: str) -> object:
     path = tmp_path / "study.yaml"
     path.write_text(text)
     return load_study(path)
+
+
+def _load_with_cli_defaults(tmp_path: Path, text: str) -> object:
+    """Load exactly as ``llem run``/``llem study plan`` do - CLI defaults applied.
+
+    Mirrors the command path: the CLI-layer effective defaults (n_cycles=3,
+    shuffle) are injected before ``load_study`` unless the file sets them.
+    """
+    path = tmp_path / "study.yaml"
+    path.write_text(text)
+    return load_study(path, cli_overrides=study_cli_overrides_for_file(path))
 
 
 def test_funnel_arithmetic_full(tmp_path: Path) -> None:
@@ -103,12 +115,17 @@ sweep:
 
 
 def test_dedup_disabled_skips_stage(tmp_path: Path) -> None:
-    """With deduplicate_equivalent false, the dedup stage is not applied."""
+    """With deduplicate_equivalent false, the dedup stage is not applied.
+
+    n_cycles is pinned to 1 to keep the focus on dedup - cycle semantics are
+    covered by ``test_plan_previews_run_cycle_default``.
+    """
     text = f"""
 task:
   model: {MODEL}
 engine: vllm
 study_execution:
+  n_cycles: 1
   deduplicate_equivalent: false
 sweep:
   measurement.latency_profiling: [false, true]
@@ -117,9 +134,45 @@ sweep:
     assert funnel.dedup_enabled is False
     assert funnel.merged_away == 0
     assert funnel.valid == 2
-    assert funnel.runs == 2  # both declared configs run, no cycles
+    assert funnel.runs == 2  # 2 declared configs x 1 cycle, dedup off
     out = render_funnel(funnel, "no-dedup")
     assert "dedup disabled" in out
+
+
+def test_plan_previews_run_cycle_default(tmp_path: Path) -> None:
+    """A file omitting n_cycles previews run's effective 3 cycles, not Pydantic 1.
+
+    The plan mirrors run semantics: the CLI injects n_cycles=3 when the study
+    file leaves it unset, so the funnel must show 3 cycles and 3x the unique
+    experiment count.
+    """
+    text = f"""
+task:
+  model: {MODEL}
+engine: vllm
+sweep:
+  measurement.latency_profiling: [false, true]
+"""
+    funnel = build_funnel(_load_with_cli_defaults(tmp_path, text))  # type: ignore[arg-type]
+    assert funnel.n_cycles == 3
+    assert funnel.unique == 1  # 2 measurement-only configs dedup to 1
+    assert funnel.runs == 3 * funnel.unique
+
+
+def test_plan_respects_pinned_cycles(tmp_path: Path) -> None:
+    """An explicit n_cycles=1 is honoured - the CLI default does not override it."""
+    text = f"""
+task:
+  model: {MODEL}
+engine: vllm
+study_execution:
+  n_cycles: 1
+sweep:
+  measurement.latency_profiling: [false, true]
+"""
+    funnel = build_funnel(_load_with_cli_defaults(tmp_path, text))  # type: ignore[arg-type]
+    assert funnel.n_cycles == 1
+    assert funnel.runs == funnel.unique
 
 
 def test_bounds_scaffold_round_trip(tmp_path: Path) -> None:
