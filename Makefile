@@ -154,6 +154,13 @@ refresh-invariants-all: ## Mine invariants for all three engines in sequence
 	./scripts/refresh_invariants.sh tensorrt
 	./scripts/refresh_invariants.sh transformers
 
+# Verification-ladder tier 1: confirm each proposed candidate rule's citation
+# resolves against a pinned engine source tree. Used by the absorb workflow and
+# CI. Obtaining SRC (the engine source tree) is the caller's concern.
+check-citations: ## Verify candidate citations (CANDIDATES=file.yaml SRC=path/to/source)
+	@test -n "$(CANDIDATES)" && test -n "$(SRC)" || (echo "Usage: make check-citations CANDIDATES=candidates.yaml SRC=engine-src/" && exit 1)
+	uv run python scripts/check_citations.py "$(CANDIDATES)" --source-root "$(SRC)"
+
 # Build wheel + validate package install + check version consistency
 package-check: ## Build wheel, validate install, and check pyproject/_version sync
 	uv build --wheel
