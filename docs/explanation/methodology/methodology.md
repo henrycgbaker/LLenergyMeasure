@@ -323,10 +323,12 @@ repeat; when `n_cycles < k`, the first `n_cycles` rows are used.
 
 Best for studies where carryover effects between experiments are a concern.
 
-Override the experiment order from the CLI:
+Set the cycle count and experiment order in the study YAML:
 
-```bash
-llem run study.yaml --cycles 5 --order interleave
+```yaml
+study_execution:
+  n_cycles: 5
+  experiment_order: interleave
 ```
 
 ---
@@ -342,10 +344,13 @@ By default, LLenergyMeasure inserts thermal gaps between experiments in a study.
 gaps allow the GPU to return toward its baseline temperature before the next experiment
 starts.
 
-Disable thermal gaps for speed-oriented testing (at the cost of measurement quality):
+Disable thermal gaps for speed-oriented testing (at the cost of measurement quality)
+by zeroing the gaps in the study YAML:
 
-```bash
-llem run study.yaml --no-gaps
+```yaml
+study_execution:
+  experiment_gap_seconds: 0
+  cycle_gap_seconds: 0
 ```
 
 LLenergyMeasure also monitors thermal throttle events during measurement. If the GPU

@@ -13,6 +13,35 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
 
 ### Breaking Changes
 
+- **`llem run` reduced to session flags only.** The semantic-override flags were removed;
+  experiment parameters now live in the YAML config (author one with `llem study init`), and a
+  config path is now required. Flags describe the session; YAML describes the experiment. Removed
+  flags and their YAML equivalents:
+  - `--model` / `-m` -> `task.model`
+  - `--engine` / `-e` -> `engine`
+  - `--dataset` / `-d` -> `task.dataset.source`
+  - `--n-prompts` / `-n` -> `task.dataset.n_prompts`
+  - `--cycles` -> `study_execution.n_cycles`
+  - `--order` -> `study_execution.experiment_order`
+  - `--no-gaps` -> `study_execution.experiment_gap_seconds: 0` (and `cycle_gap_seconds: 0`)
+  - `--timeout` -> `study_execution.wall_clock_timeout_hours`
+  - `--no-circuit-breaker` -> `study_execution.max_consecutive_failures: 0`
+  - `--fail-fast` -> `study_execution.max_consecutive_failures: 1`
+  - `--no-dedup` -> `study_execution.deduplicate_equivalent: false`
+
+  Migrate the quick single-run path:
+  ```bash
+  # before
+  llem run --model gpt2 --engine transformers
+  # after
+  llem study init -m gpt2 --defaults
+  llem run study.yaml
+  ```
+
+  Retained session flags: `--output`, `--quiet`, `--verbose`, `--resume`, `--resume-dir`,
+  `--dry-run`, `--no-lock`, `--skip-preflight`. Passing a removed flag now gives Typer's standard
+  "No such option" (exit 2). ([#749])
+
 - **`engine: pytorch` renamed to `engine: transformers`** throughout YAML, CLI, and Python API.
   The `pytorch` identifier has been renamed to `transformers` - the engine runs HuggingFace
   Transformers `.generate()`. PyTorch is the tensor substrate, not the engine, and renaming aligns
@@ -459,3 +488,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#570]: https://github.com/henrycgbaker/llenergymeasure/pull/570
 [#573]: https://github.com/henrycgbaker/llenergymeasure/pull/573
 [#575]: https://github.com/henrycgbaker/llenergymeasure/pull/575
+[#749]: https://github.com/henrycgbaker/llenergymeasure/pull/749

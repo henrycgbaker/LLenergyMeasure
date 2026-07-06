@@ -126,8 +126,8 @@ LLenergyMeasure currently supports three engines:
 | `vllm` | vLLM | Docker only |
 | `tensorrt` | TensorRT-LLM | Docker only |
 
-The engine is set via `engine:` in the YAML or `--engine` on the CLI. Each
-engine runs inside its own Docker image (except Transformers in local mode).
+The engine is set via `engine:` in the YAML config. Each engine runs inside
+its own Docker image (except Transformers in local mode).
 See also [runner](#runner).
 
 ---

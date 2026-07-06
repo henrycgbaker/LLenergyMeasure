@@ -41,7 +41,8 @@ if any of the pre-flight checks fail.
 <TabItem value="cli" label="CLI">
 
 ```bash
-llem run --model gpt2 -e transformers
+llem study init -m gpt2 -e transformers --defaults   # writes study.yaml
+llem run study.yaml
 ```
 
 </TabItem>
@@ -116,7 +117,7 @@ config, timestamps, and any measurement warnings. See
 Specify a different output directory with `--output`:
 
 ```bash
-llem run --model gpt2 -e transformers --output /data/experiments
+llem run study.yaml --output /data/experiments
 ```
 
 :::tip Reproducibility

@@ -25,8 +25,8 @@ environment, or the system is CPU-only.
 
 ### Engine not available on host
 
-**Symptom:** `llem run -e vllm ...` fails immediately with an import error
-mentioning the engine package.
+**Symptom:** `llem run study.yaml` (with `engine: vllm`) fails immediately with
+an import error mentioning the engine package.
 
 **Cause:** Engines have no host install path - they run inside per-engine
 Docker images. A host import of `transformers`, `vllm`, or `tensorrt_llm`
