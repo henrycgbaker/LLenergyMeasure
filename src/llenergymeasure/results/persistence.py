@@ -105,6 +105,7 @@ def save_config_sidecar(
     resolved_config_hash: str | None = None,
     observed_config_hash: str | None = None,
     config_validation_observations: list[dict[str, object]] | None = None,
+    declared_config: dict[str, object] | None = None,
 ) -> Path:
     """Write the per-experiment ``config.json`` sidecar with resolved/observed config-hash payload.
 
@@ -120,6 +121,13 @@ def save_config_sidecar(
       params at sidecar-write time.
     - ``config_validation_observations`` - DormantField entries that
       ``_apply_rules`` attached at load time.
+    - ``declared_config`` - the full user-declared ``ExperimentConfig``
+      (JSON model dump). Every other config field in this sidecar is a hash;
+      this is the only place the declared state is recorded in full. Named
+      consumer: the observed-collision miner
+      (``scripts/mine_observed_collisions.py``), which groups experiments by
+      ``observed_config_hash`` and diffs their declared configs to find fields
+      whose variation left the engine-effective state identical.
 
     Any missing optional field is omitted from the sidecar (not written as
     null) so downstream consumers distinguish "not available" from
@@ -142,6 +150,8 @@ def save_config_sidecar(
         payload["observed_config_hash"] = observed_config_hash
     if config_validation_observations is not None:
         payload["config_validation_observations"] = config_validation_observations
+    if declared_config is not None:
+        payload["declared_config"] = declared_config
 
     path = experiment_dir / "config.json"
     _atomic_write(json.dumps(payload, indent=2, default=str), path)
