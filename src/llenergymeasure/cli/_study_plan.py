@@ -149,9 +149,9 @@ def build_funnel(study: StudyConfig) -> PlanFunnel:
     declared_total = valid + skipped
 
     dedup_enabled = study.dedup_mode == "resolved"
-    n_cycles = execution.n_cycles
+    n_cycles = execution.n_cycles  # ExecutionConfig validates n_cycles >= 1
     runs = len(study.experiments)
-    unique = runs // n_cycles if n_cycles else runs
+    unique = runs // n_cycles
     merged_away = valid - unique if dedup_enabled else 0
 
     attributions, extra_rule_groups = _attributions(study.skipped_configs)
