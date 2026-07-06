@@ -77,8 +77,8 @@ typecheck: ## Run mypy on src/ and tests/
 
 check: lint typecheck ## lint + typecheck (no tests)
 
-test: ## Host tests (excludes gpu and docker markers)
-	uv run pytest tests/ -m "not gpu and not docker" -x -q --tb=short
+test: ## Host tests (excludes gpu, docker, and slow markers)
+	uv run pytest tests/ -m "not gpu and not docker and not slow" -x -q --tb=short
 
 test-unit: ## Unit tests with verbose output
 	uv run pytest tests/unit/ -v
