@@ -141,7 +141,32 @@ def test_cross_field_ref_token_entailed(tmp_path: Path) -> None:
     assert verdict.ok
 
 
-def test_malformed_candidate_raises_loudly(tmp_path: Path) -> None:
+def test_word_boundary_kills_substring_false_positive(tmp_path: Path) -> None:
+    # The field leaf 'max_tokens' must NOT be counted present just because a
+    # different identifier 'max_tokens_per_batch' appears in the span.
+    (tmp_path / "engine.py").write_text("if max_tokens_per_batch < 1:\n    raise ValueError\n")
+    cand = _cand(
+        {"vllm.engine_params.max_tokens": {"<": 1}},
+        (1, 2),
+        quote="if max_tokens_per_batch < 1:\n    raise ValueError",
+    )
+    verdict = check_candidate(cand, tmp_path)
+    assert not verdict.ok
+    assert verdict.reason == "constrained field 'max_tokens' not present in cited span"
+
+
+def test_word_boundary_accepts_standalone_identifier(tmp_path: Path) -> None:
+    (tmp_path / "engine.py").write_text("if max_tokens < 1:\n    raise ValueError\n")
+    cand = _cand(
+        {"vllm.engine_params.max_tokens": {"<": 1}},
+        (1, 2),
+        quote="if max_tokens < 1:\n    raise ValueError",
+    )
+    assert check_candidate(cand, tmp_path).ok
+
+
+def test_malformed_citation_raises_loudly(tmp_path: Path) -> None:
+    # A citation block that is PRESENT but missing its file is a schema error.
     path = tmp_path / "candidates.yaml"
     path.write_text(
         "schema_version: 1.0.0\n"
@@ -149,10 +174,38 @@ def test_malformed_candidate_raises_loudly(tmp_path: Path) -> None:
         "- id: broken\n"
         "  match:\n"
         "    fields:\n"
-        "      vllm.x.y: {'<': 1}\n"  # citation block omitted entirely
+        "      vllm.x.y: {'<': 1}\n"
+        "  citation:\n"
+        "    lines: [1, 2]\n"
+        "    quote: something\n"
     )
-    with pytest.raises(CandidateSchemaError, match=r"'broken'.*citation"):
+    with pytest.raises(CandidateSchemaError, match=r"'broken'.*file"):
         load_candidates(path)
+
+
+def test_uncited_candidate_is_skipped_not_failed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # An observed-collision proposal has no citation key: skipped, counted, exit 0.
+    root = _src_root(tmp_path)
+    path = tmp_path / "candidates.yaml"
+    path.write_text(
+        "schema_version: 1.0.0\n"
+        "candidates:\n"
+        "- id: collision1\n"
+        "  match:\n"
+        "    fields:\n"
+        "      vllm.engine_params.enforce_eager: {present: true}\n"
+    )
+    parsed = load_candidates(path)
+    assert parsed[0].citation is None
+
+    code = main([str(path), "--source-root", str(root)])
+    assert code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["checked"] == 0
+    assert report["skipped_uncited"] == 1
+    assert report["skipped_ids"] == ["collision1"]
 
 
 def test_missing_candidates_list_raises(tmp_path: Path) -> None:

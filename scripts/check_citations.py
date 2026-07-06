@@ -16,14 +16,16 @@ confirms, per candidate, that:
   entails the claimed constraint.
 
 Output is machine readable: a JSON report on stdout with a per-candidate
-verdict (``ok`` plus a precise ``reason`` on failure); exit 0 iff all pass. A
-malformed candidate entry raises :class:`CandidateSchemaError` loudly rather
-than being skipped.
+verdict (``ok`` plus a precise ``reason`` on failure); exit 0 iff all checked
+candidates pass. A candidate with NO ``citation`` key (an observed-collision
+proposal cites runtime evidence, not source) is SKIPPED and counted, not
+failed; a candidate whose citation is present but malformed still raises
+:class:`CandidateSchemaError` loudly.
 
 The candidate shape is a superset of the shipped ``rules.yaml`` rule (``id``,
-``match.fields``, ...) plus a ``citation`` mapping {``file``, ``lines``:
-[start, end], ``quote``}; the absorb step drops ``citation`` once the ladder
-passes and ships the rest.
+``match.fields``, ...) plus an optional ``citation`` mapping {``file``,
+``lines``: [start, end], ``quote``}; the absorb step drops ``citation`` once the
+ladder passes and ships the rest.
 
 Run: python scripts/check_citations.py CANDIDATES.yaml --source-root SRC/
 """
@@ -32,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import textwrap
 from dataclasses import dataclass
@@ -57,11 +60,15 @@ class Citation:
 
 @dataclass(frozen=True)
 class Candidate:
-    """A proposed engine rule awaiting verification, with its citation."""
+    """A proposed engine rule awaiting verification.
+
+    ``citation`` is ``None`` for proposals that cite runtime evidence rather than
+    source (observed collisions); such candidates are skipped by the checker.
+    """
 
     id: str
     fields: dict[str, Any]
-    citation: Citation
+    citation: Citation | None
 
 
 @dataclass(frozen=True)
@@ -95,6 +102,9 @@ def _parse_candidate(index: int, raw: Any) -> Candidate:
     _require(isinstance(match, dict), where, "missing 'match' mapping")
     fields = match.get("fields")
     _require(isinstance(fields, dict) and bool(fields), where, "missing non-empty 'match.fields'")
+
+    if "citation" not in raw:
+        return Candidate(id=cid, fields=dict(fields), citation=None)
 
     cite = raw.get("citation")
     _require(isinstance(cite, dict), where, "missing 'citation' mapping")
@@ -193,12 +203,24 @@ def _find_block(file_lines: list[str], quoted: list[str]) -> int | None:
     return None
 
 
+def _entailed(token: str, quote: str) -> bool:
+    """True iff ``token`` occurs in ``quote`` at a word boundary.
+
+    Boundary, not substring: the field token ``max_tokens`` must NOT be counted
+    as present just because ``max_tokens_per_batch`` appears. The lookarounds
+    reject an occurrence flanked by a word character, so a token is only entailed
+    when it stands as its own identifier/literal.
+    """
+    return re.search(rf"(?<!\w){re.escape(token)}(?!\w)", quote) is not None
+
+
 # --- Per-candidate check ---
 
 
 def check_candidate(candidate: Candidate, source_root: Path) -> Verdict:
     """Verify one candidate's citation against the pinned source tree."""
     cite = candidate.citation
+    assert cite is not None, "check_candidate is only called for cited candidates"
 
     def fail(reason: str) -> Verdict:
         return Verdict(candidate.id, ok=False, reason=reason)
@@ -231,10 +253,10 @@ def check_candidate(candidate: Candidate, source_root: Path) -> Verdict:
 
     field_tokens, value_tokens = claim_tokens(candidate)
     for tok in field_tokens:
-        if tok not in cite.quote:
+        if not _entailed(tok, cite.quote):
             return fail(f"constrained field {tok!r} not present in cited span")
     for tok in value_tokens:
-        if tok not in cite.quote:
+        if not _entailed(tok, cite.quote):
             return fail(f"constrained value {tok!r} not present in cited span")
 
     return Verdict(candidate.id, ok=True)
@@ -260,14 +282,23 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"--source-root is not a directory: {args.source_root}")
 
     candidates = load_candidates(args.candidates)
-    verdicts = [check_candidate(c, args.source_root) for c in candidates]
+    cited = [c for c in candidates if c.citation is not None]
+    skipped = [c for c in candidates if c.citation is None]
+    verdicts = [check_candidate(c, args.source_root) for c in cited]
     failed = [v for v in verdicts if not v.ok]
     report = {
         "verdicts": [v.to_dict() for v in verdicts],
         "checked": len(verdicts),
         "failed": len(failed),
+        "skipped_uncited": len(skipped),
+        "skipped_ids": [c.id for c in skipped],
     }
     print(json.dumps(report, indent=2))
+    if skipped:
+        print(
+            f"skipped {len(skipped)} uncited candidate(s) (runtime-evidence proposals)",
+            file=sys.stderr,
+        )
     if failed:
         print(f"\n{len(failed)}/{len(verdicts)} citation checks failed:", file=sys.stderr)
         for v in failed:

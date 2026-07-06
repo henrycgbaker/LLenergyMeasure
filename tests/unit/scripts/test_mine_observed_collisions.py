@@ -16,6 +16,13 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts import mine_observed_collisions as miner  # noqa: E402
 
 
+def _only_field(candidate: dict[str, Any]) -> str:
+    """The single canonical field path a collision candidate constrains."""
+    fields = list(candidate["match"]["fields"])
+    assert len(fields) == 1
+    return fields[0]
+
+
 def _declared(eager: bool, seed: int | None = None) -> dict[str, Any]:
     """A small declared ExperimentConfig varying enforce_eager (and maybe seed)."""
     cfg: dict[str, Any] = {"engine": "vllm", "vllm": {"engine_params": {"enforce_eager": eager}}}
@@ -57,12 +64,13 @@ def test_clean_two_way_collision_names_the_field(tmp_path: Path) -> None:
     assert stats.collision_groups == 1
     assert len(candidates) == 1
     candidate = candidates[0]
-    assert candidate["fields"] == ["vllm.engine_params.enforce_eager"]
+    assert _only_field(candidate) == "vllm.engine_params.enforce_eager"
+    assert candidate["match"]["fields"]["vllm.engine_params.enforce_eager"] == {"present": True}
     assert candidate["severity"] == "dormant"
-    assert candidate["co_occurring_fields"] == []
-    assert candidate["verdict"] == "unverified"
+    assert candidate["verdict"]["status"] == "unverified"
     prov = candidate["provenance"]
     assert prov["source"] == "observed_collision"
+    assert prov["co_occurring_fields"] == []
     assert prov["colliding_experiments"] == ["001_exp", "002_exp"]
     assert sorted(prov["declared_values"], key=str) == [False, True]
 
@@ -86,10 +94,14 @@ def test_multi_field_diff_flags_co_occurrence(tmp_path: Path) -> None:
     candidates, stats = _mine(tmp_path)
 
     assert stats.collision_groups == 1
-    by_field = {c["fields"][0]: c for c in candidates}
+    by_field = {_only_field(c): c for c in candidates}
     assert set(by_field) == {"task.seed", "vllm.engine_params.enforce_eager"}
-    assert by_field["task.seed"]["co_occurring_fields"] == ["vllm.engine_params.enforce_eager"]
-    assert by_field["vllm.engine_params.enforce_eager"]["co_occurring_fields"] == ["task.seed"]
+    assert by_field["task.seed"]["provenance"]["co_occurring_fields"] == [
+        "vllm.engine_params.enforce_eager"
+    ]
+    assert by_field["vllm.engine_params.enforce_eager"]["provenance"]["co_occurring_fields"] == [
+        "task.seed"
+    ]
 
 
 def test_identical_declared_configs_are_not_a_collision(tmp_path: Path) -> None:
@@ -125,7 +137,7 @@ def test_group_of_three_with_single_varying_field(tmp_path: Path) -> None:
 
     assert stats.collision_groups == 1
     assert len(candidates) == 1
-    assert candidates[0]["fields"] == ["vllm.engine_params.enforce_eager"]
+    assert _only_field(candidates[0]) == "vllm.engine_params.enforce_eager"
     assert len(candidates[0]["provenance"]["colliding_experiments"]) == 3
 
 
