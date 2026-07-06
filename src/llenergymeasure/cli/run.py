@@ -18,6 +18,7 @@ from llenergymeasure.cli._display import (
     print_dry_run,
     print_result_summary,
 )
+from llenergymeasure.cli._study_defaults import build_study_cli_overrides
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.ssot import (
@@ -384,25 +385,6 @@ def _resolve_resume_target(
     return resume_dir, resume_manifest, is_resume
 
 
-def _build_study_cli_overrides(yaml_execution: dict[str, Any]) -> dict[str, Any]:
-    """Apply the CLI-layer research-appropriate effective defaults for a study.
-
-    ``n_cycles=3`` and ``experiment_order="shuffle"`` are injected only when the
-    YAML ``study_execution`` block does not set them; the Pydantic model defaults
-    are intentionally more conservative (n_cycles=1). These are unconditional
-    research defaults, not flag overrides - the semantic-override flags were
-    removed and the YAML is the source of truth for anything it declares.
-    """
-    exec_overrides: dict[str, Any] = {}
-    if "n_cycles" not in yaml_execution:
-        exec_overrides["n_cycles"] = 3
-    if "experiment_order" not in yaml_execution:
-        exec_overrides["experiment_order"] = "shuffle"
-    if not exec_overrides:
-        return {}
-    return {"study_execution": exec_overrides}
-
-
 def _print_config_summary(
     console: Any,
     study_config: Any,
@@ -518,7 +500,7 @@ def _run_study_impl(
 
     # Apply the CLI-layer research-appropriate effective defaults (n_cycles=3,
     # shuffle) unless the YAML study_execution block already sets them.
-    study_cli_overrides = _build_study_cli_overrides(yaml_execution)
+    study_cli_overrides = build_study_cli_overrides(yaml_execution)
 
     # Load study config with overrides - show step-format spinner during expansion
     from rich.console import Console as _ExpandConsole

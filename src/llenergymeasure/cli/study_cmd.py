@@ -118,3 +118,40 @@ def study_init(
         typer.echo(f"Prune the sweep value lists, then run: llem run {out_path}")
     else:
         typer.echo(f"Edit it, then run: llem run {out_path}")
+
+
+@study_app.command("plan")  # type: ignore[misc, untyped-decorator]
+def study_plan(
+    study_file: Annotated[
+        Path,
+        typer.Argument(help="Study YAML file to preview (as llem run would expand it)."),
+    ],
+) -> None:
+    """Preview what ``llem run <study_file>`` would execute, without running it.
+
+    Prints a read-only funnel - declared grid points, then known-invalid points
+    pruned by engine rules, then duplicate configs merged away, then experiments
+    times cycles equals total runs - plus a wall-clock lower bound from the
+    thermal gaps alone. No experiments run, nothing is written, the GPU is never
+    touched. Exit 0 on a valid plan (even with skips); nonzero when the file is
+    missing, unparseable, or produces no experiments.
+    """
+    from pydantic import ValidationError
+
+    from llenergymeasure.api import load_study
+    from llenergymeasure.cli._study_defaults import study_cli_overrides_for_file
+    from llenergymeasure.cli._study_plan import build_funnel, render_funnel
+    from llenergymeasure.utils.exceptions import ConfigError
+
+    # Apply the same CLI-layer effective defaults llem run applies, so the
+    # preview matches exactly what a run would execute (e.g. n_cycles=3 when the
+    # file omits it) rather than the conservative Pydantic default.
+    try:
+        study = load_study(study_file, cli_overrides=study_cli_overrides_for_file(study_file))
+    except (ConfigError, ValidationError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
+
+    funnel = build_funnel(study)
+    title = study.study_name or str(study_file)
+    typer.echo(render_funnel(funnel, title))
