@@ -315,13 +315,37 @@ docker-build: ## Build first-party engine images (currently: transformers)
 	@echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
 	scripts/docker_build_with_cache_report.sh transformers
 
-# Seed GHCR build cache from a local machine with sufficient RAM.
-# Intended for seeding the Transformers image cache (FA3 Hopper compile,
-# ~30 min but memory-intensive) when the CI hosted runner cannot complete
-# the build. Requires: docker login ghcr.io, llem-builder buildx builder.
-# Uses Dockerfile default MAX_JOBS=32 - matches local layer cache so FA3
-# is not recompiled if already built locally.
-docker-seed-transformers: ## Seed the GHCR build cache for the transformers image
+# Seed the transformers images from a local machine with sufficient RAM
+# (the FA3 Hopper compile, ~30 min, needs more memory than CI hosted
+# runners have). Requires: docker login ghcr.io, llem-builder buildx
+# builder. Uses Dockerfile default MAX_JOBS=32 - matches local layer
+# cache so FA3 is not recompiled if already built locally. Two pushes:
+#
+#   1. The runtime promotion source transformers-cache:transformers-<VER>
+#      (<VER> = library.current_version from
+#      engine_versions/transformers/current.yaml), which
+#      publish-engine-image.yml tag-copies to canonical tags when a bump
+#      lands on main. Run this during a transformers bump session, before
+#      or alongside the bump PR - a missing seed fails the merge-time
+#      promotion run.
+#   2. The GHCR build cache on transformers:latest, reused by
+#      docker-publish.yml for the release-time hosted build.
+docker-seed-transformers: ## Seed transformers runtime image (promotion source) + GHCR build cache
+	@engver=$$(python3 -c "import yaml; print(yaml.safe_load(open('engine_versions/transformers/current.yaml'))['library']['current_version'])"); \
+	cacheref=ghcr.io/henrycgbaker/llenergymeasure/transformers-cache; \
+	echo "Seeding promotion source $$cacheref:transformers-$$engver"; \
+	docker buildx build \
+	  --builder $(BUILDER_NAME) \
+	  -f docker/Dockerfile.transformers \
+	  --target runtime \
+	  --build-arg TRANSFORMERS_VERSION=$$engver \
+	  --cache-from type=registry,ref=$$cacheref:transformers-$$engver-buildcache \
+	  --cache-from type=registry,ref=$$cacheref:transformers-$$engver \
+	  --cache-from type=registry,ref=ghcr.io/henrycgbaker/llenergymeasure/transformers:latest \
+	  --cache-to   type=registry,ref=$$cacheref:transformers-$$engver-buildcache,mode=max \
+	  --push \
+	  --tag $$cacheref:transformers-$$engver \
+	  .
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "dev"); \
 	fingerprint=$$(python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo "unknown"); \
 	ref=ghcr.io/henrycgbaker/llenergymeasure/transformers; \

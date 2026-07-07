@@ -59,10 +59,10 @@ step. Each matrix cell is a self-contained check.
   job. This needs no upstream source: the snapshot under
   `engine_versions/<engine>/<version>/outputs/` is the only input.
 
-- **`rules-coverage`** (advisory, matrix over `vllm` / `tensorrt`): checks that
-  each shipped rule still names a real validator site in the pinned engine
-  source. It reports uncovered sites to the job summary but always exits 0, so
-  coverage drift is visible without blocking a merge. The pinned source is
+- **`rules-coverage`** (advisory, matrix over `vllm` / `tensorrt`): scans the
+  pinned engine source for validator sites and reports the sites no shipped
+  rule covers. It writes the report to the job summary but always exits 0, so
+  coverage gaps are visible without blocking a merge. The pinned source is
   fetched by blobless sparse checkout of just the engine's Python package tree
   (see below), keyed and cached per engine and version.
 
@@ -118,6 +118,33 @@ guards:
   the versions the pins declare.
 
 They run host-only on hosted CPU runners and fail on drift.
+
+## Transformers image lifecycle
+
+The transformers engine runs in a first-party image (vLLM and TensorRT-LLM run
+inside upstream images with the source bind-mounted). Its lifecycle follows the
+same production split as the knowledge artifacts: built locally, promoted and
+published by CI. The flash-attention compile needs far more memory than hosted
+runners have, so CI never builds this image on the PR or merge path.
+
+1. **Local seed.** During a transformers bump session the maintainer runs
+   `make docker-seed-transformers`, which builds the runtime image on a machine
+   with enough memory and pushes it to `transformers-cache:transformers-<VER>`
+   (`<VER>` is `library.current_version` from
+   `engine_versions/transformers/current.yaml`). Run it before or alongside the
+   bump PR.
+2. **Merge-time promotion.** When the bump lands on main,
+   `publish-engine-image.yml` tag-copies the seeded image to the canonical
+   `transformers:transformers-<VER>` and `transformers:latest` tags. No
+   rebuild: production gets the bit-identical seeded image.
+3. **Release-time build.** `docker-publish.yml` (called by `release.yml`)
+   builds the package-versioned release image on a hosted runner with capped
+   compile parallelism, reusing the registry build cache that the seed target
+   also warms.
+
+A missing seed fails the promotion run loudly: the tag-copy step finds no
+source manifest at `transformers-cache:transformers-<VER>`. Recovery is to run
+the seed locally, then re-run the promotion via `workflow_dispatch`.
 
 ## Expected workflow behaviour per PR shape
 

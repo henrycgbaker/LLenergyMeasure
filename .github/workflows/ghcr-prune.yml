@@ -1,11 +1,11 @@
 name: Prune GHCR transformers-cache images
 
-# Weekly retention sweep over the per-PR transformers-cache image tags
-# that build-engine-image.yml + publish-engine-image.yml leave behind on
-# GHCR. PR-time builds publish to
+# Weekly retention sweep over the transformers-cache image tags that the
+# local seed (make docker-seed-transformers) and the merge-time promotion
+# (publish-engine-image.yml) leave behind on GHCR. Seeds publish to
 # `ghcr.io/<owner>/<repo>/transformers-cache:transformers-<version>` (with
 # a separate `-buildcache` tag carrying buildx's layer cache), and these
-# accumulate over PR cycles. This workflow keeps the registry bounded:
+# accumulate over bump cycles. This workflow keeps the registry bounded:
 # every Monday at 06:00 UTC, delete versions older than 30 days that
 # aren't currently referenced by an open PR's HEAD SHA. Versions tagged
 # for live PR heads are skipped regardless of age.
@@ -77,9 +77,9 @@ jobs:
 
           # Tags referenced by any open PR's HEAD SHA. A version's tag set
           # may include `transformers-<version>` (engine-versioned) or
-          # `<version>-buildcache`, neither of which embeds a SHA - but
-          # PRs can also produce per-SHA tags via build-engine-image.yml.
-          # Track both PR HEAD SHAs and PR HEAD branch refs.
+          # `<version>-buildcache`, neither of which embeds a SHA. Per-SHA
+          # tags no longer have a producer, but the guard stays as a cheap
+          # defence: track both PR HEAD SHAs and PR HEAD branch refs.
           mapfile -t LIVE_SHAS < <(gh pr list --state open --json headRefOid --jq '.[].headRefOid')
           printf 'Live PR HEAD SHAs: %s\n' "${LIVE_SHAS[*]:-<none>}"
 
