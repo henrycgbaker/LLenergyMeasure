@@ -3,7 +3,7 @@
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
-.PHONY: check-citations probe-candidates analyst-cold-read absorb
+.PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage
 .PHONY: package-check
 .PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
@@ -184,6 +184,14 @@ probe-candidates: ## Probe candidate rules in-engine (ENGINE=vllm|tensorrt|trans
 absorb: ## Absorb one engine-version bump into the shipped rules (ENGINE=vllm SRC=path/to/source [ARGS='--dry-run'])
 	@test -n "$(ENGINE)" && test -n "$(SRC)" || (echo "Usage: make absorb ENGINE=vllm SRC=engine-src/ [ARGS='--dry-run --skip-cold-read']" && exit 1)
 	uv run python scripts/absorb.py --engine $(ENGINE) --source-root "$(SRC)" $(ARGS)
+
+# The completeness counterpart to absorb: after a bump, report validator sites in
+# the engine source that no shipped rule covers (advisory - exit 0 by default).
+# SRC = the same engine package at the pinned version absorb takes. ARGS forwards
+# flags (--fail-on-uncovered to exit non-zero when any gap remains).
+rules-coverage: ## Report uncovered engine validator sites (ENGINE=vllm SRC=path/to/source [ARGS='--fail-on-uncovered'])
+	@test -n "$(ENGINE)" && test -n "$(SRC)" || (echo "Usage: make rules-coverage ENGINE=vllm SRC=engine-src/ [ARGS='--fail-on-uncovered']" && exit 1)
+	uv run python scripts/rules_coverage.py --engine $(ENGINE) --source-root "$(SRC)" $(ARGS)
 
 # Build wheel + validate package install + check version consistency
 package-check: ## Build wheel, validate install, and check pyproject/_version sync
