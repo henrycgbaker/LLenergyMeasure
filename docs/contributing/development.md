@@ -7,7 +7,7 @@ inside Docker; coordination code runs on host.**
 
 | Layer | Runs on | Why |
 |---|---|---|
-| Engine code (miners, introspectors, validation gates, model load) | Docker only | tensorrt-llm loads CUDA bindings on import; a unified host `uv.lock` produced incompatible cross-engine transitive constraints (#437); the multi-gigabyte `tensorrt_llm` wheel OOMed Renovate's lock-update runner. |
+| Engine code (schema introspection, rule probes, model load) | Docker only | tensorrt-llm loads CUDA bindings on import; a unified host `uv.lock` produced incompatible cross-engine transitive constraints (#437); the multi-gigabyte `tensorrt_llm` wheel OOMed Renovate's lock-update runner. |
 | Coordination (CLI, config validation, study runner, energy-measurement scaffolding without engines) | Host | Iteration speed for CLI / config / runner debugging matters; no GPU dependency. |
 | Engine-touching tests | Docker only | Tests that import an engine library run inside that engine's image. Host tests gate themselves via `pytest.importorskip(...)` and skip when the engine is absent. |
 
@@ -42,13 +42,18 @@ docker build -f docker/Dockerfile.transformers \
   --build-arg TRANSFORMERS_VERSION="$VER" \
   -t llenergymeasure:transformers-${VER} .
 
-# Direct invocation for ad-hoc miner / introspector runs:
+# Direct invocation for ad-hoc schema introspection runs:
 docker run --rm \
   -v "$(pwd)":/repo -w /repo \
   --entrypoint python3 \
   llenergymeasure:transformers-${VER} \
-  -m scripts.engine_producers.build_corpus --engine transformers
+  -m scripts.engine_producers._schemas_runner --engine transformers \
+  --output /repo/src/llenergymeasure/engines/transformers/schema.discovered.json
 ```
+
+Most maintainers use the `./scripts/refresh_discovered_schemas.sh <engine>`
+wrapper (equivalently `make discover-schema ENGINE=<engine>`) rather than
+invoking the runner directly - it selects the right image and prints the diff.
 
 For experiment dispatch (the `llem run` path) docker_runner.py emits a
 different shape: the entrypoint script `scripts/container_entrypoint.sh`
@@ -62,14 +67,14 @@ the framework entrypoint module. TRT-LLM dispatches route through
 for libnvinfer. See "Runtime-deps priming" below for the full mechanism.
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
-those two - they need a CUDA device) for the other engines. The automated
-path is the `engine-pipeline.yml` orchestrator in `.github/workflows/`, which
-fans out per-engine cells (the `_engine-invariants-cell.yml` and
-`_engine-schemas-cell.yml` reusables) plus an inline `build-transformers`
-job for the first-party transformers image. See "CI pipeline ordering"
-below for the full sequence and
-[Architecture &gt; CI architecture](/explanation/architecture/ci-architecture) for the
-topology + reusable-workflow contract.
+those two - they need a CUDA device) for the other engines.
+
+Engine knowledge (schemas and rules) is produced locally with these
+containers and then committed; CI never runs the engines. It verifies the
+committed bytes on hosted CPU runners via `engine-rules-check.yml`. See
+[CI architecture](/explanation/architecture/ci-architecture) for the workflow
+topology and [Pipeline architecture](/explanation/architecture/pipeline-architecture)
+for the transformers image lifecycle.
 
 ## Runtime-deps priming
 
@@ -121,121 +126,57 @@ sharing across machines on cluster storage.
   directory; `rm -rf ~/.cache/llem/deps/` cleans it.
 - **Not an alternative to the engine-version gate**. The probed engine
   library version (`vllm.__version__`, `tensorrt_llm.__version__`,
-  `transformers.__version__`) is compared at study setup against the
-  `engine_version` envelope on the wheel-bundled invariants + schema
-  artefacts, and a mismatch is a hard error (see `version_handshake.py`).
+  `transformers.__version__`) is compared at study setup against the SSOT
+  pin (`engine_versions/<engine>/current.yaml`) that the wheel-bundled rules
+  and discovered schema were generated against, and a mismatch is a hard
+  error (see `infra/version_handshake.py`).
 
 ## Engine image strategy
 
-Per-engine choices about runner type and image source are deliberately
-asymmetric:
+Per-engine choices about image source are deliberately asymmetric. For the
+full rationale (and the `#518` design record), see
+[Pipeline architecture: asymmetric engine architecture](/explanation/architecture/pipeline-architecture#asymmetric-engine-architecture-locked-design-choice).
+The developer-relevant summary:
 
-| Engine | CI runner | GPU required | Image source | Why |
-|---|---|---|---|---|
-| transformers | `ubuntu-latest` (GH-hosted) | No | First-party `docker/Dockerfile.transformers`, built by `engine-pipeline.yml :: build-transformers` per (PR, SSOT version) and consumed downstream via `docker pull` | No upstream provides FA3-included transformers |
-| vllm | self-hosted GPU | Yes (CUDA) | `vllm/vllm-openai:<version>` (Docker Hub) | Canonical upstream exists; project source bind-mounted at runtime |
-| tensorrt | self-hosted GPU | Yes (CUDA) | `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC) | Canonical upstream exists; project source bind-mounted at runtime |
+| Engine | Image source | Framework code |
+|---|---|---|
+| transformers | First-party `docker/Dockerfile.transformers` (flash-attention 3 included; no upstream provides it) | Bind-mounted at runtime |
+| vllm | Upstream `vllm/vllm-openai:<version>` (Docker Hub) | Bind-mounted at runtime |
+| tensorrt | Upstream `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC) | Bind-mounted at runtime |
 
-The principled rationale:
+For all three engines the `llenergymeasure` package is bind-mounted (via
+`-v <repo>:/llem-src` + `PYTHONPATH=/llem-src`), never baked into the image,
+so `src/` edits never invalidate an image layer. The transformers Dockerfile
+ships transformers plus FA2/FA3 plus the accelerate / bitsandbytes /
+sentencepiece toolchain and llem's non-engine runtime deps; vllm and tensorrt
+inherit everything they need from their upstream images.
 
-1. **vllm and tensorrt use upstream because canonical upstream exists.** Both
-   publish per-version images at stable refs that already include the engine
-   library plus its CUDA / torch substrate. Our project's value-add (the
-   `llenergymeasure` package + miner / introspector scripts) is bind-mounted
-   at `/app` with `PYTHONPATH=/app/src:/app -w /app` rather than baked into a
-   custom overlay. No first-party Dockerfile means no version drift between
-   our image and upstream's release cadence.
+## Building and publishing the transformers image
 
-2. **transformers needs a first-party image because no upstream provides
-   FA3-included transformers.** `pytorch/pytorch:2.5-cuda12.4-cudnn9-runtime`
-   has the CUDA + torch substrate but no transformers; `huggingface/transformers-pytorch-gpu`
-   has transformers but no FA3 (the hopper-extension build is niche and
-   compiled from source). `docker/Dockerfile.transformers` ships transformers
-   plus FA2 (PyPI wheel) plus FA3 (compiled from source) plus accelerate /
-   bitsandbytes / calflops / sentencepiece / einops pre-installed, plus
-   LLenergyMeasure's runtime non-engine deps (pydantic, typer, pyyaml,
-   platformdirs, nvidia-ml-py, numpy, pyarrow, tqdm, rich, python-dotenv,
-   filelock). The `llenergymeasure` package itself is NOT installed into the
-   image - it is bind-mounted at runtime via `-v <repo>:/llem-src` +
-   `PYTHONPATH=/llem-src`, identically to the vllm + tensorrt cells. This
-   keeps image rebuilds dependent only on the engine substrate, not on
-   project source edits, so `src/` changes never invalidate the FA3 layer.
+Because the flash-attention compile needs more memory than hosted CI runners
+have, CI never builds the transformers image. It is produced locally and
+promoted by a tag-copy, the same "produce locally, verify in CI" split the
+schema and rules follow:
 
-3. **Build once, consume many.** Build engine image is the single producer
-   of the transformers image; downstream workflows pull rather than rebuild.
-   CI builds the same production-equivalent image users get (`INSTALL_FA3`
-   defaults to `true` and is not overridden in any workflow). Cold builds
-   on a brand-new SSOT version still pay the FA3 compile (~30-60 min); warm
-   rebuilds reuse the GHA scope cache + the canonical `:latest` registry
-   cache and finish in a few minutes. The previous shape - engine-invariants
-   and engine-schemas each running their own buildx step against the same
-   per-version GHA scope - was prone to cache-write contention and observed
-   to deadlock at PR time on multi-GB layer writes.
+1. **Local build for development.** `make docker-build` builds the image on
+   your machine (warm rebuilds pull cache layers from GHCR and finish in a
+   few minutes).
+2. **Local seed for a bump.** `make docker-seed-transformers` builds the
+   runtime image and pushes it to the promotion-source ref
+   `transformers-cache:transformers-<VER>` (plus the build cache on
+   `transformers:latest`). Run it during a transformers bump session.
+3. **Merge-time promotion.** When the bump lands on main,
+   `publish-engine-image.yml` tag-copies the seeded image to the canonical
+   `transformers:transformers-<VER>` and `transformers:latest` tags via
+   `docker buildx imagetools create` (no rebuild). A missing seed fails the
+   promotion loudly.
+4. **Release build.** `docker-publish.yml` (called by `release.yml`) builds
+   the package-versioned release image on a hosted runner, warming off the
+   cache the seed exported.
 
-## CI pipeline ordering
-
-The engine-coupling pipeline lives in `engine-pipeline.yml`, a single
-orchestrator workflow with a coherent dependency graph. See
-[Architecture &gt; CI architecture](/explanation/architecture/ci-architecture) for the full
-topology, reusable-workflow contract, and expected-shape table.
-
-```mermaid
-flowchart LR
-    filter[filter]
-    token[mint-app-token]
-    build[build-transformers]
-    inv_tf[invariants-transformers]
-    sch_tf[schemas-transformers]
-    inv_other[invariants-others<br/>vllm + tensorrt matrix]
-    sch_other[schemas-others<br/>vllm + tensorrt matrix]
-    writeback[writeback<br/>aggregate; ONE git push]
-
-    filter --> build --> inv_tf
-    build --> sch_tf
-    filter --> inv_other
-    filter --> sch_other
-    token -.token.-> inv_tf
-    token -.token.-> sch_tf
-    token -.token.-> inv_other
-    token -.token.-> sch_other
-    inv_tf --> writeback
-    sch_tf --> writeback
-    inv_other --> writeback
-    sch_other --> writeback
-```
-
-When Renovate (or a maintainer) bumps `engine_versions/transformers/current.yaml`
-or `docker/Dockerfile.transformers`, the orchestrator fires:
-
-1. **`filter`** computes which cells to expand.
-2. **`mint-app-token`** mints one App token for the run (forwarded to cells).
-3. **`build-transformers`** builds the transformers image and pushes it to
-   `ghcr.io/<repo>/transformers-cache:transformers-<VERSION>` for the
-   downstream cells to pull. The buildcache (`:<VERSION>-buildcache`) is
-   exported via `cache-to: type=registry,mode=max`.
-4. **`invariants-transformers`** + **`schemas-transformers`** pull the
-   freshly built image and run probe + producer + classify-diff. Each
-   cell uploads a writeback artefact rather than pushing per-cell.
-5. **`writeback`** downloads all cell artefacts and performs ONE
-   `git push` per orchestrator run. Lenient gating preserves partial
-   availability: a cell that succeeded still lands its changes even if
-   another cell failed.
-
-When Renovate bumps `engine_versions/vllm/current.yaml` or
-`engine_versions/tensorrt/current.yaml`, the corresponding cells (in the
-`invariants-others` / `schemas-others` matrix) fire and pull upstream
-images directly (no first-party build).
-
-A weekly scheduled run (Monday 05:37 UTC) fires `build-transformers`
-with `--no-cache` for drift detection - if the resulting layer cache
-diverges from the prior `:<VERSION>-buildcache`, that surfaces external
-dependency drift (apt repo, PyPI wheel re-publish, base image silent
-update) that layer caching alone wouldn't catch. Cells skip on schedule
-(no PR to write back to).
-
-`publish-engine-image.yml` remains a separate workflow on `push: main`,
-tag-copying `:transformers-<VERSION>` to canonical `:latest` for
-production consumers.
+See [Pipeline architecture: transformers image lifecycle](/explanation/architecture/pipeline-architecture#transformers-image-lifecycle)
+for the full diagram and [CI architecture](/explanation/architecture/ci-architecture)
+for the workflow topology.
 
 ## Running tests
 
@@ -254,7 +195,7 @@ docker run --rm \
   -v "$(pwd)":/repo -w /repo \
   --entrypoint pytest \
   llenergymeasure:transformers-${VER} \
-  tests/unit/scripts/engine_producers/test_transformers_miner.py
+  tests/unit/engines/test_engine_protocol.py
 ```
 
 ## Why this contract

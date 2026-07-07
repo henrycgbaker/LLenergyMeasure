@@ -1,10 +1,10 @@
 # Parameter Discovery and Config Validation
 
-This document covers the runtime config-validation pipeline: how a user's `ExperimentConfig` is evaluated against the validated invariant corpus, what the loader grammar means, and what happens when a rule fires.
+This document covers the runtime config-validation path: how a user's `ExperimentConfig` is evaluated against the engine's shipped rules, what the loader grammar means, and what happens when a rule fires.
 
-**Audience:** end users debugging a rejected config; extenders writing new corpus rules; anyone wanting to understand the error messages llem produces.
+**Audience:** end users debugging a rejected config; contributors writing new rules; anyone wanting to understand the error messages llem produces.
 
-For the compile-time side (how the corpus is built), see [miner-pipeline.md](/contributing/miner-pipeline).
+For how the shipped rules are produced, see [Local knowledge production](/contributing/miner-pipeline).
 
 ---
 
@@ -12,7 +12,7 @@ For the compile-time side (how the corpus is built), see [miner-pipeline.md](/co
 
 Engine initialisation is expensive: model weights load from disk, CUDA contexts initialise, and TensorRT-LLM may need to compile an engine (minutes). A rejected config discovered after two minutes of initialisation wastes GPU time.
 
-llem evaluates each submitted `ExperimentConfig` against a pre-computed corpus of validation rules before the engine starts. Invalid combinations are caught at config-parse time - milliseconds, not minutes.
+llem evaluates each submitted `ExperimentConfig` against the engine's shipped `rules.yaml` before the engine starts. Invalid combinations are caught at config-parse time - milliseconds, not minutes.
 
 ---
 
@@ -22,25 +22,24 @@ llem evaluates each submitted `ExperimentConfig` against a pre-computed corpus o
 flowchart TB
     user[User submits config<br/>YAML / CLI flags / Python API]
     pydantic[ExperimentConfig parsed by Pydantic]
-    apply[_apply_invariants &#40;config/models.py&#41;<br/>EngineInvariantsLoader&#40;&#41;.load_invariants&#40;engine&#41;]
-    inv[(EngineInvariants<br/>engine + schema_version + invariants&lsqb;&rsqb;)]
+    apply[_apply_rules &#40;config/models.py&#41;<br/>EngineRulesLoader&#40;&#41;.load_rules&#40;engine&#41;]
+    rules[(EngineRules<br/>engine + schema_version + rules&lsqb;&rsqb;)]
 
-    user --> pydantic --> apply --> inv
+    user --> pydantic --> apply --> rules
 
-    inv --> rule[For each Invariant:<br/>try_match&#40;config&#41;]
+    rules --> rule[For each Rule:<br/>try_match&#40;config&#41;]
     rule -->|None - predicate did not fire| skip([skip])
     rule -->|RuleMatch fired| match{severity?}
 
     match -->|error| err["raise ValueError<br/>(Pydantic surfaces as<br/>ValidationError)"]
-    match -->|warn| warn[emit warning to user]
-    match -->|dormant| dormant["annotate config<br/>log: field X will be silently<br/>ignored / normalised"]
+    match -->|dormant| dormant["record normalised_fields:<br/>the engine will silently ignore<br/>or coerce these fields"]
 ```
 
 ---
 
 ## The loader grammar
 
-The `match.fields` section of each corpus rule contains predicates expressed in a small domain-specific grammar. The loader's `evaluate_predicate()` function implements it.
+The `match.fields` section of each rule contains predicates expressed in a small domain-specific grammar. The loader's `evaluate_predicate()` function implements it.
 
 ### Grammar tree
 
@@ -152,33 +151,34 @@ match:
 
 ## Severity levels
 
-Each rule has a severity that determines how the loader responds when the predicate fires.
+Each rule has a severity that determines how the loader responds when the predicate fires. Severity is a closed two-value enum.
 
 | Severity | Engine behaviour | Loader behaviour | Example |
 |---|---|---|---|
-| `error` | The engine raises if the config is submitted as-is. | Raises `ValueError` before engine initialisation. Pydantic surfaces it as a `ValidationError`. Message template is rendered with `declared_value` substituted. | `num_beams (5) is not divisible by num_return_sequences (2)` |
-| `warn` | The engine announces a suboptimal setting but still proceeds. | Emits a warning to the user. | `temperature=0 with do_sample=True; engine will warn` |
-| `dormant` | The engine silently normalises or ignores the field. The user's declared value is not the effective value. | Annotates the config: "field X will be silently coerced by the engine to Y". | `seed=-1 will be normalised to None by the engine` |
+| `error` | The engine raises if the config is submitted as-is. | Raises `ValueError` before engine initialisation. Pydantic surfaces it as a `ValidationError`. The message template is rendered with `declared_value` substituted. | `num_beams (5) is not divisible by num_return_sequences (2)` |
+| `dormant` | The engine silently normalises or ignores the field. The user's declared value is not the effective value. | Records the rule's `normalised_fields` so the study planner can deduplicate configs that resolve to the same effective configuration. | `seed=-1 is normalised to None by the engine` |
+
+There is no `warn` severity: the study workflow records effective parameters separately, so a rule either changes what runs (rejects the config, or drives dedup) or it does not exist. Provenance metadata (`source`, `verified`) is carried per rule but never influences runtime behaviour.
 
 ### Dormant rules: the "silent surprise" class
 
-`dormant` rules are the most subtle. They describe configurations where the engine accepts the value but silently normalises it to something else. Without the corpus, the user would submit `seed=-1`, not see any error, and later discover the seed was ignored.
+`dormant` rules describe configurations where the engine accepts the value but silently normalises it to something else. Without a rule, the user would submit `seed=-1`, see no error, and later discover the seed was ignored.
 
-The `expected_outcome.normalised_fields` list in a dormant rule tells the loader which fields are affected. The fixpoint contract (`_fixpoint_test.py`) asserts that applying dormant rules to a config converges to a stable state - no two dormant rules should conflict by normalising the same field to different values under the same conditions.
+The `normalised_fields` list on a dormant rule names the canonical paths the engine drives back to their default. The sweep library-resolution dedup uses this to canonicalise field-inert configs: two configs that differ only in a dormant field resolve to the same effective configuration, so the GPU runs the cell once instead of twice.
 
 ---
 
 ## Error messages
 
-When a rule fires at `error` severity, the loader renders the rule's `message_template` using field values from the matched config.
+When a rule fires at `error` severity, the loader renders the rule's `message_template` using values from the matched config.
 
 Template substitution variables:
-- `{declared_value}` - the value of the triggering field.
-- `{effective_value}` - the normalised value (dormant rules only).
-- `{rule_id}` - the rule's identifier.
+- `{declared_value}` - the value of the triggering (subject) field.
+- `{effective_value}` - the normalised value (reserved for value-aliasing dormant cases; `None` otherwise).
+- `{invariant_id}` - the rule's identifier.
 - Any `match.fields` key - the actual field value.
 
-Example error message from the corpus:
+Example error message rendered from a rule:
 
 ```
 ValidationError: `diversity_penalty` is not 0.0 or `num_beam_groups` is
@@ -187,77 +187,53 @@ not 1, triggering group beam search. In this generation mode,
 be identical.
 ```
 
-If no template is available, the loader falls back to `[{rule_id}] <no message template>` rather than raising silently.
+If a template references a missing key, the loader falls back to `[{invariant_id}] <template>` rather than raising at user-facing time.
 
 ---
 
-## Library version resolution
+## Schema version resolution
 
-The validated YAML carries the engine version the corpus was validated against. When the loader loads the validated YAML:
+Each `rules.yaml` carries a `schema_version` and the `engine_version` it was verified against. When the loader parses the file:
 
-1. It checks `schema_version` major against `SUPPORTED_MAJOR_VERSION`. A major-version mismatch raises `UnsupportedSchemaVersionError` (the package is incompatible with the installed corpus version).
-2. It parses all rules with strict enum validation: unknown `added_by` values raise `UnknownAddedByError`; unknown severity values raise `UnknownSeverityError`.
+1. It checks the `schema_version` major against the loader's supported major. A mismatch raises `UnsupportedSchemaVersionError` (the installed package is incompatible with the shipped rules format).
+2. It parses all rules with strict enum validation: an unknown `severity` raises `UnknownSeverityError`, and unknown provenance values (`source` / `verified`) raise `UnknownSourceError` / `UnknownVerifiedError`.
 
-The loader does not check whether the currently installed engine library version matches the corpus version. That alignment is enforced at corpus-build time: the dispatcher (`engine_versions/_dispatcher.load_producer`) selects which vendored producer to run for the SSOT-pinned library version, and the probe (`scripts/_drift.py`) verifies the producer's LANDMARKS resolve under the live library before mining proceeds. Runtime alignment is enforced via the engine's own constructor validation.
+The loader does not check whether the installed engine library version matches the rules' `engine_version`. That alignment is verified at production time (the rules are absorbed against the pinned source) and enforced at runtime by the engine's own constructor validation.
 
 ---
 
 ## Gap reporting
 
-When a user submits a config combination that no rule in the corpus addresses, no validation fires - the combination passes through. This is by design (the corpus is recall-first, not exhaustive), but it means some invalid combinations are caught only by the engine constructor.
+When a user submits a config combination that no rule addresses, no validation fires - the combination passes through. This is by design (the rule set is recall-first, not exhaustive), so some invalid combinations are caught only by the engine constructor.
 
-Gap reporting surfaces these at the `dormant` level or via a separate gap-detection pipeline. When a `gap_detected: true` group appears in experiment results, it indicates the config combination triggered a library-side normalisation that the corpus did not yet describe.
-
-Extending the corpus to cover new gap classes is done by adding a miner cluster or a `manual_seed` rule. See [extending-miners.md](/contributing/extending-miners).
-
----
-
-## Proposed vs validated: the two-file structure
-
-Each engine ships two YAML files:
-
-- **`invariants.proposed.yaml`** - the human-reviewable source of truth
-  (git-tracked), regenerated by the miners. Declares `expected_outcome`.
-- **`invariants.validated.yaml`** - the CI-validated overlay produced by
-  replaying each invariant against the live library. Records observed outcomes.
-
-| Aspect | Proposed YAML corpus | Validated YAML corpus |
-|---|---|---|
-| Audience | Human-reviewable | Machine-parsed only |
-| Status | Source of truth (git-tracked) | Output of `validate_invariants.py` |
-| Carries | Declared `expected_outcome` | Observed outcomes (CI run) |
-| Read by | `validate_invariants.py` | `loader.py` at runtime |
-| Regenerated by | Miners | `validate_invariants.py` |
-| Path | `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` | `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` |
-
-The loader overlays validated observations onto the proposed corpus so downstream consumers see CI-validated truth. When the validated YAML is absent (e.g. in a local development environment without a validation run), the loader falls back to the proposed corpus alone.
+The `rules-coverage` advisory (see [CI architecture](/explanation/architecture/ci-architecture#engine-rules-check)) reports validator sites in the engine source that no shipped rule covers, so maintainers can see where the rule set is thin. Closing a gap means absorbing the missing constraint into `rules.yaml` (see [Local knowledge production](/contributing/miner-pipeline)).
 
 ---
 
 ## Loader API
 
-The loader is in `src/llenergymeasure/config/engine_invariants/loader.py`.
+The loader is in `src/llenergymeasure/config/engine_rules/loader.py`.
 
 ```python
-from llenergymeasure.config.engine_invariants.loader import (
-    EngineInvariants,
-    EngineInvariantsLoader,
-    Invariant,
-    InvariantMatch,
+from llenergymeasure.config.engine_rules.loader import (
+    EngineRules,
+    EngineRulesLoader,
+    Rule,
+    RuleMatch,
 )
 
-# Load the corpus for an engine
-loader = EngineInvariantsLoader()
-corpus = loader.load_invariants("transformers")
+# Load the shipped rules for an engine
+loader = EngineRulesLoader()
+engine_rules = loader.load_rules("transformers")
 
 # Match against a config
-for inv in corpus.invariants:
-    match = inv.try_match(config)
+for rule in engine_rules.rules:
+    match = rule.try_match(config)
     if match is not None:
-        print(inv.severity, inv.render_message(match))
+        print(rule.severity, rule.render_message(match))
 ```
 
-For higher-level use cases, see `llenergymeasure.api.report_gaps.load_engine_invariants`, which loads all configured engines via a shared loader. Per-instance caching in `EngineInvariantsLoader` ensures the corpus JSON is parsed once per engine per process; tests can construct a fresh loader for isolation.
+At runtime, `_apply_rules` in `src/llenergymeasure/config/models.py` does exactly this for the config's own engine. `EngineRulesLoader` caches per engine, so `rules.yaml` is parsed once per engine per process; tests can construct a fresh loader for isolation.
 
 ---
 
@@ -265,31 +241,27 @@ For higher-level use cases, see `llenergymeasure.api.report_gaps.load_engine_inv
 
 ### "ValidationError: `num_beams` is not divisible by `num_beam_groups`"
 
-Invariant: `transformers_beam_search_num_beams_not_divisible_by_num_beam_groups`
+Rule: `transformers_beam_search_num_beams_not_divisible_by_num_beam_groups`
 
 The transformers engine requires `num_beams` to be an exact multiple of `num_beam_groups` for group beam search. Set both to compatible values: e.g. `num_beams=4, num_beam_groups=2`.
 
 ### "ValidationError: `diversity_penalty` is not 0.0 or `num_beam_groups` is not 1..."
 
-Invariant: `transformers_beam_search_diversity_penalty_eq_0p0`
+Rule: `transformers_beam_search_diversity_penalty_eq_0p0`
 
 When `num_beams > 1` and `num_beam_groups > 1` (group beam search mode), `diversity_penalty` must be greater than 0.0. Set `diversity_penalty` to a positive value, or disable group beam search.
 
-### "Warning: field `seed` will be silently normalised to None by the engine"
-
-Invariant: a dormant rule matching `seed=-1`. The engine treats -1 as "no seed" and normalises it to `None`. Set an explicit non-negative seed, or leave the field unset.
-
 ### "UnsupportedSchemaVersionError"
 
-The validated YAML in the installed package was built with a schema major version the current loader does not understand. This indicates a library/package version mismatch. Update LLenergyMeasure to the version that matches your installed engines.
+The shipped `rules.yaml` in the installed package uses a schema major version the current loader does not understand. This indicates a library/package version mismatch. Update LLenergyMeasure to the version that matches your installed engines.
 
 ---
 
 ## See also
 
 - [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview
-- [invariants-corpus-format.md](/reference/invariants-corpus-format) - corpus YAML format reference
-- [miner-pipeline.md](/contributing/miner-pipeline) - how the corpus is built
-- [extending-miners.md](/contributing/extending-miners) - adding new rules
+- [Local knowledge production](/contributing/miner-pipeline) - how the rules are produced
+- [CI architecture](/explanation/architecture/ci-architecture) - what CI verifies
 - [engines.md](/reference/engines/configuration) - engine configuration reference
 - [troubleshooting.md](/how-to/troubleshoot) - general troubleshooting guide
+```

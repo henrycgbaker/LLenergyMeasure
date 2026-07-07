@@ -2,13 +2,13 @@
 
 This is the canonical glossary for LLenergyMeasure: definitions for both the
 measurement domain (energy, GPU, LLM inference) and the project's own
-terminology (engines, runners, invariants). Cross-references use anchors within
+terminology (engines, runners, validation rules). Cross-references use anchors within
 this page.
 
-For canonical naming decisions internal to the engine-invariants pipeline
-(e.g. "invariant" not "rule", "validated corpus" not "vendored corpus"), see
-[Contributing: miner pipeline](/contributing/miner-pipeline) and
-[Reference: invariants corpus format](/reference/invariants-corpus-format).
+For terminology specific to how the per-engine validation rules are produced
+and consumed, see
+[Contributing: local knowledge production](/contributing/miner-pipeline) and
+[Parameter discovery](/explanation/architecture/parameter-discovery).
 
 ---
 
@@ -277,7 +277,7 @@ CPU+DRAM contributions.
 
 ### Runner
 
-Two senses in this codebase: (1) llem execution mode (`local` or `docker`); (2) GitHub Actions CI runner (`self-hosted`, `ubuntu-latest`). Both are correct in their contexts; readers should disambiguate from surrounding prose.
+Two senses in this codebase: (1) llem execution mode (`local` or `docker`); (2) GitHub Actions CI runner (`ubuntu-latest`). Both are correct in their contexts; readers should disambiguate from surrounding prose.
 
 **llem runner** - the execution context that wraps the [engine](#engine). LLenergyMeasure has two runner types:
 
@@ -290,7 +290,7 @@ Two senses in this codebase: (1) llem execution mode (`local` or `docker`); (2) 
 Set via `runners:` in the study YAML. Multi-engine studies without Docker
 are blocked at config load time.
 
-**CI runner** - the GitHub Actions compute host (e.g. `self-hosted` GPU runner, `ubuntu-latest`). Used in contributing and CI documentation only.
+**CI runner** - the GitHub Actions compute host (`ubuntu-latest`; CI is hosted-CPU only and never runs the engines). Used in contributing and CI documentation only.
 
 ---
 
@@ -374,14 +374,15 @@ different workloads.
 
 ## V
 
-### Validated corpus
+### Validation rules
 
-The engine-invariants corpus after the validation-CI gate has replayed each
-invariant against the live library. Stored as `invariants.validated.yaml`. Not
-to be confused with the proposed corpus (`invariants.proposed.yaml`), which
-contains declared expectations before CI observation. See
-[Reference: invariants corpus format](/reference/invariants-corpus-format)
-for the full format specification.
+The per-engine set of validation constraints, shipped as
+`src/llenergymeasure/engines/<engine>/rules.yaml`. Each rule is read from the
+engine source and verified against the engine before it ships. At runtime the
+loader evaluates them against a submitted config to reject invalid combinations
+and to flag values the engine silently normalises. See
+[Parameter discovery](/explanation/architecture/parameter-discovery) for the
+loader grammar and severities.
 
 ---
 
@@ -393,11 +394,12 @@ See [thermal stabilisation / warmup](#thermal-stabilisation--warmup).
 
 ---
 
-## Engine-invariants pipeline terminology
+## Engine validation rules terminology
 
-For terminology specific to the miner pipeline, validation gate, and corpus
-naming, see [Contributing: miner pipeline](/contributing/miner-pipeline) and
-[Reference: invariants corpus format](/reference/invariants-corpus-format).
+For terminology specific to how the per-engine validation rules are produced
+and consumed, see
+[Contributing: local knowledge production](/contributing/miner-pipeline) and
+[Parameter discovery](/explanation/architecture/parameter-discovery).
 Those pages are the canonical definition source and must be consulted before
 introducing new names in code or documentation.
 

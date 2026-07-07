@@ -401,17 +401,19 @@ behaviour. No additional setup is needed when SGLang ships.
 
 See [installation.md - Fast rebuilds and first-pull cost](/how-to/install#fast-rebuilds-and-first-pull-cost)
 for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback)
-and the three-ref breakdown of what the build/push pipeline publishes
-(`-buildcache` ref, PR-time `transformers-cache:VER` ref, canonical
-`transformers:VER`/`transformers:latest`).
+and the ref breakdown of what the local seed and the promotion publish
+(`transformers-cache:transformers-<VER>` promotion source, its
+`-buildcache` companion, and the canonical
+`transformers:transformers-<VER>`/`transformers:latest`).
 
 Operator notes:
 
-- `cache-to` writes only to the `:transformers-<VER>-buildcache` ref (separate
-  from any runnable image), so storage growth is bounded by SSOT version drift.
+- `make docker-seed-transformers` writes the `:transformers-<VER>-buildcache`
+  ref (separate from the runnable promotion-source image), so storage growth
+  is bounded by version drift.
 - Inspect what's cached on the active builder: `docker buildx du --builder llem-builder`.
 - If the cache is corrupt, recreate it with `make docker-builder-rm && make docker-builder-setup`.
-  The remote buildcache ref will repopulate on the next CI build.
+  The remote buildcache ref repopulates on the next local seed.
 
 ### Image labels
 
@@ -532,22 +534,20 @@ llem run experiment.yaml --skip-preflight
 
 ## Keeping Engine Schemas Fresh
 
-When you update an engine version (by bumping the SSOT in
-`engine_versions/<engine>/current.yaml`), the discovered parameter schemas must be
-regenerated. This happens automatically via the
-[Parameter Discovery Pipeline](/contributing/schema-refresh): `engine-pipeline.yml`
-covers all three engines via per-job `if:` gating - the vllm + tensorrt
-cells fire on `pull_request: paths`; the transformers cell fires via
-`workflow_run` after `publish-engine-image.yml` completes (which itself
-chains off `engine-pipeline.yml` via workflow_run - the build/push
-split exists so push failures don't burn the FA3 compile). For manual
-bumps, run:
+When you update an engine version (by bumping the pin in
+`engine_versions/<engine>/current.yaml`), the discovered parameter schema must
+be regenerated. This is a local maintainer step - CI verifies the committed
+schema but never runs discovery itself. Run:
 
 ```bash
-./scripts/refresh_discovered_schemas.sh <engine>
+./scripts/refresh_discovered_schemas.sh <engine>     # equivalently: make discover-schema ENGINE=<engine>
 ```
 
-See [Parameter Discovery Pipeline](/contributing/schema-refresh) for the full workflow.
+The script runs discovery inside the engine's Docker image, writes
+`src/llenergymeasure/engines/<engine>/schema.discovered.json`, and prints the
+diff for you to review and commit. See
+[Schema refresh (operations guide)](/contributing/schema-refresh) for the full
+workflow and the `schema-version-check` CI guard.
 
 ---
 

@@ -4,7 +4,6 @@ const sidebarsContributing: SidebarsConfig = {
   contributingSidebar: [
     'development',
     'miner-pipeline',
-    'extending-miners',
     'schema-refresh',
     'release-process',
     'preview-deployments',

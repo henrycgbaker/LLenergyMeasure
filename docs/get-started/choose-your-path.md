@@ -40,8 +40,9 @@ for the research-gap context.
 
 Start at [Architecture: engine extensibility](/explanation/architecture/engine-extensibility)
 for the harness-plugin contract your engine needs to satisfy. Then see
-[Contributing: extending miners](/contributing/extending-miners) for
-writing a parameter miner and wiring it into the validation pipeline.
+[Contributing: local knowledge production](/contributing/miner-pipeline) for
+producing the engine's validation rules and wiring them into the config
+validation.
 
 ---
 
