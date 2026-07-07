@@ -1,20 +1,23 @@
 name: Publish engine image (transformers)
 
-# Promotes the transformers runtime image (cache repo → canonical repo)
-# via tag-copy. NO rebuild - the PR that just merged validated the
-# image at transformers-cache:<VER>; this workflow creates new tag refs
-# pointing at the same image digest. Production users get the
-# bit-identical image that CI validated before merge.
+# Promotes the transformers runtime image (cache repo -> canonical repo)
+# via tag-copy. NO rebuild - this workflow creates new tag refs pointing
+# at the same image digest, so production users get the bit-identical
+# image that was seeded before the merge.
+#
+# The promotion source at transformers-cache:transformers-<VER> is seeded
+# LOCALLY by the maintainer (make docker-seed-transformers) as part of
+# the transformers bump session, before or alongside the bump PR. CI
+# never builds this image: the flash-attention compile needs more memory
+# than hosted runners have, and image production is a local maintainer
+# task in the same way rule and schema production is.
 #
 # Triggered ONLY on push to main when current.yaml or Dockerfile changed
-# (i.e. a Renovate-driven version bump or a Dockerfile edit landed). On
-# such pushes, the cache image at transformers-cache:<VER> is already
-# in the registry from the merging PR's build. We just promote it.
-#
-# NOT triggered on pull_request: PR-time runtime image lives at
-# transformers-cache:<VER> (build-engine-image.yml pushes it on PR);
-# downstream update-engine-{invariants,schemas} cells consume it
-# directly. Production tags shouldn't move during PR cycles.
+# (i.e. a version bump or a Dockerfile edit landed). If the seed was
+# forgotten, the tag-copy step fails loudly (no source manifest at
+# transformers-cache:transformers-<VER>); recovery is to seed locally
+# and re-run via workflow_dispatch. Production tags never move during
+# PR cycles.
 
 on:
   push:
@@ -24,9 +27,9 @@ on:
       - "docker/Dockerfile.transformers"
   workflow_dispatch:
     # Ad-hoc trigger for re-promotion (e.g. recovering from a transient
-    # registry failure, or promoting after a manual dispatch of
-    # build-engine-image.yml). Reads current.yaml current_version + tag-copies
-    # the existing transformers-cache:<VER> to canonical tags.
+    # registry failure, or promoting after a late local seed). Reads
+    # current.yaml current_version + tag-copies the existing
+    # transformers-cache:<VER> to canonical tags.
     inputs:
       version:
         description: "Override version (defaults to current.yaml current_version)"
@@ -74,9 +77,8 @@ jobs:
         # `docker buildx imagetools create` is a registry-side metadata
         # operation: creates new tag refs pointing at the existing image
         # digest. No rebuild, no layer copy. The promoted image is
-        # bit-identical to the one validated by
-        # update-engine-{invariants,schemas} on the PR cycle that just
-        # merged - exactly what we want for a production release.
+        # bit-identical to the locally seeded one - exactly what we want
+        # for a production release. Fails here if the seed is missing.
         env:
           VER: ${{ steps.version.outputs.version }}
           REPO: ghcr.io/${{ github.repository }}

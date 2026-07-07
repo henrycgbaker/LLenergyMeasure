@@ -1,0 +1,153 @@
+name: Engine rules check
+
+# Verifies that the committed engine-knowledge artifacts stay internally
+# consistent, on hosted CPU runners only. Producing that knowledge (reading an
+# engine's source into rule and schema snapshots) is a local maintainer task;
+# this workflow never mines. It only checks that what is already committed
+# still hangs together:
+#
+#   1. config-codegen (gating): the generated config models under
+#      src/llenergymeasure/engines/<engine>/config.py are byte-identical to
+#      what the committed schema snapshot regenerates. A stale config fails.
+#
+#   2. rules-coverage (advisory): scans the pinned engine source for
+#      validator sites and reports the sites no shipped rule covers. It never
+#      fails the job, so coverage gaps are visible without blocking.
+#
+# transformers is absent from the coverage report on purpose: its config
+# validation uses imperative post-init idioms that the validator-site model
+# does not recognise, so a coverage number there would be noise. It is still
+# covered by the gating codegen check.
+
+on:
+  pull_request:
+    paths:
+      - 'src/llenergymeasure/engines/*/config.py'
+      - 'src/llenergymeasure/engines/*/rules.yaml'
+      - 'src/llenergymeasure/config/engine_rules/**'
+      - 'engine_versions/*/current.yaml'
+      - 'engine_versions/*/*/outputs/curated.yaml'
+      - 'engine_versions/*/*/outputs/schema.discovered.json'
+      - 'scripts/engine_producers/**'
+      - 'scripts/rules_coverage.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/engine-rules-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-rules-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  config-codegen:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [transformers, vllm, tensorrt]
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-rules-3.12
+          python-version: "3.12"
+      - name: Install project
+        run: uv sync --dev
+      - name: Resolve pinned version
+        id: pin
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          version=$(uv run python -c "import yaml; print(yaml.safe_load(open('engine_versions/${ENGINE}/current.yaml'))['library']['current_version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Pinned ${ENGINE} version: $version"
+      - name: Verify generated config matches committed snapshot
+        env:
+          ENGINE: ${{ matrix.engine }}
+          VERSION: ${{ steps.pin.outputs.version }}
+        run: |
+          uv run python scripts/engine_producers/regen_engine_configs.py \
+            --engine "$ENGINE" --version "$VERSION" --check
+
+  rules-coverage:
+    name: rules-coverage (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: vllm
+            package_dir: vllm
+            source_repo: https://github.com/vllm-project/vllm.git
+          - engine: tensorrt
+            package_dir: tensorrt_llm
+            source_repo: https://github.com/NVIDIA/TensorRT-LLM.git
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-rules-3.12
+          python-version: "3.12"
+      - name: Install project
+        run: uv sync --dev
+      - name: Resolve pinned version
+        id: pin
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          version=$(uv run python -c "import yaml; print(yaml.safe_load(open('engine_versions/${ENGINE}/current.yaml'))['library']['current_version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Pinned ${ENGINE} version: $version"
+      - name: Restore cached engine source
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: engine-source
+          key: engine-source-${{ matrix.engine }}-${{ steps.pin.outputs.version }}
+      - name: Fetch pinned engine source
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          SOURCE_REPO: ${{ matrix.source_repo }}
+          PACKAGE_DIR: ${{ matrix.package_dir }}
+          VERSION: ${{ steps.pin.outputs.version }}
+        run: |
+          # Blobless sparse checkout of only the engine's Python package tree.
+          # The full source archive for these projects is large (hundreds of MB
+          # for the compiled-kernel engine) and is not affordable to pull on
+          # every relevant PR; the coverage scan only reads the .py package.
+          rm -rf engine-source
+          git clone --filter=blob:none --no-checkout --depth 1 \
+            --branch "v${VERSION}" "$SOURCE_REPO" engine-source
+          git -C engine-source sparse-checkout init --cone
+          git -C engine-source sparse-checkout set "$PACKAGE_DIR"
+          git -C engine-source checkout
+      - name: Report uncovered validator sites (advisory)
+        env:
+          ENGINE: ${{ matrix.engine }}
+          PACKAGE_DIR: ${{ matrix.package_dir }}
+        run: |
+          src="engine-source/${PACKAGE_DIR}"
+          set +e
+          uv run python scripts/rules_coverage.py \
+            --engine "$ENGINE" --source-root "$src" > coverage.txt 2>&1
+          rc=$?
+          set -e
+          cat coverage.txt
+          {
+            echo "### Rules coverage: ${ENGINE} (advisory)"
+            echo ''
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "rules_coverage advisory exit code: $rc (job stays green regardless)"
