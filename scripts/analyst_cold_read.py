@@ -47,9 +47,16 @@ from typing import Any
 
 import yaml
 
+# Make the top-level ``scripts`` package importable whether this is run as a
+# plain script (``python scripts/analyst_cold_read.py``) or imported as a module.
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from scripts._candidate_pool import pool_path, slug, unverified_verdict, write_pool  # noqa: E402
+
 logger = logging.getLogger("analyst_cold_read")
 
-SCHEMA_VERSION = "1.0.0"
 SOURCE = "analyst_cold_read"
 
 DEFAULT_MODEL = "qwen2.5-coder:32b"
@@ -453,10 +460,6 @@ def resolve_citation(
     return {"file": relpath, "lines": [start, end], "quote": "\n".join(file_lines[start - 1 : end])}
 
 
-def _slug(text: str) -> str:
-    return re.sub(r"_+", "_", re.sub(r"[^0-9a-zA-Z]+", "_", text)).strip("_").lower()
-
-
 def build_candidate(
     chunk: Chunk,
     sources: dict[str, list[str]],
@@ -505,7 +508,7 @@ def build_candidate(
     )
     digest = hashlib.sha1(claim.encode()).hexdigest()[:8]
     candidate: dict[str, Any] = {
-        "id": f"{engine}_analyst_{severity}_{_slug('_'.join(_leaf(f) for f in fields))}_{digest}",
+        "id": f"{engine}_analyst_{severity}_{slug('_'.join(_leaf(f) for f in fields))}_{digest}",
         "engine": engine,
         "engine_version": version,
         "severity": severity,
@@ -525,7 +528,7 @@ def build_candidate(
         "rationale": str(rule.get("rationale") or ""),
         "severity_suggestion": suggestion,
     }
-    candidate["verdict"] = {"status": "unverified", "tier": None, "date": None, "evidence": None}
+    candidate["verdict"] = unverified_verdict()
     return candidate
 
 
@@ -678,11 +681,6 @@ _POOL_HEADER = (
 )
 
 
-def _pool_path(pool_root: Path, engine: str, version: str) -> Path:
-    version_dir = "v" + re.sub(r"[^0-9a-zA-Z]+", "_", version).strip("_")
-    return pool_root / engine / version_dir / "candidates" / "analyst_cold_read.yaml"
-
-
 def write_candidates(
     candidates: list[dict[str, Any]],
     pool_root: Path,
@@ -694,20 +692,17 @@ def write_candidates(
     run_date: str,
 ) -> Path:
     """Write the version-scoped candidate pool file and return its path."""
-    document = {
-        "schema_version": SCHEMA_VERSION,
-        "source": SOURCE,
-        "engine": engine,
-        "engine_version": version,
-        "model": model,
-        "samples": samples,
-        "generated_at": run_date,
-        "candidates": candidates,
-    }
-    path = _pool_path(pool_root, engine, version)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    body = yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
-    path.write_text(_POOL_HEADER + body)
+    path = pool_path(pool_root, engine, version, "analyst_cold_read.yaml")
+    write_pool(
+        path,
+        source=SOURCE,
+        engine=engine,
+        version=version,
+        generated_at=run_date,
+        candidates=candidates,
+        header=_POOL_HEADER,
+        extra={"model": model, "samples": samples},
+    )
     return path
 
 
