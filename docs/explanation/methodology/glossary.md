@@ -7,7 +7,7 @@ this page.
 
 For terminology specific to how the per-engine validation rules are produced
 and consumed, see
-[Contributing: local knowledge production](/contributing/miner-pipeline) and
+[Contributing: local knowledge production](/contributing/knowledge-production) and
 [Parameter discovery](/explanation/architecture/parameter-discovery).
 
 ---
@@ -398,7 +398,7 @@ See [thermal stabilisation / warmup](#thermal-stabilisation--warmup).
 
 For terminology specific to how the per-engine validation rules are produced
 and consumed, see
-[Contributing: local knowledge production](/contributing/miner-pipeline) and
+[Contributing: local knowledge production](/contributing/knowledge-production) and
 [Parameter discovery](/explanation/architecture/parameter-discovery).
 Those pages are the canonical definition source and must be consulted before
 introducing new names in code or documentation.

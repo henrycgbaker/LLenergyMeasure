@@ -253,7 +253,7 @@ For the full runtime data flow, see [parameter discovery](/explanation/architect
 
 ## See also
 
-- [Invariants corpus format](/reference/invariants-corpus-format) - the parallel format spec for the validation-rules artefact
+- The parallel validation-rules artefact is `src/llenergymeasure/engines/<engine>/rules.yaml`, reviewed directly in source
 - [Architecture overview](/explanation/architecture/architecture-overview) - how the discovered schema fits the engine-knowledge products
 - [Parameter curation](/explanation/architecture/parameter-curation) - how the discovered schema relates to the hand-authored Pydantic config models
 - [Parameter discovery](/explanation/architecture/parameter-discovery) - runtime config validation

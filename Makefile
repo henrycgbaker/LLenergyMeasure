@@ -103,33 +103,29 @@ clean: ## Remove local caches and build artefacts
 
 # =============================================================================
 # Generated documentation
-#   docs-all regenerates every SSOT-derived artefact under docs/.
-#   docs-check verifies the artefacts are up to date (CI gate).
+#   docs-all regenerates every SSOT-derived artefact under docs/. Generators
+#   must be deterministic (no wall-clock timestamps); git history is the
+#   timestamp.
+#   docs-check runs docs-all and fails if any committed generated doc drifts.
 #   docs-generate is the smaller, website-only subset depended on by serve/build.
 # =============================================================================
 
-docs-all: ## Regenerate every SSOT-derived doc (CLI, config, invariants, schema, curation, invalid combos, API)
+docs-all: ## Regenerate every SSOT-derived doc (CLI, config, schema, curation, invalid combos, API)
 	uv run python scripts/generate_invalid_combos_doc.py
-	uv run python scripts/generate_config_docs.py
-	uv run python scripts/generate_cli_reference.py
+	uv run python scripts/generate_config_docs.py --output docs/reference/study-config.md
+	uv run python scripts/generate_cli_reference.py --output docs/reference/cli.md
 	@for engine in transformers vllm tensorrt; do \
-		uv run python scripts/generate_invariants_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md; \
 		uv run python scripts/generate_schema_doc.py --engine $$engine --out docs/reference/engines/schema-$$engine.md; \
 	done
 	uv run python scripts/generate_curation_doc.py
 	uv run python scripts/generate_api_docs.py
 	@echo "All generated docs refreshed"
 
-docs-check: ## Verify generated docs are up to date (used by CI)
-	@uv run python scripts/generate_config_docs.py > /dev/null
-	@uv run python scripts/generate_cli_reference.py > /dev/null
-	@uv run python scripts/generate_invalid_combos_doc.py > /dev/null
-	@for engine in transformers vllm tensorrt; do \
-		uv run python scripts/generate_invariants_doc.py --engine $$engine --out docs/reference/engines/invariants-$$engine.md > /dev/null; \
-		uv run python scripts/generate_schema_doc.py --engine $$engine --out docs/reference/engines/schema-$$engine.md > /dev/null; \
-	done
-	@uv run python scripts/generate_curation_doc.py > /dev/null
-	@uv run python scripts/generate_api_docs.py > /dev/null
+docs-check: docs-all ## Regenerate SSOT docs and fail if the committed copies drift
+	@git diff --exit-code -- docs/reference/study-config.md docs/reference/cli.md \
+		'docs/reference/engines/schema-*.md' 'docs/reference/engines/curation-*.md' \
+		docs/reference/engines/invalid-combos.md \
+		|| (echo "Generated docs are stale. Commit the regenerated files above." && exit 1)
 	@echo "Generated docs are up to date"
 
 # Rediscover a vendored engine schema by running introspection inside the
@@ -421,7 +417,7 @@ llem-clean-cache: ## Remove the HuggingFace model cache volume (forces re-downlo
 # =============================================================================
 # Docs site (Docusaurus)
 #   Source content lives in docs/; site infra lives in website/.
-#   For a complete SSOT regen (config, CLI, invariants, schema, curation,
+#   For a complete SSOT regen (config, CLI, schema, curation,
 #   invalid combos, API) use `make docs-all`. docs-generate covers only the
 #   API reference subset the website depends on at serve/build time.
 # =============================================================================

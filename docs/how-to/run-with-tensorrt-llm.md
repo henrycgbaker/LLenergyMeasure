@@ -160,4 +160,4 @@ walkthrough.
 - [Tutorial: Your first measurement](/tutorials/first-measurement) - start here if you've never run `llem`
 - [How to: run with vLLM](/how-to/run-with-docker-vllm) - sister recipe for the vLLM engine
 - [Reference: engine configuration](/reference/engines/configuration) - every TensorRT-LLM-specific config field
-- [Reference: invariants (TensorRT)](/reference/engines/invariants-tensorrt) - verified parameter constraints
+- [Reference: invalid parameter combinations](/reference/engines/invalid-combos) - verified parameter constraints across engines

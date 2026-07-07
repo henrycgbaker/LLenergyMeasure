@@ -4,7 +4,7 @@ This document covers the runtime config-validation path: how a user's `Experimen
 
 **Audience:** end users debugging a rejected config; contributors writing new rules; anyone wanting to understand the error messages llem produces.
 
-For how the shipped rules are produced, see [Local knowledge production](/contributing/miner-pipeline).
+For how the shipped rules are produced, see [Local knowledge production](/contributing/knowledge-production).
 
 ---
 
@@ -206,7 +206,7 @@ The loader does not check whether the installed engine library version matches t
 
 When a user submits a config combination that no rule addresses, no validation fires - the combination passes through. This is by design (the rule set is recall-first, not exhaustive), so some invalid combinations are caught only by the engine constructor.
 
-The `rules-coverage` advisory (see [CI architecture](/explanation/architecture/ci-architecture#engine-rules-check)) reports validator sites in the engine source that no shipped rule covers, so maintainers can see where the rule set is thin. Closing a gap means absorbing the missing constraint into `rules.yaml` (see [Local knowledge production](/contributing/miner-pipeline)).
+The `rules-coverage` advisory (see [CI architecture](/explanation/architecture/ci-architecture#engine-rules-check)) reports validator sites in the engine source that no shipped rule covers, so maintainers can see where the rule set is thin. Closing a gap means absorbing the missing constraint into `rules.yaml` (see [Local knowledge production](/contributing/knowledge-production)).
 
 ---
 
@@ -260,7 +260,7 @@ The shipped `rules.yaml` in the installed package uses a schema major version th
 ## See also
 
 - [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview
-- [Local knowledge production](/contributing/miner-pipeline) - how the rules are produced
+- [Local knowledge production](/contributing/knowledge-production) - how the rules are produced
 - [CI architecture](/explanation/architecture/ci-architecture) - what CI verifies
 - [engines.md](/reference/engines/configuration) - engine configuration reference
 - [troubleshooting.md](/how-to/troubleshoot) - general troubleshooting guide
