@@ -270,6 +270,23 @@ def test_union_dedups_identical_rules_across_samples(fake_tree: Any) -> None:
     assert drops == {"dedup_collapsed": 4}  # 3 samples x 2 rules -> 2 kept, 4 collapsed
 
 
+def test_same_claim_at_shifted_window_collapses_to_one_id(fake_tree: Any) -> None:
+    # The id digests the claim (fields, file, predicate), not the line window:
+    # one claim re-proposed at a shifted cite is one candidate, first cite kept.
+    _, sources, chunks = fake_tree
+    shifted = dict(_N_RULE, citation="sampling_params.py:6")
+
+    def stub(prompt: str, temperature: float) -> Any:
+        return _gen(_rules_json(_N_RULE, shifted))
+
+    candidates, drops = acr.run_analyst(
+        chunks, sources, stub, engine="vllm", version="0.19.1", model="m", samples=1, run_date="d"
+    )
+    assert len(candidates) == 1
+    assert drops == {"dedup_collapsed": 1}
+    assert candidates[0]["citation"]["lines"] == [1, 6]  # window of the first cite, line 3
+
+
 def test_cap_hit_splits_and_reruns() -> None:
     # One 400-line file: the temp-0 pass on the whole chunk hits the cap, so the
     # chunk is halved and each half re-run instead of accepting truncation.

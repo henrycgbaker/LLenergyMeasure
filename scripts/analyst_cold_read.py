@@ -491,9 +491,19 @@ def build_candidate(
         return "unresolved_citation"
 
     match_fields, normalised = predicate_to_match(kind, fields, predicate, severity)
-    digest = hashlib.sha1(
-        f"{severity}|{sorted(match_fields)}|{citation['file']}|{predicate}".encode()
-    ).hexdigest()[:8]
+    # The id digests the claim - severity, fields, file, whitespace/case-normalised
+    # predicate, deliberately NOT the line window, which shifts across bumps. The
+    # union dedup keys on this id, so "one candidate per id" is the pool contract:
+    # re-proposals of one claim at shifted windows collapse, first citation wins.
+    claim = "|".join(
+        [
+            severity,
+            ",".join(sorted(match_fields)),
+            citation["file"],
+            re.sub(r"\s+", "", predicate.lower()),
+        ]
+    )
+    digest = hashlib.sha1(claim.encode()).hexdigest()[:8]
     candidate: dict[str, Any] = {
         "id": f"{engine}_analyst_{severity}_{_slug('_'.join(_leaf(f) for f in fields))}_{digest}",
         "engine": engine,
@@ -517,21 +527,6 @@ def build_candidate(
     }
     candidate["verdict"] = {"status": "unverified", "tier": None, "date": None, "evidence": None}
     return candidate
-
-
-def dedup_key(candidate: dict[str, Any]) -> str:
-    """Union key: two samples proposing the same constraint at the same cite collapse."""
-    citation = candidate.get("citation") or {}
-    predicate = (candidate.get("provenance") or {}).get("predicate", "")
-    return "|".join(
-        [
-            candidate["severity"],
-            ",".join(sorted(candidate["match"]["fields"])),
-            str(citation.get("file")),
-            str(citation.get("lines")),
-            re.sub(r"\s+", "", predicate.lower()),
-        ]
-    )
 
 
 # Sampling orchestration.
@@ -609,11 +604,10 @@ def run_analyst(
             if isinstance(candidate, str):
                 drops[candidate] += 1
                 continue
-            key = dedup_key(candidate)
-            if key in seen:
+            if candidate["id"] in seen:
                 drops["dedup_collapsed"] += 1
                 continue
-            seen.add(key)
+            seen.add(candidate["id"])
             candidates.append(candidate)
     return candidates, drops
 
