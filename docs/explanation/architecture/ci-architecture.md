@@ -2,8 +2,9 @@
 
 This document describes the CI surface - what runs, when, why, and how the
 pieces compose. It complements [Pipeline architecture](/explanation/architecture/pipeline-architecture)
-(per-engine ordering) and [Miner pipeline](/contributing/miner-pipeline)
-(mining internals); this file focuses on the workflow shapes themselves.
+(per-engine ordering) and [Local knowledge production](/contributing/knowledge-production)
+(how the committed artifacts are produced); this file focuses on the workflow
+shapes themselves.
 
 CI verifies committed artifacts; it does not produce them. Reading an engine's
 source into the committed rule and schema snapshots is a local maintainer task
@@ -19,7 +20,7 @@ The repo uses two workflow patterns, picked per-concern:
 | Pattern | When | Examples |
 |---|---|---|
 | **Reusable workflow** (`workflow_call`) | a body invoked by another workflow | `docker-publish.yml`, `gpu-ci.yml` |
-| **Monolithic-direct** | one concern, triggered directly | `ci.yml`, `engine-rules-check.yml`, `security.yml`, `release.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml` |
+| **Monolithic-direct** | one concern, triggered directly | `ci.yml`, `engine-rules-check.yml`, `security.yml`, `release.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml`, `docs.yml`, `issue-type-labeller.yml` |
 
 A monolithic-direct workflow may still fan out over a matrix (see
 `engine-rules-check.yml`, which runs one concern across the engines). Reusable
@@ -168,7 +169,7 @@ machinery without saving meaningful time.
 ## Cancel-in-progress policy
 
 - `true` for read-only / stateless workflows: `ci.yml`, `engine-rules-check.yml`,
-  `gpu-ci.yml`, `security.yml`.
+  `gpu-ci.yml`, `security.yml`, `docs.yml`.
 - `false` for workflows that run long-cached builds: `publish-engine-image.yml`.
 
 Rationale: a read-only check can be cancelled and superseded freely by a newer
@@ -182,7 +183,7 @@ file is edited. Two mechanisms together provide complete coverage:
 
 1. **Runtime self-test where possible.** Workflows using `paths:` filters
    include their own file in the filter, so an edit to the workflow runs it.
-   `engine-rules-check.yml` and `ci.yml` both list their own path.
+   `engine-rules-check.yml`, `ci.yml`, and `docs.yml` all list their own path.
 2. **Shape validation for everything else.** Workflows that cannot self-test at
    runtime (`workflow_call`-only, label-only, tag-only, or closed-PR triggers)
    are covered by the `actionlint` job in `ci.yml`, which fires on edits to any
@@ -195,6 +196,7 @@ Workflows that cannot self-test at runtime:
 - `docker-publish.yml` - `workflow_call` / `workflow_dispatch` only.
 - `auto-release.yml` - `pull_request: closed` only.
 - `release.yml` - `push: tags` only.
+- `issue-type-labeller.yml` - `issues` events only.
 
 ## Conventions
 
@@ -239,6 +241,7 @@ A future engine (e.g. SGLang) is absorbed in a few places:
 
 - [Pipeline architecture](/explanation/architecture/pipeline-architecture) -
   per-engine pipeline ordering.
-- [Miner pipeline](/contributing/miner-pipeline) - mining internals (local).
+- [Local knowledge production](/contributing/knowledge-production) - how the
+  committed rule and schema artifacts are produced locally.
 - [Engine configuration reference](/reference/engines/configuration) - per-engine
   configuration surface.

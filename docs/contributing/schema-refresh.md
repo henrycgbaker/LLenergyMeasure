@@ -15,7 +15,7 @@ For the format spec of the `schema.discovered.json` artefact, see
 [schema discovered format](/reference/schema-discovered-format).
 
 For the rules-side counterpart, see
-[Local knowledge production](/contributing/miner-pipeline).
+[Local knowledge production](/contributing/knowledge-production).
 
 ---
 
@@ -107,5 +107,5 @@ The schema-discovery surface a new engine adds is small:
 
 - [Architecture overview](/explanation/architecture/architecture-overview) - the two engine-knowledge products
 - [Schema discovered format](/reference/schema-discovered-format) - the JSON envelope spec
-- [Local knowledge production](/contributing/miner-pipeline) - the rules-side operations guide
+- [Local knowledge production](/contributing/knowledge-production) - the rules-side operations guide
 - [Docker setup](/how-to/docker-setup) - building engine images locally

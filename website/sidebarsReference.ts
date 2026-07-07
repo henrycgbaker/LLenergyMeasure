@@ -6,7 +6,6 @@ const sidebarsReference: SidebarsConfig = {
     'study-config',
     'dataset-format',
     'results-schema',
-    'invariants-corpus-format',
     'schema-discovered-format',
     {
       type: 'category',
@@ -50,15 +49,6 @@ const sidebarsReference: SidebarsConfig = {
             'engines/curation-transformers',
             'engines/curation-vllm',
             'engines/curation-tensorrt',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Invariants (mined)',
-          items: [
-            'engines/invariants-transformers',
-            'engines/invariants-vllm',
-            'engines/invariants-tensorrt',
           ],
         },
         'engines/invalid-combos',

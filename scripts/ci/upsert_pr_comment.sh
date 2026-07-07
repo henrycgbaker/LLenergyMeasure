@@ -22,7 +22,7 @@
 set -euo pipefail
 
 : "${PR:?PR number required}"
-: "${MARKER:?MARKER required (e.g. 'bot-id: invariants-vllm-diff')}"
+: "${MARKER:?MARKER required (e.g. 'bot-id: rules-check-vllm')}"
 : "${REPO:=${GITHUB_REPOSITORY:-}}"
 : "${REPO:?REPO required (owner/name)}"
 MODE="${MODE:-upsert}"

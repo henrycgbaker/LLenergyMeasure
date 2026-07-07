@@ -10,7 +10,6 @@ Run: python scripts/generate_invalid_combos_doc.py
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -28,10 +27,11 @@ def generate_markdown() -> str:
         "# Invalid Parameter Combinations",
         "",
         "> Auto-generated from config validators and test results.",
-        f"> Last updated: {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
         "",
         "This document lists parameter combinations that will fail validation or runtime.",
         "The tool validates these at config load time and provides clear error messages.",
+        "The full verified rule set per engine lives at",
+        "`src/llenergymeasure/engines/<engine>/rules.yaml`.",
         "",
         "## Config Validation Errors",
         "",

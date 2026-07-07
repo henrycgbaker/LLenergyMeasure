@@ -384,8 +384,8 @@ Maps to `tensorrt_llm.SamplingParams`. `top_k` uses TRT-LLM's
 ## Validation rules
 
 The Pydantic models enforce these rules at config-load time. The full
-catalogue of invalid combinations, including engine-runtime invariants
-mined from upstream libraries, is in
+catalogue of invalid combinations, including engine-runtime constraints
+verified against upstream libraries, is in
 [invalid-combos.md](invalid-combos.md).
 
 ### Cross-engine
@@ -561,9 +561,6 @@ preset values (`models.py:405-433`).
   [curation-vllm.md](curation-vllm.md),
   [curation-tensorrt.md](curation-tensorrt.md) - which engine
   parameters are explicitly modelled vs forwarded via `extra="allow"`.
-- [invariants-transformers.md](invariants-transformers.md),
-  [invariants-vllm.md](invariants-vllm.md),
-  [invariants-tensorrt.md](invariants-tensorrt.md) - mined runtime
-  invariants per engine.
 - [invalid-combos.md](invalid-combos.md) - catalogue of rejected
-  parameter combinations.
+  parameter combinations. The full verified rule set per engine lives at
+  `src/llenergymeasure/engines/<engine>/rules.yaml`.

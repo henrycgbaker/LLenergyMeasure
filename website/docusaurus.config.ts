@@ -217,7 +217,6 @@ const config: Config = {
             {label: 'Study config', to: '/reference/study-config'},
             {label: 'Dataset format', to: '/reference/dataset-format'},
             {label: 'Results schema', to: '/reference/results-schema'},
-            {label: 'Invariants corpus format', to: '/reference/invariants-corpus-format'},
             {label: 'Schema discovered format', to: '/reference/schema-discovered-format'},
             {label: 'Library API', to: '/reference/library/run_experiment'},
             {label: 'Engines', to: '/reference/engines/configuration'},
@@ -244,7 +243,7 @@ const config: Config = {
           to: ROUTES.contributing,
           items: [
             {label: 'Development', to: '/contributing/development'},
-            {label: 'Local knowledge production', to: '/contributing/miner-pipeline'},
+            {label: 'Local knowledge production', to: '/contributing/knowledge-production'},
             {label: 'Schema refresh', to: '/contributing/schema-refresh'},
             {label: 'Release process', to: '/contributing/release-process'},
             {label: 'Preview deployments', to: '/contributing/preview-deployments'},

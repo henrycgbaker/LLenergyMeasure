@@ -1,10 +1,11 @@
 # Invalid Parameter Combinations
 
 > Auto-generated from config validators and test results.
-> Last updated: 2026-07-03 18:41 UTC
 
 This document lists parameter combinations that will fail validation or runtime.
 The tool validates these at config load time and provides clear error messages.
+The full verified rule set per engine lives at
+`src/llenergymeasure/engines/<engine>/rules.yaml`.
 
 ## Config Validation Errors
 

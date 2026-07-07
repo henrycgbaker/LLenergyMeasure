@@ -113,7 +113,7 @@ and sometimes a GPU):
   reads the engine source into candidate rules, verifies them against the
   engine, and promotes the confirmed ones into
   `src/llenergymeasure/engines/<engine>/rules.yaml`. See
-  [Local knowledge production](/contributing/miner-pipeline).
+  [Local knowledge production](/contributing/knowledge-production).
 
 All three artifacts are committed and ship inside the wheel.
 
