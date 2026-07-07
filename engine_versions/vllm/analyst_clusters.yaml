@@ -17,8 +17,6 @@
 #   - a platforms/*.py cluster is ADDED: it removes the 5-entry structural
 #     ceiling (the platform-gated constraints the file-scoped readers otherwise
 #     structurally cannot see) and is ordinary guard code the model reads well.
-schema_version: 1
-engine: vllm
 clusters:
   sampling:
     - sampling_params.py

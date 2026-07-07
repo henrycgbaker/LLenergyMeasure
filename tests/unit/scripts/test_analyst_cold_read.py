@@ -95,6 +95,18 @@ def test_build_chunks_is_deterministic(fake_tree: Any) -> None:
     assert chunks[0].class_names() == ["SamplingParams"]
 
 
+def test_load_sources_dedups_overlapping_patterns(tmp_path: Path) -> None:
+    # A file matched by two patterns in one cluster is read once and chunked once,
+    # not cold-read twice.
+    (tmp_path / "sampling_params.py").write_text(_FIXTURE_SRC)
+    cluster_files, sources = acr.load_sources(
+        tmp_path, {"sampling": ["sampling_params.py", "*.py"]}
+    )
+    assert cluster_files["sampling"] == ["sampling_params.py"]
+    assert list(sources) == ["sampling_params.py"]
+    assert [c.chunk_id for c in acr.build_chunks(cluster_files, sources)] == ["sampling.0"]
+
+
 def test_prompt_enumerates_class_checklist(fake_tree: Any) -> None:
     _, _, chunks = fake_tree
     prompt = acr.render_prompt(chunks[0], "vllm", "0.19.1")

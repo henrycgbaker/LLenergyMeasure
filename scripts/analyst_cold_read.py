@@ -54,6 +54,8 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts._candidate_pool import pool_path, slug, unverified_verdict, write_pool  # noqa: E402
+from scripts._engine_constructors import leaf_of  # noqa: E402
+from scripts.engine_producers._current import current_path, load_current  # noqa: E402
 
 logger = logging.getLogger("analyst_cold_read")
 
@@ -112,9 +114,12 @@ class Segment:
 
 @dataclass(frozen=True)
 class Chunk:
-    """One prompt's worth of source: one or more segments under a cluster."""
+    """One prompt's worth of source: one or more segments under a cluster.
 
-    cluster: str
+    ``chunk_id`` embeds the cluster name (``"<cluster>.<n>"``); split children
+    keep their parent's id, so the cluster need not be tracked separately.
+    """
+
     chunk_id: str
     segments: list[Segment]
 
@@ -163,12 +168,12 @@ def _pack_cluster(cluster: str, segments: list[Segment]) -> list[Chunk]:
     for seg in segments:
         seg_chars = len(seg.numbered())
         if buf and buf_chars + seg_chars > CHUNK_CHAR_BUDGET:
-            chunks.append(Chunk(cluster, f"{cluster}.{len(chunks)}", buf))
+            chunks.append(Chunk(f"{cluster}.{len(chunks)}", buf))
             buf, buf_chars = [], 0
         buf.append(seg)
         buf_chars += seg_chars
     if buf:
-        chunks.append(Chunk(cluster, f"{cluster}.{len(chunks)}", buf))
+        chunks.append(Chunk(f"{cluster}.{len(chunks)}", buf))
     return chunks
 
 
@@ -204,10 +209,7 @@ def split_chunk(chunk: Chunk) -> list[Chunk] | None:
         right_start = seg.start_line + mid - OVERLAP_LINES
         right = Segment(seg.filename, right_start, seg.lines[mid - OVERLAP_LINES :])
         halves = [[left], [right]]
-    return [
-        Chunk(chunk.cluster, f"{chunk.chunk_id}.{tag}", segs)
-        for tag, segs in zip(("a", "b"), halves, strict=True)
-    ]
+    return [Chunk(chunk.chunk_id, segs) for segs in halves]
 
 
 # Prompt: single exhaustive-extraction instruction with a class-coverage checklist.
@@ -327,7 +329,7 @@ def salvage_rules(text: str) -> list[dict[str, Any]]:
         obj = json.loads(text)
         rules = obj.get("rules", obj) if isinstance(obj, dict) else obj
         return [r for r in rules if isinstance(r, dict)] if isinstance(rules, list) else []
-    except (json.JSONDecodeError, AttributeError):
+    except json.JSONDecodeError:
         pass
 
     # Truncated output: the wrapper object never closes, but the complete rule
@@ -361,10 +363,6 @@ def salvage_rules(text: str) -> list[dict[str, Any]]:
 
 
 # LLM rule -> unified candidate.
-
-
-def _leaf(field: str) -> str:
-    return re.sub(r"^self\.", "", field).rsplit(".", 1)[-1]
 
 
 def _coerce_scalar(token: str) -> Any:
@@ -401,8 +399,8 @@ def predicate_to_match(
     falls back to a ``present`` spec (the field still grounds the citation, the
     raw predicate is kept in provenance). Returns (match_fields, normalised).
     """
-    normalised = [_leaf(f) for f in fields] if severity == "dormant" else []
-    leaves = [_leaf(f) for f in fields]
+    normalised = [leaf_of(f) for f in fields] if severity == "dormant" else []
+    leaves = [leaf_of(f) for f in fields]
 
     if (
         severity == "error"
@@ -481,7 +479,7 @@ def build_candidate(
     the ladder - a warn-only guard never raises at construction, so the
     candidate stays unconfirmed and is never promoted. Do not "fix" it here.
     """
-    fields = [f for f in (rule.get("fields") or []) if isinstance(f, str) and _leaf(f)]
+    fields = [f for f in (rule.get("fields") or []) if isinstance(f, str) and leaf_of(f)]
     if not fields:
         return "no_field"
     kind = str(rule.get("kind") or "other")
@@ -508,7 +506,7 @@ def build_candidate(
     )
     digest = hashlib.sha1(claim.encode()).hexdigest()[:8]
     candidate: dict[str, Any] = {
-        "id": f"{engine}_analyst_{severity}_{slug('_'.join(_leaf(f) for f in fields))}_{digest}",
+        "id": f"{engine}_analyst_{severity}_{slug('_'.join(leaf_of(f) for f in fields))}_{digest}",
         "engine": engine,
         "engine_version": version,
         "severity": severity,
@@ -635,11 +633,11 @@ def load_manifest(engine: str) -> dict[str, list[str]]:
 
 def resolve_version(engine: str) -> str:
     """Resolve the pinned engine version from engine_versions/<engine>/current.yaml."""
-    path = ENGINE_VERSIONS / engine / "current.yaml"
-    document = yaml.safe_load(path.read_text())
-    version = (document.get("library") or {}).get("current_version")
+    document = load_current(engine)
+    library = document.get("library")
+    version = library.get("current_version") if isinstance(library, dict) else None
     if not version:
-        raise ValueError(f"{path} has no library.current_version")
+        raise ValueError(f"{current_path(engine)} has no library.current_version")
     return str(version)
 
 
@@ -666,7 +664,8 @@ def load_sources(
                 rel = path.relative_to(source_root).as_posix()
                 if rel not in sources:
                     sources[rel] = path.read_text().splitlines()
-                resolved.append(rel)
+                if rel not in resolved:  # a file matched by two patterns is read once, chunked once
+                    resolved.append(rel)
         if resolved:
             cluster_files[cluster] = resolved
     return cluster_files, sources
