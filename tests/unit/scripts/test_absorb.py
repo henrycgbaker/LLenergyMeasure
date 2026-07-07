@@ -186,7 +186,8 @@ def test_recall_interrogation_only_probes_unrediscovered_rules() -> None:
 
 def test_unknown_interrogation_neither_mints_nor_retires_and_rule_ships() -> None:
     """A garbage LLM reply is UNKNOWN, not ABSENT (must-fix 1): the rule is
-    neither minted nor retired, and still ships on an unverified probe verdict."""
+    neither minted nor flagged for retirement, and still ships on an unverified
+    probe verdict."""
     missing = _rule("gone", "error", {"vllm.engine_params.foo": {"<": 1}})
     minted, absent = ab.recall_interrogation(
         "vllm",
@@ -198,11 +199,11 @@ def test_unknown_interrogation_neither_mints_nor_retires_and_rule_ships() -> Non
         "2026-07-07",
     )
     assert minted == []  # UNKNOWN mints nothing ...
-    assert absent == []  # ... and does NOT retire (no parse-failure conflation)
+    assert absent == []  # ... and raises no proposal (no parse-failure conflation)
 
     new_rules, delta = ab.promote("vllm", "0.19.1", "2026-07-07", [missing], {}, [], set(), absent)
     assert "gone" in {r["id"] for r in new_rules}  # unverified verdict -> kept untouched
-    assert "gone" not in delta.retired
+    assert "gone" not in delta.proposed_retirements
 
 
 def test_rule_source_prefers_full_path_suffix_over_basename(tmp_path: Path) -> None:
@@ -231,7 +232,7 @@ def _promote_matrix(signed_off: set[str] | None = None) -> tuple[list[dict[str, 
     old_rules = [
         _rule("old_direct", "error", {"vllm.sampling_params.temperature": {"<": 0}}),
         _rule("old_family", "error", {"vllm.sampling_params.top_p": {">": 1}}),
-        _rule("old_retired", "error", {"vllm.engine_params.foo": {"<": 1}}),
+        _rule("old_absent", "error", {"vllm.engine_params.foo": {"<": 1}}),
         _rule("old_unconfirmed", "error", {"vllm.engine_params.baz": {"<": 1}}),
         _rule(
             "old_residue", "dormant", {"vllm.sampling_params.seed": -1}, normalised_fields=["seed"]
@@ -240,7 +241,7 @@ def _promote_matrix(signed_off: set[str] | None = None) -> tuple[list[dict[str, 
     verdicts = {
         "old_direct": _verdict("confirmed"),
         "old_family": _verdict("unconfirmed"),
-        "old_retired": _verdict("unconfirmed"),
+        "old_absent": _verdict("unconfirmed"),
         "old_unconfirmed": _verdict("unconfirmed"),
         "old_residue": _verdict("unprobeable"),
     }
@@ -263,7 +264,9 @@ def _promote_matrix(signed_off: set[str] | None = None) -> tuple[list[dict[str, 
         verdicts,
         union,
         signed_off or set(),
-        ["old_retired"],
+        # ABSENT on an unconfirmed rule AND on a probe-confirmed rule: annotation
+        # only, so the confirmed one must still ship.
+        ["old_absent", "old_direct"],
     )
 
 
@@ -272,12 +275,16 @@ def test_promotion_matrix_dispositions() -> None:
     shipped = {r["id"] for r in new_rules}
 
     assert "old_direct" in shipped  # confirmed directly -> survives verbatim
+    assert "old_direct" in delta.proposed_retirements  # ABSENT never overrides the probe
     assert "old_family" in shipped  # a confirmed pool candidate on its family kept it alive
     assert "vllm_new" in shipped  # brand-new confirmed family -> added with pool id
-    assert "old_retired" not in shipped and "old_retired" in delta.retired
-    # unconfirmed but NOT declared absent -> sign-off residue, never a silent drop
+    # ABSENT is an annotation, never a disposition: the unconfirmed rule lands in
+    # residue (withheld pending sign-off) and is listed as a retirement proposal.
+    assert "old_absent" not in shipped and "old_absent" in delta.residue
+    assert delta.proposed_retirements == ["old_absent", "old_direct"]
+    # unconfirmed and NOT declared absent -> residue too, but with no proposal
     assert "old_unconfirmed" not in shipped and "old_unconfirmed" in delta.residue
-    assert "old_unconfirmed" not in delta.retired
+    assert "old_unconfirmed" not in delta.proposed_retirements
     assert "old_residue" not in shipped and "old_residue" in delta.residue
     assert "vllm_top_p" not in shipped  # rediscovery, not an add (family already shipped)
     assert "vllm_pooled" not in shipped  # unconfirmed candidate stays pooled
@@ -298,6 +305,23 @@ def test_promotion_residue_ships_only_when_signed_off() -> None:
     assert "old_residue" in shipped
     assert shipped["old_residue"]["provenance"]["verified"] == "human"
     assert "old_residue" not in delta.residue
+
+
+def test_signoff_entry_carries_absent_annotation(tmp_path: Path) -> None:
+    """An interrogation-ABSENT residue rule is annotated as a retirement proposal
+    in the sign-off file; the maintainer decides, the tool never drops it."""
+    old = {
+        "r_absent": _rule("r_absent", "error", {"vllm.engine_params.foo": {"<": 1}}),
+        "r_plain": _rule("r_plain", "error", {"vllm.engine_params.baz": {"<": 1}}),
+    }
+    delta = ab.Delta()
+    delta.residue = ["r_absent", "r_plain"]
+    ab.write_signoff(tmp_path, delta, old, {"r_absent"})
+    rows = yaml.safe_load((tmp_path / "absorb_signoff.yaml").read_text())["residue"]
+    by_id = {r["id"]: r for r in rows}
+    assert by_id["r_absent"]["interrogation"] == "absent"
+    assert by_id["r_absent"]["human_confirmed"] is False
+    assert "interrogation" not in by_id["r_plain"]
 
 
 def test_candidate_to_rule_shape() -> None:
