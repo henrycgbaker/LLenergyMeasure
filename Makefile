@@ -2,7 +2,7 @@
 .PHONY: format lint lint-fix typecheck check
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
-.PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
+.PHONY: discover-schema discover-schemas-all
 .PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage
 .PHONY: package-check
 .PHONY: docker-smoke
@@ -139,17 +139,6 @@ discover-schemas-all: ## Rediscover all three engine schemas in sequence
 	./scripts/refresh_discovered_schemas.sh vllm
 	./scripts/refresh_discovered_schemas.sh tensorrt
 	./scripts/refresh_discovered_schemas.sh transformers
-
-# Mine engine invariants. Sibling of discover-schema; both halves of the engine
-# knowledge SSOT pipeline.
-refresh-invariants: ## Mine invariants for one engine (ENGINE=vllm|tensorrt|transformers)
-	@test -n "$(ENGINE)" || (echo "Usage: make refresh-invariants ENGINE={vllm|tensorrt|transformers}" && exit 1)
-	./scripts/refresh_invariants.sh $(ENGINE)
-
-refresh-invariants-all: ## Mine invariants for all three engines in sequence
-	./scripts/refresh_invariants.sh vllm
-	./scripts/refresh_invariants.sh tensorrt
-	./scripts/refresh_invariants.sh transformers
 
 # Proposer S2: LLM analyst cold read of the pinned engine source into candidate
 # rules for the verification ladder. Needs a local Ollama daemon (owns the GPU)
