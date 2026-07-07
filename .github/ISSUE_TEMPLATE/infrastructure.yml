@@ -33,7 +33,7 @@ body:
     id: workflow_or_file
     attributes:
       label: Workflow file or run URL
-      placeholder: ".github/workflows/engine-pipeline.yml or https://github.com/.../actions/runs/N"
+      placeholder: ".github/workflows/engine-rules-check.yml or https://github.com/.../actions/runs/N"
     validations:
       required: true
   - type: textarea
