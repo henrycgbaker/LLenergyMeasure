@@ -372,5 +372,5 @@ your question.
 
 - [Methodology](/explanation/methodology/methodology) - warmup, baseline, thermal management
 - [What we measure](/explanation/methodology/what-we-measure) - energy / throughput / FLOPs
-- [Parameter discovery](/explanation/architecture/parameter-discovery) - how the engine-introspected parameter spaces are mined
+- [Parameter discovery](/explanation/architecture/parameter-discovery) - how a submitted config is validated against the engine's rules
 - [Comparison context](/explanation/methodology/comparison-context) - relationship to MLPerf, AI Energy Score

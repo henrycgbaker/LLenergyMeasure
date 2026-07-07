@@ -73,8 +73,8 @@ function WhatIsThis(): ReactNode {
             methodology-rigorous measurement harness into a coherent research
             tool that takes researchers&#39; specs and runs them. The tool
             discovers and exposes engine parameters programmatically, then uses
-            invariant mining and deduplication to keep the resulting parameter
-            space tractable for sweeps.
+            per-engine validation rules and deduplication to keep the resulting
+            parameter space tractable for sweeps.
           </p>
           <p className={styles.pitch}>
             While both the CLI and its underlying Python library can be used
@@ -246,24 +246,26 @@ function ExtensibilityBlock(): ReactNode {
           </p>
           <ul className={styles.contentList}>
             <li>
-              <strong>Programmatic introspection.</strong> Each engine&#39;s
+              <strong>Programmatic schema discovery.</strong> Each engine&#39;s
               full parameter surface is discovered automatically from
               Pydantic schemas and class signatures, not from a
-              hand-curated list.
+              hand-curated list, and compiled into a typed config model.
             </li>
             <li>
-              <strong>Invariant mining.</strong> Validation constraints -
-              which parameter combinations the engine rejects, warns on, or
-              silently normalises - are mined automatically from each
-              library&#39;s source via AST walking of validator methods and
-              dynamic probing. Mined rules deduplicate across engines by
-              fingerprint.
+              <strong>Validation rules.</strong> Which parameter combinations
+              the engine rejects, and which values it silently normalises,
+              are read from each library&#39;s source, verified against the
+              engine itself, and shipped as a per-engine rule set. The runtime
+              checks a config against these rules before spending GPU time, and
+              uses the silent-normalisation rules to deduplicate
+              measurement-equivalent configs.
             </li>
             <li>
-              <strong>Renovate-driven refresh.</strong> When an engine
-              version bumps upstream, CI re-runs introspection and mining
-              inside the new image, regenerates the schema and invariants
-              artefacts, and posts the diff for review.
+              <strong>Renovate-driven refresh.</strong> When an engine version
+              bumps upstream, Renovate opens a pull request; a maintainer
+              regenerates the schema and rules locally against the new source,
+              and CI verifies the committed artefacts are internally
+              consistent.
             </li>
           </ul>
           <p className={styles.pitch}>
@@ -273,8 +275,8 @@ function ExtensibilityBlock(): ReactNode {
             resolved plan is reviewable before any GPU time is spent.
           </p>
           <p>
-            <Link to="/explanation/architecture/engine-introspection-pipelines">
-              Engine introspection pipelines -&gt;
+            <Link to="/explanation/architecture/architecture-overview">
+              Engine knowledge architecture -&gt;
             </Link>
           </p>
         </div>

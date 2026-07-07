@@ -1,175 +1,140 @@
 ---
-title: Miner pipeline (debugging guide)
-description: Practical guide to debugging the invariant-mining pipeline. For the conceptual treatment of how the pipeline works, see the Architecture page.
+title: Local knowledge production (operations guide)
+description: How a maintainer produces and refreshes an engine's shipped validation rules locally, and how to debug the process.
 ---
 
-# Miner pipeline (debugging guide)
+# Local knowledge production (operations guide)
 
-This page is a practical debugging reference for the invariant-mining
-pipeline. For the conceptual treatment of how the pipeline works (and
-how it parallels the schema-discovery pipeline), see
-[engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines).
+This page is the practical guide to producing an engine's shipped
+validation rules (`rules.yaml`) on your own machine. Production is a local
+maintainer task - it needs the engine source and, for the in-engine probes, the
+engine's Docker image. CI never produces rules; it only verifies the committed
+bytes (see [CI architecture](/explanation/architecture/ci-architecture)).
 
-For the format spec of the corpus YAMLs the pipeline produces, see
-[invariants corpus format](/reference/invariants-corpus-format).
-
-For step-by-step instructions on adding a new miner for a new engine,
-see [extending miners](/contributing/extending-miners).
-
----
-
-## Where artefacts land on disk
-
-```
-src/llenergymeasure/engines/{engine}/
-├── invariants.proposed.yaml          Maintainer-seeded corpus, post-mining
-└── invariants.validated.yaml         CI-validated overlay, post-validate-replay
-
-src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
-├── {engine}_static_invariant_miner.yaml      Per-miner staging output (not committed)
-├── {engine}_dynamic_invariant_miner.yaml
-└── _failed_validation_{engine}.yaml          Quarantined rules
-
-scripts/engine_producers/
-├── _base.py                          Shared AST primitives, detectors, filters
-├── _current.py                       load_current() / safe_version() - SSOT loader + identifier-safe version mangler
-├── _pydantic_lift.py                 Lift module for Pydantic models
-├── _msgspec_lift.py                  Lift module for msgspec.Struct
-├── _dataclass_lift.py                Lift module for stdlib @dataclass + Literal
-├── _stub_factory.py                  Producer dispatcher shims (per-engine PEP 562 hooks)
-├── {engine}_static_invariant_miner.py        Shim: dispatches to engine_versions/<engine>/v<safe>/producers/
-├── {engine}_dynamic_invariant_miner.py       Shim (when applicable)
-├── {engine}_schema_introspector.py           Shim
-├── build_corpus.py                   Orchestration: merge + dedup + validate
-└── validate_invariants.py            Replays each rule against the live library
-
-engine_versions/{engine}/current.yaml          SSOT for library version (Renovate-writable input only)
-engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer modules
-├── static_invariant_miner.py
-├── dynamic_invariant_miner.py        (when applicable)
-└── schema_introspector.py
-```
-
-The two committed YAML files form a lifecycle pair: the miners write
-the proposed YAML, then `validate_invariants.py` replays each rule
-inside the engine's Docker image and writes the validated YAML. The
-runtime loader overlays validated observations onto the proposed
-corpus, so consumers see CI-confirmed behaviour where available and the
-declared shape elsewhere.
+For the conceptual treatment - the two knowledge products and why they are
+produced locally - see [Architecture overview](/explanation/architecture/architecture-overview).
+For the schema-side counterpart, see [Schema refresh](/contributing/schema-refresh).
 
 ---
 
-## How to read a probe-fail bot comment
+## The absorb workflow
 
-When a producer's landmark check fails, the cell skips the rest of the
-work and the bot posts a `probe-blocked` comment on the PR. The comment
-identifies which engine and which producer (`invariants` or `schemas`)
-the probe failed for, names the count of missing landmarks, and lists
-each missing dotted path. Collapsible blocks below the headline carry
-the `fingerprint_drift` and `landmarks_aliased` diagnostic lists when
-they are non-empty.
-
-The dispatcher's stderr log (visible in the probe step output) names
-which `v<safe>/producers/` archive it used. Two resolution routes:
-
-1. **Patch LANDMARKS in the fallback producer.** When the symbols still
-   resolve under both library versions, edit the LANDMARKS tuple (and
-   any related `_CLASS_TARGETS` / `_ASTTarget` definitions) in the
-   fallback producer to follow the upstream rename. One set of code
-   covers both versions.
-2. **Vendor a fresh `vN/producers/` directory.** When the library API
-   has genuinely diverged, create a new
-   `engine_versions/{engine}/v<safe(N)>/producers/` directory by
-   copying the fallback dir and patching against the new API. The
-   dispatcher's exact-match path then selects the new directory at the
-   bumped version.
-
-Per-producer granularity matters: `vllm/invariants` might still resolve
-under the bumped library while `vllm/schemas` does not, or vice versa.
-
----
-
-## File locations to grep when investigating
-
-| Symptom | Files to inspect first |
-|---|---|
-| Miner produces no rules for a new engine | `engine_versions/{engine}/v<safe>/producers/{static,dynamic}_invariant_miner.py` (does the file exist? imports succeed?); the dispatcher (`engine_versions/_dispatcher.py`) error message names the path to create when no exact-match archive AND no fallback is present at or below the SSOT-pinned version |
-| `MinerLandmarkMissingError` raised at import time | `engine_versions/{engine}/v<safe>/producers/*.py LANDMARKS` tuple (which dotted path is missing in the live library? `scripts/_drift.py --engine {engine} --producer invariants` will surface it) |
-| Validation gate fails on a previously-passing rule | `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (locate the rule by id) and `_staging/_failed_validation_{engine}.yaml` (which check failed: `positive_raises`, `message_template_match`, or `negative_does_not_raise`) |
-| Rule duplication or merge surprises | `scripts/engine_producers/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
-| Static miner missed a predicate | `scripts/engine_producers/_base.py` (shared detectors) and `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` (per-version surface) |
-| Dynamic miner inferred wrong template | `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` (predicate-inference logic); the seven templates live in the per-version module or `_base.py` depending on engine |
-| Drift between dispatcher LANDMARKS and live library | `scripts/_drift.py --engine {engine} --producer {invariants,schemas}` reports `landmarks_missing` (declared landmarks that don't resolve under the live library). Maintainer flow: patch LANDMARKS in the per-version producer module |
-
-The error classes (`MinerError`, `MinerLandmarkMissingError`) live in
-`scripts/engine_producers/_base.py` and are intentionally fail-loud: a
-previous extractor that swallowed `ImportError` and returned `[]`
-silently degraded into "no rules found", which masked broken
-extractors. Do not catch these without a specific reason.
-
----
-
-## Common debugging patterns
-
-### Probe passes locally but fails in CI
-
-The host has no engine libraries. Static analysis can run on the host
-because miners read source via `inspect.getsource()`, but dynamic
-miners and validation-replay must run inside the engine container. If
-the probe passes on your laptop and fails in CI, the symptom is
-usually a CUDA-aware import (the engine container has CUDA, your host
-does not).
-
-Run inside the container:
+`make absorb` is the one command a maintainer runs per engine-version bump. It
+drives the whole refresh loop for one engine's rules:
 
 ```bash
-docker run --rm -v "$PWD":/workspace -w /workspace \
-  llenergymeasure:{engine}-{version} \
-  python -m scripts._drift --producer invariants
+make absorb ENGINE=vllm SRC=engine-src/            # refresh the shipped rules
+make absorb ENGINE=vllm SRC=engine-src/ ARGS='--dry-run'   # report the delta, write nothing
 ```
 
-### Validation gate flips a previously-passing rule
+`SRC` is the engine's package source at the pinned version (the same tree the
+`rules-coverage` CI check does a blobless sparse checkout of). The stages are:
 
-The rule's `kwargs_positive` or `message_template` has drifted relative
-to the live library's emission. Inspect
-`_staging/_failed_validation_{engine}.yaml` to see which check
-diverged:
+1. **Cold read.** An assisted read of the pinned source proposes candidate
+   rules (`make analyst-cold-read`, which uses a local model).
+2. **Pool union.** The proposed candidates are merged with observed runtime
+   collisions and any manual seeds, then deduplicated into a version-scoped
+   working file (the "pool"). Pools are never shipped.
+3. **Recall interrogation.** For each shipped rule the fresh pool did not
+   rediscover, absorb asks "is this constraint still present?" and annotates
+   the answer.
+4. **Verification ladder.** Every candidate (and every shipped rule's precise
+   spec) is checked against the real engine. The engine is the arbiter.
+5. **Promotion.** The shipped `rules.yaml` is regenerated from the confirmed
+   candidates and the surviving shipped rules, byte-stably.
+6. **Review delta.** An old-versus-new diff is written for the maintainer to
+   review before committing.
 
-- `positive_raises` failed - library no longer raises for the
-  `kwargs_positive` shape. Either the library relaxed the constraint
-  (rule is stale; remove or update) or the kwargs are now insufficient
-  to trigger it (re-mine).
-- `message_template_match` failed - library raises but the message
-  template no longer matches. Update `message_template` to the new
-  static fragment.
-- `negative_does_not_raise` failed - library now raises for the
-  `kwargs_negative` shape. The negative example is no longer valid;
-  pick a different negative or remove the rule.
+Every stage is skippable, so a re-run resumes rather than redoes. The only
+`src/` file absorb writes is the shipped `rules.yaml`, via promotion.
 
-### Dynamic miner emits noisy false positives
+---
 
-Dynamic mining errs toward recall. The validation-CI gate is the
-filter, not the miner. If a noisy candidate cluster appears, look at
-`engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` for the cluster
-definition and tighten the value sets so the Cartesian product is
-smaller and more pointed.
+## The verification ladder
 
-### `manual_seed` rule lingers after the gap should have closed
+The ladder is why the rules are trustworthy: a candidate only ships if the
+engine confirms it.
 
-`manual_seed` is pipeline-failure debt: each entry should close as
-soon as the miner gains coverage for that pattern. Search for
-`added_by: manual_seed` in the proposed YAML and check whether the
-justification comment still applies. If the miner now covers the
-pattern, the rule should be re-mined (and `added_by` updated to the
-correct mechanical source) rather than left as `manual_seed`.
+| Tier | Check | Where it runs |
+|---|---|---|
+| 1 | **Citation** - the candidate's cited `file:line` resolves in the pinned source | Host (`make check-citations`) |
+| 2 | **Construction** - constructing the config with the offending values makes the engine raise (for `error` rules) | Engine Docker image (`make probe-candidates`) |
+| 3 | **Effective-config identity** - the engine silently normalises the declared value (for `dormant` rules) | Engine Docker image (`make probe-candidates`) |
+
+Survival is decided on the probe verdict's status, never the probe process exit
+code (which is `0` even when every verdict is an infrastructure error). A rule
+that the probe could not exercise this run is residue; it keeps shipping until a
+maintainer signs it off by hand. A rule never leaves the corpus automatically -
+a recall interrogation that comes back "absent" is a retirement proposal, not a
+drop.
+
+---
+
+## Individual stages for debugging
+
+Each stage has its own make target, so you can run and inspect them in
+isolation:
+
+| Target | Does | Produces |
+|---|---|---|
+| `make analyst-cold-read ENGINE=<e> SRC=<src>` | Cold-read the source into candidates | Candidate pool |
+| `make check-citations CANDIDATES=<f> SRC=<src>` | Ladder tier 1: confirm each citation resolves | Per-candidate citation verdict |
+| `make probe-candidates ENGINE=<e> CANDIDATES=<f>` | Ladder tiers 2-3: construction/identity probes in-engine | Per-candidate probe verdict |
+| `make rules-coverage ENGINE=<e> SRC=<src>` | Advisory: report validator sites no shipped rule covers | Coverage report |
+
+`make probe-candidates` and the in-engine ladder tiers need the engine's Docker
+image; the host-only stages (cold read, citation check, coverage) do not.
+
+---
+
+## Where artifacts land
+
+```
+src/llenergymeasure/engines/<engine>/
+├── rules.yaml                 Shipped validation rules (the only committed output)
+└── _staging/                  Working files (gitignored)
+
+engine_versions/<engine>/
+└── current.yaml               Pin for the engine library version (Renovate-writable)
+```
+
+The pool, ladder verdicts, sign-off file, and review report are working files
+under the staging area; only `rules.yaml` is committed.
+
+---
+
+## Debugging patterns
+
+### A candidate fails the citation check
+
+The cited `file:line` does not resolve in the source tree you passed as `SRC`.
+Confirm `SRC` points at the engine package at the pinned version (not a
+different checkout), then re-run `make check-citations`.
+
+### A candidate passes citation but fails the probe
+
+The construction/identity probe ran the engine and the engine did not behave as
+the candidate claimed - the constraint may be stale (the library relaxed it) or
+the candidate's values do not actually trigger it. Inspect the probe verdict for
+that candidate id; adjust or drop the candidate.
+
+### The probe reports infrastructure errors for every candidate
+
+The engine image is missing or the container could not start. Because survival
+keys on verdict status (not exit code), an all-`infra_error` run promotes
+nothing new and keeps the existing corpus. Fix the image, then re-run.
+
+### `rules-coverage` flags a validator site with no rule
+
+The rule set is recall-first, not exhaustive. Add the missing constraint by
+running `make absorb` again after seeding the candidate, or hand-author a seed
+for the pool. Coverage is advisory and never blocks a merge.
 
 ---
 
 ## See also
 
-- Architecture: [engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines) - how the pipeline works (conceptual)
-- Reference: [invariants corpus format](/reference/invariants-corpus-format) - corpus YAML format spec
-- Reference: [schema discovered format](/reference/schema-discovered-format) - the parallel pipeline's format spec
-- Contributing: [extending miners](/contributing/extending-miners) - adding a new engine miner
-- Contributing: [schema refresh (operations guide)](/contributing/schema-refresh) - the parallel pipeline's ops guide
-- Architecture: [parameter discovery (runtime loader)](/explanation/architecture/parameter-discovery) - how the corpus is consumed at runtime
+- [Architecture overview](/explanation/architecture/architecture-overview) - the two knowledge products
+- [Parameter discovery](/explanation/architecture/parameter-discovery) - how the shipped rules are consumed at runtime
+- [Schema refresh](/contributing/schema-refresh) - the schema-side operations guide
+- [CI architecture](/explanation/architecture/ci-architecture) - what CI verifies

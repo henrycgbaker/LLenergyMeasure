@@ -58,11 +58,13 @@ The engineering design behind the measurement pipeline.
 - **[Architecture overview](/explanation/architecture/architecture-overview)** - system
   components, dataflow, and the harness-plugin contract.
 - **[Pipeline architecture](/explanation/architecture/pipeline-architecture)** - the
-  end-to-end path from CLI invocation to written results.
-- **[CI architecture](/explanation/architecture/ci-architecture)** - how automated
-  engine-coupling validation, schema refresh, and image publishing are wired.
-- **[Internal pipelines](/explanation/architecture/parameter-discovery)** - parameter
-  discovery (runtime validation) and parameter curation (introspection pipeline).
+  per-engine image architecture and how an upstream version bump flows to
+  committed, verified engine knowledge.
+- **[CI architecture](/explanation/architecture/ci-architecture)** - how CI verifies
+  the committed engine knowledge, and how schema refresh and image publishing
+  are wired.
+- **[Config knowledge](/explanation/architecture/parameter-discovery)** - parameter
+  discovery (runtime config validation) and parameter curation.
 
 ### Why
 

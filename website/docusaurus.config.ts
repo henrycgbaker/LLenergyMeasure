@@ -232,7 +232,7 @@ const config: Config = {
             {label: 'Overview', to: '/explanation/overview'},
             {label: 'Methodology', to: '/explanation/methodology/methodology'},
             {label: 'Architecture', to: '/explanation/architecture/architecture-overview'},
-            {label: 'Engine introspection pipelines', to: '/explanation/architecture/engine-introspection-pipelines'},
+            {label: 'Pipeline architecture', to: '/explanation/architecture/pipeline-architecture'},
             {label: 'Why', to: '/explanation/why'},
             {label: 'Ecosystem', to: '/explanation/ecosystem'},
           ],
@@ -244,8 +244,7 @@ const config: Config = {
           to: ROUTES.contributing,
           items: [
             {label: 'Development', to: '/contributing/development'},
-            {label: 'Miner pipeline', to: '/contributing/miner-pipeline'},
-            {label: 'Extending miners', to: '/contributing/extending-miners'},
+            {label: 'Local knowledge production', to: '/contributing/miner-pipeline'},
             {label: 'Schema refresh', to: '/contributing/schema-refresh'},
             {label: 'Release process', to: '/contributing/release-process'},
             {label: 'Preview deployments', to: '/contributing/preview-deployments'},

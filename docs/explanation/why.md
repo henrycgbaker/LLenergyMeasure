@@ -86,19 +86,19 @@ arbitrary axes.
 For user-ease we do offer a typed set of curated energy-relevant parameters per engine, but this is a convenience layer, not a limitting contract.
 
 See [Parameter discovery](architecture/parameter-discovery.md) for the
-introspection pipeline and
+config-validation loader and
 [Engine extensibility](architecture/engine-extensibility.md) for what a
 new engine has to contribute.
 
-### Invariant mining and sweep deduplication
+### Validation rules and sweep deduplication
 
 Exposing every parameter programmatically and sweeping along each new axis produces a Cartesian
-explosion that is intractable to sweep. The tool's invariant-mining
-pipeline mines the engine source for the constraints (mutual
-exclusions, derived defaults, version-gated combinations) that the
-engine itself enforces, and uses these to prune the sweep space before
-any inference runs. The pruning preserves coverage of the legitimate
-configuration manifold while collapsing the combinatorial cost.
+explosion that is intractable to sweep. The tool's per-engine validation
+rules capture the constraints (mutual exclusions, derived defaults,
+version-gated combinations) that the engine itself enforces - read from
+the engine source and verified against it - and use these to prune the
+sweep space before any inference runs. The pruning preserves coverage of the
+legitimate configuration manifold while collapsing the combinatorial cost.
 
 Similarly, the structured sweep grammar separates parameters that vary
 independently from parameters that genuinely co-vary. Independent axes
@@ -107,17 +107,17 @@ dependent groups (lists of named variants, e.g. a `quantisation` group
 pairing `format` with its compatible `scale` mode) compose as a union
 of meaningful combinations rather than a Cartesian product of every
 field with every other. The grammar keeps users from accidentally
-authoring the explosion in the first place, so the invariant miner has
+authoring the explosion in the first place, so the rules have
 less to prune.
 
-Mining and exposure are paired: the "all parameters are first-class"
-claim is only credible because mining keeps the resulting sweep budget
+Rules and exposure are paired: the "all parameters are first-class"
+claim is only credible because the rules keep the resulting sweep budget
 finite. Without the pruning the offer is empty.
 
 See [Parameter curation](architecture/parameter-curation.md) for the
-curation pipeline and
-[Auto-refresh pipeline](architecture/auto-refresh-pipeline.md) for how
-the mined invariants stay current as upstream engines version.
+curation step and
+[Pipeline architecture](architecture/pipeline-architecture.md) for how
+the rules stay current as upstream engines version.
 
 ### The harness-plugin separation
 

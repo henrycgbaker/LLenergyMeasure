@@ -32,15 +32,13 @@ const sidebarsExplanation: SidebarsConfig = {
           items: [
             'architecture/harness-plugin',
             'architecture/engine-extensibility',
-            'architecture/auto-refresh-pipeline',
           ],
         },
         {
           type: 'category',
-          label: 'Internal pipelines',
+          label: 'Config knowledge',
           collapsed: true,
           items: [
-            'architecture/engine-introspection-pipelines',
             'architecture/parameter-discovery',
             'architecture/parameter-curation',
           ],

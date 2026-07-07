@@ -3,10 +3,9 @@
 Format specification for the YAML invariants corpus: top-level envelope,
 per-rule fields, valid values, schema-version history, and example.
 
-The corpus is the artefact emitted by the invariant-mining pipeline. For
-the conceptual treatment of how the pipeline produces it (and how it
-parallels schema discovery), see [engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines).
-For the runtime side that consumes the corpus at config-validation time,
+For how the per-engine validation rules are produced, see
+[local knowledge production](/contributing/miner-pipeline).
+For the runtime side that consumes the rules at config-validation time,
 see [parameter discovery](/explanation/architecture/parameter-discovery).
 
 ---
@@ -352,8 +351,6 @@ The CI pipeline enforces these invariants on every corpus file:
 ## See also
 
 - [Schema discovered format](/reference/schema-discovered-format) - the parallel format spec for the schema-discovery artefact
-- [Engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines) - how the corpus is produced
-- [Parameter discovery](/explanation/architecture/parameter-discovery) - how the corpus is consumed at runtime
-- [Miner pipeline (debugging guide)](/contributing/miner-pipeline) - practical debugging reference for the mining pipeline
-- [Extending miners](/contributing/extending-miners) - adding rules for new engines
+- [Local knowledge production](/contributing/miner-pipeline) - how the rules are produced
+- [Parameter discovery](/explanation/architecture/parameter-discovery) - how the rules are consumed at runtime
 - [Architecture overview](/explanation/architecture/architecture-overview) - system overview

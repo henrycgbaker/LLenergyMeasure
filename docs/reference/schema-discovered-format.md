@@ -5,9 +5,8 @@ schema-discovery pipeline: top-level envelope, parameter-section shape,
 limitations records, schema-version history, and example.
 
 The artefact is produced by `scripts/engine_producers/` running
-inside an engine's Docker image. For the conceptual treatment of how
-the pipeline produces it (and how it parallels invariant mining), see
-[engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines).
+inside an engine's Docker image. For how to run and troubleshoot schema
+discovery, see [schema refresh](/contributing/schema-refresh).
 For the runtime-loader side that reads these files at import time, see
 [parameter discovery](/explanation/architecture/parameter-discovery) and
 [parameter curation](/explanation/architecture/parameter-curation).
@@ -254,8 +253,8 @@ For the full runtime data flow, see [parameter discovery](/explanation/architect
 
 ## See also
 
-- [Invariants corpus format](/reference/invariants-corpus-format) - the parallel format spec for the invariant-mining artefact
-- [Engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines) - how the schema is produced (and how it parallels invariant mining)
+- [Invariants corpus format](/reference/invariants-corpus-format) - the parallel format spec for the validation-rules artefact
+- [Architecture overview](/explanation/architecture/architecture-overview) - how the discovered schema fits the engine-knowledge products
 - [Parameter curation](/explanation/architecture/parameter-curation) - how the discovered schema relates to the hand-authored Pydantic config models
 - [Parameter discovery](/explanation/architecture/parameter-discovery) - runtime config validation
 - [Schema refresh (operations guide)](/contributing/schema-refresh) - manual refresh procedure

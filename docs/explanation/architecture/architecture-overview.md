@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document is the entry point to the LLenergyMeasure architecture documentation suite. It introduces the two major subsystems - the invariant miner pipeline and the runtime config-validation pipeline - and shows how they connect to the broader measurement framework.
+This document is the entry point to the LLenergyMeasure architecture documentation suite. It introduces the engine-knowledge subsystem - how llem learns each engine's configuration surface and validation rules - and shows how that connects to the runtime measurement framework.
 
 **Start here.** Deep-dive docs for each subsystem are linked throughout.
 
@@ -8,75 +8,84 @@ This document is the entry point to the LLenergyMeasure architecture documentati
 
 ## Who this is for
 
-- **Engine extenders** adding a new engine: read this overview, then [miner-pipeline](/contributing/miner-pipeline) and [extending-miners](/contributing/extending-miners).
-- **Researchers**: read this overview, then [comparison-context](/explanation/methodology/comparison-context) for how results relate to other benchmarks.
+- **Engine extenders** adding a new engine: read this overview, then [engine extensibility](/explanation/architecture/engine-extensibility) for the plugin contract and [CI architecture](/explanation/architecture/ci-architecture) for what CI checks.
+- **Researchers**: read this overview, then [comparison context](/explanation/methodology/comparison-context) for how results relate to other benchmarks.
 
 ---
 
-## System overview
+## The two engine-knowledge products
 
-LLenergyMeasure has two pipelines that work together to give users early, actionable feedback when their configs are invalid before an expensive engine initialisation takes place.
+For each engine, llem ships two committed artifacts that together let it validate a user's config before spending GPU time:
+
+1. **A typed config schema.** `schema.discovered.json` records the engine's full parameter surface (fields, types, bounds, enums), discovered by introspecting the engine at a pinned version. A code generator turns it into the typed Pydantic model `src/llenergymeasure/engines/<engine>/config.py` that users configure against.
+2. **Validation rules.** `rules.yaml` is a list of validation rules - cross-field constraints, silent-normalisation cases - extracted from the engine's own source and verified against it. The runtime loader evaluates these against each submitted config.
+
+Both artifacts are produced locally by a maintainer when an engine version bumps, committed to the repo, and shipped inside the wheel. CI never produces them; it only verifies that the committed bytes stay internally consistent (see [CI architecture](/explanation/architecture/ci-architecture)).
 
 ```mermaid
 flowchart TB
-    subgraph compile["COMPILE-TIME - CI, Renovate-driven library bumps"]
+    subgraph produce["PRODUCE - local maintainer task, on a version bump"]
         direction TB
-        src[Engine library source<br/>transformers, vLLM, TensorRT-LLM]
-        miner[Invariant miner pipeline<br/>scripts/engine_producers/<br/>static + dynamic + lift]
-        validated[(validated corpus YAML<br/>engines/&lt;e&gt;/invariants.validated.yaml)]
-        src --> miner --> validated
+        src[Engine source<br/>at the pinned version]
+        schema[(schema.discovered.json)]
+        rules[(rules.yaml)]
+        config[config.py<br/>typed Pydantic model]
+        src -->|make discover-schema| schema
+        src -->|make absorb| rules
+        schema -->|code generation| config
+    end
+
+    subgraph verify["VERIFY - CI, read-only on hosted CPU"]
+        direction TB
+        codegen[config-codegen:<br/>regenerated config.py is<br/>byte-identical to committed]
+        coverage[rules-coverage:<br/>report uncovered validator sites<br/>advisory]
     end
 
     subgraph runtime["RUNTIME - user submits ExperimentConfig"]
         direction TB
         user[User YAML / Python API]
-        loader[Config validation pipeline<br/>config/engine_invariants/loader.py]
-        rejected[Rejection surfaced BEFORE<br/>engine initialisation<br/>saves GPU + researcher time]
+        loader[Rule loader<br/>config/engine_rules/loader.py]
+        rejected[Invalid config rejected<br/>BEFORE engine initialisation]
         user --> loader --> rejected
     end
 
-    validated -. corpus ships with package .-> loader
+    schema -. shipped in wheel .-> codegen
+    rules -. shipped in wheel .-> loader
 ```
 
 ---
 
-## The two pipelines
+## Runtime config validation
 
-### 1. The invariant miner pipeline
+At runtime, when a user submits an `ExperimentConfig`, `_apply_rules` in `src/llenergymeasure/config/models.py` loads the engine's rules and evaluates each one against the config:
 
-**What it does:** Extracts validation invariants from ML engine library source code and packages them into a versioned corpus of structured rules. Runs in CI whenever a library version bumps (Renovate-driven).
+- `EngineRulesLoader().load_rules(<engine>)` parses the shipped `rules.yaml` into an `EngineRules` object.
+- For each `Rule`, `rule.try_match(config)` returns a `RuleMatch` when the rule's predicate fires, or `None` when it does not.
+- A matched rule at **`error`** severity raises before engine initialisation begins (Pydantic surfaces it as a `ValidationError`), so an invalid combination costs milliseconds rather than the minutes an engine takes to load weights and initialise CUDA.
+- A matched rule at **`dormant`** severity records that the engine will silently ignore or coerce a field. The study planner uses this to deduplicate configs that look distinct but resolve to the same effective configuration, so the GPU only runs cells that produce distinct measurements.
 
-**Inputs:** Engine library source code (at a pinned version).
+Severity is a closed two-value enum - `error` and `dormant`. There is no `warn` level: the study workflow records effective parameters separately, so a rule either changes what runs or it does not.
 
-**Outputs:** `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (maintainer-seeded corpus, post-mining) and `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` (CI-validated observed behaviour, post-validate-replay; both ship with the package).
+Deep dive: [parameter discovery and config validation](/explanation/architecture/parameter-discovery).
 
-**Three components:**
-- Static miner - walks Python AST of validator methods; no constructor calls.
-- Dynamic miner - instantiates config classes with combinatorial probe values; observes raise/no-raise patterns.
-- Lift modules (`_pydantic_lift.py`, `_msgspec_lift.py`, `_dataclass_lift.py`) - extract constraints directly from type-system metadata (Pydantic `FieldInfo`, msgspec `Meta`, stdlib `Literal[...]`).
+---
 
-Deep-dive: [miner-pipeline.md](/contributing/miner-pipeline)
+## Keeping knowledge current
 
-### 2. The parameter-discovery / config-validation pipeline
+Upstream engines ship frequently. [Renovate](https://github.com/apps/renovate) watches upstream releases and opens a pull request that bumps the pin in `engine_versions/<engine>/current.yaml`. Detection stays automatic; refreshing the committed knowledge is a local maintainer step on that PR:
 
-**What it does:** At runtime, when a user submits an `ExperimentConfig`, evaluates each invariant in the validated corpus against the config and rejects invalid combinations before engine initialisation begins.
+1. Re-discover the schema: `make discover-schema ENGINE=<engine>`.
+2. Re-absorb the rules against the new source: `make absorb ENGINE=<engine> SRC=<engine-source>`.
+3. Commit the regenerated `schema.discovered.json`, `config.py`, and `rules.yaml`.
+4. CI verifies the committed bytes are consistent before merge.
 
-**Inputs:** User's `ExperimentConfig`; validated corpus YAML.
-
-**Outputs:** Error / warning / dormant annotations surfaced to the user via the CLI or the Python API.
-
-**Key components:**
-- `loader.py` - parses the corpus and exposes `Rule.try_match()`.
-- Loader grammar - the predicate DSL (`type_is`, `@field_ref`, `not_divisible_by`, etc.).
-- Gap reporting - flags when a config combination the corpus has no rule for is encountered.
-
-Deep-dive: [parameter-discovery.md](/explanation/architecture/parameter-discovery)
+This is a deliberate split: production needs the engine source (and sometimes a GPU), so it runs on a maintainer's machine; verification is a fast read-only check that runs on hosted CPU runners. See [CI architecture](/explanation/architecture/ci-architecture) for the verification surface and [schema refresh](/contributing/schema-refresh) for the schema-side operations guide.
 
 ---
 
 ## Broader framework context
 
-Both pipelines sit inside the larger LLenergyMeasure architecture. The config-validation pipeline plugs into Layer 0 (`config/`), which the rest of the stack builds on.
+The engine-knowledge subsystem plugs into Layer 0 (`config/`), which the rest of the stack builds on. Every `ExperimentConfig` constructed by the API or CLI passes through `config/engine_rules/loader.py` before reaching the harness.
 
 ```mermaid
 flowchart TD
@@ -86,7 +95,7 @@ flowchart TD
     L3["Layer 3 - harness/<br/>MeasurementHarness, energy sampling"]
     L2["Layer 2 - engines/<br/>transformers, vLLM, TensorRT-LLM plugins"]
     L1["Layer 1 - infra/<br/>Docker runner, container entrypoint"]
-    L0["Layer 0 - config/ + domain/ + device/ + utils/<br/>config validation pipeline lives here<br/>engine_invariants/loader.py"]
+    L0["Layer 0 - config/ + domain/ + device/ + utils/<br/>rule loader lives here<br/>engine_rules/loader.py"]
 
     L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
 
@@ -94,54 +103,25 @@ flowchart TD
     class L0 target;
 ```
 
-The config-validation pipeline lives in Layer 0 (highlighted). Higher layers build on it: every `ExperimentConfig` constructed by the API or CLI passes through `engine_invariants/loader.py` before reaching the harness.
-
-The invariant miner pipeline lives in `scripts/engine_producers/` - it is a build-time tool, not a library module. Its output is the validated corpus that ships with the package.
-
----
-
-## Data flow: end-to-end
-
-```mermaid
-flowchart TB
-    bump[Library version bump<br/>e.g. transformers 4.56.0 → 4.57.0]
-    renovate[Renovate opens PR bumping<br/>engine_versions/engine_versions/&lt;engine&gt;.yamllt;engineengine_versions/&lt;engine&gt;.yamlgt;/current.yaml]
-    pipeline[engine-pipeline.yml fires:<br/>probe + mine + validate]
-
-    bump --> renovate --> pipeline
-
-    pipeline --> tf["transformers:<br/>engine-pipeline.yml builds the image →<br/>publish-engine-image.yml pushes →<br/>invariants cell runs on GH-hosted ubuntu-latest"]
-    pipeline --> vllm["vLLM:<br/>engine-pipeline.yml runs inside llem:vllm-VER<br/>on self-hosted GPU runner (Docker isolates uv.lock)"]
-    pipeline --> trt["TRT-LLM:<br/>engine-pipeline.yml runs inside llem:tensorrt-VER<br/>on self-hosted GPU runner (CUDA-aware import)"]
-
-    tf & vllm & trt --> steps["Per-engine step sequence:<br/>1. Probe - scripts._drift checks landmarks<br/>2. Mine - build_corpus.py writes proposed.yaml<br/>3. Validate-replay - validate_invariants.py replays every rule<br/>4. Doc-gen - generate_invariants_doc.py refreshes docs/reference/engines/invariants-&lt;engine&gt;.md<br/>5. Atomic writeback - one bot commit covers all artefacts"]
-
-    steps --> green[CI must be green before merge]
-    green --> ship[Package ships with updated corpus]
-    ship --> submit[User submits ExperimentConfig]
-    submit --> evaluate[loader.py evaluates rules against config]
-    evaluate --> caught["Invalid combination caught BEFORE engine initialisation<br/><br/><i>config rejected: num_beams must be<br/>divisible by num_beam_groups</i>"]
-```
-
 ---
 
 ## Why validate before engine initialisation?
 
-GPU time is the scarce resource. Two distinct failure modes burn it:
+GPU time is the scarce resource. Two distinct failure modes burn it, and the two rule severities target them:
 
-**Dormancy-driven duplicate runs.** This is the larger cost. Engines silently normalise many fields - `seed=-1` becomes `None`, `early_stopping=True` is stripped when `num_beams=1`, sampling parameters are dropped under greedy decoding. A sweep that varies a dormant field generates configs that look distinct to the user (and to Pydantic) but produce *identical effective configurations* once the engine has normalised them. Without invariance mining, the harness runs every cell, and the resulting cells are measurement-equivalent: the user spends hours of GPU time to discover that twelve of their sixteen cells collapsed to four. With a corpus of `dormant` invariants, the loader resolves the effective config at parse time, the study planner deduplicates measurement-equivalent cells, and the GPU only runs the cells that produce distinct measurements.
+**Duplicate runs from silent normalisation.** Engines silently normalise many fields - `seed=-1` becomes `None`, sampling parameters are dropped under greedy decoding. A sweep that varies such a field generates configs that look distinct to the user (and to Pydantic) but produce identical effective configurations once the engine has normalised them. `dormant` rules let the loader resolve the effective config at parse time so the study planner deduplicates measurement-equivalent cells; the GPU only runs cells that produce distinct measurements.
 
-**Invalid-combination late rejection.** Engine initialisation is expensive: model weights load from disk, CUDA contexts initialise, and for TensorRT-LLM the engine may need compilation. A rejected config discovered after two minutes of initialisation wastes that GPU time outright. Pre-construction validation from `error` invariants catches the most common cross-field violations at config-parse time - a few milliseconds rather than several minutes.
+**Invalid-combination late rejection.** Engine initialisation is expensive: weights load from disk, CUDA contexts initialise, and TensorRT-LLM may compile an engine. A config rejected after two minutes of initialisation wastes that GPU time outright. `error` rules catch the most common cross-field violations at config-parse time.
 
-The corpus complements, rather than replaces, engine-side validation: it captures invariants that fire only in specific combinations (cross-field constraints), silent normalisations (`dormant` rules underpinning the deduplication above), and invariants from methods that run at build time rather than construction time.
+The rules complement, rather than replace, engine-side validation: they capture the constraints that fire only in specific field combinations and the silent normalisations the engine does not warn about.
 
 ---
 
-## Why a versioned corpus instead of live introspection?
+## Why committed artifacts instead of live introspection?
 
-Live introspection at runtime would require importing each engine at startup - which on vLLM and TRT-LLM means initialising CUDA contexts. The corpus is pre-computed and ships as a YAML file that loads in a few milliseconds with no GPU dependency.
+Live introspection at runtime would require importing each engine at startup - which on vLLM and TensorRT-LLM means initialising CUDA contexts. The committed `rules.yaml` and `schema.discovered.json` load in a few milliseconds with no GPU dependency.
 
-The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the validation-CI gate together enforce this discipline. See [engine-introspection-pipelines - Renovate refresh loop](/explanation/architecture/engine-introspection-pipelines#renovate-driven-refresh-loop).
+The trade-off is staleness risk: the artifacts must be refreshed when the engine library changes. The Renovate-driven bump PR plus the local refresh step and the CI byte-verification together enforce that discipline.
 
 ---
 
@@ -149,68 +129,49 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 
 | Term | Meaning |
 |------|---------|
-| **Invariant miner** | The umbrella for the mining pipeline; extracts constraints from library source |
-| **Static miner** | The AST-walking component; reads source, no constructor calls |
-| **Dynamic miner** | The probing component; constructs config objects, observes raises |
-| **Lift module** | Type-system adapter; extracts constraints from Pydantic / msgspec / dataclass metadata |
-| **Corpus** | The YAML file of extracted, validation-gate-confirmed invariants for one engine |
-| **Validated YAML** | The CI-observed version of the corpus that ships with the package |
-| **Validation-CI gate** | The step that replays every invariant against the live library; divergences fail CI |
-| **Fixpoint contract** | `_fixpoint_test.py` - asserts dormant invariants converge to a stable state under repeated application |
-| **AddedBy** | Provenance field on each invariant: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [invariants-corpus-format.md](/reference/invariants-corpus-format#added_by)) |
-| **MinerSource** | The `{path, method, line_at_scan}` record pointing back to the library source line that produced an invariant |
-| **Loader grammar** | The predicate DSL used in `match.fields`: `in`, `not_in`, `@field_ref`, `not_divisible_by`, `type_is`, etc. |
+| **Schema discovery** | Introspecting an engine at its pinned version to record its full parameter surface as `schema.discovered.json` |
+| **Config codegen** | Generating the typed Pydantic `config.py` from the discovered schema; CI asserts the regenerated file is byte-identical to the committed one |
+| **Rule** | A single validation constraint in `rules.yaml`: an `id`, a `severity`, a `match` predicate over config fields, a message template, and provenance |
+| **Severity** | Closed enum: `error` (reject the config) or `dormant` (the engine silently normalises a field; used for deduplication) |
+| **Absorb** | The local workflow that reads an engine's source into candidate rules, verifies them against the engine, and promotes the confirmed ones into `rules.yaml` |
+| **Rules coverage** | An advisory report of validator sites in the engine source that no shipped rule covers |
+| **Loader grammar** | The predicate language used in `match.fields`: `in`, `not_in`, `@field_ref`, `not_divisible_by`, `type_is`, and so on |
 
 ---
 
 ## File and package map
 
 ```
-  scripts/
-  └── engine_producers/              Invariant miner pipeline (build-time)
-      ├── _base.py                Shared infrastructure: RuleCandidate, MinerError types,
-      │                           AST primitives, pattern detectors
-      ├── _pydantic_lift.py       Pydantic v2 sub-library lift
-      ├── _msgspec_lift.py        msgspec sub-library lift
-      ├── _dataclass_lift.py      stdlib dataclass sub-library lift
-      ├── _fixpoint_test.py       Gate-soundness + corpus fixpoint contract
-      ├── transformers_miner.py   Transformers orchestration entry
-      ├── transformers_static_miner.py
-      ├── transformers_dynamic_miner.py
-      ├── vllm_static_miner.py
-      ├── vllm_dynamic_miner.py
-      ├── tensorrt_miner.py       TensorRT-LLM orchestration entry
-      ├── tensorrt_static_miner.py
-      └── build_corpus.py         Merge + dedup + validation-gate orchestration
-
-  scripts/
-  ├── validate_invariants.py             Replay invariants against live library; write validated YAML
-  └── _invariant_validation_common.py Shared capture + comparison utilities
-
   src/llenergymeasure/engines/
-  └── {engine}/                        Per-engine sub-package, ships with the wheel
-      ├── invariants.proposed.yaml     Authoritative corpus post-mine
-      └── invariants.validated.yaml    Validated observations post-replay
+  └── <engine>/                      Per-engine sub-package, ships with the wheel
+      ├── schema.discovered.json     Discovered parameter surface (pinned version)
+      ├── config.py                  Typed Pydantic model, generated from the schema
+      └── rules.yaml                 Shipped validation rules (single runtime source)
 
   src/llenergymeasure/config/
-  └── engine_invariants/
-      ├── loader.py                    Runtime corpus consumer + predicate engine
+  └── engine_rules/
+      ├── loader.py                  Runtime rule loader + predicate engine
       └── __init__.py
 
   engine_versions/
-  └── {engine}.yaml                    Per-engine SSOT: library version, miner pins,
-                                       artefact paths. Renovate-authored.
+  └── <engine>/current.yaml          Per-engine pin: library version. Renovate-writable.
+
+  scripts/                           Local production tooling (not shipped in the wheel)
+  ├── absorb.py                      The absorb workflow entry point
+  ├── analyst_cold_read.py           Reads engine source into candidate rules
+  ├── check_citations.py             Confirms each candidate's citation resolves
+  ├── probe_candidates.py            Verifies candidates against the real engine
+  └── rules_coverage.py              Advisory uncovered-validator-site report
 ```
 
 ---
 
 ## See also
 
-- [miner-pipeline.md](/contributing/miner-pipeline) - invariant miner deep-dive
-- [parameter-discovery.md](/explanation/architecture/parameter-discovery) - runtime validation pipeline
-- [invariants-corpus-format.md](/reference/invariants-corpus-format) - corpus YAML format reference
-- [extending-miners.md](/contributing/extending-miners) - how to add a new engine miner
-- [comparison-context.md](/explanation/methodology/comparison-context) - how results relate to other benchmarks
-- [engines.md](/reference/engines/configuration) - engine configuration reference
-- [methodology.md](/explanation/methodology/methodology) - energy measurement methodology
-- [schema-refresh.md](/contributing/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)
+- [Parameter discovery and config validation](/explanation/architecture/parameter-discovery) - the runtime loader
+- [Pipeline architecture](/explanation/architecture/pipeline-architecture) - per-engine ordering and the asymmetric image architecture
+- [CI architecture](/explanation/architecture/ci-architecture) - what CI verifies
+- [Engine extensibility](/explanation/architecture/engine-extensibility) - what a new engine must contribute
+- [Comparison context](/explanation/methodology/comparison-context) - how results relate to other benchmarks
+- [Engine configuration reference](/reference/engines/configuration) - the per-engine configuration surface
+- [Schema refresh](/contributing/schema-refresh) - schema-side operations guide

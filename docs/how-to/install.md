@@ -217,63 +217,42 @@ docker pull vllm/vllm-openai:0.7.3                   # pull vLLM upstream
 docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # pull TensorRT-LLM upstream
 ```
 
-**How the cache pipeline is wired:**
+**How the transformers image is published:**
 
-The transformers image is published under three GHCR refs, each serving a
-distinct consumer. The split exists because three orthogonal questions need
-separate answers:
+Because the flash-attention compile needs more memory than hosted CI runners
+have, CI never builds the transformers image. It is built locally and
+promoted by a tag-copy - the same "produce locally, verify in CI" split the
+schema and rules follow. The refs involved:
 
-| Ref | Kind | Written by | Consumed by |
-|---|---|---|---|
-| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata - **not a runnable image**) | `engine-pipeline.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
-| `transformers-cache:transformers-<VER>` | Runnable PR-time runtime image | `publish-engine-image.yml` when parent build was a `pull_request` | `engine-pipeline.yml` + `engine-pipeline.yml` for PR-time validation against the PR's Dockerfile |
-| `transformers:transformers-<VER>` + `transformers:latest` | Runnable canonical runtime image | `publish-engine-image.yml` when parent build was a push to `main`, a schedule, or a `workflow_dispatch` | End users (`docker pull`), `make docker-pull`, main-branch invariants/schemas, downstream Renovate consumers |
+| Ref | Kind | Produced by |
+|---|---|---|
+| `transformers-cache:transformers-<VER>` | Runnable promotion-source image | Local `make docker-seed-transformers` |
+| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`; not a runnable image) | Local `make docker-seed-transformers` |
+| `transformers:transformers-<VER>` + `transformers:latest` | Canonical runtime image | `publish-engine-image.yml` tag-copies the seeded image at merge; `docker-publish.yml` rebuilds it at release |
 
-The three axes encoded:
+Flow:
 
-1. **`-buildcache` suffix** distinguishes "BuildKit cache metadata" from
-   "runnable image". Cache uses `mode=max` so intermediate layers (most
-   importantly the ~30-min FA3 compile) are reusable across subsequent
-   builds; it cannot be `docker run`'d.
-2. **`transformers-cache` repo vs `transformers` repo** distinguishes
-   "built from a PR branch" from "built from `main` (vetted)". Only the
-   canonical repo serves end users, so a PR build can never accidentally
-   claim `:latest`.
-3. **Tag (`:latest` vs `:transformers-<VER>`)** within the canonical repo
-   is the standard rolling-vs-immutable convention.
+1. During a transformers bump session the maintainer runs
+   `make docker-seed-transformers` on a machine with enough memory. It pushes
+   the runtime image to the promotion-source ref
+   `transformers-cache:transformers-<VER>` and warms the build cache.
+2. When the bump lands on main, `publish-engine-image.yml` tag-copies that
+   seeded image to the canonical `transformers:transformers-<VER>` and
+   `transformers:latest` tags via `docker buildx imagetools create` - a
+   registry-side metadata operation, no rebuild. A missing seed fails the
+   promotion loudly.
+3. At release, `docker-publish.yml` (called by `release.yml`) builds the
+   package-versioned release image on a hosted runner, warming off the cache
+   the seed exported.
 
-Why not collapse them? Two tempting simplifications both lose value:
-
-- *Use `type=inline` cache (cache embedded in runtime image manifest, one
-  ref).* Drops `mode=max` intermediate-layer caching; second-build FA3 would
-  recompile.
-- *Drop the PR-time runtime image, validate against `:latest` only.* PR
-  changes to `Dockerfile.transformers` itself would go unvalidated until
-  after merge.
-
-Pipeline mechanics:
-
-- `engine-pipeline.yml` runs `build-push-action` with `cache-from` /
-  `cache-to` pointing at the buildcache ref. Builds run on every PR, push to
-  `main`, schedule, and dispatch. `push: false` - this workflow only exports
-  cache, never publishes runnable images.
-- `publish-engine-image.yml` is `workflow_run`-triggered on successful
-  `engine-pipeline.yml`. It rebuilds (warming off the just-exported
-  buildcache, so it's seconds), tags per parent-event (PR → cache repo;
-  main / schedule / dispatch → canonical repo), and pushes. The build/push
-  split exists so a registry permission failure during push doesn't burn
-  the FA3 compile; the cache survives independently.
-- `docker-compose.yml` declares `cache_from: [:transformers-<VERSION>,
-  :latest]` for the transformers engine - version-pinned first (best layer
-  match within a release), rolling-latest as fallback. vllm and tensorrt
-  have no first-party `cache_from` chain (they pull upstream directly).
-- `make docker-builder-setup` provisions a `docker-container` BuildKit
-  driver with a 200 GiB GC limit; the default `docker` driver cannot import
-  registry caches at all.
-- The Transformers FA3 compile (the only layer where caching is load-bearing)
-  runs on a self-hosted runner with sufficient cores + memory; CI rebuilds
-  warm off the buildcache ref for every subsequent SSOT bump.
-- Pulling any of the three refs is unauthenticated for public packages.
+`docker-compose.yml` declares `cache_from: [transformers:v<VERSION>,
+transformers:latest]` for the transformers engine, so a local
+`make docker-build` reuses those published layers; vllm and tensorrt have no
+first-party `cache_from` chain (they pull upstream directly).
+`make docker-builder-setup` provisions a `docker-container` BuildKit driver
+with a 200 GiB cache limit; the default `docker` driver cannot import
+registry caches at all. Pulling any public ref needs no authentication. See
+[Pipeline architecture: transformers image lifecycle](/explanation/architecture/pipeline-architecture#transformers-image-lifecycle).
 
 **How to tell if the cache actually warmed:** `make docker-build-{engine}` runs the build
 under `BUILDKIT_PROGRESS=plain` and emits a one-line summary when it finishes:
