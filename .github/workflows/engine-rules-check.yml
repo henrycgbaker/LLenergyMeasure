@@ -10,9 +10,9 @@ name: Engine rules check
 #      src/llenergymeasure/engines/<engine>/config.py are byte-identical to
 #      what the committed schema snapshot regenerates. A stale config fails.
 #
-#   2. rules-coverage (advisory): each shipped rule still names a real
-#      validator site in the pinned engine source. It reports uncovered sites
-#      but never fails the job, so coverage drift is visible without blocking.
+#   2. rules-coverage (advisory): scans the pinned engine source for
+#      validator sites and reports the sites no shipped rule covers. It never
+#      fails the job, so coverage gaps are visible without blocking.
 #
 # transformers is absent from the coverage report on purpose: its config
 # validation uses imperative post-init idioms that the validator-site model
@@ -24,6 +24,7 @@ on:
     paths:
       - 'src/llenergymeasure/engines/*/config.py'
       - 'src/llenergymeasure/engines/*/rules.yaml'
+      - 'src/llenergymeasure/config/engine_rules/**'
       - 'engine_versions/*/current.yaml'
       - 'engine_versions/*/*/outputs/curated.yaml'
       - 'engine_versions/*/*/outputs/schema.discovered.json'
