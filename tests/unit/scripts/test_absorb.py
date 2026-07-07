@@ -140,13 +140,19 @@ def test_parse_interrogation(text: str, expected: tuple[str, str | None]) -> Non
     assert ab.parse_interrogation(text) == expected
 
 
-def test_interrogate_rule_present_mints_candidate_with_recall_provenance() -> None:
-    rule = _rule("r", "error", {"vllm.sampling_params.temperature": {"<": 0}})
+def _cited_rule(tmp_path: Path, rid: str, fields: dict[str, Any]) -> dict[str, Any]:
+    # A rule whose citation resolves to a real file, so _rule_source locates it.
+    (tmp_path / "s.py").write_text("guard source\n")
+    return _rule(rid, "error", fields, provenance={"source": "manual", "citation": "s.py:1"})
+
+
+def test_interrogate_rule_present_mints_candidate_with_recall_provenance(tmp_path: Path) -> None:
+    rule = _cited_rule(tmp_path, "r", {"vllm.sampling_params.temperature": {"<": 0}})
     outcome, cand = ab.interrogate_rule(
         "vllm",
         "0.19.1",
         rule,
-        None,
+        tmp_path,
         lambda p, t: _Reply('{"present": true, "citation": "s.py:9"}'),
         "2026-07-07",
     )
@@ -157,17 +163,33 @@ def test_interrogate_rule_present_mints_candidate_with_recall_provenance() -> No
     assert cand["match"]["fields"] == rule["match"]["fields"]  # carries the precise old predicate
 
 
-def test_interrogate_rule_absent_yields_no_candidate() -> None:
-    rule = _rule("r", "error", {"vllm.sampling_params.temperature": {"<": 0}})
+def test_interrogate_rule_absent_yields_no_candidate(tmp_path: Path) -> None:
+    rule = _cited_rule(tmp_path, "r", {"vllm.sampling_params.temperature": {"<": 0}})
     outcome, cand = ab.interrogate_rule(
-        "vllm", "0.19.1", rule, None, lambda p, t: _Reply('{"present": false}'), "2026-07-07"
+        "vllm", "0.19.1", rule, tmp_path, lambda p, t: _Reply('{"present": false}'), "2026-07-07"
     )
     assert outcome == "absent" and cand is None
 
 
-def test_recall_interrogation_only_probes_unrediscovered_rules() -> None:
+def test_interrogate_rule_skips_when_source_not_located(tmp_path: Path) -> None:
+    """A citation-less rule (no retrievable source) is never sent to the model:
+    the generate callable is not invoked, nothing is minted, and no retirement
+    proposal or sign-off annotation is raised. A zero-evidence interrogation
+    would otherwise draw a guaranteed false ABSENT every run."""
+    rule = _rule("gone", "error", {"vllm.engine_params.foo": {"<": 1}})  # no citation
+
+    def gen(prompt: str, temp: float) -> _Reply:
+        raise AssertionError("generate must not be called for an un-locatable rule")
+
+    minted, absent = ab.recall_interrogation(
+        "vllm", "0.19.1", [rule], set(), tmp_path, gen, "2026-07-07"
+    )
+    assert minted == [] and absent == []  # no candidate, no retirement proposal, no annotation
+
+
+def test_recall_interrogation_only_probes_unrediscovered_rules(tmp_path: Path) -> None:
     rediscovered = _rule("kept", "error", {"vllm.sampling_params.temperature": {"<": 0}})
-    missing = _rule("gone", "error", {"vllm.engine_params.foo": {"<": 1}})
+    missing = _cited_rule(tmp_path, "gone", {"vllm.engine_params.foo": {"<": 1}})
     pool_leaf_keys = {ab._leaf_key(rediscovered)}  # temperature present in fresh pool
 
     asked: list[str] = []
@@ -177,26 +199,20 @@ def test_recall_interrogation_only_probes_unrediscovered_rules() -> None:
         return _Reply('{"present": false}')  # ABSENT
 
     minted, absent = ab.recall_interrogation(
-        "vllm", "0.19.1", [rediscovered, missing], pool_leaf_keys, None, gen, "2026-07-07"
+        "vllm", "0.19.1", [rediscovered, missing], pool_leaf_keys, tmp_path, gen, "2026-07-07"
     )
     assert asked == ["q"]  # only the un-rediscovered rule was interrogated
     assert minted == []
     assert absent == ["gone"]
 
 
-def test_unknown_interrogation_neither_mints_nor_retires_and_rule_ships() -> None:
+def test_unknown_interrogation_neither_mints_nor_retires_and_rule_ships(tmp_path: Path) -> None:
     """A garbage LLM reply is UNKNOWN, not ABSENT (must-fix 1): the rule is
     neither minted nor flagged for retirement, and still ships on an unverified
     probe verdict."""
-    missing = _rule("gone", "error", {"vllm.engine_params.foo": {"<": 1}})
+    missing = _cited_rule(tmp_path, "gone", {"vllm.engine_params.foo": {"<": 1}})
     minted, absent = ab.recall_interrogation(
-        "vllm",
-        "0.19.1",
-        [missing],
-        set(),
-        None,
-        lambda p, t: _Reply("not json, a garbage reply"),
-        "2026-07-07",
+        "vllm", "0.19.1", [missing], set(), tmp_path, lambda p, t: _Reply("garbage"), "2026-07-07"
     )
     assert minted == []  # UNKNOWN mints nothing ...
     assert absent == []  # ... and raises no proposal (no parse-failure conflation)
