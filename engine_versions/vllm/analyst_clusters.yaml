@@ -1,0 +1,56 @@
+# Analyst cold-read source clusters for vllm.
+#
+# scripts/analyst_cold_read.py reads these source-file clusters and asks an LLM
+# analyst to extract every config-validation constraint it can see, one cited
+# candidate per constraint. This file is DATA describing the engine version's
+# source layout: paths are relative to --source-root (the vllm package
+# directory, e.g. the `vllm/` folder inside an extracted 0.19.1 sdist). A glob
+# (a path containing `*`) expands against the source root; a plain path names
+# one file.
+#
+# Cluster selection follows the production-harness deltas ratified by the
+# 2026-07-02 OSS analyst parity experiment (qwen2.5-coder:32b measured against
+# the frontier bump-analyst reference):
+#   - the engine/arg_utils.py cluster is DROPPED: it was a pure noise source
+#     (CLI add_argument blocks produced invented bounds and fabricated enum
+#     members) and contributed zero unique ground-truth matches.
+#   - a platforms/*.py cluster is ADDED: it removes the 5-entry structural
+#     ceiling (the platform-gated constraints the file-scoped readers otherwise
+#     structurally cannot see) and is ordinary guard code the model reads well.
+clusters:
+  sampling:
+    - sampling_params.py
+    - pooling_params.py
+  model:
+    - config/model.py
+  parallel_sched:
+    - config/parallel.py
+    - config/scheduler.py
+  vllm:
+    - config/vllm.py
+  compilation:
+    - config/compilation.py
+  speculative:
+    - config/speculative.py
+  rest_config:
+    - config/cache.py
+    - config/lora.py
+    - config/kv_transfer.py
+    - config/ec_transfer.py
+    - config/structured_outputs.py
+    - config/observability.py
+    - config/offload.py
+    - config/pooler.py
+    - config/multimodal.py
+    - config/attention.py
+    - config/kernel.py
+    - config/device.py
+    - config/reasoning.py
+    - config/load.py
+    - config/kv_events.py
+    - config/profiler.py
+    - config/model_arch.py
+    - config/speech_to_text.py
+    - config/weight_transfer.py
+  platforms:
+    - platforms/*.py

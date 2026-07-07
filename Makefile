@@ -3,7 +3,7 @@
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
-.PHONY: check-citations probe-candidates
+.PHONY: check-citations probe-candidates analyst-cold-read
 .PHONY: package-check
 .PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
@@ -154,6 +154,14 @@ refresh-invariants-all: ## Mine invariants for all three engines in sequence
 	./scripts/refresh_invariants.sh vllm
 	./scripts/refresh_invariants.sh tensorrt
 	./scripts/refresh_invariants.sh transformers
+
+# Proposer S2: LLM analyst cold read of the pinned engine source into candidate
+# rules for the verification ladder. Needs a local Ollama daemon (owns the GPU)
+# and SRC = the engine package directory at the pinned version. Writes to the
+# version-scoped candidate pool, never to the shipped corpora.
+analyst-cold-read: ## Cold-read one engine's source into candidates (ENGINE=vllm SRC=path/to/source [ARGS=...])
+	@test -n "$(ENGINE)" && test -n "$(SRC)" || (echo "Usage: make analyst-cold-read ENGINE=vllm SRC=engine-src/ [ARGS='--samples 1']" && exit 1)
+	uv run python scripts/analyst_cold_read.py --engine $(ENGINE) --source-root "$(SRC)" $(ARGS)
 
 # Verification-ladder tier 1: confirm each proposed candidate rule's citation
 # resolves against a pinned engine source tree. Used by the absorb workflow and

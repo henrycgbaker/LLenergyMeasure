@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -36,11 +35,16 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import yaml
+# Make the top-level ``scripts`` package importable whether this is run as a
+# plain script (``python scripts/mine_observed_collisions.py``) or imported as
+# ``scripts.mine_observed_collisions``.
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from scripts._candidate_pool import pool_path, slug, unverified_verdict, write_pool  # noqa: E402
 
 logger = logging.getLogger("mine_observed_collisions")
-
-SCHEMA_VERSION = "1.0.0"
 
 # Sentinel for "field absent in this declared config" - distinct from a declared
 # null so absence and an explicit None never compare equal.
@@ -122,11 +126,6 @@ def _differing_fields(flats: list[dict[str, Any]]) -> list[str]:
     return differing
 
 
-def _slug(field_path: str) -> str:
-    """Filesystem/id-safe slug for a dotted field path."""
-    return re.sub(r"_+", "_", re.sub(r"[^0-9a-zA-Z]+", "_", field_path)).strip("_")
-
-
 # ---------------------------------------------------------------------------
 # Loading + mining
 # ---------------------------------------------------------------------------
@@ -191,7 +190,7 @@ def _make_candidate(
     observed_hash = members[0].observed_config_hash
     experiment_dirs = sorted(m.experiment_dir for m in members)
     return {
-        "id": f"{engine}_collision_dormant_{_slug(field_path)}_{observed_hash[:8]}",
+        "id": f"{engine}_collision_dormant_{slug(field_path)}_{observed_hash[:8]}",
         "engine": engine,
         "engine_version": version,
         "severity": "dormant",
@@ -205,7 +204,7 @@ def _make_candidate(
             "declared_values": _distinct_values(field_path, flats),
             "co_occurring_fields": co_occurring,
         },
-        "verdict": {"status": "unverified", "tier": None, "date": None, "evidence": None},
+        "verdict": unverified_verdict(),
     }
 
 
@@ -244,11 +243,6 @@ _POOL_HEADER = (
 )
 
 
-def _pool_path(pool_root: Path, engine: str, version: str) -> Path:
-    version_dir = "v" + re.sub(r"[^0-9a-zA-Z]+", "_", version).strip("_")
-    return pool_root / engine / version_dir / "candidates" / "observed_collisions.yaml"
-
-
 def write_candidates(
     candidates: list[dict[str, Any]],
     pool_root: Path,
@@ -263,18 +257,16 @@ def write_candidates(
 
     written: list[Path] = []
     for (engine, version), group in sorted(by_pool.items()):
-        document = {
-            "schema_version": SCHEMA_VERSION,
-            "source": "observed_collision",
-            "engine": engine,
-            "engine_version": version,
-            "generated_at": generated_at,
-            "candidates": group,
-        }
-        path = _pool_path(pool_root, engine, version)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        body = yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
-        path.write_text(_POOL_HEADER + body)
+        path = pool_path(pool_root, engine, version, "observed_collisions.yaml")
+        write_pool(
+            path,
+            source="observed_collision",
+            engine=engine,
+            version=version,
+            generated_at=generated_at,
+            candidates=group,
+            header=_POOL_HEADER,
+        )
         written.append(path)
     return written
 
