@@ -138,52 +138,32 @@ def test_salvage_garbage_is_empty(text: str) -> None:
 
 # Predicate translation: free-text predicate -> match.fields spec.
 @pytest.mark.parametrize(
-    ("kind", "fields", "predicate", "severity", "match", "normalised"),
+    ("fields", "predicate", "severity", "match"),
     [
-        ("single_field_bound", ["self.n"], "n >= 1", "error", {"n": {"<": 1}}, []),
+        # An error probes the VIOLATING side (the valid predicate negated).
+        (["self.n"], "n >= 1", "error", {"n": {"<": 1}}),
         (
-            "single_field_enum",
             ["kv_role"],
             "kv_role in {producer, consumer}",
             "error",
             {"kv_role": {"not_in": ["producer", "consumer"]}},
-            [],
         ),
-        (
-            "cross_field",
-            ["a", "b"],
-            "a <= b",
-            "error",
-            {"a": {"present": True}, "b": {"present": True}},
-            [],
-        ),
-        (
-            "single_field_bound",
-            ["seed"],
-            "seed >= 0 or seed == -1",
-            "error",
-            {"seed": {"present": True}},
-            [],
-        ),
-        (
-            "dormancy",
-            ["seed"],
-            "seed == -1 -> None",
-            "dormant",
-            {"seed": {"present": True}},
-            ["seed"],
-        ),
+        # Compound / cross-field predicates fall back to a present spec.
+        (["a", "b"], "a <= b", "error", {"a": {"present": True}, "b": {"present": True}}),
+        (["seed"], "seed >= 0 or seed == -1", "error", {"seed": {"present": True}}),
+        # A dormant claim probes the FIRING side: the positive comparison, arrow
+        # suffix stripped, so the identity probe has declared values to compare.
+        (["seed"], "seed == -1 -> None", "dormant", {"seed": {"==": -1}}),
+        (["mode"], "mode in {a, b} -> a", "dormant", {"mode": {"in": ["a", "b"]}}),
     ],
 )
 def test_predicate_translation(
-    kind: str,
     fields: list[str],
     predicate: str,
     severity: str,
     match: dict[str, Any],
-    normalised: list[str],
 ) -> None:
-    assert acr.predicate_to_match(kind, fields, predicate, severity) == (match, normalised)
+    assert acr.predicate_to_match(fields, predicate, severity) == match
 
 
 # Citation resolution.
@@ -200,6 +180,21 @@ def test_resolve_citation_extracts_verbatim_window(fake_tree: Any) -> None:
 def test_resolve_citation_rejects_bad_reference(fake_tree: Any, raw: str) -> None:
     _, sources, chunks = fake_tree
     assert acr.resolve_citation(chunks[0], sources, raw) is None
+
+
+def test_resolve_citation_prefers_exact_relpath(tmp_path: Path) -> None:
+    # Two files share a basename; only the full cited relpath disambiguates
+    # (basename alone would pick the first chunk segment, a/dup.py).
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "dup.py").write_text("x = 1\ny = 2\n")
+    (tmp_path / "b" / "dup.py").write_text("z = 3\nw = 4\n")
+    cluster_files, sources = acr.load_sources(tmp_path, {"c": ["a/dup.py", "b/dup.py"]})
+    chunks = acr.build_chunks(cluster_files, sources)
+    citation = acr.resolve_citation(chunks[0], sources, "b/dup.py:2")
+    assert citation is not None
+    assert citation["file"] == "b/dup.py"
+    assert "w = 4" in citation["quote"]
 
 
 # Candidate assembly + emission round-trip through the ladder consumers.
@@ -259,6 +254,31 @@ def test_emission_round_trips_through_probe_candidates(emitted: tuple[Path, Path
     assert parsed.severity == "error"
     assert parsed.fields == {"n": {"<": 1}}
     assert parsed.engine == "vllm"
+
+
+def test_dormancy_candidate_round_trips_probeable(fake_tree: Any) -> None:
+    # A dormancy rule emits the firing positive comparison, so the identity probe
+    # gets the alias value + resolved default to compare (not a dead present-only
+    # spec that probe_candidates rejects as unprobeable).
+    _, sources, chunks = fake_tree
+    rule = {
+        "kind": "dormancy",
+        "fields": ["seed"],
+        "predicate": "seed == -1 -> None",
+        "citation": "sampling_params.py:3",
+        "severity_suggestion": "dormant",
+    }
+    cand = _build(chunks[0], sources, rule)
+    assert isinstance(cand, dict)
+    assert cand["severity"] == "dormant"
+    assert cand["match"]["fields"] == {"seed": {"==": -1}}
+    assert cand["normalised_fields"] == ["seed"]
+
+    parsed = pc.parse_candidate(cand, 0)
+    subject_path = list(parsed.fields)[-1]
+    values = pc.identity_values(parsed, subject_path)  # must not raise Unprobeable
+    assert values[0] == -1  # the alias value ...
+    assert values[1] is pc._DEFAULT  # ... contrasted against the resolved default
 
 
 # Sampling orchestration: union dedup + cap-hit split-and-rerun.

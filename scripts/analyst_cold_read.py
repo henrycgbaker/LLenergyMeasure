@@ -387,40 +387,42 @@ def _coerce_scalar(token: str) -> Any:
 _NEGATED_OP = {"<": ">=", "<=": ">", ">": "<=", ">=": "<", "==": "!=", "!=": "=="}
 
 
-def predicate_to_match(
-    kind: str, fields: list[str], predicate: str, severity: str
-) -> tuple[dict[str, Any], list[str]]:
+def predicate_to_match(fields: list[str], predicate: str, severity: str) -> dict[str, Any]:
     """Translate the analyst's free-text predicate into a match.fields spec.
 
-    match.fields encodes the config the rule ACTS on, in the corpus polarity:
-    for an error the VIOLATING side (the valid predicate negated), for a dormant
-    candidate the normalised field(s). Only clean single-field comparison/enum
-    predicates are structured; anything compound, cross-field, or arithmetic
-    falls back to a ``present`` spec (the field still grounds the citation, the
-    raw predicate is kept in provenance). Returns (match_fields, normalised).
+    match.fields encodes the config the rule ACTS on. The comparison is
+    structured once; its polarity then follows the severity: an ``error`` probes
+    the VIOLATING side (the valid predicate negated), while a ``dormant``
+    candidate probes the FIRING side (the normalisation's trigger, positive), so
+    the identity probe has two distinct declared values to compare. Dormancy
+    predicates carry a ``-> RHS`` normalisation suffix (``seed == -1 -> None``);
+    the comparison to structure is the left-hand side. Only clean single-field
+    comparison/enum predicates are structured; anything compound, cross-field,
+    or arithmetic falls back to a ``present`` spec (the field still grounds the
+    citation, the raw predicate is kept in provenance).
     """
-    normalised = [leaf_of(f) for f in fields] if severity == "dormant" else []
     leaves = [leaf_of(f) for f in fields]
+    # A dormancy predicate reads "<comparison> -> <normalised result>"; structure
+    # only the comparison. The arrow is dash-then-gt, absent from >=/<=/negatives.
+    comparison = predicate.split("->", 1)[0].strip()
 
-    if (
-        severity == "error"
-        and len(leaves) == 1
-        and " or " not in predicate
-        and " and " not in predicate
-    ):
+    if len(leaves) == 1:
         leaf = leaves[0]
         cmp = re.fullmatch(
-            rf"\s*{re.escape(leaf)}\s*(<=|>=|==|!=|<|>)\s*(-?\d+(?:\.\d+)?)\s*", predicate
+            rf"\s*{re.escape(leaf)}\s*(<=|>=|==|!=|<|>)\s*(-?\d+(?:\.\d+)?)\s*", comparison
         )
         if cmp:
-            return {leaf: {_NEGATED_OP[cmp.group(1)]: _coerce_scalar(cmp.group(2))}}, normalised
-        enum = re.fullmatch(rf"\s*{re.escape(leaf)}\s+in\s+[\[{{(]([^\]}})]+)[\]}})]\s*", predicate)
+            op = _NEGATED_OP[cmp.group(1)] if severity == "error" else cmp.group(1)
+            return {leaf: {op: _coerce_scalar(cmp.group(2))}}
+        enum = re.fullmatch(
+            rf"\s*{re.escape(leaf)}\s+in\s+[\[{{(]([^\]}})]+)[\]}})]\s*", comparison
+        )
         if enum:
             members = [_coerce_scalar(tok) for tok in enum.group(1).split(",") if tok.strip()]
             if members:
-                return {leaf: {"not_in": members}}, normalised
+                return {leaf: {"not_in" if severity == "error" else "in": members}}
 
-    return {leaf: {"present": True} for leaf in leaves}, normalised
+    return {leaf: {"present": True} for leaf in leaves}
 
 
 def resolve_citation(
@@ -428,22 +430,28 @@ def resolve_citation(
 ) -> dict[str, Any] | None:
     """Resolve ``FILE.py:LINE`` to a {file, lines, quote} citation, or None.
 
-    Basename is matched against the chunk's own segments first, then the whole
-    pool. The quote is a verbatim window from the real file, so span-match
-    passes by construction and tier 1 adjudicates only token entailment.
+    The full cited relative path is matched exactly against the loaded sources
+    first (it disambiguates same-basename files in different directories); the
+    basename fallback then tries the chunk's own segments, then a pool-wide
+    unique match. The quote is a verbatim window from the real file, so
+    span-match passes by construction and tier 1 adjudicates only token entailment.
     """
     match = re.search(r"([\w./-]+\.py)\s*:\s*(\d+)", raw)
     if not match:
         return None
-    basename = Path(match.group(1)).name
+    cited = match.group(1)
+    basename = Path(cited).name
     line = int(match.group(2))
 
     relpath: str | None = None
-    for seg in chunk.segments:
-        if Path(seg.filename).name == basename:
-            relpath = seg.filename
-            break
-    if relpath is None:
+    if cited in sources:  # exact relative-path match wins
+        relpath = cited
+    if relpath is None:  # basename fallback: the chunk's own segments first ...
+        for seg in chunk.segments:
+            if Path(seg.filename).name == basename:
+                relpath = seg.filename
+                break
+    if relpath is None:  # ... then a pool-wide unique basename match
         hits = [path for path in sources if Path(path).name == basename]
         if len(hits) == 1:
             relpath = hits[0]
@@ -491,7 +499,10 @@ def build_candidate(
     if citation is None:
         return "unresolved_citation"
 
-    match_fields, normalised = predicate_to_match(kind, fields, predicate, severity)
+    match_fields = predicate_to_match(fields, predicate, severity)
+    # A dormant claim normalises its own field (a value-alias): the identity
+    # probe reads this to snapshot the resolved state across declared values.
+    normalised = [leaf_of(f) for f in fields] if severity == "dormant" else []
     # The id digests the claim - severity, fields, file, whitespace/case-normalised
     # predicate, deliberately NOT the line window, which shifts across bumps. The
     # union dedup keys on this id, so "one candidate per id" is the pool contract:
@@ -620,9 +631,11 @@ def load_manifest(engine: str) -> dict[str, list[str]]:
     """Read the per-engine cluster manifest; fail clearly when it is absent."""
     path = ENGINE_VERSIONS / engine / MANIFEST_NAME
     if not path.is_file():
+        available = sorted(p.parent.name for p in ENGINE_VERSIONS.glob(f"*/{MANIFEST_NAME}"))
+        have = ", ".join(available) if available else "none"
         raise FileNotFoundError(
             f"no analyst cluster manifest for engine {engine!r} at {path}. "
-            f"Only vllm ships one so far; author {path} before cold-reading {engine}."
+            f"Engines with a manifest: {have}. Author {path} before cold-reading {engine}."
         )
     document = yaml.safe_load(path.read_text())
     clusters = document.get("clusters") if isinstance(document, dict) else None
@@ -710,7 +723,11 @@ def write_candidates(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--engine", required=True, choices=("vllm", "transformers", "tensorrt"))
+    parser.add_argument(
+        "--engine",
+        required=True,
+        help="Engine to cold-read; load_manifest gates on the data files that ship a manifest",
+    )
     parser.add_argument(
         "--source-root",
         type=Path,
