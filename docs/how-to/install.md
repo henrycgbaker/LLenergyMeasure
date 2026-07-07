@@ -165,15 +165,18 @@ chain.
 > you've modified `src/llenergymeasure/`.
 
 Only Transformers has a project Dockerfile, so it is the only engine with a
-GHCR cache. The image declares `cache_from` pointing at the published GHCR
-tags; the `Build engine image` workflow's `transformers` job populates the cache via
-`docker/build-push-action`, exporting intermediate layers to
-`ghcr.io/henrycgbaker/llenergymeasure/transformers:latest` (rolling) and
-`:transformers-<VERSION>` (immutable per SSOT version, written on push to
-`main`). This lets fresh machines skip the ~30-min flash-attn FA3 Hopper
-compile. vLLM and TensorRT-LLM are pulled from upstream images
-(`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`) and need no
-project-side cache.
+GHCR cache. `docker-compose.yml` declares `cache_from` pointing at the
+published GHCR tags, and the cache itself is populated locally: `make
+docker-seed-transformers` exports the image's intermediate layers to
+`ghcr.io/henrycgbaker/llenergymeasure/transformers-cache:transformers-<VER>-buildcache`
+alongside a runnable promotion-source image. The canonical
+`transformers:transformers-<VER>` (immutable per engine pin) and
+`transformers:latest` (rolling) tags are produced from that seed: tag-copied
+at merge by `publish-engine-image.yml`, rebuilt at release by
+`docker-publish.yml` (see "How the transformers image is published" below).
+This lets fresh machines skip the ~30-min flash-attn FA3 Hopper compile.
+vLLM and TensorRT-LLM are pulled from upstream images (`vllm/vllm-openai`,
+`nvcr.io/nvidia/tensorrt-llm/release`) and need no project-side cache.
 
 Measured on `ds01` (AMD EPYC 7742, 128 cores, 504 GB RAM - Docker 27.0.3 / Buildx
 v0.32.1 / llenergymeasure 0.9.0):
