@@ -126,19 +126,23 @@ def test_interrogation_prompt_carries_predicate_fields_severity_and_absent_instr
 @pytest.mark.parametrize(
     "text,expected",
     [
-        ('{"present": true, "citation": "f.py:5"}', (True, "f.py:5")),
-        ('{"present": false}', (False, None)),
-        ("not json at all", (False, None)),
-        ('{"present": true}', (True, None)),
+        ('{"present": true, "citation": "f.py:5"}', ("present", "f.py:5")),
+        ('{"present": false}', ("absent", None)),
+        ('{"present": true}', ("present", None)),
+        # Unparseable / non-object / missing-key replies are UNKNOWN, never ABSENT:
+        # a parse failure must not be able to retire a real shipped rule.
+        ("not json at all", ("unknown", None)),
+        ("[1, 2, 3]", ("unknown", None)),  # valid JSON but not an object
+        ('{"citation": "f.py:5"}', ("unknown", None)),  # object missing "present"
     ],
 )
-def test_parse_interrogation(text: str, expected: tuple[bool, str | None]) -> None:
+def test_parse_interrogation(text: str, expected: tuple[str, str | None]) -> None:
     assert ab.parse_interrogation(text) == expected
 
 
 def test_interrogate_rule_present_mints_candidate_with_recall_provenance() -> None:
     rule = _rule("r", "error", {"vllm.sampling_params.temperature": {"<": 0}})
-    present, cand = ab.interrogate_rule(
+    outcome, cand = ab.interrogate_rule(
         "vllm",
         "0.19.1",
         rule,
@@ -146,7 +150,7 @@ def test_interrogate_rule_present_mints_candidate_with_recall_provenance() -> No
         lambda p, t: _Reply('{"present": true, "citation": "s.py:9"}'),
         "2026-07-07",
     )
-    assert present and cand is not None
+    assert outcome == "present" and cand is not None
     assert cand["provenance"]["source"] == "recall_interrogation"
     assert cand["provenance"]["from_rule"] == "r"
     assert cand["provenance"]["interrogation_citation"] == "s.py:9"
@@ -155,10 +159,10 @@ def test_interrogate_rule_present_mints_candidate_with_recall_provenance() -> No
 
 def test_interrogate_rule_absent_yields_no_candidate() -> None:
     rule = _rule("r", "error", {"vllm.sampling_params.temperature": {"<": 0}})
-    present, cand = ab.interrogate_rule(
+    outcome, cand = ab.interrogate_rule(
         "vllm", "0.19.1", rule, None, lambda p, t: _Reply('{"present": false}'), "2026-07-07"
     )
-    assert not present and cand is None
+    assert outcome == "absent" and cand is None
 
 
 def test_recall_interrogation_only_probes_unrediscovered_rules() -> None:
@@ -178,6 +182,46 @@ def test_recall_interrogation_only_probes_unrediscovered_rules() -> None:
     assert asked == ["q"]  # only the un-rediscovered rule was interrogated
     assert minted == []
     assert absent == ["gone"]
+
+
+def test_unknown_interrogation_neither_mints_nor_retires_and_rule_ships() -> None:
+    """A garbage LLM reply is UNKNOWN, not ABSENT (must-fix 1): the rule is
+    neither minted nor retired, and still ships on an unverified probe verdict."""
+    missing = _rule("gone", "error", {"vllm.engine_params.foo": {"<": 1}})
+    minted, absent = ab.recall_interrogation(
+        "vllm",
+        "0.19.1",
+        [missing],
+        set(),
+        None,
+        lambda p, t: _Reply("not json, a garbage reply"),
+        "2026-07-07",
+    )
+    assert minted == []  # UNKNOWN mints nothing ...
+    assert absent == []  # ... and does NOT retire (no parse-failure conflation)
+
+    new_rules, delta = ab.promote("vllm", "0.19.1", "2026-07-07", [missing], {}, [], set(), absent)
+    assert "gone" in {r["id"] for r in new_rules}  # unverified verdict -> kept untouched
+    assert "gone" not in delta.retired
+
+
+def test_rule_source_prefers_full_path_suffix_over_basename(tmp_path: Path) -> None:
+    """Two files share a basename; the path-qualified citation must retrieve the
+    right one, not sorted(rglob)[0] (should-fix 4)."""
+    root = tmp_path / "src"
+    (root / "core").mkdir(parents=True)
+    (root / "distributed").mkdir(parents=True)
+    (root / "core" / "scheduler.py").write_text("core scheduler\n")
+    (root / "distributed" / "scheduler.py").write_text("distributed scheduler\n")
+    rule = _rule(
+        "r",
+        "error",
+        {"x": {"<": 1}},
+        provenance={"source": "manual", "citation": "distributed/scheduler.py:1"},
+    )
+    numbered, label = ab._rule_source(root, rule)
+    assert label == "distributed/scheduler.py"  # not core/scheduler.py (sorted-first)
+    assert "distributed scheduler" in numbered
 
 
 # --- Stage 6: promotion matrix ---
@@ -272,6 +316,40 @@ def test_candidate_to_rule_shape() -> None:
         "engine_version": "0.19.1",
         "date": "2026-07-07",
     }
+
+
+def test_promoted_corpus_parses_through_real_shipped_loader(tmp_path: Path) -> None:
+    """A promote() corpus with an added analyst candidate and a human-signed
+    residue rule must parse through the runtime loader's closed-enum gate - the
+    thing that catches "absorb writes a corpus the runtime rejects" (should-fix 5)."""
+    from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
+
+    old_rules = [
+        _rule("old_signed", "error", {"vllm.engine_params.tensor_parallel_size": {"<": 1}})
+    ]
+    verdicts = {"old_signed": _verdict("unconfirmed")}  # -> sign-off path (verified: human)
+    union = [
+        _cand(
+            "vllm_added",
+            "error",
+            {"vllm.sampling_params.min_p": {">": 1}},
+            status="confirmed",
+            provenance={"source": "analyst_cold_read", "rationale": "min_p must be > 0"},
+        )
+    ]
+    new_rules, _ = ab.promote(
+        "vllm", "0.19.1", "2026-07-07", old_rules, verdicts, union, {"old_signed"}, []
+    )
+
+    corpus_dir = tmp_path / "engines" / "vllm"
+    corpus_dir.mkdir(parents=True)
+    (corpus_dir / "rules.yaml").write_text(ab.serialize_corpus("vllm", "0.19.1", new_rules))
+
+    parsed = EngineRulesLoader(corpus_root=tmp_path / "engines").load_rules("vllm")
+    by_id = {r.id: r for r in parsed.rules}
+    assert by_id["vllm_added"].provenance.source == "analyst"  # closed Source enum
+    assert by_id["vllm_added"].provenance.verified == "construction"  # closed Verified enum
+    assert by_id["old_signed"].provenance.verified == "human"  # signed residue
 
 
 # --- Byte-stable corpus regeneration ---
@@ -407,6 +485,47 @@ def test_live_run_regenerates_corpus_byte_stable(engine_tree: tuple[Path, Path])
     ab.absorb(_args(pool_root))
     assert once == before  # conservative keep leaves an untested corpus byte-identical
     assert corpus.read_text() == once  # and the regeneration is idempotent
+
+
+def test_signoff_mark_survives_across_reruns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A signed-off unconfirmed rule ships on every run and its mark is never
+    erased: the corpus is byte-identical across two live runs and the rule ships
+    both times (must-fix 2 - the self-erasing sign-off oscillation)."""
+    corpus_root = tmp_path / "engines"
+    engine_dir = corpus_root / "vllm"
+    engine_dir.mkdir(parents=True)
+    rule = _rule("vllm_signed", "error", {"vllm.engine_params.tensor_parallel_size": {"<": 1}})
+    (engine_dir / "rules.yaml").write_text(ab.serialize_corpus("vllm", "0.19.1", [rule]))
+    (engine_dir / "schema.discovered.json").write_text(
+        '{"sampling_params": {}, "engine_params": {"tensor_parallel_size": {}}}'
+    )
+    monkeypatch.setattr(ab, "CORPUS_ROOT", corpus_root)
+    monkeypatch.setattr(ab, "resolve_version", lambda engine: "0.19.1")
+    monkeypatch.setattr(ab, "run_probe", _fake_probe("unconfirmed"))  # never construction-confirmed
+
+    pool_root = tmp_path / "pool"
+    pool_dir = ab.pool_path(pool_root, "vllm", "0.19.1", "x").parent
+    pool_dir.mkdir(parents=True)
+    # Pre-seed the human sign-off mark. No analyst pool file: the rule is never
+    # rediscovered, and with --skip-interrogation it is never proposed for retirement.
+    (pool_dir / ab._SIGNOFF_FILE).write_text(
+        yaml.safe_dump({"residue": [{"id": "vllm_signed", "human_confirmed": True}]})
+    )
+
+    corpus = engine_dir / "rules.yaml"
+    args = _args(pool_root, skip_cold_read=True, skip_interrogation=True, skip_probe=False)
+    ab.absorb(args)
+    first = corpus.read_text()
+    assert "vllm_signed" in first  # ships via the sign-off path ...
+    assert ab.read_signoff(pool_dir) == {"vllm_signed"}  # ... and the mark is retained
+
+    ab.absorb(_args(pool_root, skip_cold_read=True, skip_interrogation=True, skip_probe=False))
+    second = corpus.read_text()
+    assert second == first  # byte-identical: no oscillation across re-runs
+    assert "vllm_signed" in second
+    assert ab.read_signoff(pool_dir) == {"vllm_signed"}  # mark still alive after run two
 
 
 def test_skip_flags_bypass_cold_read_and_probe(

@@ -35,7 +35,7 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -244,16 +244,35 @@ def interrogation_prompt(
     )
 
 
-def parse_interrogation(text: str) -> tuple[bool, str | None]:
-    """Parse the interrogation reply into (present, citation). Default: absent."""
+Interrogation = Literal["present", "absent", "unknown"]
+"""Three-way recall-interrogation outcome.
+
+Kept distinct from a boolean so a parse failure is never conflated with a
+positive ABSENT (which would retire a real shipped rule). Only a parsed JSON
+object that explicitly carries ``"present": false`` is ABSENT; everything else
+unparseable is UNKNOWN and falls through to the probe verdict, never retirement.
+"""
+
+
+def parse_interrogation(text: str) -> tuple[Interrogation, str | None]:
+    """Parse the interrogation reply into (outcome, citation).
+
+    ``present``  - the reply is a JSON object with ``"present": true``.
+    ``absent``   - the reply is a JSON object with ``"present": false`` (the ONLY
+      outcome that proposes retirement).
+    ``unknown``  - unparseable text, non-dict JSON, or a dict missing ``present``.
+      Neither minted nor retired: the safe default. A garbage LLM reply lands
+      here, so it can never masquerade as ABSENT and drop a shipped rule.
+    """
     try:
         obj = json.loads(text)
     except json.JSONDecodeError:
-        return False, None
-    if not isinstance(obj, dict):
-        return False, None
+        return "unknown", None
+    if not isinstance(obj, dict) or "present" not in obj:
+        return "unknown", None
     citation = obj.get("citation")
-    return bool(obj.get("present")), str(citation) if citation else None
+    cite = str(citation) if citation else None
+    return ("present" if bool(obj["present"]) else "absent"), cite
 
 
 def _rule_source(source_root: Path | None, rule: dict[str, Any]) -> tuple[str, str]:
@@ -263,15 +282,27 @@ def _rule_source(source_root: Path | None, rule: dict[str, Any]) -> tuple[str, s
     the prompt as a location prior. Returns (numbered_source, label).
     """
     citation = (rule.get("provenance") or {}).get("citation") or ""
-    name = citation.split(":", 1)[0].rsplit("/", 1)[-1]
+    file_part = citation.split(":", 1)[0]
+    name = file_part.rsplit("/", 1)[-1]
     if not source_root or not name:
         return "", "no source located"
     hits = sorted(source_root.rglob(name))
     if not hits:
         return "", "no source located"
-    lines = hits[0].read_text().splitlines()
+    # Same basename can live in several packages (scheduler.py, parallel.py both
+    # recur in vllm). Prefer the hit whose relative path ends with the cited path
+    # on segment boundaries; fall back to the sorted-first basename hit only when
+    # no suffix matches, so a bare-basename citation behaves exactly as before.
+    cited_parts = file_part.split("/")
+
+    def _suffix(hit: Path) -> bool:
+        rel = hit.relative_to(source_root).as_posix().split("/")
+        return rel[-len(cited_parts) :] == cited_parts
+
+    chosen = next((h for h in hits if _suffix(h)), hits[0])
+    lines = chosen.read_text().splitlines()
     numbered = "\n".join(f"{i:6d}  {line}" for i, line in enumerate(lines, start=1))
-    return numbered, hits[0].relative_to(source_root).as_posix()
+    return numbered, chosen.relative_to(source_root).as_posix()
 
 
 def interrogate_rule(
@@ -281,19 +312,21 @@ def interrogate_rule(
     source_root: Path | None,
     generate: Generator,
     run_date: str,
-) -> tuple[bool, dict[str, Any] | None]:
-    """Ask whether a shipped rule is still present; on yes, mint a candidate.
+) -> tuple[Interrogation, dict[str, Any] | None]:
+    """Ask whether a shipped rule is still present; on a PRESENT reply mint a candidate.
 
-    Returns (present, candidate). A positive answer becomes a candidate carrying
-    the OLD rule's precise predicate (source ``recall_interrogation``) so the
-    ladder can confirm it. A negative answer (ABSENT) yields no candidate and the
-    rule becomes a retirement proposal in the review delta.
+    Returns (outcome, candidate). A PRESENT reply becomes a candidate carrying the
+    OLD rule's precise predicate (source ``recall_interrogation``) so the ladder
+    can confirm it. An ABSENT reply yields no candidate and proposes retirement.
+    An UNKNOWN reply (unparseable / missing the ``present`` key) yields no
+    candidate and does NOT propose retirement - the rule falls through to its
+    probe verdict in the promotion matrix.
     """
     source, label = _rule_source(source_root, rule)
     reply = generate(interrogation_prompt(engine, version, rule, source, label), 0.0)
-    present, citation = parse_interrogation(reply.text)
-    if not present:
-        return False, None
+    outcome, citation = parse_interrogation(reply.text)
+    if outcome != "present":
+        return outcome, None
     leaves = sorted(leaf_of(f) for f in _match_fields(rule))
     candidate: dict[str, Any] = {
         "id": f"{engine}_recall_{rule['severity']}_{slug('_'.join(leaves))}_{_digest(str(rule['id']))}",
@@ -312,7 +345,7 @@ def interrogate_rule(
         "interrogation_citation": citation,
     }
     candidate["verdict"] = unverified_verdict()
-    return True, candidate
+    return "present", candidate
 
 
 def recall_interrogation(
@@ -326,19 +359,22 @@ def recall_interrogation(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Interrogate every shipped rule the fresh pool did not rediscover.
 
-    Returns (new candidates, ids of rules the analyst reported ABSENT).
+    Returns (new candidates, ids of rules the analyst reported ABSENT). Only a
+    positively-parsed ABSENT retires a rule; an UNKNOWN reply (parse failure,
+    non-dict JSON, missing ``present`` key) is neither minted nor retired - it
+    falls through to the probe verdict, so a garbage reply cannot drop a rule.
     """
     minted: list[dict[str, Any]] = []
     absent: list[str] = []
     for rule in old_rules:
         if _leaf_key(rule) in pool_leaf_keys:
             continue  # rediscovered by a fresh candidate; no interrogation needed
-        present, candidate = interrogate_rule(
+        outcome, candidate = interrogate_rule(
             engine, version, rule, source_root, generate, run_date
         )
-        if present and candidate is not None:
+        if outcome == "present" and candidate is not None:
             minted.append(candidate)
-        else:
+        elif outcome == "absent":
             absent.append(str(rule["id"]))
     return minted, absent
 
@@ -495,6 +531,7 @@ class Delta:
         self.retired: list[str] = []
         self.changed: list[str] = []
         self.residue: list[str] = []
+        self.signed: list[str] = []  # residue rules that shipped via sign-off this run
 
 
 def promote(
@@ -539,6 +576,7 @@ def promote(
             if rid in signed_off:
                 new_rules.append(_mark_human(rule, version, run_date))
                 delta.survived.append(rid)
+                delta.signed.append(rid)  # consumed a sign-off mark; persist it
             else:
                 delta.residue.append(rid)
         else:  # unverified / infra_error: not tested this run - keep untouched
@@ -565,27 +603,41 @@ def read_signoff(pool_dir: Path) -> set[str]:
 
 
 def write_signoff(pool_dir: Path, delta: Delta, old_by_id: dict[str, dict[str, Any]]) -> None:
-    """Write the residue sign-off file, preserving existing human marks."""
+    """Write the residue sign-off file, persisting consumed marks.
+
+    Two kinds of entry are written, sorted by id for byte-stable regeneration:
+    the current unsigned residue (rules awaiting a human mark), and every rule
+    that shipped via the sign-off path this run (``human_confirmed: true``,
+    ``delta.signed``). Persisting the consumed marks is what stops the corpus
+    oscillating: a signed rule ships via ``delta.survived`` (not residue), so
+    without re-emitting its mark the next run would find none, route the rule
+    back to residue, and unship it. Prior marks on ids still in residue are
+    preserved so a maintainer's edit is not clobbered.
+    """
     prior = {
         str(e["id"]): bool(e.get("human_confirmed"))
         for e in _load_yaml_list(pool_dir / _SIGNOFF_FILE, "residue")
     }
-    residue = [
-        {
+
+    def entry(rid: str, confirmed: bool) -> dict[str, Any]:
+        return {
             "id": rid,
             "severity": old_by_id[rid].get("severity"),
             "fields": sorted(old_by_id[rid].get("match", {}).get("fields", {})),
-            "human_confirmed": prior.get(rid, False),
+            "human_confirmed": confirmed,
         }
-        for rid in delta.residue
-    ]
+
+    rows = [entry(rid, prior.get(rid, False)) for rid in delta.residue]
+    rows += [entry(rid, True) for rid in delta.signed]
+    rows.sort(key=lambda r: str(r["id"]))
     header = (
         "# Material residue: shipped rules the probe could not exercise this run.\n"
         "# Set human_confirmed: true to keep shipping a rule you have verified by hand;\n"
-        "# the next absorb run consumes the mark. Unmarked residue is retired.\n"
+        "# the next absorb run consumes the mark. Unmarked residue is not shipped\n"
+        "# until you mark it (withheld pending sign-off, not retired).\n"
     )
     (pool_dir / _SIGNOFF_FILE).write_text(
-        header + yaml.safe_dump({"residue": residue}, sort_keys=False)
+        header + yaml.safe_dump({"residue": rows}, sort_keys=False)
     )
 
 
