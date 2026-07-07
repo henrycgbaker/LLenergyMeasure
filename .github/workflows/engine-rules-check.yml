@@ -76,6 +76,7 @@ jobs:
             --engine "$ENGINE" --version "$VERSION" --check
 
   rules-coverage:
+    name: rules-coverage (${{ matrix.engine }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
