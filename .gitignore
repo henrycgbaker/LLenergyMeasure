@@ -62,6 +62,11 @@ configs/engine_invariants/_staging/
 # previous-run fingerprint per (engine, producer) for drift detection).
 engine_versions/*.compat.json
 
+# Absorb candidate-pool workspace (version-scoped working files: pool,
+# ladder verdicts, sign-off, review delta - operational, never committed;
+# the only shipped output is the promoted rules corpus in src/).
+engine_versions/**/candidates/
+
 # Local caches (tooling scratch; never committed).
 .cache/
 

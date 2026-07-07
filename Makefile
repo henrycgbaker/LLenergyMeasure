@@ -3,7 +3,7 @@
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
-.PHONY: check-citations probe-candidates analyst-cold-read
+.PHONY: check-citations probe-candidates analyst-cold-read absorb
 .PHONY: package-check
 .PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
@@ -175,6 +175,15 @@ check-citations: ## Verify candidate citations (CANDIDATES=file.yaml SRC=path/to
 probe-candidates: ## Probe candidate rules in-engine (ENGINE=vllm|tensorrt|transformers CANDIDATES=file.yaml [ARGS=...])
 	@test -n "$(ENGINE)" && test -n "$(CANDIDATES)" || (echo "Usage: make probe-candidates ENGINE={vllm|tensorrt|transformers} CANDIDATES=candidates.yaml [ARGS='--out /tmp/verdicts.yaml']" && exit 1)
 	./scripts/probe_candidates.sh $(ENGINE) --candidates "$(CANDIDATES)" $(ARGS)
+
+# The absorb conductor: one command per engine-version bump that drives the whole
+# knowledge-refresh loop (cold read -> pool union -> recall interrogation ->
+# verification ladder -> promotion into the shipped rules corpus -> review delta).
+# SRC = the engine package at the pinned version. --dry-run reports the delta and
+# writes no shipped corpus. ARGS forwards flags (--skip-cold-read, --clean-room).
+absorb: ## Absorb one engine-version bump into the shipped rules (ENGINE=vllm SRC=path/to/source [ARGS='--dry-run'])
+	@test -n "$(ENGINE)" && test -n "$(SRC)" || (echo "Usage: make absorb ENGINE=vllm SRC=engine-src/ [ARGS='--dry-run --skip-cold-read']" && exit 1)
+	uv run python scripts/absorb.py --engine $(ENGINE) --source-root "$(SRC)" $(ARGS)
 
 # Build wheel + validate package install + check version consistency
 package-check: ## Build wheel, validate install, and check pyproject/_version sync
