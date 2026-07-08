@@ -106,7 +106,7 @@ No. FP8 quantisation (per `tensorrt.engine_params.quant_config.quant_algo: FP8`,
 
 ### Does it work on consumer GPUs (RTX 4090 / 4080)?
 
-Yes for Transformers and vLLM. TensorRT-LLM compilation is supported on Ada Lovelace (SM 8.9). Consumer GPUs typically have less VRAM than datacentre cards, so larger models may need quantisation or smaller batch sizes. The reference invariants corpus catches the most common VRAM-vs-config-vs-batch-size mismatches before init.
+Yes for Transformers and vLLM. TensorRT-LLM compilation is supported on Ada Lovelace (SM 8.9). Consumer GPUs typically have less VRAM than datacentre cards, so larger models may need quantisation or smaller batch sizes. The reference rules corpus catches the most common VRAM-vs-config-vs-batch-size mismatches before init.
 
 ### Multi-GPU?
 

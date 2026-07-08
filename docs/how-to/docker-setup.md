@@ -442,7 +442,7 @@ docker image inspect llenergymeasure:transformers \
 > `version_handshake.py` does today is a different check: it probes each
 > image's engine library version (`vllm.__version__`,
 > `tensorrt_llm.__version__`, `transformers.__version__`) and compares
-> it against the engine_version envelope on the wheel-bundled invariants
+> it against the engine_version envelope on the wheel-bundled rules
 > + schema artefacts. A real library/artefact mismatch is a hard error;
 > set `LLEM_SKIP_IMAGE_CHECK=1` to bypass if you know the skew is
 > harmless.

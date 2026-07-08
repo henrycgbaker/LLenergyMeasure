@@ -33,8 +33,9 @@ RadixAttention energy profiles. RadixAttention's KV-cache reuse mechanism
 creates an unusual energy signature (lower energy on repeated prefix patterns)
 that requires a dedicated measurement treatment.
 
-Scope includes: SGLang Docker image, engine plugin, parameter miner, and
-methodology documentation for prefix-aware energy measurement.
+Scope includes: SGLang Docker image, engine plugin, config schema and
+validation rules, and methodology documentation for prefix-aware energy
+measurement.
 
 ### Beyond Milestone 5
 

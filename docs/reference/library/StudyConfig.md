@@ -111,7 +111,7 @@ Controls sequencing, cycles, and failure handling:
 | `wall_clock_timeout_hours` | `float \| None` | `None` | Study-level wall-clock timeout. `None` = no limit. |
 | `experiment_timeout_seconds` | `float` | `600.0` | Per-experiment timeout. Applies to both local and Docker paths. |
 | `stdout_silence_timeout_seconds` | `float` | `300.0` | Docker watchdog: kill the container if it emits no stdout for this many seconds. Raise to 600-900s for TRT-LLM builds with infrequent compile progress output. |
-| `deduplicate_equivalent` | `bool` | `True` | When `True`, configs that are library-equivalent (same resolved config hash after engine-invariants dormant resolution) are deduplicated. Set to `false` to run every declared config regardless of measurement equivalence. |
+| `deduplicate_equivalent` | `bool` | `True` | When `True`, configs that are library-equivalent (same resolved config hash after engine-rules dormant resolution) are deduplicated. Set to `false` to run every declared config regardless of measurement equivalence. |
 
 ### Runner and image overrides
 
@@ -142,7 +142,7 @@ experiments cannot be constructed.
 
 Each item in `experiments` is individually validated as an `ExperimentConfig` (see
 [`ExperimentConfig`](./ExperimentConfig) for per-experiment validation rules, including
-engine-section matching and engine-invariants checking).
+engine-section matching and engine-rules checking).
 
 ---
 

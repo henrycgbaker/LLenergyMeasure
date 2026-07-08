@@ -176,8 +176,8 @@ Concrete near-term directions:
   plugin (RadixAttention prefix-cache energy profiles); the
   engine-plugin contract is sized to absorb new entrants as they
   stabilise.
-- **Adaptive sweep sampling.** Programmatic discovery + invariant
-  mining keeps the tractable parameter space large; further reductions
+- **Adaptive sweep sampling.** Programmatic discovery plus validation
+  rules keep the tractable parameter space large; further reductions
   would come from adaptive sampling that prioritises experiments most
   informative about the impl-effect question.
 - **Open-science result database.** A web frontend that lets users

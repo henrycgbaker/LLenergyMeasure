@@ -160,9 +160,12 @@ ExperimentConfig(
 require `dtype="float16"` or `dtype="bfloat16"`. Combining with `dtype="float32"` raises
 `ValidationError`.
 
-**Engine invariants.** The invariants corpus may emit `ConfigValidationWarning` for
-configurations the library will silently override (dormant invariants), or raise
-`ValidationError` for invalid combinations (e.g. FP8 on A100 with `engine="tensorrt"`).
+**Engine rules.** The engine's shipped `rules.yaml` is checked when the config is parsed,
+before the engine starts. A rule at `error` severity raises `ValidationError` for an
+invalid combination; a rule at `dormant` severity records a field the engine silently
+normalises, which the study planner uses to deduplicate configs that resolve to the same
+effective configuration. A separate `ConfigValidationWarning` is emitted for an unknown or
+misspelled engine field, with a suggestion for the closest valid name.
 
 ---
 
