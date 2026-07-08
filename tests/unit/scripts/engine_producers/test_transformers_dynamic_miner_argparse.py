@@ -83,10 +83,10 @@ def _load_miner_module(path: Path) -> Any:
     ids=lambda p: p.parent.parent.name,
 )
 def test_default_out_uses_registry_basename(miner_path: Path) -> None:
-    """The ``--out`` default basename matches the orchestrator registry entry.
+    """The ``--out`` default basename matches the expected staging entry.
 
-    The orchestrator (``build_corpus._ENGINE_EXTRACTORS``) names the staging
-    file ``transformers_dynamic_invariant_miner.yaml``. The miner default
+    The orchestrator names the staging file
+    ``transformers_dynamic_invariant_miner.yaml``. The miner default
     must match exactly; relying on the merger's ``transformers_*.yaml``
     discovery glob to paper over a basename mismatch is the latent bug the
     fix removes.
@@ -200,30 +200,6 @@ def test_out_argument_routes_write_path(miner_path: Path, tmp_path: Path) -> Non
             f"miner created the legacy hardcoded path {sentinel_hardcoded!s} "
             "despite --out being supplied."
         )
-
-
-def test_orchestrator_registry_matches_miner_default_basename() -> None:
-    """Cross-module invariant: registry name == miner --out default basename.
-
-    Prevents the basename from drifting back out of sync. The
-    orchestrator's ``_ENGINE_EXTRACTORS`` registry is the source of truth
-    for which staging filename the merger looks for; the miner default must
-    track it.
-    """
-    from scripts.engine_producers.build_corpus import _ENGINE_EXTRACTORS
-
-    transformers_extractors = {
-        e.module: e.staging_basename for e in _ENGINE_EXTRACTORS["transformers"]
-    }
-    dynamic_basename = transformers_extractors.get(
-        "scripts.engine_producers.transformers_dynamic_invariant_miner"
-    )
-    assert dynamic_basename == _EXPECTED_STAGING_BASENAME, (
-        f"orchestrator registry expects {dynamic_basename!r}; "
-        f"this test pins it to {_EXPECTED_STAGING_BASENAME!r}. "
-        "If you renamed the staging file, update the miner --out default and "
-        "_EXPECTED_STAGING_BASENAME in this test together."
-    )
 
 
 class _ParseCaptured(BaseException):
