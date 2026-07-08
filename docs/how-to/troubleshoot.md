@@ -329,7 +329,7 @@ tell for version skew).
 > always equals the host source). What `StudyRunner._prepare_images` does
 > today is a different check: it probes the in-container engine library
 > version and compares it against the engine_version envelope on the
-> wheel-bundled invariants + schema artefacts. The Pydantic-shape errors
+> wheel-bundled rules + schema artefacts. The Pydantic-shape errors
 > above are exactly the symptom that probe is meant to catch ahead of
 > dispatch, so on current builds the gate should hard-error before the
 > container ever runs. If you reached this section anyway, either the image

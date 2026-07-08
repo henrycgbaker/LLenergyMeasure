@@ -183,8 +183,8 @@ others) and sweeps configurations for throughput and latency.
 Where the contrast lies: optimum-benchmark is throughput-leaning - the
 default reported metrics are latency and tokens-per-second, with energy
 as a secondary axis (recently added). LLenergyMeasure makes energy a
-first-class output and pairs it with the discovery and invariant-mining
-pipelines that optimum-benchmark does not have. Methodology rigour
+first-class output and pairs it with the config schema-discovery and
+validation-rules pipelines that optimum-benchmark does not have. Methodology rigour
 (baseline subtraction, warmup convergence, thermal stabilisation,
 sampler lifecycle) is more explicit on the LLenergyMeasure side.
 

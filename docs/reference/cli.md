@@ -2,13 +2,14 @@
 
 ## CLI Reference
 
-llem provides four commands and a version flag.
+llem provides five commands and a version flag.
 
 ```
 llem run [CONFIG] [OPTIONS]   # run an experiment or study
 llem config [OPTIONS]         # show environment and configuration status
 llem doctor [OPTIONS]         # verify Docker images match the host toolchain
-llem report-gaps [OPTIONS]    # propose invariants corpus entries from runtime feedback
+llem report-gaps [OPTIONS]    # propose rules corpus entries from runtime feedback
+llem study [SUBCOMMAND]       # write and prepare study files (init, plan)
 llem --version                # print version and exit
 ```
 
@@ -51,7 +52,7 @@ Verify Docker images match the host ExperimentConfig schema
 
 ### `llem report-gaps`
 
-Propose invariants corpus entries from runtime observations
+Propose rules corpus entries from runtime observations
 
 **Options:**
 
@@ -67,3 +68,41 @@ Propose invariants corpus entries from runtime observations
 ### `llem study`
 
 Write and prepare study files (llem run stays the executor).
+
+### `llem study init`
+
+Write a study file for a model, ready to edit and run with ``llem run``.
+
+Without ``--defaults`` the tuning fields are present but commented out, each
+annotated with its type, range, and default - uncomment the ones you want.
+With ``--defaults`` those fields are filled in at their defaults, giving a
+reproducible baseline you can run as-is. With ``--bounds`` every field with
+a derivable value range becomes an explicit value list under ``sweep:``,
+forming a maximal grid you prune down to the study you want.
+
+**Options:**
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--model` | `-m` | str |  | Model id or HuggingFace path for the study. |
+| `--engine` | `-e` | str |  | Engine to write (transformers, vllm, tensorrt). Omit to write all engines. |
+| `--output` | `-o` | path |  | Where to write the study file (default: study.yaml). Will not overwrite. |
+| `--defaults` |  | flag | `false` | Set every field to its default (a runnable baseline) instead of leaving them commented out. |
+| `--bounds` |  | flag | `false` | Emit every field with a derivable value range as an explicit value list under sweep: - a maximal grid to prune before running. |
+
+### `llem study plan`
+
+Preview what ``llem run <study_file>`` would execute, without running it.
+
+Prints a read-only funnel - declared grid points, then known-invalid points
+pruned by engine rules, then duplicate configs merged away, then experiments
+times cycles equals total runs - plus a wall-clock lower bound from the
+thermal gaps alone. No experiments run, nothing is written, the GPU is never
+touched. Exit 0 on a valid plan (even with skips); nonzero when the file is
+missing, unparseable, or produces no experiments.
+
+**Arguments:**
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `study_file` | path | yes | Study YAML file to preview (as llem run would expand it). |
