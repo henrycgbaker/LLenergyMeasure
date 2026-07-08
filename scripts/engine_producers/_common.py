@@ -674,8 +674,7 @@ def make_envelope(
     # most recent commit touching any input path. Without this override every
     # CI run produces a fresh wallclock timestamp, which the workflow's
     # commit-back picks up as a 2-line diff, re-firing the path filter and
-    # creating a synchronize loop. Mirrors LLENERGY_VALIDATION_FROZEN_AT in
-    # scripts/validate_invariants.py.
+    # creating a synchronize loop.
     discovered_at = (
         os.environ.get("LLENERGY_DISCOVERY_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
     )

@@ -24,8 +24,8 @@ the lift can derive from a stdlib dataclass is:
 
 If a target dataclass mixes in ``annotated-types`` constraints via
 ``Annotated[int, Gt(0)]`` (rare but valid), this lift treats them as opaque
-type metadata - those constraints belong in the ``_pydantic_lift`` /
-``_msgspec_lift`` paths if the library uses one of those frameworks.
+type metadata - those constraints belong in a Pydantic- or msgspec-specific
+lift path if the library uses one of those frameworks.
 
 Determinism
 -----------
