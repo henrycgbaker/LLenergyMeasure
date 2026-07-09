@@ -83,6 +83,13 @@ jobs:
           mapfile -t LIVE_SHAS < <(gh pr list --state open --json headRefOid --jq '.[].headRefOid')
           printf 'Live PR HEAD SHAs: %s\n' "${LIVE_SHAS[*]:-<none>}"
 
+          # The current pin's cache tag is the live promotion source that
+          # publish-engine-image.yml tag-copies from; it must never be
+          # pruned regardless of age. Resolve it from current.yaml at run
+          # time so the exemption tracks the pin, never a hardcoded version.
+          PIN=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
+          printf 'Current transformers pin (exempt): %s\n' "${PIN}"
+
           # Page through versions; the API returns up to 100 per page.
           page=1
           delete_ids=()
@@ -106,14 +113,20 @@ jobs:
               fi
 
               # Tag-overlap check: skip if any tag matches a live PR's
-              # HEAD SHA (whole-string match). The buildx-cache tag
-              # convention is `<sha>-buildcache`; the engine-version tag
-              # is `transformers-<version>`. We compare each tag against
-              # each live SHA.
+              # HEAD SHA (whole-string match) or the current pin's cache
+              # tag. The buildx-cache tag convention is `<sha>-buildcache`;
+              # the engine-version tag is `transformers-<version>`. We
+              # compare each tag against each live SHA, and against the
+              # pinned promotion source `transformers-<PIN>` (+ its
+              # `-buildcache` variant).
               skip=0
               if [[ -n "${TAGS}" ]]; then
                 IFS=',' read -ra TAG_ARR <<< "${TAGS}"
                 for tag in "${TAG_ARR[@]}"; do
+                  if [[ "${tag}" == "transformers-${PIN}" || "${tag}" == "transformers-${PIN}-buildcache" ]]; then
+                    skip=1
+                    break
+                  fi
                   for sha in "${LIVE_SHAS[@]}"; do
                     [[ -z "${sha}" ]] && continue
                     if [[ "${tag}" == "${sha}" || "${tag}" == "${sha}-buildcache" ]]; then
@@ -125,7 +138,7 @@ jobs:
               fi
 
               if [[ ${skip} -eq 1 ]]; then
-                echo "Skip (live PR ref): id=${ID} created=${CREATED} tags=[${TAGS}]"
+                echo "Skip (live PR ref or current pin): id=${ID} created=${CREATED} tags=[${TAGS}]"
                 continue
               fi
 

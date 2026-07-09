@@ -54,13 +54,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The promotion path (publish-engine-image.yml) owns the `latest` and
+      # `transformers-<engine version>` tags. This release-time build tags
+      # only the package version so the two producers never write the same
+      # tag with different content.
       - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/transformers
           tags: |
             type=raw,value=${{ inputs.version }}
-            type=raw,value=latest
 
       - uses: actions/setup-python@v5
         with:
@@ -71,11 +74,23 @@ jobs:
         run: |
           value=$(python3 scripts/compute_expconf_fingerprint.py)
           echo "value=${value}" >> "$GITHUB_OUTPUT"
+      # Read the transformers engine pin so the build installs the pinned
+      # version instead of the Dockerfile ARG fallback default. yq ships on
+      # ubuntu-latest runners.
+      - id: pin
+        name: Resolve transformers pin from current.yaml
+        run: |
+          value=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
+          echo "value=${value}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.transformers
+          # Build the runtime stage, matching the locally seeded promotion
+          # source. The dev stage layers ruff/mypy/pytest on top and is for
+          # local iteration only, not for a published release image.
+          target: runtime
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -87,6 +102,7 @@ jobs:
           build-args: |
             LLEM_PKG_VERSION=${{ inputs.version }}
             LLEM_EXPCONF_SCHEMA_FINGERPRINT=${{ steps.fingerprint.outputs.value }}
+            TRANSFORMERS_VERSION=${{ steps.pin.outputs.value }}
             MAX_JOBS=2
           # mode=max exports intermediate layers (including the flash-attn
           # compile) so downstream builders can reuse them, not just the final

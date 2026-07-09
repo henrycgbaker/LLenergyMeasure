@@ -14,6 +14,12 @@ name: Engine rules check
 #      validator sites and reports the sites no shipped rule covers. It never
 #      fails the job, so coverage gaps are visible without blocking.
 #
+#   3. seed-image-check (gating): the transformers runtime image is seeded
+#      locally before a bump lands (make docker-seed-transformers) and
+#      tag-copied on merge by publish-engine-image.yml. This checks the seed
+#      for the current pin already exists in GHCR, so a bump PR that forgot to
+#      seed fails at PR time rather than at merge-time promotion.
+#
 # transformers is absent from the coverage report on purpose: its config
 # validation uses imperative post-init idioms that the validator-site model
 # does not recognise, so a coverage number there would be noise. It is still
@@ -37,6 +43,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: engine-rules-check-${{ github.event.pull_request.number || github.ref }}
@@ -151,3 +158,39 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           echo "rules_coverage advisory exit code: $rc (job stays green regardless)"
+
+  seed-image-check:
+    name: seed-image-check (transformers)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+      - name: Resolve pinned version
+        id: pin
+        run: |
+          version=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Pinned transformers version: $version"
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify transformers seed image exists in GHCR
+        env:
+          VERSION: ${{ steps.pin.outputs.version }}
+          REPO: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SOURCE="${REPO}/transformers-cache:transformers-${VERSION}"
+          echo "Checking promotion source: ${SOURCE}"
+          if docker manifest inspect "${SOURCE}" > /dev/null 2>&1; then
+            echo "Seed image found: ${SOURCE}"
+          else
+            echo "::error::Seed image missing: ${SOURCE}"
+            echo "The transformers runtime image for pin ${VERSION} was not seeded." >&2
+            echo "Run 'make docker-seed-transformers' locally before merging this bump," >&2
+            echo "otherwise the merge-time promotion (publish-engine-image.yml) will fail." >&2
+            exit 1
+          fi
