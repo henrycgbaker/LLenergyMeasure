@@ -17,6 +17,26 @@ For the schema-side counterpart, see [Schema refresh](/contributing/schema-refre
 
 ---
 
+## Prerequisites
+
+The cold-read stage reads the pinned engine source with a local LLM, so before
+the first run:
+
+- **A local Ollama daemon** reachable at `--ollama-host` (default
+  `http://localhost:11434`, or the `OLLAMA_HOST` env var).
+- **The analyst model pulled** into Ollama: `ollama pull qwen2.5-coder:32b`
+  (the `--model` default; it needs a 32k context window).
+- **A local copy of the engine's package source at the pinned version**, passed
+  as `SRC` / `--source-root`. There is no downloader; unpack it yourself (e.g.
+  `pip download --no-binary :all: --no-deps vllm==0.19.1` then extract the
+  sdist).
+- **An `analyst_clusters.yaml` manifest** for the engine (see below) - the
+  three shipped engines already have one.
+
+The in-engine probe tiers additionally need the engine's Docker image (and, for
+the GPU engines, an NVIDIA GPU). The host-only stages (cold read, citation
+check, coverage) do not.
+
 ## The absorb workflow
 
 `make absorb` is the one command a maintainer runs per engine-version bump. It
@@ -31,7 +51,8 @@ make absorb ENGINE=vllm SRC=engine-src/ ARGS='--dry-run'   # report the delta, w
 `rules-coverage` CI check does a blobless sparse checkout of). The stages are:
 
 1. **Cold read.** An assisted read of the pinned source proposes candidate
-   rules (`make analyst-cold-read`, which uses a local model).
+   rules (`make analyst-cold-read`, which prompts the local Ollama model per
+   source cluster).
 2. **Pool union.** The proposed candidates are merged with observed runtime
    collisions and any manual seeds, then deduplicated into a version-scoped
    working file (the "pool"). Pools are never shipped.
@@ -45,8 +66,17 @@ make absorb ENGINE=vllm SRC=engine-src/ ARGS='--dry-run'   # report the delta, w
 6. **Review delta.** An old-versus-new diff is written for the maintainer to
    review before committing.
 
-Every stage is skippable, so a re-run resumes rather than redoes. The only
-`src/` file absorb writes is the shipped `rules.yaml`, via promotion.
+Stages can be skipped to resume rather than redo a run:
+
+- `--skip-cold-read` reuses the existing analyst pool file (no Ollama call).
+- `--skip-interrogation` skips the recall-interrogation pass.
+- `--skip-probe` runs the citation tier only (no engine container).
+- `--clean-room` ignores the within-version verdict memory and re-probes
+  everything.
+- `--dry-run` reports the full delta and writes no shipped corpus.
+- `--ollama-host` / `--model` override the analyst endpoint and model.
+
+The only `src/` file absorb writes is the shipped `rules.yaml`, via promotion.
 
 ---
 
@@ -62,11 +92,28 @@ engine confirms it.
 | 3 | **Effective-config identity** - the engine silently normalises the declared value (for `dormant` rules) | Engine Docker image (`make probe-candidates`) |
 
 Survival is decided on the probe verdict's status, never the probe process exit
-code (which is `0` even when every verdict is an infrastructure error). A rule
-that the probe could not exercise this run is residue; it keeps shipping until a
-maintainer signs it off by hand. A rule never leaves the corpus automatically -
-a recall interrogation that comes back "absent" is a retirement proposal, not a
-drop.
+code (which is `0` even when every verdict is an infrastructure error). The
+verdict vocabulary is closed - there is deliberately no `refuted`, because pure
+config construction can never prove the engine accepts a config end-to-end:
+
+| Verdict | Meaning | Disposition on promotion |
+|---|---|---|
+| `confirmed` | The probe proved the claim in the real engine | Ships |
+| `unconfirmed` | The probe ran but neither proved nor disproved the claim | **Withheld** until signed off (fail-closed) |
+| `unprobeable` | No deterministic probe could be derived or run | **Withheld** until signed off (fail-closed) |
+| `infra_error` | A probe leg failed for infrastructure reasons | Kept untouched (not tested this run) |
+| `unverified` | Not probed this run | Kept untouched (not tested this run) |
+
+The residue semantics are **fail-closed**: an `unconfirmed` or `unprobeable`
+rule is *withheld* from the promoted `rules.yaml` - it does not ship - until a
+maintainer signs it off by hand. It is not retained-until-reviewed; an unmarked
+residue rule silently disappears from the shipped corpus. Signing off means
+adding the rule's id to the `residue:` list in
+`engine_versions/<engine>/v<version>/outputs/absorb_signoff.yaml` with
+`human_confirmed: true`; absorb reads that file and re-ships only the marked
+rules (annotating them as human-confirmed). Rules that simply were not tested
+this run (`unverified` / `infra_error`) are kept untouched, so an all-infra
+failure promotes nothing new and drops nothing.
 
 ---
 
@@ -91,15 +138,49 @@ image; the host-only stages (cold read, citation check, coverage) do not.
 
 ```
 src/llenergymeasure/engines/<engine>/
-├── rules.yaml                 Shipped validation rules (the only committed output)
-└── _staging/                  Working files (gitignored)
+└── rules.yaml                 Shipped validation rules (the only src/ output absorb writes)
 
 engine_versions/<engine>/
-└── current.yaml               Pin for the engine library version (Renovate-writable)
+├── current.yaml               Pin for the engine library version
+├── analyst_clusters.yaml      Cold-read source clustering manifest (see below)
+└── v<version>/
+    ├── candidates/            Version-scoped working pool (gitignored)
+    │   ├── analyst_cold_read.yaml   Cold-read proposals
+    │   ├── observed_collisions.yaml Deterministic-miner input
+    │   ├── manual_seeds.yaml        Hand-authored seeds
+    │   ├── union.yaml               Merged, deduplicated pool
+    │   └── ladder.yaml              Persisted probe verdicts (within-version memory)
+    └── outputs/               Durable, git-tracked
+        └── absorb_signoff.yaml      Human residue sign-off record
 ```
 
-The pool, ladder verdicts, sign-off file, and review report are working files
-under the staging area; only `rules.yaml` is committed.
+The pool and ladder verdicts under `candidates/` are working files and are
+gitignored (`engine_versions/**/candidates/`). The `outputs/` sibling is
+git-tracked: the sign-off file is a durable record a maintainer edits. Only
+`rules.yaml` is a committed *shipped* artifact.
+
+### The analyst_clusters.yaml manifest
+
+Each engine has a per-engine manifest at
+`engine_versions/<engine>/analyst_clusters.yaml`. It is a single `clusters:`
+mapping of cluster name to a list of source files (relative to `SRC`); a path
+with a `*` is a glob. The cold read packs each cluster's files into char-budget
+chunks and prompts the model once per chunk, so the manifest is what scopes and
+groups the read - a cluster name becomes the chunk id prefix. Example:
+
+```yaml
+# engine_versions/vllm/analyst_clusters.yaml
+clusters:
+  sampling:
+    - sampling_params.py
+  speculative:
+    - config/speculative.py
+  platforms:
+    - platforms/*.py
+```
+
+Adding a source area to the cold read means adding files to a cluster (or a new
+cluster) here; there are no per-cluster prompt hints, only the file list.
 
 ---
 
@@ -123,6 +204,15 @@ that candidate id; adjust or drop the candidate.
 The engine image is missing or the container could not start. Because survival
 keys on verdict status (not exit code), an all-`infra_error` run promotes
 nothing new and keeps the existing corpus. Fix the image, then re-run.
+
+### A rule I expected to ship disappeared from `rules.yaml`
+
+It was probed as `unconfirmed` or `unprobeable` and is not signed off, so it was
+withheld (fail-closed). Check the review delta's residue list. If the constraint
+is genuinely still real but not machine-probeable, add its id to the `residue:`
+list in `engine_versions/<engine>/v<version>/outputs/absorb_signoff.yaml` with
+`human_confirmed: true`, then re-run absorb - it will re-ship the marked rule.
+If the constraint is genuinely gone, leave it unmarked and it stays dropped.
 
 ### `rules-coverage` flags a validator site with no rule
 
