@@ -74,13 +74,13 @@ passthrough_kwargs:
 `ExperimentConfig` sets `extra="forbid"`, so an unknown **top-level** key is a
 hard error, and so is a key placed directly on an engine block that is not
 `engine_params` or `sampling_params` (the validator emits a migration hint;
-`models.py:617-687`). Parameters therefore live one level deeper than they did
+`validate_engine_section_extras` in `models.py`). Parameters therefore live one level deeper than they did
 in the pre-0.10 flat layout: `transformers.engine_params.dtype`, not
 `transformers.dtype`.
 
 The engine-specific section must match the `engine:` field; mixing
 `engine: vllm` with a `transformers:` section is a configuration error
-(`validate_engine_section_match`, `models.py:593`). When `engine:` is set
+(`validate_engine_section_match` in `models.py`). When `engine:` is set
 without a matching section, the engine's own defaults are used.
 
 There is no top-level `dtype:` field. `dtype` lives inside each engine's
@@ -90,7 +90,7 @@ models it differently (see the per-engine tables).
 
 `runners:`, `images:`, `sweep:`, and `experiments:` are study-level fields and
 not valid in a single-experiment YAML; they belong on the study document
-(`StudyConfig`, `models.py:931-1026`). See
+(`StudyConfig` in `models.py`). See
 [study-config.md](../study-config.md).
 
 ## Common fields (all engines)
@@ -102,46 +102,46 @@ identically across engines. Every one is `extra="forbid"`.
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `model` | str (required, min length 1) | - | HuggingFace model ID or local path | `models.py:279-321` |
-| `dataset.source` | str (min length 1) | `aienergyscore` | Built-in dataset alias or `.jsonl` path | `models.py:243-271` |
-| `dataset.n_prompts` | int >= 1 | `100` | Number of prompts to load or generate | `models.py:243-271` |
-| `dataset.order` | `interleaved` \| `grouped` \| `shuffled` | `interleaved` | Prompt ordering strategy | `models.py:243-271` |
-| `max_input_tokens` | int >= 1 \| null | `256` | Input truncation cap; null disables | `models.py:279-321` |
-| `max_output_tokens` | int >= 1 \| null | `256` | Output token budget; null generates to EOS or context limit | `models.py:279-321` |
-| `random_seed` | int | `42` | Per-experiment seed for inference RNG and dataset ordering | `models.py:279-321` |
+| `model` | str (required, min length 1) | - | HuggingFace model ID or local path | `TaskConfig` |
+| `dataset.source` | str (min length 1) | `aienergyscore` | Built-in dataset alias or `.jsonl` path | `DatasetConfig` |
+| `dataset.n_prompts` | int >= 1 | `100` | Number of prompts to load or generate | `DatasetConfig` |
+| `dataset.order` | `interleaved` \| `grouped` \| `shuffled` | `interleaved` | Prompt ordering strategy | `DatasetConfig` |
+| `max_input_tokens` | int >= 1 \| null | `256` | Input truncation cap; null disables | `TaskConfig` |
+| `max_output_tokens` | int >= 1 \| null | `256` | Output token budget; null generates to EOS or context limit | `TaskConfig` |
+| `random_seed` | int | `42` | Per-experiment seed for inference RNG and dataset ordering | `TaskConfig` |
 
 ### `measurement:`
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `warmup.enabled` | bool | `true` | Enable warmup phase before measurement | `models.py:118-172` |
-| `warmup.n_prompts` | int >= 1 | `5` | Number of warmup prompts in fixed mode | `models.py:118-172` |
-| `warmup.thermal_floor_seconds` | float >= 30.0 | `60.0` | Minimum post-warmup wait for thermal stabilisation | `models.py:118-172` |
-| `warmup.convergence_detection` | bool | `false` | Enable adaptive CV-based convergence (replaces the fixed `n_prompts` count) | `models.py:118-172` |
-| `warmup.cv_threshold` | float [0.01, 0.5] | `0.05` | CV target for convergence | `models.py:118-172` |
-| `warmup.max_prompts` | int >= 5 | `20` | Safety cap for CV mode | `models.py:118-172` |
-| `warmup.window_size` | int >= 3 | `3` | Sliding window size for CV calculation | `models.py:118-172` |
-| `warmup.min_prompts` | int >= 1 | `5` | Minimum prompts before checking convergence | `models.py:118-172` |
-| `baseline.enabled` | bool | `true` | Measure idle GPU power before experiments | `models.py:180-235` |
-| `baseline.duration_seconds` | float [5.0, 120.0] | `30.0` | Baseline measurement window | `models.py:180-235` |
-| `baseline.strategy` | `cached` \| `validated` \| `fresh` | `validated` | Caching strategy for the baseline measurement | `models.py:180-235` |
-| `baseline.cache_ttl_seconds` | float >= 60.0 | `7200.0` | Cached baseline lifetime (cached/validated only) | `models.py:180-235` |
-| `baseline.validation_interval` | int >= 1 | `5` | Re-validate every N experiments (validated only) | `models.py:180-235` |
-| `baseline.drift_threshold` | float [0.01, 0.50] | `0.10` | Drift fraction that triggers re-measurement (validated only) | `models.py:180-235` |
-| `energy_sampler` | `auto` \| `nvml` \| `zeus` \| `codecarbon` \| null | `auto` | Energy sampler; null disables energy measurement | `models.py:328-428` |
-| `latency_profiling` | bool | `false` | Opt-in per-token latency profiling (TTFT/ITL). Overhead may perturb energy and latency, so profiled runs are tagged in `measurement_warnings`. | `models.py:328-428` |
-| `measurement_methodology` | `total` \| `windowed` \| `steady_state` | `total` | How the measurement window is derived from the run | `models.py:328-428` |
-| `measurement_window` | [float, float] \| null | null | Required when `measurement_methodology=windowed` (`start >= 0`, `end > start`) | `models.py:328-428` |
-| `warmup_discard_fraction` | float [0.0, 1.0) | `0.1` | Fraction of the run discarded as warmup when deriving steady state | `models.py:328-428` |
-| `warmup_discard_seconds` | float >= 0.0 \| null | null | Absolute warmup discard window (overrides the fraction) | `models.py:328-428` |
-| `steady_state_auto_detect` | bool | `false` | Auto-detect the steady-state window | `models.py:328-428` |
+| `warmup.enabled` | bool | `true` | Enable warmup phase before measurement | `WarmupConfig` |
+| `warmup.n_prompts` | int >= 1 | `5` | Number of warmup prompts in fixed mode | `WarmupConfig` |
+| `warmup.thermal_floor_seconds` | float >= 30.0 | `60.0` | Minimum post-warmup wait for thermal stabilisation | `WarmupConfig` |
+| `warmup.convergence_detection` | bool | `false` | Enable adaptive CV-based convergence (replaces the fixed `n_prompts` count) | `WarmupConfig` |
+| `warmup.cv_threshold` | float [0.01, 0.5] | `0.05` | CV target for convergence | `WarmupConfig` |
+| `warmup.max_prompts` | int >= 5 | `20` | Safety cap for CV mode | `WarmupConfig` |
+| `warmup.window_size` | int >= 3 | `3` | Sliding window size for CV calculation | `WarmupConfig` |
+| `warmup.min_prompts` | int >= 1 | `5` | Minimum prompts before checking convergence | `WarmupConfig` |
+| `baseline.enabled` | bool | `true` | Measure idle GPU power before experiments | `BaselineConfig` |
+| `baseline.duration_seconds` | float [5.0, 120.0] | `30.0` | Baseline measurement window | `BaselineConfig` |
+| `baseline.strategy` | `cached` \| `validated` \| `fresh` | `validated` | Caching strategy for the baseline measurement | `BaselineConfig` |
+| `baseline.cache_ttl_seconds` | float >= 60.0 | `7200.0` | Cached baseline lifetime (cached/validated only) | `BaselineConfig` |
+| `baseline.validation_interval` | int >= 1 | `5` | Re-validate every N experiments (validated only) | `BaselineConfig` |
+| `baseline.drift_threshold` | float [0.01, 0.50] | `0.10` | Drift fraction that triggers re-measurement (validated only) | `BaselineConfig` |
+| `energy_sampler` | `auto` \| `nvml` \| `zeus` \| `codecarbon` \| null | `auto` | Energy sampler; null disables energy measurement | `MeasurementConfig` |
+| `latency_profiling` | bool | `false` | Opt-in per-token latency profiling (TTFT/ITL). Overhead may perturb energy and latency, so profiled runs are tagged in `measurement_warnings`. | `MeasurementConfig` |
+| `measurement_methodology` | `total` \| `windowed` \| `steady_state` | `total` | How the measurement window is derived from the run | `MeasurementConfig` |
+| `measurement_window` | [float, float] \| null | null | Required when `measurement_methodology=windowed` (`start >= 0`, `end > start`) | `MeasurementConfig` |
+| `warmup_discard_fraction` | float [0.0, 1.0) | `0.1` | Fraction of the run discarded as warmup when deriving steady state | `MeasurementConfig` |
+| `warmup_discard_seconds` | float >= 0.0 \| null | null | Absolute warmup discard window (overrides the fraction) | `MeasurementConfig` |
+| `steady_state_auto_detect` | bool | `false` | Auto-detect the steady-state window | `MeasurementConfig` |
 
 ### Top-level optional fields
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `sampling_preset` | `deterministic` \| `standard` \| `creative` \| `factual` \| null | null | Merges preset values into the active engine's `sampling_params:` section at parse time. Explicit YAML values take precedence. | `models.py:469-476`, `models.py:555-584`, `ssot.py:27-32` |
-| `passthrough_kwargs` | dict \| null | null | Extra kwargs forwarded to the engine at execution time; keys must not collide with `ExperimentConfig` top-level field names | `models.py:501-505`, `models.py:689-704` |
+| `sampling_preset` | `deterministic` \| `standard` \| `creative` \| `factual` \| null | null | Merges preset values into the active engine's `sampling_params:` section at parse time. Explicit YAML values take precedence. | `ExperimentConfig` (`expand_sampling_preset`, `SAMPLING_PRESETS`) |
+| `passthrough_kwargs` | dict \| null | null | Extra kwargs forwarded to the engine at execution time; keys must not collide with `ExperimentConfig` top-level field names | `ExperimentConfig` (`validate_passthrough_kwargs_no_collision`) |
 
 ## Harness (`harness:`) - transformers-only orchestration knobs
 
@@ -162,17 +162,17 @@ harness:
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `batch_size` | int >= 1 | null (-> 1) | Prompt-batching size for llem's runner loop (`model.generate()` has no batch_size kwarg) | `harness.py:45-49` |
-| `torch_compile` | bool | null (-> false) | Enable `torch.compile` on the loaded model | `harness.py:50-53` |
-| `torch_compile_mode` | str | null (-> `default`) | `default` \| `reduce-overhead` \| `max-autotune`. Requires `torch_compile=true`. | `harness.py:54-57` |
-| `torch_compile_backend` | str | null (-> `inductor`) | `torch.compile` backend. Requires `torch_compile=true`. | `harness.py:58-61` |
-| `allow_tf32` | bool | null | Allow TF32 matmul on Ampere+ via `torch.backends` | `harness.py:62-65` |
-| `autocast_enabled` | bool | null (-> false) | Wrap generation in `torch.autocast` | `harness.py:66-69` |
-| `autocast_dtype` | `float16` \| `bfloat16` | null (-> bfloat16 on Ampere) | AMP dtype (used when `autocast_enabled=true`) | `harness.py:70-73` |
+| `batch_size` | int >= 1 | null (-> 1) | Prompt-batching size for llem's runner loop (`model.generate()` has no batch_size kwarg) | `TransformersHarness` |
+| `torch_compile` | bool | null (-> false) | Enable `torch.compile` on the loaded model | `TransformersHarness` |
+| `torch_compile_mode` | str | null (-> `default`) | `default` \| `reduce-overhead` \| `max-autotune`. Requires `torch_compile=true`. | `TransformersHarness` |
+| `torch_compile_backend` | str | null (-> `inductor`) | `torch.compile` backend. Requires `torch_compile=true`. | `TransformersHarness` |
+| `allow_tf32` | bool | null | Allow TF32 matmul on Ampere+ via `torch.backends` | `TransformersHarness` |
+| `autocast_enabled` | bool | null (-> false) | Wrap generation in `torch.autocast` | `TransformersHarness` |
+| `autocast_dtype` | `float16` \| `bfloat16` | null (-> bfloat16 on Ampere) | AMP dtype (used when `autocast_enabled=true`) | `TransformersHarness` |
 
 Naming `torch_compile_mode` or `torch_compile_backend` without
-`torch_compile=true` is rejected (`validate_torch_compile_options`,
-`harness.py:75-86`).
+`torch_compile=true` is rejected (`validate_torch_compile_options` in
+`harness.py`).
 
 ## Transformers engine (`transformers:`)
 
@@ -349,18 +349,18 @@ cross-engine validators - is in [invalid-combos.md](invalid-combos.md).
 ### Cross-engine (structural, in `models.py`)
 
 - The engine-specific section must match `engine:`
-  (`validate_engine_section_match`, `models.py:593`).
+  (`validate_engine_section_match`).
 - A key placed directly on an engine block (not under `engine_params` or
   `sampling_params`) is rejected with a migration hint
-  (`validate_engine_section_extras`, `models.py:618`).
+  (`validate_engine_section_extras`).
 - `passthrough_kwargs` keys must not collide with `ExperimentConfig` top-level
-  field names (`validate_passthrough_kwargs_no_collision`, `models.py:690`).
+  field names (`validate_passthrough_kwargs_no_collision`).
 
 ### Transformers
 
 - With `attn_implementation` `flash_attention_2` or `flash_attention_3`,
-  `dtype` must not be `float32` (`validate_transformers_flash_attn_dtype`,
-  `models.py:714`; a missing dtype is treated as `bfloat16`).
+  `dtype` must not be `float32` (`validate_transformers_flash_attn_dtype` in
+  `models.py`; a missing dtype is treated as `bfloat16`).
 - All further transformers constraints (beam-search divisibility,
   quantisation, caching) come from the shipped rule corpus; see
   [invalid-combos.md](invalid-combos.md).
@@ -371,12 +371,12 @@ cross-engine validators - is in [invalid-combos.md](invalid-combos.md).
   bounds, dormant normalisations) come from each engine's shipped rule corpus.
   Note that the old hand-written `dtype: float32` rejection was dropped with
   the generated configs: vLLM's `dtype` now includes `float32` in its Literal,
-  and the informational `DTYPE_SUPPORT` map (`ssot.py:185-189`) drives
+  and the informational `DTYPE_SUPPORT` map (in `ssot.py`) drives
   pre-flight checks, not Pydantic parsing.
 
 ### Engine x dtype support (pre-flight)
 
-From `ssot.DTYPE_SUPPORT` (`ssot.py:185-189`) - an informational pre-flight
+From `ssot.DTYPE_SUPPORT` - an informational pre-flight
 map, not a parse-time constraint:
 
 | Engine | `float32` | `float16` | `bfloat16` |
@@ -505,7 +505,7 @@ sampling_preset: deterministic   # sets temperature: 0.0 under transformers.samp
 
 `sampling_preset` is expanded at parse time into the active engine's
 `sampling_params:` sub-section via `setdefault`, so explicit YAML values take
-precedence over preset values (`expand_sampling_preset`, `models.py:555-584`).
+precedence over preset values (`expand_sampling_preset` in `models.py`).
 
 ## See also
 

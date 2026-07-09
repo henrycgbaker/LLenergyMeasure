@@ -74,7 +74,9 @@ Stages can be skipped to resume rather than redo a run:
 - `--clean-room` ignores the within-version verdict memory and re-probes
   everything.
 - `--dry-run` reports the full delta and writes no shipped corpus.
-- `--ollama-host` / `--model` override the analyst endpoint and model.
+
+The analyst endpoint and model are overridable with `--ollama-host` / `--model`
+(see [Prerequisites](#prerequisites) for their defaults).
 
 The only `src/` file absorb writes is the shipped `rules.yaml`, via promotion.
 

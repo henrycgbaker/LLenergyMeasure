@@ -239,20 +239,7 @@ machinery without saving meaningful time.
 | `engine-filter` | `engine-rules-check.yml` | `engine-filter` |
 | `engine-rules-gate` | `engine-rules-check.yml` | `engine-rules-gate` |
 
-Two invariants make this list safe:
-
-- **Every required context must report on every PR.** A required context that
-  never reports (because its workflow `paths:`-skipped) wedges the PR on
-  "Expected - waiting for status" forever. So the two engine contexts are the
-  always-run `engine-filter` and the always-run fan-in `engine-rules-gate`, not
-  the work jobs, which skip on non-engine PRs.
-- **A required context must never be a matrix-expanded name.** A job-level
-  `if:`-skipped matrix job reports a single check run under its *unexpanded*
-  name (`config-codegen`), not per cell (`config-codegen (vllm)`), so an
-  expanded-name required context never reports on a non-engine PR. That is the
-  whole reason `engine-rules-gate` exists: a matrix-free fan-in that stands in
-  for the per-engine `config-codegen` and `seed-image-check` results as one
-  requireable context.
+These constraints follow from the requireable-contexts rules described above.
 
 `filter` and `engine-filter` are deliberately distinct job IDs even though both
 are `dorny/paths-filter` gates, so their check contexts do not collide on the

@@ -94,19 +94,18 @@ snapshot change that forgot the regen fails at PR time.
 ## What CI verifies
 
 CI never produces these artefacts; it verifies the committed bytes on hosted
-CPU runners. Three checks guard the refresh outputs:
+CPU runners. The check that guards this page's own output is:
 
 | Check | Workflow / job | What it asserts |
 |---|---|---|
 | `regen_engine_configs.py --check` | `engine-rules-check.yml` / `config-codegen` (matrix over all three engines) | `config.py` is byte-identical to what the committed snapshot regenerates. |
-| `check_discovered_schema_versions.py` | `ci.yml` / `schema-version-check` (matrix over all three engines) | The `schema.discovered.json` engine version equals `library.current_version` in `current.yaml`. |
-| `check_pydantic_matches_discovered.py` | `ci.yml` / `docs-freshness` (second step) | The Pydantic config surface aligns with the discovered schema (no silently narrowed types or undiscovered fields, modulo an explicit whitelist). |
 
-The two `ci.yml` checks are gated on the `docker` paths filter, which includes
-`engine_versions/**`, so a pin bump under `engine_versions/` triggers them even
-though nothing under `docker/` changed. See
-[CI architecture](/explanation/architecture/ci-architecture) for the full
-workflow topology.
+Two further byte-identity checks in `ci.yml` verify the schema version and
+Pydantic alignment - see
+[CI architecture](/explanation/architecture/ci-architecture). Both are gated on
+the `docker` paths filter, which includes `engine_versions/**`, so a pin bump
+under `engine_versions/` triggers them even though nothing under `docker/`
+changed.
 
 ---
 
