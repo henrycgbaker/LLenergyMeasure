@@ -484,6 +484,12 @@ def main(argv: list[str] | None = None) -> int:
         # (a bare traceback here reads as an internal error rather than a
         # missing-snapshot signal).
         outputs = _outputs.outputs_dir(args.engine, args.version)
+        if outputs.exists():
+            # The snapshot dir is present, so this FileNotFoundError came from
+            # somewhere else inside sync (e.g. a missing tool or file mid
+            # generation). Attributing it to a missing snapshot would point
+            # the maintainer at a directory that exists; let it propagate.
+            raise
         print(
             f"No mined snapshot for {args.engine} {args.version}.\n"
             f"Missing directory: {outputs}\n"

@@ -343,6 +343,35 @@ def test_missing_snapshot_dir_main_exits_with_friendly_message(
     assert "make discover-schema ENGINE=vllm" in err
 
 
+def test_unrelated_file_not_found_with_present_snapshot_reraises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The snapshot outputs/ dir exists, but something downstream inside sync
+    # raises FileNotFoundError for an unrelated file. main() must NOT print
+    # the missing-snapshot remediation (it would point at a directory that is
+    # present); the error propagates untouched.
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    monkeypatch.setattr(rec._outputs, "outputs_dir", lambda engine, version: outputs)
+
+    def _boom(engine: str, version: str, outputs_dir: Path) -> bytes:
+        raise FileNotFoundError("some unrelated file vanished mid-generation")
+
+    monkeypatch.setattr(rec, "generate_config", _boom)
+    with pytest.raises(FileNotFoundError, match="unrelated file vanished"):
+        rec.main(
+            [
+                "--engine",
+                "vllm",
+                "--version",
+                "9.9.9",
+                "--check",
+                "--output",
+                str(tmp_path / "c.py"),
+            ]
+        )
+
+
 def test_default_output_is_the_src_shadow() -> None:
     assert rec._shadow_config_path("vllm") == (
         REPO_ROOT / "src" / "llenergymeasure" / "engines" / "vllm" / "config.py"

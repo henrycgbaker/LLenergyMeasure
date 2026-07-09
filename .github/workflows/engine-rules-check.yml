@@ -44,7 +44,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  filter:
+  # Named engine-filter (not filter) so its check context is distinguishable
+  # from ci.yml's filter job on the PR checks tab, and so branch protection
+  # can require it unambiguously (fail-closed for the codegen gates).
+  engine-filter:
     # Always runs (including on workflow_dispatch). Cost is trivial; downstream
     # jobs depend on its output. `engine` is the union of the paths this
     # workflow previously used as its workflow-level paths: filter.
@@ -72,12 +75,12 @@ jobs:
               - '.github/workflows/engine-rules-check.yml'
 
   config-codegen:
-    needs: filter
+    needs: engine-filter
     if: >-
       always()
       && (
         github.event_name == 'workflow_dispatch'
-        || needs.filter.outputs.engine == 'true'
+        || needs.engine-filter.outputs.engine == 'true'
       )
     runs-on: ubuntu-latest
     strategy:
@@ -113,12 +116,12 @@ jobs:
 
   rules-coverage:
     name: rules-coverage (${{ matrix.engine }})
-    needs: filter
+    needs: engine-filter
     if: >-
       always()
       && (
         github.event_name == 'workflow_dispatch'
-        || needs.filter.outputs.engine == 'true'
+        || needs.engine-filter.outputs.engine == 'true'
       )
     runs-on: ubuntu-latest
     strategy:
@@ -213,12 +216,12 @@ jobs:
 
   seed-image-check:
     name: seed-image-check (transformers)
-    needs: filter
+    needs: engine-filter
     if: >-
       always()
       && (
         github.event_name == 'workflow_dispatch'
-        || needs.filter.outputs.engine == 'true'
+        || needs.engine-filter.outputs.engine == 'true'
       )
     runs-on: ubuntu-latest
     steps:
