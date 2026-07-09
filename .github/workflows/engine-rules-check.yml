@@ -59,7 +59,10 @@ jobs:
       - uses: dorny/paths-filter@v4
         id: changes
         with:
-          base: ${{ github.event_name == 'push' && github.ref || '' }}
+          # No base: - this workflow has no push trigger, so on its only
+          # events (pull_request, workflow_dispatch) the action diffs against
+          # the PR base branch by default. A base: expression here would be
+          # dead (ci.yml needs it only because ci.yml also runs on push).
           filters: |
             engine:
               - 'src/llenergymeasure/engines/*/config.py'

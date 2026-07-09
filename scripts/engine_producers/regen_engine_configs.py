@@ -477,30 +477,24 @@ def main(argv: list[str] | None = None) -> int:
     try:
         drift = sync(args.engine, args.version, output, write=args.write)
     except FileNotFoundError:
-        # First thing a version-bump PR hits: current.yaml points at a new pin
-        # whose per-version snapshot has not been mined yet, so the outputs/
-        # directory the codegen reads from does not exist. Name the missing
-        # directory and the ritual that fills it, then exit non-zero cleanly
-        # (a bare traceback here reads as an internal error rather than a
-        # missing-snapshot signal).
+        # A missing snapshot dir is expected right after a bump; turn the bare
+        # traceback (reads as an internal error) into a remediation message.
         outputs = _outputs.outputs_dir(args.engine, args.version)
         if outputs.exists():
-            # The snapshot dir is present, so this FileNotFoundError came from
-            # somewhere else inside sync (e.g. a missing tool or file mid
-            # generation). Attributing it to a missing snapshot would point
-            # the maintainer at a directory that exists; let it propagate.
+            # Snapshot dir is present, so this came from elsewhere in sync (a
+            # file missing mid-generation). Don't misattribute it to a missing
+            # snapshot - that would point the maintainer at a dir that exists.
             raise
         print(
             f"No mined snapshot for {args.engine} {args.version}.\n"
             f"Missing directory: {outputs}\n"
             f"(expected {_outputs.SCHEMA_FILENAME} + {_outputs.CURATED_FILENAME} inside it).\n"
             "\n"
-            "This is normal right after a version bump: current.yaml points at\n"
-            "the new pin but its schema has not been discovered yet. Produce the\n"
-            "snapshot locally (needs Docker, and a GPU for vllm/tensorrt):\n"
+            "Normal right after a version bump: the new pin's schema is not\n"
+            "discovered yet. Produce it locally (needs Docker, and a GPU for\n"
+            "vllm/tensorrt), then place schema.discovered.json and curated.yaml\n"
+            "under that directory and re-run this check:\n"
             f"  make discover-schema ENGINE={args.engine}\n"
-            "then place the resulting schema.discovered.json and a curated.yaml\n"
-            f"under {outputs} and re-run this check.\n"
             "See docs/contributing/schema-refresh.md for the full ritual.",
             file=sys.stderr,
         )
