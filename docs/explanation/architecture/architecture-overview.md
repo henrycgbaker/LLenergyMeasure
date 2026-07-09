@@ -72,7 +72,7 @@ Deep dive: [parameter discovery and config validation](/explanation/architecture
 
 ## Keeping knowledge current
 
-Upstream engines ship frequently. [Renovate](https://github.com/apps/renovate) watches upstream releases and opens a pull request that bumps the pin in `engine_versions/<engine>/current.yaml`. Detection stays automatic; refreshing the committed knowledge is a local maintainer step on that PR:
+Upstream engines ship frequently. A self-hosted Renovate cron (`renovate.yml`) watches upstream releases and opens a pull request that bumps the pin in `engine_versions/<engine>/current.yaml`. Detection stays automatic; refreshing the committed knowledge is a local maintainer step on that PR:
 
 1. Re-discover the schema: `make discover-schema ENGINE=<engine>`.
 2. Re-absorb the rules against the new source: `make absorb ENGINE=<engine> SRC=<engine-source>`.

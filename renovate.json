@@ -51,14 +51,6 @@
     {
       "matchManagers": ["pep621"],
       "rangeStrategy": "replace"
-    },
-    {
-      "description": "Only auto-PR when Mend merge-confidence is high or very-high. Applied ONLY to transformers and pytorch, which have dense merge-confidence data. vllm and tensorrt-llm have sparse merge-confidence (releases rarely score high), so this gate silently suppressed every PR for them; they are excluded here and rely on the 14-day minimumReleaseAge for stability instead.",
-      "matchPackageNames": [
-        "transformers",
-        "pytorch/pytorch"
-      ],
-      "matchConfidence": ["high", "very high"]
     }
   ],
   "schedule": ["before 9am on Monday"],
