@@ -26,19 +26,13 @@ name: Engine rules check
 # covered by the gating codegen check.
 
 on:
+  # No workflow-level paths: filter. The jobs must report a check-run context
+  # on EVERY pull request so branch protection can require them - a workflow
+  # that paths-skips never reports, and a required check that never reports
+  # blocks the PR forever with "Expected - waiting for status". The per-job
+  # filter below skips (not omits) the work on non-engine PRs, and a skipped
+  # required check counts as satisfied. Mirrors the ci.yml filter-job pattern.
   pull_request:
-    paths:
-      - 'src/llenergymeasure/engines/*/config.py'
-      - 'src/llenergymeasure/engines/*/rules.yaml'
-      - 'src/llenergymeasure/config/engine_rules/**'
-      - 'engine_versions/*/current.yaml'
-      - 'engine_versions/*/*/outputs/curated.yaml'
-      - 'engine_versions/*/*/outputs/schema.discovered.json'
-      - 'scripts/engine_producers/**'
-      - 'scripts/rules_coverage.py'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - '.github/workflows/engine-rules-check.yml'
   workflow_dispatch:
 
 permissions:
@@ -50,7 +44,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Named engine-filter (not filter) so its check context is distinguishable
+  # from ci.yml's filter job on the PR checks tab, and so branch protection
+  # can require it unambiguously (fail-closed for the codegen gates).
+  engine-filter:
+    # Always runs (including on workflow_dispatch). Cost is trivial; downstream
+    # jobs depend on its output. `engine` is the union of the paths this
+    # workflow previously used as its workflow-level paths: filter.
+    runs-on: ubuntu-latest
+    outputs:
+      engine: ${{ steps.changes.outputs.engine }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          # No base: - this workflow has no push trigger, so on its only
+          # events (pull_request, workflow_dispatch) the action diffs against
+          # the PR base branch by default. A base: expression here would be
+          # dead (ci.yml needs it only because ci.yml also runs on push).
+          filters: |
+            engine:
+              - 'src/llenergymeasure/engines/*/config.py'
+              - 'src/llenergymeasure/engines/*/rules.yaml'
+              - 'src/llenergymeasure/config/engine_rules/**'
+              - 'engine_versions/*/current.yaml'
+              - 'engine_versions/*/*/outputs/curated.yaml'
+              - 'engine_versions/*/*/outputs/schema.discovered.json'
+              - 'scripts/engine_producers/**'
+              - 'scripts/rules_coverage.py'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/engine-rules-check.yml'
+
   config-codegen:
+    needs: engine-filter
+    if: >-
+      always()
+      && (
+        github.event_name == 'workflow_dispatch'
+        || needs.engine-filter.outputs.engine == 'true'
+      )
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -85,6 +119,13 @@ jobs:
 
   rules-coverage:
     name: rules-coverage (${{ matrix.engine }})
+    needs: engine-filter
+    if: >-
+      always()
+      && (
+        github.event_name == 'workflow_dispatch'
+        || needs.engine-filter.outputs.engine == 'true'
+      )
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -132,9 +173,26 @@ jobs:
           # The full source archive for these projects is large (hundreds of MB
           # for the compiled-kernel engine) and is not affordable to pull on
           # every relevant PR; the coverage scan only reads the .py package.
-          rm -rf engine-source
-          git clone --filter=blob:none --no-checkout --depth 1 \
-            --branch "v${VERSION}" "$SOURCE_REPO" engine-source
+          #
+          # Retry the clone: a network flake against the upstream remote would
+          # otherwise read as a red gate on an unrelated PR. Retry only, never
+          # continue-on-error - a genuine clone failure (bad tag, dead repo)
+          # must still hard-fail after the attempts are exhausted.
+          set -euo pipefail
+          attempts=3
+          for attempt in $(seq 1 "$attempts"); do
+            rm -rf engine-source
+            if git clone --filter=blob:none --no-checkout --depth 1 \
+              --branch "v${VERSION}" "$SOURCE_REPO" engine-source; then
+              break
+            fi
+            if [ "$attempt" -eq "$attempts" ]; then
+              echo "::error::Failed to clone ${SOURCE_REPO} at v${VERSION} after ${attempts} attempts." >&2
+              exit 1
+            fi
+            echo "Clone attempt ${attempt}/${attempts} failed; retrying in 5s..." >&2
+            sleep 5
+          done
           git -C engine-source sparse-checkout init --cone
           git -C engine-source sparse-checkout set "$PACKAGE_DIR"
           git -C engine-source checkout
@@ -161,6 +219,13 @@ jobs:
 
   seed-image-check:
     name: seed-image-check (transformers)
+    needs: engine-filter
+    if: >-
+      always()
+      && (
+        github.event_name == 'workflow_dispatch'
+        || needs.engine-filter.outputs.engine == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch

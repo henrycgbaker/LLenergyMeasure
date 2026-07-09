@@ -258,6 +258,23 @@ def test_ordering_none_operands_are_no_match(op: str) -> None:
     assert evaluate_predicate(5, {op: None}) is False
 
 
+@pytest.mark.parametrize("op", ["<", "<=", ">", ">="])
+@pytest.mark.parametrize("actual", [True, False])
+def test_ordering_rejects_bool_actual(op: str, actual: bool) -> None:
+    # bool subclasses int, so ``True > 0`` compares cleanly; the ordering ops
+    # must treat a boolean-valued field as non-comparable and never fire (the
+    # generated pydantic model stays the authority on bool-field validity).
+    # This is what keeps a mined ``{'>': 0}`` bound off ``early_stopping=True``.
+    assert evaluate_predicate(actual, {op: 0}) is False
+
+
+@pytest.mark.parametrize("op", ["<", "<=", ">", ">="])
+def test_ordering_rejects_bool_bound(op: str) -> None:
+    # A bool on the bound side (e.g. an @field_ref resolving to a boolean) is
+    # equally non-comparable.
+    assert evaluate_predicate(5, {op: True}) is False
+
+
 def test_ordering_comparable_non_numeric_still_compares() -> None:
     # Same-type ordering (str vs str) stays live - only cross-type pairs no-match.
     assert evaluate_predicate("b", {">": "a"}) is True
@@ -272,6 +289,9 @@ def test_ordered_helper() -> None:
     assert _ordered(0, 5, operator.gt) is False
     assert _ordered(None, 0, operator.gt) is False
     assert _ordered(5, None, operator.gt) is False
+    # bool operands are non-comparable (mirrors the divisibility exclusion).
+    assert _ordered(True, 0, operator.gt) is False
+    assert _ordered(5, True, operator.gt) is False
     # Type-incomparable pair: TypeError swallowed, treated as no-match.
     assert _ordered({"backend": "inductor"}, 0, operator.gt) is False
     assert _ordered("inductor", 0, operator.lt) is False

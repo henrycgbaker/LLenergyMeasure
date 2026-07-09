@@ -229,9 +229,12 @@ def test_bounds_emits_both_bool_values_for_early_stopping() -> None:
     """early_stopping is a valid boolean knob, so it sweeps both values.
 
     early_stopping=True is the documented way to enable beam-search early
-    stopping; it must not be pruned from the sweep. (A dormant corpus rule
-    strips early_stopping at resolution time, so the two values collapse at
-    dedup - see the round-trip tests - but the sweep axis itself is emitted.)
+    stopping; it must not be pruned from the sweep. The corpus carries a
+    mis-mined ``{'>': 0}`` bound on the field, but ordering predicates do not
+    fire on booleans (see ``_ordered``), so the value pruner does not drop
+    ``True``. (A dormant corpus rule strips early_stopping at resolution time,
+    so the two values collapse at dedup - see the round-trip tests - but the
+    sweep axis itself is emitted.)
     """
     text = render_study_bounds(MODEL, ["transformers"])
     raw = yaml.safe_load(text)
@@ -252,12 +255,13 @@ def test_bounds_render_is_byte_deterministic() -> None:
 def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> None:
     """A bounds file expands to the product of its series lengths.
 
-    The full Cartesian product is enumerated pre-dedup (one equivalence group
-    per combination member); measurement-equivalent combinations then collapse
-    via the resolved-config-hash dedup, so the number of executed experiments
-    equals the group count (<= product). For transformers the collapse is
-    strict: a dormant corpus rule strips early_stopping at resolution, so its
-    two swept values resolve to the same config.
+    The declared count equals the full Cartesian product of the series lengths
+    (one declared config per combination member). Resolved-config-hash dedup
+    then folds combinations that resolve to the same effective config, so the
+    executed experiments equal the distinct resolved set, which equals the
+    equivalence-group count (<= product). For transformers the collapse is
+    strict: a dormant corpus rule strips early_stopping at resolution time, so
+    its two swept values resolve to the same config.
     """
     text = render_study_bounds(MODEL, [engine])
     path = tmp_path / "study.yaml"
@@ -266,10 +270,13 @@ def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> No
     product = math.prod(len(v) for v in sweep.values())
     study = _load_without_config_warnings(path)
     assert product > 1
+    # Declared count is the full cartesian product.
+    assert len(study.declared_resolved_config_hashes) == product
     # Every sweep combination is accounted for in exactly one equivalence group.
     assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == product
     # Executed experiments are the post-dedup distinct resolved configs.
     assert len(study.experiments) == len(study.pre_run_equivalence_groups)
+    assert len(study.experiments) == len(set(study.declared_resolved_config_hashes))
     assert 1 < len(study.experiments) <= product
     assert all(e.engine == engine for e in study.experiments)
 
@@ -277,8 +284,9 @@ def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> No
 def test_bounds_all_engines_round_trips_to_sum_of_products(tmp_path: Path) -> None:
     """A multi-engine bounds file expands to the sum of per-engine products.
 
-    As in the single-engine case, the sum-of-products is the pre-dedup member
-    total; executed experiments are the post-dedup group count.
+    As in the single-engine case, the declared count equals the summed product
+    (the pre-dedup member total); executed experiments equal the distinct
+    resolved set after dedup, which is the post-dedup group count.
     """
     text = render_study_bounds(MODEL, all_engine_names())
     path = tmp_path / "study.yaml"
@@ -289,8 +297,10 @@ def test_bounds_all_engines_round_trips_to_sum_of_products(tmp_path: Path) -> No
     assert set(per_engine) == set(all_engine_names())
     expected_members = sum(math.prod(lengths) for lengths in per_engine.values())
     study = _load_without_config_warnings(path)
+    assert len(study.declared_resolved_config_hashes) == expected_members
     assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == expected_members
     assert len(study.experiments) == len(study.pre_run_equivalence_groups)
+    assert len(study.experiments) == len(set(study.declared_resolved_config_hashes))
 
 
 # ---------------------------------------------------------------------------
