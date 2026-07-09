@@ -4,15 +4,21 @@
   "enabledManagers": ["dockerfile", "custom.regex", "pep621", "github-actions"],
   "gitIgnoredAuthors": ["llem-ci-bot[bot]"],
   "dockerfile": {
-    "fileMatch": ["docker/Dockerfile\\..*"]
+    "managerFilePatterns": [
+      "/docker/Dockerfile\\..*/"
+    ]
   },
   "pep621": {
-    "fileMatch": ["(^|/)pyproject\\.toml$"]
+    "managerFilePatterns": [
+      "/(^|/)pyproject\\.toml$/"
+    ]
   },
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^engine_versions/(?:transformers|vllm|tensorrt)/current\\.yaml$"],
+      "managerFilePatterns": [
+        "/^engine_versions/(?:transformers|vllm|tensorrt)/current\\.yaml$/"
+      ],
       "matchStrings": [
         "pep503_name: (?<depName>[\\w-]+)\\s*\\n\\s*current_version: \"(?<currentValue>[^\"]+)\""
       ],
