@@ -1,0 +1,24 @@
+# Analyst cold-read source clusters for tensorrt.
+#
+# scripts/analyst_cold_read.py reads these source-file clusters and asks an LLM
+# analyst to extract every config-validation constraint it can see, one cited
+# candidate per constraint. This file is DATA describing the engine version's
+# source layout: paths are relative to --source-root (the installed
+# `tensorrt_llm/` package directory, e.g. the `tensorrt_llm/` folder inside an
+# extracted 1.0.0 release tarball). A glob (a path containing `*`) expands
+# against the source root; a plain path names one file.
+#
+# Cluster selection is a MINIMAL citation-grounded starter, NOT an
+# experiment-ratified cluster design like vllm's (no OSS analyst parity
+# experiment has been run for tensorrt). It is derived from where the shipped
+# rule corpus's verified constraints actually live: the single shipped tensorrt
+# citation names llmapi/llm_args.py (TorchLlmArgs, where the @model_validator
+# constraints live); sampling_params.py is the SamplingParams surface the
+# repo's tensorrt schema introspector reads. Refinement happens at the first
+# real cold-read. load_sources warns-and-skips missing paths, so layout drift
+# at a future pin degrades to a warning, not a crash.
+clusters:
+  llm_args:
+    - llmapi/llm_args.py
+  sampling:
+    - sampling_params.py

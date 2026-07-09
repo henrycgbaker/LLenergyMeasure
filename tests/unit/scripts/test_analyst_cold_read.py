@@ -352,12 +352,33 @@ def test_no_split_when_under_cap(fake_tree: Any) -> None:
 # Manifest loading.
 def test_missing_manifest_fails_clearly() -> None:
     with pytest.raises(FileNotFoundError) as exc:
-        acr.load_manifest("transformers")
+        acr.load_manifest("no-such-engine")
     assert "no analyst cluster manifest" in str(exc.value)
-    assert "transformers" in str(exc.value)
+    assert "no-such-engine" in str(exc.value)
 
 
 def test_vllm_manifest_loads() -> None:
     manifest = acr.load_manifest("vllm")
     assert "sampling" in manifest and "platforms" in manifest
     assert "engine/arg_utils.py" not in [p for ps in manifest.values() for p in ps]
+
+
+@pytest.mark.parametrize("engine", ["transformers", "tensorrt"])
+def test_every_engine_ships_a_manifest(engine: str) -> None:
+    """Cold-read must be operable for every engine: each ships a manifest with
+    non-empty clusters (citation-grounded starters for transformers/tensorrt)."""
+    manifest = acr.load_manifest(engine)
+    assert manifest, f"{engine}: manifest has no clusters"
+    assert all(patterns for patterns in manifest.values())
+
+
+def test_transformers_manifest_covers_cited_sources() -> None:
+    paths = [p for ps in acr.load_manifest("transformers").values() for p in ps]
+    assert "generation/configuration_utils.py" in paths
+    assert "utils/quantization_config.py" in paths
+
+
+def test_tensorrt_manifest_covers_cited_sources() -> None:
+    paths = [p for ps in acr.load_manifest("tensorrt").values() for p in ps]
+    assert "llmapi/llm_args.py" in paths
+    assert "sampling_params.py" in paths
