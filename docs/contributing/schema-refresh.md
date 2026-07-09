@@ -19,6 +19,29 @@ For the rules-side counterpart, see
 
 ---
 
+## The pin is the SSOT
+
+An engine's version is pinned in one place: its `current.yaml`.
+
+```yaml
+# engine_versions/vllm/current.yaml
+schema_version: "4.0"
+engine: vllm
+library:
+  pep503_name: vllm
+  current_version: 0.19.1
+```
+
+Every downstream artefact resolves the version from
+`library.current_version` here: the discovery script picks the container
+image, the codegen check picks the snapshot directory, and the CI checks read
+it to know what to verify against. Bumping an engine means editing this one
+field, then re-running the two local production steps below and committing the
+results. There is no Dockerfile `ARG` to keep in sync and no separate version
+constant anywhere else.
+
+---
+
 ## Refreshing a schema
 
 Schema discovery is a local maintainer task - it introspects the engine
@@ -31,33 +54,58 @@ NVIDIA GPU). CI never runs discovery; it only verifies the committed bytes.
 
 Equivalently, `make discover-schema ENGINE=<engine>`.
 
-The script selects the discovery image from the engine's pinned version
+The script reads the pin from `engine_versions/<engine>/current.yaml`
+(`yq '.library.current_version'`), selects the discovery image from it
 (`vllm/vllm-openai:<ver>` for vllm, `nvcr.io/nvidia/tensorrt-llm/release:<ver>`
 for tensorrt, and the first-party `llenergymeasure:transformers-<ver>` image
-for transformers - building it if absent), runs
-`python -m scripts.engine_producers._schemas_runner` inside the container, and
-writes the result to
+for transformers - building it from `docker/Dockerfile.transformers` if
+absent), runs `python -m scripts.engine_producers._schemas_runner` inside the
+container, and writes the result to
 `src/llenergymeasure/engines/<engine>/schema.discovered.json`. It prints the
-`git diff` but does **not** commit: review the diff, `git add`, and open a PR.
+`git diff` but does **not** commit: the committed JSON is the canonical SSOT,
+and authority comes from `git commit`, not from re-running the script. Review
+the diff, `git add`, and open a PR.
 
-After a schema refresh, regenerate the typed config model
-(`config.py`) so the two stay in step - the config codegen check in CI fails
-otherwise. See [Architecture overview](/explanation/architecture/architecture-overview).
+To make re-discovery byte-stable, the script sets `LLENERGY_DISCOVERY_FROZEN_AT`
+so the envelope's `discovered_at` is a fixed anchor rather than a fresh
+wallclock on every run (see Troubleshooting).
 
 ---
 
-## Version-bump guard
+## Regenerate the typed config after a schema change
 
-If a developer bumps an engine version `ARG` in a Dockerfile without
-re-running discovery, the `schema-version-check` job in `ci.yml` catches the
-mismatch. The job runs on a hosted CPU runner, is gated on changes under
-`docker/`, skips Renovate-labelled PRs, and runs
-`scripts/check_discovered_schema_versions.py` per engine. On failure, re-run
-discovery locally and commit the refreshed schema:
+The typed config model at `src/llenergymeasure/engines/<engine>/config.py` is
+generated from the committed snapshot, not hand-written (its header says
+`DO NOT EDIT`). After a schema refresh, regenerate it so the two stay in step:
 
 ```bash
-./scripts/refresh_discovered_schemas.sh <engine>
+uv run python scripts/engine_producers/regen_engine_configs.py \
+  --engine <engine> --version <ver> --write
 ```
+
+`--write` overwrites the target file; the default `--check` mode regenerates in
+memory and byte-compares against the committed file, exiting non-zero with a
+diff on drift. The `config-codegen` matrix job in `engine-rules-check.yml` runs
+exactly `--check` per engine, resolving `<ver>` from `current.yaml`, so a
+snapshot change that forgot the regen fails at PR time.
+
+---
+
+## What CI verifies
+
+CI never produces these artefacts; it verifies the committed bytes on hosted
+CPU runners. The check that guards this page's own output is:
+
+| Check | Workflow / job | What it asserts |
+|---|---|---|
+| `regen_engine_configs.py --check` | `engine-rules-check.yml` / `config-codegen` (matrix over all three engines) | `config.py` is byte-identical to what the committed snapshot regenerates. |
+
+Two further byte-identity checks in `ci.yml` verify the schema version and
+Pydantic alignment - see
+[CI architecture](/explanation/architecture/ci-architecture). Both are gated on
+the `docker` paths filter, which includes `engine_versions/**`, so a pin bump
+under `engine_versions/` triggers them even though nothing under `docker/`
+changed.
 
 ---
 
@@ -65,8 +113,7 @@ discovery locally and commit the refreshed schema:
 
 - Docker plus the NVIDIA Container Toolkit on the machine running discovery
   (the GPU engines introspect inside a `--gpus all` container).
-- [Mend Renovate](https://github.com/apps/renovate) GitHub App installed on
-  the repo (free for open source) opens the bump PRs; detection is automatic.
+- `yq` on `PATH` (the refresh script reads the pin from `current.yaml` with it).
 
 ---
 
@@ -74,13 +121,12 @@ discovery locally and commit the refreshed schema:
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Renovate not detecting bumps | `fileMatch` pattern doesn't cover the Dockerfile | Check Renovate dashboard, verify `docker/Dockerfile\\..*` matches |
-| Renovate not detecting transformers bumps | `customManagers` regex not matching | Verify `ARG TRANSFORMERS_VERSION=X.Y.Z` format in `docker/Dockerfile.transformers` |
+| `config-codegen` fails on a snapshot PR | `config.py` was not regenerated after the schema changed | Run `regen_engine_configs.py --engine <e> --version <v> --write` and commit `config.py` |
+| `schema-version-check` fails | `schema.discovered.json` version does not match the `current.yaml` pin | Re-run `./scripts/refresh_discovered_schemas.sh <engine>` after the bump and commit the refreshed schema |
+| `docs-freshness` Pydantic-alignment step fails | A config field has no discovered counterpart, or a type narrowed/widened | Add the field to the whitelist in `check_pydantic_matches_discovered.py` if intentional, else fix the snapshot or the curation |
 | Schema discovery fails to import engine | Container missing `--gpus all` | Verify the machine has NVIDIA drivers plus the Container Toolkit |
-| Version guard fails on non-version change | Should not happen - guard only compares version ARGs | If it does, check `_parse_arg` regex in `scripts/check_discovered_schema_versions.py` |
-| NGC registry auth failure | Private image or rate-limited | Add `hostRules` to `renovate.json` |
 | Schema unchanged after discovery | Engine version did not change params | Expected: the script reports no changes and commits nothing |
-| Re-discovery shows a 2-line diff on unchanged source | `LLENERGY_DISCOVERY_FROZEN_AT` not set | The introspector writes a fresh wallclock `discovered_at` on every invocation; set the env var to a stable anchor (typically the author date of the most recent commit touching any input path) so re-discovery is byte-stable |
+| Re-discovery shows a 2-line diff on unchanged source | `LLENERGY_DISCOVERY_FROZEN_AT` not set | The introspector writes a fresh wallclock `discovered_at` on every invocation; the refresh script sets this env var to a stable anchor (typically the author date of the most recent commit touching any input path) so re-discovery is byte-stable |
 
 ---
 
@@ -92,14 +138,17 @@ Dockerfile-or-upstream choice, the pin, and curation), see
 
 The schema-discovery surface a new engine adds is small:
 
-1. Add a per-engine module under `scripts/engine_producers/`, mirroring an
+1. Add a pin: `engine_versions/<engine>/current.yaml` with the
+   `library.current_version` set.
+2. Add a per-engine module under `scripts/engine_producers/`, mirroring an
    existing `*_introspector.py`, and register it in
    `scripts/engine_producers/__init__.py`.
-2. Add a case to `scripts/refresh_discovered_schemas.sh`.
-3. Run discovery once: `./scripts/refresh_discovered_schemas.sh <engine>`.
-4. Add a Renovate `packageRule` in `renovate.json`.
-5. If the Dockerfile `ARG` maps directly to the engine version, add an entry
-   to `_ENGINE_SPECS` in `scripts/check_discovered_schema_versions.py`.
+3. Add a case to `scripts/refresh_discovered_schemas.sh`.
+4. Run discovery once: `./scripts/refresh_discovered_schemas.sh <engine>`, then
+   regenerate the config: `regen_engine_configs.py --engine <engine>
+   --version <ver> --write`.
+5. Add the engine to the `config-codegen` and `schema-version-check` CI
+   matrices.
 
 ---
 
@@ -108,4 +157,5 @@ The schema-discovery surface a new engine adds is small:
 - [Architecture overview](/explanation/architecture/architecture-overview) - the two engine-knowledge products
 - [Schema discovered format](/reference/schema-discovered-format) - the JSON envelope spec
 - [Local knowledge production](/contributing/knowledge-production) - the rules-side operations guide
+- [CI architecture](/explanation/architecture/ci-architecture) - what CI verifies and how
 - [Docker setup](/how-to/docker-setup) - building engine images locally

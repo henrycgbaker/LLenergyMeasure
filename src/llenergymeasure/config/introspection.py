@@ -482,66 +482,206 @@ def get_capability_matrix_markdown() -> str:
     return "\n".join(lines)
 
 
-def get_validation_rules() -> list[dict[str, str]]:
-    """Get validation rules from config validators for documentation.
+# Config-load-time errors enforced by ExperimentConfig @model_validator rules
+# (not corpus-derived). These live in ``llenergymeasure.config.models`` as
+# ``@model_validator`` methods; there is no introspectable data table for them,
+# so they are named here explicitly. The "validator" key names the method that
+# raises; get_validation_rules cross-checks this set against the live validators
+# so the list cannot silently drift out of step (see the tripwire there).
+_MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
+    {
+        "engine": "all",
+        "validator": "validate_engine_section_match",
+        "combination": "engine section mismatch",
+        "reason": "The engine section must match the engine field (validate_engine_section_match).",
+        "resolution": "Ensure the transformers:/vllm:/tensorrt: section matches the engine: field.",
+    },
+    {
+        "engine": "all",
+        "validator": "validate_passthrough_kwargs_no_collision",
+        "combination": "passthrough_kwargs key collision",
+        "reason": "passthrough_kwargs keys must not collide with ExperimentConfig "
+        "fields (validate_passthrough_kwargs_no_collision).",
+        "resolution": "Set the named field directly instead of via passthrough_kwargs.",
+    },
+    {
+        "engine": "all",
+        "validator": "validate_engine_section_extras",
+        "combination": "unknown field on the engine section wrapper",
+        "reason": "A key placed directly on the engine section (not under "
+        "engine_params/sampling_params) is never forwarded to the engine "
+        "(validate_engine_section_extras).",
+        "resolution": "Move the key under <engine>.engine_params or <engine>.sampling_params.",
+    },
+    {
+        "engine": "transformers",
+        "validator": "validate_transformers_flash_attn_dtype",
+        "combination": "attn_implementation in [flash_attention_2, flash_attention_3] "
+        "and dtype=float32",
+        "reason": "attn_implementation='flash_attention_2'/'flash_attention_3' requires "
+        "dtype='float16' or dtype='bfloat16'; FlashAttention does not support float32 "
+        "computation (validate_transformers_flash_attn_dtype).",
+        "resolution": "Set transformers.engine_params.dtype to float16 or bfloat16.",
+    },
+]
 
-    Extracts cross-engine validation rules that are enforced at config
-    load time. These rules are the SSOT for the "Config Validation Errors"
-    section in invalid-combos.md.
+
+def _render_predicate(field_path: str, spec: Any) -> str:
+    """Render one match predicate as a compact human-readable string.
+
+    ``field_path`` is a dotted path (``vllm.sampling_params.top_p``); it is
+    shortened to its leaf name for legibility. ``spec`` is the corpus predicate:
+    a bare value (equality) or an operator dict (``{"<": 1}``,
+    ``{"in": [...]}``). ``@field`` references are shown verbatim.
+    """
+    leaf = field_path.rsplit(".", 1)[-1]
+    if not isinstance(spec, dict):
+        return f"{leaf}={spec}"
+    parts: list[str] = []
+    for op, value in spec.items():
+        if op == "present":
+            parts.append(f"{leaf} is set")
+        elif op == "absent":
+            parts.append(f"{leaf} is unset")
+        elif op in ("in", "not_in"):
+            joined = ", ".join(str(v) for v in value)
+            word = "in" if op == "in" else "not in"
+            parts.append(f"{leaf} {word} [{joined}]")
+        elif op in ("type_is", "type_is_not"):
+            names = value if isinstance(value, str) else ", ".join(str(v) for v in value)
+            word = "is" if op == "type_is" else "is not"
+            parts.append(f"type({leaf}) {word} {names}")
+        elif op in ("divisible_by", "not_divisible_by"):
+            word = "divisible by" if op == "divisible_by" else "not divisible by"
+            parts.append(f"{leaf} {word} {value}")
+        else:
+            parts.append(f"{leaf} {op} {value}")
+    return " and ".join(parts)
+
+
+def _render_combination(rule: Any) -> str:
+    """Render a rule's full match as ``field-a op-a and field-b op-b``."""
+    return " and ".join(_render_predicate(path, spec) for path, spec in rule.match_fields.items())
+
+
+def _rule_reason(rule: Any) -> str:
+    """Human-readable reason for a rule.
+
+    Prefer the rule's message template (rendered with the substitution
+    placeholders left literal, since there is no concrete config here); fall
+    back to the rule id when a rule ships no template.
+    """
+    if rule.message_template:
+        return " ".join(rule.message_template.split())
+    return f"Enforced by rule {rule.id}."
+
+
+def _corpus_rules_by_severity(severity: str) -> list[tuple[str, Any]]:
+    """Return ``(engine_name, rule)`` pairs of one severity, sorted by (engine, id).
+
+    Every engine's shipped rules.yaml is the SSOT; this reads them through the
+    same loader the runtime uses, so the doc can never drift from what actually
+    fires. Ordering is stable so the generated doc is byte-stable across runs.
+    Each caller projects the rule into its own row shape.
+    """
+    from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
+
+    loader = EngineRulesLoader()
+    pairs: list[tuple[str, Any]] = []
+    for engine in Engine:
+        engine_name = engine.value
+        for rule in loader.load_rules(engine_name).rules:
+            if rule.severity != severity:
+                continue
+            pairs.append((engine_name, rule))
+    pairs.sort(key=lambda p: (p[0], p[1].id))
+    return pairs
+
+
+def get_validation_rules() -> list[dict[str, str]]:
+    """Config-load-time error rules, derived from the live rule corpus + validators.
+
+    These are the SSOT for the "Config Validation Errors" section in
+    invalid-combos.md. Rows come from two places, unified into one shape:
+
+    - The ExperimentConfig ``@model_validator`` rules, which raise before any
+      engine rule runs (engine-section mismatch, passthrough collision,
+      wrapper-level extras, and the transformers flash-attention dtype check).
+    - The per-engine rule corpus (``src/llenergymeasure/engines/<e>/rules.yaml``),
+      every ``error``-severity rule, read through :class:`EngineRulesLoader`.
+
+    A completeness tripwire cross-checks ``_MODEL_VALIDATOR_RULES`` against the
+    live ExperimentConfig validators so adding or renaming a validator without
+    updating the list fails ``make docs-check`` instead of silently drifting.
 
     Returns:
         List of dicts with keys: engine, combination, reason, resolution.
+        Deterministically ordered (model validators first, then corpus rules by
+        engine then rule id) so the generated doc is byte-stable.
     """
-    return [
+    from llenergymeasure.config.models import ExperimentConfig
+
+    listed = {e["validator"] for e in _MODEL_VALIDATOR_RULES}
+    live = {
+        name
+        for name in ExperimentConfig.__pydantic_decorators__.model_validators
+        if name.startswith("validate_")
+    }
+    if listed != live:
+        missing = live - listed
+        extra = listed - live
+        raise RuntimeError(
+            "_MODEL_VALIDATOR_RULES is out of step with ExperimentConfig validators. "
+            f"Missing (add a row): {sorted(missing)}. "
+            f"Extra (remove a row): {sorted(extra)}."
+        )
+
+    rows: list[dict[str, str]] = [
         {
-            "engine": "transformers",
-            "combination": "load_in_4bit=True + load_in_8bit=True",
-            "reason": "Cannot use both 4-bit and 8-bit quantization simultaneously",
-            "resolution": "Choose one: transformers.engine_params.load_in_4bit=true OR transformers.engine_params.load_in_8bit=true",
-        },
-        {
-            "engine": "transformers",
-            "combination": "torch_compile_mode without torch_compile=True",
-            "reason": "torch_compile_mode/torch_compile_backend only take effect when torch_compile=True",
-            "resolution": "Set harness.transformers.torch_compile=true when using torch_compile_mode or torch_compile_backend",
-        },
-        {
-            "engine": "transformers",
-            "combination": "bnb_4bit_* without load_in_4bit=True",
-            "reason": "BitsAndBytes 4-bit options require 4-bit quantization to be enabled",
-            "resolution": "Set transformers.engine_params.load_in_4bit=true when using bnb_4bit_compute_dtype, bnb_4bit_quant_type, or bnb_4bit_use_double_quant",
-        },
-        {
-            "engine": "transformers",
-            "combination": "cache_implementation with use_cache=False",
-            "reason": "Cannot specify a cache strategy when caching is explicitly disabled",
-            "resolution": "Remove use_cache=false or remove cache_implementation",
-        },
-        {
-            "engine": "all",
-            "combination": "engine section mismatch",
-            "reason": "Engine section must match the engine field",
-            "resolution": "Ensure transformers:/vllm:/tensorrt: section matches engine: field",
-        },
-        {
-            "engine": "all",
-            "combination": "passthrough_kwargs key collision",
-            "reason": "passthrough_kwargs keys must not collide with ExperimentConfig fields",
-            "resolution": "Use named fields directly instead of passthrough_kwargs",
-        },
-        {
-            "engine": "tensorrt",
-            "combination": "dtype=float32",
-            "reason": "TensorRT-LLM is optimised for lower-precision inference",
-            "resolution": "Use dtype='float16' or 'bfloat16'",
-        },
-        {
-            "engine": "vllm",
-            "combination": "load_in_4bit or load_in_8bit",
-            "reason": "vLLM does not support bitsandbytes quantization",
-            "resolution": "Use vllm.engine_params.quantization (awq, gptq, fp8) for quantized inference",
-        },
+            "engine": e["engine"],
+            "combination": e["combination"],
+            "reason": e["reason"],
+            "resolution": e["resolution"],
+        }
+        for e in _MODEL_VALIDATOR_RULES
     ]
+    for engine_name, rule in _corpus_rules_by_severity("error"):
+        rows.append(
+            {
+                "engine": engine_name,
+                "combination": _render_combination(rule),
+                "reason": _rule_reason(rule),
+                "resolution": "Adjust the field(s) so the condition no longer holds; "
+                f"see rule {rule.id}.",
+            }
+        )
+    return rows
+
+
+def get_dormant_rules() -> list[dict[str, str]]:
+    """Dormant (silently-normalised) rules, derived from the live rule corpus.
+
+    A ``dormant`` rule describes a field the engine accepts but silently
+    normalises or ignores: the declared value is not the effective value. The
+    study planner uses these to deduplicate configs that resolve to the same
+    effective configuration, so they never reject a config - they are surfaced
+    here so users know which declared values do not take effect.
+
+    Returns:
+        List of dicts with keys: engine, combination, effect, normalised_fields.
+        Deterministically ordered by engine then rule id.
+    """
+    rows: list[dict[str, str]] = []
+    for engine_name, rule in _corpus_rules_by_severity("dormant"):
+        rows.append(
+            {
+                "engine": engine_name,
+                "combination": _render_combination(rule),
+                "effect": _rule_reason(rule),
+                "normalised_fields": ", ".join(rule.normalised_fields) or "-",
+            }
+        )
+    return rows
 
 
 def get_runtime_limitations() -> list[dict[str, str]]:

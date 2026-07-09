@@ -23,9 +23,10 @@ The repo uses two workflow patterns, picked per-concern:
 | **Monolithic-direct** | one concern, triggered directly | `ci.yml`, `engine-rules-check.yml`, `security.yml`, `release.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml`, `docs.yml`, `issue-type-labeller.yml` |
 
 A monolithic-direct workflow may still fan out over a matrix (see
-`engine-rules-check.yml`, which runs one concern across the engines). Reusable
-workflows are invoked with `uses: ./.github/workflows/<name>.yml` from
-`release.yml` and `auto-release.yml`.
+`engine-rules-check.yml`, which runs one concern across the engines). The
+reusable workflows are invoked with `uses: ./.github/workflows/<name>.yml`:
+`release.yml` calls `docker-publish.yml`, and `auto-release.yml` calls
+`gpu-ci.yml`.
 
 ## Engine rules check
 
@@ -36,7 +37,8 @@ upstream source; it never mines, and it never writes back.
 ### Topology
 
 ```mermaid
-flowchart LR
+flowchart TB
+    ef[engine-filter - always runs]
     subgraph config-codegen [config-codegen matrix - gating]
         cc_tf[transformers]
         cc_vllm[vllm]
@@ -46,12 +48,31 @@ flowchart LR
         rc_vllm[vllm]
         rc_trt[tensorrt]
     end
+    sic[seed-image-check - gating]
+    gate[engine-rules-gate - fan-in, always runs]
+
+    ef --> config-codegen
+    ef --> rules-coverage
+    ef --> sic
+    config-codegen --> gate
+    sic --> gate
 ```
 
-The two jobs are independent - there is no dependency edge and no aggregation
-step. Each matrix cell is a self-contained check.
+`engine-filter` runs on every PR and decides whether the work jobs do anything
+(see [Requireable without a workflow-level paths filter](#requireable-without-a-workflow-level-paths-filter)).
+The two matrix jobs and the seed check are otherwise independent - each cell is
+a self-contained check. `engine-rules-gate` is the single fan-in the branch
+requires; `rules-coverage` feeds nothing downstream because it is advisory.
 
 ### Jobs
+
+- **`engine-filter`** (always runs): a `dorny/paths-filter` job whose `engine`
+  output is true when the PR touches any engine-knowledge path (a config,
+  a `rules.yaml`, the engine-rules loader, a pin, a snapshot output, the
+  producers, or this workflow file). It replaces the workflow-level `paths:`
+  filter this workflow used to carry (see below). Named `engine-filter` - not
+  `filter` - so its check context is distinguishable from `ci.yml`'s `filter`
+  job.
 
 - **`config-codegen`** (gating, matrix over `transformers` / `vllm` /
   `tensorrt`): regenerates the typed config model from the engine's committed
@@ -67,10 +88,39 @@ step. Each matrix cell is a self-contained check.
   fetched by blobless sparse checkout of just the engine's Python package tree
   (see below), keyed and cached per engine and version.
 
+- **`seed-image-check`** (gating, transformers only): the transformers runtime
+  image is seeded locally before a bump lands (`make docker-seed-transformers`)
+  and tag-copied on merge by `publish-engine-image.yml`. This job checks the
+  GHCR seed for the current pin already exists, so a bump PR that forgot to seed
+  fails at PR time rather than at merge-time promotion.
+
+- **`engine-rules-gate`** (fan-in, always runs, matrix-free): depends on
+  `config-codegen` and `seed-image-check` and fails iff a gating job failed
+  (skipped gating jobs count as satisfied). This is the only context from this
+  workflow branch protection requires - see below for why the matrix job names
+  cannot be required directly.
+
 `transformers` is absent from `rules-coverage` on purpose: its config
 validation uses imperative post-init idioms that the validator-site model does
 not recognise, so a coverage number there would be noise. transformers is
 still covered by the gating `config-codegen` job.
+
+### Requireable without a workflow-level paths filter
+
+This workflow carries no workflow-level `paths:` filter. A required check must
+report a check-run context on every PR: a workflow that `paths:`-skips never
+reports, and a required check that never reports blocks the PR forever on
+"Expected - waiting for status". So the work is gated per-job (via
+`engine-filter`) rather than by omitting the workflow, mirroring `ci.yml`'s
+`filter` pattern: on a non-engine PR the gating jobs skip, and a skipped
+required check counts as satisfied.
+
+Branch protection requires one context from this workflow: `engine-rules-gate`.
+It cannot require the matrix job names (`config-codegen (vllm)` and so on):
+when a matrix job is skipped at job level, GitHub reports one check run under
+the unexpanded job name, so an expanded-name required context never reports on
+a non-engine PR and the merge waits forever. `engine-rules-gate` is matrix-free
+and always runs, so it always reports.
 
 ### Fetching pinned engine source affordably
 
@@ -114,9 +164,13 @@ workflow), because they gate the same core artifacts the rest of `ci.yml`
 guards:
 
 - `check_pydantic_matches_discovered.py` - the typed config models match the
-  discovered schema for all engines.
+  discovered schema for all engines. It runs as the second step of the
+  `docs-freshness` job (gated on `ci.yml`'s `filter.docs_inputs`).
 - `check_discovered_schema_versions.py` - the discovered schema snapshots carry
-  the versions the pins declare.
+  the versions the pins declare. It runs as the `schema-version-check` job, a
+  three-engine matrix (`transformers` / `vllm` / `tensorrt`) gated on
+  `ci.yml`'s `filter.docker` output (which includes `engine_versions/**`), one
+  cell per engine.
 
 They run host-only on hosted CPU runners and fail on drift.
 
@@ -149,41 +203,80 @@ the seed locally, then re-run the promotion via `workflow_dispatch`.
 
 ## Expected workflow behaviour per PR shape
 
-The canonical PR shapes and what the check matrix shows.
+`engine-rules-check` runs on every PR (no workflow-level `paths:` filter), so
+its `engine-filter`, `engine-rules-gate`, and - on `transformers` engines -
+`seed-image-check` contexts always report. What varies per PR shape is whether
+`engine-filter` sees an engine-knowledge change and lets the work jobs run.
 
-| PR shape | `engine-rules-check` triggered? | Jobs that run |
+| PR shape | `engine-filter.engine` | Work jobs that run |
 |---|---|---|
-| **Workflow-only edit** (`engine-rules-check.yml` changed) | Yes (self-test) | Both jobs, full matrix |
-| **One-engine pin bump** (`engine_versions/vllm/current.yaml`) | Yes | Both jobs, all cells (the paths filter is workflow-wide) |
-| **Config or snapshot change** (`engines/<engine>/config.py` or a snapshot output) | Yes | Both jobs, full matrix |
-| **Rules edit** (`engines/<engine>/rules.yaml`) | Yes | Both jobs, full matrix |
-| **Pure ci.yml / docs change** | **Absent** | - |
+| **Workflow-only edit** (`engine-rules-check.yml` changed) | `true` (self-test) | Both matrices, seed check, gate |
+| **Pin bump** (`engine_versions/<engine>/current.yaml`) | `true` | Both matrices, seed check, gate |
+| **Config or snapshot change** (`engines/<engine>/config.py`, or an `outputs/` snapshot) | `true` | Both matrices, seed check, gate |
+| **Rules edit** (`engines/<engine>/rules.yaml`) or loader change | `true` | Both matrices, seed check, gate |
+| **Pure ci.yml / docs change** | `false` | Work jobs **skip**; `engine-filter` and `engine-rules-gate` still report (green) |
 
-`engine-rules-check` absent on the last shape is the load-bearing observation:
-PRs that touch only unrelated paths leave the workflow out of the check matrix
-entirely (the workflow-level `paths:` filter does not match). The workflow does
-not sub-filter per engine - when it fires, the full matrix runs. The matrix is
-small and every job is a fast read-only check, so per-engine gating would add
+The load-bearing observation is that the last shape does not omit the workflow:
+the gating jobs skip, `engine-rules-gate` runs anyway and passes (skipped needs
+count as satisfied), and the required context reports green. This is what lets
+branch protection require `engine-rules-gate` without wedging non-engine PRs on
+"Expected - waiting for status". The workflow does not sub-filter per engine -
+when `engine-filter.engine` is true, the full matrix runs. The matrix is small
+and every job is a fast read-only check, so per-engine gating would add
 machinery without saving meaningful time.
+
+## Branch-protection required contexts
+
+`main` requires these seven check contexts, all of which report on every PR:
+
+| Context | Workflow | Job |
+|---|---|---|
+| `test` | `ci.yml` | `test` |
+| `lint` | `ci.yml` | `lint` |
+| `type-check` | `ci.yml` | `type-check` |
+| `actionlint` | `ci.yml` | `actionlint` |
+| `filter` | `ci.yml` | `filter` |
+| `engine-filter` | `engine-rules-check.yml` | `engine-filter` |
+| `engine-rules-gate` | `engine-rules-check.yml` | `engine-rules-gate` |
+
+These constraints follow from the requireable-contexts rules described above.
+
+`filter` and `engine-filter` are deliberately distinct job IDs even though both
+are `dorny/paths-filter` gates, so their check contexts do not collide on the
+PR checks tab.
 
 ## Cancel-in-progress policy
 
-- `true` for read-only / stateless workflows: `ci.yml`, `engine-rules-check.yml`,
-  `gpu-ci.yml`, `security.yml`, `docs.yml`.
-- `false` for workflows that run long-cached builds: `publish-engine-image.yml`.
+- **`cancel-in-progress: true`** for read-only / stateless workflows:
+  `engine-rules-check.yml` and `docs.yml` set it unconditionally. `ci.yml` sets
+  it to `${{ github.event_name == 'pull_request' }}` - cancel superseded PR
+  runs, but let merge-queue / push runs on `main` finish.
+- **`cancel-in-progress: false`** for workflows that mutate a registry or run
+  long-cached builds: `publish-engine-image.yml` (grouped per commit SHA) and
+  `ghcr-prune.yml` (a single in-flight sweep; a cancelled prune pass leaves the
+  registry half-pruned).
+- **No `concurrency:` block** on `gpu-ci.yml` and `security.yml`: GPU runs are
+  label-gated and rare, and the security scan is cheap, so neither needs
+  supersession control.
 
 Rationale: a read-only check can be cancelled and superseded freely by a newer
-push; cancelling a long build wastes accumulated layer cache. No workflow
-writes back to a PR branch, so there is no partial-write state to orphan.
+push; cancelling a long build or a registry mutation wastes accumulated layer
+cache or strands a half-done write. No workflow writes back to a PR branch, so
+there is no partial-write state to orphan on the PR side.
 
 ## Path-trigger self-tests
 
 Every workflow's correctness MUST be verifiable at PR time when the workflow
 file is edited. Two mechanisms together provide complete coverage:
 
-1. **Runtime self-test where possible.** Workflows using `paths:` filters
-   include their own file in the filter, so an edit to the workflow runs it.
-   `engine-rules-check.yml`, `ci.yml`, and `docs.yml` all list their own path.
+1. **Runtime self-test where possible.** A workflow that filters on paths lists
+   its own file among them, so an edit to the workflow exercises it.
+   - `ci.yml` and `docs.yml` include their own filename in a workflow-level
+     `on.pull_request.paths`.
+   - `engine-rules-check.yml` has no workflow-level `paths:` (it must report on
+     every PR), so it self-tests through the `engine-filter` job's filter list,
+     which includes `.github/workflows/engine-rules-check.yml`: editing the
+     workflow flips `engine-filter.engine` true and runs the full matrix.
 2. **Shape validation for everything else.** Workflows that cannot self-test at
    runtime (`workflow_call`-only, label-only, tag-only, or closed-PR triggers)
    are covered by the `actionlint` job in `ci.yml`, which fires on edits to any
@@ -204,7 +297,8 @@ Workflows that cannot self-test at runtime:
 
 - Kebab-case, one concern per file: `<verb>-<scope>.yml` (e.g.
   `engine-rules-check.yml`).
-- Reusable workflows: `_<name>.yml` underscore prefix.
+- Reusable (`workflow_call`) workflows use the same kebab-case naming as any
+  other file - `docker-publish.yml`, `gpu-ci.yml` - with no special prefix.
 - Single-word workflows lowercase: `ci.yml`, `release.yml`, `security.yml`.
 
 ### Workflow `name:` field
