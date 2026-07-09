@@ -144,6 +144,7 @@ def test_cross_section_non_divisor_return_count_accepted():
         },
     )
     assert cfg.active_engine_params().num_beams == 4
+    assert cfg.active_sampling_params().num_return_sequences == 3
 
 
 # ---------------------------------------------------------------------------
@@ -220,20 +221,6 @@ def test_legitimate_transformers_value_validates_cleanly(section, field, value):
         transformers={section: {field: value}},
     )
     assert getattr(getattr(cfg, "active_" + section)(), field) == value
-
-
-def test_beams_ge_return_sequences_validates_cleanly():
-    """num_beams=4 with num_return_sequences=3 (non-divisor pair) is valid."""
-    cfg = ExperimentConfig(
-        task={"model": "gpt2"},
-        engine="transformers",
-        transformers={
-            "engine_params": {"num_beams": 4},
-            "sampling_params": {"num_return_sequences": 3},
-        },
-    )
-    assert cfg.active_engine_params().num_beams == 4
-    assert cfg.active_sampling_params().num_return_sequences == 3
 
 
 def test_bare_vllm_config_has_no_phantom_dormant_observations():

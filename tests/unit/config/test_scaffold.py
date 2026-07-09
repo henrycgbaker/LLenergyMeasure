@@ -229,9 +229,9 @@ def test_bounds_emits_both_bool_values_for_early_stopping() -> None:
     """early_stopping is a valid boolean knob, so it sweeps both values.
 
     early_stopping=True is the documented way to enable beam-search early
-    stopping; it must not be pruned from the sweep. (At the default num_beams=1
-    the two values are measurement-equivalent and collapse at dedup time - see
-    the round-trip tests - but the sweep axis itself is emitted.)
+    stopping; it must not be pruned from the sweep. (A dormant corpus rule
+    strips early_stopping at resolution time, so the two values collapse at
+    dedup - see the round-trip tests - but the sweep axis itself is emitted.)
     """
     text = render_study_bounds(MODEL, ["transformers"])
     raw = yaml.safe_load(text)
@@ -255,9 +255,9 @@ def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> No
     The full Cartesian product is enumerated pre-dedup (one equivalence group
     per combination member); measurement-equivalent combinations then collapse
     via the resolved-config-hash dedup, so the number of executed experiments
-    equals the group count (<= product). For transformers this is a strict
-    collapse: early_stopping is dormant at the default num_beams=1, so its two
-    values are measurement-equivalent.
+    equals the group count (<= product). For transformers the collapse is
+    strict: a dormant corpus rule strips early_stopping at resolution, so its
+    two swept values resolve to the same config.
     """
     text = render_study_bounds(MODEL, [engine])
     path = tmp_path / "study.yaml"
