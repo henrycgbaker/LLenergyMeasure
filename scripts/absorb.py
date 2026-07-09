@@ -2,8 +2,8 @@
 """Absorb: the one command a maintainer runs per engine-version bump.
 
 Drives the knowledge-refresh loop for ONE engine's validation rules: cold read
-(analyst proposes candidates) -> pool union (analyst + observed collisions +
-manual seeds, deduped) -> recall interrogation (ask "is this still present?" for
+(analyst proposes candidates) -> pool union (analyst + manual seeds, deduped)
+-> recall interrogation (ask "is this still present?" for
 each shipped rule the fresh pool did not rediscover) -> verification ladder
 (citation check on the host, then construction / identity probes in the engine
 container; the engine is the arbiter) -> promotion (regenerate the shipped rules
@@ -78,7 +78,7 @@ _CORPUS_HEADER = (
     "# severity is closed {error, dormant}; provenance is metadata only.\n"
 )
 _UNION_HEADER = (
-    "# Absorb union pool: analyst cold read + observed collisions + manual seeds,\n"
+    "# Absorb union pool: analyst cold read + manual seeds,\n"
     "# deduped on candidate id and translated to canonical field paths.\n"
     "# UNVERIFIED candidates for the verification ladder; not a shipped corpus.\n"
 )
@@ -202,10 +202,9 @@ def union_candidates(sources: list[list[dict[str, Any]]]) -> list[dict[str, Any]
 
 
 def build_union(pool_dir: Path, engine: str) -> list[dict[str, Any]]:
-    """Read the three proposer pools, dedup, and canonicalise field paths."""
+    """Read the analyst and manual-seed pools, dedup, and canonicalise field paths."""
     sources = [
         _load_yaml_list(pool_dir / "analyst_cold_read.yaml", "candidates"),
-        _load_yaml_list(pool_dir / "observed_collisions.yaml", "candidates"),
         _load_yaml_list(pool_dir / "manual_seeds.yaml", "candidates"),
     ]
     union = union_candidates(sources)

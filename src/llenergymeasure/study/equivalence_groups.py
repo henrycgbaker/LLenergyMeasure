@@ -9,8 +9,8 @@ sidecars for shared observed-config-hash values.
 
 The observed-config-hash collision invariant (§4.1) guarantees that in a post-resolved-config-hash dedup run set,
 any group with ``len(member_resolved_config_hashes) >= 2`` is a **proven library-resolution mechanism gap**.
-Phase 50.3b's ``llem report-gaps`` command consumes this file to propose
-corpus additions.
+The file is a post-hoc analysis artifact; nothing reads it back at runtime
+(``llem report-gaps`` consumes ``runtime_observations.jsonl``, not this file).
 """
 
 from __future__ import annotations
@@ -51,7 +51,6 @@ class ObservedCollisionGroup:
     member_resolved_config_hashes: tuple[str, ...]
     member_experiment_ids: tuple[str, ...]
     gap_detected: bool
-    proposed_invariant_id: str | None = None
 
 
 @dataclass
@@ -60,7 +59,7 @@ class EquivalenceGroups:
 
     study_id: str
     dedup_mode: Literal["resolved", "off"]
-    validated_invariants_version: str = ""
+    validated_rules_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
     observed_collision_groups: list[ObservedCollisionGroup] = field(default_factory=list)
 
@@ -126,7 +125,7 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
     payload = {
         "study_id": groups.study_id,
         "dedup_mode": groups.dedup_mode,
-        "validated_invariants_version": groups.validated_invariants_version,
+        "validated_rules_version": groups.validated_rules_version,
         "groups": [asdict(g) for g in groups.groups],
         "observed_collision_groups": [asdict(g) for g in groups.observed_collision_groups],
     }
