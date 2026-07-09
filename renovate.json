@@ -22,21 +22,6 @@
   "packageRules": [
     {
       "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["vllm/vllm-openai"],
-      "labels": ["renovate", "engine-vllm"],
-      "automerge": false,
-      "minimumReleaseAge": "14 days"
-    },
-    {
-      "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["nvcr.io/nvidia/tensorrt-llm/release"],
-      "labels": ["renovate", "engine-tensorrt"],
-      "registryUrls": ["https://nvcr.io"],
-      "automerge": false,
-      "minimumReleaseAge": "14 days"
-    },
-    {
-      "matchManagers": ["dockerfile"],
       "matchPackageNames": ["pytorch/pytorch"],
       "labels": ["renovate", "engine-transformers"],
       "automerge": false,

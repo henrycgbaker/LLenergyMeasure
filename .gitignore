@@ -54,10 +54,6 @@ docs/reference/api/
 scripts/_poc_*.yaml
 scripts/probe_*_results.json
 
-# Rule-extractor staging outputs (regenerated each run; consumed by the
-# corpus merger - never hand-edited, never committed).
-configs/engine_invariants/_staging/
-
 # Probe primitive cache (rewritten on every probe run; tracks the
 # previous-run fingerprint per (engine, producer) for drift detection).
 engine_versions/*.compat.json

@@ -1,11 +1,9 @@
 """Tests for the sweep library-resolution mechanism - fixpoint iteration + dedup.
 
-Idempotence + shuffle-stability are enforced by
-``scripts/miners/_fixpoint_test.py`` (CI-time contract - any corpus PR that
-violates them is rejected before this module runs). These tests focus on
-the *runtime* behaviour: does the library-resolution mechanism reach fixpoint, does it
-collapse measurement-equivalent configs, does it detect cycles, does it
-populate equivalence-group metadata.
+These tests cover the *runtime* behaviour of :func:`_apply_rules_fixpoint`:
+idempotence on already-canonical configs, shuffle-stability, reaching a stable
+fixpoint, collapsing measurement-equivalent configs, cycle detection, and
+populating equivalence-group metadata.
 """
 
 from __future__ import annotations
