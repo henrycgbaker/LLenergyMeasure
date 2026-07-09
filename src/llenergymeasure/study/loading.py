@@ -13,6 +13,7 @@ parses *and* finalises in one call is ``llenergymeasure.api.load_study``.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any, Literal
 
 from llenergymeasure.config.grid import (
@@ -112,13 +113,5 @@ def finalise_study(raw: LoadedStudyRaw) -> StudyConfig:
         dedup_mode=dedup_mode,
         pre_run_equivalence_groups=pre_run_groups,
         declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
-        dormant_observations=[
-            {
-                "engine": obs.engine,
-                "rule_id": obs.rule_id,
-                "field_path": obs.field_path,
-                "normalisation": obs.normalisation,
-            }
-            for obs in dedup.dormant_observations
-        ],
+        dormant_observations=[asdict(obs) for obs in dedup.dormant_observations],
     )

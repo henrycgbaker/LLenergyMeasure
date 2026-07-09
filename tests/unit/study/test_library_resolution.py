@@ -166,8 +166,11 @@ class TestCanonicalise:
     def test_cycle_detection_guard_raises(self, monkeypatch):
         # The fixpoint guard is defensive against a bad corpus. A strip-only
         # projection is monotone and cannot cycle, so force the non-convergence
-        # path with a monkeypatched projection that alternates the target value
-        # every pass - the guard must surface it rather than hang.
+        # path. The projection is precomputed once per rule, so we cannot flip
+        # it per pass; instead patch the assignment so the field never lands on
+        # its canonical target (it alternates every write). The field stays off
+        # its projected value, so ``fired`` is True on every pass and the guard
+        # must surface the non-convergence rather than hang.
         cfg = _mk_config(transformers={"sampling_params": {"do_sample": True, "top_k": 50}})
         rule = _mk_rule(
             invariant_id="cycler",
@@ -179,11 +182,16 @@ class TestCanonicalise:
         import llenergymeasure.study.library_resolution as lr
 
         flip = itertools.cycle([999, 50])
-        monkeypatch.setattr(
-            lr,
-            "_rule_normalisations",
-            lambda _rule: {"transformers.sampling_params.top_k": next(flip)},
-        )
+
+        # The projection strips top_k, but the patched assign writes an
+        # alternating literal instead, so the field never lands on its projected
+        # target and the loop never converges.
+        real_assign = lr._assign_field_path
+
+        def _assign(config, path, _value):
+            real_assign(config, path, next(flip))
+
+        monkeypatch.setattr(lr, "_assign_field_path", _assign)
         with pytest.raises(LibraryResolutionCycleError):
             _apply_rules_fixpoint(cfg, [rule])
 

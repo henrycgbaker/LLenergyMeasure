@@ -123,6 +123,13 @@ def _apply_rules_fixpoint(
     if not dormant_rules:
         return config.model_copy(deep=True)
 
+    # A rule's normalisations depend only on the frozen Rule, not on the config
+    # under resolution, so precompute once per rule rather than recomputing on
+    # every fixpoint iteration for every config. Rule carries a dict field
+    # (match_fields), so it is not hashable - key the precompute by object
+    # identity rather than by the Rule itself.
+    normalisations_by_rule = {id(r): _rule_normalisations(r) for r in dormant_rules}
+
     current = config.model_copy(deep=True)
     for _iteration in range(_MAX_ITER):
         fired = False
@@ -130,7 +137,7 @@ def _apply_rules_fixpoint(
             match = rule.try_match(current)
             if match is None:
                 continue
-            updates = _rule_normalisations(rule)
+            updates = normalisations_by_rule[id(rule)]
             if not updates:
                 continue
             for field_path, target_value in updates.items():
@@ -373,12 +380,9 @@ def resolve_library_effective(
 
     # Distinct observations, first-seen order - the same rule fires on many
     # sweep points but the display wants one line per (engine, rule, field).
-    distinct_observations: list[DormantObservation] = []
-    seen: set[DormantObservation] = set()
-    for obs in observations:
-        if obs not in seen:
-            seen.add(obs)
-            distinct_observations.append(obs)
+    # DormantObservation is frozen/hashable and dict preserves insertion order,
+    # so dict.fromkeys gives first-seen dedup in one pass.
+    distinct_observations = list(dict.fromkeys(observations))
 
     groups_by_hash: dict[str, list[int]] = {}
     for idx, h in enumerate(hashes):

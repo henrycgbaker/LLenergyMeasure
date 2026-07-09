@@ -395,6 +395,27 @@ def canonical_operator(op: str) -> str:
     return OPERATOR_ALIASES.get(op, op)
 
 
+def _canonicalise_match_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    """Canonicalise operator keys in every dict-valued field spec at parse time.
+
+    A dict spec's keys are predicate operators; word-form aliases (``equals`` /
+    ``not_equal``) are mapped to their symbol form via :func:`canonical_operator`
+    so every consumer sees one canonical key regardless of how the corpus author
+    wrote the rule. :func:`canonical_operator` passes unknown keys through
+    unchanged, so non-operator keys (``present``, ``not_in``, ...) are untouched.
+    Scalar shorthand specs (bare-value equality) are not dicts, so they pass
+    through unchanged too.
+    """
+    return {
+        path: (
+            {canonical_operator(op): value for op, value in spec.items()}
+            if isinstance(spec, dict)
+            else spec
+        )
+        for path, spec in fields.items()
+    }
+
+
 def _ordered(a: Any, b: Any, op: Callable[[Any, Any], bool]) -> bool:
     """Apply an ordering comparison, treating None and incomparable types as no-match.
 
@@ -607,7 +628,7 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
         id=rule_id,
         engine=str(raw["engine"]),
         severity=severity,
-        match_fields=dict(match["fields"]),
+        match_fields=_canonicalise_match_fields(dict(match["fields"])),
         provenance=_parse_provenance(rule_id, raw["provenance"]),
         message_template=raw.get("message_template"),
         normalised_fields=tuple(str(p) for p in normalised),

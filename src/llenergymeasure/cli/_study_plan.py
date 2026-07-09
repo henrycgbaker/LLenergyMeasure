@@ -222,7 +222,7 @@ def _wall_clock_line(funnel: PlanFunnel) -> str:
     return line + "."
 
 
-def dormant_observation_lines(study: StudyConfig) -> list[str]:
+def dormant_observation_lines(study: StudyConfig, *, include_header: bool = True) -> list[str]:
     """Plain-text lines describing the dormant normalisations that will apply.
 
     Dormant rules silently rewrite the executed config (e.g. a greedy config
@@ -230,6 +230,10 @@ def dormant_observation_lines(study: StudyConfig) -> list[str]:
     engine listing the rule id and the field-level effect. Returns ``[]`` when
     no dormant rule fired, so callers render the section only when non-empty.
     Shared by ``llem study plan`` and the preflight summary.
+
+    ``include_header`` controls the leading "Dormant normalisations ..." line:
+    ``llem study plan`` keeps it, while the preflight panel omits it because the
+    section already carries its own bold title.
     """
     observations = study.dormant_observations
     if not observations:
@@ -239,7 +243,7 @@ def dormant_observation_lines(study: StudyConfig) -> list[str]:
     for obs in observations:
         by_engine.setdefault(str(obs.get("engine", "?")), []).append(obs)
 
-    lines = ["Dormant normalisations (applied to the executed config):"]
+    lines = ["Dormant normalisations (applied to the executed config):"] if include_header else []
     for engine in sorted(by_engine):
         lines.append(f"  {engine}:")
         for obs in by_engine[engine]:
