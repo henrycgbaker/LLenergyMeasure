@@ -292,7 +292,10 @@ Workflows that cannot self-test at runtime:
 - `auto-release.yml` - `pull_request: closed` only.
 - `release.yml` - `push: tags` only.
 - `issue-type-labeller.yml` - `issues` events only.
-- `renovate.yml` - `schedule` cron plus `workflow_dispatch` only.
+- `renovate.yml` - `schedule` cron plus `workflow_dispatch` only. Its
+  operational health signal is the dependency-dashboard issue: the daily run
+  refreshes it, so a stale dashboard means the cron (or its App credentials)
+  has died - the same staleness signal that exposed the hosted app's death.
 
 ## Conventions
 
