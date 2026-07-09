@@ -176,7 +176,7 @@ Template substitution variables:
 - `{declared_value}` - the value of the triggering (subject) field.
 - `{effective_value}` - the normalised value (reserved for value-aliasing dormant cases; `None` otherwise).
 - `{invariant_id}` - the rule's identifier.
-- Any `match.fields` key - the actual field value.
+- The leaf name of any matched `match.fields` path - the actual field value. The renderer seeds the full dotted paths first, then exposes each under its bare leaf name (e.g. `vllm.sampling_params.min_tokens` is also available as `{min_tokens}`, since a dotted path is not a valid `str.format` placeholder). On a leaf-name collision between two distinct paths the first-seen path wins, keeping rendering deterministic.
 
 Example error message rendered from a rule:
 
@@ -187,7 +187,7 @@ not 1, triggering group beam search. In this generation mode,
 be identical.
 ```
 
-If a template references a missing key, the loader falls back to `[{invariant_id}] <template>` rather than raising at user-facing time.
+If a template references a key that is still missing after substitution, the loader falls back to the raw template rather than raising at user-facing time. The fallback does not prefix the rule id: the sole caller (`ExperimentConfig._apply_rules`) already annotates every rendered message with `[rule.id]`, so prefixing here would double it.
 
 ---
 
