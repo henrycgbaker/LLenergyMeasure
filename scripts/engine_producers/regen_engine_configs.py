@@ -474,7 +474,31 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     output = args.output if args.output is not None else _shadow_config_path(args.engine)
-    drift = sync(args.engine, args.version, output, write=args.write)
+    try:
+        drift = sync(args.engine, args.version, output, write=args.write)
+    except FileNotFoundError:
+        # A missing snapshot dir is expected right after a bump; turn the bare
+        # traceback (reads as an internal error) into a remediation message.
+        outputs = _outputs.outputs_dir(args.engine, args.version)
+        if outputs.exists():
+            # Snapshot dir is present, so this came from elsewhere in sync (a
+            # file missing mid-generation). Don't misattribute it to a missing
+            # snapshot - that would point the maintainer at a dir that exists.
+            raise
+        print(
+            f"No mined snapshot for {args.engine} {args.version}.\n"
+            f"Missing directory: {outputs}\n"
+            f"(expected {_outputs.SCHEMA_FILENAME} + {_outputs.CURATED_FILENAME} inside it).\n"
+            "\n"
+            "Normal right after a version bump: the new pin's schema is not\n"
+            "discovered yet. Produce it locally (needs Docker, and a GPU for\n"
+            "vllm/tensorrt), then place schema.discovered.json and curated.yaml\n"
+            "under that directory and re-run this check:\n"
+            f"  make discover-schema ENGINE={args.engine}\n"
+            "See docs/contributing/schema-refresh.md for the full ritual.",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.write:
         print(f"[regen-configs] wrote: {output}")
