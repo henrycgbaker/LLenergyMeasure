@@ -39,7 +39,6 @@ class TestWriteSerialisation:
                     member_resolved_config_hashes=("sha256:abc", "sha256:xyz"),
                     member_experiment_ids=("exp_0001", "exp_0003"),
                     gap_detected=True,
-                    proposed_rule_id="candidate_rule_1",
                 )
             ],
         )

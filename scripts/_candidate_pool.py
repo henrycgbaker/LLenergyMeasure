@@ -1,9 +1,10 @@
 """Shared candidate-pool contract for the engine-rule proposers.
 
-The analyst cold read (``scripts/analyst_cold_read.py``) writes UNVERIFIED
-candidates into a version-scoped pool, in one unified schema the verification
-ladder consumes unchanged. This module owns the shared pieces of that contract
-so every proposer that targets the pool stays on one envelope:
+The analyst cold read (``scripts/analyst_cold_read.py``) - currently the sole
+proposer - writes UNVERIFIED candidates into a version-scoped pool, in one
+unified schema the verification ladder consumes unchanged. This module owns
+the shared pieces of that contract so any future proposer stays on the same
+envelope:
 
 - :func:`pool_path` - the on-disk layout
   ``<pool_root>/<engine>/v<mangled-version>/candidates/<filename>``.
@@ -13,7 +14,7 @@ so every proposer that targets the pool stays on one envelope:
 - :func:`slug` - the filesystem/id-safe slug for a field path or free text.
 - :func:`unverified_verdict` - the verdict stub every fresh candidate carries.
 
-Neither proposer writes the shipped ``src/llenergymeasure/engines/<engine>/rules.yaml``
+Proposers never write the shipped ``src/llenergymeasure/engines/<engine>/rules.yaml``
 corpora; those are frozen and the ladder promotes into them separately.
 """
 
@@ -59,7 +60,7 @@ def write_pool(
 
     ``extra`` carries proposer-specific header keys (e.g. the analyst's ``model``
     and ``samples``); they slot in after ``engine_version`` and before
-    ``generated_at`` so both proposers' envelopes share a stable key order.
+    ``generated_at`` so every pool envelope keeps a stable key order.
     """
     document: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,

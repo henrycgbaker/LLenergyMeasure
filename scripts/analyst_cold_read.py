@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyst cold read (proposer S2 of the engine-rule verification ladder).
+"""Analyst cold read - the engine-rule verification ladder's proposer.
 
 An LLM analyst reads the pinned engine source cold - no prior corpus, no
 seeding - and proposes every config-validation constraint it can see, each a
@@ -685,7 +685,7 @@ def load_sources(
 
 
 _POOL_HEADER = (
-    "# Analyst cold-read candidate rules (proposer S2).\n"
+    "# Analyst cold-read candidate rules.\n"
     "# Emitted by scripts/analyst_cold_read.py: an LLM analyst's exhaustive cold\n"
     "# read of the pinned engine source, one cited candidate per constraint.\n"
     "# UNVERIFIED candidates for the verification ladder. Do NOT hand-copy into\n"

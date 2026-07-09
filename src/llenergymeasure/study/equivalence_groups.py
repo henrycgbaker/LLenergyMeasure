@@ -51,7 +51,6 @@ class ObservedCollisionGroup:
     member_resolved_config_hashes: tuple[str, ...]
     member_experiment_ids: tuple[str, ...]
     gap_detected: bool
-    proposed_rule_id: str | None = None
 
 
 @dataclass

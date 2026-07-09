@@ -202,10 +202,9 @@ def union_candidates(sources: list[list[dict[str, Any]]]) -> list[dict[str, Any]
 
 
 def build_union(pool_dir: Path, engine: str) -> list[dict[str, Any]]:
-    """Read the three proposer pools, dedup, and canonicalise field paths."""
+    """Read the analyst and manual-seed pools, dedup, and canonicalise field paths."""
     sources = [
         _load_yaml_list(pool_dir / "analyst_cold_read.yaml", "candidates"),
-        _load_yaml_list(pool_dir / "observed_collisions.yaml", "candidates"),
         _load_yaml_list(pool_dir / "manual_seeds.yaml", "candidates"),
     ]
     union = union_candidates(sources)
