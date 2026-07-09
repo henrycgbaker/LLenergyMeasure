@@ -1,4 +1,4 @@
-# Exposure allowlist for vllm 0.7.3 (Move 2: curation as data).
+# Exposure allowlist for vllm 0.19.1 (Move 2: curation as data).
 #
 # Field names llem exposes as first-class typed fields on the generated
 # Config class. Non-curated engine fields stay reachable through the

@@ -4,23 +4,25 @@
 #
 # Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 #
-# Always writes to src/llenergymeasure/engines/<engine>.json
+# Always writes to src/llenergymeasure/engines/<engine>/schema.discovered.json
 # and prints the resulting `git diff`. Does NOT commit. The discovered JSON
 # file IS the canonical SSOT - authority comes from `git commit`, not from
 # who ran discovery.
 #
-# Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
+# Legitimate refresh (e.g. you bumped an engine pin in current.yaml):
 #   review the diff, `git add`, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/engines/<engine>.json`
+#   `git checkout src/llenergymeasure/engines/<engine>/schema.discovered.json`
 #
-# Discovery image selection:
-#   vllm         -> pristine vllm/vllm-openai:<tag> (vllm pre-installed)
-#   tensorrt     -> pristine nvcr.io/nvidia/tensorrt-llm/release:<tag>
+# Image selection matches scripts/probe_candidates.sh and the CI engine cells:
+# the pinned version is read from engine_versions/<engine>/current.yaml (the
+# Renovate-writable SSOT), then
+#   vllm         -> pristine vllm/vllm-openai:v<version> (vllm pre-installed)
+#   tensorrt     -> pristine nvcr.io/nvidia/tensorrt-llm/release:<version>
 #                   (works around llenergymeasure:tensorrt's cuKernelGetName bug)
-#   transformers -> llenergymeasure:transformers-<ver> (base pytorch image has no
-#                   transformers package; our Dockerfile pip-installs it at the
-#                   version pinned by ARG TRANSFORMERS_VERSION)
+#   transformers -> llenergymeasure:transformers-<version> (base pytorch image
+#                   has no transformers package; our Dockerfile pip-installs it
+#                   at the version passed via --build-arg TRANSFORMERS_VERSION)
 set -euo pipefail
 
 usage() {
@@ -28,7 +30,7 @@ usage() {
 Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 
 Builds or pulls the engine's discovery image, runs discovery inside it,
-writes src/llenergymeasure/engines/<engine>.json, and
+writes src/llenergymeasure/engines/<engine>/schema.discovered.json, and
 prints the git diff. Does NOT commit.
 EOF
 }
@@ -41,26 +43,36 @@ fi
 ENGINE="$1"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Extract ARG default value from a Dockerfile: _arg_default <file> <NAME>
-_arg_default() {
-    grep -oE "^ARG[[:space:]]+${2}=[^[:space:]]+" "$1" | head -1 | cut -d= -f2-
+if ! command -v yq >/dev/null 2>&1; then
+    echo "yq is required to read the engine pin from current.yaml but was not found on PATH" >&2
+    exit 1
+fi
+
+# Pinned engine version from the per-engine SSOT (same locus probe_candidates.sh
+# and the CI cells read).
+_pinned_version() {
+    yq '.library.current_version' "$REPO_ROOT/engine_versions/$1/current.yaml"
 }
+
+VER="$(_pinned_version "$ENGINE")"
+if [[ -z "$VER" || "$VER" == "null" ]]; then
+    echo "Could not resolve $ENGINE version from engine_versions/$ENGINE/current.yaml" >&2
+    exit 1
+fi
 
 case "$ENGINE" in
     vllm)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.vllm" VLLM_VERSION)"
-        IMAGE="vllm/vllm-openai:${VER}"
+        IMAGE="vllm/vllm-openai:v${VER}"
         ;;
     tensorrt)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.tensorrt" TRTLLM_VERSION)"
         IMAGE="nvcr.io/nvidia/tensorrt-llm/release:${VER}"
         ;;
     transformers)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.transformers" TRANSFORMERS_VERSION)"
         IMAGE="llenergymeasure:transformers-${VER}"
         if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
             echo "[$ENGINE] Image $IMAGE not found; building from docker/Dockerfile.transformers..." >&2
-            docker build -f "$REPO_ROOT/docker/Dockerfile.transformers" -t "$IMAGE" "$REPO_ROOT"
+            docker build --build-arg "TRANSFORMERS_VERSION=${VER}" \
+                -f "$REPO_ROOT/docker/Dockerfile.transformers" -t "$IMAGE" "$REPO_ROOT"
         fi
         ;;
     *)
