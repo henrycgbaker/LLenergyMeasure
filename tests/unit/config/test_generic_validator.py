@@ -1,8 +1,8 @@
 """Tests for the generic ``_apply_rules`` model validator.
 
-Covers the severity dispatch paths (error / dormant), the out-of-enum
-severity fallback, and the no-match / missing-corpus fallbacks. Rule
-loading is exercised by ``tests/unit/config/engine_rules/test_loader.py``;
+Covers the severity dispatch paths (error / dormant), the inert
+out-of-enum severity case, and the no-match / missing-corpus fallbacks.
+Rule loading is exercised by ``tests/unit/config/engine_rules/test_loader.py``;
 this module focuses on the validator's dispatch and the
 ``_dormant_observations`` contract.
 """
@@ -122,15 +122,18 @@ def test_error_severity_no_raise_when_match_misses(monkeypatch: pytest.MonkeyPat
 
 
 # ---------------------------------------------------------------------------
-# Severity dispatch - out-of-enum fallback
+# Severity dispatch - out-of-enum severity is inert
 # ---------------------------------------------------------------------------
 #
-# The loader's closed ``{error, dormant}`` enum makes any other severity
-# unreachable in production; direct construction bypasses that check so the
-# defensive fallback branch stays covered.
+# ``Severity`` is a closed ``{error, dormant}`` Literal validated at corpus
+# load, so no other value can reach ``_apply_rules`` through the real loader.
+# The dispatch therefore carries no fallback branch: a severity outside the
+# enum (only reachable by bypassing the loader via direct construction) matches
+# neither the error nor the dormant arm and is silently skipped - it does not
+# raise, warn, or record a dormant observation.
 
 
-def test_out_of_enum_severity_emits_config_validation_warning(
+def test_out_of_enum_severity_is_silently_skipped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rule = _make_rule(
@@ -142,37 +145,16 @@ def test_out_of_enum_severity_emits_config_validation_warning(
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", ConfigValidationWarning)
-        ExperimentConfig(
+        cfg = ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
             transformers={"engine_params": {"attn_implementation": "eager"}},
         )
 
+    # Neither error (would raise) nor dormant (would record an observation).
+    assert cfg._dormant_observations == {}
     matched = [w for w in caught if issubclass(w.category, ConfigValidationWarning)]
-    assert matched, "expected a ConfigValidationWarning"
-    assert "test_bogus_rule" in str(matched[0].message)
-    assert "unknown severity" in str(matched[0].message)
-
-
-def test_out_of_enum_severity_not_fatal_under_simplefilter_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``simplefilter('error', ConfigValidationWarning)`` escalates the fallback to raise."""
-    rule = _make_rule(
-        "test_bogus_rule",
-        "bogus",
-        {"transformers.engine_params.attn_implementation": "eager"},
-    )
-    _install_test_rules(monkeypatch, [rule])
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", ConfigValidationWarning)
-        with pytest.raises((ValidationError, ConfigValidationWarning)):
-            ExperimentConfig(
-                task={"model": "gpt2"},
-                engine="transformers",
-                transformers={"engine_params": {"attn_implementation": "eager"}},
-            )
+    assert not matched, "an out-of-enum severity must not warn"
 
 
 # ---------------------------------------------------------------------------
@@ -261,32 +243,6 @@ def test_error_rule_shortcircuits_later_rules(monkeypatch: pytest.MonkeyPatch) -
                 "sampling_params": {"temperature": 0.9},
             },
         )
-
-
-# ---------------------------------------------------------------------------
-# Unknown severity - fail-safe
-# ---------------------------------------------------------------------------
-
-
-def test_unknown_severity_emits_warning(monkeypatch: pytest.MonkeyPatch) -> None:
-    rule = _make_rule(
-        "weird_severity",
-        "not_a_real_severity",
-        {"transformers.engine_params.attn_implementation": "sdpa"},
-    )
-    _install_test_rules(monkeypatch, [rule])
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", ConfigValidationWarning)
-        ExperimentConfig(
-            task={"model": "gpt2"},
-            engine="transformers",
-            transformers={"engine_params": {"attn_implementation": "sdpa"}},
-        )
-
-    matched = [w for w in caught if issubclass(w.category, ConfigValidationWarning)]
-    assert matched
-    assert "weird_severity" in str(matched[0].message)
 
 
 # ---------------------------------------------------------------------------

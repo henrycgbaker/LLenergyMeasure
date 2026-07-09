@@ -207,21 +207,35 @@ class Rule:
     def render_message(self, match: RuleMatch) -> str:
         """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
 
+        ``matched_fields`` is keyed by full dotted paths
+        (``vllm.sampling_params.min_tokens``), which are not valid
+        ``str.format`` placeholder names, so each key is also exposed under its
+        bare leaf name (``{min_tokens}``) - the corpus authoring convention.
+
         Uses ``str.format`` with permissive defaults - templates that reference
-        missing keys fall back to the rule id + raw template rather than
-        raising at user-facing time.
+        a still-missing key fall back to the raw template rather than raising at
+        user-facing time. The fallback does NOT prefix the rule id: the sole
+        caller (:meth:`ExperimentConfig._apply_rules`) already annotates every
+        rendered message with ``[rule.id]``.
         """
         if self.message_template is None:
-            return f"[{self.id}] <no message template>"
+            return "<no message template>"
+        # Seed the full dotted paths first, then add leaf names via setdefault:
+        # a dot-free path is never re-added under its own key (which would make
+        # ``.format`` raise "multiple values"), and on a leaf collision between
+        # two distinct paths the first-seen path wins (deterministic rendering).
+        fmt_kwargs: dict[str, Any] = dict(match.matched_fields)
+        for path, value in match.matched_fields.items():
+            fmt_kwargs.setdefault(path.rsplit(".", 1)[-1], value)
         try:
             return self.message_template.format(
                 declared_value=match.declared_value,
                 effective_value=match.effective_value,
                 invariant_id=self.id,
-                **match.matched_fields,
+                **fmt_kwargs,
             )
         except (KeyError, IndexError):
-            return f"[{self.id}] {self.message_template}"
+            return self.message_template
 
 
 @dataclass(frozen=True)
@@ -362,15 +376,24 @@ def _ordered(a: Any, b: Any, op: Callable[[Any, Any], bool]) -> bool:
     ``a`` may be None when the predicate's field is unset; ``b`` may be None
     when a ``@field_ref`` resolves against a missing target - both yield False.
 
-    A mined numeric bound can land on a field that naturally holds a non-numeric
-    value (e.g. transformers ``compile_config``, a dict / CompileConfig shape).
-    Comparing such a pair with ``<`` / ``<=`` / ``>`` / ``>=`` raises TypeError;
-    that would escape config construction as an uncaught crash. Since the bound
-    is a corpus artifact rather than a user error - the generated pydantic model
-    remains the authority on the field's type validity - the rule simply does
-    not fire (False) on a type-incomparable pair.
+    ``bool`` operands are treated as non-comparable and never fire, mirroring
+    the ``_is_int_pair`` exclusion the divisibility ops apply. Python evaluates
+    ``True > 0`` cleanly (``bool`` subclasses ``int``), so an ordering bound
+    mined against a scalar numeric field would otherwise silently reject a
+    boolean-valued field (e.g. a ``{'>': 0}`` bound firing on
+    ``early_stopping=True``). The generated pydantic model remains the authority
+    on a boolean field's type validity, so the ordering rule stays inert.
+
+    A mined numeric bound can also land on a field that naturally holds a
+    non-numeric value (e.g. transformers ``compile_config``, a dict /
+    CompileConfig shape). Comparing such a pair with ``<`` / ``<=`` / ``>`` /
+    ``>=`` raises TypeError; that would escape config construction as an
+    uncaught crash. Since the bound is a corpus artifact rather than a user
+    error, the rule simply does not fire (False) on a type-incomparable pair.
     """
     if a is None or b is None:
+        return False
+    if isinstance(a, bool) or isinstance(b, bool):
         return False
     try:
         return op(a, b)
@@ -549,6 +572,12 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
     normalised = raw.get("normalised_fields") or ()
     if isinstance(normalised, str):
         normalised = (normalised,)
+    if normalised and severity != "dormant":
+        raise RuleCorpusError(
+            f"Rule {rule_id!r} has severity={severity!r} but declares normalised_fields; "
+            "normalised_fields drives dedup canonicalisation and is only meaningful on "
+            "'dormant' rules (it is dead data on 'error' rules)."
+        )
     return Rule(
         id=rule_id,
         engine=str(raw["engine"]),

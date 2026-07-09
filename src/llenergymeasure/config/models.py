@@ -759,14 +759,6 @@ class ExperimentConfig(BaseModel):
                     effective_value=match.effective_value,
                     reason=annotated,
                 )
-                continue
-            # Typo in the corpus: loader validation would normally reject this,
-            # but surface it visibly if anything slips past.
-            warnings.warn(
-                f"[{rule.id}] unknown severity {rule.severity!r}",
-                ConfigValidationWarning,
-                stacklevel=2,
-            )
 
         object.__setattr__(self, "_dormant_observations", dormant_observations)
         return self
