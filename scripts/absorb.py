@@ -48,6 +48,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from engine_versions import _outputs  # noqa: E402
 from scripts._candidate_pool import (  # noqa: E402
     SCHEMA_VERSION,
     pool_path,
@@ -837,7 +838,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Absorb one engine-version bump into the shipped rules corpus."
     )
     parser.add_argument(
-        "--engine", required=True, help="Engine to absorb (vllm, tensorrt, transformers)."
+        "--engine", required=True, choices=_outputs.ENGINES, help="Engine to absorb."
     )
     parser.add_argument(
         "--source-root", type=Path, help="Pinned engine package dir (citations resolve against it)."
