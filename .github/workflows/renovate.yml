@@ -1,0 +1,68 @@
+name: Renovate
+
+# Self-hosted Renovate cron. The hosted Mend Renovate app stopped visiting
+# this repo on 2026-04-29 (its last update PR and its last dependency-dashboard
+# refresh both landed that day, and later config edits and a dashboard checkbox
+# request drew no reaction). This workflow replaces that hosted app by running
+# Renovate ourselves on a schedule.
+#
+# Authentication uses the llem-ci-bot GitHub App token (minted from the APP_ID
+# and APP_PRIVATE_KEY repo secrets), not the default GITHUB_TOKEN. This is
+# deliberate: pull requests opened with an App token trigger CI, whereas PRs
+# opened with GITHUB_TOKEN would not (GitHub suppresses workflow runs on commits
+# it pushed itself, to avoid recursion). Update PRs must run CI to be reviewable.
+#
+# The in-config `schedule` in renovate.json ("before 9am on Monday") still gates
+# when update PRs are actually created, so this cron does not change bump
+# cadence. This workflow runs daily so the dependency dashboard stays fresh:
+# dashboard staleness is the liveness signal that diagnosed the hosted app's
+# death, and a daily run also picks up dashboard-checkbox requests and
+# vulnerability alerts within a day rather than only on the weekly bump window.
+
+on:
+  schedule:
+    - cron: '23 5 * * *'  # daily 05:23 UTC (off-peak, avoids the Monday crons)
+  workflow_dispatch:
+    inputs:
+      log_level:
+        description: 'Renovate log level (info or debug)'
+        required: false
+        default: 'info'
+
+concurrency:
+  # One Renovate run at a time; never cancel a run mid-flight (a cancelled run
+  # can leave the dependency dashboard or an in-progress PR half-updated).
+  group: renovate
+  cancel-in-progress: false
+
+# Renovate authenticates with the App token minted below; the default
+# GITHUB_TOKEN needs no permissions here (create-github-app-token reads only
+# the App secrets, not the workflow token).
+permissions: {}
+
+jobs:
+  renovate:
+    name: Run Renovate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Mint llem-ci-bot App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v46.1.18
+        env:
+          # Renovate discovers renovate.json from the target repo itself, so no
+          # global configurationFile is set here. RENOVATE_REPOSITORIES scopes
+          # the run to this repo; ONBOARDING is off because renovate.json exists.
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: 'false'
+          # LOG_LEVEL is forwarded to the Renovate container by the action's
+          # default env-regex allowlist.
+          LOG_LEVEL: ${{ inputs.log_level || 'info' }}
+        with:
+          token: ${{ steps.app-token.outputs.token }}
