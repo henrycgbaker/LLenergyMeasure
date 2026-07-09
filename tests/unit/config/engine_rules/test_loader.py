@@ -175,8 +175,12 @@ def test_valid_severity_set_is_closed_two_value() -> None:
 
 @pytest.mark.parametrize("severity", ["error", "dormant"])
 def test_both_severities_round_trip(tmp_path: Path, severity: str) -> None:
-    corpus = _CORPUS_MINIMAL.replace("severity: dormant", f"severity: {severity}")
-    _write_corpus(tmp_path, "transformers", corpus)
+    data = yaml.safe_load(_CORPUS_MINIMAL)
+    data["rules"][0]["severity"] = severity
+    # normalised_fields is dormant-only (rejected at load on error rules).
+    if severity == "error":
+        del data["rules"][0]["normalised_fields"]
+    _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
     loader = EngineRulesLoader(corpus_root=tmp_path)
     assert loader.load_rules("transformers").rules[0].severity == severity
 
@@ -306,3 +310,27 @@ def test_normalised_fields_string_coerces_to_tuple(tmp_path: Path) -> None:
     loader = EngineRulesLoader(corpus_root=tmp_path)
     rule = loader.load_rules("transformers").rules[0]
     assert rule.normalised_fields == ("transformers.sampling.temperature",)
+
+
+def test_normalised_fields_on_error_rule_rejected_at_load(tmp_path: Path) -> None:
+    # normalised_fields drives dedup canonicalisation and is only meaningful on
+    # dormant rules; on an error rule it is dead data. Reject it at load.
+    data = yaml.safe_load(_CORPUS_MINIMAL)
+    data["rules"][0]["severity"] = "error"
+    # (the minimal corpus already carries a normalised_fields entry)
+    _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    with pytest.raises(RuleCorpusError, match="normalised_fields"):
+        loader.load_rules("transformers")
+
+
+def test_normalised_fields_omitted_on_error_rule_is_fine(tmp_path: Path) -> None:
+    # An error rule with no normalised_fields loads cleanly.
+    data = yaml.safe_load(_CORPUS_MINIMAL)
+    data["rules"][0]["severity"] = "error"
+    del data["rules"][0]["normalised_fields"]
+    _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    rule = loader.load_rules("transformers").rules[0]
+    assert rule.severity == "error"
+    assert rule.normalised_fields == ()

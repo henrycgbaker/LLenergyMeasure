@@ -10,6 +10,7 @@ import pytest
 from llenergymeasure.config.engine_rules import (
     Provenance,
     Rule,
+    RuleMatch,
     evaluate_predicate,
     resolve_field_path,
 )
@@ -341,17 +342,6 @@ def test_render_message_substitutes_declared_value() -> None:
     assert "rule_x" in msg
 
 
-def test_render_message_missing_template_returns_fallback() -> None:
-    rule = _make_rule(
-        match_fields={"transformers.sampling.temperature": {"present": True}},
-        message=None,
-    )
-    config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
-    match = rule.try_match(config)
-    assert match is not None
-    assert "rule_x" in rule.render_message(match)
-
-
 def test_render_message_with_missing_format_key_falls_back_gracefully() -> None:
     # Template refers to a field not populated in the match.
     rule = _make_rule(
@@ -361,6 +351,90 @@ def test_render_message_with_missing_format_key_falls_back_gracefully() -> None:
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
     match = rule.try_match(config)
     assert match is not None
-    # Should not raise; should fall back to rule-id + raw template.
+    # Should not raise; falls back to the raw template unchanged.
+    assert rule.render_message(match) == "Field {not_in_match_or_declared}"
+
+
+def test_render_message_substitutes_leaf_name_of_dotted_path() -> None:
+    # matched_fields keys are full dotted paths, but templates conventionally
+    # reference the bare leaf name. The leaf must resolve.
+    rule = Rule(
+        id="rule_x",
+        engine="transformers",
+        severity="error",
+        match_fields={"transformers.sampling.temperature": {"present": True}},
+        provenance=_PROVENANCE,
+        message_template="temperature={temperature} is invalid",
+    )
+    config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
+    match = rule.try_match(config)
+    assert match is not None
+    assert rule.render_message(match) == "temperature=0.7 is invalid"
+
+
+def test_render_message_multiple_leaf_placeholders() -> None:
+    # Every matched dotted path contributes its leaf name; a template can
+    # reference several at once. (The full dotted path itself is not a usable
+    # placeholder: ``str.format`` reads the dots as attribute access, so only
+    # the injected leaf name resolves - matching the corpus authoring style.)
+    rule = _make_rule(
+        match_fields={
+            "transformers.sampling.top_k": {"present": True},
+            "transformers.sampling.top_p": {"present": True},
+        },
+        message="top_k={top_k} top_p={top_p}",
+    )
+    config = _Config(transformers=_Transformers(sampling=_Sampling(top_k=40, top_p=0.9)))
+    match = rule.try_match(config)
+    assert match is not None
+    assert rule.render_message(match) == "top_k=40 top_p=0.9"
+
+
+def test_render_message_fallback_does_not_prefix_rule_id() -> None:
+    # The sole caller (_apply_rules) prepends [rule.id]; render_message must
+    # NOT prepend it again in the fallback, or users see a doubled id.
+    rule = _make_rule(
+        match_fields={"transformers.sampling.temperature": {"present": True}},
+        message="unresolved {mystery}",
+    )
+    config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
+    match = rule.try_match(config)
+    assert match is not None
     out = rule.render_message(match)
-    assert "rule_x" in out
+    assert not out.startswith("[rule_x]")
+    assert "rule_x" not in out
+
+
+def test_render_message_missing_template_omits_id_prefix() -> None:
+    # With no template the placeholder message is id-free too (caller owns it).
+    rule = _make_rule(
+        match_fields={"transformers.sampling.temperature": {"present": True}},
+        message=None,
+    )
+    config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
+    match = rule.try_match(config)
+    assert match is not None
+    out = rule.render_message(match)
+    assert "rule_x" not in out
+    assert out == "<no message template>"
+
+
+def test_render_message_leaf_collision_keeps_first_path() -> None:
+    # Two dotted paths share a leaf name; first-seen (insertion order) wins.
+    rule = Rule(
+        id="rule_x",
+        engine="transformers",
+        severity="error",
+        match_fields={},
+        provenance=_PROVENANCE,
+        message_template="max_batch_size={max_batch_size}",
+    )
+    match = RuleMatch(
+        rule=rule,
+        declared_value=1,
+        matched_fields={
+            "engine_params.max_batch_size": 8,
+            "cuda_graph_config.max_batch_size": 16,
+        },
+    )
+    assert rule.render_message(match) == "max_batch_size=8"

@@ -178,8 +178,11 @@ def test_series_collapsing_below_two_values_is_pinned() -> None:
 def test_real_corpus_keeps_early_stopping_true() -> None:
     """early_stopping=true is valid (enables beam-search early stopping).
 
-    The old mis-mined `{'>': 0}` bound rejected True (True > 0 in Python); after
-    its removal the shipped corpus keeps both boolean values.
+    Two independent facts now keep both boolean values. First, the mis-mined
+    ``{'>': 0}`` bound that rejected ``True`` (``True > 0`` is true in Python)
+    was deleted from the shipped transformers corpus. Second, even a re-mined
+    ordering bound could not reject booleans: ordering predicates do not fire on
+    bool operands (see ``_ordered``), so the value pruner never drops ``True``.
     """
     rules = EngineRulesLoader().load_rules("transformers").rules
     kept = drop_known_rejected([False, True], "transformers.engine_params.early_stopping", rules)
