@@ -175,11 +175,15 @@ def test_series_collapsing_below_two_values_is_pinned() -> None:
     assert _series("flag", rules=rules) is None
 
 
-def test_real_corpus_rejects_early_stopping_true() -> None:
-    """The shipped transformers corpus knows early_stopping=true raises."""
+def test_real_corpus_keeps_early_stopping_true() -> None:
+    """early_stopping=true is valid (enables beam-search early stopping).
+
+    The old mis-mined `{'>': 0}` bound rejected True (True > 0 in Python); after
+    its removal the shipped corpus keeps both boolean values.
+    """
     rules = EngineRulesLoader().load_rules("transformers").rules
     kept = drop_known_rejected([False, True], "transformers.engine_params.early_stopping", rules)
-    assert kept == [False]
+    assert kept == [False, True]
 
 
 def test_real_corpus_rejects_vllm_top_k_below_neg1() -> None:

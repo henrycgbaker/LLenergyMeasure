@@ -86,9 +86,9 @@ class TestCompileTimeParams:
     def test_tensorrt_max_batch_size_nonneg(self):
         """max_batch_size=0 is accepted (rule fires at < 0, not < 1).
 
-        The mined rule `tensorrt_raises_max_batch_size_lt_0_cuda_graph_max_batch_size`
-        uses `< 0` (TRT-LLM's ``cuda_graph_config.max_batch_size must be non-negative``),
-        so 0 is valid at parse time. Negative values are rejected.
+        The mined rule `tensorrt_raises_max_batch_size_lt_0` uses `< 0`
+        (``engine_params.max_batch_size must be non-negative``), so 0 is valid
+        at parse time. Negative values are rejected.
         """
         config = _make_trt(max_batch_size=0)
         assert config.tensorrt.engine_params.max_batch_size == 0

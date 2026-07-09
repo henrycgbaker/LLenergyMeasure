@@ -225,13 +225,18 @@ def test_bounds_pins_fields_without_derivable_range() -> None:
     assert raw["vllm"]["sampling_params"]["temperature"] == 1.0
 
 
-def test_bounds_drops_known_rejected_values() -> None:
-    """early_stopping's series collapses to [false] via a corpus rule, so it pins."""
+def test_bounds_emits_both_bool_values_for_early_stopping() -> None:
+    """early_stopping is a valid boolean knob, so it sweeps both values.
+
+    early_stopping=True is the documented way to enable beam-search early
+    stopping; it must not be pruned from the sweep. (A dormant corpus rule
+    strips early_stopping at resolution time, so the two values collapse at
+    dedup - see the round-trip tests - but the sweep axis itself is emitted.)
+    """
     text = render_study_bounds(MODEL, ["transformers"])
     raw = yaml.safe_load(text)
     sweep = raw["sweep"]
-    assert "transformers.engine_params.early_stopping" not in sweep
-    assert raw["transformers"]["engine_params"]["early_stopping"] is None
+    assert sweep["transformers.engine_params.early_stopping"] == [False, True]
     assert sweep["transformers.engine_params.use_cache"] == [False, True]
     assert sweep["transformers.sampling_params.do_sample"] == [False, True]
 
@@ -245,20 +250,36 @@ def test_bounds_render_is_byte_deterministic() -> None:
 
 @pytest.mark.parametrize("engine", all_engine_names())
 def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> None:
-    """A bounds file expands to exactly the product of its series lengths."""
+    """A bounds file expands to the product of its series lengths.
+
+    The full Cartesian product is enumerated pre-dedup (one equivalence group
+    per combination member); measurement-equivalent combinations then collapse
+    via the resolved-config-hash dedup, so the number of executed experiments
+    equals the group count (<= product). For transformers the collapse is
+    strict: a dormant corpus rule strips early_stopping at resolution, so its
+    two swept values resolve to the same config.
+    """
     text = render_study_bounds(MODEL, [engine])
     path = tmp_path / "study.yaml"
     path.write_text(text)
     sweep = _sweep_block(text)
-    expected = math.prod(len(v) for v in sweep.values())
+    product = math.prod(len(v) for v in sweep.values())
     study = _load_without_config_warnings(path)
-    assert expected > 1
-    assert len(study.experiments) == expected
+    assert product > 1
+    # Every sweep combination is accounted for in exactly one equivalence group.
+    assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == product
+    # Executed experiments are the post-dedup distinct resolved configs.
+    assert len(study.experiments) == len(study.pre_run_equivalence_groups)
+    assert 1 < len(study.experiments) <= product
     assert all(e.engine == engine for e in study.experiments)
 
 
 def test_bounds_all_engines_round_trips_to_sum_of_products(tmp_path: Path) -> None:
-    """A multi-engine bounds file expands to the sum of per-engine products."""
+    """A multi-engine bounds file expands to the sum of per-engine products.
+
+    As in the single-engine case, the sum-of-products is the pre-dedup member
+    total; executed experiments are the post-dedup group count.
+    """
     text = render_study_bounds(MODEL, all_engine_names())
     path = tmp_path / "study.yaml"
     path.write_text(text)
@@ -266,9 +287,10 @@ def test_bounds_all_engines_round_trips_to_sum_of_products(tmp_path: Path) -> No
     for key, values in _sweep_block(text).items():
         per_engine.setdefault(key.split(".")[0], []).append(len(values))
     assert set(per_engine) == set(all_engine_names())
-    expected = sum(math.prod(lengths) for lengths in per_engine.values())
+    expected_members = sum(math.prod(lengths) for lengths in per_engine.values())
     study = _load_without_config_warnings(path)
-    assert len(study.experiments) == expected
+    assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == expected_members
+    assert len(study.experiments) == len(study.pre_run_equivalence_groups)
 
 
 # ---------------------------------------------------------------------------

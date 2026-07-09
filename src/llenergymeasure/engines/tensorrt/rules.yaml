@@ -70,14 +70,14 @@ rules:
     verified: human
     engine_version: 1.0.0
     date: '2026-07-02'
-- id: tensorrt_raises_max_batch_size_lt_0_cuda_graph_max_batch_size
+- id: tensorrt_raises_max_batch_size_lt_0
   engine: tensorrt
   severity: error
   match:
     fields:
       tensorrt.engine_params.max_batch_size:
         <: 0
-  message_template: cuda_graph_config.max_batch_size must be non-negative
+  message_template: engine_params.max_batch_size must be non-negative, got {declared_value}.
   provenance:
     source: deterministic_miner
     verified: construction

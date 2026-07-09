@@ -5,20 +5,6 @@ schema_version: 1.0.0
 engine: transformers
 engine_version: 5.7.0
 rules:
-- id: transformers_beam_search_num_beams_eq_1
-  engine: transformers
-  severity: dormant
-  match:
-    fields:
-      transformers.engine_params.num_beams: 1
-  message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `True` -- this flag
-    is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
-  provenance:
-    source: deterministic_miner
-    verified: runtime
-    engine_version: 5.7.0
-    citation: transformers/generation/configuration_utils.py:386
-    date: '2026-06-12T10:04:46+02:00'
 - id: transformers_bnb_load_in_4bit_xor_load_in_8bit
   engine: transformers
   severity: error
@@ -42,8 +28,18 @@ rules:
       transformers.engine_params.cache_implementation:
         present: true
         not_in:
-        - dynamic
         - static
+        - offloaded_static
+        - sliding_window
+        - hybrid
+        - hybrid_chunked
+        - offloaded_hybrid
+        - offloaded_hybrid_chunked
+        - dynamic
+        - dynamic_full
+        - offloaded
+        - quantized
+        - paged
   message_template: 'Invalid `cache_implementation` (nonsense). Choose one of: (''static'', ''offloaded_static'',
     ''sliding_window'', ''hybrid'', ''hybrid_chunked'', ''offloaded_hybrid'', ''offloaded_hybrid_chunked'',
     ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'', ''paged'')'
@@ -139,20 +135,6 @@ rules:
     verified: construction
     engine_version: 5.7.0
     citation: transformers/generation/configuration_utils.py:714
-    date: '2026-06-12T10:04:46+02:00'
-- id: transformers_early_stopping_type_early_stopping_exceeds_zero
-  engine: transformers
-  severity: error
-  match:
-    fields:
-      transformers.engine_params.early_stopping:
-        '>': 0
-  message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
-  provenance:
-    source: deterministic_miner
-    verified: runtime
-    engine_version: 5.7.0
-    citation: transformers/generation/configuration_utils.py:380
     date: '2026-06-12T10:04:46+02:00'
 - id: transformers_early_stopping_type_early_stopping_not_in_allowlist
   engine: transformers
@@ -476,14 +458,14 @@ rules:
     engine_version: 5.7.0
     citation: transformers/generation/configuration_utils.py:386
     date: '2026-06-12T10:04:46+02:00'
-- id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
+- id: transformers_num_return_vs_beams_num_return_sequences_gt_num_beams
   engine: transformers
   severity: error
   match:
     fields:
-      transformers.engine_params.num_beams:
-        not_divisible_by: '@transformers.sampling_params.num_return_sequences'
-  message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
+      transformers.sampling_params.num_return_sequences:
+        '>': '@transformers.engine_params.num_beams'
+  message_template: '`num_return_sequences` has to be smaller or equal to `num_beams`.'
   provenance:
     source: deterministic_miner
     verified: runtime
@@ -497,23 +479,6 @@ rules:
     fields:
       transformers.sampling_params.max_new_tokens:
         <=: 0
-  message_template: '`max_new_tokens` must be greater than 0, but is -1.'
-  provenance:
-    source: deterministic_miner
-    verified: runtime
-    engine_version: 5.7.0
-    citation: transformers/generation/configuration_utils.py:376
-    date: '2026-06-12T10:04:46+02:00'
-- id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
-  engine: transformers
-  severity: error
-  match:
-    fields:
-      transformers.sampling_params.max_new_tokens:
-        present: true
-        not_in:
-        - 1
-        - 16
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   provenance:
     source: deterministic_miner
