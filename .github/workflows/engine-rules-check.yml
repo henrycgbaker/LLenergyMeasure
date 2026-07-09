@@ -20,6 +20,10 @@ name: Engine rules check
 #      for the current pin already exists in GHCR, so a bump PR that forgot to
 #      seed fails at PR time rather than at merge-time promotion.
 #
+#   4. engine-rules-gate: matrix-free fan-in over the gating jobs; the only
+#      context from this workflow that branch protection requires. See the
+#      job comment for why the matrix job names cannot be required directly.
+#
 # transformers is absent from the coverage report on purpose: its config
 # validation uses imperative post-init idioms that the validator-site model
 # does not recognise, so a coverage number there would be noise. It is still
@@ -259,3 +263,29 @@ jobs:
             echo "otherwise the merge-time promotion (publish-engine-image.yml) will fail." >&2
             exit 1
           fi
+
+  engine-rules-gate:
+    # Branch protection requires this single context instead of the per-engine
+    # matrix names. When a matrix job is skipped at job level, GitHub reports
+    # ONE check run under the unexpanded job name, so expanded-name required
+    # contexts like "config-codegen (vllm)" never report on non-engine PRs and
+    # the merge waits forever on "Expected". This job is matrix-free and runs
+    # on every PR, so it always reports; it fails iff a gating job failed
+    # (skipped gating jobs on non-engine PRs pass).
+    needs: [config-codegen, seed-image-check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail when a gating job failed
+        env:
+          CODEGEN: ${{ needs.config-codegen.result }}
+          SEED: ${{ needs.seed-image-check.result }}
+        run: |
+          echo "config-codegen: ${CODEGEN}"
+          echo "seed-image-check: ${SEED}"
+          for result in "${CODEGEN}" "${SEED}"; do
+            case "${result}" in
+              success|skipped) ;;
+              *) exit 1 ;;
+            esac
+          done
