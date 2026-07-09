@@ -267,13 +267,6 @@ def _is_intentional_narrowing(discovered: str, pydantic: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-# Root $defs name of an engine's generated Config model. Codegen emits three
-# same-named classes (Config / EngineParams / SamplingParams) per engine, so
-# pydantic disambiguates them by module path; the root Config is the walk entry.
-def _engine_config_def(engine: str) -> str:
-    return f"llenergymeasure__engines__{engine}__config__Config"
-
-
 def _refs_in(prop: dict[str, Any]) -> list[str]:
     """$defs names a property references directly (bare, or inside anyOf/allOf)."""
     refs: list[str] = []
@@ -288,22 +281,51 @@ def _refs_in(prop: dict[str, Any]) -> list[str]:
     return refs
 
 
-def _collect_props(engine: str, defs: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _engine_config_def(engine: str, schema: dict[str, Any]) -> str:
+    """Root $defs name of an engine's generated Config model, resolved structurally.
+
+    The top-level ``ExperimentConfig`` schema carries one property per engine
+    (``schema["properties"][engine]``) whose $ref (inside an anyOf with null)
+    points at that engine's generated Config def. Following the ref here binds
+    the walk root to the actual schema structure rather than to the codegen
+    module path (``llenergymeasure__engines__<engine>__config__Config``), so a
+    codegen rename cannot silently leave the type check dormant - the exact
+    failure that hit when the pre-codegen names (``VLLMEngineConfig`` ...)
+    stopped matching. A missing property or unresolvable ref is loud, not silent.
+    """
+    prop = (schema.get("properties") or {}).get(engine)
+    if not isinstance(prop, dict):
+        raise SystemExit(
+            f"{engine}: no top-level property on ExperimentConfig; expected a $ref "
+            "to the engine's generated Config def. The type check would otherwise "
+            "go dormant - fix the structural walk root."
+        )
+    refs = [r for r in _refs_in(prop) if r in (schema.get("$defs") or {})]
+    if not refs:
+        raised = _refs_in(prop) or ["(no $ref)"]
+        raise SystemExit(
+            f"{engine}: ExperimentConfig property {engine!r} $ref {raised[0]!r} is "
+            "not in schema $defs; expected a $ref to the engine's generated Config "
+            "def. The type check would otherwise go dormant - fix the structural "
+            "walk root."
+        )
+    return refs[0]
+
+
+def _collect_props(engine: str, schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """All leaf property schemas reachable from an engine's Config def.
 
-    Walks $refs from the generated ``...__config__Config`` def (which fans out
-    to EngineParams / SamplingParams and any nested passthrough sub-configs the
-    vllm surface exposes, e.g. CompilationConfig / SpeculativeConfig). Resolving
-    structurally instead of via a hardcoded class-name list keeps this immune to
-    codegen renames - the exact failure that left the type check silently dormant
-    when the pre-codegen names (``VLLMEngineConfig`` ...) stopped matching.
+    Resolves the walk root structurally from the top-level ExperimentConfig
+    property for the engine, then walks $refs from that generated Config def
+    (which fans out to EngineParams / SamplingParams and any nested passthrough
+    sub-configs the vllm surface exposes, e.g. CompilationConfig /
+    SpeculativeConfig). Resolving structurally instead of via a hardcoded
+    class-name list keeps this immune to codegen renames - the exact failure
+    that left the type check silently dormant when the pre-codegen names
+    (``VLLMEngineConfig`` ...) stopped matching.
     """
-    root = _engine_config_def(engine)
-    if root not in defs:
-        raise SystemExit(
-            f"{engine}: config def {root!r} not in schema $defs; the generated "
-            "Config model was renamed - update _engine_config_def."
-        )
+    defs = schema.get("$defs") or {}
+    root = _engine_config_def(engine, schema)
     props: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
     queue = [root]
@@ -323,13 +345,12 @@ def _get_pydantic_leaves(engine: str, schema: dict[str, Any]) -> dict[str, dict[
 
     Returns dict mapping leaf_name -> JSON schema property dict.
     """
-    defs = schema.get("$defs", {})
     params = get_engine_params(engine)
 
-    all_props = _collect_props(engine, defs)
+    all_props = _collect_props(engine, schema)
     if not all_props:
         raise SystemExit(
-            f"{engine}: no properties reachable from {_engine_config_def(engine)!r}; "
+            f"{engine}: no properties reachable from the generated Config def; "
             "the type-equality check would be silently dormant. Fix the schema walk."
         )
 

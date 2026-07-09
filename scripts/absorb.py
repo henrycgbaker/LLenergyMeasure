@@ -755,6 +755,12 @@ def absorb(args: argparse.Namespace) -> int:
     # The sign-off is the durable human approval record, so it lives in the
     # versioned, git-tracked outputs/ snapshot dir (sibling of the gitignored
     # candidates/ pool), not in the throwaway pool workspace.
+    #
+    # Derived relative to pool_root (not via engine_versions._outputs.outputs_dir)
+    # on purpose: _outputs hardcodes the real repo root, so routing through it
+    # would break test isolation and custom pool roots by writing into the real
+    # engine_versions/ tree. With the default pool root this lands exactly in the
+    # git-tracked engine_versions/<engine>/v<safe>/outputs/ dir.
     signoff_dir = pool_dir.parent / "outputs"
     logger.info(
         "absorb engine=%s version=%s date=%s dry_run=%s", engine, version, run_date, args.dry_run

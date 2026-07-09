@@ -372,13 +372,14 @@ def test_every_engine_ships_a_manifest(engine: str) -> None:
     assert all(patterns for patterns in manifest.values())
 
 
-def test_transformers_manifest_covers_cited_sources() -> None:
-    paths = [p for ps in acr.load_manifest("transformers").values() for p in ps]
-    assert "generation/configuration_utils.py" in paths
-    assert "utils/quantization_config.py" in paths
-
-
-def test_tensorrt_manifest_covers_cited_sources() -> None:
-    paths = [p for ps in acr.load_manifest("tensorrt").values() for p in ps]
-    assert "llmapi/llm_args.py" in paths
-    assert "sampling_params.py" in paths
+@pytest.mark.parametrize(
+    "engine,expected",
+    [
+        ("transformers", ["generation/configuration_utils.py", "utils/quantization_config.py"]),
+        ("tensorrt", ["llmapi/llm_args.py", "sampling_params.py"]),
+    ],
+)
+def test_manifest_covers_cited_sources(engine: str, expected: list[str]) -> None:
+    paths = [p for ps in acr.load_manifest(engine).values() for p in ps]
+    for source in expected:
+        assert source in paths

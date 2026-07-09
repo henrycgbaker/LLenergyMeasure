@@ -47,15 +47,22 @@ def _setup_repo(
     empty_surface: dict[str, dict] = {"engine_params": {}, "sampling_params": {}}
 
     specs = [
-        ("vllm", vllm_current, vllm_schema_version, vllm_src_surface, vllm_outputs_surface),
-        ("tensorrt", trt_current, trt_schema_version, None, None),
-        ("transformers", transformers_current, transformers_schema_version, None, None),
+        (
+            "vllm",
+            vllm_current,
+            vllm_schema_version,
+            vllm_src_surface,
+            vllm_outputs_surface,
+            skip_vllm_schema,
+        ),
+        ("tensorrt", trt_current, trt_schema_version, None, None, False),
+        ("transformers", transformers_current, transformers_schema_version, None, None, False),
     ]
-    for engine, current, schema_version, src_surface, outputs_surface in specs:
+    for engine, current, schema_version, src_surface, outputs_surface, skip_schema in specs:
         engine_dir = engine_versions_dir / engine
         engine_dir.mkdir(parents=True)
         (engine_dir / "current.yaml").write_text(_current_yaml(current))
-        if engine == "vllm" and skip_vllm_schema:
+        if skip_schema:
             continue
         # src/ shadow (runtime loader + absorb read this copy)
         src_dir = engines_dir / engine

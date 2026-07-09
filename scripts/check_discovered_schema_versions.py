@@ -62,10 +62,16 @@ def _current_version(current_yaml: Path) -> str | None:
     return None if value is None else str(value)
 
 
-def _parse_schema_version(schema_path: Path) -> Any:
-    """Extract engine_version from a discovered schema JSON."""
+def _read_schema(schema_path: Path) -> tuple[Any, dict[str, Any]]:
+    """Parse a discovered schema once, returning (engine_version, surface).
+
+    The surface is the parameter-carrying subset (engine + sampling params). One
+    read serves both the version-envelope check and the surface comparison, so a
+    single loop iteration never json.loads the same file twice.
+    """
     data = json.loads(schema_path.read_text())
-    return data.get("engine_version")
+    surface = {key: data.get(key) for key in _SURFACE_KEYS}
+    return data.get("engine_version"), surface
 
 
 def _surface(schema_path: Path) -> dict[str, Any]:
@@ -92,7 +98,7 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
 
         schema_path = engines_dir / engine / DEFAULT_SCHEMA_FILENAME
         try:
-            schema_version = _parse_schema_version(schema_path)
+            schema_version, src_surface = _read_schema(schema_path)
         except FileNotFoundError:
             errors.append(f"{engine}: schema not found: {schema_path}")
             continue
@@ -119,13 +125,13 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
         # runtime loader and absorb read.
         outputs_schema = (
             engine_versions_dir / engine / _outputs.safe_version(pinned_version) / "outputs"
-        ) / DEFAULT_SCHEMA_FILENAME
+        ) / _outputs.SCHEMA_FILENAME
         try:
             outputs_surface = _surface(outputs_schema)
         except FileNotFoundError:
             errors.append(f"{engine}: versioned schema snapshot not found: {outputs_schema}")
             continue
-        if _surface(schema_path) != outputs_surface:
+        if src_surface != outputs_surface:
             mismatches.append(
                 f"SURFACE MISMATCH: {schema_path} and {outputs_schema} agree on version "
                 f"{pinned_version} but their parameter surfaces differ\n"

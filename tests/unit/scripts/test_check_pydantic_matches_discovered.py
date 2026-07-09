@@ -10,7 +10,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[3] / "scripts"))
 sys.path.insert(0, str(Path(__file__).parents[3] / "src"))
 
-import check_pydantic_matches_discovered as cpm
 from check_pydantic_matches_discovered import (
     _canonicalise_discovered_type,
     _canonicalise_pydantic_type,
@@ -129,22 +128,21 @@ def test_collect_props_reaches_generated_config(engine: str) -> None:
     from llenergymeasure.config.models import ExperimentConfig
 
     schema = ExperimentConfig.model_json_schema()
-    assert _collect_props(engine, schema["$defs"]), f"no props reachable for {engine}"
+    assert _collect_props(engine, schema), f"no props reachable for {engine}"
 
 
-def test_bogus_config_def_fails_loudly() -> None:
-    """A config-def name that matches nothing must raise, not silently compare zero
-    fields - the guard that keeps the type check from going dormant again."""
+def test_bogus_config_def_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A root resolution that matches nothing must raise, not silently compare zero
+    fields - the guard that keeps the type check from going dormant again. Point the
+    engine property at a $defs entry that does not exist and confirm the loud fail."""
     from llenergymeasure.config.models import ExperimentConfig
 
     schema = ExperimentConfig.model_json_schema()
-    original = cpm._engine_config_def
-    cpm._engine_config_def = lambda engine: "NoSuchConfigDef"
-    try:
-        with pytest.raises(SystemExit, match="not in schema"):
-            _collect_props("vllm", schema["$defs"])
-    finally:
-        cpm._engine_config_def = original
+    bogus = {p: dict(v) for p, v in schema["properties"].items()}
+    bogus["vllm"] = {"anyOf": [{"$ref": "#/$defs/NoSuchConfigDef"}, {"type": "null"}]}
+    monkeypatch.setitem(schema, "properties", bogus)
+    with pytest.raises(SystemExit, match="not in schema"):
+        _collect_props("vllm", schema)
 
 
 # ---------------------------------------------------------------------------
