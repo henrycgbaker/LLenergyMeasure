@@ -34,59 +34,41 @@ def _setup_repo(
 ) -> Path:
     """Create a minimal repo structure for the version check script.
 
-    Each engine gets a current.yaml pin, a src/ shadow schema, and a matching
-    versioned outputs/ snapshot schema. ``vllm_src_surface`` /
-    ``vllm_outputs_surface`` override the two vllm parameter surfaces so a
-    surface divergence can be simulated (they default to the same empty surface).
+    Each engine gets a current.yaml pin, a src/ shadow schema, and a versioned
+    outputs/ snapshot schema. The outputs dir is named by the pin (``*_current``)
+    while the schemas carry ``*_schema_version``, so the two can diverge to drive
+    a version-mismatch test. ``vllm_src_surface`` / ``vllm_outputs_surface``
+    override the two vllm parameter surfaces so a surface divergence can be
+    simulated (they default to the same empty surface).
     """
     repo = tmp_path / "repo"
     engine_versions_dir = repo / "engine_versions"
-
-    for engine, version in [
-        ("vllm", vllm_current),
-        ("tensorrt", trt_current),
-        ("transformers", transformers_current),
-    ]:
-        engine_dir = engine_versions_dir / engine
-        engine_dir.mkdir(parents=True)
-        (engine_dir / "current.yaml").write_text(_current_yaml(version))
-
     engines_dir = repo / "src" / "llenergymeasure" / "engines"
     empty_surface: dict[str, dict] = {"engine_params": {}, "sampling_params": {}}
 
-    def _write_schema(
-        engine: str,
-        version: str,
-        *,
-        src_surface: dict | None = None,
-        outputs_surface: dict | None = None,
-        outputs_version: str | None = None,
-    ) -> None:
+    specs = [
+        ("vllm", vllm_current, vllm_schema_version, vllm_src_surface, vllm_outputs_surface),
+        ("tensorrt", trt_current, trt_schema_version, None, None),
+        ("transformers", transformers_current, transformers_schema_version, None, None),
+    ]
+    for engine, current, schema_version, src_surface, outputs_surface in specs:
+        engine_dir = engine_versions_dir / engine
+        engine_dir.mkdir(parents=True)
+        (engine_dir / "current.yaml").write_text(_current_yaml(current))
+        if engine == "vllm" and skip_vllm_schema:
+            continue
         # src/ shadow (runtime loader + absorb read this copy)
         src_dir = engines_dir / engine
         src_dir.mkdir(parents=True, exist_ok=True)
         (src_dir / "schema.discovered.json").write_text(
-            json.dumps({"engine_version": version, **(src_surface or empty_surface)})
+            json.dumps({"engine_version": schema_version, **(src_surface or empty_surface)})
         )
-        # versioned outputs/ snapshot (codegen reads this copy)
-        out_dir = (
-            engine_versions_dir / engine / _safe_version(outputs_version or version) / "outputs"
-        )
+        # versioned outputs/ snapshot codegen reads (dir named by the pin)
+        out_dir = engine_versions_dir / engine / _safe_version(current) / "outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "schema.discovered.json").write_text(
-            json.dumps({"engine_version": version, **(outputs_surface or empty_surface)})
+            json.dumps({"engine_version": schema_version, **(outputs_surface or empty_surface)})
         )
-
-    if not skip_vllm_schema:
-        _write_schema(
-            "vllm",
-            vllm_schema_version,
-            src_surface=vllm_src_surface,
-            outputs_surface=vllm_outputs_surface,
-            outputs_version=vllm_current,
-        )
-    _write_schema("tensorrt", trt_schema_version, outputs_version=trt_current)
-    _write_schema("transformers", transformers_schema_version, outputs_version=transformers_current)
 
     return repo
 
