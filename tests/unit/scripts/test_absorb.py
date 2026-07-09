@@ -10,6 +10,8 @@ and the skip flags write nothing they should not.
 
 from __future__ import annotations
 
+import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -455,6 +457,40 @@ def test_ladder_memory_skips_already_verdicted(
     assert calls == []  # already carries a verdict; not re-probed
 
 
+def test_citation_pass_rate_cleans_up_temp_on_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The citation gate writes a throwaway input file; an exception mid-check must
+    not leave it behind in the pool dir (try/finally cleanup)."""
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("citation check exploded")
+
+    monkeypatch.setattr(ab, "load_candidates", _boom)
+    union = [_cand("vllm_a", "error", {"vllm.sampling_params.temperature": {"<": 0}})]
+    with pytest.raises(RuntimeError, match="exploded"):
+        ab.citation_pass_rate(union, tmp_path, tmp_path)
+    assert not (tmp_path / "_citation_input.yaml").exists()
+
+
+def test_run_probe_hard_errors_on_nonzero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A probe wrapper that exits non-zero before writing verdicts must be a hard
+    error, not a silent no-op absorb (the operator would otherwise read the empty
+    result as a clean 'nothing to probe')."""
+    probe_input = tmp_path / "_probe_input.yaml"
+    probe_input.write_text("candidates: []\n")
+
+    def _crash(*args: Any, **kwargs: Any) -> Any:
+        return subprocess.CompletedProcess(args=args, returncode=1)
+
+    monkeypatch.setattr(ab.subprocess, "run", _crash)
+    monkeypatch.setattr(ab, "_require_under_repo", lambda p: Path(p.name))
+    with pytest.raises(SystemExit, match=re.escape("probe_candidates.sh")):
+        ab.run_probe("vllm", probe_input, "2026-07-07")
+
+
 # --- Orchestration: --dry-run + skip flags ---
 
 
@@ -548,9 +584,14 @@ def test_signoff_mark_survives_across_reruns(
     pool_root = tmp_path / "pool"
     pool_dir = ab.pool_path(pool_root, "vllm", "0.19.1", "x").parent
     pool_dir.mkdir(parents=True)
+    # The sign-off is the durable approval record: it lives in the versioned,
+    # git-tracked outputs/ snapshot dir (sibling of the gitignored candidates/
+    # pool), so it survives a fresh clone.
+    signoff_dir = pool_dir.parent / "outputs"
+    signoff_dir.mkdir(parents=True)
     # Pre-seed the human sign-off mark. No analyst pool file: the rule is never
     # rediscovered, and with --skip-interrogation it is never proposed for retirement.
-    (pool_dir / ab._SIGNOFF_FILE).write_text(
+    (signoff_dir / ab._SIGNOFF_FILE).write_text(
         yaml.safe_dump({"residue": [{"id": "vllm_signed", "human_confirmed": True}]})
     )
 
@@ -559,13 +600,15 @@ def test_signoff_mark_survives_across_reruns(
     ab.absorb(args)
     first = corpus.read_text()
     assert "vllm_signed" in first  # ships via the sign-off path ...
-    assert ab.read_signoff(pool_dir) == {"vllm_signed"}  # ... and the mark is retained
+    assert ab.read_signoff(signoff_dir) == {"vllm_signed"}  # ... and the mark is retained
+    # The gitignored candidates/ pool must NOT hold the durable approval record.
+    assert not (pool_dir / ab._SIGNOFF_FILE).exists()
 
     ab.absorb(_args(pool_root, skip_cold_read=True, skip_interrogation=True, skip_probe=False))
     second = corpus.read_text()
     assert second == first  # byte-identical: no oscillation across re-runs
     assert "vllm_signed" in second
-    assert ab.read_signoff(pool_dir) == {"vllm_signed"}  # mark still alive after run two
+    assert ab.read_signoff(signoff_dir) == {"vllm_signed"}  # mark still alive after run two
 
 
 def test_skip_flags_bypass_cold_read_and_probe(

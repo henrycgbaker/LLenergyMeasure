@@ -63,8 +63,9 @@ configs/engine_invariants/_staging/
 engine_versions/*.compat.json
 
 # Absorb candidate-pool workspace (version-scoped working files: pool,
-# ladder verdicts, sign-off, review delta - operational, never committed;
-# the only shipped output is the promoted rules corpus in src/).
+# ladder verdicts, review delta - operational, never committed. The human
+# sign-off record lives in the tracked outputs/ snapshot dir, not here; the
+# only other shipped output is the promoted rules corpus in src/).
 engine_versions/**/candidates/
 
 # Local caches (tooling scratch; never committed).

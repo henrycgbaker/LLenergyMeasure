@@ -8,7 +8,10 @@ from pathlib import Path
 
 # Import the script's main function directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from check_discovered_schema_versions import main
+
+from engine_versions._outputs import safe_version as _safe_version
 
 
 def _current_yaml(version: str) -> str:
@@ -26,31 +29,53 @@ def _setup_repo(
     transformers_current: str = "5.5.4",
     transformers_schema_version: str = "5.5.4",
     skip_vllm_schema: bool = False,
+    vllm_src_surface: dict | None = None,
+    vllm_outputs_surface: dict | None = None,
 ) -> Path:
-    """Create a minimal repo structure for the version check script."""
+    """Create a minimal repo structure for the version check script.
+
+    Each engine gets a current.yaml pin, a src/ shadow schema, and a versioned
+    outputs/ snapshot schema. The outputs dir is named by the pin (``*_current``)
+    while the schemas carry ``*_schema_version``, so the two can diverge to drive
+    a version-mismatch test. ``vllm_src_surface`` / ``vllm_outputs_surface``
+    override the two vllm parameter surfaces so a surface divergence can be
+    simulated (they default to the same empty surface).
+    """
     repo = tmp_path / "repo"
     engine_versions_dir = repo / "engine_versions"
+    engines_dir = repo / "src" / "llenergymeasure" / "engines"
+    empty_surface: dict[str, dict] = {"engine_params": {}, "sampling_params": {}}
 
-    for engine, version in [
-        ("vllm", vllm_current),
-        ("tensorrt", trt_current),
-        ("transformers", transformers_current),
-    ]:
+    specs = [
+        (
+            "vllm",
+            vllm_current,
+            vllm_schema_version,
+            vllm_src_surface,
+            vllm_outputs_surface,
+            skip_vllm_schema,
+        ),
+        ("tensorrt", trt_current, trt_schema_version, None, None, False),
+        ("transformers", transformers_current, transformers_schema_version, None, None, False),
+    ]
+    for engine, current, schema_version, src_surface, outputs_surface, skip_schema in specs:
         engine_dir = engine_versions_dir / engine
         engine_dir.mkdir(parents=True)
-        (engine_dir / "current.yaml").write_text(_current_yaml(version))
-
-    engines_dir = repo / "src" / "llenergymeasure" / "engines"
-
-    def _write_schema(engine: str, version: str) -> None:
-        engine_dir = engines_dir / engine
-        engine_dir.mkdir(parents=True, exist_ok=True)
-        (engine_dir / "schema.discovered.json").write_text(json.dumps({"engine_version": version}))
-
-    if not skip_vllm_schema:
-        _write_schema("vllm", vllm_schema_version)
-    _write_schema("tensorrt", trt_schema_version)
-    _write_schema("transformers", transformers_schema_version)
+        (engine_dir / "current.yaml").write_text(_current_yaml(current))
+        if skip_schema:
+            continue
+        # src/ shadow (runtime loader + absorb read this copy)
+        src_dir = engines_dir / engine
+        src_dir.mkdir(parents=True, exist_ok=True)
+        (src_dir / "schema.discovered.json").write_text(
+            json.dumps({"engine_version": schema_version, **(src_surface or empty_surface)})
+        )
+        # versioned outputs/ snapshot codegen reads (dir named by the pin)
+        out_dir = engine_versions_dir / engine / _safe_version(current) / "outputs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "schema.discovered.json").write_text(
+            json.dumps({"engine_version": schema_version, **(outputs_surface or empty_surface)})
+        )
 
     return repo
 
@@ -86,6 +111,19 @@ class TestMismatch:
         captured = capsys.readouterr()
         assert "MISMATCH" in captured.err
         assert "transformers" in captured.err
+
+    def test_surface_divergence_between_copies(self, tmp_path: Path, capsys):
+        """Versions agree, but the src/ and outputs/ parameter surfaces differ."""
+        repo = _setup_repo(
+            tmp_path,
+            vllm_src_surface={"engine_params": {"max_num_seqs": {}}, "sampling_params": {}},
+            vllm_outputs_surface={"engine_params": {}, "sampling_params": {}},
+        )
+        code = main(repo_root=repo)
+        assert code == 1
+        captured = capsys.readouterr()
+        assert "SURFACE MISMATCH" in captured.err
+        assert "vllm" in captured.err
 
 
 class TestErrors:

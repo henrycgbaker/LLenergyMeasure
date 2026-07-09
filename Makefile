@@ -2,7 +2,7 @@
 .PHONY: format lint lint-fix typecheck check
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
-.PHONY: discover-schema discover-schemas-all
+.PHONY: discover-schema discover-schemas-all scaffold-snapshot
 .PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage
 .PHONY: package-check
 .PHONY: docker-smoke
@@ -139,6 +139,18 @@ discover-schemas-all: ## Rediscover all three engine schemas in sequence
 	./scripts/refresh_discovered_schemas.sh vllm
 	./scripts/refresh_discovered_schemas.sh tensorrt
 	./scripts/refresh_discovered_schemas.sh transformers
+
+# Scaffold the per-version snapshot outputs dir a bump needs before codegen can
+# go green (engine_versions/<engine>/v<safe>/outputs/). Derives v<safe> from the
+# current.yaml pin via engine_versions/_outputs.py (the one place that mangling
+# lives). Creating the dir is all this does - the maintainer still drops the
+# mined schema.discovered.json + curated.yaml into it.
+scaffold-snapshot: ## Scaffold the snapshot outputs dir from the pin (ENGINE=vllm|tensorrt|transformers)
+	@test -n "$(ENGINE)" || (echo "Usage: make scaffold-snapshot ENGINE={vllm|tensorrt|transformers}" && exit 1)
+	@ver=$$(python3 -c "import yaml; print(yaml.safe_load(open('engine_versions/$(ENGINE)/current.yaml'))['library']['current_version'])"); \
+	outdir=$$(python3 -c "from engine_versions import _outputs; print(_outputs.outputs_dir('$(ENGINE)', '$$ver'))"); \
+	mkdir -p "$$outdir"; \
+	echo "Scaffolded $$outdir (drop schema.discovered.json + curated.yaml here, then run config-codegen)"
 
 # Proposer S2: LLM analyst cold read of the pinned engine source into candidate
 # rules for the verification ladder. Needs a local Ollama daemon (owns the GPU)

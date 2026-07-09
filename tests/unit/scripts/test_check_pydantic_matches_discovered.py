@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parents[3] / "src"))
 from check_pydantic_matches_discovered import (
     _canonicalise_discovered_type,
     _canonicalise_pydantic_type,
+    _collect_props,
     _is_intentional_narrowing,
     check_engine,
 )
@@ -107,6 +108,41 @@ class TestIntentionalNarrowing:
 
     def test_widening_not_allowed(self) -> None:
         assert _is_intentional_narrowing("Literal['a']", "str") is False
+
+    def test_opaque_passthrough_allowed(self) -> None:
+        # llem declines to type a complex field and passes it through as Any;
+        # that maximal non-narrowing is intentional, not drift.
+        assert _is_intentional_narrowing("QuantConfig", "any") is True
+        assert _is_intentional_narrowing("set[str]", "any") is True
+
+
+# ---------------------------------------------------------------------------
+# Structural $defs walk (rename-immune; must not go dormant)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+def test_collect_props_reaches_generated_config(engine: str) -> None:
+    """The walk resolves the generated ...__config__Config def and reaches its
+    fields - the live comparison the pre-codegen name map silently stopped doing."""
+    from llenergymeasure.config.models import ExperimentConfig
+
+    schema = ExperimentConfig.model_json_schema()
+    assert _collect_props(engine, schema), f"no props reachable for {engine}"
+
+
+def test_bogus_config_def_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A root resolution that matches nothing must raise, not silently compare zero
+    fields - the guard that keeps the type check from going dormant again. Point the
+    engine property at a $defs entry that does not exist and confirm the loud fail."""
+    from llenergymeasure.config.models import ExperimentConfig
+
+    schema = ExperimentConfig.model_json_schema()
+    bogus = {p: dict(v) for p, v in schema["properties"].items()}
+    bogus["vllm"] = {"anyOf": [{"$ref": "#/$defs/NoSuchConfigDef"}, {"type": "null"}]}
+    monkeypatch.setitem(schema, "properties", bogus)
+    with pytest.raises(SystemExit, match="not in schema"):
+        _collect_props("vllm", schema)
 
 
 # ---------------------------------------------------------------------------
