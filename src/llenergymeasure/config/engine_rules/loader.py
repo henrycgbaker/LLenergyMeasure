@@ -209,12 +209,8 @@ class Rule:
 
         ``matched_fields`` is keyed by full dotted paths
         (``vllm.sampling_params.min_tokens``), which are not valid
-        ``str.format`` placeholder names. Templates conventionally reference the
-        bare leaf name (``{min_tokens}``), so each dotted key is additionally
-        exposed under its leaf name (``path.rsplit('.', 1)[-1]``). On a leaf-name
-        collision between two paths the first-seen path wins (dict-insertion
-        order), so a rule keeps deterministic rendering; author unambiguously by
-        keeping distinct leaf names in a single rule's ``match.fields``.
+        ``str.format`` placeholder names, so each key is also exposed under its
+        bare leaf name (``{min_tokens}``) - the corpus authoring convention.
 
         Uses ``str.format`` with permissive defaults - templates that reference
         a still-missing key fall back to the raw template rather than raising at
@@ -224,11 +220,10 @@ class Rule:
         """
         if self.message_template is None:
             return "<no message template>"
-        # Expose both the full dotted path and its leaf name as format kwargs.
-        # The full paths seed the map first, so a bare (dot-free) path is never
-        # re-added under an identical leaf key (which would make ``.format``
-        # raise "multiple values"); on a leaf collision between two distinct
-        # paths the first-seen path wins.
+        # Seed the full dotted paths first, then add leaf names via setdefault:
+        # a dot-free path is never re-added under its own key (which would make
+        # ``.format`` raise "multiple values"), and on a leaf collision between
+        # two distinct paths the first-seen path wins (deterministic rendering).
         fmt_kwargs: dict[str, Any] = dict(match.matched_fields)
         for path, value in match.matched_fields.items():
             fmt_kwargs.setdefault(path.rsplit(".", 1)[-1], value)

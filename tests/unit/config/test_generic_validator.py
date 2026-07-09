@@ -246,29 +246,6 @@ def test_error_rule_shortcircuits_later_rules(monkeypatch: pytest.MonkeyPatch) -
 
 
 # ---------------------------------------------------------------------------
-# Unknown severity - inert (closed enum makes it unreachable in production)
-# ---------------------------------------------------------------------------
-
-
-def test_unknown_severity_does_not_raise_or_record(monkeypatch: pytest.MonkeyPatch) -> None:
-    rule = _make_rule(
-        "weird_severity",
-        "not_a_real_severity",
-        {"transformers.engine_params.attn_implementation": "sdpa"},
-    )
-    _install_test_rules(monkeypatch, [rule])
-
-    cfg = ExperimentConfig(
-        task={"model": "gpt2"},
-        engine="transformers",
-        transformers={"engine_params": {"attn_implementation": "sdpa"}},
-    )
-    # An out-of-enum severity matches neither the error nor the dormant arm,
-    # so it is skipped: no raise, no dormant observation.
-    assert cfg._dormant_observations == {}
-
-
-# ---------------------------------------------------------------------------
 # Integration - real corpus on disk exercises every engine path without
 # raising (catches predicate-operator / field-path regressions end-to-end)
 # ---------------------------------------------------------------------------
