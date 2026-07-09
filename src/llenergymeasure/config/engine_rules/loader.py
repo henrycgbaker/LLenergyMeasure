@@ -370,6 +370,31 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
 }
 
 
+OPERATOR_ALIASES: dict[str, str] = {
+    "equals": "==",
+    "not_equal": "!=",
+}
+"""Word-form operator names mapped to their symbol canonical form.
+
+Corpus authors write ``equals`` / ``not_equal`` interchangeably with ``==`` /
+``!=`` (both resolve to identical handlers in :data:`_OPERATOR_HANDLERS`).
+Consumers that inspect predicate *keys* rather than evaluate them (e.g. the
+sweep library-resolution projection) canonicalise through this map so an alias
+variant and its symbol form are treated as the same operator. The single
+source of truth for which words alias which symbols - do not duplicate.
+"""
+
+
+def canonical_operator(op: str) -> str:
+    """Return the canonical (symbol) form of a predicate operator.
+
+    Word-form aliases (``equals`` / ``not_equal``) map to their symbols
+    (``==`` / ``!=``); every other operator (including symbols already in
+    canonical form) passes through unchanged.
+    """
+    return OPERATOR_ALIASES.get(op, op)
+
+
 def _ordered(a: Any, b: Any, op: Callable[[Any, Any], bool]) -> bool:
     """Apply an ordering comparison, treating None and incomparable types as no-match.
 

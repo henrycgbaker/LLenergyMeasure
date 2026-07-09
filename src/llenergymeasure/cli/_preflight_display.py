@@ -234,6 +234,15 @@ def build_preflight_panel(
         if has_both:
             body.append(f"    {_pl(n_configs, 'unique config')} total\n")
 
+    # -- Dormant normalisations (only when a dormant rule fired) --
+    from llenergymeasure.cli._study_plan import dormant_observation_lines
+
+    dormant_lines = dormant_observation_lines(study_config)
+    if dormant_lines:
+        _section(body, "Dormant normalisations")
+        for line in dormant_lines[1:]:  # drop the shared header; _section titled it
+            body.append(f"  {line}\n", style="dim")
+
     body.append("\n")
     # Hash (dimmed)
     body.append("Study design hash:\n ", style="dim")

@@ -15,7 +15,11 @@ import yaml
 
 from llenergymeasure.api import load_study
 from llenergymeasure.cli._study_defaults import study_cli_overrides_for_file
-from llenergymeasure.cli._study_plan import build_funnel, render_funnel
+from llenergymeasure.cli._study_plan import (
+    build_funnel,
+    dormant_observation_lines,
+    render_funnel,
+)
 
 MODEL = "Qwen/Qwen2.5-0.5B"
 
@@ -173,6 +177,46 @@ sweep:
     funnel = build_funnel(_load_with_cli_defaults(tmp_path, text))  # type: ignore[arg-type]
     assert funnel.n_cycles == 1
     assert funnel.runs == funnel.unique
+
+
+def test_dormant_observations_rendered_in_plan(tmp_path: Path) -> None:
+    """A dormant-triggering field surfaces its rule id and field in the plan.
+
+    ``epsilon_cutoff`` is a transformers pydantic-extra the engine silently
+    strips; the dormant rule ``transformers_dormant_epsilon_cutoff_ne_0_0``
+    fires and drives it to absent. That normalisation must be visible in
+    ``llem study plan`` rather than mutating the executed config silently.
+    """
+    text = f"""
+task:
+  model: {MODEL}
+engine: transformers
+transformers:
+  sampling_params:
+    do_sample: true
+    epsilon_cutoff: 0.5
+"""
+    study = _load(tmp_path, text)
+    lines = dormant_observation_lines(study)  # type: ignore[arg-type]
+    joined = "\n".join(lines)
+    assert "transformers_dormant_epsilon_cutoff_ne_0_0" in joined
+    assert "epsilon_cutoff" in joined
+    assert "transformers:" in joined
+
+
+def test_dormant_observations_absent_when_none_fire(tmp_path: Path) -> None:
+    """No dormant rule fires -> the section is empty (rendered only when non-empty)."""
+    text = f"""
+task:
+  model: {MODEL}
+engine: transformers
+transformers:
+  sampling_params:
+    do_sample: true
+    temperature: 0.7
+"""
+    study = _load(tmp_path, text)
+    assert dormant_observation_lines(study) == []  # type: ignore[arg-type]
 
 
 def test_bounds_scaffold_round_trip(tmp_path: Path) -> None:

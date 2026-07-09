@@ -220,6 +220,45 @@ class TestExpandGridSweep:
             assert c.vllm.engine_params is not None
             assert c.vllm.engine_params.max_num_seqs in (64, 256)
 
+    def test_fixed_engine_union_with_scoped_axis(self):
+        """A study fixing engine: transformers while sweeping a vllm axis keeps both.
+
+        Regression (PR-D change 3): the explicit fixed engine used to be silently
+        dropped when scope-derived engines were computed from a differently-scoped
+        sweep axis. It must be unioned in - transformers gets its baseline run and
+        vllm gets its swept grid.
+        """
+        raw = {
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "sweep": {
+                "vllm.engine_params.max_num_seqs": [64, 256],
+            },
+        }
+        valid, skipped = expand_grid(raw)
+        assert skipped == []
+        engines = {c.engine for c in valid}
+        assert engines == {"transformers", "vllm"}
+        # transformers: one baseline (no transformers-scoped axis) ; vllm: 2 swept
+        assert len([c for c in valid if c.engine == "transformers"]) == 1
+        assert len([c for c in valid if c.engine == "vllm"]) == 2
+
+    def test_default_engine_not_unioned_with_scoped_axis(self):
+        """An unset engine (defaulting to transformers) is NOT spuriously added.
+
+        Only an *explicitly* set engine is unioned into scope-derived engines;
+        a sweep over only vllm axes with no engine: line stays vllm-only.
+        """
+        raw = {
+            "task": {"model": "gpt2"},
+            "sweep": {
+                "vllm.engine_params.max_num_seqs": [64, 256],
+            },
+        }
+        valid, skipped = expand_grid(raw)
+        assert skipped == []
+        assert {c.engine for c in valid} == {"vllm"}
+
 
 # =============================================================================
 # expand_grid() - explicit experiments mode
@@ -438,6 +477,47 @@ class TestExpandGridInvalidHandling:
         raw = {"study_name": "empty-study"}
         with pytest.raises(ConfigError):
             expand_grid(raw)
+
+    def test_experiments_yaml_null_treated_as_empty(self):
+        """`experiments:` present-but-null must not TypeError.
+
+        Regression (PR-D change 4): YAML `experiments:` with no value yields
+        None, which used to blow up the iteration. It is treated as [] so the
+        sweep (or inline baseline) still produces the study.
+        """
+        raw = {
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "experiments": None,
+            "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
+        }
+        valid, skipped = expand_grid(raw)
+        assert len(valid) == 2
+        assert skipped == []
+
+    def test_skipped_config_errors_are_json_serialisable(self):
+        """A rule-rejected config's stored error survives json.dumps.
+
+        Regression (PR-D change 5): Pydantic error dicts carry a non-serialisable
+        `ctx` (the raw exception object). `_extract_rule_id` reads it, then it is
+        stripped so SkippedConfig.errors stays json.dumps-able.
+        """
+        import json
+
+        raw = {
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "transformers": {"engine_params": {"num_beams": 2}},
+            "sweep": {"transformers.sampling_params.num_return_sequences": [1, 4]},
+        }
+        _valid, skipped = expand_grid(raw)
+        assert len(skipped) == 1
+        # rule_id was still extracted before ctx was dropped.
+        assert skipped[0].rule_id is not None
+        # errors carry no ctx and round-trip through json.dumps.
+        for err in skipped[0].errors:
+            assert "ctx" not in err
+        json.dumps(skipped[0].to_dict())
 
 
 class TestSkippedConfigRuleAttribution:

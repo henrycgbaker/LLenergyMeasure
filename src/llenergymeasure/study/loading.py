@@ -112,4 +112,13 @@ def finalise_study(raw: LoadedStudyRaw) -> StudyConfig:
         dedup_mode=dedup_mode,
         pre_run_equivalence_groups=pre_run_groups,
         declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
+        dormant_observations=[
+            {
+                "engine": obs.engine,
+                "rule_id": obs.rule_id,
+                "field_path": obs.field_path,
+                "normalisation": obs.normalisation,
+            }
+            for obs in dedup.dormant_observations
+        ],
     )
