@@ -1014,3 +1014,12 @@ class StudyConfig(BaseModel):
             "its equivalence group at sidecar-write time."
         ),
     )
+    dormant_observations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Distinct dormant-rule normalisations applied during library resolution "
+            "(keys: engine, rule_id, field_path, normalisation). Dormant fields are "
+            "silently rewritten in the executed config, so these are surfaced in "
+            "'llem study plan' and preflight output. Empty when no dormant rule fired."
+        ),
+    )

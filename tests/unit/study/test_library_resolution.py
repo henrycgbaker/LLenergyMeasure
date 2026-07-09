@@ -89,11 +89,14 @@ class TestCanonicalise:
             },
         )
         result = _apply_rules_fixpoint(cfg, [rule])
-        # Canonical form is the not_equal sentinel.
-        assert result.transformers.sampling_params.temperature == 1.0
+        # A not_equal subject field is stripped to *absent* (None for a declared
+        # field) so a config that set it collapses with one that never did.
+        assert result.transformers.sampling_params.temperature is None
 
     def test_idempotence_on_already_canonical(self):
-        cfg = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 1.0}})
+        # Already-absent temperature: the rule cannot fire (present: True fails),
+        # so the config is unchanged - the fixpoint is stable on first pass.
+        cfg = _mk_config(transformers={"sampling_params": {"do_sample": False}})
         rule = _mk_rule(
             invariant_id="greedy_normalises_temperature",
             match_fields={
@@ -102,7 +105,7 @@ class TestCanonicalise:
             },
         )
         result = _apply_rules_fixpoint(cfg, [rule])
-        assert result.transformers.sampling_params.temperature == 1.0
+        assert result.transformers.sampling_params.temperature is None
 
     def test_chained_rules_converge(self):
         # Rule A: if temperature > 0.8, strip top_p (simulating greedy-when-hot
@@ -138,12 +141,12 @@ class TestCanonicalise:
         # top_k unchanged: rule_b only fires when top_k != 50, but input is 50.
         assert result.transformers.sampling_params.top_k == 50
 
-    def test_cycle_detection(self):
-        # Synthetic cycle: two rules that flip a field back and forth.
-        # rule_a: if top_k=50, strip it
-        # rule_b: if top_k absent, set to 50 (via not_equal on present)
-        # The real rule shape is constrained; simulate a cycle by assigning a
-        # path that gets reset each iteration.
+    def test_strip_only_projection_is_monotone(self):
+        # Two present/not_equal rules on the same field can no longer cycle:
+        # every dormant projection strips its subject to *absent*, which is
+        # monotone (a stripped field never re-triggers a present: True rule),
+        # so the flip-flop that used to cycle under the old sentinel-restore
+        # projection now converges to a single stripped state.
         cfg = _mk_config(transformers={"sampling_params": {"do_sample": True, "top_k": 50}})
         rule_a = _mk_rule(
             invariant_id="clear_top_k",
@@ -157,8 +160,40 @@ class TestCanonicalise:
                 "transformers.sampling_params.top_k": {"present": True, "not_equal": 50},
             },
         )
+        result = _apply_rules_fixpoint(cfg, [rule_a, rule_b])
+        assert result.transformers.sampling_params.top_k is None
+
+    def test_cycle_detection_guard_raises(self, monkeypatch):
+        # The fixpoint guard is defensive against a bad corpus. A strip-only
+        # projection is monotone and cannot cycle, so force the non-convergence
+        # path. The projection is precomputed once per rule, so we cannot flip
+        # it per pass; instead patch the assignment so the field never lands on
+        # its canonical target (it alternates every write). The field stays off
+        # its projected value, so ``fired`` is True on every pass and the guard
+        # must surface the non-convergence rather than hang.
+        cfg = _mk_config(transformers={"sampling_params": {"do_sample": True, "top_k": 50}})
+        rule = _mk_rule(
+            invariant_id="cycler",
+            match_fields={"transformers.sampling_params.top_k": {"present": True}},
+        )
+
+        import itertools
+
+        import llenergymeasure.study.library_resolution as lr
+
+        flip = itertools.cycle([999, 50])
+
+        # The projection strips top_k, but the patched assign writes an
+        # alternating literal instead, so the field never lands on its projected
+        # target and the loop never converges.
+        real_assign = lr._assign_field_path
+
+        def _assign(config, path, _value):
+            real_assign(config, path, next(flip))
+
+        monkeypatch.setattr(lr, "_assign_field_path", _assign)
         with pytest.raises(LibraryResolutionCycleError):
-            _apply_rules_fixpoint(cfg, [rule_a, rule_b])
+            _apply_rules_fixpoint(cfg, [rule])
 
     def test_non_dormant_rules_ignored(self):
         cfg = _mk_config(transformers={"sampling_params": {"do_sample": True, "temperature": 0.5}})
@@ -280,6 +315,72 @@ class TestDedupSweep:
         # do_sample=True x temps=[0.5, 1.0, 1.5] -> 3 distinct sampling configs
         # do_sample=False x any temp -> 1 canonical greedy
         assert len(result.canonical_configs) == 4
+
+    def test_dormant_extra_collapses_to_one_group(self):
+        # Regression (PR-D change 1): two configs differing only in a dormant
+        # pydantic EXTRA (epsilon_cutoff) must land in ONE equivalence group.
+        # The fallback projection previously emitted None for the present-only
+        # subject, so the extra key survived with value None and the
+        # resolved-config hash distinguished None from missing -> 2 groups.
+        cfg_a = _mk_config(
+            transformers={"sampling_params": {"do_sample": True, "epsilon_cutoff": 0.5}}
+        )
+        cfg_b = _mk_config(
+            transformers={"sampling_params": {"do_sample": True, "epsilon_cutoff": 0.9}}
+        )
+        result = resolve_library_effective([cfg_a, cfg_b], deduplicate=True)
+        assert len(result.groups) == 1
+        assert result.would_dedup is True
+        assert len(result.canonical_configs) == 1
+
+    def test_operator_alias_projects_identically(self):
+        # Regression (PR-D change 2): a rule written with the '!=' symbol and
+        # one written with the 'not_equal' word alias must project the same way
+        # (both strip the subject field), so a corpus-author's choice of alias
+        # cannot change dedup behaviour.
+        cfg = _mk_config(
+            transformers={"sampling_params": {"do_sample": False, "epsilon_cutoff": 0.5}}
+        )
+        rule_symbol = _mk_rule(
+            invariant_id="strip_via_symbol",
+            match_fields={
+                "transformers.sampling_params.do_sample": False,
+                "transformers.sampling_params.epsilon_cutoff": {"present": True, "!=": 0.0},
+            },
+        )
+        rule_word = _mk_rule(
+            invariant_id="strip_via_word",
+            match_fields={
+                "transformers.sampling_params.do_sample": False,
+                "transformers.sampling_params.epsilon_cutoff": {"present": True, "not_equal": 0.0},
+            },
+        )
+        by_symbol = _apply_rules_fixpoint(cfg, [rule_symbol])
+        by_word = _apply_rules_fixpoint(cfg, [rule_word])
+        # Both strip the extra to absent, so both resolved views hash identically.
+        assert hash_config(build_resolved_view(by_symbol)) == hash_config(
+            build_resolved_view(by_word)
+        )
+        # And the extra is gone in both.
+        symbol_extra = by_symbol.transformers.sampling_params.__pydantic_extra__ or {}
+        word_extra = by_word.transformers.sampling_params.__pydantic_extra__ or {}
+        assert "epsilon_cutoff" not in symbol_extra
+        assert "epsilon_cutoff" not in word_extra
+
+    def test_dormant_observations_captured(self):
+        # PR-D change 6 substrate: dedup records the distinct normalisations it
+        # applied so plan / preflight can surface them.
+        cfg = _mk_config(
+            transformers={"sampling_params": {"do_sample": True, "epsilon_cutoff": 0.5}}
+        )
+        result = resolve_library_effective([cfg], deduplicate=True)
+        obs = result.dormant_observations
+        assert any(
+            o.rule_id == "transformers_dormant_epsilon_cutoff_ne_0_0"
+            and o.field_path == "transformers.sampling_params.epsilon_cutoff"
+            and o.normalisation == "stripped"
+            for o in obs
+        )
 
     def test_hashes_stable_across_repeated_dedup(self):
         cfg = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}})

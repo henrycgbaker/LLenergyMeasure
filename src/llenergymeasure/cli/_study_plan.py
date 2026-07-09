@@ -31,7 +31,13 @@ from llenergymeasure.utils.formatting import format_elapsed
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
 
-__all__ = ["PlanFunnel", "RuleAttribution", "build_funnel", "render_funnel"]
+__all__ = [
+    "PlanFunnel",
+    "RuleAttribution",
+    "build_funnel",
+    "dormant_observation_lines",
+    "render_funnel",
+]
 
 # Cap on how many distinct engine-rule attributions get their own line before the
 # tail is folded into a single "+ N more" summary line.
@@ -214,6 +220,38 @@ def _wall_clock_line(funnel: PlanFunnel) -> str:
     if deferred:
         line += " (" + "; ".join(deferred) + ")"
     return line + "."
+
+
+def dormant_observation_lines(study: StudyConfig, *, include_header: bool = True) -> list[str]:
+    """Plain-text lines describing the dormant normalisations that will apply.
+
+    Dormant rules silently rewrite the executed config (e.g. a greedy config
+    strips ``temperature``), so this surfaces them: one grouped block per
+    engine listing the rule id and the field-level effect. Returns ``[]`` when
+    no dormant rule fired, so callers render the section only when non-empty.
+    Shared by ``llem study plan`` and the preflight summary.
+
+    ``include_header`` controls the leading "Dormant normalisations ..." line:
+    ``llem study plan`` keeps it, while the preflight panel omits it because the
+    section already carries its own bold title.
+    """
+    observations = study.dormant_observations
+    if not observations:
+        return []
+
+    by_engine: dict[str, list[dict[str, Any]]] = {}
+    for obs in observations:
+        by_engine.setdefault(str(obs.get("engine", "?")), []).append(obs)
+
+    lines = ["Dormant normalisations (applied to the executed config):"] if include_header else []
+    for engine in sorted(by_engine):
+        lines.append(f"  {engine}:")
+        for obs in by_engine[engine]:
+            rule_id = obs.get("rule_id", "?")
+            field_path = obs.get("field_path", "?")
+            effect = obs.get("normalisation", "")
+            lines.append(f"    {field_path} {effect}  (rule {rule_id})")
+    return lines
 
 
 def render_funnel(funnel: PlanFunnel, title: str) -> str:
