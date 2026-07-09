@@ -59,7 +59,7 @@ flowchart TD
     renovate --> bump --> discover --> absorb --> commit --> ci --> review --> merged
 ```
 
-- **Detection is automatic.** [Renovate](https://github.com/apps/renovate) watches upstream releases and opens a PR that bumps the pin (and, for transformers, the Dockerfile `ARG`).
+- **Detection is automatic.** A self-hosted Renovate cron (`renovate.yml`) watches upstream releases and opens a PR that bumps the pin (and, for transformers, the Dockerfile `ARG`).
 - **Production is local.** Reading the new engine source into an updated schema and rule set needs the engine source - and sometimes a GPU - so it runs on a maintainer's machine, not in CI. See [Schema refresh](/contributing/schema-refresh) and [Local knowledge production](/contributing/knowledge-production).
 - **Verification is CI.** Once the regenerated artifacts are committed, `engine-rules-check.yml` checks they are internally consistent - the generated config matches the committed one, and uncovered validator sites are reported as advisory. No GPU, no containers, no self-hosted runners, and nothing writes back to the branch. See [CI architecture](/explanation/architecture/ci-architecture).
 

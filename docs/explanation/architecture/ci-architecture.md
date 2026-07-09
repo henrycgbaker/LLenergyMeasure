@@ -20,7 +20,7 @@ The repo uses two workflow patterns, picked per-concern:
 | Pattern | When | Examples |
 |---|---|---|
 | **Reusable workflow** (`workflow_call`) | a body invoked by another workflow | `docker-publish.yml`, `gpu-ci.yml` |
-| **Monolithic-direct** | one concern, triggered directly | `ci.yml`, `engine-rules-check.yml`, `security.yml`, `release.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml`, `docs.yml`, `issue-type-labeller.yml` |
+| **Monolithic-direct** | one concern, triggered directly | `ci.yml`, `engine-rules-check.yml`, `security.yml`, `release.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml`, `docs.yml`, `issue-type-labeller.yml`, `renovate.yml` |
 
 A monolithic-direct workflow may still fan out over a matrix (see
 `engine-rules-check.yml`, which runs one concern across the engines). The
@@ -251,10 +251,12 @@ PR checks tab.
   `engine-rules-check.yml` and `docs.yml` set it unconditionally. `ci.yml` sets
   it to `${{ github.event_name == 'pull_request' }}` - cancel superseded PR
   runs, but let merge-queue / push runs on `main` finish.
-- **`cancel-in-progress: false`** for workflows that mutate a registry or run
-  long-cached builds: `publish-engine-image.yml` (grouped per commit SHA) and
-  `ghcr-prune.yml` (a single in-flight sweep; a cancelled prune pass leaves the
-  registry half-pruned).
+- **`cancel-in-progress: false`** for workflows that mutate a registry, open
+  or update PRs, or run long-cached builds: `publish-engine-image.yml` (grouped
+  per commit SHA), `ghcr-prune.yml` (a single in-flight sweep; a cancelled prune
+  pass leaves the registry half-pruned), and `renovate.yml` (a single in-flight
+  Renovate run; a cancelled run can strand a half-updated dependency dashboard
+  or PR).
 - **No `concurrency:` block** on `gpu-ci.yml` and `security.yml`: GPU runs are
   label-gated and rare, and the security scan is cheap, so neither needs
   supersession control.
@@ -290,6 +292,7 @@ Workflows that cannot self-test at runtime:
 - `auto-release.yml` - `pull_request: closed` only.
 - `release.yml` - `push: tags` only.
 - `issue-type-labeller.yml` - `issues` events only.
+- `renovate.yml` - `schedule` cron plus `workflow_dispatch` only.
 
 ## Conventions
 
