@@ -77,6 +77,28 @@ class TestBuildPreflightPanel:
         output = _render_panel(sc)
         assert "Study: test-study" in output
 
+    def test_panel_shows_dormant_observations_when_present(self):
+        """The preflight panel surfaces dormant normalisations (PR-D change 6)."""
+        sc = _make_panel_study_config()
+        sc.dormant_observations = [
+            {
+                "engine": "transformers",
+                "rule_id": "transformers_dormant_epsilon_cutoff_ne_0_0",
+                "field_path": "transformers.sampling_params.epsilon_cutoff",
+                "normalisation": "stripped",
+            }
+        ]
+        output = _render_panel(sc)
+        assert "Dormant normalisations" in output
+        assert "transformers_dormant_epsilon_cutoff_ne_0_0" in output
+        assert "epsilon_cutoff" in output
+
+    def test_panel_omits_dormant_section_when_empty(self):
+        """No dormant observations -> no section (additive, non-empty only)."""
+        sc = _make_panel_study_config()
+        output = _render_panel(sc)
+        assert "Dormant normalisations" not in output
+
     def test_panel_metadata_experiments_plural(self):
         """Panel shows n configs x n cycles = n runs (plural form)."""
         sc = _make_panel_study_config(

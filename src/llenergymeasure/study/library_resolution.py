@@ -4,8 +4,9 @@ Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §2.
 
 The library-resolution mechanism is the host-side, pre-dispatch layer that normalises every
 field the engine-rules corpus marks as ``dormant``. Each rule's fired-state
-projection is taken from its match predicate's "not_equal" / "present"
-operand (the sentinel value the predicate is *deviating from*) - that same
+projection drives its subject field (the one marked ``!=`` / ``present``, or
+named in ``normalised_fields``) back to *absent* via :data:`_STRIP`, so a
+config that set the dormant field collapses with one that never did. That same
 projection is what :mod:`scripts.engine_producers._fixpoint_test` enforces in CI, so
 runtime canonicalisation and CI correctness tests apply an identical
 normalisation.
@@ -27,6 +28,7 @@ from typing import Any
 from llenergymeasure.config.engine_rules.loader import (
     EngineRulesLoader,
     Rule,
+    canonical_operator,
     resolve_field_path,
 )
 from llenergymeasure.config.models import ExperimentConfig
@@ -78,8 +80,27 @@ class LibraryResolutionCycleError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class DormantObservation:
+    """One dormant normalisation the library-resolution mechanism applied.
+
+    Records that a dormant rule fired on a config and drove a field to its
+    canonical form, so ``llem study plan`` / preflight can surface the
+    (otherwise silent) mutation of the executed config.
+    """
+
+    engine: str
+    rule_id: str
+    field_path: str
+    normalisation: str
+    """Human-readable effect: ``"stripped"`` for a strip-to-absent, else
+    ``"-> <value>"`` for a concrete rewrite."""
+
+
 def _apply_rules_fixpoint(
-    config: ExperimentConfig, rules: list[Rule] | tuple[Rule, ...]
+    config: ExperimentConfig,
+    rules: list[Rule] | tuple[Rule, ...],
+    observations: list[DormantObservation] | None = None,
 ) -> ExperimentConfig:
     """Apply every ``dormant``-severity rule to ``config`` repeatedly until stable.
 
@@ -90,6 +111,9 @@ def _apply_rules_fixpoint(
         config: A validated ``ExperimentConfig``.
         rules: The rule list for the config's engine (typically from
             ``EngineRulesLoader.load_rules(engine).rules``).
+        observations: Optional sink; each applied normalisation is appended as a
+            :class:`DormantObservation` for downstream (plan / preflight)
+            display. ``None`` skips the bookkeeping entirely.
 
     Raises:
         LibraryResolutionCycleError: If the fixpoint loop exceeds
@@ -99,6 +123,13 @@ def _apply_rules_fixpoint(
     if not dormant_rules:
         return config.model_copy(deep=True)
 
+    # A rule's normalisations depend only on the frozen Rule, not on the config
+    # under resolution, so precompute once per rule rather than recomputing on
+    # every fixpoint iteration for every config. Rule carries a dict field
+    # (match_fields), so it is not hashable - key the precompute by object
+    # identity rather than by the Rule itself.
+    normalisations_by_rule = {id(r): _rule_normalisations(r) for r in dormant_rules}
+
     current = config.model_copy(deep=True)
     for _iteration in range(_MAX_ITER):
         fired = False
@@ -106,7 +137,7 @@ def _apply_rules_fixpoint(
             match = rule.try_match(current)
             if match is None:
                 continue
-            updates = _rule_normalisations(rule)
+            updates = normalisations_by_rule[id(rule)]
             if not updates:
                 continue
             for field_path, target_value in updates.items():
@@ -119,6 +150,16 @@ def _apply_rules_fixpoint(
                 if not already_canonical:
                     _assign_field_path(current, field_path, target_value)
                     fired = True
+                    if observations is not None:
+                        norm = "stripped" if target_value is _STRIP else f"-> {target_value!r}"
+                        observations.append(
+                            DormantObservation(
+                                engine=rule.engine,
+                                rule_id=rule.id,
+                                field_path=field_path,
+                                normalisation=norm,
+                            )
+                        )
         if not fired:
             return current
     raise LibraryResolutionCycleError(current, _MAX_ITER)
@@ -156,15 +197,22 @@ def _rule_normalisations(rule: Rule) -> dict[str, Any]:
        config path (see :func:`_resolve_normalised_field`) and collapses to
        :data:`_STRIP` - the field is driven back to *absent* (its library
        default), so a config that set it equals one that never did.
-    2. Otherwise, fall back to the rule's *match* predicate: any field
-       matched with a ``not_equal`` / ``present`` operator is normalised by
-       stripping (setting to ``None`` or the ``not_equal`` sentinel if
-       scalar). This is the fixpoint-test projection - structurally identical
-       to what CI enforces for shuffle-stability.
+    2. Otherwise, fall back to the rule's *match* predicate: any field marked
+       ``!=`` / ``not_equal`` / ``present`` is a *subject* field and is driven
+       to :data:`_STRIP` (absent). Stripping is the only projection that
+       collapses correctly for both declared fields (reset to their ``None``
+       default) and pydantic extras (remove the key) - emitting ``None`` or a
+       concrete sentinel leaves an extra key present, so the resolved-config
+       hash distinguishes it from a config that never set the field and dedup
+       silently no-ops.
+
+    Operator keys are canonicalised (``!=`` and ``not_equal`` are the same
+    operator) so a rule written with a word alias projects identically to one
+    written with the symbol.
 
     Rules that match only on equality (e.g. ``do_sample: false``) do not
     normalise those fields - equality predicates are *triggers*, not
-    *subjects*. Subject fields are the ones marked ``present``/``not_equal``.
+    *subjects*. Subject fields are the ones marked ``present`` / ``!=``.
     """
     out: dict[str, Any] = {}
 
@@ -179,15 +227,13 @@ def _rule_normalisations(rule: Rule) -> dict[str, Any]:
     for path, spec in rule.match_fields.items():
         if not isinstance(spec, dict):
             continue
-        if "not_equal" in spec:
-            # The "canonical" state is the not_equal sentinel - applying the
-            # rule drives the field back to the library-observed default.
-            out[path] = spec["not_equal"]
-        elif spec.get("present") and "in" not in spec:
-            # Subject field marked only as "present" - strip to None (the
-            # library either ignores it, or the effective value is captured
-            # later via observed_config_hash).
-            out[path] = None
+        canon = {canonical_operator(op): value for op, value in spec.items()}
+        is_not_equal = "!=" in canon
+        is_present = bool(canon.get("present")) and "in" not in canon
+        if is_not_equal or is_present:
+            # Subject field - drive it back to *absent* so a config that set it
+            # collapses with one that never did.
+            out[path] = _STRIP
     return out
 
 
@@ -269,6 +315,9 @@ class DedupResult:
             runs even when ``deduplicate=False``).
         deduplicated: ``True`` iff dedup was actually applied to the
             ``canonical_configs`` return slot.
+        dormant_observations: Distinct dormant normalisations applied across the
+            sweep (dedup'd by engine/rule/field/effect, ordered), for plan /
+            preflight display. Empty when no dormant rule fired.
     """
 
     canonical_configs: list[ExperimentConfig]
@@ -276,6 +325,7 @@ class DedupResult:
     declared_resolved_hashes: list[str] = field(default_factory=list)
     would_dedup: bool = False
     deduplicated: bool = False
+    dormant_observations: list[DormantObservation] = field(default_factory=list)
 
 
 def resolve_library_effective(
@@ -322,10 +372,17 @@ def resolve_library_effective(
 
     canonicalised: list[ExperimentConfig] = []
     hashes: list[str] = []
+    observations: list[DormantObservation] = []
     for cfg in configs:
-        canon = _apply_rules_fixpoint(cfg, _rules_for(cfg))
+        canon = _apply_rules_fixpoint(cfg, _rules_for(cfg), observations=observations)
         canonicalised.append(canon)
         hashes.append(hash_config(build_resolved_view(canon)))
+
+    # Distinct observations, first-seen order - the same rule fires on many
+    # sweep points but the display wants one line per (engine, rule, field).
+    # DormantObservation is frozen/hashable and dict preserves insertion order,
+    # so dict.fromkeys gives first-seen dedup in one pass.
+    distinct_observations = list(dict.fromkeys(observations))
 
     groups_by_hash: dict[str, list[int]] = {}
     for idx, h in enumerate(hashes):
@@ -358,6 +415,7 @@ def resolve_library_effective(
         declared_resolved_hashes=hashes,
         would_dedup=would_dedup,
         deduplicated=deduplicate and would_dedup,
+        dormant_observations=distinct_observations,
     )
 
 

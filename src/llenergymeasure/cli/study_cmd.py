@@ -140,7 +140,11 @@ def study_plan(
 
     from llenergymeasure.api import load_study
     from llenergymeasure.cli._study_defaults import study_cli_overrides_for_file
-    from llenergymeasure.cli._study_plan import build_funnel, render_funnel
+    from llenergymeasure.cli._study_plan import (
+        build_funnel,
+        dormant_observation_lines,
+        render_funnel,
+    )
     from llenergymeasure.utils.exceptions import ConfigError
 
     # Apply the same CLI-layer effective defaults llem run applies, so the
@@ -155,3 +159,8 @@ def study_plan(
     funnel = build_funnel(study)
     title = study.study_name or str(study_file)
     typer.echo(render_funnel(funnel, title))
+
+    dormant_lines = dormant_observation_lines(study)
+    if dormant_lines:
+        typer.echo("")
+        typer.echo("\n".join(dormant_lines))

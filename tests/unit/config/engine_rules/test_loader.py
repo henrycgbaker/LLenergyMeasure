@@ -334,3 +334,20 @@ def test_normalised_fields_omitted_on_error_rule_is_fine(tmp_path: Path) -> None
     rule = loader.load_rules("transformers").rules[0]
     assert rule.severity == "error"
     assert rule.normalised_fields == ()
+
+
+def test_word_form_operator_alias_canonicalised_at_parse(tmp_path: Path) -> None:
+    # A rule authored with the word-form operator ``not_equal`` must load with
+    # its symbol form ``!=`` in the parsed match fields, so every consumer sees
+    # one canonical key regardless of corpus authoring style. Non-operator keys
+    # (``present``) and the field path pass through unchanged.
+    data = yaml.safe_load(_CORPUS_MINIMAL)
+    data["rules"][0]["match"]["fields"] = {
+        "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
+    }
+    _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    rule = loader.load_rules("transformers").rules[0]
+    spec = rule.match_fields["transformers.sampling.temperature"]
+    assert "not_equal" not in spec
+    assert spec == {"present": True, "!=": 1.0}

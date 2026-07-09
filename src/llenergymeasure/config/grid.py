@@ -166,7 +166,10 @@ def expand_grid(
     # With explicit entries an empty sweep contributes nothing, so it never
     # adds a phantom default-engine baseline the user never wrote.
     sweep = raw_study.get("sweep", {})
-    explicit_entries = raw_study.get("experiments", [])
+    # `experiments:` present but YAML-null yields None from .get(); treat an
+    # explicitly-empty key the same as an absent one rather than TypeError-ing
+    # on the iteration below.
+    explicit_entries = raw_study.get("experiments") or []
     sweep_raw_configs = _expand_sweep(sweep, merged_fixed, synthesize_baseline=not explicit_entries)
 
     # Step 4: Append explicit experiments: list entries
@@ -203,12 +206,19 @@ def expand_grid(
             errors: list[dict[str, Any]] = []
             if isinstance(exc, ValidationError):
                 errors = [dict(e) for e in exc.errors()]
+            rule_id = _extract_rule_id(errors)
+            # Pydantic's error dicts carry a `ctx` mapping that can hold the raw
+            # exception object (non-serialisable). `_extract_rule_id` has read
+            # what it needs from it, so drop `ctx` now - SkippedConfig.errors is
+            # persisted via json.dumps and must stay serialisable.
+            for err in errors:
+                err.pop("ctx", None)
             skipped.append(
                 SkippedConfig(
                     raw_config=raw_config,
                     reason=reason,
                     errors=errors,
-                    rule_id=_extract_rule_id(errors),
+                    rule_id=rule_id,
                 )
             )
 
@@ -652,8 +662,15 @@ def _expand_sweep(
     if isinstance(fixed_engine, list):
         engines = list(fixed_engine)
     elif scoped_dims or scoped_groups:
-        # Engines implied by scoped axes or scoped groups
-        engines = sorted(set(scoped_dims.keys()) | set(scoped_groups.keys()))
+        # Engines implied by scoped axes or scoped groups. A study may ALSO fix
+        # `engine:` explicitly (e.g. `engine: transformers` while sweeping a
+        # vllm.* axis) - that engine gets its own baseline run, so union it in
+        # rather than letting the scoped axes silently drop it. Only an
+        # explicitly-set engine counts; the "transformers" default does not.
+        scope_engines = set(scoped_dims.keys()) | set(scoped_groups.keys())
+        if "engine" in fixed:
+            scope_engines.add(fixed_engine)
+        engines = sorted(scope_engines)
     else:
         engines = [fixed_engine]
 
