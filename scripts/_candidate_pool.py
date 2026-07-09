@@ -1,10 +1,9 @@
 """Shared candidate-pool contract for the engine-rule proposers.
 
-Both proposers - the analyst cold read (S2, ``scripts/analyst_cold_read.py``)
-and the observed-collision miner (S3, ``scripts/mine_observed_collisions.py``) -
-write UNVERIFIED candidates into the same version-scoped pool, in one unified
-schema the verification ladder consumes unchanged. This module owns the shared
-pieces of that contract so the two proposers cannot drift apart:
+The analyst cold read (``scripts/analyst_cold_read.py``) writes UNVERIFIED
+candidates into a version-scoped pool, in one unified schema the verification
+ladder consumes unchanged. This module owns the shared pieces of that contract
+so every proposer that targets the pool stays on one envelope:
 
 - :func:`pool_path` - the on-disk layout
   ``<pool_root>/<engine>/v<mangled-version>/candidates/<filename>``.

@@ -123,11 +123,12 @@ def save_config_sidecar(
       ``_apply_rules`` attached at load time.
     - ``declared_config`` - the full user-declared ``ExperimentConfig``
       (JSON model dump). Every other config field in this sidecar is a hash;
-      this is the only place the declared state is recorded in full. Named
-      consumer: the observed-collision miner
-      (``scripts/mine_observed_collisions.py``), which groups experiments by
-      ``observed_config_hash`` and diffs their declared configs to find fields
-      whose variation left the engine-effective state identical.
+      this is the only place the declared state is recorded in full. Consumed
+      by observed-collision detection
+      (:func:`llenergymeasure.study.equivalence_groups.find_observed_collisions`),
+      which groups experiments by ``observed_config_hash`` and diffs their
+      declared configs to find fields whose variation left the engine-effective
+      state identical.
 
     Any missing optional field is omitted from the sidecar (not written as
     null) so downstream consumers distinguish "not available" from

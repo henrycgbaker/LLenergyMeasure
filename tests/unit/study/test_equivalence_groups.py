@@ -19,7 +19,7 @@ class TestWriteSerialisation:
         groups = EquivalenceGroups(
             study_id="study_abc",
             dedup_mode="resolved",
-            validated_invariants_version="transformers:4.56.0@deadbee",
+            validated_rules_version="transformers:4.56.0@deadbee",
             groups=[
                 PreRunGroup(
                     resolved_config_hash="sha256:abc",
@@ -39,7 +39,7 @@ class TestWriteSerialisation:
                     member_resolved_config_hashes=("sha256:abc", "sha256:xyz"),
                     member_experiment_ids=("exp_0001", "exp_0003"),
                     gap_detected=True,
-                    proposed_invariant_id="candidate_invariant_1",
+                    proposed_rule_id="candidate_rule_1",
                 )
             ],
         )
@@ -49,7 +49,7 @@ class TestWriteSerialisation:
 
         assert loaded["study_id"] == "study_abc"
         assert loaded["dedup_mode"] == "resolved"
-        assert loaded["validated_invariants_version"].startswith("transformers:")
+        assert loaded["validated_rules_version"].startswith("transformers:")
         assert len(loaded["groups"]) == 1
         assert loaded["groups"][0]["member_count"] == 2
         assert loaded["groups"][0]["would_dedup"] is True

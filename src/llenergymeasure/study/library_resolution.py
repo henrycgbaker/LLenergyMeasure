@@ -6,10 +6,10 @@ The library-resolution mechanism is the host-side, pre-dispatch layer that norma
 field the engine-rules corpus marks as ``dormant``. Each rule's fired-state
 projection drives its subject field (the one marked ``!=`` / ``present``, or
 named in ``normalised_fields``) back to *absent* via :data:`_STRIP`, so a
-config that set the dormant field collapses with one that never did. That same
-projection is what :mod:`scripts.engine_producers._fixpoint_test` enforces in CI, so
-runtime canonicalisation and CI correctness tests apply an identical
-normalisation.
+config that set the dormant field collapses with one that never did.
+:func:`_apply_rules_fixpoint` iterates that projection to a stable fixpoint;
+its idempotence and shuffle-stability are covered by the unit tests in
+``tests/unit/study/test_library_resolution.py``.
 
 Rules chain (vLLM epsilon-clamp → greedy-normalise); iteration is capped at
 :data:`_MAX_ITER` to surface cycles via :class:`LibraryResolutionCycleError`.

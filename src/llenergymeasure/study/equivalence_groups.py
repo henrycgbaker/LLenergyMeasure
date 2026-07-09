@@ -51,7 +51,7 @@ class ObservedCollisionGroup:
     member_resolved_config_hashes: tuple[str, ...]
     member_experiment_ids: tuple[str, ...]
     gap_detected: bool
-    proposed_invariant_id: str | None = None
+    proposed_rule_id: str | None = None
 
 
 @dataclass
@@ -60,7 +60,7 @@ class EquivalenceGroups:
 
     study_id: str
     dedup_mode: Literal["resolved", "off"]
-    validated_invariants_version: str = ""
+    validated_rules_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
     observed_collision_groups: list[ObservedCollisionGroup] = field(default_factory=list)
 
@@ -126,7 +126,7 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
     payload = {
         "study_id": groups.study_id,
         "dedup_mode": groups.dedup_mode,
-        "validated_invariants_version": groups.validated_invariants_version,
+        "validated_rules_version": groups.validated_rules_version,
         "groups": [asdict(g) for g in groups.groups],
         "observed_collision_groups": [asdict(g) for g in groups.observed_collision_groups],
     }

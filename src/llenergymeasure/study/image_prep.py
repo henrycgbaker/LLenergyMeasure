@@ -347,7 +347,7 @@ class _ImageMixin:
         # probe_status is MISMATCH
         error = VersionMismatchError(
             f"Docker image '{image}' has {engine_name} library version "
-            f"{probed!r} but the bundled invariants + discovered schemas "
+            f"{probed!r} but the bundled rules + discovered schemas "
             f"in this wheel were mined against {expected!r}. Applying "
             f"version-{expected!r} validation rules to a version-{probed!r} "
             f"substrate is not safe.\n\n"
