@@ -54,6 +54,10 @@ jobs:
               - 'docker/**'
               - '.dockerignore'
               - 'pyproject.toml'
+              # Version-bump PRs move the pin under engine_versions/ (not
+              # docker/), and schema-version-check exists to gate exactly
+              # those. Without this the job never runs on a bump PR.
+              - 'engine_versions/**'
             workflows:
               - '.github/workflows/**'
             docs_inputs:
@@ -63,8 +67,11 @@ jobs:
               # and this workflow file (self-test). pyproject/uv.lock
               # excluded: env-break would surface in lint / type-check /
               # test / package-validation before docs-freshness anyway.
+              # docs/reference/** holds the generated pages docs-freshness
+              # regenerates and diffs; an edit there must trip the check.
               - 'src/**'
               - 'scripts/**'
+              - 'docs/reference/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -248,7 +255,6 @@ jobs:
     if: >-
       always()
       && needs.filter.outputs.docker == 'true'
-      && !contains(github.event.pull_request.labels.*.name, 'renovate')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -256,5 +262,5 @@ jobs:
         engine: [transformers, vllm, tensorrt]
     steps:
       - uses: actions/checkout@v6
-      - name: Check ${{ matrix.engine }} schema version aligns with Dockerfile
+      - name: Check ${{ matrix.engine }} schema version matches current.yaml pin
         run: python3 scripts/check_discovered_schema_versions.py --engine ${{ matrix.engine }}

@@ -311,20 +311,36 @@ def test_generated_shape(fake_snapshot: tuple[Path, Path]) -> None:
         assert cls in text
 
 
-def test_missing_snapshot_dir_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_snapshot_dir_sync_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(rec._outputs, "outputs_dir", lambda engine, version: tmp_path / "absent")
     with pytest.raises(FileNotFoundError, match="snapshot outputs dir not found"):
-        rec.main(
-            [
-                "--engine",
-                "vllm",
-                "--version",
-                "9.9.9",
-                "--check",
-                "--output",
-                str(tmp_path / "c.py"),
-            ]
-        )
+        rec.sync("vllm", "9.9.9", tmp_path / "c.py", write=False)
+
+
+def test_missing_snapshot_dir_main_exits_with_friendly_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A version bump lands current.yaml pointing at a pin whose snapshot has
+    # not been mined yet; main() must exit non-zero with a remediation message
+    # (naming the missing directory and the ritual), not a bare traceback.
+    absent = tmp_path / "absent"
+    monkeypatch.setattr(rec._outputs, "outputs_dir", lambda engine, version: absent)
+    rc = rec.main(
+        [
+            "--engine",
+            "vllm",
+            "--version",
+            "9.9.9",
+            "--check",
+            "--output",
+            str(tmp_path / "c.py"),
+        ]
+    )
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "No mined snapshot for vllm 9.9.9" in err
+    assert str(absent) in err
+    assert "make discover-schema ENGINE=vllm" in err
 
 
 def test_default_output_is_the_src_shadow() -> None:
