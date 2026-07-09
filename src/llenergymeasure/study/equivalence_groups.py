@@ -9,8 +9,8 @@ sidecars for shared observed-config-hash values.
 
 The observed-config-hash collision invariant (§4.1) guarantees that in a post-resolved-config-hash dedup run set,
 any group with ``len(member_resolved_config_hashes) >= 2`` is a **proven library-resolution mechanism gap**.
-Phase 50.3b's ``llem report-gaps`` command consumes this file to propose
-corpus additions.
+The file is a post-hoc analysis artifact; nothing reads it back at runtime
+(``llem report-gaps`` consumes ``runtime_observations.jsonl``, not this file).
 """
 
 from __future__ import annotations

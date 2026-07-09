@@ -2,8 +2,8 @@
 """Absorb: the one command a maintainer runs per engine-version bump.
 
 Drives the knowledge-refresh loop for ONE engine's validation rules: cold read
-(analyst proposes candidates) -> pool union (analyst + observed collisions +
-manual seeds, deduped) -> recall interrogation (ask "is this still present?" for
+(analyst proposes candidates) -> pool union (analyst + manual seeds, deduped)
+-> recall interrogation (ask "is this still present?" for
 each shipped rule the fresh pool did not rediscover) -> verification ladder
 (citation check on the host, then construction / identity probes in the engine
 container; the engine is the arbiter) -> promotion (regenerate the shipped rules
@@ -78,7 +78,7 @@ _CORPUS_HEADER = (
     "# severity is closed {error, dormant}; provenance is metadata only.\n"
 )
 _UNION_HEADER = (
-    "# Absorb union pool: analyst cold read + observed collisions + manual seeds,\n"
+    "# Absorb union pool: analyst cold read + manual seeds,\n"
     "# deduped on candidate id and translated to canonical field paths.\n"
     "# UNVERIFIED candidates for the verification ladder; not a shipped corpus.\n"
 )
