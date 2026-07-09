@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from llenergymeasure.config.introspection import (
     get_capability_matrix_markdown,
+    get_dormant_rules,
     get_runtime_limitations,
     get_validation_rules,
 )
@@ -26,16 +27,22 @@ def generate_markdown() -> str:
     lines = [
         "# Invalid Parameter Combinations",
         "",
-        "> Auto-generated from config validators and test results.",
+        "> Auto-generated. Do not edit by hand: run",
+        "> `python scripts/generate_invalid_combos_doc.py` (or `make docs-all`).",
         "",
-        "This document lists parameter combinations that will fail validation or runtime.",
-        "The tool validates these at config load time and provides clear error messages.",
-        "The full verified rule set per engine lives at",
-        "`src/llenergymeasure/engines/<engine>/rules.yaml`.",
+        "This document lists parameter combinations that fail validation or run",
+        "differently than declared. The error rules are enforced at config load",
+        "time with a clear error message; the dormant rules are accepted but",
+        "silently normalised by the engine. Both are derived from the live rule",
+        "corpus (`src/llenergymeasure/engines/<engine>/rules.yaml`) plus the",
+        "cross-engine `ExperimentConfig` validators, so this page cannot drift",
+        "from what actually fires at runtime.",
         "",
         "## Config Validation Errors",
         "",
-        "These combinations are rejected at config load time with a clear error message.",
+        "These combinations are rejected at config load time with a clear error",
+        "message. The `all` rows are cross-engine `ExperimentConfig` validators;",
+        "the rest come from each engine's shipped rule corpus.",
         "",
         "| Engine | Invalid Combination | Reason | Resolution |",
         "|---------|---------------------|--------|------------|",
@@ -45,6 +52,28 @@ def generate_markdown() -> str:
         lines.append(
             f"| {invariant['engine']} | `{invariant['combination']}` | "
             f"{invariant['reason']} | {invariant['resolution']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Dormant Parameters",
+            "",
+            "These combinations pass validation, but the engine silently normalises",
+            "or ignores the declared field: the declared value is not the effective",
+            "value. The study planner deduplicates configs that differ only in a",
+            "dormant field, so the GPU runs such a cell once. `Normalised fields`",
+            "names the paths the engine drives back to their default.",
+            "",
+            "| Engine | Combination | Effect | Normalised fields |",
+            "|---------|-------------|--------|-------------------|",
+        ]
+    )
+
+    for dormant in get_dormant_rules():
+        lines.append(
+            f"| {dormant['engine']} | `{dormant['combination']}` | "
+            f"{dormant['effect']} | {dormant['normalised_fields']} |"
         )
 
     lines.extend(
