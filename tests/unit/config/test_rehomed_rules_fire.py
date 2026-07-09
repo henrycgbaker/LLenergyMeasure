@@ -95,27 +95,52 @@ def test_cross_section_num_beams_lt_num_return_sequences_fires():
         )
 
 
-def test_cross_section_num_beams_not_divisible_by_num_return_sequences_fires():
-    """num_beams not divisible by sampling_params.num_return_sequences is rejected."""
-    with pytest.raises(ValueError, match="not_divisible_by_num_return_sequences"):
+def test_cross_section_num_return_sequences_gt_num_beams_fires():
+    """num_return_sequences above engine_params.num_beams is rejected.
+
+    The real upstream constraint is num_return_sequences <= num_beams (not a
+    divisibility check), so a value strictly greater than num_beams must be
+    rejected regardless of divisibility. The re-encoded rule is asserted to
+    fire in isolation (a sibling `num_beams < @num_return_sequences` rule
+    encodes the same constraint and may short-circuit at the ExperimentConfig
+    layer, so the config-path assertion only pins rejection, not which id).
+    """
+    from llenergymeasure.config.engine_rules import EngineRulesLoader
+
+    rules = EngineRulesLoader().load_rules("transformers").rules
+    violating = {
+        "transformers": {
+            "engine_params": {"num_beams": 4},
+            "sampling_params": {"num_return_sequences": 5},
+        }
+    }
+    fired = {r.id for r in rules if r.try_match(violating)}
+    assert "transformers_num_return_vs_beams_num_return_sequences_gt_num_beams" in fired
+
+    with pytest.raises(ValueError, match="num_return_sequences"):
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
             transformers={
-                "engine_params": {"num_beams": 5},
-                "sampling_params": {"num_return_sequences": 2},
+                "engine_params": {"num_beams": 4},
+                "sampling_params": {"num_return_sequences": 5},
             },
         )
 
 
-def test_cross_section_compatible_beam_and_return_counts_accepted():
-    """num_beams >= and divisible by num_return_sequences constructs cleanly."""
+def test_cross_section_non_divisor_return_count_accepted():
+    """num_return_sequences <= num_beams but not a divisor constructs cleanly.
+
+    Regression guard for the re-encode: 3 return sequences with 4 beams is not
+    a divisor pair yet is valid upstream, so the old not_divisible_by rule was a
+    false positive here.
+    """
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
         transformers={
             "engine_params": {"num_beams": 4},
-            "sampling_params": {"num_return_sequences": 2},
+            "sampling_params": {"num_return_sequences": 3},
         },
     )
     assert cfg.active_engine_params().num_beams == 4
@@ -163,3 +188,67 @@ def test_numeric_bound_still_fires_after_incomparable_guard():
             engine="transformers",
             transformers={"sampling_params": {"min_new_tokens": 0}},
         )
+
+
+# ---------------------------------------------------------------------------
+# Purged false-positive rules: legitimate configs must now validate cleanly.
+#
+# Each of these values was rejected by a probe-confirmed false-positive corpus
+# rule (an over-fit allowlist or a mis-mined type bound). After the purge they
+# must construct through the public ExperimentConfig path without raising.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "section,field,value",
+    [
+        # early_stopping=True enables beam-search early stopping (was rejected
+        # by the {'>': 0} bound, since True > 0 in Python).
+        ("engine_params", "early_stopping", True),
+        # max_new_tokens=256 (was rejected by an over-fit not_in [1, 16]).
+        ("sampling_params", "max_new_tokens", 256),
+        # cache_implementation="sliding_window" is a documented value (was
+        # rejected by a not_in [dynamic, static] allowlist).
+        ("engine_params", "cache_implementation", "sliding_window"),
+    ],
+)
+def test_legitimate_transformers_value_validates_cleanly(section, field, value):
+    """A documented, valid transformers value constructs without raising."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={section: {field: value}},
+    )
+    assert getattr(getattr(cfg, "active_" + section)(), field) == value
+
+
+def test_beams_ge_return_sequences_validates_cleanly():
+    """num_beams=4 with num_return_sequences=3 (non-divisor pair) is valid."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={
+            "engine_params": {"num_beams": 4},
+            "sampling_params": {"num_return_sequences": 3},
+        },
+    )
+    assert cfg.active_engine_params().num_beams == 4
+    assert cfg.active_sampling_params().num_return_sequences == 3
+
+
+def test_bare_vllm_config_has_no_phantom_dormant_observations():
+    """The three deleted vllm `absent: true` rules no longer fire on a bare config.
+
+    Each rule matched a field that was simply never set and normalised it to
+    absence - a guaranteed no-op that fired a phantom dormant observation on
+    every config. A bare vllm config must now yield zero dormant observations
+    from those rules.
+    """
+    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
+    purged = {
+        "vllm_samplingparams_dormant_bad_words_unset_true",
+        "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+        "vllm_samplingparams_dormant_stop_token_ids_unset_true",
+    }
+    assert not (set(cfg._dormant_observations) & purged)
+    assert cfg._dormant_observations == {}

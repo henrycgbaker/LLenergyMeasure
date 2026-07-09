@@ -108,21 +108,6 @@ rules:
     engine_version: 0.19.1
     citation: parallel.py:353
     date: '2026-06-22'
-- id: vllm_samplingparams_dormant_bad_words_unset_true
-  engine: vllm
-  severity: dormant
-  match:
-    fields:
-      vllm.sampling_params.bad_words:
-        absent: true
-  normalised_fields:
-  - bad_words
-  provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 0.19.1
-    citation: sampling_params.py:396
-    date: '2026-06-22'
 - id: vllm_samplingparams_dormant_seed_eq_neg1
   engine: vllm
   severity: dormant
@@ -136,36 +121,6 @@ rules:
     verified: construction
     engine_version: 0.19.1
     citation: sampling_params.py:385
-    date: '2026-06-22'
-- id: vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true
-  engine: vllm
-  severity: dormant
-  match:
-    fields:
-      vllm.sampling_params.skip_reading_prefix_cache:
-        absent: true
-  normalised_fields:
-  - skip_reading_prefix_cache
-  provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 0.19.1
-    citation: sampling_params.py:425
-    date: '2026-06-22'
-- id: vllm_samplingparams_dormant_stop_token_ids_unset_true
-  engine: vllm
-  severity: dormant
-  match:
-    fields:
-      vllm.sampling_params.stop_token_ids:
-        absent: true
-  normalised_fields:
-  - stop_token_ids
-  provenance:
-    source: deterministic_miner
-    verified: construction
-    engine_version: 0.19.1
-    citation: sampling_params.py:393
     date: '2026-06-22'
 - id: vllm_samplingparams_raises_frequency_penalty_gt_2p0
   engine: vllm

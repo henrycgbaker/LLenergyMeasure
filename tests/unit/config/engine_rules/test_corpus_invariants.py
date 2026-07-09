@@ -133,27 +133,27 @@ def test_cross_section_field_refs_fire(corpora) -> None:
     fired = {inv.id for inv in rules if inv.try_match(violating)}
     assert "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences" in fired
 
-    not_divisible = {
-        "transformers": {
-            "engine_params": {"num_beams": 5},
-            "sampling_params": {"num_return_sequences": 2},
-        }
-    }
-    fired = {inv.id for inv in rules if inv.try_match(not_divisible)}
-    assert (
-        "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences" in fired
-    )
-
-    clean = {
+    return_gt_beams = {
         "transformers": {
             "engine_params": {"num_beams": 4},
-            "sampling_params": {"num_return_sequences": 2},
+            "sampling_params": {"num_return_sequences": 5},
         }
     }
-    fired = {inv.id for inv in rules if inv.try_match(clean)}
+    fired = {inv.id for inv in rules if inv.try_match(return_gt_beams)}
+    assert "transformers_num_return_vs_beams_num_return_sequences_gt_num_beams" in fired
+
+    # num_return_sequences <= num_beams but not a divisor: valid upstream, must
+    # not fire (regression guard for the not_divisible_by -> <= re-encode).
+    non_divisor_ok = {
+        "transformers": {
+            "engine_params": {"num_beams": 4},
+            "sampling_params": {"num_return_sequences": 3},
+        }
+    }
+    fired = {inv.id for inv in rules if inv.try_match(non_divisor_ok)}
     assert not fired & {
         "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences",
-        "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences",
+        "transformers_num_return_vs_beams_num_return_sequences_gt_num_beams",
     }
 
 
