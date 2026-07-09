@@ -14,14 +14,15 @@ from what actually fires at runtime.
 ## Config Validation Errors
 
 These combinations are rejected at config load time with a clear error
-message. The `all` rows are cross-engine `ExperimentConfig` validators;
-the rest come from each engine's shipped rule corpus.
+message. Rows citing a rule id come from that engine's shipped rule
+corpus; the rest are `ExperimentConfig` pydantic validators.
 
 | Engine | Invalid Combination | Reason | Resolution |
 |---------|---------------------|--------|------------|
 | all | `engine section mismatch` | The engine section must match the engine field (validate_engine_section_match). | Ensure the transformers:/vllm:/tensorrt: section matches the engine: field. |
 | all | `passthrough_kwargs key collision` | passthrough_kwargs keys must not collide with ExperimentConfig fields (validate_passthrough_kwargs_no_collision). | Set the named field directly instead of via passthrough_kwargs. |
 | all | `unknown field on the engine section wrapper` | A key placed directly on the engine section (not under engine_params/sampling_params) is never forwarded to the engine (validate_engine_section_extras). | Move the key under <engine>.engine_params or <engine>.sampling_params. |
+| transformers | `attn_implementation in [flash_attention_2, flash_attention_3] and dtype=float32` | attn_implementation='flash_attention_2'/'flash_attention_3' requires dtype='float16' or dtype='bfloat16'; FlashAttention does not support float32 computation (validate_transformers_flash_attn_dtype). | Set transformers.engine_params.dtype to float16 or bfloat16. |
 | tensorrt | `max_input_len < 1` | max_input_len must be >= 1, got {declared_value}. | Adjust the field(s) so the condition no longer holds; see rule tensorrt_engineparams_raises_max_input_len_lt_1. |
 | tensorrt | `max_num_tokens < 1` | max_num_tokens must be >= 1, got {declared_value}. | Adjust the field(s) so the condition no longer holds; see rule tensorrt_engineparams_raises_max_num_tokens_lt_1. |
 | tensorrt | `max_seq_len < 1` | max_seq_len must be >= 1, got {declared_value}. | Adjust the field(s) so the condition no longer holds; see rule tensorrt_engineparams_raises_max_seq_len_lt_1. |

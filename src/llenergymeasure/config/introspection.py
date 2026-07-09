@@ -482,20 +482,23 @@ def get_capability_matrix_markdown() -> str:
     return "\n".join(lines)
 
 
-# Cross-engine config-load-time errors enforced by ExperimentConfig pydantic
-# validators (not by the per-engine rule corpus). These live in
-# ``llenergymeasure.config.models`` as ``@model_validator`` methods; there is no
-# introspectable data table for them, so they are named here explicitly and
-# kept in step with the validator methods by name.
-_CROSS_ENGINE_VALIDATOR_RULES: list[dict[str, str]] = [
+# Config-load-time errors enforced by ExperimentConfig @model_validator rules
+# (not corpus-derived). These live in ``llenergymeasure.config.models`` as
+# ``@model_validator`` methods; there is no introspectable data table for them,
+# so they are named here explicitly. The "validator" key names the method that
+# raises; get_validation_rules cross-checks this set against the live validators
+# so the list cannot silently drift out of step (see the tripwire there).
+_MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
     {
         "engine": "all",
+        "validator": "validate_engine_section_match",
         "combination": "engine section mismatch",
         "reason": "The engine section must match the engine field (validate_engine_section_match).",
         "resolution": "Ensure the transformers:/vllm:/tensorrt: section matches the engine: field.",
     },
     {
         "engine": "all",
+        "validator": "validate_passthrough_kwargs_no_collision",
         "combination": "passthrough_kwargs key collision",
         "reason": "passthrough_kwargs keys must not collide with ExperimentConfig "
         "fields (validate_passthrough_kwargs_no_collision).",
@@ -503,11 +506,22 @@ _CROSS_ENGINE_VALIDATOR_RULES: list[dict[str, str]] = [
     },
     {
         "engine": "all",
+        "validator": "validate_engine_section_extras",
         "combination": "unknown field on the engine section wrapper",
         "reason": "A key placed directly on the engine section (not under "
         "engine_params/sampling_params) is never forwarded to the engine "
         "(validate_engine_section_extras).",
         "resolution": "Move the key under <engine>.engine_params or <engine>.sampling_params.",
+    },
+    {
+        "engine": "transformers",
+        "validator": "validate_transformers_flash_attn_dtype",
+        "combination": "attn_implementation in [flash_attention_2, flash_attention_3] "
+        "and dtype=float32",
+        "reason": "attn_implementation='flash_attention_2'/'flash_attention_3' requires "
+        "dtype='float16' or dtype='bfloat16'; FlashAttention does not support float32 "
+        "computation (validate_transformers_flash_attn_dtype).",
+        "resolution": "Set transformers.engine_params.dtype to float16 or bfloat16.",
     },
 ]
 
@@ -562,33 +576,26 @@ def _rule_reason(rule: Any) -> str:
     return f"Enforced by rule {rule.id}."
 
 
-def _corpus_rules_by_severity(severity: str) -> list[dict[str, str]]:
-    """Return corpus rows of one severity, sorted deterministically by (engine, id).
+def _corpus_rules_by_severity(severity: str) -> list[tuple[str, Any]]:
+    """Return ``(engine_name, rule)`` pairs of one severity, sorted by (engine, id).
 
     Every engine's shipped rules.yaml is the SSOT; this reads them through the
     same loader the runtime uses, so the doc can never drift from what actually
     fires. Ordering is stable so the generated doc is byte-stable across runs.
+    Each caller projects the rule into its own row shape.
     """
     from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
 
     loader = EngineRulesLoader()
-    rows: list[dict[str, str]] = []
+    pairs: list[tuple[str, Any]] = []
     for engine in Engine:
         engine_name = engine.value
         for rule in loader.load_rules(engine_name).rules:
             if rule.severity != severity:
                 continue
-            rows.append(
-                {
-                    "engine": engine_name,
-                    "id": rule.id,
-                    "combination": _render_combination(rule),
-                    "reason": _rule_reason(rule),
-                    "normalised_fields": ", ".join(rule.normalised_fields),
-                }
-            )
-    rows.sort(key=lambda r: (r["engine"], r["id"]))
-    return rows
+            pairs.append((engine_name, rule))
+    pairs.sort(key=lambda p: (p[0], p[1].id))
+    return pairs
 
 
 def get_validation_rules() -> list[dict[str, str]]:
@@ -597,26 +604,55 @@ def get_validation_rules() -> list[dict[str, str]]:
     These are the SSOT for the "Config Validation Errors" section in
     invalid-combos.md. Rows come from two places, unified into one shape:
 
+    - The ExperimentConfig ``@model_validator`` rules, which raise before any
+      engine rule runs (engine-section mismatch, passthrough collision,
+      wrapper-level extras, and the transformers flash-attention dtype check).
     - The per-engine rule corpus (``src/llenergymeasure/engines/<e>/rules.yaml``),
       every ``error``-severity rule, read through :class:`EngineRulesLoader`.
-    - The cross-engine ExperimentConfig pydantic validators, which raise before
-      any engine rule runs (engine-section mismatch, passthrough collision, and
-      wrapper-level extras).
+
+    A completeness tripwire cross-checks ``_MODEL_VALIDATOR_RULES`` against the
+    live ExperimentConfig validators so adding or renaming a validator without
+    updating the list fails ``make docs-check`` instead of silently drifting.
 
     Returns:
         List of dicts with keys: engine, combination, reason, resolution.
-        Deterministically ordered (cross-engine validators first, then corpus
-        rules by engine then rule id) so the generated doc is byte-stable.
+        Deterministically ordered (model validators first, then corpus rules by
+        engine then rule id) so the generated doc is byte-stable.
     """
-    rows: list[dict[str, str]] = list(_CROSS_ENGINE_VALIDATOR_RULES)
-    for rule in _corpus_rules_by_severity("error"):
+    from llenergymeasure.config.models import ExperimentConfig
+
+    listed = {e["validator"] for e in _MODEL_VALIDATOR_RULES}
+    live = {
+        name
+        for name in ExperimentConfig.__pydantic_decorators__.model_validators
+        if name.startswith("validate_")
+    }
+    if listed != live:
+        missing = live - listed
+        extra = listed - live
+        raise RuntimeError(
+            "_MODEL_VALIDATOR_RULES is out of step with ExperimentConfig validators. "
+            f"Missing (add a row): {sorted(missing)}. "
+            f"Extra (remove a row): {sorted(extra)}."
+        )
+
+    rows: list[dict[str, str]] = [
+        {
+            "engine": e["engine"],
+            "combination": e["combination"],
+            "reason": e["reason"],
+            "resolution": e["resolution"],
+        }
+        for e in _MODEL_VALIDATOR_RULES
+    ]
+    for engine_name, rule in _corpus_rules_by_severity("error"):
         rows.append(
             {
-                "engine": rule["engine"],
-                "combination": rule["combination"],
-                "reason": rule["reason"],
+                "engine": engine_name,
+                "combination": _render_combination(rule),
+                "reason": _rule_reason(rule),
                 "resolution": "Adjust the field(s) so the condition no longer holds; "
-                f"see rule {rule['id']}.",
+                f"see rule {rule.id}.",
             }
         )
     return rows
@@ -636,13 +672,13 @@ def get_dormant_rules() -> list[dict[str, str]]:
         Deterministically ordered by engine then rule id.
     """
     rows: list[dict[str, str]] = []
-    for rule in _corpus_rules_by_severity("dormant"):
+    for engine_name, rule in _corpus_rules_by_severity("dormant"):
         rows.append(
             {
-                "engine": rule["engine"],
-                "combination": rule["combination"],
-                "effect": rule["reason"],
-                "normalised_fields": rule["normalised_fields"] or "-",
+                "engine": engine_name,
+                "combination": _render_combination(rule),
+                "effect": _rule_reason(rule),
+                "normalised_fields": ", ".join(rule.normalised_fields) or "-",
             }
         )
     return rows
