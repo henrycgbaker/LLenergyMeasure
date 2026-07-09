@@ -35,11 +35,18 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from engine_versions import _outputs
 from scripts.engine_producers._common import DEFAULT_SCHEMA_FILENAME
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _ENGINES = ("vllm", "tensorrt", "transformers")
+
+# The two on-disk copies of a discovered schema whose parameter surfaces must
+# not diverge: the src/ shadow the runtime loader and absorb read, and the
+# versioned outputs/ snapshot codegen reads. Only the version envelope is
+# compared elsewhere; these are the keys that carry the actual config surface.
+_SURFACE_KEYS = ("engine_params", "sampling_params")
 
 
 def _normalize_version(version: str) -> str:
@@ -59,6 +66,12 @@ def _parse_schema_version(schema_path: Path) -> Any:
     """Extract engine_version from a discovered schema JSON."""
     data = json.loads(schema_path.read_text())
     return data.get("engine_version")
+
+
+def _surface(schema_path: Path) -> dict[str, Any]:
+    """Parameter surface (engine + sampling params) of a discovered schema."""
+    data = json.loads(schema_path.read_text())
+    return {key: data.get(key) for key in _SURFACE_KEYS}
 
 
 def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) -> int:
@@ -97,6 +110,26 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
                 f"MISMATCH: {current_yaml.name} pins library.current_version={pinned_version} "
                 f"but schema was discovered against {schema_version}\n"
                 f"  Run: ./scripts/refresh_discovered_schemas.sh {engine}"
+            )
+            continue  # version already diverged; a surface diff would just be noise
+
+        # Guard the two schema copies against a surface divergence the version
+        # envelope alone cannot catch: the versioned outputs/ snapshot codegen
+        # reads must expose the same parameter surface as the src/ shadow the
+        # runtime loader and absorb read.
+        outputs_schema = (
+            engine_versions_dir / engine / _outputs.safe_version(pinned_version) / "outputs"
+        ) / DEFAULT_SCHEMA_FILENAME
+        try:
+            outputs_surface = _surface(outputs_schema)
+        except FileNotFoundError:
+            errors.append(f"{engine}: versioned schema snapshot not found: {outputs_schema}")
+            continue
+        if _surface(schema_path) != outputs_surface:
+            mismatches.append(
+                f"SURFACE MISMATCH: {schema_path} and {outputs_schema} agree on version "
+                f"{pinned_version} but their parameter surfaces differ\n"
+                f"  Re-run discovery so both copies carry the same surface."
             )
 
     if errors:

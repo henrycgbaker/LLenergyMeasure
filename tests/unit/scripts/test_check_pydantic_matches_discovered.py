@@ -10,9 +10,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[3] / "scripts"))
 sys.path.insert(0, str(Path(__file__).parents[3] / "src"))
 
+import check_pydantic_matches_discovered as cpm
 from check_pydantic_matches_discovered import (
     _canonicalise_discovered_type,
     _canonicalise_pydantic_type,
+    _collect_props,
     _is_intentional_narrowing,
     check_engine,
 )
@@ -107,6 +109,42 @@ class TestIntentionalNarrowing:
 
     def test_widening_not_allowed(self) -> None:
         assert _is_intentional_narrowing("Literal['a']", "str") is False
+
+    def test_opaque_passthrough_allowed(self) -> None:
+        # llem declines to type a complex field and passes it through as Any;
+        # that maximal non-narrowing is intentional, not drift.
+        assert _is_intentional_narrowing("QuantConfig", "any") is True
+        assert _is_intentional_narrowing("set[str]", "any") is True
+
+
+# ---------------------------------------------------------------------------
+# Structural $defs walk (rename-immune; must not go dormant)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+def test_collect_props_reaches_generated_config(engine: str) -> None:
+    """The walk resolves the generated ...__config__Config def and reaches its
+    fields - the live comparison the pre-codegen name map silently stopped doing."""
+    from llenergymeasure.config.models import ExperimentConfig
+
+    schema = ExperimentConfig.model_json_schema()
+    assert _collect_props(engine, schema["$defs"]), f"no props reachable for {engine}"
+
+
+def test_bogus_config_def_fails_loudly() -> None:
+    """A config-def name that matches nothing must raise, not silently compare zero
+    fields - the guard that keeps the type check from going dormant again."""
+    from llenergymeasure.config.models import ExperimentConfig
+
+    schema = ExperimentConfig.model_json_schema()
+    original = cpm._engine_config_def
+    cpm._engine_config_def = lambda engine: "NoSuchConfigDef"
+    try:
+        with pytest.raises(SystemExit, match="not in schema"):
+            _collect_props("vllm", schema["$defs"])
+    finally:
+        cpm._engine_config_def = original
 
 
 # ---------------------------------------------------------------------------

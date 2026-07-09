@@ -233,18 +233,25 @@ def _canonicalise_pydantic_type(prop: dict[str, Any], defs: dict[str, Any]) -> s
 
 
 def _is_intentional_narrowing(discovered: str, pydantic: str) -> bool:
-    """Check if Pydantic intentionally narrows a broad engine type.
+    """Check if Pydantic intentionally narrows or opaquely passes a broad engine type.
 
     Allowed patterns:
-    - str → Literal[...] (curating valid string values)
-    - int → Literal[...] (curating valid int values)
-    - Complex class type → simpler Pydantic type (e.g. CompilationConfig → dict)
+    - str -> Literal[...] (curating valid string values)
+    - int -> Literal[...] (curating valid int values)
+    - Complex class type -> simpler Pydantic type (e.g. CompilationConfig -> dict)
+    - anything -> any (opaque passthrough: llem declines to type a complex field
+      and lets it through the extra="allow" surface with soft validation against
+      the discovered schema - a nested sub-config, a set/list container, or a
+      broad str/type union. Widening to Any is the maximal non-narrowing, so it
+      is not drift.)
     """
+    if pydantic == "any":
+        return True
     if pydantic.startswith("Literal["):
-        # Simple base type → Literal (str → Literal['a', 'b'])
+        # Simple base type -> Literal (str -> Literal['a', 'b'])
         if discovered in ("str", "int", "float"):
             return True
-        # Compound type containing str → Literal (str | SomeClass → Literal['a', 'b'])
+        # Compound type containing str -> Literal (str | SomeClass -> Literal['a', 'b'])
         if "|" in discovered and any(p.strip() == "str" for p in discovered.split("|")):
             return True
     # Complex discovered type (class name) mapped to simple Pydantic type
@@ -260,6 +267,57 @@ def _is_intentional_narrowing(discovered: str, pydantic: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+# Root $defs name of an engine's generated Config model. Codegen emits three
+# same-named classes (Config / EngineParams / SamplingParams) per engine, so
+# pydantic disambiguates them by module path; the root Config is the walk entry.
+def _engine_config_def(engine: str) -> str:
+    return f"llenergymeasure__engines__{engine}__config__Config"
+
+
+def _refs_in(prop: dict[str, Any]) -> list[str]:
+    """$defs names a property references directly (bare, or inside anyOf/allOf)."""
+    refs: list[str] = []
+    ref = prop.get("$ref")
+    if isinstance(ref, str):
+        refs.append(ref.split("/")[-1])
+    for key in ("anyOf", "allOf"):
+        for member in prop.get(key) or []:
+            member_ref = member.get("$ref") if isinstance(member, dict) else None
+            if isinstance(member_ref, str):
+                refs.append(member_ref.split("/")[-1])
+    return refs
+
+
+def _collect_props(engine: str, defs: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """All leaf property schemas reachable from an engine's Config def.
+
+    Walks $refs from the generated ``...__config__Config`` def (which fans out
+    to EngineParams / SamplingParams and any nested passthrough sub-configs the
+    vllm surface exposes, e.g. CompilationConfig / SpeculativeConfig). Resolving
+    structurally instead of via a hardcoded class-name list keeps this immune to
+    codegen renames - the exact failure that left the type check silently dormant
+    when the pre-codegen names (``VLLMEngineConfig`` ...) stopped matching.
+    """
+    root = _engine_config_def(engine)
+    if root not in defs:
+        raise SystemExit(
+            f"{engine}: config def {root!r} not in schema $defs; the generated "
+            "Config model was renamed - update _engine_config_def."
+        )
+    props: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
+    queue = [root]
+    while queue:
+        name = queue.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        for leaf, prop in (defs.get(name, {}).get("properties", {}) or {}).items():
+            props.setdefault(leaf, prop)
+            queue += _refs_in(prop)
+    return props
+
+
 def _get_pydantic_leaves(engine: str, schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Get flattened Pydantic leaves for an engine with their JSON schema props.
 
@@ -267,40 +325,16 @@ def _get_pydantic_leaves(engine: str, schema: dict[str, Any]) -> dict[str, dict[
     """
     defs = schema.get("$defs", {})
     params = get_engine_params(engine)
-    result: dict[str, dict[str, Any]] = {}
 
-    # Build a lookup from the JSON schema for detailed type info
-    engine_config_names = {
-        "transformers": ["TransformersConfig"],
-        "vllm": [
-            "VLLMEngineConfig",
-            "VLLMSamplingConfig",
-            "VLLMBeamSearchConfig",
-            "VLLMAttentionConfig",
-            "VLLMSpeculativeConfig",
-        ],
-        "tensorrt": [
-            "TensorRTConfig",
-            "TensorRTQuantConfig",
-            "TensorRTKvCacheConfig",
-            "TensorRTSamplingConfig",
-            "TensorRTSchedulerConfig",
-        ],
-    }
-
-    # Collect all properties from relevant $defs
-    all_props: dict[str, dict[str, Any]] = {}
-    for config_name in engine_config_names.get(engine, []):
-        if config_name in defs:
-            props = defs[config_name].get("properties", {})
-            all_props.update(props)
+    all_props = _collect_props(engine, defs)
+    if not all_props:
+        raise SystemExit(
+            f"{engine}: no properties reachable from {_engine_config_def(engine)!r}; "
+            "the type-equality check would be silently dormant. Fix the schema walk."
+        )
 
     # Match introspection output to JSON schema props
-    for _path, meta in params.items():
-        leaf_name = meta["name"]
-        result[leaf_name] = all_props.get(leaf_name, {})
-
-    return result
+    return {meta["name"]: all_props.get(meta["name"], {}) for meta in params.values()}
 
 
 # ---------------------------------------------------------------------------

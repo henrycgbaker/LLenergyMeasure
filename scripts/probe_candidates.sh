@@ -15,10 +15,15 @@
 #   vllm         -> pristine vllm/vllm-openai:v<version>
 #   tensorrt     -> pristine nvcr.io/nvidia/tensorrt-llm/release:<version>
 #   transformers -> llenergymeasure:transformers-<version> (built locally if absent)
-# tensorrt binds CUDA at import, so it keeps the NVIDIA entrypoint and is pinned
-# to GPUs 1-3 (device 0 stays free); vllm/transformers need no GPU to construct
-# config objects.
+# tensorrt binds CUDA at import, so it keeps the NVIDIA entrypoint and needs a
+# GPU; vllm/transformers need no GPU to construct config objects. The tensorrt
+# GPU selection defaults to devices 1-3 (device 0 stays free on the reference
+# host) and is overridable via LLEM_PROBE_GPUS for hosts with a different layout
+# (e.g. LLEM_PROBE_GPUS='device=0' on a single-GPU host).
 set -euo pipefail
+
+# Docker --gpus device selector for the tensorrt probe; override for other hosts.
+LLEM_PROBE_GPUS="${LLEM_PROBE_GPUS:-device=1,2,3}"
 
 usage() {
     cat <<'EOF'
@@ -93,8 +98,9 @@ DOCKER_ARGS=(
 
 echo "[$ENGINE] Running probe_candidates.py inside $IMAGE..." >&2
 if [[ "$ENGINE" == "tensorrt" ]]; then
-    # Keep the NVIDIA entrypoint (it sets up the CUDA env before exec); pin GPUs 1-3.
-    docker run "${DOCKER_ARGS[@]}" --gpus '"device=1,2,3"' "$IMAGE" \
+    # Keep the NVIDIA entrypoint (it sets up the CUDA env before exec); GPU
+    # selection from LLEM_PROBE_GPUS (default device=1,2,3, device 0 free).
+    docker run "${DOCKER_ARGS[@]}" --gpus "\"${LLEM_PROBE_GPUS}\"" "$IMAGE" \
         python3 scripts/probe_candidates.py --engine "$ENGINE" "$@"
 else
     docker run "${DOCKER_ARGS[@]}" --entrypoint python3 "$IMAGE" \

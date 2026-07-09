@@ -396,20 +396,38 @@ def citation_pass_rate(
     eng = str(union[0].get("engine")) if union else ""
     ver = str(union[0].get("engine_version")) if union else ""
     _write_pool(tmp, "absorb_union", eng, ver, "", union)
-    candidates = [c for c in load_candidates(tmp) if c.citation is not None]
-    passed = sum(1 for c in candidates if check_candidate(c, source_root).ok)
-    tmp.unlink()
-    return passed, len(candidates)
+    try:
+        candidates = [c for c in load_candidates(tmp) if c.citation is not None]
+        passed = sum(1 for c in candidates if check_candidate(c, source_root).ok)
+        return passed, len(candidates)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def run_probe(engine: str, probe_input: Path, run_date: str) -> None:
-    """Probe candidates inside the engine container via the shell wrapper."""
+    """Probe candidates inside the engine container via the shell wrapper.
+
+    A non-zero exit is a hard error: the wrapper crashing before it writes any
+    verdict back (docker pull failure, image missing, entrypoint crash) would
+    otherwise leave every candidate ``unverified``, promotion would touch
+    nothing, and the operator would read a clean "corpus unchanged" as a passing
+    probe. Fail loudly naming the wrapper so a bump is never silently a no-op.
+    Verdict-level failure (all ``infra_error``) is still caught separately by the
+    ladder gate; this catches the case where no verdict was written at all.
+    """
+    wrapper = "scripts/probe_candidates.sh"
     rel = _require_under_repo(probe_input)
-    subprocess.run(
-        ["scripts/probe_candidates.sh", engine, "--candidates", str(rel), "--date", run_date],
+    result = subprocess.run(
+        [wrapper, engine, "--candidates", str(rel), "--date", run_date],
         cwd=REPO_ROOT,
         check=False,
     )
+    if result.returncode != 0:
+        raise SystemExit(
+            f"probe failure: {wrapper} {engine} exited {result.returncode} before writing "
+            f"verdicts back to {rel}; nothing was probed. Fix the engine image / wrapper and "
+            "re-run - absorb will not silently skip the probe."
+        )
 
 
 def probe_ladder(
@@ -597,14 +615,19 @@ def promote(
 # --- Residue sign-off + review delta report ---
 
 
-def read_signoff(pool_dir: Path) -> set[str]:
-    """Rule ids the maintainer marked ``human_confirmed: true`` in the sign-off."""
-    entries = _load_yaml_list(pool_dir / _SIGNOFF_FILE, "residue")
+def read_signoff(signoff_dir: Path) -> set[str]:
+    """Rule ids the maintainer marked ``human_confirmed: true`` in the sign-off.
+
+    ``signoff_dir`` is the versioned, git-tracked ``outputs/`` snapshot dir (not
+    the gitignored candidates pool): the human approval record is a durable
+    decision that must survive a fresh clone.
+    """
+    entries = _load_yaml_list(signoff_dir / _SIGNOFF_FILE, "residue")
     return {str(e["id"]) for e in entries if e.get("human_confirmed") is True}
 
 
 def write_signoff(
-    pool_dir: Path, delta: Delta, old_by_id: dict[str, dict[str, Any]], absent: set[str]
+    signoff_dir: Path, delta: Delta, old_by_id: dict[str, dict[str, Any]], absent: set[str]
 ) -> None:
     """Write the residue sign-off file, persisting consumed marks.
 
@@ -621,7 +644,7 @@ def write_signoff(
     """
     prior = {
         str(e["id"]): bool(e.get("human_confirmed"))
-        for e in _load_yaml_list(pool_dir / _SIGNOFF_FILE, "residue")
+        for e in _load_yaml_list(signoff_dir / _SIGNOFF_FILE, "residue")
     }
 
     def entry(rid: str, confirmed: bool) -> dict[str, Any]:
@@ -646,7 +669,8 @@ def write_signoff(
         "# interrogation: absent is a retirement proposal: decline the mark to let the\n"
         "# rule lapse, or mark it to keep shipping it.\n"
     )
-    (pool_dir / _SIGNOFF_FILE).write_text(
+    signoff_dir.mkdir(parents=True, exist_ok=True)
+    (signoff_dir / _SIGNOFF_FILE).write_text(
         header + yaml.safe_dump({"residue": rows}, sort_keys=False)
     )
 
@@ -728,6 +752,10 @@ def absorb(args: argparse.Namespace) -> int:
     run_date = args.date or date.today().isoformat()
     pool_dir = pool_path(args.pool_root, engine, version, _UNION_FILE).parent
     pool_dir.mkdir(parents=True, exist_ok=True)
+    # The sign-off is the durable human approval record, so it lives in the
+    # versioned, git-tracked outputs/ snapshot dir (sibling of the gitignored
+    # candidates/ pool), not in the throwaway pool workspace.
+    signoff_dir = pool_dir.parent / "outputs"
     logger.info(
         "absorb engine=%s version=%s date=%s dry_run=%s", engine, version, run_date, args.dry_run
     )
@@ -776,11 +804,11 @@ def absorb(args: argparse.Namespace) -> int:
             "probe ladder verified nothing this run; every rule kept untouched, corpus unchanged"
         )
 
-    signed_off = read_signoff(pool_dir)
+    signed_off = read_signoff(signoff_dir)
     new_rules, delta = promote(
         engine, version, run_date, old_rules, verdicts, union, signed_off, interrogation_absent
     )
-    write_signoff(pool_dir, delta, old_by_id, set(interrogation_absent))
+    write_signoff(signoff_dir, delta, old_by_id, set(interrogation_absent))
 
     report = render_delta(delta, citations)
     print(report)
