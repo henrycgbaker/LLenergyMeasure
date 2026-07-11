@@ -1033,8 +1033,11 @@ class MeasurementHarness:
     ) -> ExperimentResult:
         """Assemble ExperimentResult from measurement data.
 
-        All energy/FLOPs fields are populated with real values (no 0.0 placeholders).
-        Energy breakdown uses baseline adjustment when available.
+        Energy/FLOPs fields carry measured values. The one exception: when no energy
+        sampler produced a measurement, total_energy_j keeps a 0.0 placeholder that is
+        made loud via a warning log and the energy_measurement_unavailable measurement
+        warning (absence, not a measured zero). Energy breakdown uses baseline
+        adjustment when available.
 
         Args:
             engine_name: Engine identifier string (from engine.name).
