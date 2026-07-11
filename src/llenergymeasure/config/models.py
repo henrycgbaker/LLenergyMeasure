@@ -918,12 +918,12 @@ class ExecutionConfig(BaseModel):
     deduplicate_equivalent: bool = Field(
         default=True,
         description=(
-            "When true (default), sweep expansion applies library resolution to each declared "
-            "ExperimentConfig via engine-rules dormant-rule application and drops "
+            "When true (default), sweep expansion applies effective-config resolution to each "
+            "declared ExperimentConfig via engine-rules dormant-rule application and drops "
             "duplicates that share a resolved_config_hash. When false, every declared "
-            "config runs - the library-resolution mechanism still populates equivalence-group "
+            "config runs - effective-config resolution still populates equivalence-group "
             "metadata for the sidecar but no configs are elided. The --no-dedup "
-            "CLI flag is the equivalent. See sweep-dedup.md §2.3.1."
+            "CLI flag is the equivalent."
         ),
     )
 
@@ -990,10 +990,10 @@ class StudyConfig(BaseModel):
     dedup_mode: Literal["resolved", "off"] = Field(
         default="resolved",
         description=(
-            "Library-resolution mechanism dedup mode. 'resolved' applies dormant-rule "
-            "library resolution at expansion and collapses resolved-config-hash-equivalent "
-            "configs to a single run. 'off' runs every declared config "
-            "regardless of equivalence. Set via "
+            "Effective-config resolution dedup mode. 'resolved' applies dormant-rule "
+            "effective-config resolution at expansion and collapses "
+            "resolved-config-hash-equivalent configs to a single run. 'off' runs every "
+            "declared config regardless of equivalence. Set via "
             "ExecutionConfig.deduplicate_equivalent / --no-dedup."
         ),
     )
@@ -1003,7 +1003,7 @@ class StudyConfig(BaseModel):
             "Pre-run equivalence groups computed at sweep-expansion time. "
             "Each group records the resolved_config_hash, canonical excerpt, and member "
             "declared-indices. Written to 'equivalence_groups.json' alongside "
-            "the results bundle. See sweep-dedup.md §6."
+            "the results bundle."
         ),
     )
     declared_resolved_config_hashes: list[str] = Field(
@@ -1017,9 +1017,9 @@ class StudyConfig(BaseModel):
     dormant_observations: list[dict[str, Any]] = Field(
         default_factory=list,
         description=(
-            "Distinct dormant-rule normalisations applied during library resolution "
-            "(keys: engine, rule_id, field_path, normalisation). Dormant fields are "
-            "silently rewritten in the executed config, so these are surfaced in "
-            "'llem study plan' and preflight output. Empty when no dormant rule fired."
+            "Distinct auto-normalised settings applied during effective-config resolution "
+            "(keys: engine, rule_id, field_path, normalisation). These are fields the "
+            "engine silently rewrites in the executed config, so they are surfaced in "
+            "'llem study plan' and preflight output. Empty when nothing was normalised."
         ),
     )

@@ -27,7 +27,7 @@ from typing import Any
 _SIGNIFICANT_DIGITS = 10
 
 _IDIOM_SUMMARY = (
-    "valid idioms are {min: a, max: b, num: n} (evenly spaced), "
+    "valid range shorthands are {min: a, max: b, num: n} (evenly spaced), "
     "{log: {min: a, max: b, num: n}} (log-spaced) and "
     "{pow2: {min: a, max: b}} (powers of two)"
 )
@@ -47,8 +47,8 @@ def expand_axis_idiom(mapping: dict[str, Any]) -> list[int] | list[float]:
     if keys == {"pow2"}:
         return _expand_pow2(_inner_mapping("pow2", mapping["pow2"], {"min", "max"}))
     raise ValueError(
-        f"mapping with keys {sorted(str(k) for k in keys)} is not a sweep idiom; "
-        f"{_IDIOM_SUMMARY}. Literal mapping values cannot be swept as an axis - "
+        f"mapping with keys {sorted(str(k) for k in keys)} is not a recognised range "
+        f"shorthand; {_IDIOM_SUMMARY}. Literal mapping values cannot be swept as an axis - "
         "set them in the base config, or sweep them via a group entry "
         "(list of dicts)."
     )
@@ -75,7 +75,7 @@ def _expand_log(mapping: dict[str, Any]) -> list[int] | list[float]:
     """``{log: {min, max, num}}`` -> n log-spaced values, endpoints inclusive."""
     lo, hi = _bounds("log", mapping)
     if lo <= 0:
-        raise ValueError(f"log idiom requires min > 0, got min={lo}")
+        raise ValueError(f"log range shorthand requires min > 0, got min={lo}")
     n = _num("log", mapping["num"])
     ratio = hi / lo
     values = [lo * ratio ** (i / (n - 1)) for i in range(1, n - 1)]
@@ -89,7 +89,7 @@ def _expand_pow2(mapping: dict[str, Any]) -> list[int] | list[float]:
     """``{pow2: {min, max}}`` -> ascending powers of two within [min, max]."""
     lo, hi = _bounds("pow2", mapping)
     if lo <= 0:
-        raise ValueError(f"pow2 idiom requires min > 0, got min={lo}")
+        raise ValueError(f"pow2 range shorthand requires min > 0, got min={lo}")
     # Scan integer exponents with a +-1 safety margin against log2 rounding.
     # Negative exponents (0.5, 0.25, ...) are exact binary floats.
     k_lo = math.floor(math.log2(lo)) - 1
@@ -98,7 +98,7 @@ def _expand_pow2(mapping: dict[str, Any]) -> list[int] | list[float]:
         p for k in range(k_lo, k_hi + 1) if lo <= (p := 2**k if k >= 0 else 2.0**k) <= hi
     ]
     if not powers:
-        raise ValueError(f"pow2 idiom: no power of two lies within [{lo}, {hi}]")
+        raise ValueError(f"pow2 range shorthand: no power of two lies within [{lo}, {hi}]")
     if all(isinstance(p, int) for p in powers):
         return powers  # type: ignore[return-value]  # narrowed by the all() check
     return [float(p) for p in powers]
@@ -114,7 +114,7 @@ def _inner_mapping(idiom: str, value: Any, expected_keys: set[str]) -> dict[str,
     keys_desc = ", ".join(sorted(expected_keys))
     if not isinstance(value, dict) or set(value) != expected_keys:
         raise ValueError(
-            f"{idiom} idiom requires a nested mapping with exactly the keys "
+            f"{idiom} range shorthand requires a nested mapping with exactly the keys "
             f"{{{keys_desc}}}, got {value!r}; {_IDIOM_SUMMARY}"
         )
     return value
@@ -124,7 +124,7 @@ def _number(idiom: str, name: str, value: Any) -> int | float:
     """Require a finite int or float (bool excluded)."""
     if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
         return value
-    raise ValueError(f"{idiom} idiom: '{name}' must be a finite number, got {value!r}")
+    raise ValueError(f"{idiom} range shorthand: '{name}' must be a finite number, got {value!r}")
 
 
 def _bounds(idiom: str, mapping: dict[str, Any]) -> tuple[int | float, int | float]:
@@ -132,7 +132,7 @@ def _bounds(idiom: str, mapping: dict[str, Any]) -> tuple[int | float, int | flo
     lo = _number(idiom, "min", mapping["min"])
     hi = _number(idiom, "max", mapping["max"])
     if lo > hi:
-        raise ValueError(f"{idiom} idiom: min ({lo}) must not exceed max ({hi})")
+        raise ValueError(f"{idiom} range shorthand: min ({lo}) must not exceed max ({hi})")
     return lo, hi
 
 
@@ -140,7 +140,7 @@ def _num(idiom: str, value: Any) -> int:
     """Require an integer point count >= 2."""
     if isinstance(value, int) and not isinstance(value, bool) and value >= 2:
         return value
-    raise ValueError(f"{idiom} idiom: 'num' must be an integer >= 2, got {value!r}")
+    raise ValueError(f"{idiom} range shorthand: 'num' must be an integer >= 2, got {value!r}")
 
 
 # =============================================================================

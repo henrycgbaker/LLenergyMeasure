@@ -153,12 +153,12 @@ class TestIdiomErrors:
 
     @pytest.mark.parametrize("lo", [0, -1, -0.5])
     def test_log_requires_positive_min(self, lo):
-        with pytest.raises(ValueError, match="log idiom requires min > 0"):
+        with pytest.raises(ValueError, match="log range shorthand requires min > 0"):
             expand_axis_idiom({"log": {"min": lo, "max": 10, "num": 3}})
 
     @pytest.mark.parametrize("lo", [0, -4])
     def test_pow2_requires_positive_min(self, lo):
-        with pytest.raises(ValueError, match="pow2 idiom requires min > 0"):
+        with pytest.raises(ValueError, match="pow2 range shorthand requires min > 0"):
             expand_axis_idiom({"pow2": {"min": lo, "max": 8}})
 
     @pytest.mark.parametrize(("lo", "hi"), [(33, 63), (0.3, 0.4)])
@@ -167,32 +167,40 @@ class TestIdiomErrors:
             expand_axis_idiom({"pow2": {"min": lo, "max": hi}})
 
     def test_unknown_key_mixed_into_linear(self):
-        with pytest.raises(ValueError, match=r"not a sweep idiom.*valid idioms"):
+        with pytest.raises(
+            ValueError, match=r"not a recognised range shorthand.*valid range shorthand"
+        ):
             expand_axis_idiom({"min": 0, "max": 8, "num": 3, "step": 2})
 
     def test_linear_missing_num(self):
-        with pytest.raises(ValueError, match=r"not a sweep idiom.*valid idioms"):
+        with pytest.raises(
+            ValueError, match=r"not a recognised range shorthand.*valid range shorthand"
+        ):
             expand_axis_idiom({"min": 0, "max": 8})
 
     def test_unknown_key_next_to_log(self):
-        with pytest.raises(ValueError, match=r"not a sweep idiom.*valid idioms"):
+        with pytest.raises(
+            ValueError, match=r"not a recognised range shorthand.*valid range shorthand"
+        ):
             expand_axis_idiom({"log": {"min": 1, "max": 10, "num": 3}, "extra": 1})
 
     def test_log_inner_missing_num(self):
-        with pytest.raises(ValueError, match="log idiom requires a nested mapping"):
+        with pytest.raises(ValueError, match="log range shorthand requires a nested mapping"):
             expand_axis_idiom({"log": {"min": 1, "max": 10}})
 
     def test_log_inner_not_a_mapping(self):
-        with pytest.raises(ValueError, match="log idiom requires a nested mapping"):
+        with pytest.raises(ValueError, match="log range shorthand requires a nested mapping"):
             expand_axis_idiom({"log": 5})
 
     def test_pow2_inner_unknown_key(self):
-        with pytest.raises(ValueError, match="pow2 idiom requires a nested mapping"):
+        with pytest.raises(ValueError, match="pow2 range shorthand requires a nested mapping"):
             expand_axis_idiom({"pow2": {"min": 4, "max": 32, "num": 3}})
 
     @pytest.mark.parametrize("mapping", [{}, {"foo": 1}, {"values": [1, 2, 3]}])
     def test_arbitrary_mapping_rejected_loudly(self, mapping):
-        with pytest.raises(ValueError, match=r"not a sweep idiom.*valid idioms"):
+        with pytest.raises(
+            ValueError, match=r"not a recognised range shorthand.*valid range shorthand"
+        ):
             expand_axis_idiom(mapping)
 
 

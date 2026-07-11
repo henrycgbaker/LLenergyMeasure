@@ -129,7 +129,7 @@ def render_markdown() -> str:
         "llem run [CONFIG] [OPTIONS]   # run an experiment or study",
         "llem config [OPTIONS]         # show environment and configuration status",
         "llem doctor [OPTIONS]         # verify Docker images match the host toolchain",
-        "llem report-gaps [OPTIONS]    # propose rules corpus entries from runtime feedback",
+        "llem report-gaps [OPTIONS]    # propose engine rule set entries from runtime feedback",
         "llem study [SUBCOMMAND]       # write and prepare study files (init, plan)",
         "llem --version                # print version and exit",
         "```",
