@@ -70,7 +70,7 @@ from scripts.engine_producers.transformers_dynamic_invariant_miner import (  # n
 # ``fail`` and skips the downstream stages without re-importing here.
 #
 # Sourced from the version-pinned archive at
-# ``llenergymeasure._engine_archive.transformers.<safe_version>.producers.static_invariant_miner``.
+# ``engine_versions.transformers.<safe_version>.producers.static_invariant_miner``.
 # PEP 562 ``__getattr__`` defers the archive import + SSOT parse until the
 # probe (or in-module code) accesses ``LANDMARKS``; module import stays
 # cheap so unrelated test collection does not drag in the engine machinery.
@@ -154,7 +154,7 @@ def _check_landmarks() -> tuple[str, str]:
     Returns ``(installed_version, generation_config_source_path)``.
 
     Iterates :data:`LANDMARKS` (lazy-loaded from
-    ``llenergymeasure._engine_archive``) and resolves each via the same
+    ``engine_versions``) and resolves each via the same
     ``_resolve_landmark`` helper the probe uses, so the miner's runtime
     landmark check cannot drift from the probe's static check. A missing
     landmark raises :class:`MinerLandmarkMissingError`.

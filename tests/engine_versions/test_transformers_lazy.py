@@ -1,6 +1,6 @@
 """Per-engine LANDMARKS resolution tests for transformers v5.7.0.
 
-Engine-specific complement to ``tests/_engine_archive/test_dispatcher.py``:
+Engine-specific complement to ``tests/engine_versions/test_dispatcher.py``:
 asserts the two transformers producer modules expose ``LANDMARKS`` lazily
 via PEP 562 ``__getattr__`` and that the resolved tuple matches the
 machinery loaded directly through the dispatcher.

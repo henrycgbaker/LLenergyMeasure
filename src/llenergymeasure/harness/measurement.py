@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import TIMEOUT_ENV_SNAPSHOT
 from llenergymeasure.datasets import load_prompts
+from llenergymeasure.domain.bundle_artefacts import TIMESERIES_FILENAME
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
@@ -32,6 +33,7 @@ from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.energy import select_energy_sampler
 from llenergymeasure.engines.protocol import EnginePlugin, InferenceOutput
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
+from llenergymeasure.results.persistence import save_config_sidecar
 from llenergymeasure.utils.formatting import bytes_to_mb
 
 if TYPE_CHECKING:
@@ -680,7 +682,7 @@ class MeasurementHarness:
         if save_timeseries and resolved_output_dir is not None and window.timeseries_samples:
             ts_file = write_timeseries_parquet(
                 window.timeseries_samples,
-                resolved_output_dir / "timeseries.parquet",
+                resolved_output_dir / TIMESERIES_FILENAME,
             )
             timeseries_path = ts_file.name  # relative name in result JSON
             _emit_substep(_p, "save", "timeseries parquet written")
@@ -755,20 +757,27 @@ class MeasurementHarness:
         """
         try:
             from llenergymeasure.domain.hashing import build_observed_view, hash_config
-            from llenergymeasure.results.persistence import save_config_sidecar
 
             obs_engine = output.extras.get("observed_engine_params", {}) or {}
             obs_sampling = output.extras.get("observed_sampling_params", {}) or {}
             lib_ver = output.extras.get("library_version", "unknown") or "unknown"
 
-            # Compute observed_config_hash from extracted native-type state
+            # Compute observed_config_hash from extracted native-type state.
+            # harness + measurement come from the ran config so the observed hash
+            # covers the same identity dimensions as the resolved hash.
             engine_name = result.engine
             task_dict = config.task.model_dump(mode="python")
+            active_harness = config.active_harness()
+            harness_dump = (
+                active_harness.model_dump(mode="python") if active_harness is not None else {}
+            )
             observed_view = build_observed_view(
                 engine=engine_name,
                 task=task_dict,
                 observed_engine_params=obs_engine,
                 observed_sampling_params=obs_sampling,
+                harness=harness_dump,
+                measurement=config.measurement.model_dump(mode="python"),
             )
             obs_hash = hash_config(observed_view)
 
@@ -1225,10 +1234,11 @@ class MeasurementHarness:
         if kv_cache_mb is not None:
             memory_stats["kv_cache_mb"] = kv_cache_mb
 
-        # Batch stats: None for vLLM (continuous batching). Static-batching engines
+        # Batch stats: continuous-batching engines (e.g. vLLM) report num_batches
+        # as None, so the truthiness guard skips them. Static-batching engines
         # report num_batches + padding; effective batch size derives from prompt count.
         batch_stats: dict[str, Any] | None = None
-        if engine_name != "vllm" and output.num_batches:
+        if output.num_batches:
             configured_batch_size = self._configured_batch_size(engine_name, config)
             effective_batch_size: float | None = None
             if output.num_batches > 0:

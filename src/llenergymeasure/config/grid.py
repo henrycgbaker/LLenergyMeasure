@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 
 # Keys that belong to the study YAML structure, not to individual experiments.
 # These are stripped from base: files and excluded from the fixed dict.
-# "runners" is study-level metadata (per-engine runner config) - not an experiment field.
+# "runners" and "images" are study-level metadata (per-engine runner config and
+# per-engine Docker image overrides) - not experiment fields.
 _STUDY_ONLY_KEYS = frozenset(
     {
         "sweep",
@@ -37,6 +38,7 @@ _STUDY_ONLY_KEYS = frozenset(
         "study_name",
         "version",
         "runners",
+        "images",
         "output",
     }
 )

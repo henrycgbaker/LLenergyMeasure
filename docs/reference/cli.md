@@ -8,7 +8,7 @@ llem provides five commands and a version flag.
 llem run [CONFIG] [OPTIONS]   # run an experiment or study
 llem config [OPTIONS]         # show environment and configuration status
 llem doctor [OPTIONS]         # verify Docker images match the host toolchain
-llem report-gaps [OPTIONS]    # propose rules corpus entries from runtime feedback
+llem report-gaps [OPTIONS]    # propose engine rule set entries from runtime feedback
 llem study [SUBCOMMAND]       # write and prepare study files (init, plan)
 llem --version                # print version and exit
 ```
@@ -52,7 +52,7 @@ Verify Docker images match the host ExperimentConfig schema
 
 ### `llem report-gaps`
 
-Propose rules corpus entries from runtime observations
+Propose engine rule set entries from runtime observations
 
 **Options:**
 

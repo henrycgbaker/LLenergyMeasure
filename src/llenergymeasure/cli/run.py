@@ -27,6 +27,7 @@ from llenergymeasure.config.ssot import (
     RUNNER_LOCAL,
     Engine,
 )
+from llenergymeasure.domain.bundle_artefacts import MANIFEST_FILENAME
 from llenergymeasure.utils.exceptions import (
     ConfigError,
     EngineError,
@@ -353,7 +354,7 @@ def _resolve_resume_target(
     resume_manifest = None
     is_resume = resume or resume_dir is not None
     if resume_dir is not None:
-        if not (resume_dir / "manifest.json").exists():
+        if not (resume_dir / MANIFEST_FILENAME).exists():
             raise typer.BadParameter(
                 f"No manifest.json in {resume_dir} - not a valid study directory.",
                 param_hint="--resume-dir",

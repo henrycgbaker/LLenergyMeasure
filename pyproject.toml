@@ -116,14 +116,20 @@ disable_error_code = [
     "no-any-return",
 ]
 
-# scripts/ holds mining-substrate research tooling. It is not part of the
-# typed product surface (src/ never imports it) and was never in the type
+# scripts/ holds mining-substrate research tooling. Most of it is not part of
+# the typed product surface (src/ never imports it) and was never in the type
 # gate. Some test modules import its helpers directly, so mypy follows those
 # imports and would otherwise gate on pre-existing untyped research code.
-# Ignore errors in scripts.* until/unless it is brought into scope on its own.
+# scripts.engine_producers.* is the exception: it is the live knowledge-
+# production machinery (config codegen + mining chokepoints), now typed and
+# gated by the typecheck target.
 [[tool.mypy.overrides]]
 module = "scripts.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "scripts.engine_producers.*"
+ignore_errors = false
 
 [[tool.uv.index]]
 name = "nvidia"
@@ -174,7 +180,7 @@ exclude_lines = [
 show_missing = true
 
 [tool.importlinter]
-root_packages = ["llenergymeasure", "engine_versions"]
+root_packages = ["llenergymeasure", "engine_versions", "scripts"]
 include_external_packages = false
 exclude_type_checking_imports = true
 unmatched_ignore_imports_alerting = "warn"
@@ -187,7 +193,8 @@ layers = [
     "llenergymeasure.cli | llenergymeasure.entrypoints",
     "llenergymeasure.api",
     "llenergymeasure.study",
-    "llenergymeasure.harness | llenergymeasure.results",
+    "llenergymeasure.harness",
+    "llenergymeasure.results",
     "llenergymeasure.engines | llenergymeasure.energy | llenergymeasure.datasets",
     "llenergymeasure.infra",
     "llenergymeasure.device",
@@ -195,10 +202,6 @@ layers = [
     "llenergymeasure.utils",
 ]
 ignore_imports = [
-    # Phase 50 M4: harness._write_config_sidecar() persists config.json
-    # (needs results.persistence). Import is local-inside-method; no cycle risk.
-    # H3 hashing now imports from domain.hashing (L0) - no layer breach.
-    "llenergymeasure.harness.measurement -> llenergymeasure.results.persistence",
     # ExperimentConfig consumes the generated engines.<e>.config.Config (the
     # nested engine_params / sampling_params shape projected from the mined
     # schema). The generated config is a pure-data Pydantic class with no engine
@@ -283,3 +286,32 @@ source_modules = [
     "llenergymeasure.utils",
 ]
 forbidden_modules = ["engine_versions"]
+
+# scripts/ is the mining-substrate tooling (mine/absorb/probe/doc-gen). It and
+# engine_versions/ are CI-time tooling that legitimately depend on each other -
+# engine_versions._dispatcher imports scripts.engine_producers._current, and
+# scripts.absorb imports engine_versions._outputs. That bidirectional edge is
+# allowed (no contract forbids it); this contract only encodes the boundary
+# that the shipped runtime product imports neither. Adding scripts to
+# root_packages above makes both sides of the edge visible to the graph.
+[[tool.importlinter.contracts]]
+id = "scripts-tooling-only"
+name = "scripts is CI-time tooling; runtime layers must not import it"
+type = "forbidden"
+source_modules = [
+    "llenergymeasure.cli",
+    "llenergymeasure.entrypoints",
+    "llenergymeasure.api",
+    "llenergymeasure.study",
+    "llenergymeasure.harness",
+    "llenergymeasure.results",
+    "llenergymeasure.engines",
+    "llenergymeasure.energy",
+    "llenergymeasure.datasets",
+    "llenergymeasure.infra",
+    "llenergymeasure.device",
+    "llenergymeasure.config",
+    "llenergymeasure.domain",
+    "llenergymeasure.utils",
+]
+forbidden_modules = ["scripts"]
