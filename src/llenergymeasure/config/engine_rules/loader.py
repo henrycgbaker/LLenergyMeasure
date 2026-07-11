@@ -218,7 +218,7 @@ class Rule:
         )
 
     def render_message(self, match: RuleMatch) -> str:
-        """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
+        """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{rule_id}`` in the template.
 
         ``matched_fields`` is keyed by full dotted paths
         (``vllm.sampling_params.min_tokens``), which are not valid
@@ -254,7 +254,7 @@ class Rule:
             return self.message_template.format(
                 declared_value=match.declared_value,
                 effective_value=match.effective_value,
-                invariant_id=self.id,
+                rule_id=self.id,
                 **fmt_kwargs,
             )
         except (KeyError, IndexError):

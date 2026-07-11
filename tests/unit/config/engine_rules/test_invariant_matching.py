@@ -332,7 +332,7 @@ def test_try_match_stops_at_first_failing_predicate() -> None:
 def test_render_message_substitutes_declared_value() -> None:
     rule = _make_rule(
         match_fields={"transformers.sampling.temperature": {"present": True}},
-        message="Dormant: temperature={declared_value} rule={invariant_id}",
+        message="Dormant: temperature={declared_value} rule={rule_id}",
     )
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
     match = rule.try_match(config)
