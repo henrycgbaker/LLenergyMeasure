@@ -83,15 +83,17 @@ To get engine images:
 # Transformers - build from source (one-time, ~30 min cold; seconds from cache)
 make docker-build
 
-# vLLM - pull upstream image
-docker pull vllm/vllm-openai:0.7.3
+# vLLM - pull upstream image (pinned engine version)
+docker pull vllm/vllm-openai:v0.19.1
 
-# TensorRT-LLM - pull upstream NGC image
-docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
+# TensorRT-LLM - pull upstream NGC image (pinned engine version)
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
 ```
 
-Docker and NVIDIA Container Toolkit must be installed first. See
-[Docker setup](/how-to/docker-setup) for a full walkthrough.
+The upstream tags above track the pinned engine versions
+(`engine_versions/<engine>/current.yaml`); `llem doctor` prints the exact image
+each engine resolves to. Docker and NVIDIA Container Toolkit must be installed
+first. See [Docker setup](/how-to/docker-setup) for a full walkthrough.
 
 ---
 

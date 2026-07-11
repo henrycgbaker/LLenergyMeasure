@@ -15,9 +15,12 @@ Released milestones:
 | v0.8.0 | Study/sweep: multi-experiment grid sweeps, manifest writer, deduplication, subprocess isolation |
 | v0.9.0 | Docker + vLLM: containerised engine architecture, vLLM engine, Docker CI, logging overhaul |
 
-The TensorRT-LLM release (v0.10.0) is implementation-complete and in
-final UAT before tagging. Run `llem --version` against your installed package
-for the authoritative current version.
+v0.10.0 (in progress) is the engine-knowledge-as-data milestone: each engine's
+config, schema, and validation rules are generated from version-pinned upstream
+snapshots rather than hand-curated, alongside study-authoring improvements.
+TensorRT-LLM activation is the v0.11.0 milestone and still needs live
+end-to-end validation on GPU hardware before tagging. Run `llem --version`
+against your installed package for the authoritative current version.
 
 Pre-1.0 disclaimer: the tool is research-grade for single-machine use. It is
 not yet at the stability and API-stability bar of a 1.0 release.

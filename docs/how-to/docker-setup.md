@@ -276,7 +276,8 @@ each engine has two possible image sources:
 | Source | Tag pattern | Built by | Use case |
 |--------|------------|----------|----------|
 | **Local build** | `llenergymeasure:{engine}` | `make docker-build-{engine}` | Development - reflects current source tree |
-| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}` | CI on release tags | Production, CI, pip-install users |
+| **Registry (transformers)** | `ghcr.io/henrycgbaker/llenergymeasure/transformers:v{package_version}` | CI on release tags | Production, CI, pip-install users |
+| **Upstream (vllm, tensorrt)** | `vllm/vllm-openai:v{engine_version}`, `nvcr.io/nvidia/tensorrt-llm/release:{engine_version}` | vLLM / NVIDIA (NGC) | Same - the canonical engine image, project source bind-mounted |
 
 ### Image resolution
 
@@ -290,8 +291,10 @@ follows a precedence chain (highest wins):
 5. **Smart default**: local build image if present, otherwise registry image
 
 In practice, most users rely on the smart default (level 5). If you have built images locally
-with `make docker-build`, those are used. Otherwise, `llem` uses the GHCR registry image
-matching your installed version.
+with `make docker-build`, those are used. Otherwise, `llem` resolves the per-engine default:
+the first-party GHCR image for transformers (at the package version), and the canonical
+upstream image for vLLM / TensorRT-LLM (`vllm/vllm-openai`,
+`nvcr.io/nvidia/tensorrt-llm/release`, at the pinned engine version).
 
 ### Auto-pull on first use
 
@@ -320,16 +323,20 @@ multiple experiments share the same engine image. The CLI shows this as a
 For offline environments or to avoid pull latency during experiments:
 
 ```bash
-# Pull all registry images for your version
+# Pull the first-party transformers image for your installed version
 make docker-pull
 
-# Or pull individually
-docker pull ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0
-docker pull ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0
+# Or pull each engine's default image individually. transformers is a
+# first-party GHCR image tagged with the llenergymeasure version; vLLM and
+# TensorRT-LLM are upstream images tagged with the pinned engine version.
 docker pull ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0
+docker pull vllm/vllm-openai:v0.19.1
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
 ```
 
-Replace `0.9.0` with your installed version (`llem --version`).
+Replace the transformers tag with your installed version (`llem --version`); the
+vLLM and TensorRT-LLM tags track the pins in `engine_versions/<engine>/current.yaml`.
+`llem doctor` prints the exact image each engine resolves to.
 
 ### Check current image resolution
 
@@ -343,9 +350,9 @@ Output shows local vs registry source for each engine:
 
 ```
 === Image resolution ===
-  transformers -> llenergymeasure:transformers  (local_build)
-  tensorrt   -> ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0  (registry)
-  vllm       -> llenergymeasure:vllm  (local_build)
+  tensorrt   -> nvcr.io/nvidia/tensorrt-llm/release:1.0.0  (registry)
+  transformers -> ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0  (registry)
+  vllm       -> vllm/vllm-openai:v0.19.1  (registry)
 ```
 
 ### Building or pulling images locally
@@ -359,10 +366,10 @@ project source at run time.
 make docker-build
 
 # vLLM - pull upstream
-docker pull vllm/vllm-openai:0.7.3
+docker pull vllm/vllm-openai:v0.19.1
 
 # TensorRT-LLM - pull upstream (NGC)
-docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
 ```
 
 `make docker-build` builds the project's first-party engine images
