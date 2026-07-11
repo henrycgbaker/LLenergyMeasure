@@ -24,8 +24,10 @@ from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 import llenergymeasure  # noqa: E402
+from scripts._docgen_common import write_doc  # noqa: E402
 
 _OUT_PATH = _PROJECT_ROOT / "docs" / "reference" / "api" / "llenergymeasure.md"
 
@@ -140,9 +142,7 @@ def main() -> int:
         elif inspect.isclass(symbol):
             parts.append(_render_pydantic_class(name, symbol))
 
-    _OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _OUT_PATH.write_text("".join(parts))
-    print(f"Generated: {_OUT_PATH}")
+    write_doc(_OUT_PATH, "".join(parts))
     return 0
 
 

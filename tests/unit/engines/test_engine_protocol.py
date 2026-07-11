@@ -4,8 +4,6 @@ All tests run without a GPU. torch is imported only for dtype comparison in
 test_resolve_torch_dtype (no CUDA calls). Everything else is pure Python.
 """
 
-import importlib.util
-
 import pytest
 
 # =============================================================================
@@ -75,67 +73,6 @@ def test_get_engine_unknown_message_contains_engine_name():
 
     with pytest.raises(EngineError, match="'badbackend'"):
         get_engine("badbackend")
-
-
-# =============================================================================
-# Engine detection
-# =============================================================================
-
-
-def test_detect_default_engine_returns_pytorch():
-    """detect_default_engine returns 'transformers' when transformers is installed."""
-    pytest.importorskip("transformers")
-    from llenergymeasure.engines import detect_default_engine
-
-    # transformers must be installed in the test environment
-    assert importlib.util.find_spec("transformers") is not None, (
-        "transformers must be installed for this test to be meaningful"
-    )
-    assert detect_default_engine() == "transformers"
-
-
-def test_detect_default_engine_returns_tensorrt_when_only_trt():
-    """detect_default_engine returns 'tensorrt' when only tensorrt_llm is installed."""
-    from unittest.mock import patch
-
-    import llenergymeasure.engines as engines_mod
-
-    def mock_available(name):
-        return name == "tensorrt"  # Only tensorrt is "installed"
-
-    with patch("llenergymeasure.engines.is_engine_available", side_effect=mock_available):
-        result = engines_mod.detect_default_engine()
-        assert result == "tensorrt"
-
-
-def test_detect_default_engine_raises_when_no_engines():
-    """detect_default_engine raises EngineError when no engines are installed."""
-    from unittest.mock import patch
-
-    import llenergymeasure.engines as engines_mod
-    from llenergymeasure.utils.exceptions import EngineError
-
-    # Patch is_engine_available so all engine checks return False
-    with (
-        patch("llenergymeasure.engines.is_engine_available", return_value=False),
-        pytest.raises(EngineError, match="No inference engine"),
-    ):
-        engines_mod.detect_default_engine()
-
-
-def test_detect_default_engine_error_message_has_setup_hint():
-    """Error message from detect_default_engine points at the Docker setup path."""
-    from unittest.mock import patch
-
-    import llenergymeasure.engines as engines_mod
-    from llenergymeasure.utils.exceptions import EngineError
-
-    # Patch is_engine_available so all engine checks return False
-    with (
-        patch("llenergymeasure.engines.is_engine_available", return_value=False),
-        pytest.raises(EngineError, match=r"docs/development\.md"),
-    ):
-        engines_mod.detect_default_engine()
 
 
 # =============================================================================

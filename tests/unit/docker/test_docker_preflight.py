@@ -22,6 +22,7 @@ from llenergymeasure.utils.exceptions import (
     LLEMError,
     PreFlightError,
 )
+from tests.conftest import make_study
 from tests.unit.docker.conftest import make_subprocess_result
 
 # ---------------------------------------------------------------------------
@@ -785,22 +786,12 @@ class TestTier2QuotaAndFallbackStderr:
 class TestWiring:
     """Tests that run_study_preflight correctly wires into run_docker_preflight."""
 
-    def _make_study(self, engines: list[str]):
-        """Build a minimal StudyConfig with the given engines."""
-        from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-
-        experiments = [ExperimentConfig(task={"model": f"model-{b}"}, engine=b) for b in engines]
-        return StudyConfig(
-            experiments=experiments,
-            study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
-        )
-
     def test_docker_preflight_called_when_docker_runner_resolved(self) -> None:
         """run_study_preflight calls run_docker_preflight when any runner is Docker."""
         from llenergymeasure.infra.runner_resolution import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
-        study = self._make_study(["transformers"])
+        study = make_study(["transformers"])
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
         runner_specs = {"transformers": docker_spec}
@@ -833,7 +824,7 @@ class TestWiring:
         from llenergymeasure.infra.runner_resolution import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
-        study = self._make_study(["transformers"])
+        study = make_study(["transformers"])
 
         local_spec = RunnerSpec(mode="local", image=None, source="default")
         runner_specs = {"transformers": local_spec}
@@ -858,7 +849,7 @@ class TestWiring:
         from llenergymeasure.infra.runner_resolution import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
-        study = self._make_study(["transformers"])
+        study = make_study(["transformers"])
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
         runner_specs = {"transformers": docker_spec}

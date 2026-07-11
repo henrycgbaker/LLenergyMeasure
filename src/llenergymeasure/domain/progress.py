@@ -264,7 +264,6 @@ STEP_IMAGE_CHECK = "image_check"
 STEP_PULL = "pull"
 STEP_CONTAINER_START = "container_start"
 STEP_CONTAINER_PREFLIGHT = "container_preflight"
-STEP_CONTAINER = "container"  # kept for backward compat (study runner)
 
 # Measurement phase
 STEP_BASELINE = "baseline"
@@ -283,7 +282,6 @@ STEP_LABELS: dict[str, str] = {
     STEP_PULL: "Pulling",
     STEP_CONTAINER_START: "Starting",
     STEP_CONTAINER_PREFLIGHT: "Checking",
-    STEP_CONTAINER: "Starting",
     STEP_BASELINE: "Measuring",
     STEP_MODEL: "Loading",
     STEP_PROMPTS: "Loading",
@@ -303,7 +301,6 @@ STEP_PHASES: dict[str, str] = {
     STEP_PULL: PHASE_SETUP,
     STEP_CONTAINER_START: PHASE_SETUP,
     STEP_CONTAINER_PREFLIGHT: PHASE_SETUP,
-    STEP_CONTAINER: PHASE_SETUP,
     STEP_BASELINE: PHASE_MEASUREMENT,
     STEP_MODEL: PHASE_MEASUREMENT,
     STEP_PROMPTS: PHASE_MEASUREMENT,

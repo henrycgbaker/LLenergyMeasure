@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from llenergymeasure.config.ssot import Engine
 
-KNOWN_ENGINES: list[Engine] = list(Engine)
-
 
 def is_engine_available(engine: str) -> bool:
     """Check if an engine is available (installed and importable).

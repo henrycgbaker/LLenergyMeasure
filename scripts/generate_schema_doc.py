@@ -26,6 +26,7 @@ sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.ssot import Engine  # noqa: E402
+from scripts._docgen_common import write_doc  # noqa: E402
 from scripts.engine_producers._common import DEFAULT_SCHEMA_FILENAME  # noqa: E402
 
 _ENGINE_DISPLAY_NAMES: dict[str, str] = {
@@ -184,8 +185,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     text = _render(args.engine)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(text + "\n")
+    write_doc(args.out, text + "\n")
     return 0
 
 

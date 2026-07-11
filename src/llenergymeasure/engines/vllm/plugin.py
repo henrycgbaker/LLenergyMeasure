@@ -291,10 +291,9 @@ class VLLMEngine:
 
         # Count tokens from RequestOutput objects.
         # Sum across ALL outputs per request (n>1 or beam search produces multiple).
-        input_token_count = sum(len(o.prompt_token_ids) for o in outputs)
-        output_token_count = sum(
-            len(out.token_ids) for o in outputs if o.outputs for out in o.outputs
-        )
+        from llenergymeasure.engines._observed import count_request_tokens
+
+        input_token_count, output_token_count = count_request_tokens(outputs)
 
         logger.debug(
             "vLLM inference complete: %d total tokens (in=%d, out=%d) in %.2fs",

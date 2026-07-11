@@ -8,7 +8,6 @@ Covers:
 - Device handle failure returns None
 - NVMLError during sampling skips bad samples
 - No samples collected returns None
-- invalidate_baseline_cache (specific GPU set and all devices)
 - adjust_energy_for_baseline (positive and floor-at-zero)
 - create_energy_breakdown (with and without baseline)
 - Multi-GPU baseline measurement sums power across GPUs
@@ -32,7 +31,6 @@ from llenergymeasure.harness.baseline import (
     _baseline_cache,
     adjust_energy_for_baseline,
     create_energy_breakdown,
-    invalidate_baseline_cache,
     load_baseline_cache,
     measure_baseline_power,
     save_baseline_cache,
@@ -119,21 +117,6 @@ def test_cache_hit_respects_ttl():
 
     assert result.from_cache is True
     assert result.power_w == fresh_entry.power_w
-
-
-def test_cache_hit_backward_compat_device_index():
-    """device_index kwarg still hits cache keyed by (device_index,) tuple."""
-    entry = _make_fresh_cache_entry(gpu_indices=[0], power_w=77.0)
-    _baseline_cache[(0,)] = entry
-
-    with (
-        patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
-        patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
-    ):
-        result = measure_baseline_power(device_index=0, cache_ttl_sec=3600.0)
-
-    assert result.from_cache is True
-    assert result.power_w == 77.0
 
 
 # =============================================================================
@@ -330,53 +313,6 @@ def test_multi_gpu_cache_keyed_by_sorted_tuple():
 
     assert result.from_cache is True
     assert result.power_w == entry.power_w
-
-
-# =============================================================================
-# invalidate_baseline_cache
-# =============================================================================
-
-
-def test_invalidate_specific_device():
-    """invalidate_baseline_cache([0]) removes GPU 0 but leaves GPU 1."""
-    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
-    _baseline_cache[(1,)] = _make_fresh_cache_entry(gpu_indices=[1])
-
-    invalidate_baseline_cache([0])
-
-    assert (0,) not in _baseline_cache
-    assert (1,) in _baseline_cache
-
-
-def test_invalidate_all_devices():
-    """invalidate_baseline_cache(None) clears the entire cache."""
-    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
-    _baseline_cache[(1,)] = _make_fresh_cache_entry(gpu_indices=[1])
-    _baseline_cache[(2,)] = _make_fresh_cache_entry(gpu_indices=[2])
-
-    invalidate_baseline_cache(None)
-
-    assert len(_baseline_cache) == 0
-
-
-def test_invalidate_missing_device_is_noop():
-    """invalidate_baseline_cache for a GPU set not in cache does not raise."""
-    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
-
-    invalidate_baseline_cache([99])  # GPU 99 not in cache
-
-    assert (0,) in _baseline_cache  # GPU 0 untouched
-
-
-def test_invalidate_multi_gpu_set():
-    """invalidate_baseline_cache([0, 1]) removes (0, 1) key."""
-    _baseline_cache[(0, 1)] = _make_fresh_cache_entry(gpu_indices=[0, 1])
-    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
-
-    invalidate_baseline_cache([0, 1])
-
-    assert (0, 1) not in _baseline_cache
-    assert (0,) in _baseline_cache  # single-GPU entry untouched
 
 
 # =============================================================================

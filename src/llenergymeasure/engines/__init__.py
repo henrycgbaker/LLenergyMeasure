@@ -1,34 +1,10 @@
 """Inference engines for llenergymeasure."""
 
-from llenergymeasure.config.engine_detection import is_engine_available
 from llenergymeasure.config.ssot import Engine
 from llenergymeasure.engines.protocol import EnginePlugin
 from llenergymeasure.utils.exceptions import EngineError
 
-__all__ = ["EnginePlugin", "detect_default_engine", "get_engine"]
-
-
-def detect_default_engine() -> Engine:
-    """Detect the default available inference engine.
-
-    Returns 'transformers' if transformers is installed, 'tensorrt' if tensorrt_llm is
-    installed (and not transformers), 'vllm' if vllm is installed.
-    Priority: transformers > tensorrt > vllm.
-
-    Raises:
-        EngineError: If no supported engine is installed.
-    """
-    if is_engine_available(Engine.TRANSFORMERS):
-        return Engine.TRANSFORMERS
-    if is_engine_available(Engine.TENSORRT):
-        return Engine.TENSORRT
-    if is_engine_available(Engine.VLLM):
-        return Engine.VLLM
-    raise EngineError(
-        "No inference engine available on host. Engines run inside Docker - "
-        "build the engine image and dispatch via `llem run`. "
-        "See docs/development.md for the build/run pattern."
-    )
+__all__ = ["EnginePlugin", "get_engine"]
 
 
 def get_engine(name: str) -> EnginePlugin:

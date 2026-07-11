@@ -6,14 +6,12 @@ from llenergymeasure.domain.experiment import (
     StudyResult,
 )
 from llenergymeasure.domain.metrics import (
-    EnergyMetrics,
     FlopsResult,
 )
 from llenergymeasure.domain.progress import ProgressCallback, StudyProgressCallback
 
 __all__ = [
     "AggregationMetadata",
-    "EnergyMetrics",
     "ExperimentResult",
     "FlopsResult",
     "ProgressCallback",
