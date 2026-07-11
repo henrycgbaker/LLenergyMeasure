@@ -195,6 +195,27 @@ def _canonicalise_discovered_type(type_str: str) -> str:
     return _JSON_TO_PYTHON_TYPE.get(type_str, type_str)
 
 
+def _canonicalise_discovered_field(field: dict[str, Any]) -> str:
+    """Canonicalise a discovered field's type, unioning its runtime literals.
+
+    Verified string literals under ``runtime_literals`` widen the discovered type
+    exactly as codegen widens the generated annotation (``bool`` ->
+    ``bool | Literal['never']``), so the Pydantic side (which carries the union)
+    compares equal instead of flagging spurious drift.
+    """
+    base = _canonicalise_discovered_type(field.get("type", ""))
+    literal_values = sorted(
+        entry["value"]
+        for entry in field.get("runtime_literals") or []
+        if isinstance(entry, dict) and isinstance(entry.get("value"), str)
+    )
+    if not literal_values:
+        return base
+    parts = base.split(" | ")
+    parts.append(f"Literal[{', '.join(repr(v) for v in literal_values)}]")
+    return " | ".join(sorted(parts))
+
+
 def _canonicalise_pydantic_type(prop: dict[str, Any], defs: dict[str, Any]) -> str:
     """Canonicalise a Pydantic JSON schema property type."""
     # Handle anyOf (Optional[X] → anyOf: [X, null])
@@ -215,6 +236,10 @@ def _canonicalise_pydantic_type(prop: dict[str, Any], defs: dict[str, Any]) -> s
             values = sorted(str(v) for v in ref_def["enum"])
             return f"Literal[{', '.join(repr(v) for v in values)}]"
         return ref_name
+
+    # Handle single-member Literal (pydantic v2 renders it as `const`, not `enum`).
+    if "const" in prop:
+        return f"Literal[{prop['const']!r}]"
 
     # Handle enum (Literal)
     if "enum" in prop:
@@ -383,11 +408,12 @@ def check_engine(engine: str, schema: dict[str, Any]) -> list[dict[str, str]]:
     for leaf_name, prop in pydantic_leaves.items():
         if leaf_name in all_discovered:
             # Both sides have it - compare types
-            discovered_type = all_discovered[leaf_name].get("type", "")
+            discovered_field = all_discovered[leaf_name]
+            discovered_type = discovered_field.get("type", "")
             if not discovered_type or not prop or discovered_type == "unknown":
                 continue
 
-            canon_discovered = _canonicalise_discovered_type(discovered_type)
+            canon_discovered = _canonicalise_discovered_field(discovered_field)
             canon_pydantic = _canonicalise_pydantic_type(prop, defs)
 
             if canon_discovered != canon_pydantic:

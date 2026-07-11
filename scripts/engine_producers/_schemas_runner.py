@@ -33,6 +33,7 @@ from scripts.engine_producers._common import (
     DEFAULT_SCHEMA_FILENAME,
     jsonable,
 )
+from scripts.engine_producers._runtime_literals import run_stage
 from scripts.engine_producers.tensorrt_schema_introspector import discover as discover_tensorrt
 from scripts.engine_producers.transformers_schema_introspector import (
     discover as discover_transformers,
@@ -56,6 +57,19 @@ def _resolve_output_path(
     if multi or output_arg.is_dir() or output_arg.suffix == "":
         return output_arg / engine / DEFAULT_SCHEMA_FILENAME
     return output_arg
+
+
+def _read_previous_envelope(out_path: Path) -> dict[str, Any] | None:
+    """Read the prior discovered envelope at ``out_path`` for auto-narrow, or None.
+
+    A missing or unparseable file is not an error: on a first discovery there is
+    no previous schema to narrow against.
+    """
+    try:
+        data = json.loads(out_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,8 +116,32 @@ def main(argv: list[str] | None = None) -> int:
     failed: list[tuple[str, str]] = []
 
     for engine in requested:
+        # Discovery, the runtime-literal stage, and the write share one
+        # try/except so a stage crash marks the engine failed (never a partial
+        # or unstaged write); out_path is resolved first so the stage can read
+        # the previous envelope for auto-narrow.
         try:
             envelope = DISCOVERY_FUNCTIONS[engine](repo_root, args.image_ref)
+            out_path = _resolve_output_path(
+                engine=engine,
+                output_arg=args.output,
+                multi=len(requested) > 1,
+                repo_root=repo_root,
+            )
+            previous = _read_previous_envelope(out_path)
+            report = run_stage(engine, envelope, repo_root, previous)
+            for line in report.lines:
+                print(f"[{engine}] {line}")
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(
+                json.dumps(envelope, indent=2, sort_keys=False, default=jsonable) + "\n"
+            )
+            print(
+                f"[{engine}] wrote {out_path} "
+                f"(version={envelope['engine_version']}, "
+                f"engine_params={len(envelope['engine_params'])}, "
+                f"sampling_params={len(envelope['sampling_params'])})"
+            )
         except ImportError as exc:
             print(f"[{engine}] SKIPPED (not importable): {exc}", file=sys.stderr)
             failed.append((engine, "not importable"))
@@ -112,23 +150,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{engine}] FAILED: {exc!r}", file=sys.stderr)
             failed.append((engine, repr(exc)))
             continue
-
-        out_path = _resolve_output_path(
-            engine=engine,
-            output_arg=args.output,
-            multi=len(requested) > 1,
-            repo_root=repo_root,
-        )
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(envelope, indent=2, sort_keys=False, default=jsonable) + "\n"
-        )
-        print(
-            f"[{engine}] wrote {out_path} "
-            f"(version={envelope['engine_version']}, "
-            f"engine_params={len(envelope['engine_params'])}, "
-            f"sampling_params={len(envelope['sampling_params'])})"
-        )
         succeeded.append(engine)
 
     if not succeeded:

@@ -93,6 +93,15 @@ def _render_table(params: dict[str, Any]) -> list[str]:
         if not isinstance(meta, dict):
             continue
         type_str = str(meta.get("type", "-"))
+        # Verified runtime literals widen the type the generated config uses; show
+        # the same union here so the reference matches the accepted values.
+        literal_values = sorted(
+            entry["value"]
+            for entry in (meta.get("runtime_literals") or [])
+            if isinstance(entry, dict) and isinstance(entry.get("value"), str)
+        )
+        if literal_values:
+            type_str = f"{type_str} | Literal[{', '.join(repr(v) for v in literal_values)}]"
         default_str = _format_default(meta.get("default"))
         description = str(meta.get("description") or "").strip()
         description = _escape_pipe(description.replace("\n", " "))

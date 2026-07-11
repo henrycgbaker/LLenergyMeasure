@@ -95,6 +95,16 @@ To make re-discovery byte-stable, the script sets `LLENERGY_DISCOVERY_FROZEN_AT`
 so the envelope's `discovered_at` is a fixed anchor rather than a fresh
 wallclock on every run (see Troubleshooting).
 
+Discovery now also runs the runtime-literal probe as a second stage before the
+schema is written: it recovers string literals the static type misses (e.g.
+transformers `early_stopping` accepting `"never"`) and records them under a
+field's `runtime_literals` key. The runner prints `runtime-literals:` report
+lines per engine, including a `NARROWED` line whenever a previously recorded
+literal no longer verifies at the new pin - so the diff surface makes any
+auto-narrowing visible in review. See
+[Local knowledge production](/contributing/knowledge-production#the-runtime-literal-stage)
+for the full stage.
+
 ---
 
 ## Regenerate the typed config after a schema change

@@ -3,7 +3,7 @@
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all scaffold-snapshot promote-schemas
-.PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage
+.PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage check-corpus-literals
 .PHONY: package-check
 .PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
@@ -198,6 +198,13 @@ absorb: ## Absorb one engine-version bump into the shipped rules (ENGINE=vllm SR
 rules-coverage: ## Report uncovered engine validator sites (ENGINE=vllm SRC=path/to/source [ARGS='--fail-on-uncovered'])
 	@test -n "$(ENGINE)" && test -n "$(SRC)" || (echo "Usage: make rules-coverage ENGINE=vllm SRC=engine-src/ [ARGS='--fail-on-uncovered']" && exit 1)
 	uv run python scripts/rules_coverage.py --engine $(ENGINE) --source-root "$(SRC)" $(ARGS)
+
+# Standing consistency check between the two knowledge products: every string
+# literal the shipped rules corpus asserts must be expressible in the discovered
+# schema type (directly, or via a verified runtime_literals entry). A finding
+# means a corpus rule references a value the generated typed config would reject.
+check-corpus-literals: ## Report corpus rule literals inexpressible in discovered schema types
+	uv run python -m scripts.engine_producers._runtime_literals --census
 
 # Build wheel + validate package install + check version consistency
 package-check: ## Build wheel, validate install, and check pyproject/_version sync
