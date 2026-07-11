@@ -229,7 +229,7 @@ rules:
     fields:
       vllm.sampling_params.n:
         type_is_not: int
-  message_template: n must be an int, but is of type {type(self.n)}
+  message_template: n must be an int, got {declared_value}.
   provenance:
     source: deterministic_miner
     verified: construction
@@ -313,7 +313,7 @@ rules:
     fields:
       vllm.sampling_params.top_k:
         type_is_not: int
-  message_template: top_k must be an integer, got {type(self.top_k).__name__}
+  message_template: top_k must be an integer, got {declared_value}.
   provenance:
     source: deterministic_miner
     verified: construction

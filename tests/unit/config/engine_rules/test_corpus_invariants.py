@@ -8,7 +8,9 @@ coverage. They read the real shipped corpus, not fixtures.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -18,9 +20,14 @@ from llenergymeasure.config.engine_rules import (
     VALID_SOURCE,
     VALID_VERIFIED,
     EngineRulesLoader,
+    Rule,
+    RuleMatch,
 )
+from llenergymeasure.config.engine_rules.loader import spec_has_field_ref
 
 ENGINES = ("transformers", "vllm", "tensorrt")
+
+_BRACE = re.compile(r"\{[^{}]*\}")
 
 
 @pytest.fixture(scope="module")
@@ -217,6 +224,54 @@ def test_dormant_rules_carry_normalised_fields(corpora, engine: str) -> None:
     for rule in corpora[engine].rules:
         if rule.severity == "error":
             assert not rule.normalised_fields, f"{rule.id}: error rule carries normalised_fields"
+
+
+def _ref_leaves(spec: Any) -> list[str]:
+    """Bare leaf names of every ``@field_ref`` comparand in a predicate spec."""
+    if isinstance(spec, str) and spec.startswith("@"):
+        return [spec[1:].rsplit(".", 1)[-1]]
+    if isinstance(spec, dict):
+        return [leaf for value in spec.values() for leaf in _ref_leaves(value)]
+    if isinstance(spec, (list, tuple)):
+        return [leaf for value in spec for leaf in _ref_leaves(value)]
+    return []
+
+
+def _synthetic_match(rule: Rule) -> RuleMatch:
+    """A match populating match-field leaves and resolved @field_ref leaves.
+
+    Mirrors what :meth:`Rule.try_match` produces on a real config: match-field
+    values under ``matched_fields`` and resolved comparand values under
+    ``field_refs``. Placeholder values are unique per leaf so a rendered
+    template never accidentally hides an unresolved brace.
+    """
+    matched = {path: f"<{path.rsplit('.', 1)[-1]}>" for path in rule.match_fields}
+    field_refs: dict[str, Any] = {}
+    for spec in rule.match_fields.values():
+        if spec_has_field_ref(spec):
+            for leaf in _ref_leaves(spec):
+                field_refs[leaf] = f"<{leaf}>"
+    last = list(matched.values())[-1] if matched else None
+    return RuleMatch(rule=rule, declared_value=last, matched_fields=matched, field_refs=field_refs)
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_corpus_templates_render_without_raw_fallback(corpora, engine: str) -> None:
+    # Every corpus message template must render fully from the values the
+    # renderer exposes (declared_value / effective_value / rule id, match-field
+    # leaves, and resolved @field_ref comparand leaves). A residual ``{...}``
+    # brace means the template referenced something unavailable (a Python
+    # expression copied from upstream source, or a comparand the renderer does
+    # not expose) and would silently fall back to the raw template at runtime.
+    offenders = []
+    for rule in corpora[engine].rules:
+        if rule.message_template is None:
+            continue
+        rendered = rule.render_message(_synthetic_match(rule))
+        leftover = _BRACE.findall(rendered)
+        if leftover:
+            offenders.append((rule.id, leftover))
+    assert not offenders, f"{engine}: templates with raw-text fallback: {offenders}"
 
 
 @pytest.mark.parametrize("engine", ENGINES)
