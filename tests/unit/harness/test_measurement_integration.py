@@ -373,6 +373,94 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     assert result.energy_breakdown is not None
 
 
+def test_harness_build_result_absent_energy_placeholder_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """_build_result() with no energy measurement keeps a 0.0 placeholder and warns loudly.
+
+    The schema requires a non-null total_energy_j, so absence keeps 0.0 - but it is made
+    distinguishable from a measured zero via a WARNING log naming the absence (item 2 of
+    the silent-zero hardening; the persisted measurement_warnings list carries the
+    corresponding energy_measurement_unavailable flag, tested separately).
+    """
+    import logging
+    from datetime import datetime
+
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.engines.protocol import InferenceOutput
+    from llenergymeasure.harness import MeasurementHarness
+
+    harness = MeasurementHarness()
+    config = ExperimentConfig(task={"model": "test/model"})
+    output = InferenceOutput(
+        elapsed_time_sec=10.0,
+        input_tokens=50,
+        output_tokens=50,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+    )
+    flops_result = FlopsResult(
+        value=1e12, method="palm_formula", confidence="medium", precision="n/a"
+    )
+    now = datetime.now()
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.harness.measurement"):
+        result = harness._build_result(
+            engine_name="transformers",
+            engine_version=None,
+            config=config,
+            output=output,
+            model_memory_mb=0.0,
+            snapshot=None,
+            start_time=now,
+            end_time=now,
+            duration_sec=10.0,
+            thermal_info=ThermalThrottleInfo(),
+            energy_measurement=None,
+            baseline=None,
+            flops_result=flops_result,
+            timeseries_path=None,
+            measurement_warnings=[],
+        )
+
+    assert result.total_energy_j == 0.0
+    assert any("No energy measurement available" in rec.message for rec in caplog.records)
+
+
+def test_harness_collect_warnings_flags_absent_energy() -> None:
+    """_collect_warnings() emits energy_measurement_unavailable when energy is absent.
+
+    Thermal telemetry sampled fine (30 samples), so this proves the absent-energy flag is
+    keyed off the authoritative backend, not the thermal sampler's sample count.
+    """
+    from llenergymeasure.harness import MeasurementHarness
+
+    harness = MeasurementHarness()
+    warnings = harness._collect_warnings(
+        duration_sec=30.0,
+        timeseries_samples=_make_samples(n_seconds=3),
+        gpu_indices=None,
+        energy_measurement=None,
+    )
+    assert any("energy_measurement_unavailable" in w for w in warnings)
+    assert not any("nvml_low_sample_count" in w for w in warnings)
+
+
+def test_harness_collect_warnings_present_energy_no_flag() -> None:
+    """_collect_warnings() does not flag energy absence when a measurement is present."""
+    from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.harness import MeasurementHarness
+
+    harness = MeasurementHarness()
+    warnings = harness._collect_warnings(
+        duration_sec=30.0,
+        timeseries_samples=_make_samples(n_seconds=3),
+        gpu_indices=None,
+        energy_measurement=EnergyMeasurement(total_j=42.5, duration_sec=30.0),
+    )
+    assert not any("energy_measurement_unavailable" in w for w in warnings)
+
+
 def test_harness_build_result_uses_energy_measurement_duration_for_baseline() -> None:
     """Baseline energy adjustment uses energy_measurement.duration_sec, not datetime delta."""
     from datetime import datetime, timedelta

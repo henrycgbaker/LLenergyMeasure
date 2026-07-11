@@ -46,10 +46,16 @@ def _make_experiment(
 
 
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
+    # study.experiments is the fully-cycled execution list in production
+    # (finalise_study runs apply_cycles before the manifest is built), so the
+    # fixture must cycle too - _build_entries counts occurrences in that list.
+    from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
+
     experiments = [_make_experiment(f"model-{i}") for i in range(n_experiments)]
+    ordered = apply_cycles(experiments, n_cycles, ExperimentOrder.SEQUENTIAL, TEST_CONFIG_HASH)
     return StudyConfig(
         study_name="test-study",
-        experiments=experiments,
+        experiments=ordered,
         study_execution=ExecutionConfig(n_cycles=n_cycles),
         study_design_hash=TEST_CONFIG_HASH,
     )

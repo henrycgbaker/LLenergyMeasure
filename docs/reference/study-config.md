@@ -208,3 +208,21 @@ All fields except `model` are optional and have sensible defaults.
 | `allow_tf32` | boolean | None | `null` | Allow TF32 on Ampere GPUs via torch.backends (None -> PyTorch default). |
 | `autocast_enabled` | boolean | None | `null` | Wrap generation in torch.autocast mixed precision (None -> False). |
 | `autocast_dtype` | 'float16' | 'bfloat16' | None | `null` | torch.autocast dtype (None -> bfloat16 on Ampere). |
+
+### Sweep-Axis Range Shorthands
+
+An independent sweep axis (`sweep:` entry mapping to a list of scalars) may be
+written as one of three compact range shorthands instead of an explicit list.
+Each expands to a plain list at load time, so the two forms are interchangeable.
+
+| Shorthand | Meaning | Example | Expands to |
+|-----------|---------|---------|------------|
+| `{min: a, max: b, num: n}` | `n` evenly spaced values, endpoints inclusive | `{min: 0, max: 8, num: 5}` | `[0, 2, 4, 6, 8]` |
+| `{log: {min: a, max: b, num: n}}` | `n` log-spaced values (`min > 0`), endpoints inclusive | `{log: {min: 1, max: 100, num: 3}}` | `[1, 10, 100]` |
+| `{pow2: {min: a, max: b}}` | ascending powers of two within `[a, b]` | `{pow2: {min: 4, max: 32}}` | `[4, 8, 16, 32]` |
+
+Values stay integers when all bounds are integers and every produced value is
+integral; otherwise they are floats (rounded to kill binary-float noise).
+A mapping that matches none of these shapes is rejected at load time. To sweep a
+literal mapping value, set it in the base config or use a group entry (list of
+dicts).

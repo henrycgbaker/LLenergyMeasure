@@ -115,6 +115,10 @@ class NVMLSampler:
                 pynvml.nvmlDeviceGetCount()
             return True
         except Exception:
+            # Fail-soft by design: unavailable NVML returns False. Leave a debug-level
+            # trace so a real driver/permission failure is diagnosable, without
+            # changing the swallow-and-return behaviour.
+            logger.debug("NVML sampler is_available() probe failed", exc_info=True)
             return False
 
     def start_tracking(self) -> Any:

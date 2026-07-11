@@ -89,7 +89,7 @@ class TestBuildPreflightPanel:
             }
         ]
         output = _render_panel(sc)
-        assert "Dormant normalisations" in output
+        assert "Auto-normalised settings" in output
         assert "transformers_dormant_epsilon_cutoff_ne_0_0" in output
         assert "epsilon_cutoff" in output
 
@@ -97,7 +97,7 @@ class TestBuildPreflightPanel:
         """No dormant observations -> no section (additive, non-empty only)."""
         sc = _make_panel_study_config()
         output = _render_panel(sc)
-        assert "Dormant normalisations" not in output
+        assert "Auto-normalised settings" not in output
 
     def test_panel_metadata_experiments_plural(self):
         """Panel shows n configs x n cycles = n runs (plural form)."""

@@ -27,12 +27,15 @@ Usage::
 from __future__ import annotations
 
 import importlib.util
+import logging
 
 from llenergymeasure.energy.base import EnergySampler  # canonical definition
 from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLSampler
 from llenergymeasure.energy.zeus import ZeusSampler
 from llenergymeasure.utils.exceptions import ConfigError
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # v2.0 auto-selection API
@@ -90,25 +93,46 @@ def select_energy_sampler(
 
 
 def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
-    """Auto-select best available sampler: Zeus > NVML > CodeCarbon > None."""
+    """Auto-select best available sampler: Zeus > NVML > CodeCarbon > None.
+
+    On total failure (no sampler available) this logs a warning naming the reason
+    each probe was skipped or rejected, so a silent energy=0.0 result is never the
+    only trace of a measurement backend that failed to come up.
+    """
+    # Record why each candidate was skipped or rejected, for the failure warning.
+    reasons: list[str] = []
+
     # Zeus - preferred: hardware energy register accuracy
     if importlib.util.find_spec("zeus") is not None:
         sampler = ZeusSampler(gpu_indices=gpu_indices)
         if sampler.is_available():
             return sampler
+        reasons.append("zeus: installed but is_available() returned False")
+    else:
+        reasons.append("zeus: package not installed")
 
     # NVML - always available on GPU machines (nvidia-ml-py is a base dep)
     nvml_sampler = NVMLSampler(gpu_indices=gpu_indices)
     if nvml_sampler.is_available():
         return nvml_sampler
+    reasons.append("nvml: is_available() returned False (no NVIDIA GPU or NVML init failed)")
 
     # CodeCarbon - software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
     if importlib.util.find_spec("codecarbon") is not None:
         cc_sampler = CodeCarbonSampler()
         if cc_sampler.is_available():
             return cc_sampler
+        reasons.append("codecarbon: installed but is_available() returned False")
+    else:
+        reasons.append("codecarbon: package not installed")
 
-    # CPU-only or no energy measurement available
+    # CPU-only or no energy measurement available - make the failure loud.
+    logger.warning(
+        "Energy measurement disabled: auto-selection found no available sampler "
+        "(probed Zeus -> NVML -> CodeCarbon). Reported energy will be unavailable, "
+        "not a measured zero. Probe results: %s",
+        "; ".join(reasons),
+    )
     return None
 
 

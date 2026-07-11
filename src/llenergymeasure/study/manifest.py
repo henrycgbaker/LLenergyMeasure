@@ -337,28 +337,37 @@ class ManifestWriter:
 
     @staticmethod
     def _build_entries(study: StudyConfig) -> list[ExperimentManifestEntry]:
-        """Build pending entries for all (experiment, cycle) combinations.
+        """Build one pending entry per (config_hash, occurrence) in the ordered list.
 
-        study.experiments is already the cycled execution list from apply_cycles()
-        in load_study_config() (e.g. 6 entries for 2 configs x 3 cycles). Iterating
-        it directly and then looping over n_cycles would produce 18 entries instead
-        of 6. Deduplicate by config_hash first to recover the unique configs, then
-        build one entry per (config_hash, cycle) pair.
+        study.experiments is the fully-cycled execution list from apply_cycles()
+        in finalise_study(). The runner assigns each occurrence of a declared
+        config_hash a cycle number by counting occurrences in that list (1st ->
+        cycle 1, 2nd -> cycle 2, ...). Manifest entries must mirror that exactly:
+        one entry per (config_hash, occurrence).
+
+        The usual case is n_cycles occurrences per unique hash (apply_cycles
+        multiplies the deduped set by n_cycles). But when dedup is off and a
+        sweep canonicalises two grid points to the same declared config, that
+        hash appears k*n_cycles times; keying entries off n_cycles alone would
+        create only n_cycles of them and the runner's (n_cycles+1)th
+        mark_running would raise an uncaught KeyError. Counting actual
+        occurrences keeps the manifest and runner aligned.
         """
         from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-        # Deduplicate: preserve first-seen order, discard repetitions from cycling.
-        seen: dict[str, ExperimentConfig] = {}
+        # First-seen summary per hash; count occurrences to size the cycle range.
+        summaries: dict[str, str] = {}
+        occurrences: dict[str, int] = {}
         for exp in study.experiments:
             h = compute_declared_config_hash(exp)
-            if h not in seen:
-                seen[h] = exp
+            if h not in summaries:
+                summaries[h] = build_config_summary(exp)
+            occurrences[h] = occurrences.get(h, 0) + 1
 
         entries: list[ExperimentManifestEntry] = []
-        n_cycles = study.study_execution.n_cycles
-        for config_hash, exp in seen.items():
-            summary = build_config_summary(exp)
-            for cycle in range(1, n_cycles + 1):
+        for config_hash, count in occurrences.items():
+            summary = summaries[config_hash]
+            for cycle in range(1, count + 1):
                 entries.append(
                     ExperimentManifestEntry(
                         config_hash=config_hash,

@@ -109,7 +109,7 @@ output:
 #
 # Type-based disambiguation: list[scalar] = axis, list[dict] = group.
 # YAML anchors (&name) + merge keys (<<: *name) reduce repetition in groups.
-# See .product/designs/sweep-constraints.md for full design rationale.
+# See docs/reference/study-config.md for the sweep and range-shorthand reference.
 #
 # KNOWN-BAD CROSSES (do not add as independent axes):
 #   - harness.transformers.torch_compile=true  x  transformers.engine_params load_in_{4,8}bit
@@ -261,7 +261,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
 #   - Override sweep axes (e.g. harness.transformers.batch_size: 1 for speculative decoding)
 #   - Use params not in any sweep axis or group (e.g. engine_params.cpu_offload_gb)
 #   - Require unique combinations spanning multiple unrelated groups
-# See .product/designs/sweep-constraints.md for the design.
+# See docs/reference/study-config.md for the sweep and range-shorthand reference.
 
 experiments:
 
