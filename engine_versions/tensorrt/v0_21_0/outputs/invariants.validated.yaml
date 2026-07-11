@@ -1,8 +1,8 @@
 schema_version: 1.0.0
 engine: tensorrt
 engine_version: 0.21.0
-image_ref: llenergymeasure:tensorrt
-base_image_ref: llenergymeasure:tensorrt
+image_ref: nvcr.io/nvidia/tensorrt-llm/release:0.21.0
+base_image_ref: nvcr.io/nvidia/tensorrt-llm/release:0.21.0
 validated_at: '2026-05-06T20:35:47+02:00'
 validation_commit: 4ad6ee7b8e43c1282751a5b76ca936c6fe6982a3
 cases:

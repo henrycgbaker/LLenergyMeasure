@@ -21,20 +21,22 @@ def doctor_command() -> None:
 
     # "transformers" is 12 chars; width 13 keeps the column aligned.
     header = (
-        f"{'Engine':<13s}  {'Image':<50s}  "
+        f"{'Engine':<13s}  {'Image':<50s}  {'Local':<6s}  "
         f"{'Pkg ver':<10s}  {'Img SHA-256':<14s}  {'Host SHA-256':<14s}  {'Status':<12s}"
     )
     typer.echo(header)
     typer.echo("-" * len(header))
 
     host_fp_short = report.host_fingerprint[:12]
+    local_label = {True: "yes", False: "no", None: "-"}
     for row in report.results:
         img = row.image if len(row.image) <= 50 else "…" + row.image[-49:]
+        local = local_label[row.local_present]
         pkg = (row.pkg_version or "-")[:10]
         img_fp = (row.image_fingerprint or "-")[:12]
         status_text = row.status.value
         line = (
-            f"{row.engine:<13s}  {img:<50s}  "
+            f"{row.engine:<13s}  {img:<50s}  {local:<6s}  "
             f"{pkg:<10s}  {img_fp:<14s}  {host_fp_short:<14s}  {status_text:<12s}"
         )
         typer.echo(line)

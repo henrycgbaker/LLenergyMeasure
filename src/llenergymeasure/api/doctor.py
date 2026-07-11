@@ -6,8 +6,9 @@ from dataclasses import dataclass
 
 from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import Engine
-from llenergymeasure.infra.image_registry import get_default_image
+from llenergymeasure.infra.image_registry import get_default_image, image_present_locally
 from llenergymeasure.infra.version_handshake import (
+    BundledEngineVersionMismatchError,
     SchemaStatus,
     classify_stamp,
     compute_expconf_fingerprint,
@@ -15,6 +16,7 @@ from llenergymeasure.infra.version_handshake import (
     rebuild_hint,
     skip_check_enabled,
 )
+from llenergymeasure.utils.exceptions import ConfigError
 
 __all__ = [
     "DoctorReport",
@@ -41,6 +43,7 @@ class EngineDoctorResult:
     pkg_version: str | None
     image_fingerprint: str | None
     status: SchemaStatus
+    local_present: bool | None = None
     detail: str = ""
 
 
@@ -70,14 +73,35 @@ def run_doctor_checks(
     """Run image-health checks across *engines* and return a structured report.
 
     Image resolution follows ``get_default_image`` - local build first, then
-    versioned GHCR tag. Unreachable images (docker not installed, no such tag,
-    inspect timeout) become ``UNREACHABLE`` rows rather than blowing up.
+    the per-engine default remote image (first-party GHCR for transformers,
+    upstream ``vllm/vllm-openai`` / ``nvcr.io/nvidia/tensorrt-llm/release`` at
+    the pinned engine version for vLLM/TRT). Each row also reports whether the
+    resolved image is present in the local Docker cache. Unreachable images
+    (docker not installed, no such tag, inspect timeout) become ``UNREACHABLE``
+    rows rather than blowing up; an engine whose default cannot be resolved
+    (broken wheel) becomes an ``UNREACHABLE`` row carrying the actionable fix.
     """
     host_fp = compute_expconf_fingerprint()
     results: list[EngineDoctorResult] = []
 
     for engine in engines:
-        image = get_default_image(engine)
+        try:
+            image = get_default_image(engine)
+        except (ConfigError, BundledEngineVersionMismatchError) as exc:
+            results.append(
+                EngineDoctorResult(
+                    engine=engine,
+                    image="(unresolved)",
+                    pkg_version=None,
+                    image_fingerprint=None,
+                    status=SchemaStatus.UNREACHABLE,
+                    local_present=None,
+                    detail=str(exc),
+                )
+            )
+            continue
+
+        local_present = image_present_locally(image)
         stamp = inspect_image_stamp(image)
         status = classify_stamp(stamp, host_fp)
         results.append(
@@ -87,6 +111,7 @@ def run_doctor_checks(
                 pkg_version=stamp.pkg_version,
                 image_fingerprint=stamp.expconf_fingerprint,
                 status=status,
+                local_present=local_present,
                 detail=_detail_for(engine, status),
             )
         )

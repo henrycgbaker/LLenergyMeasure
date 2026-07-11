@@ -23,7 +23,7 @@ Lovelace or newer); on A100 (SM 8.0), use INT8 or W4A16_AWQ instead.
 
 - `llenergymeasure` installed (host-side orchestrator)
 - Docker + NVIDIA Container Toolkit - see [Docker setup](/how-to/docker-setup)
-- TensorRT-LLM Docker image built or pullable from GHCR - see [Contributing > Development](/contributing/development)
+- TensorRT-LLM upstream image (`nvcr.io/nvidia/tensorrt-llm/release`) - pulled automatically from NVIDIA NGC on first run; pre-fetch per [Docker setup](/how-to/docker-setup)
 - NVIDIA GPU with SM >= 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
 
 ## 1. Create a config file
@@ -104,8 +104,9 @@ What happens:
 
 1. Pre-flight checks run: Docker CLI, NVIDIA Container Toolkit, GPU
    visibility, SM-version check.
-2. The TensorRT-LLM Docker image is pulled on first run
-   (`ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0`).
+2. The upstream TensorRT-LLM image (`nvcr.io/nvidia/tensorrt-llm/release`) is
+   pulled from NVIDIA NGC on first run, with the llenergymeasure source
+   bind-mounted into it.
 3. The container compiles the TensorRT engine from the model weights.
    **First run only - this takes several minutes.** Progress is shown in
    the terminal.
