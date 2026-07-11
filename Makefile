@@ -2,7 +2,7 @@
 .PHONY: format lint lint-fix typecheck check
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
-.PHONY: discover-schema discover-schemas-all scaffold-snapshot
+.PHONY: discover-schema discover-schemas-all scaffold-snapshot promote-schemas
 .PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage
 .PHONY: package-check
 .PHONY: docker-smoke
@@ -151,6 +151,15 @@ scaffold-snapshot: ## Scaffold the snapshot outputs dir from the pin (ENGINE=vll
 	outdir=$$(python3 -c "from engine_versions import _outputs; print(_outputs.outputs_dir('$(ENGINE)', '$$ver'))"); \
 	mkdir -p "$$outdir"; \
 	echo "Scaffolded $$outdir (drop schema.discovered.json + curated.yaml here, then run config-codegen)"
+
+# Promote the versioned discovered-schema snapshots into the packaged src copies:
+# a byte-copy of engine_versions/<engine>/v<safe>/outputs/schema.discovered.json
+# -> src/llenergymeasure/engines/<engine>/schema.discovered.json at each engine's
+# pin. This is the ONLY writer of the src copies (no transformation); the refresh
+# script runs it automatically after discovery. Pass ENGINE=<e> for one engine.
+# The CI surface-equality guard is the drift tripwire for this promotion.
+promote-schemas: ## Byte-copy versioned schema snapshots into the src copies (ENGINE=<e> optional)
+	python3 scripts/promote_schemas.py $(if $(ENGINE),--engine $(ENGINE),)
 
 # Proposer S2: LLM analyst cold read of the pinned engine source into candidate
 # rules for the verification ladder. Needs a local Ollama daemon (owns the GPU)

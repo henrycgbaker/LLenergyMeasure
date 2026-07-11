@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
-# Rediscover an engine schema by running discovery inside the
-# appropriate Docker image.
+# Rediscover an engine schema by running discovery inside the appropriate
+# Docker image, then promote the result into the packaged copy.
 #
 # Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 #
-# Always writes to src/llenergymeasure/engines/<engine>/schema.discovered.json
-# and prints the resulting `git diff`. Does NOT commit. The discovered JSON
-# file IS the canonical SSOT - authority comes from `git commit`, not from
-# who ran discovery.
+# Write path (one writer per step):
+#   1. Discovery writes the versioned snapshot
+#      engine_versions/<engine>/v<safe>/outputs/schema.discovered.json - the
+#      ONLY discovery write target. v<safe> is derived from the current.yaml pin
+#      via engine_versions/_outputs.py (the one place that name-mangling lives;
+#      this mirrors the scaffold-snapshot make target).
+#   2. scripts/promote_schemas.py byte-copies that snapshot into the packaged
+#      shadow src/llenergymeasure/engines/<engine>/schema.discovered.json - the
+#      ONLY writer of the src copy, with no transformation.
+# Codegen (scripts/engine_producers/regen_engine_configs.py) reads the outputs/
+# snapshot. This script runs both steps, then prints the `git diff` of the two
+# files. It does NOT commit. The committed JSON IS the canonical SSOT - authority
+# comes from `git commit`, not from who ran discovery.
 #
 # Legitimate refresh (e.g. you bumped an engine pin in current.yaml):
-#   review the diff, `git add`, and open a PR.
+#   review the diff, `git add` both files, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/engines/<engine>/schema.discovered.json`
+#   `git checkout --` the two schema paths printed in the diff.
 #
 # Image selection matches scripts/probe_candidates.sh and the CI engine cells:
 # the pinned version is read from engine_versions/<engine>/current.yaml (the
@@ -29,9 +38,12 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 
-Builds or pulls the engine's discovery image, runs discovery inside it,
-writes src/llenergymeasure/engines/<engine>/schema.discovered.json, and
-prints the git diff. Does NOT commit.
+Builds or pulls the engine's discovery image and runs discovery inside it,
+writing the versioned snapshot
+engine_versions/<engine>/v<safe>/outputs/schema.discovered.json, then promotes
+it byte-for-byte into
+src/llenergymeasure/engines/<engine>/schema.discovered.json. Prints the git diff
+of both files. Does NOT commit.
 EOF
 }
 
@@ -87,9 +99,24 @@ if [[ -z "${IMAGE:-}" ]]; then
     exit 1
 fi
 
-OUTPUT_REL="src/llenergymeasure/engines/${ENGINE}/schema.discovered.json"
+# Discovery write target: the versioned snapshot under engine_versions/. Derive
+# the v<safe> directory from the pin via engine_versions/_outputs.py (the one
+# place name-mangling lives; mirrors the scaffold-snapshot make target). The path
+# is emitted repo-relative so it can be handed to both docker (-v mount) and git.
+OUTPUT_REL="$(cd "$REPO_ROOT" && python3 -c "
+from pathlib import Path
+from engine_versions import _outputs
+print(_outputs.schema_path('$ENGINE', '$VER').relative_to(Path.cwd()))
+")"
+if [[ -z "$OUTPUT_REL" ]]; then
+    echo "[$ENGINE] Failed to derive the snapshot output path from pin $VER" >&2
+    exit 1
+fi
+# The packaged copy the promotion step writes (never written directly here).
+SRC_REL="src/llenergymeasure/engines/${ENGINE}/schema.discovered.json"
 
 echo "[$ENGINE] Running discovery inside $IMAGE..." >&2
+echo "[$ENGINE] Discovery writes $OUTPUT_REL" >&2
 # Forward LLENERGY_DISCOVERY_FROZEN_AT into the container if the caller (CI)
 # set it. The introspectors use it to pin `discovered_at` to a
 # stable anchor, breaking the writeback->resync loop on unchanged source.
@@ -106,28 +133,33 @@ docker run --rm --gpus all \
     --output "/repo/$OUTPUT_REL"
 
 cd "$REPO_ROOT"
+
+# Promote the versioned snapshot into the packaged src copy. This is the ONLY
+# writer of the src copy - discovery above never touches src directly.
+echo "[$ENGINE] Promoting $OUTPUT_REL -> $SRC_REL" >&2
+python3 "$REPO_ROOT/scripts/promote_schemas.py" --engine "$ENGINE"
+
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
     echo "[$ENGINE] Not inside a git repo - skipping diff output." >&2
     exit 0
 fi
 
-if git diff --quiet -- "$OUTPUT_REL" 2>/dev/null; then
-    if [[ -z "$(git status --porcelain -- "$OUTPUT_REL")" ]]; then
-        echo "[$ENGINE] No changes to discovered schema." >&2
-        exit 0
-    fi
+if git diff --quiet -- "$OUTPUT_REL" "$SRC_REL" 2>/dev/null \
+    && [[ -z "$(git status --porcelain -- "$OUTPUT_REL" "$SRC_REL")" ]]; then
+    echo "[$ENGINE] No changes to discovered schema." >&2
+    exit 0
 fi
 
 echo "" >&2
-echo "=== git diff --stat $OUTPUT_REL ===" >&2
-git diff --stat -- "$OUTPUT_REL" || true
+echo "=== git diff --stat (snapshot + packaged copy) ===" >&2
+git diff --stat -- "$OUTPUT_REL" "$SRC_REL" || true
 echo "" >&2
-echo "=== git diff $OUTPUT_REL (first 200 lines) ===" >&2
-git --no-pager diff -- "$OUTPUT_REL" | head -200 || true
+echo "=== git diff (first 200 lines) ===" >&2
+git --no-pager diff -- "$OUTPUT_REL" "$SRC_REL" | head -200 || true
 echo "" >&2
 cat <<EOF >&2
 Schema changed.
-  - Legitimate refresh? Review the diff, \`git add $OUTPUT_REL\`, and open a PR.
+  - Legitimate refresh? Review the diff, \`git add $OUTPUT_REL $SRC_REL\`, and open a PR.
   - Exploring a custom fork or stale image? Revert with:
-      git checkout -- $OUTPUT_REL
+      git checkout -- $OUTPUT_REL $SRC_REL
 EOF
