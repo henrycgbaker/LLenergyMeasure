@@ -235,10 +235,10 @@ def build_preflight_panel(
         if has_both:
             body.append(f"    {_pl(n_configs, 'unique config')} total\n")
 
-    # -- Dormant normalisations (only when a dormant rule fired) --
+    # -- Auto-normalised settings (only when a dormant rule fired) --
     dormant_lines = dormant_observation_lines(study_config, include_header=False)
     if dormant_lines:
-        _section(body, "Dormant normalisations")
+        _section(body, "Auto-normalised settings")
         for line in dormant_lines:
             body.append(f"  {line}\n", style="dim")
 

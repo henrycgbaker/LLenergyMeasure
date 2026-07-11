@@ -173,7 +173,43 @@ def render_markdown(schema: dict[str, Any]) -> str:
         lines.extend(sections[section_key])
         lines.append("")
 
+    lines.extend(_sweep_axis_notation_section())
+
     return "\n".join(lines)
+
+
+def _sweep_axis_notation_section() -> list[str]:
+    """Prose reference for the numeric sweep-axis range shorthands.
+
+    A sweep axis value is normally an explicit YAML list. Three mapping
+    shorthands are accepted as compact notation for such a list; they expand at
+    load time, so downstream consumers only ever see plain lists. This is
+    hand-authored (not schema-derived) because the shorthands are parsed in
+    ``config/sweep_idioms.py``, not on any ``ExperimentConfig`` field.
+    """
+    return [
+        "### Sweep-Axis Range Shorthands",
+        "",
+        "An independent sweep axis (`sweep:` entry mapping to a list of scalars) may be",
+        "written as one of three compact range shorthands instead of an explicit list.",
+        "Each expands to a plain list at load time, so the two forms are interchangeable.",
+        "",
+        "| Shorthand | Meaning | Example | Expands to |",
+        "|-----------|---------|---------|------------|",
+        "| `{min: a, max: b, num: n}` | `n` evenly spaced values, endpoints inclusive | "
+        "`{min: 0, max: 8, num: 5}` | `[0, 2, 4, 6, 8]` |",
+        "| `{log: {min: a, max: b, num: n}}` | `n` log-spaced values (`min > 0`), endpoints "
+        "inclusive | `{log: {min: 1, max: 100, num: 3}}` | `[1, 10, 100]` |",
+        "| `{pow2: {min: a, max: b}}` | ascending powers of two within `[a, b]` | "
+        "`{pow2: {min: 4, max: 32}}` | `[4, 8, 16, 32]` |",
+        "",
+        "Values stay integers when all bounds are integers and every produced value is",
+        "integral; otherwise they are floats (rounded to kill binary-float noise).",
+        "A mapping that matches none of these shapes is rejected at load time. To sweep a",
+        "literal mapping value, set it in the base config or use a group entry (list of",
+        "dicts).",
+        "",
+    ]
 
 
 # ---------------------------------------------------------------------------

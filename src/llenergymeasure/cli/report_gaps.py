@@ -66,7 +66,7 @@ def report_gaps_cmd(
         typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
     ] = 0,
 ) -> None:
-    """Propose rules corpus entries from captured runtime observations."""
+    """Propose engine rule set entries from captured runtime observations."""
     from llenergymeasure.cli import _setup_logging
 
     _setup_logging(verbose)
