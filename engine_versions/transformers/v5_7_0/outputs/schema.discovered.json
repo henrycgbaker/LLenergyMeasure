@@ -110,7 +110,21 @@
     },
     "early_stopping": {
       "type": "bool",
-      "default": null
+      "default": null,
+      "runtime_literals": [
+        {
+          "value": "never",
+          "verified": "construction",
+          "pin": "5.7.0",
+          "evidence": [
+            "doc:GenerationConfig.early_stopping",
+            "rule:transformers_early_stopping_type_early_stopping_not_in_allowlist",
+            "rule:transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str",
+            "rule:transformers_raises_early_stopping_not_in_set",
+            "src:transformers/generation/configuration_utils.py:632"
+          ]
+        }
+      ]
     },
     "max_time": {
       "type": "float",

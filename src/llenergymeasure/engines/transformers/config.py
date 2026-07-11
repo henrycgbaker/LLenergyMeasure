@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -23,7 +23,7 @@ class EngineParams(BaseModel):
     use_cache: bool | None = None
     cache_implementation: str | None = None
     num_beams: int | None = None
-    early_stopping: bool | None = None
+    early_stopping: bool | Literal["never"] | None = None
     length_penalty: float | None = None
     no_repeat_ngram_size: int | None = None
     prompt_lookup_num_tokens: int | None = None
