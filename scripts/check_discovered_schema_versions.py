@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""Check that engine current.yaml versions match discovered schema engine_versions.
+"""Guard the discovered-schema promotion invariant on hosted CI.
 
 Each engine has a canonical version pinned in
 ``engine_versions/<engine>/current.yaml`` under ``library.current_version``. The
 discovered schema at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``
 must agree.
+
+The src copy is produced by ``promote_schemas.py``, which byte-copies the
+versioned snapshot ``engine_versions/<engine>/v<safe>/outputs/schema.discovered.json``
+into the src tree. That promotion is the single write path for the src copy, so
+the two files must never diverge. This check is the drift tripwire for that
+invariant: it verifies the pin matches the schema version and that the src copy
+and the versioned snapshot expose the same parameter surface. With promotion in
+place it should never fire; a failure means the promotion was skipped or a copy
+was hand-edited.
 
 Engines covered:
   - vllm
@@ -43,9 +52,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 _ENGINES = ("vllm", "tensorrt", "transformers")
 
 # The two on-disk copies of a discovered schema whose parameter surfaces must
-# not diverge: the src/ shadow the runtime loader and absorb read, and the
-# versioned outputs/ snapshot codegen reads. Only the version envelope is
-# compared elsewhere; these are the keys that carry the actual config surface.
+# not diverge after promotion: the src/ shadow the runtime loader and absorb
+# read, and the versioned outputs/ snapshot codegen reads (and promotion copies
+# from). Only the version envelope is compared elsewhere; these are the keys
+# that carry the actual config surface.
 _SURFACE_KEYS = ("engine_params", "sampling_params")
 
 
@@ -119,10 +129,10 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
             )
             continue  # version already diverged; a surface diff would just be noise
 
-        # Guard the two schema copies against a surface divergence the version
-        # envelope alone cannot catch: the versioned outputs/ snapshot codegen
-        # reads must expose the same parameter surface as the src/ shadow the
-        # runtime loader and absorb read.
+        # Guard the promotion invariant against a surface divergence the version
+        # envelope alone cannot catch: the versioned outputs/ snapshot (which
+        # codegen reads and promotion copies from) must expose the same parameter
+        # surface as the promoted src/ shadow the runtime loader and absorb read.
         outputs_schema = (
             engine_versions_dir / engine / _outputs.safe_version(pinned_version) / "outputs"
         ) / _outputs.SCHEMA_FILENAME
