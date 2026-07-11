@@ -140,6 +140,30 @@ def test_engine_column_aligns_for_transformers() -> None:
     assert header_line.index("Image") == data_line.index("llenergymeasure:pytorch")
 
 
+def test_local_present_column_rendered() -> None:
+    """The Local column reports whether the resolved image is cached locally."""
+    report = _report(
+        [
+            EngineDoctorResult(
+                engine="vllm",
+                image="vllm/vllm-openai:v0.19.1",
+                pkg_version=None,
+                image_fingerprint=None,
+                status=SchemaStatus.UNREACHABLE,
+                local_present=True,
+            )
+        ]
+    )
+    with patch("llenergymeasure.api.doctor.run_doctor_checks", return_value=report):
+        result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    header_line = next(line for line in lines if line.startswith("Engine"))
+    assert "Local" in header_line
+    data_line = next(line for line in lines if line.startswith("vllm"))
+    assert "yes" in data_line
+
+
 def test_host_footer_rendered() -> None:
     report = _report(
         [
