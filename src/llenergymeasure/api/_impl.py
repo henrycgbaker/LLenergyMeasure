@@ -20,6 +20,11 @@ from llenergymeasure.config.models import (
     TaskConfig,
 )
 from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.domain.bundle_artefacts import (
+    ENVIRONMENT_FILENAME,
+    STUDY_ARTEFACTS_DIR,
+    SYSTEM_OVERRIDES_FILENAME,
+)
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.infra.runner_resolution import RunnerSpec
@@ -327,7 +332,7 @@ def _to_study_config(
 
 def _ensure_study_artefacts_dir(study_dir: Path) -> Path:
     """Create and return the _study-artefacts/ subdirectory."""
-    artefacts_dir = study_dir / "_study-artefacts"
+    artefacts_dir = study_dir / STUDY_ARTEFACTS_DIR
     artefacts_dir.mkdir(exist_ok=True)
     return artefacts_dir
 
@@ -565,7 +570,7 @@ def _write_study_artefacts(
             "study_name": _study_name,
             **system_overrides,
         }
-        overrides_path = artefacts_dir / "system_overrides.json"
+        overrides_path = artefacts_dir / SYSTEM_OVERRIDES_FILENAME
         try:
             overrides_path.write_text(
                 json.dumps(overrides_with_identity, indent=2), encoding="utf-8"
@@ -584,7 +589,7 @@ def _write_study_artefacts(
             "study_name": _study_name,
             **sw_env,
         }
-        env_path = artefacts_dir / "environment.json"
+        env_path = artefacts_dir / ENVIRONMENT_FILENAME
         env_path.write_text(json.dumps(study_env, indent=2), encoding="utf-8")
         logger.info("Study-level environment written to %s", env_path)
     except Exception as exc:

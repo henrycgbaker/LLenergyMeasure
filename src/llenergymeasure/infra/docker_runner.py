@@ -58,6 +58,7 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_THREAD_JOIN,
     Engine,
 )
+from llenergymeasure.domain.bundle_artefacts import TIMESERIES_FILENAME
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerStdoutSilenceError,
@@ -501,11 +502,11 @@ class DockerRunner:
             # The harness inside the container wrote timeseries.parquet to
             # /run/llem (= exchange_dir on host). Move it to a temp dir so
             # the caller can copy it into the study directory.
-            ts_parquet = exchange_dir / "timeseries.parquet"
+            ts_parquet = exchange_dir / TIMESERIES_FILENAME
             ts_tmpdir: Path | None = None
             if ts_parquet.exists() and not isinstance(result, dict):
                 ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
-                shutil.move(str(ts_parquet), str(ts_tmpdir / "timeseries.parquet"))
+                shutil.move(str(ts_parquet), str(ts_tmpdir / TIMESERIES_FILENAME))
 
             # --- Success: clean up ---
             self._cleanup_exchange_dir(exchange_dir)

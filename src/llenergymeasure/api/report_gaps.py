@@ -42,6 +42,7 @@ from typing import Any, Literal
 import yaml
 
 from llenergymeasure.config.ssot import Engine
+from llenergymeasure.domain.bundle_artefacts import MANIFEST_FILENAME, RESOLUTION_FILENAME
 from llenergymeasure.study.runtime_observations import RUNTIME_OBSERVATIONS_FILENAME
 from llenergymeasure.utils.io import load_json
 
@@ -371,7 +372,7 @@ def _load_kwargs_by_hash(study_dir: Path) -> tuple[dict[str, dict[str, Any]], in
     """
     if not study_dir.exists() or not study_dir.is_dir():
         return {}, 0
-    manifest_path = study_dir / "manifest.json"
+    manifest_path = study_dir / MANIFEST_FILENAME
     if manifest_path.exists():
         return _load_kwargs_via_manifest(study_dir, manifest_path)
     logger.warning(
@@ -401,7 +402,7 @@ def _load_kwargs_via_manifest(
         if config_hash in by_hash:
             # Same config can repeat across cycles; one flat dict suffices.
             continue
-        resolution_path = study_dir / Path(result_file).parent / "_resolution.json"
+        resolution_path = study_dir / Path(result_file).parent / RESOLUTION_FILENAME
         if not resolution_path.exists():
             continue
         flat, failed = _read_resolution_sidecar(resolution_path)
@@ -431,7 +432,7 @@ def _load_kwargs_via_prefix_scan(
             c in "0123456789abcdef" for c in hash_prefix
         ):
             continue
-        resolution_path = entry / "_resolution.json"
+        resolution_path = entry / RESOLUTION_FILENAME
         if not resolution_path.exists():
             continue
         flat, failed = _read_resolution_sidecar(resolution_path)

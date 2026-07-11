@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.domain.bundle_artefacts import STUDY_ARTEFACTS_DIR
 from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.study.image_prep import _sanitize_image_for_filename
 
@@ -498,6 +499,6 @@ class _BaselineMixin:
         File lives at ``{study_dir}/_study-artefacts/baseline_cache_{cache_key}.json``.
         Creates the artefacts directory if needed.
         """
-        artefacts_dir = self.study_dir / "_study-artefacts"
+        artefacts_dir = self.study_dir / STUDY_ARTEFACTS_DIR
         artefacts_dir.mkdir(parents=True, exist_ok=True)
         return artefacts_dir / f"baseline_cache_{cache_key}.json"
