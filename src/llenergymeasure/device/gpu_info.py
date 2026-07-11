@@ -35,6 +35,10 @@ def nvml_context() -> Generator[None, None, None]:
         finally:
             pynvml.nvmlShutdown()
     except Exception:
+        # Fail-soft by design: caller proceeds without NVML. Leave a debug-level
+        # trace so a real driver/permission failure is diagnosable, without
+        # changing the swallow-and-continue behaviour.
+        logger.debug("NVML unavailable; proceeding without it", exc_info=True)
         yield  # pynvml absent or nvmlInit failed - caller proceeds without NVML
 
 
