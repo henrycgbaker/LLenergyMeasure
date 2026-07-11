@@ -15,7 +15,7 @@ pattern; mirrors sphinx (`themes/`), spaCy (`languages/`), scikit-learn
 
 ```
 engines/
-  __init__.py          # get_engine(name) factory, detect_default_engine()
+  __init__.py          # get_engine(name) factory
   protocol.py          # EnginePlugin protocol + InferenceOutput dataclass
   probe_adapter.py     # Adapter helpers
   _observed.py         # Observed-runtime-data extraction (effective params, metrics)
@@ -77,16 +77,12 @@ InferenceOutput(
 ## Engine factory
 
 ```python
-from llenergymeasure.engines import get_engine, detect_default_engine
+from llenergymeasure.engines import get_engine
 
 engine = get_engine("pytorch")   # PyTorchEngine
 engine = get_engine("vllm")      # VLLMEngine
 engine = get_engine("tensorrt")  # TensorRTEngine
-
-default = detect_default_engine()  # "pytorch" if transformers installed, etc.
 ```
-
-Priority for auto-detection: pytorch > tensorrt > vllm.
 
 ## Engine code runs in Docker
 

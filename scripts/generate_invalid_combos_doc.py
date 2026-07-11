@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from llenergymeasure.config.introspection import (
     get_capability_matrix_markdown,
@@ -20,6 +21,7 @@ from llenergymeasure.config.introspection import (
     get_runtime_limitations,
     get_validation_rules,
 )
+from scripts._docgen_common import write_doc
 
 
 def generate_markdown() -> str:
@@ -141,11 +143,7 @@ def main() -> None:
     output_path = (
         Path(__file__).parent.parent / "docs" / "reference" / "engines" / "invalid-combos.md"
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    content = generate_markdown()
-    output_path.write_text(content)
-    print(f"Generated: {output_path}")
+    write_doc(output_path, generate_markdown())
 
 
 if __name__ == "__main__":

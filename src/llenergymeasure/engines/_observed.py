@@ -168,6 +168,31 @@ def _dump_raw(native_obj: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def count_request_tokens(outputs: Any) -> tuple[int, int]:
+    """Count input (prompt) and output (generated) tokens across RequestOutputs.
+
+    Sums across ALL outputs per request (n>1 sampling or beam search produces
+    multiple sequences). Attribute access is guarded so a RequestOutput missing
+    ``prompt_token_ids`` / ``outputs`` contributes zero rather than raising.
+
+    Args:
+        outputs: Iterable of ``RequestOutput`` objects (vLLM or TRT-LLM).
+
+    Returns:
+        Tuple of (input_token_count, output_token_count).
+    """
+    input_token_count = sum(
+        len(o.prompt_token_ids) for o in outputs if hasattr(o, "prompt_token_ids")
+    )
+    output_token_count = sum(
+        len(out.token_ids)
+        for o in outputs
+        if hasattr(o, "outputs") and o.outputs
+        for out in o.outputs
+    )
+    return input_token_count, output_token_count
+
+
 def extract_request_metrics(outputs: Any) -> tuple[list[float], list[float]]:
     """Extract per-request E2E latency and TTFT (ms) from RequestOutputs.
 

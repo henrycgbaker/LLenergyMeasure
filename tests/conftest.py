@@ -7,14 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
     StudyResult,
-)
-from llenergymeasure.domain.metrics import (
-    EnergyMetrics,
 )
 
 _REPLAY_DIR = Path(__file__).parent / "fixtures" / "replay"
@@ -133,14 +130,17 @@ def make_study_result(**overrides) -> StudyResult:
     return StudyResult(**defaults)
 
 
-def make_energy_metrics(**overrides) -> EnergyMetrics:
-    """Return a valid EnergyMetrics with sensible defaults."""
-    defaults: dict = {
-        "total_energy_j": 10.0,
-        "duration_sec": 5.0,
-    }
-    defaults.update(overrides)
-    return EnergyMetrics(**defaults)
+def make_study(engines: list[str]) -> StudyConfig:
+    """Build a minimal StudyConfig with one experiment per engine name.
+
+    Shared by the pre-flight tests that only care about which engines a
+    study spans (single vs multi-engine runner-elevation paths).
+    """
+    experiments = [ExperimentConfig(task={"model": f"model-{e}"}, engine=e) for e in engines]
+    return StudyConfig(
+        experiments=experiments,
+        study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
+    )
 
 
 def make_user_config(**overrides):

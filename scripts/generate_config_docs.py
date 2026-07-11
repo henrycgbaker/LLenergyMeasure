@@ -15,13 +15,16 @@ Output:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from llenergymeasure.config._doc_helpers import default_label, type_label
+from scripts._docgen_common import add_output_option, emit_markdown
 
 # ---------------------------------------------------------------------------
 # Schema helpers
@@ -30,6 +33,25 @@ from llenergymeasure.config._doc_helpers import default_label, type_label
 
 def _description(prop: dict[str, Any]) -> str:
     return prop.get("description", "")
+
+
+# Anything that is not a lowercase word char, hyphen, or space. github-slugger
+# (which Docusaurus uses to derive heading anchors) removes exactly this
+# punctuation from an ASCII heading and keeps [a-z0-9_-]; spaces map to hyphens.
+_SLUGGER_DROP = re.compile(r"[^a-z0-9_ -]")
+
+
+def _heading_anchor(title: str) -> str:
+    """Slugify a heading the way Docusaurus (github-slugger) does.
+
+    Docusaurus derives heading anchors with github-slugger: lowercase, drop
+    punctuation, then map spaces to hyphens. Punctuation is REMOVED,
+    not hyphenated - so a code span like ``transformers.engine_params`` yields
+    ``transformersengine_params``, not ``transformers-engine_params``. The table
+    of contents must slugify with the same rule or its in-page links resolve to
+    anchors that do not exist.
+    """
+    return _SLUGGER_DROP.sub("", title.lower()).replace(" ", "-")
 
 
 # ---------------------------------------------------------------------------
@@ -155,12 +177,7 @@ def render_markdown(schema: dict[str, Any]) -> str:
     lines.append("**Sections:**")
     for section_key, section_title in _SECTION_ORDER:
         if section_key in sections:
-            anchor = section_title.lower()
-            for ch in " /`.:()`":
-                anchor = anchor.replace(ch, "-")
-            while "--" in anchor:
-                anchor = anchor.replace("--", "-")
-            anchor = anchor.strip("-")
+            anchor = _heading_anchor(section_title)
             lines.append(f"- [{section_title}](#{anchor})")
     lines.append("")
 
@@ -218,27 +235,15 @@ def _sweep_axis_notation_section() -> list[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate config reference Markdown")
-    parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        default=None,
-        help="Write output to this file path (default: stdout)",
+    parser = add_output_option(
+        argparse.ArgumentParser(description="Generate config reference Markdown")
     )
     args = parser.parse_args()
 
     from llenergymeasure.config.models import ExperimentConfig
 
     schema = ExperimentConfig.model_json_schema()
-    markdown = render_markdown(schema)
-
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(markdown)
-        print(f"Written to {args.output}", file=sys.stderr)
-    else:
-        print(markdown)
+    emit_markdown(render_markdown(schema), args.output)
 
 
 if __name__ == "__main__":

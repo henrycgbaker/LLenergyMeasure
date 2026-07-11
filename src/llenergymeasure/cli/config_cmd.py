@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from typing import Annotated, Any
+from typing import Any
 
-import typer
-
+from llenergymeasure.cli._options import VerboseOption
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
     Engine,
@@ -73,10 +72,7 @@ def _probe_engine_version(engine: str) -> str | None:
 
 
 def config_command(
-    verbose: Annotated[
-        int,
-        typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
-    ] = 0,
+    verbose: VerboseOption = 0,
 ) -> None:
     """Show environment and configuration status."""
     from llenergymeasure.cli import _setup_logging

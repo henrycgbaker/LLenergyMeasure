@@ -56,7 +56,6 @@ __all__ = [
     "parse_image_stamp",
     "probe_image_engine_version",
     "read_bundled_engine_version",
-    "read_ssot_engine_version",
     "rebuild_hint",
     "skip_check_enabled",
 ]
@@ -249,12 +248,9 @@ def read_bundled_engine_version(engine: str) -> str | None:
     bug, never via a runtime configuration choice, so silent handling
     would mask the real issue.
 
-    Preferred over :func:`read_ssot_engine_version` for the runtime
-    handshake because the bundled artefact is in the wheel (so it works
-    for installed users without an in-repo SSOT file), and because the
-    artefact's engine_version is the one llem actually applies at
-    experiment time - the SSOT version describes the build's INTENT;
-    the bundled envelope describes what shipped.
+    The bundled artefact is the runtime source of truth: it is in the wheel
+    (so it works for installed users without an in-repo SSOT file), and its
+    engine_version is the one llem actually applies at experiment time.
     """
     from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
     from llenergymeasure.config.schema_loader import SchemaLoader
@@ -284,36 +280,6 @@ def read_bundled_engine_version(engine: str) -> str | None:
             f"entries for the engine and rebuild the wheel."
         )
     return inv_version
-
-
-def read_ssot_engine_version(engine: str) -> str | None:
-    """Read ``engine_versions/{engine}/current.yaml::library.current_version``.
-
-    Legacy: use :func:`read_bundled_engine_version` for the runtime handshake.
-    This helper is retained for in-repo dev tooling that needs the SSOT
-    file directly (it's not shipped in the wheel).
-
-    Returns ``None`` if the file is absent, unreadable, or the field is
-    missing. The repo root is resolved via
-    :func:`llenergymeasure.infra.docker_runner._resolve_repo_root`, which
-    is the single source of truth for repo-shape paths.
-    """
-    import yaml
-
-    from llenergymeasure.infra.docker_runner import _resolve_repo_root
-
-    ssot_path = _resolve_repo_root() / "engine_versions" / engine / "current.yaml"
-    try:
-        with open(ssot_path) as f:
-            data = yaml.safe_load(f) or {}
-    except (FileNotFoundError, OSError) as exc:
-        logger.debug("SSOT read failed for %s at %s: %s", engine, ssot_path, exc)
-        return None
-
-    version = data.get("library", {}).get("current_version")
-    if not isinstance(version, str) or not version:
-        return None
-    return version
 
 
 def classify_engine_version(

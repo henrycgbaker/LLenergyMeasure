@@ -18,6 +18,7 @@ from llenergymeasure.cli._display import (
     print_dry_run,
     print_result_summary,
 )
+from llenergymeasure.cli._options import VerboseOption
 from llenergymeasure.cli._study_defaults import build_study_cli_overrides
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
@@ -60,10 +61,7 @@ def run(
         bool,
         typer.Option("--quiet", "-q", help="Suppress progress bars"),
     ] = False,
-    verbose: Annotated[
-        int,
-        typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
-    ] = 0,
+    verbose: VerboseOption = 0,
     skip_preflight: Annotated[
         bool,
         typer.Option(

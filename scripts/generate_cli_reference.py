@@ -19,6 +19,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from scripts._docgen_common import add_output_option, emit_markdown
 
 
 def _type_label(param: object) -> str:
@@ -151,24 +154,11 @@ def render_markdown() -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate CLI reference Markdown")
-    parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        default=None,
-        help="Write output to this file path (default: stdout)",
+    parser = add_output_option(
+        argparse.ArgumentParser(description="Generate CLI reference Markdown")
     )
     args = parser.parse_args()
-
-    markdown = render_markdown()
-
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(markdown)
-        print(f"Written to {args.output}", file=sys.stderr)
-    else:
-        print(markdown)
+    emit_markdown(render_markdown(), args.output)
 
 
 if __name__ == "__main__":

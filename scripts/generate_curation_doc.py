@@ -21,6 +21,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 from llenergymeasure.config.introspection import get_engine_params  # noqa: E402
 from llenergymeasure.config.schema_loader import SchemaLoader  # noqa: E402
 from llenergymeasure.config.ssot import Engine  # noqa: E402
+from scripts._docgen_common import write_doc  # noqa: E402
 
 ENGINES = tuple(e.value for e in Engine)
 
@@ -122,9 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     for engine in targets:
         content = generate_engine_doc(engine, loader)
         output_path = args.out if args.out else default_dir / f"curation-{engine}.md"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(content)
-        print(f"Generated: {output_path}")
+        write_doc(output_path, content)
     return 0
 
 

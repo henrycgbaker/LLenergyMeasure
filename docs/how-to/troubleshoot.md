@@ -345,8 +345,8 @@ the SSOT bumped transformers but the local image is still on an older tag).
 
 ```bash
 make docker-build                                       # local build, Transformers
-docker pull vllm/vllm-openai:0.7.3                      # repull vLLM upstream
-docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # repull TensorRT-LLM upstream
+docker pull vllm/vllm-openai:v0.19.1                    # repull vLLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0   # repull TensorRT-LLM upstream
 make docker-pull                                        # pull the newest published Transformers tag
 ```
 

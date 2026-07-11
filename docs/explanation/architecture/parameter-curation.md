@@ -4,7 +4,7 @@
 
 ---
 
-llem exposes engine parameters to users through hand-authored Pydantic models. This document explains how those models stay in sync with the underlying engines.
+llem exposes engine parameters to users through generated Pydantic models. This document explains where the curation decisions live and how the generated models stay in sync with the underlying engines.
 
 ---
 
@@ -13,17 +13,23 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
 ```mermaid
 flowchart TD
     discovery[programmatic discovery<br/>scripts/engine_producers/]
-    pydantic[Pydantic curation<br/>config/engine_configs.py]
+    curated[curation decisions<br/>engine_versions/&lt;engine&gt;/v&lt;ver&gt;/outputs/curated.yaml]
+    codegen[codegen<br/>scripts/engine_producers/regen_engine_configs.py]
+    pydantic[generated Pydantic models<br/>engines/&lt;engine&gt;/config.py]
     drift[drift checker<br/>scripts/check_pydantic_matches_discovered.py]
     allowlist[LLEM_NATIVE_FIELDS<br/>intentional-divergence allowlist]
 
+    discovery --> codegen
+    curated --> codegen
+    codegen --> pydantic
     discovery --> drift
     pydantic --> drift
     drift --> allowlist
 ```
 
 - **Programmatic discovery** introspects engine APIs and writes `engines/*/schema.discovered.json` (the ground truth for "what parameters does this engine accept").
-- **Pydantic curation** is the hand-authored set of sub-config models that expose typed, documented fields to users.
+- **Curation decisions** are recorded per pinned engine version in `curated.yaml` - which fields the typed surface names explicitly, type narrowing, and user-facing descriptions.
+- **Codegen** projects the discovered schema plus the curation decisions into the committed Pydantic models at `src/llenergymeasure/engines/<engine>/config.py`. The generated files must not be hand-edited (each header says so).
 - **Drift checker** flags Pydantic fields with no corresponding discovered entry.
 - **`LLEM_NATIVE_FIELDS`** is the "yes, this divergence is intentional" allowlist - it suppresses known-good exceptions so the drift checker only reports unexpected divergence.
 
@@ -37,14 +43,17 @@ These JSON files are the ground truth for "what parameters does this engine vers
 
 ---
 
-## Pydantic curation
+## Curation and the generated models
 
-`src/llenergymeasure/config/engine_configs.py` contains hand-authored Pydantic models that llem exposes to users. Curation decisions:
+`src/llenergymeasure/engines/<engine>/config.py` holds the Pydantic models llem exposes to users (`engine_params:` and `sampling_params:` per engine). These files are generated: `scripts/engine_producers/regen_engine_configs.py` produces them from the pinned version's `schema.discovered.json` plus `curated.yaml` under `engine_versions/<engine>/v<version>/outputs/`. To change the exposed surface, edit `curated.yaml` and regenerate - never the generated `config.py`.
+
+The curation principles the generated surface encodes:
 
 - **Field names match native engine names.** A field called `quant_config` maps directly to the engine kwarg `quant_config`. No translation layer, no llem aliases.
-- **Sub-configs group related parameters.** e.g. `TensorRTKvCacheConfig` groups all kv-cache knobs under `tensorrt.kv_cache_config.*`. The sub-config name matches the native engine kwarg name.
+- **Sub-config typing is per-engine.** Where the snapshot models a nested config, it becomes a typed sub-model (e.g. vLLM's `speculative_config` and `compilation_config`); where it does not, the field is a freeform `Any`-typed dict passed through whole (e.g. TensorRT-LLM's `quant_config`, `kv_cache_config`, `scheduler_config` on the current pin).
 - **Types may be narrowed.** A field typed `str` in discovery might become `Literal["bfloat16", "float16", "float32"]` in curation - this is intentional and allowed by the drift checker.
-- **Descriptions are added.** Pydantic `Field(description=...)` docs are user-facing; discovery has none.
+- **Descriptions are added.** Pydantic field docs are user-facing; discovery has none.
+- **Unmodelled parameters still work.** The generated sub-models set `extra="allow"`, so a parameter the snapshot does not name explicitly is forwarded to the engine unchanged.
 
 ---
 
@@ -74,7 +83,7 @@ Some Pydantic fields legitimately have no discovered counterpart. Common reasons
 | Reason | Example |
 |--------|---------|
 | Passed via `**kwargs`, invisible to `inspect.signature` | `transformers.dtype` - `from_pretrained` accepts it as a kwarg alias |
-| llem surfaces a sub-config field that the engine accepts as a flat kwarg at a different nesting level | `tensorrt.quant_algo` inside `TensorRTQuantConfig` |
+| Sub-config nesting differs between llem's surface and the engine API | `tensorrt.max_batch_size` - TRT-LLM accepts it inside a nested build config, not as a flat constructor kwarg |
 | Beam-search or speculative-decoding params from a separate params class | `vllm.beam_width` (from `BeamSearchParams`, not `LLM.__init__`) |
 
 These are listed in `LLEM_NATIVE_FIELDS` in the drift checker. Each entry suppresses one `pydantic_only` warning for a named `(engine, field_name)` pair.
