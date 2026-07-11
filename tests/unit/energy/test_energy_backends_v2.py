@@ -6,6 +6,8 @@ Tests cover NVMLSampler, ZeusSampler, EnergyMeasurement, and select_energy_sampl
 
 from __future__ import annotations
 
+import logging
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -250,6 +252,57 @@ def test_select_backend_auto_returns_none_when_nothing_available() -> None:
     ):
         result = select_energy_sampler("auto")
     assert result is None
+
+
+def test_select_backend_auto_warns_when_nothing_available(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Auto-selection logs a warning with the per-backend why-chain when nothing is available.
+
+    Regression guard for the silent energy=0.0 failure mode: a disabled energy backend
+    must leave a loud trace, not just a zeroed metric.
+    """
+    with (
+        caplog.at_level(logging.WARNING, logger="llenergymeasure.energy"),
+        patch("importlib.util.find_spec", return_value=None),
+        patch(
+            "llenergymeasure.energy.NVMLSampler.is_available",
+            return_value=False,
+        ),
+    ):
+        result = select_energy_sampler("auto")
+
+    assert result is None
+    assert any("Energy measurement disabled" in rec.message for rec in caplog.records)
+    # The why-chain names each probed backend so the failure is diagnosable.
+    warning_text = " ".join(rec.message for rec in caplog.records)
+    assert "zeus" in warning_text
+    assert "nvml" in warning_text
+    assert "codecarbon" in warning_text
+
+
+def test_nvml_sampler_is_available_logs_debug_on_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """NVMLSampler.is_available() leaves a debug trace when the NVML probe raises.
+
+    Fail-soft behaviour (returns False) is unchanged; the change is observability so a
+    real driver/permission failure is diagnosable.
+    """
+    fake_pynvml = MagicMock()
+    with (
+        caplog.at_level(logging.DEBUG, logger="llenergymeasure.energy.nvml"),
+        patch("importlib.util.find_spec", return_value=MagicMock()),
+        patch.dict(sys.modules, {"pynvml": fake_pynvml}),
+        patch(
+            "llenergymeasure.device.gpu_info.nvml_context",
+            side_effect=RuntimeError("NVML init failed"),
+        ),
+    ):
+        result = NVMLSampler().is_available()
+
+    assert result is False
+    assert any("is_available() probe failed" in rec.message for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------
