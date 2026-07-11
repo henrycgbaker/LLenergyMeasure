@@ -145,12 +145,18 @@ class RuleMatch:
     ``None`` today: ``try_match`` does not populate it, because dormant rules
     express the strip case via ``normalised_fields`` rather than an inline
     remap.
+
+    ``field_refs`` maps each ``@field_ref`` comparand's bare leaf name to its
+    resolved config value. Comparands are not match fields, so this lets a
+    cross-field message template reference the comparand (``{max_model_len}``)
+    without falling back to the raw template.
     """
 
     rule: Rule
     declared_value: Any
     effective_value: Any | None = None
     matched_fields: dict[str, Any] = field(default_factory=dict)
+    field_refs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -194,6 +200,7 @@ class Rule:
         last.
         """
         matched: dict[str, Any] = {}
+        field_refs: dict[str, Any] = {}
         last_value: Any = None
         for path, spec in self.match_fields.items():
             actual = resolve_field_path(config, path)
@@ -201,16 +208,28 @@ class Rule:
             if not evaluate_predicate(actual, resolved_spec):
                 return None
             matched[path] = actual
+            field_refs.update(_collect_ref_values(spec, config, path))
             last_value = actual
-        return RuleMatch(rule=self, declared_value=last_value, matched_fields=matched)
+        return RuleMatch(
+            rule=self,
+            declared_value=last_value,
+            matched_fields=matched,
+            field_refs=field_refs,
+        )
 
     def render_message(self, match: RuleMatch) -> str:
-        """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
+        """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{rule_id}`` in the template.
 
         ``matched_fields`` is keyed by full dotted paths
         (``vllm.sampling_params.min_tokens``), which are not valid
         ``str.format`` placeholder names, so each key is also exposed under its
         bare leaf name (``{min_tokens}``) - the corpus authoring convention.
+
+        ``field_refs`` supplies the resolved value of every ``@field_ref``
+        comparand under its bare leaf name (``{max_model_len}``), so a
+        cross-field message template can name the comparand it compares against.
+        A match-field leaf wins over a field-ref leaf on collision (the
+        subject's actual value is authoritative).
 
         Uses ``str.format`` with permissive defaults - templates that reference
         a still-missing key fall back to the raw template rather than raising at
@@ -220,18 +239,22 @@ class Rule:
         """
         if self.message_template is None:
             return "<no message template>"
-        # Seed the full dotted paths first, then add leaf names via setdefault:
-        # a dot-free path is never re-added under its own key (which would make
-        # ``.format`` raise "multiple values"), and on a leaf collision between
-        # two distinct paths the first-seen path wins (deterministic rendering).
+        # Full dotted match paths first, then match-field leaf names via
+        # setdefault: a dot-free path is never re-added under its own key (which
+        # would make ``.format`` raise "multiple values"), and on a leaf
+        # collision between two distinct match paths the first-seen path wins
+        # (deterministic rendering). Field-ref leaves fill in only where a match
+        # field did not already claim the leaf (match fields are authoritative).
         fmt_kwargs: dict[str, Any] = dict(match.matched_fields)
         for path, value in match.matched_fields.items():
             fmt_kwargs.setdefault(path.rsplit(".", 1)[-1], value)
+        for leaf, value in match.field_refs.items():
+            fmt_kwargs.setdefault(leaf, value)
         try:
             return self.message_template.format(
                 declared_value=match.declared_value,
                 effective_value=match.effective_value,
-                invariant_id=self.id,
+                rule_id=self.id,
                 **fmt_kwargs,
             )
         except (KeyError, IndexError):
@@ -318,6 +341,31 @@ def _resolve_one_ref(ref: str, config: Any, predicate_field_path: str) -> Any:
     return resolve_field_path(config, full_path)
 
 
+def _collect_ref_values(spec: Any, config: Any, predicate_field_path: str) -> dict[str, Any]:
+    """Map each ``@field_ref`` comparand's leaf name to its resolved config value.
+
+    A cross-field predicate compares the subject field against a ``@field_ref``
+    comparand (``max_num_batched_tokens: {'<': '@max_model_len'}``). The comparand
+    is not itself a match field, so :meth:`Rule.render_message` cannot expose it
+    from ``matched_fields`` and a template mentioning ``{max_model_len}`` would
+    fall back to raw text. This surfaces the resolved comparand value under its
+    bare leaf name so such templates render. Non-ref specs contribute nothing.
+    """
+    if not spec_has_field_ref(spec):
+        return {}
+    refs: dict[str, Any] = {}
+    if isinstance(spec, str):
+        leaf = spec[len(_FIELD_REF_PREFIX) :].rsplit(".", 1)[-1]
+        refs[leaf] = _resolve_one_ref(spec, config, predicate_field_path)
+    elif isinstance(spec, dict):
+        for value in spec.values():
+            refs.update(_collect_ref_values(value, config, predicate_field_path))
+    elif isinstance(spec, (list, tuple)):
+        for value in spec:
+            refs.update(_collect_ref_values(value, config, predicate_field_path))
+    return refs
+
+
 _OPERATOR_HANDLERS: dict[str, Any] = {
     # Comparison operators: bilaterally None-safe on the *asymmetric* ones.
     # ``a`` may be None when the predicate's field is unset; ``b`` may be
@@ -370,6 +418,19 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
 }
 
 
+VALID_OPERATOR_KEYS: frozenset[str] = frozenset(_OPERATOR_HANDLERS)
+"""Every accepted dict-spec operator key (symbol and word-form both present).
+
+A predicate dict's keys must all name a real operator. Since
+:data:`_OPERATOR_HANDLERS` registers both symbol forms and their word-form
+aliases (``equals`` / ``not_equal``) plus the presence flags
+(``present`` / ``absent``), its keyset is the complete pre-canonicalisation
+allowlist. :func:`_canonicalise_match_fields` rejects any key outside it at
+parse so a typo (``not_equalz``) fails loudly at load rather than as a bare
+``ValueError`` at rule-match time.
+"""
+
+
 OPERATOR_ALIASES: dict[str, str] = {
     "equals": "==",
     "not_equal": "!=",
@@ -395,25 +456,35 @@ def canonical_operator(op: str) -> str:
     return OPERATOR_ALIASES.get(op, op)
 
 
-def _canonicalise_match_fields(fields: dict[str, Any]) -> dict[str, Any]:
+def _canonicalise_match_fields(rule_id: str, fields: dict[str, Any]) -> dict[str, Any]:
     """Canonicalise operator keys in every dict-valued field spec at parse time.
 
     A dict spec's keys are predicate operators; word-form aliases (``equals`` /
     ``not_equal``) are mapped to their symbol form via :func:`canonical_operator`
     so every consumer sees one canonical key regardless of how the corpus author
-    wrote the rule. :func:`canonical_operator` passes unknown keys through
-    unchanged, so non-operator keys (``present``, ``not_in``, ...) are untouched.
-    Scalar shorthand specs (bare-value equality) are not dicts, so they pass
-    through unchanged too.
+    wrote the rule. Non-operator flag keys (``present``, ``absent``) and the
+    membership/type operators are registered operators too, so they pass through
+    unchanged. Scalar shorthand specs (bare-value equality) are not dicts, so
+    they pass through unchanged too.
+
+    Any dict-spec key outside :data:`VALID_OPERATOR_KEYS` (a typo like
+    ``not_equalz``) is rejected here with a :class:`RuleCorpusError` naming the
+    rule and the offending key, rather than passing through to fail as a bare
+    ``ValueError`` at rule-match time.
     """
-    return {
-        path: (
-            {canonical_operator(op): value for op, value in spec.items()}
-            if isinstance(spec, dict)
-            else spec
-        )
-        for path, spec in fields.items()
-    }
+    canonicalised: dict[str, Any] = {}
+    for path, spec in fields.items():
+        if not isinstance(spec, dict):
+            canonicalised[path] = spec
+            continue
+        for op in spec:
+            if op not in VALID_OPERATOR_KEYS:
+                raise RuleCorpusError(
+                    f"Rule {rule_id!r} field {path!r} uses unknown match operator {op!r}; "
+                    f"must be one of: {sorted(VALID_OPERATOR_KEYS)}"
+                )
+        canonicalised[path] = {canonical_operator(op): value for op, value in spec.items()}
+    return canonicalised
 
 
 def _ordered(a: Any, b: Any, op: Callable[[Any, Any], bool]) -> bool:
@@ -628,7 +699,7 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
         id=rule_id,
         engine=str(raw["engine"]),
         severity=severity,
-        match_fields=_canonicalise_match_fields(dict(match["fields"])),
+        match_fields=_canonicalise_match_fields(rule_id, dict(match["fields"])),
         provenance=_parse_provenance(rule_id, raw["provenance"]),
         message_template=raw.get("message_template"),
         normalised_fields=tuple(str(p) for p in normalised),

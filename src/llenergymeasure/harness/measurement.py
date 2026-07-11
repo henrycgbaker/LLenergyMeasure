@@ -189,6 +189,7 @@ def collect_measurement_warnings(
     temp_start_c: float | None,
     temp_end_c: float | None,
     nvml_sample_count: int,
+    energy_measurement_present: bool = True,
 ) -> list[str]:  # pragma: no cover
     from llenergymeasure.harness.measurement_warnings import (
         collect_measurement_warnings as _cmw,
@@ -200,6 +201,7 @@ def collect_measurement_warnings(
         temp_start_c=temp_start_c,
         temp_end_c=temp_end_c,
         nvml_sample_count=nvml_sample_count,
+        energy_measurement_present=energy_measurement_present,
     )
 
 
@@ -686,7 +688,7 @@ class MeasurementHarness:
         # 15. Collect measurement quality warnings
         duration_sec = (window.end_time - window.start_time).total_seconds()
         measurement_warnings = self._collect_warnings(
-            duration_sec, window.timeseries_samples, gpu_indices
+            duration_sec, window.timeseries_samples, gpu_indices, window.energy_measurement
         )
 
         # 16. Assemble ExperimentResult
@@ -759,14 +761,22 @@ class MeasurementHarness:
             obs_sampling = output.extras.get("observed_sampling_params", {}) or {}
             lib_ver = output.extras.get("library_version", "unknown") or "unknown"
 
-            # Compute observed_config_hash from extracted native-type state
+            # Compute observed_config_hash from extracted native-type state.
+            # harness + measurement come from the ran config so the observed hash
+            # covers the same identity dimensions as the resolved hash.
             engine_name = result.engine
             task_dict = config.task.model_dump(mode="python")
+            active_harness = config.active_harness()
+            harness_dump = (
+                active_harness.model_dump(mode="python") if active_harness is not None else {}
+            )
             observed_view = build_observed_view(
                 engine=engine_name,
                 task=task_dict,
                 observed_engine_params=obs_engine,
                 observed_sampling_params=obs_sampling,
+                harness=harness_dump,
+                measurement=config.measurement.model_dump(mode="python"),
             )
             obs_hash = hash_config(observed_view)
 
@@ -864,8 +874,15 @@ class MeasurementHarness:
         duration_sec: float,
         timeseries_samples: list[PowerThermalSample],
         gpu_indices: list[int] | None = None,
+        energy_measurement: Any = None,
     ) -> list[str]:
-        """Collect measurement quality warnings from timeseries samples."""
+        """Collect measurement quality warnings from timeseries samples.
+
+        ``energy_measurement`` is the authoritative energy backend result (or None).
+        Its presence is a separate signal from ``timeseries_samples`` (which come from
+        the thermal-telemetry sampler) - an absent energy measurement must be flagged
+        even when thermal telemetry sampled fine.
+        """
         temp_start: float | None = None
         temp_end: float | None = None
         if timeseries_samples:
@@ -883,6 +900,7 @@ class MeasurementHarness:
             temp_start_c=temp_start,
             temp_end_c=temp_end,
             nvml_sample_count=nvml_count,
+            energy_measurement_present=energy_measurement is not None,
         )
 
     @staticmethod
@@ -1023,8 +1041,11 @@ class MeasurementHarness:
     ) -> ExperimentResult:
         """Assemble ExperimentResult from measurement data.
 
-        All energy/FLOPs fields are populated with real values (no 0.0 placeholders).
-        Energy breakdown uses baseline adjustment when available.
+        Energy/FLOPs fields carry measured values. The one exception: when no energy
+        sampler produced a measurement, total_energy_j keeps a 0.0 placeholder that is
+        made loud via a warning log and the energy_measurement_unavailable measurement
+        warning (absence, not a measured zero). Energy breakdown uses baseline
+        adjustment when available.
 
         Args:
             engine_name: Engine identifier string (from engine.name).
@@ -1075,8 +1096,21 @@ class MeasurementHarness:
         # the sampler total when a window is in effect).
         if window_result is not None:
             total_energy_j = window_result.energy_j
+        elif energy_measurement is not None:
+            total_energy_j = energy_measurement.total_j
         else:
-            total_energy_j = energy_measurement.total_j if energy_measurement is not None else 0.0
+            # No authoritative energy measurement (sampler unavailable or disabled). The
+            # schema requires a non-null total_energy_j, so we keep a 0.0 placeholder -
+            # but this is absence, NOT a measured zero. It is made loud here and, in the
+            # persisted result, via the energy_measurement_unavailable measurement warning
+            # (see collect_measurement_warnings); it can never be silent.
+            logger.warning(
+                "No energy measurement available for %s; reporting total_energy_j=0.0 as a "
+                "placeholder for absence, not a measured zero (see the "
+                "'energy_measurement_unavailable' measurement warning).",
+                experiment_id,
+            )
+            total_energy_j = 0.0
         # duration_sec is passed in from run() - computed once, not recalculated here
 
         # Token counts reported describe the full workload; for a sub-window, energy and

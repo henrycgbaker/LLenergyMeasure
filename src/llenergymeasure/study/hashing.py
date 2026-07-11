@@ -40,6 +40,12 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     resolved-config / observed-config ordering separates "how the engine
     constructs" from "what it generates with". Any section-level extras merge
     into the engine-params view.
+
+    The active engine's ``harness`` block (llem-orchestration knobs the engine
+    has no native API for - batch_size, torch_compile, allow_tf32, autocast) and
+    the ``measurement`` block (methodology dials) also join the view: both drive
+    execution or define distinct runs, so a sweep over either must produce
+    distinct resolved hashes rather than collapsing under dedup.
     """
     engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)
@@ -47,10 +53,15 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     engine_params = dump.pop("engine_params", None) or {}
     sampling = dump.pop("sampling_params", None) or {}
 
+    active_harness = config.active_harness()
+    harness_dump = active_harness.model_dump(mode="python") if active_harness is not None else {}
+
     return ConfigHashView(
         engine=engine_name,
         task=config.task.model_dump(mode="python"),
         observed_engine_params={**engine_params, **dump},
         observed_sampling_params=sampling,
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
+        harness=harness_dump,
+        measurement=config.measurement.model_dump(mode="python"),
     )

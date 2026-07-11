@@ -26,9 +26,10 @@ MODEL = "Qwen/Qwen2.5-0.5B"
 # A crafted vLLM study with a known shape:
 #   sweep = top_p(2) x latency_profiling(2) = 4 declared grid points
 #   top_p = 2.0 is rejected by a shipped engine rule (2 points)
-#   the 2 valid points differ only in latency_profiling, a measurement dial
-#     excluded from the resolved-config hash, so they dedup to 1 unique
-#   n_cycles = 3 -> 3 runs; gaps: 2 x 30s experiment + 2 x 120s cycle = 300s
+#   the 2 valid points differ only in latency_profiling, a measurement dial that
+#     joins the resolved-config hash (2026-07-11 ruling: sweeping methodology
+#     creates distinct runs), so they stay 2 unique - dedup merges nothing
+#   n_cycles = 3 -> 6 runs; gaps: 5 x 30s experiment + 2 x 120s cycle = 390s
 _CRAFTED = f"""
 study_name: crafted-demo
 task:
@@ -71,10 +72,12 @@ def test_funnel_arithmetic_full(tmp_path: Path) -> None:
     assert funnel.skipped == 2
     assert funnel.valid == 2
     assert funnel.dedup_enabled is True
-    assert funnel.merged_away == 1
-    assert funnel.unique == 1
+    # latency_profiling now joins the identity hash, so the two valid points are
+    # distinct: nothing merges away and both are unique.
+    assert funnel.merged_away == 0
+    assert funnel.unique == 2
     assert funnel.n_cycles == 3
-    assert funnel.runs == 3
+    assert funnel.runs == 6
 
 
 def test_funnel_rule_attribution(tmp_path: Path) -> None:
@@ -98,8 +101,8 @@ def test_render_shows_rule_id_and_counts(tmp_path: Path) -> None:
     assert "Study plan: crafted-demo" in out
     assert _TOP_P_RULE in out
     assert "runs" in out
-    # Gap-only wall-clock lower bound: 2*30 + 2*120 = 300s = 5m 00s.
-    assert "5m 00s" in out
+    # Gap-only wall-clock lower bound: 5*30 + 2*120 = 390s = 6m 30s.
+    assert "6m 30s" in out
 
 
 def test_non_rule_failures_grouped(tmp_path: Path) -> None:
@@ -159,7 +162,9 @@ sweep:
 """
     funnel = build_funnel(_load_with_cli_defaults(tmp_path, text))  # type: ignore[arg-type]
     assert funnel.n_cycles == 3
-    assert funnel.unique == 1  # 2 measurement-only configs dedup to 1
+    # Measurement dials join the identity hash (2026-07-11 ruling): the two
+    # methodology variants stay distinct rather than deduping to one.
+    assert funnel.unique == 2
     assert funnel.runs == 3 * funnel.unique
 
 

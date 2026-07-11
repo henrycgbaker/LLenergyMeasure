@@ -111,7 +111,7 @@ Controls sequencing, cycles, and failure handling:
 | `wall_clock_timeout_hours` | `float \| None` | `None` | Study-level wall-clock timeout. `None` = no limit. |
 | `experiment_timeout_seconds` | `float` | `600.0` | Per-experiment timeout. Applies to both local and Docker paths. |
 | `stdout_silence_timeout_seconds` | `float` | `300.0` | Docker watchdog: kill the container if it emits no stdout for this many seconds. Raise to 600-900s for TRT-LLM builds with infrequent compile progress output. |
-| `deduplicate_equivalent` | `bool` | `True` | When `True`, configs that are library-equivalent (same resolved config hash after engine-rules dormant resolution) are deduplicated. Set to `false` to run every declared config regardless of measurement equivalence. |
+| `deduplicate_equivalent` | `bool` | `True` | When `True`, configs sharing a resolved config hash (after engine-rules dormant resolution) are deduplicated. The hash covers the engine, task, sampling, harness, and measurement fields, so sweeping any of those yields distinct runs and only genuine duplicates collapse. Set to `false` to run every declared config. |
 
 ### Runner and image overrides
 

@@ -541,8 +541,8 @@ rules:
       transformers.sampling_params.compile_config:
         type_is_not: CompileConfig
         present: true
-  message_template: You provided `compile_config` as an instance of {type(self.compile_config)}, but it
-    must be an instance of `CompileConfig`.
+  message_template: You provided `compile_config` as {declared_value}, but it must be an instance of
+    `CompileConfig`.
   provenance:
     source: deterministic_miner
     verified: construction
