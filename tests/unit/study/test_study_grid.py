@@ -408,6 +408,25 @@ class TestExpandGridBase:
         with pytest.raises(ConfigError, match="base"):
             expand_grid(raw, study_yaml_path=study_yaml)
 
+    def test_top_level_images_key_is_study_level(self):
+        """A top-level ``images:`` override must not leak into experiment configs.
+
+        ``images:`` is study-level metadata (per-engine Docker image overrides).
+        Before the fix it was absent from ``_STUDY_ONLY_KEYS``, so it flowed into
+        every experiment dict and ``ExperimentConfig(extra="forbid")`` rejected
+        all of them ("all generated configs are invalid").
+        """
+        raw = {
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "images": {"transformers": "ghcr.io/org/img:tag"},
+            "sweep": {"task.dataset.n_prompts": [10, 20]},
+        }
+        valid, skipped = expand_grid(raw)
+        assert len(skipped) == 0
+        assert len(valid) == 2
+        assert {c.task.dataset.n_prompts for c in valid} == {10, 20}
+
 
 # =============================================================================
 # expand_grid() - invalid combination handling
