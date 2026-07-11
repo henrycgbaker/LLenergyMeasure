@@ -53,9 +53,9 @@ make absorb ENGINE=vllm SRC=engine-src/ ARGS='--dry-run'   # report the delta, w
 1. **Cold read.** An assisted read of the pinned source proposes candidate
    rules (`make analyst-cold-read`, which prompts the local Ollama model per
    source cluster).
-2. **Pool union.** The proposed candidates are merged with observed runtime
-   collisions and any manual seeds, then deduplicated into a version-scoped
-   working file (the "pool"). Pools are never shipped.
+2. **Pool union.** The proposed candidates are merged with any manual seeds,
+   then deduplicated into a version-scoped working file (the "pool"). Pools are
+   never shipped.
 3. **Recall interrogation.** For each shipped rule the fresh pool did not
    rediscover, absorb asks "is this constraint still present?" and annotates
    the answer.
@@ -148,12 +148,11 @@ engine_versions/<engine>/
 └── v<version>/
     ├── candidates/            Version-scoped working pool (gitignored)
     │   ├── analyst_cold_read.yaml   Cold-read proposals
-    │   ├── observed_collisions.yaml Deterministic-miner input
     │   ├── manual_seeds.yaml        Hand-authored seeds
     │   ├── union.yaml               Merged, deduplicated pool
     │   └── ladder.yaml              Persisted probe verdicts (within-version memory)
     └── outputs/               Durable, git-tracked
-        └── absorb_signoff.yaml      Human residue sign-off record
+        └── absorb_signoff.yaml      Human residue sign-off record (written by absorb; created on demand)
 ```
 
 The pool and ladder verdicts under `candidates/` are working files and are

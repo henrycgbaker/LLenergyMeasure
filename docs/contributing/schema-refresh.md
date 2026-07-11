@@ -54,17 +54,42 @@ NVIDIA GPU). CI never runs discovery; it only verifies the committed bytes.
 
 Equivalently, `make discover-schema ENGINE=<engine>`.
 
+The write path has a single writer per step:
+
+```
+container discovery
+        |
+        v
+engine_versions/<engine>/v<safe>/outputs/schema.discovered.json   <- ONLY discovery write target
+        |
+        v  make promote-schemas (byte-copy; the ONLY writer of the src copy)
+src/llenergymeasure/engines/<engine>/schema.discovered.json        <- packaged copy
+        |
+        v  regen_engine_configs.py (reads outputs/)
+src/llenergymeasure/engines/<engine>/config.py
+```
+
 The script reads the pin from `engine_versions/<engine>/current.yaml`
 (`yq '.library.current_version'`), selects the discovery image from it
 (`vllm/vllm-openai:<ver>` for vllm, `nvcr.io/nvidia/tensorrt-llm/release:<ver>`
 for tensorrt, and the first-party `llenergymeasure:transformers-<ver>` image
 for transformers - building it from `docker/Dockerfile.transformers` if
 absent), runs `python -m scripts.engine_producers._schemas_runner` inside the
-container, and writes the result to
-`src/llenergymeasure/engines/<engine>/schema.discovered.json`. It prints the
-`git diff` but does **not** commit: the committed JSON is the canonical SSOT,
-and authority comes from `git commit`, not from re-running the script. Review
-the diff, `git add`, and open a PR.
+container, and writes the result to the versioned snapshot
+`engine_versions/<engine>/v<safe>/outputs/schema.discovered.json` (the `v<safe>`
+directory is derived from the pin via `engine_versions/_outputs.py`, the one
+place that name-mangling lives). It then runs `scripts/promote_schemas.py` to
+byte-copy that snapshot into the packaged copy
+`src/llenergymeasure/engines/<engine>/schema.discovered.json`. Promotion is the
+**only** writer of the src copy and does no transformation - if one is ever
+needed it belongs in discovery or codegen, not promotion.
+
+The script prints the `git diff` of both files but does **not** commit: the
+committed JSON is the canonical SSOT, and authority comes from `git commit`, not
+from re-running the script. Review the diff, `git add` both files, and open a PR.
+Promotion is also exposed on its own as `make promote-schemas` (all engines, or
+`ENGINE=<engine>` for one) for the rare case you have refreshed a snapshot by
+hand and only need to re-sync the src copy.
 
 To make re-discovery byte-stable, the script sets `LLENERGY_DISCOVERY_FROZEN_AT`
 so the envelope's `discovered_at` is a fixed anchor rather than a fresh
@@ -99,13 +124,13 @@ CPU runners. The check that guards this page's own output is:
 | Check | Workflow / job | What it asserts |
 |---|---|---|
 | `regen_engine_configs.py --check` | `engine-rules-check.yml` / `config-codegen` (matrix over all three engines) | `config.py` is byte-identical to what the committed snapshot regenerates. |
+| `check_discovered_schema_versions.py` | `ci.yml` (matrix over all three engines) | The pin matches the schema version, and the promoted src copy exposes the same parameter surface as the versioned snapshot it was promoted from. This is the drift tripwire for the promotion invariant; with `promote-schemas` in place it should never fire. |
 
-Two further byte-identity checks in `ci.yml` verify the schema version and
-Pydantic alignment - see
-[CI architecture](/explanation/architecture/ci-architecture). Both are gated on
-the `docker` paths filter, which includes `engine_versions/**`, so a pin bump
-under `engine_versions/` triggers them even though nothing under `docker/`
-changed.
+A further byte-identity check in `ci.yml` verifies Pydantic alignment - see
+[CI architecture](/explanation/architecture/ci-architecture). These checks are
+gated on the `docker` paths filter, which includes `engine_versions/**`, so a
+pin bump under `engine_versions/` triggers them even though nothing under
+`docker/` changed.
 
 ---
 
