@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import TIMEOUT_ENV_SNAPSHOT
 from llenergymeasure.datasets import load_prompts
+from llenergymeasure.domain.bundle_artefacts import TIMESERIES_FILENAME
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
@@ -32,6 +33,7 @@ from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.energy import select_energy_sampler
 from llenergymeasure.engines.protocol import EnginePlugin, InferenceOutput
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
+from llenergymeasure.results.persistence import save_config_sidecar
 from llenergymeasure.utils.formatting import bytes_to_mb
 
 if TYPE_CHECKING:
@@ -680,7 +682,7 @@ class MeasurementHarness:
         if save_timeseries and resolved_output_dir is not None and window.timeseries_samples:
             ts_file = write_timeseries_parquet(
                 window.timeseries_samples,
-                resolved_output_dir / "timeseries.parquet",
+                resolved_output_dir / TIMESERIES_FILENAME,
             )
             timeseries_path = ts_file.name  # relative name in result JSON
             _emit_substep(_p, "save", "timeseries parquet written")
@@ -755,7 +757,6 @@ class MeasurementHarness:
         """
         try:
             from llenergymeasure.domain.hashing import build_observed_view, hash_config
-            from llenergymeasure.results.persistence import save_config_sidecar
 
             obs_engine = output.extras.get("observed_engine_params", {}) or {}
             obs_sampling = output.extras.get("observed_sampling_params", {}) or {}

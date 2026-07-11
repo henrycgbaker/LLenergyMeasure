@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
+from llenergymeasure.domain.bundle_artefacts import MANIFEST_FILENAME
 from llenergymeasure.results.persistence import _atomic_write
 from llenergymeasure.utils.exceptions import StudyError
 
@@ -146,7 +147,7 @@ class ManifestWriter:
 
     def __init__(self, study: StudyConfig, study_dir: Path) -> None:
         self._study_dir = study_dir
-        self.path = study_dir / "manifest.json"
+        self.path = study_dir / MANIFEST_FILENAME
         self.manifest = self._build_manifest(study)
         self._write()
 
@@ -160,7 +161,7 @@ class ManifestWriter:
         """
         writer = cls.__new__(cls)
         writer._study_dir = study_dir
-        writer.path = study_dir / "manifest.json"
+        writer.path = study_dir / MANIFEST_FILENAME
         writer.manifest = manifest
         return writer
 

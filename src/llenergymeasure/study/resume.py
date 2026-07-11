@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from llenergymeasure.domain.bundle_artefacts import MANIFEST_FILENAME
 from llenergymeasure.utils.exceptions import StudyError
 from llenergymeasure.utils.io import load_json
 
@@ -40,7 +41,7 @@ def find_resumable_study(output_dir: Path) -> Path | None:
     for subdir in output_dir.iterdir():
         if not subdir.is_dir():
             continue
-        manifest_path = subdir / "manifest.json"
+        manifest_path = subdir / MANIFEST_FILENAME
         if not manifest_path.exists():
             continue
         try:
@@ -83,7 +84,7 @@ def load_resume_state(
     """
     from llenergymeasure.study.manifest import StudyManifest
 
-    manifest_path = study_dir / "manifest.json"
+    manifest_path = study_dir / MANIFEST_FILENAME
     if not manifest_path.exists():
         raise StudyError(
             f"Cannot resume: manifest.json not found in {study_dir}. "
