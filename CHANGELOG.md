@@ -9,9 +9,27 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [v0.10.0] - TBD
 
-Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docusaurus docs site, Z-engines layout, and CI hardening.
+The engine-knowledge-as-data milestone. Hand-curated per-engine config was replaced by
+typed Pydantic configs code-generated from validation rules mined directly from engine
+source; the engine-coupling restructure, per-engine SSOT version pins, a Docusaurus docs
+site, study-authoring commands (`llem study init` / bounds mode / sweep idioms / plan
+preview), the absorb conductor, and a rewritten hosted-byte-verification CI all landed on
+this line. Engine pins advanced to vLLM 0.19.1, TensorRT-LLM 1.0.0, and Transformers 5.7.0.
 
 ### Breaking Changes
+
+- **Hand-curated `engine_configs.py` deleted; per-engine typed configs are now
+  code-generated.** The ~1100-line hand-maintained `engine_configs.py` was removed. Each
+  engine's typed Pydantic config surface is now code-generated from validation rules mined
+  directly from that engine's source, keyed to the pinned version under `engine_versions/`.
+  A parity gate guarded the deletion. Author-facing YAML is unchanged; only the internal
+  config construction path moved to codegen. ([#733], [#734], [#735], [#736], [#738])
+
+- **Engine validation vocabulary renamed from "invariants" to "rules".** The mined corpus,
+  its loader surface, and the CLI/docs terminology now say "rules". A single shipped rules
+  corpus with a closed severity enum replaces the prior split, and the invariant-era
+  compatibility shims were dropped. YAML that referenced the old `engine_invariants` naming
+  must move to the `rules` vocabulary. ([#480], [#572], [#737], [#740])
 
 - **`llem run` reduced to session flags only.** The semantic-override flags were removed;
   experiment parameters now live in the YAML config (author one with `llem study init`), and a
@@ -109,9 +127,9 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
   via `LLEM_SKIP_IMAGE_CHECK=1`. ([#256])
 - `SchemaLoader` class (`llenergymeasure.config.SchemaLoader`) reads vendored engine schemas via
   `importlib.resources` with per-instance caching and major-version envelope validation. ([#268])
-- Engine parameter discovery script (`scripts/discover_engine_schemas.py`) introspects installed
-  engine packages inside their Docker images. Supports `vllm`, `tensorrt`, `transformers`, and
-  `--all`. ([#266])
+- Engine parameter discovery introspects installed engine packages inside their Docker images.
+  The initial standalone script (`scripts/discover_engine_schemas.py`, #266) was later superseded
+  by the `scripts/engine_producers/` codegen toolkit (see Breaking Changes). ([#266])
 - Vendored engine parameter schemas at `src/llenergymeasure/engines/{vllm,tensorrt,transformers}/`.
   Regenerate with `make discover-schema ENGINE=<engine>`. ([#266])
 - Per-engine sub-package layout (`src/llenergymeasure/engines/<engine>/`) co-locating runtime data,
@@ -148,6 +166,30 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
   ([#514], [#573])
 - Cloudflare Pages PR preview deploy workflow. ([#575])
 - SSOT audit trail and GHCR image retention policies. ([#546])
+- Engine-knowledge SSOT workspace under `engine_versions/` with per-version mined producer
+  snapshots, a shared schema-extraction substrate, and workspace-driven codegen for the typed
+  engine config models. ([#733], [#734], [#735], [#736])
+- Vendored per-version producer snapshots for all three engines (vLLM 0.7.3 / 0.16.0 / 0.18.1 /
+  0.19.1, TensorRT-LLM 0.21.0 / 1.0.0 / 1.2.0 / 1.2.1, Transformers 4.57.3 / 5.3.0 / 5.6.2 / 5.7.0).
+  ([#599], [#600], [#601], [#636], [#637], [#638], [#639], [#640], [#641], [#642])
+- Schema-vs-source drift tool (coverage and added-direction probes, `EXCLUSIONS.yaml`, sticky-comment
+  gate) replacing the prior probe primitive. ([#635], [#643], [#644], [#649], [#650])
+- `llem study init` scaffold command for authoring a study YAML. ([#745])
+- `llem study plan` preview command showing the expanded experiment grid. ([#750])
+- Numeric sweep-axis idioms (`span`, `log`, `pow2`) for concise study axes. ([#746])
+- Bounds mode with series policies and per-axis overrides. ([#747])
+- Sweep configs record the rejecting rule id when a candidate is skipped. ([#741])
+- Absorb conductor orchestrates engine-rule refresh across all engines. ([#756], [#771])
+- Upstream validator coverage check confirms mined rules cover each engine's validators. ([#757])
+- Cold-read analyst proposer for engine rules. ([#755])
+- Citation checker (tier 1 of the rule verification ladder). ([#753])
+- Construction and identity probe kernel for rule verification. ([#754])
+- Observed-collision miner surfaces dormant rule candidates from runtime observations. ([#752])
+- Self-hosted Renovate cron; engine-version scanning revived and its config migrated. ([#732],
+  [#775], [#776])
+- Generated-doc drift gate in the docs-freshness workflow. ([#760], [#761])
+- Fan-in gate making the engine-rules-check requireable without deadlock; bump gates made
+  reachable and requireable. ([#769], [#772])
 
 ### Changed
 
@@ -165,6 +207,12 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
 - Renovate customManager retargeted from Dockerfile ARGs to `engine_versions/` SSOT. ([#481])
 - First-party `Dockerfile.vllm` and `Dockerfile.tensorrt` replaced with upstream-direct images
   plus volume mounts. ([#509])
+- Advanced engine pins to vLLM 0.19.1, TensorRT-LLM 1.0.0, and Transformers 5.7.0, adopting the
+  generated nested configs at those versions. ([#738])
+- Engine pipeline rewritten to hosted byte-verification (the mined corpus and generated configs
+  are verified byte-for-byte against a fresh mine, no human source-diffing). ([#758])
+- Documentation aligned to the byte-verification engine-knowledge flow and the rules vocabulary;
+  stale engine and contributing pages rewritten. ([#759], [#764], [#774])
 
 ### Fixed
 
@@ -188,12 +236,21 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
 - Non-matching engine sections stripped correctly during multi-engine grid expansion. ([#171])
 - Docker auto-elevation enforced for multi-engine studies. ([#172])
 - Baseline cache path resolved before Docker bind-mount. ([#248])
+- Purged false-positive and phantom rules from the shipped corpus. ([#767])
+- Rule message rendering and loader guards corrected. ([#768])
+- Study dedup fallback, grid edge cases, and dormant-candidate visibility repaired. ([#770])
+- Schema discovery retargeted at the `current.yaml` pins. ([#765])
+- Pin-driven Transformers publish and GHCR prune exemption. ([#766])
 
 ### Removed
 
 - Internal helper `llenergymeasure.study.runner._calculate_timeout` (replaced by direct config
   reads). ([#529])
 - First-party `Dockerfile.vllm` and `Dockerfile.tensorrt` engine images. ([#509])
+- Dead invariant-mining pipeline and the `refresh-invariants` / `schema-diff` scripts. ([#762],
+  [#763])
+- Orphaned files, dead references, and retired mined-invariants documentation pages. ([#760],
+  [#773])
 - Predecessor CI workflows: `auto-mine.yml`, `vendor-tensorrt.yml`, `vendor-vllm.yml`,
   `parameter-discovery.yml`, and predecessors. ([#483], [#485])
 
@@ -480,6 +537,7 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#444]: https://github.com/henrycgbaker/llenergymeasure/pull/444
 [#447]: https://github.com/henrycgbaker/llenergymeasure/pull/447
 [#477]: https://github.com/henrycgbaker/llenergymeasure/pull/477
+[#480]: https://github.com/henrycgbaker/llenergymeasure/pull/480
 [#481]: https://github.com/henrycgbaker/llenergymeasure/pull/481
 [#482]: https://github.com/henrycgbaker/llenergymeasure/pull/482
 [#483]: https://github.com/henrycgbaker/llenergymeasure/pull/483
@@ -495,7 +553,61 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#560]: https://github.com/henrycgbaker/llenergymeasure/pull/560
 [#566]: https://github.com/henrycgbaker/llenergymeasure/pull/566
 [#570]: https://github.com/henrycgbaker/llenergymeasure/pull/570
+[#572]: https://github.com/henrycgbaker/llenergymeasure/pull/572
 [#573]: https://github.com/henrycgbaker/llenergymeasure/pull/573
 [#575]: https://github.com/henrycgbaker/llenergymeasure/pull/575
+[#599]: https://github.com/henrycgbaker/llenergymeasure/pull/599
+[#600]: https://github.com/henrycgbaker/llenergymeasure/pull/600
+[#601]: https://github.com/henrycgbaker/llenergymeasure/pull/601
+[#635]: https://github.com/henrycgbaker/llenergymeasure/pull/635
+[#636]: https://github.com/henrycgbaker/llenergymeasure/pull/636
+[#637]: https://github.com/henrycgbaker/llenergymeasure/pull/637
+[#638]: https://github.com/henrycgbaker/llenergymeasure/pull/638
+[#639]: https://github.com/henrycgbaker/llenergymeasure/pull/639
+[#640]: https://github.com/henrycgbaker/llenergymeasure/pull/640
+[#641]: https://github.com/henrycgbaker/llenergymeasure/pull/641
+[#642]: https://github.com/henrycgbaker/llenergymeasure/pull/642
+[#643]: https://github.com/henrycgbaker/llenergymeasure/pull/643
+[#644]: https://github.com/henrycgbaker/llenergymeasure/pull/644
+[#649]: https://github.com/henrycgbaker/llenergymeasure/pull/649
+[#650]: https://github.com/henrycgbaker/llenergymeasure/pull/650
+[#732]: https://github.com/henrycgbaker/llenergymeasure/pull/732
+[#733]: https://github.com/henrycgbaker/llenergymeasure/pull/733
+[#734]: https://github.com/henrycgbaker/llenergymeasure/pull/734
+[#735]: https://github.com/henrycgbaker/llenergymeasure/pull/735
+[#736]: https://github.com/henrycgbaker/llenergymeasure/pull/736
+[#737]: https://github.com/henrycgbaker/llenergymeasure/pull/737
+[#738]: https://github.com/henrycgbaker/llenergymeasure/pull/738
+[#740]: https://github.com/henrycgbaker/llenergymeasure/pull/740
+[#741]: https://github.com/henrycgbaker/llenergymeasure/pull/741
+[#745]: https://github.com/henrycgbaker/llenergymeasure/pull/745
+[#746]: https://github.com/henrycgbaker/llenergymeasure/pull/746
+[#747]: https://github.com/henrycgbaker/llenergymeasure/pull/747
 [#749]: https://github.com/henrycgbaker/llenergymeasure/pull/749
+[#750]: https://github.com/henrycgbaker/llenergymeasure/pull/750
+[#752]: https://github.com/henrycgbaker/llenergymeasure/pull/752
+[#753]: https://github.com/henrycgbaker/llenergymeasure/pull/753
+[#754]: https://github.com/henrycgbaker/llenergymeasure/pull/754
+[#755]: https://github.com/henrycgbaker/llenergymeasure/pull/755
+[#756]: https://github.com/henrycgbaker/llenergymeasure/pull/756
+[#757]: https://github.com/henrycgbaker/llenergymeasure/pull/757
+[#758]: https://github.com/henrycgbaker/llenergymeasure/pull/758
+[#759]: https://github.com/henrycgbaker/llenergymeasure/pull/759
+[#760]: https://github.com/henrycgbaker/llenergymeasure/pull/760
+[#761]: https://github.com/henrycgbaker/llenergymeasure/pull/761
+[#762]: https://github.com/henrycgbaker/llenergymeasure/pull/762
+[#763]: https://github.com/henrycgbaker/llenergymeasure/pull/763
+[#764]: https://github.com/henrycgbaker/llenergymeasure/pull/764
+[#765]: https://github.com/henrycgbaker/llenergymeasure/pull/765
+[#766]: https://github.com/henrycgbaker/llenergymeasure/pull/766
+[#767]: https://github.com/henrycgbaker/llenergymeasure/pull/767
+[#768]: https://github.com/henrycgbaker/llenergymeasure/pull/768
+[#769]: https://github.com/henrycgbaker/llenergymeasure/pull/769
+[#770]: https://github.com/henrycgbaker/llenergymeasure/pull/770
+[#771]: https://github.com/henrycgbaker/llenergymeasure/pull/771
+[#772]: https://github.com/henrycgbaker/llenergymeasure/pull/772
+[#773]: https://github.com/henrycgbaker/llenergymeasure/pull/773
+[#774]: https://github.com/henrycgbaker/llenergymeasure/pull/774
+[#775]: https://github.com/henrycgbaker/llenergymeasure/pull/775
+[#776]: https://github.com/henrycgbaker/llenergymeasure/pull/776
 [#783]: https://github.com/henrycgbaker/llenergymeasure/pull/783
