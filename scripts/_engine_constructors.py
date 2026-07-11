@@ -56,6 +56,10 @@ _CONSTRUCTOR_TABLE: dict[tuple[str, str], tuple[tuple[str, str], ...]] = {
         ("vllm.config.device", "DeviceConfig"),
         ("vllm.config.lora", "LoRAConfig"),
         ("vllm.config", "SchedulerConfig"),
+        # Nested-object surface: engine_params.compilation_config.* leaves
+        # validate on CompilationConfig. Appended last so every flat
+        # engine_params leaf keeps resolving to its original class.
+        ("vllm.config.compilation", "CompilationConfig"),
     ),
     ("transformers", "sampling_params"): (("transformers", "GenerationConfig"),),
     ("transformers", "sampling"): (("transformers", "GenerationConfig"),),
