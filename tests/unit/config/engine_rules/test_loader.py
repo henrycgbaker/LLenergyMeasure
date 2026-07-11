@@ -351,3 +351,32 @@ def test_word_form_operator_alias_canonicalised_at_parse(tmp_path: Path) -> None
     spec = rule.match_fields["transformers.sampling.temperature"]
     assert "not_equal" not in spec
     assert spec == {"present": True, "!=": 1.0}
+
+
+def test_unknown_dict_spec_operator_rejected_at_parse(tmp_path: Path) -> None:
+    # A typo'd operator key (``not_equalz``) is not a real operator; without an
+    # allowlist it passes canonical_operator unchanged at parse and only fails at
+    # rule-match time with a bare ValueError. Reject it at load, naming the rule
+    # and the offending key.
+    data = yaml.safe_load(_CORPUS_MINIMAL)
+    data["rules"][0]["match"]["fields"] = {
+        "transformers.sampling.temperature": {"not_equalz": 1.0},
+    }
+    _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    with pytest.raises(RuleCorpusError, match=r"transformers_test_rule.*not_equalz"):
+        loader.load_rules("transformers")
+
+
+def test_all_valid_operators_accepted_at_parse(tmp_path: Path) -> None:
+    # Every operator in the handler table (symbol and word forms) plus the
+    # present/absent flags must parse cleanly.
+    data = yaml.safe_load(_CORPUS_MINIMAL)
+    data["rules"][0]["match"]["fields"] = {
+        "transformers.sampling.temperature": {"present": True, "not_equal": 1.0, ">=": 0.0},
+    }
+    _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    rule = loader.load_rules("transformers").rules[0]
+    spec = rule.match_fields["transformers.sampling.temperature"]
+    assert spec == {"present": True, "!=": 1.0, ">=": 0.0}

@@ -175,7 +175,7 @@ When a rule fires at `error` severity, the loader renders the rule's `message_te
 Template substitution variables:
 - `{declared_value}` - the value of the triggering (subject) field.
 - `{effective_value}` - the normalised value (reserved for value-aliasing dormant cases; `None` otherwise).
-- `{invariant_id}` - the rule's identifier.
+- `{rule_id}` - the rule's identifier.
 - The leaf name of any matched `match.fields` path - the actual field value. The renderer seeds the full dotted paths first, then exposes each under its bare leaf name (e.g. `vllm.sampling_params.min_tokens` is also available as `{min_tokens}`, since a dotted path is not a valid `str.format` placeholder). On a leaf-name collision between two distinct paths the first-seen path wins, keeping rendering deterministic.
 
 Example error message rendered from a rule:

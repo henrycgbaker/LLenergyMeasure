@@ -48,6 +48,7 @@ candidates file).
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import sys
 from dataclasses import dataclass, field
@@ -59,6 +60,42 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _engine_constructors as ec
+
+
+def _load_canonical_operator() -> Any:
+    """Import the loader's ``canonical_operator`` as the single alias-table SSOT.
+
+    The probe runs inside pristine engine images and must stay stdlib + PyYAML
+    only, so it cannot ``import llenergymeasure`` (that pulls the whole package
+    init chain). The loader module itself imports only stdlib + yaml, so we load
+    it directly by file path - bypassing the package ``__init__`` chain - to
+    reuse :data:`OPERATOR_ALIASES` without duplicating the word-form/symbol table
+    here. The loader canonicalises match specs at parse time; probes read raw
+    pool YAML on a different path, so word-form operators (``not_equal``) must be
+    canonicalised here too or they land ``unprobeable`` and are silently dropped.
+    """
+    loader_path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "llenergymeasure"
+        / "config"
+        / "engine_rules"
+        / "loader.py"
+    )
+    module_name = "_engine_rules_loader"
+    spec = importlib.util.spec_from_file_location(module_name, loader_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load engine-rules loader from {loader_path}")
+    module = importlib.util.module_from_spec(spec)
+    # Register before exec: the loader's frozen dataclasses use forward
+    # references under ``from __future__ import annotations``, and dataclass
+    # introspection resolves them via ``sys.modules[cls.__module__]``.
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module.canonical_operator
+
+
+canonical_operator = _load_canonical_operator()
 
 # Deterministic derivation constants. REF_BASE anchors any field referenced by
 # an @field_ref (and any unnamed constructor arg a cross-field probe needs);
@@ -217,8 +254,16 @@ def _value_not_of_type(names: Any) -> Any:
 
 
 def _substantive_op(spec: dict[str, Any]) -> tuple[str, Any] | None:
-    """The one non-present/absent operator in a spec, or None if flag-only."""
-    ops = [(k, v) for k, v in spec.items() if k not in _FLAG_KEYS]
+    """The one non-present/absent operator in a spec, or None if flag-only.
+
+    The operator key is canonicalised (word-form ``not_equal`` -> symbol ``!=``)
+    so a candidate authored with a word-form operator dispatches to the same
+    derivation branch as its symbol form instead of falling through to
+    ``unprobeable``. This is the single chokepoint every derivation path
+    (``_fire_value`` / ``_nofire_value`` / ``identity_values``) reads its
+    operator name from.
+    """
+    ops = [(canonical_operator(k), v) for k, v in spec.items() if k not in _FLAG_KEYS]
     if not ops:
         return None
     return ops[0]
