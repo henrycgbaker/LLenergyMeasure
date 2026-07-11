@@ -16,11 +16,11 @@ import pytest
 
 import llenergymeasure.harness.preflight
 import llenergymeasure.study.preflight
-from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.harness.preflight import run_preflight
 from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.utils.exceptions import PreFlightError
-from tests.conftest import make_config
+from tests.conftest import make_config, make_study
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -409,21 +409,12 @@ def test_check_model_accessible_network_error(monkeypatch: pytest.MonkeyPatch) -
 # ---------------------------------------------------------------------------
 
 
-def _make_study(engines: list[str]) -> StudyConfig:
-    """Build a minimal StudyConfig with the given engines."""
-    experiments = [ExperimentConfig(task={"model": f"model-{b}"}, engine=b) for b in engines]
-    return StudyConfig(
-        experiments=experiments,
-        study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
-    )
-
-
 def test_run_study_preflight_single_engine_passes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Single-engine study passes study preflight unconditionally."""
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    study = _make_study(["transformers"])
+    study = make_study(["transformers"])
     # Should not raise
     run_study_preflight(study)
 
@@ -436,7 +427,7 @@ def test_run_study_preflight_multi_engine_docker_available_auto_elevates(
     monkeypatch.setattr(
         "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
     )
-    study = _make_study(["transformers", "vllm"])
+    study = make_study(["transformers", "vllm"])
     with caplog.at_level(logging.INFO, logger="llenergymeasure.study.preflight"):
         # Should not raise
         run_study_preflight(study)
@@ -455,7 +446,7 @@ def test_run_study_preflight_multi_engine_no_docker_raises(
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    study = _make_study(["transformers", "vllm"])
+    study = make_study(["transformers", "vllm"])
     with pytest.raises(PreFlightError) as exc_info:
         run_study_preflight(study)
 
@@ -472,7 +463,7 @@ def test_run_study_preflight_error_message_contains_engines(
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    study = _make_study(["transformers", "tensorrt"])
+    study = make_study(["transformers", "tensorrt"])
     with pytest.raises(PreFlightError) as exc_info:
         run_study_preflight(study)
 

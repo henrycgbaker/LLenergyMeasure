@@ -116,18 +116,6 @@ def test_sampler_defaults_to_gpu_zero() -> None:
     assert sampler._gpu_indices == [0]
 
 
-def test_sampler_backward_compat_device_index() -> None:
-    """PowerThermalSampler(device_index=1) uses _gpu_indices = [1] (deprecated)."""
-    sampler = PowerThermalSampler(device_index=1)
-    assert sampler._gpu_indices == [1]
-
-
-def test_sampler_gpu_indices_takes_precedence_over_device_index() -> None:
-    """gpu_indices takes precedence when both gpu_indices and device_index given."""
-    sampler = PowerThermalSampler(gpu_indices=[2, 3], device_index=0)
-    assert sampler._gpu_indices == [2, 3]
-
-
 # =============================================================================
 # Test 1: hw and sw thermal constants are distinct (0x40 vs 0x20)
 # =============================================================================

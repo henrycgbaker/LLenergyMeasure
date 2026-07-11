@@ -506,7 +506,7 @@ def test_codecarbon_stop_tracking_returns_energy_measurement() -> None:
     """stop_tracking() returns an EnergyMeasurement exposing total_j and per_gpu_j.
 
     The harness reads ``.total_j`` and ``.per_gpu_j``; CodeCarbon must mirror the
-    NVML/Zeus return shape, not the old EnergyMetrics(total_energy_j=...) shape.
+    NVML/Zeus return shape, not the legacy total_energy_j=... shape.
     """
     from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 

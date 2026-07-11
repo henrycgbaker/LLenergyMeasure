@@ -18,6 +18,7 @@ from llenergymeasure.api import (
     find_runtime_gaps,
     render_yaml_fragment,
 )
+from llenergymeasure.cli._options import VerboseOption
 
 __all__ = ["report_gaps_cmd"]
 
@@ -61,10 +62,7 @@ def report_gaps_cmd(
             ),
         ),
     ] = False,
-    verbose: Annotated[
-        int,
-        typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
-    ] = 0,
+    verbose: VerboseOption = 0,
 ) -> None:
     """Propose rules corpus entries from captured runtime observations."""
     from llenergymeasure.cli import _setup_logging

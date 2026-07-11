@@ -38,26 +38,6 @@ class FlopsResult(BaseModel):
         return self.value > 0
 
 
-class EnergyMetrics(BaseModel):
-    """Energy consumption metrics."""
-
-    total_energy_j: float = Field(..., description="Total energy consumed in Joules")
-    gpu_energy_j: float = Field(0.0, description="GPU energy in Joules")
-    cpu_energy_j: float = Field(0.0, description="CPU energy in Joules")
-    ram_energy_j: float = Field(0.0, description="RAM energy in Joules")
-    gpu_power_w: float = Field(0.0, description="Average GPU power in Watts")
-    cpu_power_w: float = Field(0.0, description="Average CPU power in Watts")
-    ram_power_w: float = Field(0.0, description="Average RAM power in Watts")
-    duration_sec: float = Field(..., description="Measurement duration in seconds")
-    emissions_kg_co2: float = Field(0.0, description="Carbon emissions in kg CO2")
-    energy_per_token_j: float = Field(0.0, description="Energy per token in Joules")
-
-    @property
-    def total_power_w(self) -> float:
-        """Total average power consumption (GPU + CPU + RAM)."""
-        return self.gpu_power_w + self.cpu_power_w + (self.ram_power_w or 0.0)
-
-
 # =============================================================================
 # Schema v3: Energy Breakdown, Thermal Throttle, Warmup Result
 # =============================================================================

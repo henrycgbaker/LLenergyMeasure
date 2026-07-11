@@ -54,7 +54,6 @@ def measure_baseline_power(
     duration_sec: float = 30.0,
     sample_interval_ms: int = 100,
     cache_ttl_sec: float = 3600.0,
-    device_index: int | None = None,
 ) -> BaselineCache | None:
     """Measure idle GPU baseline power with session caching.
 
@@ -67,23 +66,13 @@ def measure_baseline_power(
         duration_sec: How long to sample idle power.
         sample_interval_ms: Interval between power samples in milliseconds.
         cache_ttl_sec: How long cached results remain valid in seconds.
-        device_index: Deprecated. Use gpu_indices instead. If provided and
-            gpu_indices is None, treated as gpu_indices=[device_index].
 
     Returns:
         BaselineCache with measured power (summed across GPUs), or None if
         measurement failed.
     """
     # Resolve gpu_indices
-    if gpu_indices is not None:
-        resolved_indices = gpu_indices
-    elif device_index is not None:
-        logger.warning(
-            "measure_baseline_power: device_index is deprecated, use gpu_indices instead"
-        )
-        resolved_indices = [device_index]
-    else:
-        resolved_indices = [0]
+    resolved_indices = gpu_indices if gpu_indices is not None else [0]
 
     cache_key = tuple(sorted(resolved_indices))
 
@@ -180,24 +169,6 @@ def measure_baseline_power(
     )
 
     return result
-
-
-def invalidate_baseline_cache(
-    gpu_indices: list[int] | tuple[int, ...] | None = None,
-) -> None:
-    """Invalidate cached baseline measurements.
-
-    Args:
-        gpu_indices: Specific GPU set to invalidate (as list or tuple), or None
-            to clear all cached baselines.
-    """
-    if gpu_indices is not None:
-        cache_key = tuple(sorted(gpu_indices))
-        _baseline_cache.pop(cache_key, None)
-        logger.debug("Baseline cache invalidated for GPUs %s", list(gpu_indices))
-    else:
-        _baseline_cache.clear()
-        logger.debug("Baseline cache cleared (all devices)")
 
 
 def adjust_energy_for_baseline(
