@@ -1199,10 +1199,11 @@ class MeasurementHarness:
         if kv_cache_mb is not None:
             memory_stats["kv_cache_mb"] = kv_cache_mb
 
-        # Batch stats: None for vLLM (continuous batching). Static-batching engines
+        # Batch stats: continuous-batching engines (e.g. vLLM) report num_batches
+        # as None, so the truthiness guard skips them. Static-batching engines
         # report num_batches + padding; effective batch size derives from prompt count.
         batch_stats: dict[str, Any] | None = None
-        if engine_name != "vllm" and output.num_batches:
+        if output.num_batches:
             configured_batch_size = self._configured_batch_size(engine_name, config)
             effective_batch_size: float | None = None
             if output.num_batches > 0:
