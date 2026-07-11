@@ -1,4 +1,4 @@
-"""Per-engine LANDMARKS resolution tests for tensorrt-llm v0.21.0.
+"""Per-engine LANDMARKS resolution tests for tensorrt-llm v1.0.0.
 
 Engine-specific complement to ``tests/engine_versions/test_dispatcher.py``:
 asserts the two tensorrt producer modules expose ``LANDMARKS`` lazily via
@@ -17,7 +17,7 @@ import importlib
 
 from engine_versions._dispatcher import load_producer
 
-_TENSORRT_VERSION = "0.21.0"
+_TENSORRT_VERSION = "1.0.0"
 
 
 def _assert_landmark_shape(landmarks: object) -> tuple[str, ...]:

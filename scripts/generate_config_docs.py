@@ -21,8 +21,10 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from llenergymeasure.config._doc_helpers import default_label, type_label
+from scripts._docgen_common import add_output_option, emit_markdown
 
 # ---------------------------------------------------------------------------
 # Schema helpers
@@ -233,27 +235,15 @@ def _sweep_axis_notation_section() -> list[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate config reference Markdown")
-    parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        default=None,
-        help="Write output to this file path (default: stdout)",
+    parser = add_output_option(
+        argparse.ArgumentParser(description="Generate config reference Markdown")
     )
     args = parser.parse_args()
 
     from llenergymeasure.config.models import ExperimentConfig
 
     schema = ExperimentConfig.model_json_schema()
-    markdown = render_markdown(schema)
-
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(markdown)
-        print(f"Written to {args.output}", file=sys.stderr)
-    else:
-        print(markdown)
+    emit_markdown(render_markdown(schema), args.output)
 
 
 if __name__ == "__main__":

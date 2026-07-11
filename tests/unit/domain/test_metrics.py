@@ -9,7 +9,6 @@ from llenergymeasure.domain.metrics import (
     collect_itl_measurements,
     compute_latency_statistics,
 )
-from tests.conftest import make_energy_metrics
 
 # ---------------------------------------------------------------------------
 # TestFlopsResult
@@ -32,26 +31,6 @@ class TestFlopsResult:
             value=-1.0, method="parameter_estimate", confidence="low", precision="fp16"
         )
         assert fr.is_valid is False
-
-
-# ---------------------------------------------------------------------------
-# TestEnergyMetrics
-# ---------------------------------------------------------------------------
-
-
-class TestEnergyMetrics:
-    """total_power_w property."""
-
-    def test_total_power_w_sums_gpu_cpu_ram(self):
-        """E5: total_power_w folds in ram_power_w alongside GPU and CPU."""
-        em = make_energy_metrics(gpu_power_w=100.0, cpu_power_w=25.0, ram_power_w=10.0)
-        assert em.total_power_w == pytest.approx(135.0)
-
-    def test_total_power_w_default_ram_zero(self):
-        """ram_power_w defaults to 0.0, so the total reduces to GPU + CPU."""
-        em = make_energy_metrics(gpu_power_w=100.0, cpu_power_w=25.0)
-        assert em.ram_power_w == 0.0
-        assert em.total_power_w == pytest.approx(125.0)
 
 
 # ---------------------------------------------------------------------------

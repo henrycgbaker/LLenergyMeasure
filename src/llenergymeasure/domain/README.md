@@ -11,18 +11,6 @@ Defines the data structures used throughout the framework for metrics collection
 ### metrics.py
 Metrics collected during experiments.
 
-**EnergyMetrics** - Energy consumption:
-```python
-EnergyMetrics(
-    total_energy_j=150.0,
-    gpu_energy_j=140.0,
-    cpu_energy_j=10.0,
-    gpu_power_w=280.0,
-    duration_sec=2.5,
-    emissions_kg_co2=0.00015,
-)
-```
-
 **FlopsResult** - FLOPs estimation with provenance:
 ```python
 FlopsResult(

@@ -70,25 +70,14 @@ class PowerThermalSampler:
         self,
         gpu_indices: list[int] | None = None,
         sample_interval_ms: int = 100,
-        device_index: int | None = None,
     ) -> None:
         """Initialise power/thermal sampler.
 
         Args:
             gpu_indices: CUDA device indices to monitor. Defaults to [0] when None.
             sample_interval_ms: Interval between samples in milliseconds.
-            device_index: Deprecated. Use gpu_indices instead. If provided and
-                gpu_indices is None, treated as gpu_indices=[device_index].
         """
-        if gpu_indices is not None:
-            self._gpu_indices = gpu_indices
-        elif device_index is not None:
-            logger.warning(
-                "PowerThermalSampler: device_index is deprecated, use gpu_indices instead"
-            )
-            self._gpu_indices = [device_index]
-        else:
-            self._gpu_indices = [0]
+        self._gpu_indices = gpu_indices if gpu_indices is not None else [0]
 
         self._sample_interval = sample_interval_ms / 1000.0
         self._sample_interval_ms = sample_interval_ms

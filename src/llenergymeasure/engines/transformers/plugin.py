@@ -534,14 +534,9 @@ class TransformersEngine:
                 if pt.load_in_4bit:
                     bnb_kwargs["load_in_4bit"] = True
                     if pt.bnb_4bit_compute_dtype is not None:
-                        import torch as _torch
-
-                        _dtype_map = {
-                            "float16": _torch.float16,
-                            "bfloat16": _torch.bfloat16,
-                            "float32": _torch.float32,
-                        }
-                        bnb_kwargs["bnb_4bit_compute_dtype"] = _dtype_map[pt.bnb_4bit_compute_dtype]
+                        bnb_kwargs["bnb_4bit_compute_dtype"] = self._resolve_torch_dtype(
+                            pt.bnb_4bit_compute_dtype
+                        )
                     if pt.bnb_4bit_quant_type is not None:
                         bnb_kwargs["bnb_4bit_quant_type"] = pt.bnb_4bit_quant_type
                     if pt.bnb_4bit_use_double_quant is not None:
@@ -684,9 +679,9 @@ class TransformersEngine:
 
         _hn = config.active_harness()
         if _hn is not None and _hn.autocast_enabled is True and torch.cuda.is_available():
-            _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
             _amp_ctx = torch.autocast(
-                device_type="cuda", dtype=_dtype_map[_hn.autocast_dtype or "bfloat16"]
+                device_type="cuda",
+                dtype=self._resolve_torch_dtype(_hn.autocast_dtype or "bfloat16"),
             )
         else:
             _amp_ctx = nullcontext()  # type: ignore[assignment]

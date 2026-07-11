@@ -79,6 +79,35 @@ def print_result_summary(result: ExperimentResult) -> None:
         print()
 
 
+def _print_vram_estimate(
+    vram: dict[str, float] | None,
+    gpu_vram_gb: float | None,
+    dtype: str | None,
+    *,
+    label: str = "VRAM estimate",
+) -> None:
+    """Print a VRAM-estimate block to stdout.
+
+    Shared by the single-experiment and study dry-run renderers. Prints
+    "(unavailable)" when *vram* is None; otherwise the weights/KV/overhead
+    breakdown plus a total line annotated with GPU capacity when known.
+    """
+    print(label)
+    if vram is None:
+        print("  (unavailable)")
+    else:
+        print(f"  Weights        {_sig3(vram['weights_gb'])} GB ({dtype or '-'})")
+        print(f"  KV cache       {_sig3(vram['kv_cache_gb'])} GB")
+        print(f"  Overhead       {_sig3(vram['overhead_gb'])} GB")
+        total_line = f"  Total          ~{_sig3(vram['total_gb'])} GB"
+        if gpu_vram_gb is not None:
+            fits = vram["total_gb"] <= gpu_vram_gb
+            status = "OK" if fits else "WARNING: may not fit"
+            total_line += f" / {_sig3(gpu_vram_gb)} GB available   {status}"
+        print(total_line)
+    print()
+
+
 def print_dry_run(
     config: ExperimentConfig,
     vram: dict[str, float] | None,
@@ -132,23 +161,7 @@ def print_dry_run(
     print(f"  Output         {output_display}")
     print()
 
-    # --- VRAM estimate ---
-    print("VRAM estimate")
-    if vram is None:
-        print("  (unavailable)")
-    else:
-        weights_line = f"  Weights        {_sig3(vram['weights_gb'])} GB ({engine_dtype or '-'})"
-        print(weights_line)
-        print(f"  KV cache       {_sig3(vram['kv_cache_gb'])} GB")
-        print(f"  Overhead       {_sig3(vram['overhead_gb'])} GB")
-
-        total_line = f"  Total          ~{_sig3(vram['total_gb'])} GB"
-        if gpu_vram_gb is not None:
-            fits = vram["total_gb"] <= gpu_vram_gb
-            status = "OK" if fits else "WARNING: may not fit"
-            total_line += f" / {_sig3(gpu_vram_gb)} GB available   {status}"
-        print(total_line)
-    print()
+    _print_vram_estimate(vram, gpu_vram_gb, engine_dtype)
 
     print("Config valid. Run without --dry-run to start.")
 
@@ -292,21 +305,9 @@ def print_study_dry_run(
             peak_vram = vram
             peak_config = exp
 
-    print("VRAM estimate (peak)")
-    if peak_vram is not None and peak_config is not None:
-        peak_engine_params = peak_config.active_engine_params()
-        peak_dtype = getattr(peak_engine_params, "dtype", None)
-        print(f"  Weights        {_sig3(peak_vram['weights_gb'])} GB ({peak_dtype or '-'})")
-        print(f"  KV cache       {_sig3(peak_vram['kv_cache_gb'])} GB")
-        print(f"  Overhead       {_sig3(peak_vram['overhead_gb'])} GB")
-        total_line = f"  Total          ~{_sig3(peak_vram['total_gb'])} GB"
-        if gpu_vram_gb is not None:
-            fits = peak_vram["total_gb"] <= gpu_vram_gb
-            status = "OK" if fits else "WARNING: may not fit"
-            total_line += f" / {_sig3(gpu_vram_gb)} GB available   {status}"
-        print(total_line)
-    else:
-        print("  (unavailable)")
-    print()
+    peak_dtype: str | None = None
+    if peak_config is not None:
+        peak_dtype = getattr(peak_config.active_engine_params(), "dtype", None)
+    _print_vram_estimate(peak_vram, gpu_vram_gb, peak_dtype, label="VRAM estimate (peak)")
 
     print("Config valid. Run without --dry-run to start.")

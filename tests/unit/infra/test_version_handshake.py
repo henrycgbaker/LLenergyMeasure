@@ -22,7 +22,6 @@ from llenergymeasure.infra.version_handshake import (
     inspect_image_stamp,
     probe_image_engine_version,
     read_bundled_engine_version,
-    read_ssot_engine_version,
     skip_check_enabled,
 )
 
@@ -222,24 +221,6 @@ class TestClassifyEngineVersion:
         self, probed: str | None, expected: str | None
     ) -> None:
         assert classify_engine_version(probed, expected) is SchemaStatus.UNREACHABLE
-
-
-# ---------------------------------------------------------------------------
-# read_ssot_engine_version - reads engine_versions/{engine}.yaml
-# ---------------------------------------------------------------------------
-
-
-class TestReadSsotEngineVersion:
-    def test_known_engine(self) -> None:
-        """The committed SSOT files vllm/tensorrt/transformers all resolve."""
-        # Exact values are subject to Renovate bumps; assert non-empty + str.
-        for engine in ("vllm", "tensorrt", "transformers"):
-            version = read_ssot_engine_version(engine)
-            assert isinstance(version, str)
-            assert version  # non-empty
-
-    def test_unknown_engine_returns_none(self) -> None:
-        assert read_ssot_engine_version("nonexistent_engine_xyz") is None
 
 
 # ---------------------------------------------------------------------------

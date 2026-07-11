@@ -282,15 +282,9 @@ class TensorRTEngine:
         peak_mb = get_cuda_peak_memory_mb()
 
         # Count tokens from RequestOutput objects (same pattern as vLLM)
-        input_token_count = sum(
-            len(o.prompt_token_ids) for o in outputs if hasattr(o, "prompt_token_ids")
-        )
-        output_token_count = sum(
-            len(out.token_ids)
-            for o in outputs
-            if hasattr(o, "outputs") and o.outputs
-            for out in o.outputs
-        )
+        from llenergymeasure.engines._observed import count_request_tokens
+
+        input_token_count, output_token_count = count_request_tokens(outputs)
 
         logger.debug(
             "TRT-LLM inference complete: %d total tokens (in=%d, out=%d) in %.2fs",
