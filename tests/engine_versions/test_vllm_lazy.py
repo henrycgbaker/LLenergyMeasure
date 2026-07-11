@@ -4,9 +4,9 @@ Asserts that the producer modules' PEP 562 ``__getattr__`` hooks resolve
 ``LANDMARKS`` to the same tuple that ``load_producer`` returns directly
 from the per-version archive subpackage. This catches drift between the
 producer-side wiring (script ``_get_landmarks`` + dispatcher call) and
-the archive contents (``_engine_archive/vllm/v0_19_1/producers/*.py``).
+the archive contents (``engine_versions/vllm/v0_19_1/producers/*.py``).
 
-Mirror of ``tests/_engine_archive/test_dispatcher.py`` style: pytest,
+Mirror of ``tests/engine_versions/test_dispatcher.py`` style: pytest,
 parametrize across producer kinds, no fixtures.
 """
 
