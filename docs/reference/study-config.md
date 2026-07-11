@@ -10,16 +10,16 @@ All fields except `model` are optional and have sensible defaults.
 - [Warmup (`warmup:`)](#warmup-warmup)
 - [Baseline (`baseline:`)](#baseline-baseline)
 - [Transformers Engine (`transformers:`)](#transformers-engine-transformers)
-- [Transformers Engine Params (`transformers.engine_params:`)](#transformers-engine-params-transformers-engine_params)
-- [Transformers Sampling Params (`transformers.sampling_params:`)](#transformers-sampling-params-transformers-sampling_params)
+- [Transformers Engine Params (`transformers.engine_params:`)](#transformers-engine-params-transformersengine_params)
+- [Transformers Sampling Params (`transformers.sampling_params:`)](#transformers-sampling-params-transformerssampling_params)
 - [vLLM Engine (`vllm:`)](#vllm-engine-vllm)
-- [vLLM Engine Params (`vllm.engine_params:`)](#vllm-engine-params-vllm-engine_params)
-- [vLLM Sampling Params (`vllm.sampling_params:`)](#vllm-sampling-params-vllm-sampling_params)
+- [vLLM Engine Params (`vllm.engine_params:`)](#vllm-engine-params-vllmengine_params)
+- [vLLM Sampling Params (`vllm.sampling_params:`)](#vllm-sampling-params-vllmsampling_params)
 - [TensorRT-LLM Engine (`tensorrt:`)](#tensorrt-llm-engine-tensorrt)
-- [TensorRT-LLM Engine Params (`tensorrt.engine_params:`)](#tensorrt-llm-engine-params-tensorrt-engine_params)
-- [TensorRT-LLM Sampling Params (`tensorrt.sampling_params:`)](#tensorrt-llm-sampling-params-tensorrt-sampling_params)
+- [TensorRT-LLM Engine Params (`tensorrt.engine_params:`)](#tensorrt-llm-engine-params-tensorrtengine_params)
+- [TensorRT-LLM Sampling Params (`tensorrt.sampling_params:`)](#tensorrt-llm-sampling-params-tensorrtsampling_params)
 - [Harness Overrides (`harness:`)](#harness-overrides-harness)
-- [Transformers Harness (`harness.transformers:`)](#transformers-harness-harness-transformers)
+- [Transformers Harness (`harness.transformers:`)](#transformers-harness-harnesstransformers)
 
 ### Top-Level Fields
 

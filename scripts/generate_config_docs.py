@@ -15,6 +15,7 @@ Output:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,25 @@ from llenergymeasure.config._doc_helpers import default_label, type_label
 
 def _description(prop: dict[str, Any]) -> str:
     return prop.get("description", "")
+
+
+# Anything that is not a lowercase word char, hyphen, or space. github-slugger
+# (which Docusaurus uses to derive heading anchors) removes exactly this
+# punctuation from an ASCII heading and keeps [a-z0-9_-]; spaces map to hyphens.
+_SLUGGER_DROP = re.compile(r"[^a-z0-9_ -]")
+
+
+def _heading_anchor(title: str) -> str:
+    """Slugify a heading the way Docusaurus (github-slugger) does.
+
+    Docusaurus derives heading anchors with github-slugger: lowercase, drop
+    punctuation, then map spaces to hyphens. Punctuation is REMOVED,
+    not hyphenated - so a code span like ``transformers.engine_params`` yields
+    ``transformersengine_params``, not ``transformers-engine_params``. The table
+    of contents must slugify with the same rule or its in-page links resolve to
+    anchors that do not exist.
+    """
+    return _SLUGGER_DROP.sub("", title.lower()).replace(" ", "-")
 
 
 # ---------------------------------------------------------------------------
@@ -155,12 +175,7 @@ def render_markdown(schema: dict[str, Any]) -> str:
     lines.append("**Sections:**")
     for section_key, section_title in _SECTION_ORDER:
         if section_key in sections:
-            anchor = section_title.lower()
-            for ch in " /`.:()`":
-                anchor = anchor.replace(ch, "-")
-            while "--" in anchor:
-                anchor = anchor.replace("--", "-")
-            anchor = anchor.strip("-")
+            anchor = _heading_anchor(section_title)
             lines.append(f"- [{section_title}](#{anchor})")
     lines.append("")
 

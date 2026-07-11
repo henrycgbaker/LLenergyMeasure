@@ -130,7 +130,7 @@ means it stays `null` for that engine.
 
 | Metric group | vLLM | transformers | tensorrt |
 |--------------|:----:|:------------:|:--------:|
-| `request_latency.*` (per-request E2E) | yes (from RequestOutput metrics) | yes (per-batch approximation) | dash (metrics usually absent in 0.21.0) |
+| `request_latency.*` (per-request E2E) | yes (from RequestOutput metrics) | yes (per-batch approximation) | dash (metrics usually absent from the pinned TensorRT-LLM build) |
 | `latency_stats` TTFT | yes (always-on) | profiling only | dash |
 | `latency_stats` ITL / `tpot_ms` | profiling only (`proportional`) | profiling only (`true_streaming`) | dash (unsupported) |
 | `kv_cache.*` | yes (best-effort) | dash | dash |

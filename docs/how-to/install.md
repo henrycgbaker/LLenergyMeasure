@@ -119,15 +119,15 @@ vLLM or TensorRT-LLM.
 make docker-build
 
 # vLLM - pull upstream
-docker pull vllm/vllm-openai:0.7.3
+docker pull vllm/vllm-openai:v0.19.1
 
 # TensorRT-LLM - pull upstream (NGC)
-docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
 ```
 
-The pinned versions are the SSOT in `engine_versions/{vllm,tensorrt}.yaml`
-under `library.current_version`. Renovate bumps them on each upstream
-release.
+The pinned versions are the SSOT in `engine_versions/{vllm,tensorrt}/current.yaml`
+under `library.current_version` (`llem doctor` prints the resolved image).
+Renovate bumps them on each upstream release.
 
 You can also build the Transformers image with plain `docker build` (no
 Compose, no build cache):
@@ -216,8 +216,8 @@ subsequent rebuilds for vLLM/TRT are seconds - the slow part doesn't repeat.
 
 ```bash
 make docker-build                                    # build Transformers from source
-docker pull vllm/vllm-openai:0.7.3                   # pull vLLM upstream
-docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # pull TensorRT-LLM upstream
+docker pull vllm/vllm-openai:v0.19.1                 # pull vLLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0  # pull TensorRT-LLM upstream
 ```
 
 **How the transformers image is published:**
