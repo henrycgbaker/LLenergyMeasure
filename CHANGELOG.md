@@ -176,6 +176,15 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
 - `Dockerfile.transformers` stale references to the old `[pytorch]` extra and header comments
   corrected. ([#265])
 - Config hash mismatch in Docker study runs resolved. ([#176])
+- Config-identity hash now covers the active engine's `harness` block (`batch_size`,
+  `torch_compile`, `allow_tf32`, `autocast`). These drive execution but were omitted, so a
+  `harness.batch_size` sweep collapsed to a single resolved hash and default dedup ran one
+  experiment instead of the full sweep.
+- `measurement.*` methodology fields now join the config-identity hash, so sweeping warmup,
+  baseline, energy sampler, or windowing produces distinct runs rather than deduping to one.
+- `--no-dedup` no longer crashes with a `KeyError` when a sweep canonicalises two grid points
+  to the same declared config: manifest entries are built from actual per-hash occurrence
+  counts, keeping the manifest aligned with the runner's per-occurrence cycle counter.
 - Non-matching engine sections stripped correctly during multi-engine grid expansion. ([#171])
 - Docker auto-elevation enforced for multi-engine studies. ([#172])
 - Baseline cache path resolved before Docker bind-mount. ([#248])
