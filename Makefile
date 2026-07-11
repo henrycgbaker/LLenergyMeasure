@@ -61,20 +61,20 @@ docker-setup: setup ## setup + docker compose build (transformers engine image)
 # Local Development
 # =============================================================================
 
-format: ## Auto-format src/ and tests/ with ruff
-	uv run ruff format src/ tests/
+format: ## Auto-format src/, tests/, and the knowledge-production machinery with ruff
+	uv run ruff format src/ tests/ scripts/engine_producers/
 
 lint: ## Run ruff check, ruff format --check, and import-linter
-	uv run ruff check src/ tests/
-	uv run ruff format --check src/ tests/
+	uv run ruff check src/ tests/ scripts/engine_producers/
+	uv run ruff format --check src/ tests/ scripts/engine_producers/
 	uv run lint-imports
 
 lint-fix: ## Auto-fix lint issues (ruff check --fix + format)
-	uv run ruff check src/ tests/ --fix
-	uv run ruff format src/ tests/
+	uv run ruff check src/ tests/ scripts/engine_producers/ --fix
+	uv run ruff format src/ tests/ scripts/engine_producers/
 
-typecheck: ## Run mypy on src/ and tests/
-	uv run mypy src/ tests/
+typecheck: ## Run mypy on src/, tests/, and the knowledge-production machinery
+	uv run mypy src/ tests/ scripts/engine_producers/
 
 check: lint typecheck ## lint + typecheck (no tests)
 

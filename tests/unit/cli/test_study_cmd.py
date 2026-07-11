@@ -169,9 +169,10 @@ sweep:
     )
     result = runner.invoke(app, ["study", "plan", str(study)])
     assert result.exit_code == 0
-    # 2 measurement-only configs dedup to 1 unique x 3 cycles = 3 runs.
+    # Measurement dials join the identity hash (2026-07-11 ruling): the two
+    # methodology variants stay distinct -> 2 unique x 3 cycles = 6 runs.
     assert re.search(r"cycles\s+3", result.output)
-    assert re.search(r"runs\s+3", result.output)
+    assert re.search(r"runs\s+6", result.output)
 
 
 def test_plan_output_has_no_invariant_vocab(tmp_path: Path) -> None:

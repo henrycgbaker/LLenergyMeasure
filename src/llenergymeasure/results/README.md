@@ -1,105 +1,46 @@
 # results/ - Results Persistence
 
-Results storage, loading, and aggregation for experiment outputs.
+Saves and loads a single experiment's results to and from the filesystem.
+There is no repository object, aggregation command, or export layer here; the
+package is one module, `persistence.py`.
 
-## Purpose
+## persistence.py
 
-Implements the late aggregation pattern where raw per-process results are persisted separately and aggregated on demand. This enables partial results recovery and flexible aggregation strategies.
+Public functions:
 
-## Key Files
+| Function | Purpose |
+|----------|---------|
+| `save_result(result, output_dir, ...)` | Write an `ExperimentResult` to a collision-safe per-experiment directory. Returns the `result.json` path. |
+| `load_result(path)` | Read an `ExperimentResult` back from a `result.json` path, re-attaching sidecars. |
+| `save_config_sidecar(...)` | Write the resolved-config `config.json` sidecar (carries `observed_config_hash`). |
+| `save_environment(snapshot, dir)` | Write the `environment.json` sidecar. |
 
-### repository.py
-File system repository for results.
+Writes are atomic (temp file plus `os.replace`) and directory names are made
+collision-free before writing.
 
-**FileSystemRepository** - Persist and load results:
-```python
-from llenergymeasure.results import FileSystemRepository
+## Per-experiment layout
 
-repo = FileSystemRepository(base_path=Path("results"))
+`save_result` creates one directory per run under `output_dir`:
 
-# Save raw per-process result
-path = repo.save_raw(experiment_id, raw_result)
-
-# Load raw results
-results = repo.load_all_raw(experiment_id)
-
-# Save aggregated result
-path = repo.save_aggregated(aggregated_result)
-
-# Load aggregated
-result = repo.load_aggregated(experiment_id)
-
-# Query operations
-experiments = repo.list_experiments()  # With raw results
-aggregated = repo.list_aggregated()    # With aggregated
-has_raw = repo.has_raw(experiment_id)
-has_agg = repo.has_aggregated(experiment_id)
-
-# Cleanup
-repo.delete_experiment(experiment_id)
+```
+{output_dir}/
+  [{index}_]c{cycle}_{model}-{engine}_{hash}/
+    result.json          # ExperimentResult, pydantic model_dump_json (the only typed dump)
+    config.json          # resolved-config sidecar (save_config_sidecar)
+    environment.json     # environment snapshot (save_environment)
+    _resolution.json     # per-field resolution log (written when provided)
+    timeseries.parquet   # GPU power/thermal/memory series (copied in when present)
 ```
 
-**Directory structure:**
-```
-results/
-├── raw/
-│   └── exp_20240115_123456/
-│       ├── process_0.json
-│       ├── process_1.json
-│       └── process_2.json
-└── aggregated/
-    └── exp_20240115_123456.json
-```
+`load_result` reads `result.json` and best-effort re-attaches the
+`timeseries.parquet` and `environment.json` sidecars; a missing or corrupt
+sidecar degrades gracefully (warning, not error) rather than failing the load.
 
-### exporters.py
-Export results to various formats.
-
-```python
-from llenergymeasure.results import export_to_csv, export_to_json
-
-# Export aggregated results to CSV
-export_to_csv(results, "output.csv")
-
-# Export to JSON
-export_to_json(results, "output.json")
-```
-
-## Result Schema
-
-Raw results and aggregated results both include:
-```json
-{
-  "schema_version": "2.0.0",
-  "experiment_id": "exp_20240115_123456",
-  ...
-}
-```
-
-Schema version allows backward-compatible loading of older results.
-
-## CLI Commands
-
-```bash
-# Aggregate single experiment
-lem aggregate exp_20240115_123456
-
-# Aggregate all pending
-lem aggregate --all
-
-# Re-aggregate (overwrite existing)
-lem aggregate exp_id --force
-
-# List experiments
-lem results list      # Aggregated only
-lem results list --all  # Include pending
-
-# Show results
-lem results show exp_id
-lem results show exp_id --raw
-lem results show exp_id --json
-```
+Study-level artefacts (the `_study-artefacts/` directory, `manifest.json`,
+`equivalence_groups.json`) are written by the `study/` and `api/` layers, not
+here. Artefact filenames are defined in `domain/bundle_artefacts.py`.
 
 ## Related
 
-- See `../domain/README.md` for result models
-- See `../cli/` for CLI commands
+- `../domain/experiment.py` - the `ExperimentResult` model this package serialises.
+- `../domain/bundle_artefacts.py` - shared bundle filename constants.

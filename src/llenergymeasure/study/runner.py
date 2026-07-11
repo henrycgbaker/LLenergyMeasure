@@ -47,6 +47,10 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_SIGTERM_GRACE,
     TIMEOUT_THREAD_JOIN,
 )
+from llenergymeasure.domain.bundle_artefacts import (
+    CONFIG_SIDECAR_FILENAME,
+    EQUIVALENCE_GROUPS_FILENAME,
+)
 from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
 from llenergymeasure.study._progress import _consume_progress_events
 from llenergymeasure.study.baseline_measure import _BaselineMixin
@@ -181,7 +185,7 @@ def _save_and_record(
         # Also patch in the resolved_config_hash from StudyConfig, which the harness
         # doesn't have access to at write time.
         if ts_source_dir is not None:
-            config_sidecar_src = ts_source_dir / "config.json"
+            config_sidecar_src = ts_source_dir / CONFIG_SIDECAR_FILENAME
             if config_sidecar_src.exists():
                 try:
                     _payload = load_json(config_sidecar_src)
@@ -191,7 +195,7 @@ def _save_and_record(
 
                     _atomic_write(
                         json.dumps(_payload, indent=2, default=str),
-                        result_path.parent / "config.json",
+                        result_path.parent / CONFIG_SIDECAR_FILENAME,
                     )
                 except Exception as exc:  # pragma: no cover - best-effort
                     logger.debug("config.json sidecar move failed: %s", exc)
@@ -601,7 +605,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
             # Scan config.json sidecars for post-run observed-config-hash groups
             sidecars: list[dict[str, Any]] = []
-            for config_json in self.study_dir.rglob("config.json"):
+            for config_json in self.study_dir.rglob(CONFIG_SIDECAR_FILENAME):
                 with contextlib.suppress(Exception):
                     sidecars.append(load_json(config_json))
             post_run_groups: list[ObservedCollisionGroup] = find_observed_collisions(sidecars)
@@ -612,7 +616,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 groups=pre_run_groups,
                 observed_collision_groups=post_run_groups,
             )
-            write_equivalence_groups(groups, self.study_dir / "equivalence_groups.json")
+            write_equivalence_groups(groups, self.study_dir / EQUIVALENCE_GROUPS_FILENAME)
             logger.debug("Wrote equivalence_groups.json to %s", self.study_dir)
         except Exception as exc:
             logger.debug("equivalence_groups.json write failed (non-fatal): %s", exc)

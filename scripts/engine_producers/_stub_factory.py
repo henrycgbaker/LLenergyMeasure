@@ -20,7 +20,10 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from engine_versions._dispatcher import ProducerKind
 
 
 def _ensure_project_root_on_path() -> None:
@@ -32,7 +35,7 @@ def _ensure_project_root_on_path() -> None:
 
 
 @functools.cache
-def _resolve_producer_cached(engine: str, producer: str) -> ModuleType:
+def _resolve_producer_cached(engine: str, producer: ProducerKind) -> ModuleType:
     from engine_versions._dispatcher import load_producer
     from scripts.engine_producers._current import load_current
 
@@ -69,7 +72,7 @@ def make_static_stub(
 ) -> tuple[
     Callable[[], ModuleType],
     Callable[[str], Any],
-    Callable[[list[str] | None], int],
+    Callable[..., int],
 ]:
     """Factory for a static-invariant-miner shim. Returns (resolver, __getattr__, main)."""
     _ensure_project_root_on_path()
@@ -91,7 +94,7 @@ def make_dynamic_stub(
 ) -> tuple[
     Callable[[], ModuleType],
     Callable[[str], Any],
-    Callable[[list[str] | None], int],
+    Callable[..., int],
 ]:
     """Factory for a dynamic-invariant-miner shim. Returns (resolver, __getattr__, main)."""
     _ensure_project_root_on_path()

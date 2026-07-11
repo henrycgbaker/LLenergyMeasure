@@ -16,6 +16,14 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from llenergymeasure.domain.bundle_artefacts import (
+    CONFIG_SIDECAR_FILENAME,
+    ENVIRONMENT_FILENAME,
+    RESOLUTION_FILENAME,
+    RESULT_FILENAME,
+    TIMESERIES_FILENAME,
+)
+
 if TYPE_CHECKING:
     from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.experiment import ExperimentResult
@@ -154,7 +162,7 @@ def save_config_sidecar(
     if declared_config is not None:
         payload["declared_config"] = declared_config
 
-    path = experiment_dir / "config.json"
+    path = experiment_dir / CONFIG_SIDECAR_FILENAME
     _atomic_write(json.dumps(payload, indent=2, default=str), path)
     logger.debug("Saved config sidecar to %s", path)
     return path
@@ -191,7 +199,7 @@ def save_environment(
     env_data["cuda_version"] = snapshot_dict.get("cuda_version")
     env_data["cuda_version_source"] = snapshot_dict.get("cuda_version_source")
 
-    path = experiment_dir / "environment.json"
+    path = experiment_dir / ENVIRONMENT_FILENAME
     _atomic_write(json.dumps(env_data, indent=2, default=str), path)
     logger.debug("Saved environment to %s", path)
     return path
@@ -231,20 +239,20 @@ def save_result(
     base_dir = output_dir / dir_name
     target_dir = _find_collision_free_dir(base_dir)
 
-    result_path = target_dir / "result.json"
+    result_path = target_dir / RESULT_FILENAME
     _atomic_write(result.model_dump_json(indent=2), result_path)
     logger.debug("Saved result to %s", result_path)
 
     # Write _resolution.json sidecar
     if resolution_log:
-        res_path = target_dir / "_resolution.json"
+        res_path = target_dir / RESOLUTION_FILENAME
         _atomic_write(json.dumps(resolution_log, indent=2, default=str), res_path)
         logger.debug("Saved resolution log to %s", res_path)
 
     if timeseries_source is not None:
         timeseries_source = Path(timeseries_source)
         if timeseries_source.exists():
-            dest = target_dir / "timeseries.parquet"
+            dest = target_dir / TIMESERIES_FILENAME
             shutil.copy2(timeseries_source, dest)
             logger.debug("Copied timeseries sidecar to %s", dest)
         else:
@@ -278,7 +286,7 @@ def load_result(path: Path) -> ExperimentResult:
     content = path.read_text(encoding="utf-8")
     result = ExperimentResult.model_validate_json(content)
 
-    sidecar = path.parent / "timeseries.parquet"
+    sidecar = path.parent / TIMESERIES_FILENAME
     if result.timeseries is not None and not sidecar.exists():
         warnings.warn(
             f"Timeseries sidecar missing at {sidecar}. "
@@ -287,7 +295,7 @@ def load_result(path: Path) -> ExperimentResult:
             stacklevel=2,
         )
 
-    environment = _load_environment_sidecar(path.parent / "environment.json")
+    environment = _load_environment_sidecar(path.parent / ENVIRONMENT_FILENAME)
     if environment is not None:
         result = result.model_copy(update={"environment": environment})
 

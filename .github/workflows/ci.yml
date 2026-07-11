@@ -92,9 +92,9 @@ jobs:
           python-version: "3.12"
       - run: uv sync --dev
       - name: Ruff lint
-        run: uv run ruff check src/ tests/
+        run: uv run ruff check src/ tests/ scripts/engine_producers/
       - name: Ruff format check
-        run: uv run ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/ scripts/engine_producers/
       - name: Architecture lint
         run: uv run lint-imports
       - name: Defensive lint - no stale Dockerfile.tensorrt
@@ -128,7 +128,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --dev
       - name: mypy
-        run: uv run mypy src/ tests/
+        run: uv run mypy src/ tests/ scripts/engine_producers/
 
   test:
     needs: filter

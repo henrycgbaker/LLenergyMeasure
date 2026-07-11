@@ -151,3 +151,101 @@ def test_single_config_sweep_no_dedup(tmp_path: Path) -> None:
     assert len(study_config.experiments) == 3
     group_sizes = sorted(g["member_count"] for g in study_config.pre_run_equivalence_groups)
     assert group_sizes == [1, 1, 1]
+
+
+# ---------------------------------------------------------------------------
+# Config-identity hash fixes (S9): harness + measurement join the dedup hash;
+# --no-dedup with a repeated declared config must not crash the runner.
+# ---------------------------------------------------------------------------
+
+
+def test_harness_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
+    """A harness.batch_size sweep must expand to distinct experiments.
+
+    Regression for the config-identity bug: build_resolved_view omitted
+    config.harness, so a batch_size sweep - which drives execution (the
+    transformers plugin reads batch_size, torch_compile, allow_tf32, autocast) -
+    collapsed to a single resolved_config_hash. Default dedup then ran ONE
+    experiment and reported the other three as dedup-merged.
+    """
+    study = {
+        "study_name": "batch_size_sweep",
+        "engine": "transformers",
+        "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
+        "sweep": {"harness.transformers.batch_size": [1, 4, 8, 16]},
+    }
+    path = _write_study(tmp_path, study)
+    study_config = load_study_config_finalised(path)
+
+    assert study_config.dedup_mode == "resolved"
+    # Four distinct batch sizes are four distinct runs (was 1 before the fix).
+    assert len(study_config.experiments) == 4
+    assert len(set(study_config.declared_resolved_config_hashes)) == 4
+
+
+def test_measurement_warmup_sweep_not_deduped(tmp_path: Path) -> None:
+    """A measurement.* sweep must expand to distinct experiments.
+
+    Ruled 2026-07-11 (option A): measurement fields join the identity hash -
+    sweeping methodology creates distinct runs; dedup collapses only true
+    duplicates. build_resolved_view previously excluded MeasurementConfig, so a
+    warmup sweep collapsed to a single run.
+    """
+    study = {
+        "study_name": "warmup_sweep",
+        "engine": "transformers",
+        "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
+        "sweep": {"measurement.warmup.n_prompts": [5, 10, 20]},
+    }
+    path = _write_study(tmp_path, study)
+    study_config = load_study_config_finalised(path)
+
+    assert len(study_config.experiments) == 3
+    assert len(set(study_config.declared_resolved_config_hashes)) == 3
+
+
+def test_no_dedup_repeated_config_runs_without_keyerror(tmp_path: Path) -> None:
+    """--no-dedup with a sweep that collapses grid points must not crash the runner.
+
+    The manifest builder created ``n_cycles`` entries per UNIQUE declared hash,
+    but the runner advances a per-hash cycle counter on every OCCURRENCE in the
+    ordered execution list. With dedup off, the greedy family collapses the three
+    temperature points to one canonical config, so that declared hash occurs
+    three times yet had only one manifest entry - the runner's second
+    ``mark_running(hash, cycle=2)`` raised an uncaught KeyError, aborting the
+    study.
+    """
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+    from llenergymeasure.study.manifest import ManifestWriter
+
+    study = {
+        "study_name": "no_dedup_repeat",
+        "engine": "transformers",
+        "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
+        "sweep": {
+            "transformers.sampling_params.do_sample": [True, False],
+            "transformers.sampling_params.temperature": [0.5, 1.0, 1.5],
+        },
+        "study_execution": {"deduplicate_equivalent": False, "n_cycles": 1},
+    }
+    path = _write_study(tmp_path, study)
+    study_config = load_study_config_finalised(path)
+
+    # Precondition: at least one declared hash repeats in the ordered list
+    # (the greedy family canonicalises to a single config).
+    hashes = [compute_declared_config_hash(e) for e in study_config.experiments]
+    assert len(hashes) > len(set(hashes)), "sweep must yield a repeated declared config"
+
+    writer = ManifestWriter(study=study_config, study_dir=tmp_path)
+
+    # Reproduce the runner's per-occurrence cycle assignment (StudyRunner._run_one):
+    # each occurrence increments the per-hash counter and marks that entry running.
+    counters: dict[str, int] = {}
+    for cfg in study_config.experiments:
+        h = compute_declared_config_hash(cfg)
+        cycle = counters.get(h, 0) + 1
+        counters[h] = cycle
+        writer.mark_running(h, cycle)  # raised KeyError at cycle=2 before the fix
+
+    # One manifest entry per occurrence - manifest and runner stay aligned.
+    assert len(writer.manifest.experiments) == len(study_config.experiments)
