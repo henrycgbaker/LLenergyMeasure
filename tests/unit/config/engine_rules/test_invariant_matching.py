@@ -414,3 +414,32 @@ def test_render_message_leaf_collision_keeps_first_path() -> None:
         },
     )
     assert rule.render_message(match) == "max_batch_size=8"
+
+
+def test_render_message_exposes_field_ref_comparand_leaf() -> None:
+    # A cross-field rule compares the subject against a @field_ref comparand that
+    # is NOT a match field. The renderer must expose the resolved comparand value
+    # under its bare leaf name so the template renders instead of falling back to
+    # raw text. try_match populates match.field_refs from the resolved refs.
+    rule = _make_rule(
+        match_fields={"transformers.sampling.top_k": {">": "@num_beams"}},
+        message="top_k ({top_k}) must be <= num_beams ({num_beams})",
+    )
+    config = _Config(transformers=_Transformers(sampling=_Sampling(top_k=8, num_beams=4)))
+    match = rule.try_match(config)
+    assert match is not None
+    assert match.field_refs == {"num_beams": 4}
+    assert rule.render_message(match) == "top_k (8) must be <= num_beams (4)"
+
+
+def test_render_message_match_field_leaf_wins_over_field_ref_leaf() -> None:
+    # If a leaf name is both a match field and a @field_ref comparand, the match
+    # field's actual value is authoritative (field_refs only fill unclaimed leaves).
+    rule = _make_rule(match_fields={}, message="top_k={top_k}")
+    match = RuleMatch(
+        rule=rule,
+        declared_value=8,
+        matched_fields={"transformers.sampling.top_k": 8},
+        field_refs={"top_k": 99},
+    )
+    assert rule.render_message(match) == "top_k=8"
