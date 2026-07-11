@@ -22,7 +22,7 @@ the NVIDIA Container Toolkit are installed before proceeding.
 
 - `llenergymeasure` installed (host-side orchestrator)
 - Docker + NVIDIA Container Toolkit - see [Docker setup](/how-to/docker-setup)
-- vLLM Docker image built or pullable from GHCR - see [Contributing > Development](/contributing/development)
+- vLLM upstream image (`vllm/vllm-openai`) - pulled automatically from Docker Hub on first run; pre-fetch per [Docker setup](/how-to/docker-setup)
 
 ## 1. Create a config file
 
@@ -84,8 +84,8 @@ What happens:
 
 1. Pre-flight checks run: Docker CLI, NVIDIA Container Toolkit, GPU
    visibility inside container, CUDA/driver compatibility.
-2. The vLLM Docker image is pulled on first run
-   (`ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0`).
+2. The upstream vLLM image (`vllm/vllm-openai`) is pulled from Docker Hub on
+   first run, with the llenergymeasure source bind-mounted into it.
 3. The container launches, runs the experiment, and streams results back.
 4. Results are printed to stdout and saved to `results/`.
 

@@ -62,17 +62,19 @@ class TestGetDefaultImage:
 
         assert image == "llenergymeasure:vllm"
 
-    def test_falls_back_to_ghcr_when_no_local_image(self):
+    def test_transformers_default_is_ghcr_at_package_version(self):
+        """Transformers keeps the first-party GHCR image at the package version."""
+        from llenergymeasure import __version__
         from llenergymeasure.infra.image_registry import get_default_image
 
         with patch(
             "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
         ):
-            image = get_default_image("vllm")
+            image = get_default_image("transformers")
 
-        assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:v")
+        assert image == f"ghcr.io/henrycgbaker/llenergymeasure/transformers:v{__version__}"
 
-    def test_fallback_to_latest_when_version_empty(self):
+    def test_transformers_falls_back_to_latest_when_version_empty(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
         with (
@@ -81,25 +83,62 @@ class TestGetDefaultImage:
         ):
             image = get_default_image("transformers")
 
-        assert image.endswith(":vlatest")
+        assert image == "ghcr.io/henrycgbaker/llenergymeasure/transformers:vlatest"
 
-    def test_engine_name_included_in_image(self):
+    def test_vllm_default_is_upstream_openai_at_pinned_version(self):
+        """vLLM resolves to the upstream Docker Hub image at the pinned engine version."""
         from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.infra.version_handshake import read_bundled_engine_version
 
-        for engine in Engine:
-            image = get_default_image(engine)
-            assert engine in image, f"Expected engine {engine!r} in image {image!r}"
-
-    def test_ghcr_image_includes_package_version(self):
-        from llenergymeasure import __version__
-        from llenergymeasure.infra.image_registry import get_default_image
+        expected_version = read_bundled_engine_version("vllm")
+        assert expected_version, "vllm bundled engine version must resolve in-repo"
 
         with patch(
             "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
         ):
             image = get_default_image("vllm")
 
-        assert f"v{__version__}" in image
+        assert image == f"vllm/vllm-openai:v{expected_version}"
+
+    def test_tensorrt_default_is_upstream_ngc_at_pinned_version(self):
+        """TensorRT-LLM resolves to the upstream NGC image (no ``v`` prefix)."""
+        from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.infra.version_handshake import read_bundled_engine_version
+
+        expected_version = read_bundled_engine_version("tensorrt")
+        assert expected_version, "tensorrt bundled engine version must resolve in-repo"
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            image = get_default_image("tensorrt")
+
+        assert image == f"nvcr.io/nvidia/tensorrt-llm/release:{expected_version}"
+
+    def test_engine_name_included_in_image(self):
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            for engine in Engine:
+                image = get_default_image(engine)
+                assert engine in image, f"Expected engine {engine!r} in image {image!r}"
+
+    def test_hard_error_when_pinned_version_unavailable(self):
+        """A partial/broken wheel yields an actionable error, never a 404 tag."""
+        from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.utils.exceptions import ConfigError
+
+        with (
+            patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=False),
+            patch(
+                "llenergymeasure.infra.version_handshake.read_bundled_engine_version",
+                return_value=None,
+            ),
+            pytest.raises(ConfigError, match=r'runners\.vllm to "docker:'),
+        ):
+            get_default_image("vllm")
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +256,7 @@ class TestResolveImage:
         ):
             image, source = resolve_image("vllm")
 
-        assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:v")
+        assert image.startswith("vllm/vllm-openai:v")
         assert source == "registry"
 
     def test_env_var_case_insensitive_engine(self, monkeypatch):

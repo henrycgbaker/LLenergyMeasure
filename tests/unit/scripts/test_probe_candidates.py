@@ -73,6 +73,20 @@ def test_not_equal_with_present() -> None:
     assert _nofire({"!=": 0.0, "present": True}) == 0.0
 
 
+def test_word_form_not_equal_dispatches_like_symbol() -> None:
+    # A candidate authored with the word-form operator must derive the same
+    # probe values as its symbol form; otherwise it lands unprobeable and is
+    # silently dropped (recall loss). The loader canonicalises at parse time,
+    # but the probe reads raw pool YAML on a different path.
+    assert _fire({"not_equal": 0.0, "present": True}) == _fire({"!=": 0.0, "present": True})
+    assert _nofire({"not_equal": 0.0, "present": True}) == _nofire({"!=": 0.0, "present": True})
+
+
+def test_word_form_equals_dispatches_like_symbol() -> None:
+    assert _fire({"equals": 3}) == _fire({"==": 3})
+    assert _nofire({"equals": 3}) == _nofire({"==": 3})
+
+
 def test_in_membership() -> None:
     assert _fire({"in": ["pplx", "naive"]}) == "pplx"
     assert _nofire({"in": ["pplx", "naive"]}) == "__llem_probe_nonmember__"

@@ -1,18 +1,31 @@
 """Docker image resolution for engine containers.
 
-Two image sources
------------------
-**Local images** (``llenergymeasure:{engine}``) are produced by
-``docker compose build`` / ``make docker-build-all`` and always reflect the
-current source tree.  They are preferred for fast local iteration.
+Per-engine image sources
+-------------------------
+**Transformers** uses a first-party image published by CI on release tags
+(``ghcr.io/henrycgbaker/llenergymeasure/transformers:v{package_version}``). It
+is the only engine with a project-built image (its flash-attention kernel
+compile has no upstream equivalent).
 
-**Registry images** (``ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}``)
-are published by CI on release tags.  Versioned and immutable, they are used
-in CI, by pip-install users, and whenever no local image is present.
+**vLLM and TensorRT-LLM** run inside the canonical UPSTREAM images
+(``vllm/vllm-openai:v{engine_version}`` and
+``nvcr.io/nvidia/tensorrt-llm/release:{engine_version}``) with the
+llenergymeasure source bind-mounted at run time. There is no first-party GHCR
+image for these engines, so their default must point at the upstream ref at the
+pinned engine version - not a GHCR tag CI never publishes.
 
-``get_default_image(engine)`` checks for a local image first, then falls back
-to the registry tag built from the current package version (or ``"latest"`` if
-version detection fails).
+**Local images** (``llenergymeasure:{engine}``) produced by
+``docker compose build`` / ``make docker-build-all`` are preferred when present
+for fast local iteration.
+
+``get_default_image(engine)`` checks for a local image first, then resolves the
+per-engine default remote image. The engine version that tags the vLLM/TRT
+upstream images is read from the wheel-shipped artefact envelope
+(``version_handshake.read_bundled_engine_version``), which CI keeps equal to
+``engine_versions/<engine>/current.yaml`` via
+``scripts/check_discovered_schema_versions.py``. When that version cannot be
+resolved (a partial or broken wheel), resolution raises an actionable
+``ConfigError`` rather than emitting a tag that would 404 on ``docker pull``.
 
 Overriding the image
 --------------------
@@ -20,7 +33,7 @@ The ``runners:`` section in the study YAML accepts explicit image references::
 
     runners:
       transformers: local               # host execution (no Docker)
-      vllm: docker                      # default resolution (local → registry)
+      vllm: docker                      # default resolution (local -> upstream)
       tensorrt: "docker:my/custom:tag"  # explicit image override
 
 ``parse_runner_value()`` converts these into a ``(runner_type, image_override)``
@@ -40,25 +53,38 @@ from llenergymeasure.config.ssot import (
     RUNNER_DOCKER,
     RUNNER_LOCAL,
     TIMEOUT_DOCKER_CLI,
+    Engine,
     RunnerMode,
+    engine_str,
 )
+from llenergymeasure.utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "DEFAULT_IMAGE_TEMPLATE",
+    "DEFAULT_IMAGE_TEMPLATES",
     "get_default_image",
+    "image_present_locally",
     "parse_runner_value",
     "resolve_image",
     "show_image_resolution",
 ]
 
 # ---------------------------------------------------------------------------
-# Template and registry
+# Per-engine default image templates
 # ---------------------------------------------------------------------------
 
-# {version} is filled at runtime; matches tags pushed by docker-publish.yml.
-DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}"
+# ``{version}`` is filled at runtime (see ``get_default_image``). Transformers
+# is a first-party GHCR image tagged with the llenergymeasure package version
+# (published by docker-publish.yml); vLLM and TensorRT-LLM are canonical
+# upstream images tagged with the pinned engine version. The vLLM tag carries a
+# ``v`` prefix and the NGC TRT-LLM tag does not - matching the refs the
+# schema/rules producers pull (scripts/refresh_discovered_schemas.sh).
+DEFAULT_IMAGE_TEMPLATES: dict[str, str] = {
+    Engine.TRANSFORMERS.value: "ghcr.io/henrycgbaker/llenergymeasure/transformers:v{version}",
+    Engine.VLLM.value: "vllm/vllm-openai:v{version}",
+    Engine.TENSORRT.value: "nvcr.io/nvidia/tensorrt-llm/release:{version}",
+}
 
 # Local image tag produced by `docker compose build` (no registry prefix).
 LOCAL_IMAGE_TEMPLATE = "llenergymeasure:{engine}"
@@ -75,13 +101,19 @@ def get_default_image(engine: str) -> str:
     Resolution order:
 
     1. **Local image** (``llenergymeasure:{engine}``): produced by
-       ``docker compose build`` / ``make docker-build-all``.  Always reflects
-       current source code.  Preferred for local development iteration.
-    2. **Registry image** (``ghcr.io/…/{engine}:v{version}``): published by
-       CI on release tags.  Versioned and immutable.  Used in CI, by pip-install
-       users, and whenever no local image exists.
+       ``docker compose build`` / ``make docker-build-all``. Always reflects
+       current source code. Preferred for local development iteration.
+    2. **Per-engine default remote image**:
 
-    To force a specific image, use ``runners: {engine}: "docker:<image:tag>"``
+       - transformers -> first-party GHCR image at the package version
+         (``ghcr.io/.../transformers:v{package_version}``);
+       - vllm -> upstream ``vllm/vllm-openai:v{engine_version}``;
+       - tensorrt -> upstream
+         ``nvcr.io/nvidia/tensorrt-llm/release:{engine_version}``.
+
+    The engine version tagging the vLLM/TRT upstream images comes from the
+    wheel-shipped artefact envelope, kept equal to the ``current.yaml`` pin by
+    CI. To force a specific image, use ``runners: {engine}: "docker:<image:tag>"``
     in the study YAML.
 
     Args:
@@ -89,21 +121,76 @@ def get_default_image(engine: str) -> str:
 
     Returns:
         Image reference string, e.g. ``"llenergymeasure:vllm"`` (local) or
-        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"`` (registry).
+        ``"vllm/vllm-openai:v0.19.1"`` (upstream).
+
+    Raises:
+        ConfigError: The engine is unknown, or its pinned upstream version is
+            unavailable at runtime (a partial or broken wheel). The message
+            tells the user to set ``runners.<engine>`` to an explicit
+            ``docker:<image>`` reference.
     """
-    # Prefer local image from docker compose build
+    # 1. Prefer a locally-built image (fast local iteration).
     local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
     if _image_exists_locally(local_image):
         logger.info("Using local image %s (from docker compose build)", local_image)
         return local_image
 
-    # Fall back to versioned GHCR tag
-    from llenergymeasure._version import __version__
+    # 2. Per-engine default remote image at the resolved version.
+    engine_name = engine_str(engine)
+    template = DEFAULT_IMAGE_TEMPLATES.get(engine_name)
+    if template is None:
+        raise ConfigError(
+            f"No default Docker image is defined for engine {engine_name!r}. "
+            f'Set runners.{engine_name} to "docker:<image>:<tag>" in your study '
+            f"YAML to pin an explicit image."
+        )
+    image = template.format(version=_default_image_version(engine_name))
+    logger.info("No local image found; using default image %s", image)
+    return image
 
-    version = __version__ if __version__ else "latest"
-    ghcr_image = DEFAULT_IMAGE_TEMPLATE.format(engine=engine, version=version)
-    logger.info("No local image found; using registry image %s", ghcr_image)
-    return ghcr_image
+
+def _default_image_version(engine: str) -> str:
+    """Return the version that tags *engine*'s default remote image.
+
+    Transformers uses the llenergymeasure package version (its GHCR image is
+    published per release). vLLM and TensorRT-LLM use the pinned ENGINE version
+    read from the wheel-shipped artefact envelope - the same version the runtime
+    schema handshake uses, kept equal to
+    ``engine_versions/<engine>/current.yaml`` by
+    ``scripts/check_discovered_schema_versions.py``.
+
+    Raises:
+        ConfigError: The pinned engine version is unavailable at runtime.
+    """
+    if engine == Engine.TRANSFORMERS.value:
+        from llenergymeasure._version import __version__
+
+        return __version__ if __version__ else "latest"
+
+    # Lazy import: version_handshake imports this module at top level, so a
+    # module-level import here would be circular.
+    from llenergymeasure.infra.version_handshake import read_bundled_engine_version
+
+    version = read_bundled_engine_version(engine)
+    if not version:
+        raise ConfigError(
+            f"Cannot resolve a default Docker image for engine {engine!r}: its "
+            f"pinned engine version is unavailable at runtime (the bundled rules "
+            f"and schema artefacts are missing or disagree). Set "
+            f'runners.{engine} to "docker:<image>:<tag>" in your study YAML to '
+            f"pin an explicit image."
+        )
+    return version
+
+
+def image_present_locally(image: str) -> bool:
+    """Return True iff *image* is present in the local Docker image cache.
+
+    Thin public wrapper over the cached inspect check, for diagnostics (e.g.
+    ``llem doctor``) that report whether a resolved image reference is already
+    pulled locally.
+    """
+    return _image_exists_locally(image)
 
 
 def inspect_image(image: str, *, timeout: float) -> subprocess.CompletedProcess[bytes] | None:

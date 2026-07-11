@@ -1,7 +1,7 @@
 """Unit tests for collect_measurement_warnings().
 
-Tests all four warning flags: short duration, persistence mode off, thermal drift,
-and low NVML sample count.
+Tests all five warning flags: short duration, persistence mode off, thermal drift,
+low NVML sample count, and absent authoritative energy measurement.
 """
 
 from __future__ import annotations
@@ -85,6 +85,46 @@ def test_low_nvml_sample_warning_fires_below_10():
 def test_low_nvml_sample_warning_absent_at_10():
     """Warning is absent when NVML sample count equals 10."""
     warnings = collect_measurement_warnings(30.0, True, 40.0, 40.0, 10)
+    assert not any("nvml_low_sample_count" in w for w in warnings)
+
+
+# ---------------------------------------------------------------------------
+# Warning 5: Authoritative energy measurement absent
+# ---------------------------------------------------------------------------
+
+
+def test_energy_unavailable_warning_fires_when_absent():
+    """Warning fires when the authoritative energy measurement is absent."""
+    warnings = collect_measurement_warnings(
+        30.0, True, 40.0, 40.0, 50, energy_measurement_present=False
+    )
+    assert any("energy_measurement_unavailable" in w for w in warnings)
+
+
+def test_energy_unavailable_warning_absent_when_present():
+    """Warning is absent when the energy measurement is present."""
+    warnings = collect_measurement_warnings(
+        30.0, True, 40.0, 40.0, 50, energy_measurement_present=True
+    )
+    assert not any("energy_measurement_unavailable" in w for w in warnings)
+
+
+def test_energy_unavailable_defaults_to_present():
+    """Absent-energy warning does not fire by default (backward-compatible callers)."""
+    warnings = collect_measurement_warnings(30.0, True, 40.0, 40.0, 50)
+    assert not any("energy_measurement_unavailable" in w for w in warnings)
+
+
+def test_energy_unavailable_independent_of_sample_count():
+    """Absent energy fires even when the thermal sampler collected plenty of samples.
+
+    The two signals watch different subsystems: nvml_low_sample_count watches the
+    thermal-telemetry sampler, energy_measurement_unavailable watches the energy backend.
+    """
+    warnings = collect_measurement_warnings(
+        30.0, True, 40.0, 40.0, 600, energy_measurement_present=False
+    )
+    assert any("energy_measurement_unavailable" in w for w in warnings)
     assert not any("nvml_low_sample_count" in w for w in warnings)
 
 

@@ -1,6 +1,6 @@
 """Measurement quality warnings for energy experiments.
 
-Four warning flags, all purely informational (never block experiments).
+Five warning flags, all purely informational (never block experiments).
 Each includes actionable remediation advice per CONTEXT.md.
 """
 
@@ -13,20 +13,35 @@ def collect_measurement_warnings(
     temp_start_c: float | None,
     temp_end_c: float | None,
     nvml_sample_count: int,
+    energy_measurement_present: bool = True,
     # thermal_drift_threshold default 10C - confidence LOW, no peer citation, flagged for validation
     thermal_drift_threshold_c: float = 10.0,
 ) -> list[str]:
     """Collect measurement quality warnings for a completed experiment.
 
-    All four warnings are purely informational - they never block experiments.
+    All five warnings are purely informational - they never block experiments.
     Each includes actionable remediation advice.
+
+    Note on the two sample/energy signals, which watch DIFFERENT things:
+    - ``nvml_low_sample_count`` watches the harness thermal-telemetry sampler
+      (``device/power_thermal.py`` PowerThermalSampler, whose samples feed
+      ``nvml_sample_count``). It does NOT observe the authoritative energy backend,
+      so it cannot detect that energy measurement itself failed.
+    - ``energy_measurement_unavailable`` watches the authoritative energy backend
+      (Zeus/NVML/CodeCarbon selected by ``select_energy_sampler``). It fires when
+      that backend produced no measurement at all, distinguishing an absent
+      measurement from a genuine measured zero.
 
     Args:
         duration_sec: Total measurement window duration in seconds.
         gpu_persistence_mode: Whether GPU persistence mode was enabled during measurement.
         temp_start_c: GPU temperature at measurement start, or None if unavailable.
         temp_end_c: GPU temperature at measurement end, or None if unavailable.
-        nvml_sample_count: Number of NVML power samples collected during measurement.
+        nvml_sample_count: Number of thermal-telemetry power samples collected during
+            measurement (from PowerThermalSampler, not the authoritative energy backend).
+        energy_measurement_present: Whether the authoritative energy backend produced a
+            measurement. False means energy was not measured (sampler unavailable or
+            disabled); reported energy is absent, not a measured zero.
         thermal_drift_threshold_c: Maximum acceptable temperature change in Celsius.
             Default 10C - confidence LOW (engineering judgement, no peer citation,
             flagged for validation).
@@ -61,11 +76,19 @@ def collect_measurement_warnings(
                 "Increase thermal_floor_seconds or check cooling."
             )
 
-    # 4. Low NVML sample count
+    # 4. Low NVML sample count (thermal-telemetry sampler, not the energy backend)
     if nvml_sample_count < 10:
         warnings.append(
             "nvml_low_sample_count: fewer than 10 NVML power samples collected; "
             "energy integration may be inaccurate."
+        )
+
+    # 5. Authoritative energy measurement absent
+    if not energy_measurement_present:
+        warnings.append(
+            "energy_measurement_unavailable: no energy sampler produced a measurement; "
+            "reported energy is absent, not a measured zero. Set an explicit energy "
+            "backend or install a supported sampler (zeus/nvml/codecarbon)."
         )
 
     return warnings
