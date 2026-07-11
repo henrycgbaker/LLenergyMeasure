@@ -179,12 +179,12 @@ Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docus
 - Config-identity hash now covers the active engine's `harness` block (`batch_size`,
   `torch_compile`, `allow_tf32`, `autocast`). These drive execution but were omitted, so a
   `harness.batch_size` sweep collapsed to a single resolved hash and default dedup ran one
-  experiment instead of the full sweep.
+  experiment instead of the full sweep. ([#783])
 - `measurement.*` methodology fields now join the config-identity hash, so sweeping warmup,
-  baseline, energy sampler, or windowing produces distinct runs rather than deduping to one.
+  baseline, energy sampler, or windowing produces distinct runs rather than deduping to one. ([#783])
 - `--no-dedup` no longer crashes with a `KeyError` when a sweep canonicalises two grid points
   to the same declared config: manifest entries are built from actual per-hash occurrence
-  counts, keeping the manifest aligned with the runner's per-occurrence cycle counter.
+  counts, keeping the manifest aligned with the runner's per-occurrence cycle counter. ([#783])
 - Non-matching engine sections stripped correctly during multi-engine grid expansion. ([#171])
 - Docker auto-elevation enforced for multi-engine studies. ([#172])
 - Baseline cache path resolved before Docker bind-mount. ([#248])
@@ -498,3 +498,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#573]: https://github.com/henrycgbaker/llenergymeasure/pull/573
 [#575]: https://github.com/henrycgbaker/llenergymeasure/pull/575
 [#749]: https://github.com/henrycgbaker/llenergymeasure/pull/749
+[#783]: https://github.com/henrycgbaker/llenergymeasure/pull/783
