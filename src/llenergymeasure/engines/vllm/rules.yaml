@@ -5,6 +5,22 @@ schema_version: 1.0.0
 engine: vllm
 engine_version: 0.19.1
 rules:
+- id: vllm_compilationconfig_raises_encoder_cudagraph_max_images_per_batch_lt_0
+  engine: vllm
+  severity: error
+  match:
+    fields:
+      vllm.engine_params.compilation_config.cudagraph_mm_encoder: true
+      vllm.engine_params.compilation_config.encoder_cudagraph_max_images_per_batch:
+        <: 0
+  message_template: encoder_cudagraph_max_images_per_batch must be non-negative (0 = auto-infer), got
+    {declared_value}.
+  provenance:
+    source: deterministic_miner
+    verified: construction
+    engine_version: 0.19.1
+    citation: compilation.py:959
+    date: '2026-07-11'
 - id: vllm_engineparams_raises_kv_cache_memory_bytes_lt_1
   engine: vllm
   severity: error

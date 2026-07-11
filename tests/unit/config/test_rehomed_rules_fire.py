@@ -239,3 +239,56 @@ def test_bare_vllm_config_has_no_phantom_dormant_observations():
     }
     assert not (set(cfg._dormant_observations) & purged)
     assert cfg._dormant_observations == {}
+
+
+# ---------------------------------------------------------------------------
+# Nested-object rule paths (engine_params.compilation_config.*)
+#
+# The 2026-07-11 miner recall check surfaced a construction-confirmed vLLM
+# bound on a nested CompilationConfig field (probe verdict: confirmed, both
+# legs, vllm/vllm-openai:v0.19.1). Its rule is the first corpus entry whose
+# match path descends through a nested sub-model, so these tests pin that the
+# 4-segment path resolves through the public ExperimentConfig route in both
+# directions (fires on the violating pair, silent when satisfied or unset).
+# ---------------------------------------------------------------------------
+
+
+def test_nested_compilation_config_bound_fires():
+    """cudagraph_mm_encoder=True with a negative image budget is rejected."""
+    with pytest.raises(ValueError, match="encoder_cudagraph_max_images_per_batch"):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={
+                "engine_params": {
+                    "compilation_config": {
+                        "cudagraph_mm_encoder": True,
+                        "encoder_cudagraph_max_images_per_batch": -1,
+                    }
+                }
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "compilation_config",
+    [
+        # Satisfying pair: precondition holds, budget is non-negative.
+        {"cudagraph_mm_encoder": True, "encoder_cudagraph_max_images_per_batch": 0},
+        # Precondition off: a negative budget alone does not raise upstream.
+        {"cudagraph_mm_encoder": False, "encoder_cudagraph_max_images_per_batch": -1},
+        # Nested object entirely absent.
+        None,
+    ],
+)
+def test_nested_compilation_config_bound_silent_when_not_violated(compilation_config):
+    """The nested rule stays silent on satisfying, precondition-off, and unset shapes."""
+    engine_params = (
+        {"compilation_config": compilation_config} if compilation_config is not None else {}
+    )
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm={"engine_params": engine_params},
+    )
+    assert cfg.engine == "vllm"
