@@ -59,6 +59,9 @@
       "rangeStrategy": "replace"
     }
   ],
+  "statusCheckNames": {
+    "minimumReleaseAge": null
+  },
   "schedule": ["before 9am on Monday"],
   "prConcurrentLimit": 3,
   "vulnerabilityAlerts": {
