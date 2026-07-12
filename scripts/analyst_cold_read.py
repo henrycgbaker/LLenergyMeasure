@@ -224,14 +224,18 @@ Constraint kinds (use exactly these strings for "kind"):
   single_field_enum  - one field must be in a set of allowed values (e.g. kv_role in {{producer,consumer}})
   cross_field        - a relation between two or more fields (e.g. min_tokens <= max_tokens; A requires B)
   dormancy           - a field is silently normalised/reset/clamped without raising (e.g. seed==-1 -> None)
+  runtime_literal    - a field accepts a specific string literal its apparent declared type would not suggest (e.g. a bool field also accepting "never", an int field also accepting "auto")
   other              - env-var-gated, platform-gated, or requires a live model/hf-config to evaluate
 
 For EACH constraint emit an object with these keys:
-  "kind":                one of the five strings above
+  "kind":                one of the six strings above
   "fields":              list of the config field name(s) involved (bare names, strip any "self." prefix)
   "predicate":           a normalised boolean expression for the VALID/legal condition
                          (e.g. "n >= 1", "-2.0 <= presence_penalty <= 2.0", "min_tokens <= max_tokens").
                          For dormancy, describe the normalisation (e.g. "seed == -1 -> None").
+                         For runtime_literal, the predicate must contain the accepted literal in
+                         double quotes (e.g. early_stopping accepts "never"), with the citation
+                         pointing at the line proving the literal is accepted.
   "condition":           the class / method context in which it applies (e.g. "SamplingParams._verify_args")
   "citation":            "FILENAME.py:LINE" using the exact 1-based line numbers shown in the left margin
                          below. Cite the line where the guard/raise/assignment actually appears.
@@ -541,6 +545,44 @@ def build_candidate(
     return candidate
 
 
+def build_literal_proposal(
+    chunk: Chunk, sources: dict[str, list[str]], rule: dict[str, Any]
+) -> dict[str, Any] | str:
+    """Assemble one runtime-literal proposal, or the drop reason when unusable.
+
+    A ``runtime_literal`` rule claims a field accepts a specific string literal
+    its declared type would not suggest (e.g. a bool field also accepting
+    "never"). The emitted ``{field, value, citation}`` object is the contract the
+    runtime-literal discovery stage's proposal reader consumes; there the value is
+    arbitrated by a construction probe, so a garbage proposal costs one failed
+    probe and nothing here. Returns "no_field" when no usable field is named,
+    "no_literal" when the predicate carries no double-quoted literal, and
+    "unresolved_citation" when the citation points at no real file:line.
+    """
+    leaves = [leaf_of(f) for f in (rule.get("fields") or []) if isinstance(f, str) and leaf_of(f)]
+    if not leaves:
+        return "no_field"
+    leaf = leaves[0]
+
+    predicate = str(rule.get("predicate") or "")
+    token = re.search(r'"([^"\s]{1,40})"', predicate)
+    if not token:
+        return "no_literal"
+
+    raw = str(rule.get("citation") or "")
+    citation = resolve_citation(chunk, sources, raw)
+    if citation is None:
+        return "unresolved_citation"
+
+    cited = re.search(r"([\w./-]+\.py)\s*:\s*(\d+)", raw)
+    cited_line = int(cited.group(2)) if cited else 0
+    return {
+        "field": leaf,
+        "value": token.group(1),
+        "citation": {"file": citation["file"], "line": cited_line, "quote": citation["quote"]},
+    }
+
+
 # Sampling orchestration.
 
 
@@ -587,22 +629,40 @@ def run_analyst(
     model: str,
     samples: int,
     run_date: str,
-) -> tuple[list[dict[str, Any]], Counter[str]]:
-    """Cold-read every chunk, build candidates, and union-dedup the pool.
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Counter[str]]:
+    """Cold-read every chunk, build candidates + literal proposals, union-dedup.
 
-    Also returns the drop counters (no_field / unresolved_citation /
-    dedup_collapsed): the per-bump analyst-health signal - citation-resolution
-    rate is the parity experiment's headline quality metric - which the absorb
-    workflow reads to judge whether a cold read degraded.
+    Rules of kind ``runtime_literal`` route to :func:`build_literal_proposal`
+    (deduped on ``(field, value)``, first citation kept); every other kind follows
+    the unified-candidate path unchanged. Returns
+    ``(candidates, literal_proposals, drops)``. The drop counters (no_field /
+    no_literal / unresolved_citation / dedup_collapsed) are the per-bump
+    analyst-health signal - citation-resolution rate is the parity experiment's
+    headline quality metric - which the absorb workflow reads to judge whether a
+    cold read degraded.
     """
     seen: set[str] = set()
+    seen_literals: set[tuple[str, str]] = set()
     drops: Counter[str] = Counter()
     candidates: list[dict[str, Any]] = []
+    literal_proposals: list[dict[str, Any]] = []
     for position, chunk in enumerate(chunks, start=1):
         logger.info("chunk %d/%d %s", position, len(chunks), chunk.chunk_id)
         for source_chunk, rule in sample_chunk(
             chunk, generate, samples, engine=engine, version=version
         ):
+            if rule.get("kind") == "runtime_literal":
+                proposal = build_literal_proposal(source_chunk, sources, rule)
+                if isinstance(proposal, str):
+                    drops[proposal] += 1
+                    continue
+                key = (proposal["field"], proposal["value"])
+                if key in seen_literals:
+                    drops["dedup_collapsed"] += 1
+                    continue
+                seen_literals.add(key)
+                literal_proposals.append(proposal)
+                continue
             candidate = build_candidate(
                 source_chunk,
                 sources,
@@ -621,7 +681,7 @@ def run_analyst(
                 continue
             seen.add(candidate["id"])
             candidates.append(candidate)
-    return candidates, drops
+    return candidates, literal_proposals, drops
 
 
 # Manifest, version, source loading, emission.
@@ -692,6 +752,15 @@ _POOL_HEADER = (
     "# the shipped src/llenergymeasure/engines/<engine>/rules.yaml corpora.\n"
 )
 
+_LITERAL_POOL_HEADER = (
+    "# Analyst runtime-literal proposals.\n"
+    "# Emitted by scripts/analyst_cold_read.py: UNVERIFIED (field, value, citation)\n"
+    "# string-literal proposals the analyst saw while cold-reading the pinned\n"
+    "# engine source. The runtime-literal discovery stage consumes these read-only\n"
+    "# and arbitrates each with a construction probe; do NOT hand-copy into any\n"
+    "# discovered schema or shipped corpus.\n"
+)
+
 
 def write_candidates(
     candidates: list[dict[str, Any]],
@@ -713,6 +782,39 @@ def write_candidates(
         generated_at=run_date,
         candidates=candidates,
         header=_POOL_HEADER,
+        extra={"model": model, "samples": samples},
+    )
+    return path
+
+
+def write_literal_proposals(
+    proposals: list[dict[str, Any]],
+    pool_root: Path,
+    *,
+    engine: str,
+    version: str,
+    model: str,
+    samples: int,
+    run_date: str,
+) -> Path | None:
+    """Write the runtime-literal proposal pool file, or None when there are none.
+
+    Proposals are sorted by ``(field, value)`` and written under the shared pool
+    envelope's ``candidates`` key, which the discovery stage's proposal reader
+    consumes verbatim. An empty list writes nothing and returns None.
+    """
+    if not proposals:
+        return None
+    ordered = sorted(proposals, key=lambda p: (p["field"], p["value"]))
+    path = pool_path(pool_root, engine, version, "runtime_literals.proposed.yaml")
+    write_pool(
+        path,
+        source=SOURCE,
+        engine=engine,
+        version=version,
+        generated_at=run_date,
+        candidates=ordered,
+        header=_LITERAL_POOL_HEADER,
         extra={"model": model, "samples": samples},
     )
     return path
@@ -772,7 +874,7 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.time()
     generate = ollama_generator(args.ollama_host, args.model)
-    candidates, drops = run_analyst(
+    candidates, literal_proposals, drops = run_analyst(
         chunks,
         sources,
         generate,
@@ -791,14 +893,25 @@ def main(argv: list[str] | None = None) -> int:
         samples=args.samples,
         run_date=run_date,
     )
+    literal_path = write_literal_proposals(
+        literal_proposals,
+        args.pool_root,
+        engine=args.engine,
+        version=version,
+        model=args.model,
+        samples=args.samples,
+        run_date=run_date,
+    )
     by_kind = Counter(c["provenance"]["kind"] for c in candidates)
     drop_note = " ".join(f"{reason}={count}" for reason, count in sorted(drops.items())) or "none"
     print(
         f"analyst cold read: {len(candidates)} candidates "
-        f"({dict(sorted(by_kind.items()))}), drops: {drop_note}, "
-        f"in {time.time() - started:.0f}s\nwrote {path}",
+        f"({dict(sorted(by_kind.items()))}), literal_proposals={len(literal_proposals)}, "
+        f"drops: {drop_note}, in {time.time() - started:.0f}s\nwrote {path}",
         file=sys.stderr,
     )
+    if literal_path is not None:
+        print(f"wrote {literal_path}", file=sys.stderr)
     return 0
 
 
