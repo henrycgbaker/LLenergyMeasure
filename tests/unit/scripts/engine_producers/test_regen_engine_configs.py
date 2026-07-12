@@ -69,6 +69,26 @@ def test_python_type_to_json_schema(type_str: str | None, expected: dict) -> Non
     assert rec._python_type_to_json_schema(type_str) == expected
 
 
+def test_field_shape_unions_runtime_literals() -> None:
+    """A verified runtime literal unions onto the base type as a string anyOf member.
+
+    The ``runtime_literals`` key itself must not leak into the emitted property.
+    """
+    shape = {
+        "type": "bool",
+        "default": None,
+        "runtime_literals": [
+            {"value": "never", "verified": "construction", "pin": "5.7.0", "evidence": ["rule:x"]}
+        ],
+    }
+    prop = rec._field_shape_to_property(shape)
+    assert prop == {
+        "anyOf": [{"type": "boolean"}, {"type": "string", "enum": ["never"]}],
+        "default": None,
+    }
+    assert "runtime_literals" not in prop
+
+
 def test_field_shape_passes_through_enum_and_bounds() -> None:
     """JSON-Schema-native keys (enum, bounds, default, x-source) survive."""
     shape = {
@@ -417,3 +437,50 @@ def test_vllm_nested_blobs_generate_typed_submodels(tmp_path: Path) -> None:
     assert "class SpeculativeConfig" in text
     assert "compilation_config: CompilationConfig | None" in text
     assert "speculative_config: SpeculativeConfig | None" in text
+
+
+def test_generate_config_widens_annotation_with_runtime_literal(tmp_path: Path) -> None:
+    """A recorded runtime literal widens the generated annotation end-to-end.
+
+    ``early_stopping: bool`` with a verified ``"never"`` literal must generate
+    ``early_stopping: bool | Literal["never"] | None = None`` through the full
+    pre-step + datamodel-codegen + ruff path (the ruff post-step normalises the
+    generator's single quotes to double quotes, per the repo convention the
+    sibling shape test pins).
+    """
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "schema.discovered.json").write_text(
+        json.dumps(
+            {
+                "engine_version": "5.7.0",
+                "engine_params": {
+                    "early_stopping": {
+                        "type": "bool",
+                        "default": None,
+                        "runtime_literals": [
+                            {
+                                "value": "never",
+                                "verified": "construction",
+                                "pin": "5.7.0",
+                                "evidence": ["rule:x"],
+                            }
+                        ],
+                    },
+                },
+                "sampling_params": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "curated.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "engine": "transformers",
+                "exposed_fields": {"engine_params": ["early_stopping"], "sampling_params": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    text = rec.generate_config("transformers", "5.7.0", outputs).decode("utf-8")
+    assert 'early_stopping: bool | Literal["never"] | None = None' in text

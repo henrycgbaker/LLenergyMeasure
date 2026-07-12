@@ -185,6 +185,71 @@ cluster) here; there are no per-cluster prompt hints, only the file list.
 
 ---
 
+## The runtime-literal stage
+
+Some engine type knowledge lives only in runtime validation code, not in the
+static type surface. Transformers `early_stopping` is the canonical case: it
+accepts `True`/`False`/`"never"` at runtime, but signature-based discovery
+records `{"type": "bool"}`, so the generated typed config rejects the
+upstream-valid `"never"`. The runtime-literal stage recovers these literals and
+folds them into the discovered schema. It runs as a second stage of schema
+discovery, inside the same engine container, over the just-discovered envelope:
+
+```
+static discovery -> candidate generation -> construction probe -> merged schema written once
+```
+
+**Candidate generation** unions three-plus-one sources, all string-valued only:
+
+- the shipped rules corpus (equality / membership comparands and single-quoted
+  `message_template` tokens);
+- the engine's own validation source text (`self.<field> in {...}` / `== "..."`)
+  and class docstrings;
+- an optional LLM-proposed file (read-only; written by a separate analyst);
+- plus the previous schema's recorded literals, carried forward so a still-valid
+  literal survives even if its original evidence source moved.
+
+A candidate is kept only when the field's static type cannot already express the
+value.
+
+**Construction probe** (the engine is the arbiter). Each candidate gets a
+two-leg probe in the real engine: the literal value must BUILD the native
+config, and a sentinel string must RAISE. A field that accepts both is not
+string-validated at construction grain, so recording it would be unsound and it
+is dropped. For transformers the probe builds `GenerationConfig(**kwargs)` then
+calls `.validate()` WITHOUT `strict` - strict validation conflates a type-valid
+literal with a beam-mode inertness complaint.
+
+**Recording.** A verified literal is written under an in-schema `runtime_literals`
+key on the field, with construction provenance and its evidence:
+
+```json
+"early_stopping": {
+  "type": "bool",
+  "default": null,
+  "runtime_literals": [
+    {"value": "never", "verified": "construction", "pin": "5.7.0",
+     "evidence": ["rule:transformers_raises_early_stopping_not_in_set", "src:..."]}
+  ]
+}
+```
+
+Codegen unions this into the generated annotation:
+`early_stopping: bool | Literal['never'] | None`.
+
+**Staleness is auto-narrow with loud surfacing.** At a bump every recorded
+literal is re-probed. One that no longer verifies is dropped from the schema
+(no human gate) and a `NARROWED` line is emitted for the maintainer's diff, so
+the removal is visible in review rather than silent.
+
+**Standing check.** `make check-corpus-literals` reports any corpus rule literal
+the discovered schema type cannot express (directly or via a `runtime_literals`
+entry). It is the consistency tripwire between the two knowledge products; a
+finding means a shipped rule references a value the generated typed config would
+reject.
+
+---
+
 ## Debugging patterns
 
 ### A candidate fails the citation check

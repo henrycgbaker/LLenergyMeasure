@@ -15,12 +15,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
+sys.path.insert(0, str(Path(__file__).parents[3]))
 sys.path.insert(0, str(Path(__file__).parents[3] / "scripts"))
 
 import analyst_cold_read as acr
 import check_citations as cc
 import probe_candidates as pc
+
+from scripts.engine_producers import _runtime_literals as rl
 
 
 def _gen(text: str, done: str = "stop", eval_count: int = 100) -> Any:
@@ -294,10 +298,11 @@ def test_union_dedups_identical_rules_across_samples(fake_tree: Any) -> None:
     def stub(prompt: str, temperature: float) -> Any:
         return _gen(_rules_json(_N_RULE, other))  # every sample proposes the same two rules
 
-    candidates, drops = acr.run_analyst(
+    candidates, literals, drops = acr.run_analyst(
         chunks, sources, stub, engine="vllm", version="0.19.1", model="m", samples=3, run_date="d"
     )
     assert len(candidates) == 2  # union collapses the duplicates
+    assert literals == []  # no runtime_literal rules in this pass
     assert {next(iter(c["match"]["fields"])) for c in candidates} == {"n", "temperature"}
     assert drops == {"dedup_collapsed": 4}  # 3 samples x 2 rules -> 2 kept, 4 collapsed
 
@@ -311,10 +316,11 @@ def test_same_claim_at_shifted_window_collapses_to_one_id(fake_tree: Any) -> Non
     def stub(prompt: str, temperature: float) -> Any:
         return _gen(_rules_json(_N_RULE, shifted))
 
-    candidates, drops = acr.run_analyst(
+    candidates, literals, drops = acr.run_analyst(
         chunks, sources, stub, engine="vllm", version="0.19.1", model="m", samples=1, run_date="d"
     )
     assert len(candidates) == 1
+    assert literals == []
     assert drops == {"dedup_collapsed": 1}
     assert candidates[0]["citation"]["lines"] == [1, 6]  # window of the first cite, line 3
 
@@ -383,3 +389,138 @@ def test_manifest_covers_cited_sources(engine: str, expected: list[str]) -> None
     paths = [p for ps in acr.load_manifest(engine).values() for p in ps]
     for source in expected:
         assert source in paths
+
+
+# Runtime-literal proposals: a runtime_literal rule -> the discovery-stage contract.
+# The literal value comes from the predicate's quoted token, not the source; the
+# citation only needs to resolve into the fake tree.
+_LITERAL_RULE = {
+    "kind": "runtime_literal",
+    "fields": ["early_stopping"],
+    "predicate": 'early_stopping accepts "never"',
+    "condition": "GenerationConfig.validate",
+    "citation": "sampling_params.py:3",
+    "severity_suggestion": "error",
+    "rationale": "early_stopping also accepts the string never",
+}
+
+
+def test_run_analyst_emits_candidate_and_literal_proposal(fake_tree: Any) -> None:
+    # One runtime_literal rule + one normal rule in the same pass: the normal one
+    # flows the candidate path, the literal one becomes a contract-shaped proposal.
+    _, sources, chunks = fake_tree
+
+    def stub(prompt: str, temperature: float) -> Any:
+        return _gen(_rules_json(_LITERAL_RULE, _N_RULE))
+
+    candidates, literals, _drops = acr.run_analyst(
+        chunks, sources, stub, engine="vllm", version="0.19.1", model="m", samples=1, run_date="d"
+    )
+    assert len(candidates) == 1
+    assert next(iter(candidates[0]["match"]["fields"])) == "n"
+    assert len(literals) == 1
+    proposal = literals[0]
+    assert proposal["field"] == "early_stopping"
+    assert proposal["value"] == "never"
+    assert proposal["citation"]["file"] == "sampling_params.py"
+    assert proposal["citation"]["line"] == 3
+    assert "if self.n < 1:" in proposal["citation"]["quote"]  # verbatim window from the real file
+
+
+@pytest.mark.parametrize(
+    ("rule", "reason"),
+    [
+        (dict(_LITERAL_RULE, fields=[]), "no_field"),
+        # A predicate with no double-quoted literal cannot name the accepted value.
+        (dict(_LITERAL_RULE, predicate="early_stopping accepts never"), "no_literal"),
+        (dict(_LITERAL_RULE, citation="ghost.py:1"), "unresolved_citation"),
+    ],
+)
+def test_literal_proposal_dropped_when_unusable(
+    fake_tree: Any, rule: dict[str, Any], reason: str
+) -> None:
+    _, sources, chunks = fake_tree
+    assert acr.build_literal_proposal(chunks[0], sources, rule) == reason
+
+
+def test_literal_proposals_dedup_on_field_value(fake_tree: Any) -> None:
+    # Same (field, value) proposed twice at different cites -> one proposal, the
+    # first citation kept (line 3, not the shifted line 6).
+    _, sources, chunks = fake_tree
+    shifted = dict(_LITERAL_RULE, citation="sampling_params.py:6")
+
+    def stub(prompt: str, temperature: float) -> Any:
+        return _gen(_rules_json(_LITERAL_RULE, shifted))
+
+    candidates, literals, drops = acr.run_analyst(
+        chunks, sources, stub, engine="vllm", version="0.19.1", model="m", samples=1, run_date="d"
+    )
+    assert candidates == []
+    assert len(literals) == 1
+    assert literals[0]["citation"]["line"] == 3  # first citation wins
+    assert drops == {"dedup_collapsed": 1}
+
+
+def test_write_literal_proposals_empty_writes_nothing(tmp_path: Path) -> None:
+    out = acr.write_literal_proposals(
+        [], tmp_path / "pool", engine="vllm", version="0.19.1", model="m", samples=3, run_date="d"
+    )
+    assert out is None
+    assert not (tmp_path / "pool").exists()
+
+
+def test_write_literal_proposals_round_trips(tmp_path: Path) -> None:
+    proposals = [
+        {
+            "field": "early_stopping",
+            "value": "never",
+            "citation": {"file": "gen.py", "line": 3, "quote": "if ..."},
+        }
+    ]
+    out = acr.write_literal_proposals(
+        proposals,
+        tmp_path / "pool",
+        engine="vllm",
+        version="0.19.1",
+        model="m",
+        samples=3,
+        run_date="d",
+    )
+    assert out is not None
+    assert out == (
+        tmp_path / "pool" / "vllm" / "v0_19_1" / "candidates" / "runtime_literals.proposed.yaml"
+    )
+    doc = yaml.safe_load(out.read_text())
+    assert doc["candidates"] == proposals
+
+
+def test_written_proposal_round_trips_through_runtime_literals_reader(
+    fake_tree: Any, tmp_path: Path
+) -> None:
+    # The end-to-end contract: a proposal the analyst emits, once written, is a
+    # candidate the runtime-literal discovery stage's reader accepts, with the
+    # exact llm:<file>:<line> evidence the stage expects.
+    _, sources, chunks = fake_tree
+    proposal = acr.build_literal_proposal(chunks[0], sources, _LITERAL_RULE)
+    assert isinstance(proposal, dict)
+    out = acr.write_literal_proposals(
+        [proposal],
+        tmp_path / "pool",
+        engine="vllm",
+        version="0.19.1",
+        model="m",
+        samples=3,
+        run_date="d",
+    )
+    assert out is not None
+    doc = yaml.safe_load(out.read_text())
+
+    field_specs = {"early_stopping": ("sampling_params", {"type": "bool"})}
+    candidates = rl.llm_candidates(doc, field_specs)
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.field == "early_stopping"
+    assert candidate.value == "never"
+    file_ref = proposal["citation"]["file"]
+    line_ref = proposal["citation"]["line"]
+    assert candidate.evidence == (f"llm:{file_ref}:{line_ref}",)

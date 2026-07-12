@@ -30,7 +30,11 @@ The mined schema carries structured ``enum`` / ``minimum`` / ``maximum`` /
 ``exclusiveMinimum`` / ``exclusiveMaximum`` keys, which this wrapper projects
 into real ``Literal`` / bounded fields. Both the mined Python type spelling and
 the JSON-native spelling a model-schema lift emits are mapped, so a bounded
-native-typed field is never silently widened to ``Any | None``.
+native-typed field is never silently widened to ``Any | None``. A field's
+``runtime_literals`` key (verified string literals the static type misses, e.g.
+``early_stopping`` accepting ``"never"``) is unioned into the field type -
+``bool`` becomes ``bool | Literal['never'] | None`` - but the ``runtime_literals``
+key itself never leaks into the emitted JSON Schema.
 """
 
 from __future__ import annotations
@@ -162,12 +166,46 @@ _PASSTHROUGH_KEYS: tuple[str, ...] = (
 )
 
 
+def _runtime_literal_values(shape: dict[str, Any]) -> list[str]:
+    """Sorted unique string values recorded under a field shape's ``runtime_literals``."""
+    values: set[str] = set()
+    for entry in shape.get("runtime_literals") or []:
+        value = entry.get("value") if isinstance(entry, dict) else None
+        if isinstance(value, str):
+            values.add(value)
+    return sorted(values)
+
+
 def _field_shape_to_property(shape: dict[str, Any]) -> dict[str, Any]:
-    """Translate one ``schema.discovered.json`` field shape to a JSON Schema property."""
+    """Translate one ``schema.discovered.json`` field shape to a JSON Schema property.
+
+    A field's verified ``runtime_literals`` (string values the static type
+    misses) are unioned onto the base type so the generated annotation widens
+    (``bool`` -> ``bool | Literal['never'] | None``). The ``runtime_literals`` key
+    is deliberately NOT in :data:`_PASSTHROUGH_KEYS`, so it never leaks into the
+    emitted schema - only its effect on the type does.
+    """
     prop = _python_type_to_json_schema(shape.get("type"))
     for key in _PASSTHROUGH_KEYS:
         if key in shape:
             prop[key] = shape[key]
+
+    literals = _runtime_literal_values(shape)
+    if not literals:
+        return prop
+
+    if "enum" in prop:
+        # Extend the existing membership set; a mixed-member Literal built from
+        # membership alone drops the scalar ``type`` unless it is already string.
+        prop["enum"] = list(prop["enum"]) + [v for v in literals if v not in prop["enum"]]
+        if "type" in prop and prop.get("type") != "string":
+            prop.pop("type")
+    elif "type" in prop or "anyOf" in prop:
+        base_members = prop.pop("anyOf") if "anyOf" in prop else [{"type": prop.pop("type")}]
+        merged: dict[str, Any] = {"anyOf": [*base_members, {"type": "string", "enum": literals}]}
+        merged.update(prop)  # keep default / description / x-source on the outer prop
+        prop = merged
+    # else: empty {} (Any) already covers any literal - leave unchanged.
     return prop
 
 

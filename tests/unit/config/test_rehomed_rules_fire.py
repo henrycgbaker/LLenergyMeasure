@@ -12,8 +12,12 @@ is proven for the whole set.
 
 from __future__ import annotations
 
+from typing import Literal
+
 import pytest
 
+from llenergymeasure.config.engine_rules import EngineRulesLoader
+from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig
 
 # (engine, section, field, violating_value, rule_id_fragment)
@@ -292,3 +296,115 @@ def test_nested_compilation_config_bound_silent_when_not_violated(compilation_co
         vllm={"engine_params": engine_params},
     )
     assert cfg.engine == "vllm"
+
+
+# ---------------------------------------------------------------------------
+# Runtime-literal discovery: transformers early_stopping accepts "never".
+#
+# The typed union widens to ``bool | Literal["never"] | None`` once the caller
+# regenerates the shipped config.py from the runtime-literal-augmented schema.
+# The four tests below that construct or introspect that widened surface
+# (public-path acceptance, the loader path, the round-trip, and the annotation
+# golden, plus the "silent on a constructed never config" check) WILL FAIL until
+# that regeneration lands; they are written to pass afterwards. The dict-grain
+# rule-firing test and the union-rejection test do not depend on regeneration.
+# ---------------------------------------------------------------------------
+
+_NEVER_RULE_IDS = {
+    "transformers_early_stopping_type_early_stopping_not_in_allowlist",
+    "transformers_raises_early_stopping_not_in_set",
+    "transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str",
+}
+
+
+def test_early_stopping_never_accepted_public_path():
+    """early_stopping="never" constructs and is preserved through ExperimentConfig."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"early_stopping": "never"}},
+    )
+    assert cfg.transformers.engine_params.early_stopping == "never"
+
+
+def test_early_stopping_never_accepted_via_loader():
+    """The same value survives the CLI-override loader path."""
+    cfg = load_experiment_config(
+        path=None,
+        cli_overrides={
+            "task.model": "gpt2",
+            "engine": "transformers",
+            "transformers.engine_params.early_stopping": "never",
+        },
+    )
+    assert cfg.transformers.engine_params.early_stopping == "never"
+
+
+def test_early_stopping_never_survives_roundtrip():
+    """A model_dump / re-construct round-trip preserves the literal value."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"early_stopping": "never"}},
+    )
+    reloaded = ExperimentConfig(**cfg.model_dump(mode="json"))
+    assert reloaded.transformers.engine_params.early_stopping == "never"
+
+
+def test_early_stopping_generated_annotation_golden():
+    """The generated EngineParams field annotation is the widened union."""
+    from llenergymeasure.engines.transformers.config import EngineParams
+
+    annotation = EngineParams.model_fields["early_stopping"].annotation
+    assert annotation == (bool | Literal["never"] | None)
+
+
+def test_three_never_rules_fire_at_try_match_grain():
+    """The three corpus rules fire on out-of-allowlist / wrong-type values.
+
+    Dict-grain firing does not depend on the regenerated config: it exercises the
+    shipped rules corpus directly.
+    """
+    rules = EngineRulesLoader().load_rules("transformers").rules
+
+    def fired(value: object) -> set[str]:
+        cfg = {"transformers": {"engine_params": {"early_stopping": value}}}
+        return {r.id for r in rules if r.try_match(cfg)}
+
+    fired_on_string = fired("sometimes")
+    assert "transformers_early_stopping_type_early_stopping_not_in_allowlist" in fired_on_string
+    assert "transformers_raises_early_stopping_not_in_set" in fired_on_string
+
+    fired_on_float = fired(1.5)
+    assert (
+        "transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str"
+        in fired_on_float
+    )
+
+
+def test_three_never_rules_silent_on_constructed_never_config():
+    """The allowlist member "never" is now reachable and clean: no rule fires on it."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"early_stopping": "never"}},
+    )
+    rules = EngineRulesLoader().load_rules("transformers").rules
+    fired = {r.id for r in rules if r.try_match(cfg)}
+    assert not (fired & _NEVER_RULE_IDS)
+
+
+def test_pydantic_union_rejects_sometimes_public_path():
+    """A non-member string is still rejected through the public path.
+
+    The typed union (``bool | Literal["never"] | None``) is the first guard; the
+    corpus error rules remain the dict-grain / passthrough backstop. Either path
+    raising is a rejection - the point is that widening to accept "never" did NOT
+    open the door to arbitrary strings.
+    """
+    with pytest.raises(ValueError):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers={"engine_params": {"early_stopping": "sometimes"}},
+        )

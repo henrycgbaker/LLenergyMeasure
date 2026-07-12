@@ -80,7 +80,7 @@ All fields except `model` are optional and have sensible defaults.
 | `use_cache` | boolean | None | `null` |  |
 | `cache_implementation` | string | None | `null` |  |
 | `num_beams` | integer | None | `null` |  |
-| `early_stopping` | boolean | None | `null` |  |
+| `early_stopping` | boolean | string | None | `null` |  |
 | `length_penalty` | number | None | `null` |  |
 | `no_repeat_ngram_size` | integer | None | `null` |  |
 | `prompt_lookup_num_tokens` | integer | None | `null` |  |
