@@ -311,10 +311,22 @@ def test_promotion_matrix_dispositions() -> None:
     assert "old_family" in delta.changed  # survived via pool candidate, flagged for drift review
 
 
-def test_promotion_survivor_ships_verbatim() -> None:
+def test_promotion_survivor_reconfirmed_is_restamped() -> None:
+    """A directly re-confirmed survivor keeps its claim verbatim but its
+    provenance is re-pinned to the confirming version (the corpus invariant
+    pins provenance.engine_version to the envelope version)."""
     new_rules, _ = _promote_matrix()
     survivor = next(r for r in new_rules if r["id"] == "old_direct")
-    assert survivor == _rule("old_direct", "error", {"vllm.sampling_params.temperature": {"<": 0}})
+    expected = _rule("old_direct", "error", {"vllm.sampling_params.temperature": {"<": 0}})
+    assert {k: v for k, v in survivor.items() if k != "provenance"} == {
+        k: v for k, v in expected.items() if k != "provenance"
+    }
+    assert survivor["provenance"] == {
+        "source": "manual",
+        "verified": "construction",
+        "engine_version": "0.19.1",
+        "date": "2026-07-07",
+    }
 
 
 def test_promotion_residue_ships_only_when_signed_off() -> None:

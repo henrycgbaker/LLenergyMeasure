@@ -541,6 +541,22 @@ def _mark_human(rule: dict[str, Any], version: str, run_date: str) -> dict[str, 
     return promoted
 
 
+def _restamp_confirmed(rule: dict[str, Any], version: str, run_date: str) -> dict[str, Any]:
+    """Re-stamp a shipped rule the probe re-confirmed at this pin.
+
+    The corpus invariant pins every rule's ``provenance.engine_version`` to the
+    envelope version, so a survivor confirmed at the new pin must carry the new
+    pin, not the version it was first verified at. ``source`` and any citation
+    are preserved (where the knowledge came from does not change); ``verified``
+    becomes ``construction`` because that is what this run's probe proved.
+    """
+    promoted = {k: v for k, v in rule.items() if k != "provenance"}
+    old_provenance = dict(rule.get("provenance") or {})
+    old_provenance.update({"verified": "construction", "engine_version": version, "date": run_date})
+    promoted["provenance"] = old_provenance
+    return promoted
+
+
 class Delta:
     """Mechanical old-vs-new corpus diff, grouped by disposition."""
 
@@ -587,10 +603,12 @@ def promote(
         status = verdicts.get(rid, {}).get("status", UNVERIFIED)
         family_confirmed = _leaf_key(rule) in confirmed_leaf_keys
         if status == CONFIRMED or family_confirmed:
-            new_rules.append(rule)
-            delta.survived.append(rid)
-            if status != CONFIRMED:
+            if status == CONFIRMED:
+                new_rules.append(_restamp_confirmed(rule, version, run_date))
+            else:
+                new_rules.append(rule)
                 delta.changed.append(rid)  # kept via a pool candidate: possible in-place drift
+            delta.survived.append(rid)
         elif status in ("unconfirmed", "unprobeable"):
             if rid in signed_off:
                 new_rules.append(_mark_human(rule, version, run_date))
