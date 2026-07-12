@@ -1,0 +1,7 @@
+# Material residue: shipped rules the probe could not exercise this run.
+# Set human_confirmed: true to keep shipping a rule you have verified by hand;
+# the next absorb run consumes the mark. Unmarked residue is not shipped
+# until you mark it (withheld pending sign-off, not retired). An entry with
+# interrogation: absent is a retirement proposal: decline the mark to let the
+# rule lapse, or mark it to keep shipping it.
+residue: []
