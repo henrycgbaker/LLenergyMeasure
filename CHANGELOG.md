@@ -190,6 +190,13 @@ this line. Engine pins advanced to vLLM 0.19.1, TensorRT-LLM 1.0.0, and Transfor
 - Generated-doc drift gate in the docs-freshness workflow. ([#760], [#761])
 - Fan-in gate making the engine-rules-check requireable without deadlock; bump gates made
   reachable and requireable. ([#769], [#772])
+- Runtime-literal discovery stage: string-literal candidates pooled from corpus cross-refs,
+  upstream AST/docstring scans, LLM proposals, and previous-schema carry-forward, each verified
+  by a two-leg construction probe in the pinned container; confirmed literals are recorded in
+  the discovered schema and code-generated as union types. Standing census via
+  `make check-corpus-literals`. ([#789])
+- Miner final-run recall check with report, a probe-confirmed nested vLLM compilation-config
+  cross-field rule, and nested-path rule firing tests. ([#788])
 
 ### Changed
 
@@ -213,6 +220,13 @@ this line. Engine pins advanced to vLLM 0.19.1, TensorRT-LLM 1.0.0, and Transfor
   are verified byte-for-byte against a fresh mine, no human source-diffing). ([#758])
 - Documentation aligned to the byte-verification engine-knowledge flow and the rules vocabulary;
   stale engine and contributing pages rewritten. ([#759], [#764], [#774])
+- Discovery write path inverted: container discovery writes only under `engine_versions/`, with
+  `make promote-schemas` as the sole writer of the packaged copies. ([#785])
+- Knowledge-production scripts gated by ruff and mypy in Makefile and CI; import-linter layer
+  contracts made honest; bundle artefact filenames centralised as constants. ([#784])
+- Dead code deleted and duplicated helpers folded across study and scripts layers. ([#786])
+- Docs: heading anchors match the live slugifier, version references pinned to `current.yaml`
+  sources, and curation-era drift rewritten. ([#787])
 
 ### Fixed
 
@@ -241,6 +255,17 @@ this line. Engine pins advanced to vLLM 0.19.1, TensorRT-LLM 1.0.0, and Transfor
 - Study dedup fallback, grid edge cases, and dormant-candidate visibility repaired. ([#770])
 - Schema discovery retargeted at the `current.yaml` pins. ([#765])
 - Pin-driven Transformers publish and GHCR prune exemption. ([#766])
+- Rules follow-ups: probe operator canonicalisation, loader operator allowlist, message-template
+  residue, and `{invariant_id}` renamed to `{rule_id}`. ([#779])
+- Per-engine upstream default images resolve from the pinned engine version instead of a
+  never-published GHCR ref; `llem doctor` verifies them. ([#780])
+- Energy-measurement failure is loud instead of a silent zero: sampler auto-selection warns,
+  absent energy stays `None` rather than coercing to `0.0`, sampler failures set a measurement
+  warning, and NVML init failures log debug traces. ([#781])
+- Documented top-level `images:` study key no longer leaks into experiment configs and rejects
+  the whole study; user-facing config copy de-jargonised. ([#782])
+- Self-hosted Renovate aborted before opening update PRs: the stability commit-status POST the
+  App token cannot make is now disabled in config. ([#791])
 
 ### Removed
 
@@ -610,4 +635,15 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#774]: https://github.com/henrycgbaker/llenergymeasure/pull/774
 [#775]: https://github.com/henrycgbaker/llenergymeasure/pull/775
 [#776]: https://github.com/henrycgbaker/llenergymeasure/pull/776
+[#779]: https://github.com/henrycgbaker/llenergymeasure/pull/779
+[#780]: https://github.com/henrycgbaker/llenergymeasure/pull/780
+[#781]: https://github.com/henrycgbaker/llenergymeasure/pull/781
+[#782]: https://github.com/henrycgbaker/llenergymeasure/pull/782
 [#783]: https://github.com/henrycgbaker/llenergymeasure/pull/783
+[#784]: https://github.com/henrycgbaker/llenergymeasure/pull/784
+[#785]: https://github.com/henrycgbaker/llenergymeasure/pull/785
+[#786]: https://github.com/henrycgbaker/llenergymeasure/pull/786
+[#787]: https://github.com/henrycgbaker/llenergymeasure/pull/787
+[#788]: https://github.com/henrycgbaker/llenergymeasure/pull/788
+[#789]: https://github.com/henrycgbaker/llenergymeasure/pull/789
+[#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
