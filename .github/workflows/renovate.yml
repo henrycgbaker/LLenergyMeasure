@@ -12,6 +12,12 @@ name: Renovate
 # opened with GITHUB_TOKEN would not (GitHub suppresses workflow runs on commits
 # it pushed itself, to avoid recursion). Update PRs must run CI to be reviewable.
 #
+# The App token has no Commit-statuses permission, so renovate.json sets
+# statusCheckNames.minimumReleaseAge to null: Renovate would otherwise POST a
+# stability commit status to each bump branch, 403, and abort the whole run
+# before opening the PR (observed 2026-07-12). Nothing consumes that status;
+# the 14-day minimumReleaseAge cooling itself still applies.
+#
 # The in-config `schedule` in renovate.json ("before 9am on Monday") still gates
 # when update PRs are actually created, so this cron does not change bump
 # cadence. This workflow runs daily so the dependency dashboard stays fresh:
