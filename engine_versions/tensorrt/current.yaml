@@ -9,7 +9,7 @@ schema_version: 1
 engine: tensorrt
 library:
   pep503_name: tensorrt-llm
-  current_version: "1.0.0"
+  current_version: "1.2.1"
 source_tarball:
   # Template for the upstream release tarball. Tooling that mines TRT-LLM source
   # files substitutes `{version}` with `library.current_version`. Single locus
