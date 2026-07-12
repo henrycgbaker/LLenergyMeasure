@@ -120,17 +120,32 @@ echo "[$ENGINE] Discovery writes $OUTPUT_REL" >&2
 # Forward LLENERGY_DISCOVERY_FROZEN_AT into the container if the caller (CI)
 # set it. The introspectors use it to pin `discovered_at` to a
 # stable anchor, breaking the writeback->resync loop on unchanged source.
-docker run --rm --gpus all \
-    --user "$(id -u):$(id -g)" \
-    --entrypoint python3 \
-    -e LLENERGY_DISCOVERY_FROZEN_AT="${LLENERGY_DISCOVERY_FROZEN_AT:-}" \
-    -v "$REPO_ROOT:/repo" \
-    -w /repo \
-    "$IMAGE" \
-    -m scripts.engine_producers._schemas_runner \
-    --engine "$ENGINE" \
-    --image-ref "$IMAGE" \
+#
+# --user maps the host uid, which has no /etc/passwd entry in the image; torch
+# calls getpass.getuser() at import and raises "uid not found" without USER set.
+# HOME=/tmp keeps any torch/HF cache writes on a writable ephemeral path.
+DOCKER_ARGS=(
+    --rm --gpus all
+    --user "$(id -u):$(id -g)"
+    -e HOME=/tmp -e USER=llem-discovery
+    -e LLENERGY_DISCOVERY_FROZEN_AT="${LLENERGY_DISCOVERY_FROZEN_AT:-}"
+    -v "$REPO_ROOT:/repo" -w /repo
+)
+RUNNER_ARGS=(
+    -m scripts.engine_producers._schemas_runner
+    --engine "$ENGINE"
+    --image-ref "$IMAGE"
     --output "/repo/$OUTPUT_REL"
+)
+if [[ "$ENGINE" == "tensorrt" ]]; then
+    # Keep the NVIDIA entrypoint (matches scripts/probe_candidates.sh): from
+    # 1.2.1 the NGC image sets up /usr/local/tensorrt/lib on LD_LIBRARY_PATH
+    # in /etc/shinit_v2, not in the static image env, so bypassing the
+    # entrypoint makes `import tensorrt` fail with a missing libnvonnxparser.
+    docker run "${DOCKER_ARGS[@]}" "$IMAGE" python3 "${RUNNER_ARGS[@]}"
+else
+    docker run "${DOCKER_ARGS[@]}" --entrypoint python3 "$IMAGE" "${RUNNER_ARGS[@]}"
+fi
 
 cd "$REPO_ROOT"
 
