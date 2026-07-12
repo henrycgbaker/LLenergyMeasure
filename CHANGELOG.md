@@ -7,7 +7,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
-## [v0.10.0] - TBD
+## [v0.10.0] - 2026-07-13
 
 The engine-knowledge-as-data milestone. Hand-curated per-engine config was replaced by
 typed Pydantic configs code-generated from validation rules mined directly from engine
