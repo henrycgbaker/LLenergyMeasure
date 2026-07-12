@@ -27,7 +27,6 @@ engines/
     plugin.py          # HuggingFace Transformers engine
     rules.yaml         # Shipped validation rules (single runtime source)
     schema.discovered.json      # Introspected parameter schema
-    _staging/          # Per-engine miner staging (gitkeep'd)
 
   vllm/                # Same shape: vLLM engine (Docker-only)
   tensorrt/            # Same shape: TensorRT-LLM engine (NGC Docker)
