@@ -644,7 +644,13 @@ def test_trt_fp8_accepts_float16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "FP8"}}},
+        tensorrt={
+            "engine_params": {
+                "backend": "trt",
+                "dtype": "float16",
+                "quant_config": {"quant_algo": "FP8"},
+            }
+        },
     )
     assert cfg.tensorrt.engine_params.dtype == "float16"
 
@@ -654,7 +660,13 @@ def test_trt_fp8_accepts_bfloat16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt={"engine_params": {"dtype": "bfloat16", "quant_config": {"quant_algo": "FP8"}}},
+        tensorrt={
+            "engine_params": {
+                "backend": "trt",
+                "dtype": "bfloat16",
+                "quant_config": {"quant_algo": "FP8"},
+            }
+        },
     )
     assert cfg.tensorrt.engine_params.dtype == "bfloat16"
 
@@ -664,7 +676,13 @@ def test_trt_non_fp8_accepts_float16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "INT8"}}},
+        tensorrt={
+            "engine_params": {
+                "backend": "trt",
+                "dtype": "float16",
+                "quant_config": {"quant_algo": "INT8"},
+            }
+        },
     )
     assert cfg.tensorrt.engine_params.dtype == "float16"
 

@@ -9,6 +9,27 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Added
 
+- TensorRT-LLM schema discovery now mines BOTH backend args classes and unions them into
+  one discovered engine-params surface (63 -> 95 fields): `TrtLlmArgs` (the `trt` backend)
+  and `TorchLlmArgs` (the `pytorch` backend). Each field carries a `backends` applicability
+  list (`[pytorch, trt]`, `[trt]`, or `[pytorch]`) recording which backend's args class
+  carries it. Codegen keeps a single `EngineParams`; the metadata is descriptive (surfaced
+  as a Backends column in the schema reference), and cross-backend applicability is enforced
+  by loud validation rules, never silent dropping. Absence of the key means "all backends",
+  so the single-class vllm/transformers schemas are byte-unchanged. ([#PR])
+- Exposure-time field narrowing via a new optional `exposure_overrides` block in
+  `curated.yaml`: narrows a generated config field (`enum` -> `Literal`, `default`) without
+  touching the mined schema. Used to expose tensorrt `backend` as `Literal["pytorch", "trt"]`
+  defaulting to `"pytorch"` while the mined type stays `str`. ([#PR])
+- Backend-applicability rules in the tensorrt corpus (27 -> 29): `fast_build` and
+  `quant_config` require `backend='trt'` (both exist only on `TrtLlmArgs`; the pytorch
+  backend's `TorchLlmArgs` rejects them under `extra='forbid'`). Live-verified by direct
+  construction at 1.2.1; enforced at the config-expansion grain, complementing the plugin's
+  construction-grain `ConfigError` guards (defense in depth at both grains). ([#PR])
+- The deterministic cross-field extractor's target table now walks the `TorchLlmArgs`
+  validator tree (`stream_interval`, `batch_wait_*`, `ray_*` preconditions,
+  `speculative_config`), joining the pytorch-backend validators to the standing candidate
+  surface. ([#PR])
 - Standing plugin-kwarg lint: `scripts/check_plugin_kwargs.py` cross-checks the literal
   constructor-kwarg names each engine plugin's translation layer hand-types against that
   engine's discovered schema at the current pin, with a rationale-carrying allowlist for

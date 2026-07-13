@@ -5,8 +5,8 @@
   "engine_commit_sha": null,
   "image_ref": "nvcr.io/nvidia/tensorrt-llm/release:1.2.1",
   "base_image_ref": null,
-  "discovered_at": "2026-07-12T12:41:07.050586+00:00",
-  "discovery_method": "TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
+  "discovered_at": "2026-07-13T00:00:00+00:00",
+  "discovery_method": "TorchLlmArgs+TrtLlmArgs.model_json_schema() union with per-field backends + dataclasses.fields(SamplingParams)",
   "discovery_limitations": [
     {
       "section": "engine_params",
@@ -14,6 +14,13 @@
         "build_config"
       ],
       "reason": "BuildConfig is not a Pydantic model; appears as Optional[object] in the schema"
+    },
+    {
+      "section": "engine_params",
+      "fields": [
+        "load_format"
+      ],
+      "reason": "shared field: TorchLlmArgs and TrtLlmArgs disagree on type/default/description; the trt (TrtLlmArgs) spec is recorded and the field is tagged applicable to both backends"
     },
     {
       "section": "sampling_params",
@@ -26,379 +33,906 @@
       "type": "string",
       "default": null,
       "description": "The path to the model checkpoint or the model name from the Hugging Face Hub.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "tokenizer": {
       "type": "string | None",
       "default": null,
       "description": "The path to the tokenizer checkpoint or the tokenizer name from the Hugging Face Hub.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "tokenizer_mode": {
       "type": "Literal['auto', 'slow']",
       "default": "auto",
       "description": "The mode to initialize the tokenizer.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "custom_tokenizer": {
       "type": "string | None",
       "default": null,
       "description": "Specify a custom tokenizer implementation. Accepts either: (1) a built-in alias (e.g., 'deepseek_v32'), or (2) a Python import path (e.g., 'tensorrt_llm.tokenizer.deepseek_v32.DeepseekV32Tokenizer'). The tokenizer class must implement 'from_pretrained(path, **kwargs)' and the TokenizerBase interface.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "skip_tokenizer_init": {
       "type": "boolean",
       "default": false,
       "description": "Whether to skip the tokenizer initialization.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "trust_remote_code": {
       "type": "boolean",
       "default": false,
       "description": "Whether to trust the remote code.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "tensor_parallel_size": {
       "type": "integer",
       "default": 1,
       "description": "The tensor parallel size.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "dtype": {
       "type": "string",
       "default": "auto",
       "description": "The data type to use for the model.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "revision": {
       "type": "string | None",
       "default": null,
       "description": "The revision to use for the model.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "tokenizer_revision": {
       "type": "string | None",
       "default": null,
       "description": "The revision to use for the tokenizer.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "pipeline_parallel_size": {
       "type": "integer",
       "default": 1,
       "description": "The pipeline parallel size.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "context_parallel_size": {
       "type": "integer",
       "default": 1,
       "description": "The context parallel size.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "gpus_per_node": {
       "type": "integer | None",
       "default": null,
       "description": "The number of GPUs per node.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "moe_cluster_parallel_size": {
       "type": "integer | None",
       "default": null,
       "description": "The cluster parallel size for MoE models's expert weights.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "moe_tensor_parallel_size": {
       "type": "integer | None",
       "default": null,
       "description": "The tensor parallel size for MoE models's expert weights.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "moe_expert_parallel_size": {
       "type": "integer | None",
       "default": null,
       "description": "The expert parallel size for MoE models's expert weights.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "enable_attention_dp": {
       "type": "boolean",
       "default": false,
       "description": "Enable attention data parallel.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "enable_lm_head_tp_in_adp": {
       "type": "boolean",
       "default": false,
       "description": "Enable LM head TP in attention dp.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "pp_partition": {
       "type": "array | None",
       "default": null,
       "description": "Pipeline parallel partition, a list of each rank's layer number.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "cp_config": {
       "type": "object | None",
       "default": null,
       "description": "Context parallel config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "load_format": {
       "type": "Literal['auto', 'dummy']",
       "default": "auto",
       "description": "The format to load the model.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "fail_fast_on_attention_window_too_large": {
       "type": "boolean",
       "default": false,
       "description": "Fail fast when attention window is too large to fit even a single sequence in the KV cache.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "enable_lora": {
       "type": "boolean",
       "default": false,
       "description": "Enable LoRA.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "lora_config": {
       "type": "LoraConfig | None",
       "default": null,
       "description": "LoRA configuration for the model.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "kv_cache_config": {
       "type": "KvCacheConfig",
       "default": null,
       "description": "KV cache config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "enable_chunked_prefill": {
       "type": "boolean",
       "default": false,
       "description": "Enable chunked prefill.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "guided_decoding_backend": {
       "type": "string | None",
       "default": null,
       "description": "Guided decoding backend. llguidance is supported in PyTorch backend only.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "batched_logits_processor": {
       "type": "Optional[tensorrt_llm.sampling_params.BatchedLogitsProcessor]",
       "default": null,
       "description": "Batched logits processor.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "iter_stats_max_iterations": {
       "type": "integer | None",
       "default": null,
       "description": "The maximum number of iterations for iter stats.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "request_stats_max_iterations": {
       "type": "integer | None",
       "default": null,
       "description": "The maximum number of iterations for request stats.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "peft_cache_config": {
       "type": "PeftCacheConfig | None",
       "default": null,
       "description": "PEFT cache config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "scheduler_config": {
       "type": "SchedulerConfig",
       "default": null,
       "description": "Scheduler config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "cache_transceiver_config": {
       "type": "CacheTransceiverConfig | None",
       "default": null,
       "description": "Cache transceiver config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "sparse_attention_config": {
       "type": "RocketSparseAttentionConfig | DeepSeekSparseAttentionConfig | SkipSoftmaxAttentionConfig | None",
       "default": null,
       "description": "Sparse attention config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "speculative_config": {
       "type": "DraftTargetDecodingConfig | EagleDecodingConfig | LookaheadDecodingConfig | MedusaDecodingConfig | MTPDecodingConfig | NGramDecodingConfig | UserProvidedDecodingConfig | SaveHiddenStatesDecodingConfig | AutoDecodingConfig | None",
       "default": null,
       "description": "Speculative decoding config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "max_batch_size": {
       "type": "integer | None",
       "default": null,
       "description": "The maximum batch size.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "max_input_len": {
       "type": "integer | None",
       "default": null,
       "description": "The maximum input length.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "max_seq_len": {
       "type": "integer | None",
       "default": null,
       "description": "The maximum sequence length.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "max_beam_width": {
       "type": "integer | None",
       "default": null,
       "description": "The maximum beam width.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "max_num_tokens": {
       "type": "integer | None",
       "default": 8192,
       "description": "The maximum number of tokens.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "gather_generation_logits": {
       "type": "boolean",
       "default": false,
       "description": "Gather generation logits.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "num_postprocess_workers": {
       "type": "integer",
       "default": 0,
       "description": "The number of processes used for postprocessing the generated tokens, including detokenization.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "postprocess_tokenizer_dir": {
       "type": "string | None",
       "default": null,
       "description": "The path to the tokenizer directory for postprocessing.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "reasoning_parser": {
       "type": "string | None",
       "default": null,
       "description": "The parser to separate reasoning content from output.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "decoding_config": {
       "type": "Optional[tensorrt_llm.llmapi.llm_args.DecodingConfig]",
       "default": null,
       "description": "The decoding config.",
-      "deprecated": true
+      "deprecated": true,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "otlp_traces_endpoint": {
       "type": "string | None",
       "default": null,
       "description": "Target URL to which OpenTelemetry traces will be sent.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "backend": {
       "type": "string | None",
       "default": null,
       "description": "The backend to use for this LLM instance.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "return_perf_metrics": {
       "type": "boolean",
       "default": false,
       "description": "Return perf metrics.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "orchestrator_type": {
       "type": "string | None",
       "default": null,
       "description": "The orchestrator type to use. Defaults to None, which uses MPI.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "env_overrides": {
       "type": "object | None",
       "default": null,
       "description": "[EXPERIMENTAL] Environment variable overrides. NOTE: import-time-cached env vars in the code won't update unless the code fetches them from os.environ on demand.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "pytorch",
+        "trt"
+      ]
     },
     "enable_tqdm": {
       "type": "boolean",
       "default": false,
       "description": "Enable tqdm for progress bar.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "workspace": {
       "type": "string | None",
       "default": null,
       "description": "The workspace for the model.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "enable_build_cache": {
       "type": "Union[tensorrt_llm.llmapi.build_cache.BuildCacheConfig, bool]",
       "default": false,
       "description": "Enable build cache.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "extended_runtime_perf_knob_config": {
       "type": "ExtendedRuntimePerfKnobConfig | None",
       "default": null,
       "description": "Extended runtime perf knob config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "calib_config": {
       "type": "CalibConfig | None",
       "default": null,
       "description": "Calibration config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "quant_config": {
       "type": "QuantConfig | None",
       "default": null,
       "description": "Quantization config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "embedding_parallel_mode": {
       "type": "string",
       "default": "SHARDING_ALONG_VOCAB",
       "description": "The embedding parallel mode.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "fast_build": {
       "type": "boolean",
       "default": false,
       "description": "Enable fast build.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "build_config": {
       "type": "BuildConfig | None",
       "default": null,
       "description": "Build config.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "enable_prompt_adapter": {
       "type": "boolean",
       "default": false,
       "description": "Enable prompt adapter.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "max_prompt_adapter_token": {
       "type": "integer",
       "default": 0,
       "description": "The maximum number of prompt adapter tokens.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "batching_type": {
       "type": "BatchingType | None",
       "default": null,
       "description": "Batching type.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
     },
     "normalize_log_probs": {
       "type": "boolean",
       "default": false,
       "description": "Normalize log probabilities.",
-      "deprecated": false
+      "deprecated": false,
+      "backends": [
+        "trt"
+      ]
+    },
+    "garbage_collection_gen0_threshold": {
+      "type": "integer",
+      "default": 20000,
+      "description": "Threshold for Python garbage collection of generation 0 objects.Lower values trigger more frequent garbage collection.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "cuda_graph_config": {
+      "type": "CudaGraphConfig | None",
+      "default": null,
+      "description": "CUDA graph config.If true, use CUDA graphs for decoding.         CUDA graphs are only created for the batch sizes in cuda_graph_config.batch_sizes,         and are enabled for batches that consist of decoding requests *only*         (the reason is that it's hard to capture a single graph with prefill requests         since the input shapes are a function of the sequence lengths).         Note that each CUDA graph can use up to 200 MB of extra memory.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "attention_dp_config": {
+      "type": "AttentionDpConfig | None",
+      "default": null,
+      "description": "Optimized load-balancing for the DP Attention scheduler.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "disable_overlap_scheduler": {
+      "type": "boolean",
+      "default": false,
+      "description": "Disable the overlap scheduler.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "moe_config": {
+      "type": "MoeConfig",
+      "default": null,
+      "description": "MoE config.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "nvfp4_gemm_config": {
+      "type": "Nvfp4GemmConfig",
+      "default": null,
+      "description": "NVFP4 GEMM backend config.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "attn_backend": {
+      "type": "string",
+      "default": "TRTLLM",
+      "description": "Attention backend to use.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "sampler_type": {
+      "type": "string | SamplerType",
+      "default": "auto",
+      "description": "The type of sampler to use. Options are TRTLLMSampler, TorchSampler or auto. Defaults to auto, which will use TorchSampler unless BeamSearch is requested.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "sampler_force_async_worker": {
+      "type": "boolean",
+      "default": false,
+      "description": "Force usage of the async worker in the sampler for D2H copies, even if confidential compute is not active. Normally, the async worker should only be used when confidential compute is active. This argument is provided to enable it for testing purposes, irrespective of confidential compute state.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "enable_iter_perf_stats": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable iteration performance statistics.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "enable_iter_req_stats": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, enables per request stats per iteration. Must also set enable_iter_perf_stats to true to get request stats.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "print_iter_log": {
+      "type": "boolean",
+      "default": false,
+      "description": "Print iteration logs.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "perf_metrics_max_requests": {
+      "type": "integer",
+      "default": 0,
+      "description": "The maximum number of requests for perf metrics. Must also set request_perf_metrics to true to get perf metrics.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "batch_wait_timeout_ms": {
+      "type": "number",
+      "default": 0,
+      "description": "If greater than 0, the request queue might wait up to batch_wait_timeout_ms to receive max_batch_size requests, if fewer than max_batch_size requests are currently available. If 0, no waiting occurs.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "batch_wait_timeout_iters": {
+      "type": "integer",
+      "default": 0,
+      "description": "Maximum number of iterations the scheduler will wait to accumulate new coming requests for improved GPU utilization efficiency. If greater than 0, the scheduler will delay batch processing to gather more requests up to the specified iteration limit. If 0, disables timeout-iters-based batching delays.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "batch_wait_max_tokens_ratio": {
+      "type": "number",
+      "default": 0,
+      "description": "Token accumulation threshold ratio for batch scheduling optimization. If greater than 0, the scheduler will accumulate requests locally until the total token count reaches batch_wait_max_tokens_ratio * max_num_tokens. This mechanism enhances GPU utilization efficiency by ensuring adequate batch sizes.If 0 disables token-based batching delays.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "torch_compile_config": {
+      "type": "TorchCompileConfig | None",
+      "default": null,
+      "description": "Torch compile config.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "enable_autotuner": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable autotuner for all tunable ops. This flag is for debugging purposes only, and the performance may significantly degrade if set to false.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "enable_layerwise_nvtx_marker": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, enable layerwise nvtx marker.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "enable_min_latency": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, enable min-latency mode. Currently only used for Llama4.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "stream_interval": {
+      "type": "integer",
+      "default": 1,
+      "description": "The iteration interval to create responses under the streaming mode. Set this to a larger value when the batch size is large, which helps reduce the streaming overhead.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "force_dynamic_quantization": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, force dynamic quantization. Defaults to False.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "allreduce_strategy": {
+      "type": "string | None",
+      "default": "AUTO",
+      "description": "Allreduce strategy to use.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "checkpoint_loader": {
+      "type": "Optional[tensorrt_llm._torch.models.checkpoints.BaseCheckpointLoader]",
+      "default": null,
+      "description": "The checkpoint loader to use for this LLM instance. You may use a custom checkpoint loader by subclassing `BaseCheckpointLoader` and providing an instance of the subclass here to load weights from a custom checkpoint format.\nIf neither checkpoint_format nor checkpoint_loader are provided, checkpoint_format will be set to HF and the default HfCheckpointLoader will be used.\nIf checkpoint_format and checkpoint_loader are both provided, checkpoint_loader will be ignored.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "checkpoint_format": {
+      "type": "string | None",
+      "default": null,
+      "description": "The format of the provided checkpoint. You may use a custom checkpoint format by subclassing `BaseCheckpointLoader` and registering it with `register_checkpoint_loader`.\nIf neither checkpoint_format nor checkpoint_loader are provided, checkpoint_format will be set to HF and the default HfCheckpointLoader will be used.\nIf checkpoint_format and checkpoint_loader are both provided, checkpoint_loader will be ignored.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "kv_connector_config": {
+      "type": "KvCacheConnectorConfig | None",
+      "default": null,
+      "description": "The config for KV cache connector.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "mm_encoder_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "Only load/execute the vision encoder part of the full model. Defaults to False.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "ray_worker_extension_cls": {
+      "type": "string | None",
+      "default": null,
+      "description": "The full worker extension class name including module path.Allows users to extend the functions of the RayGPUWorker class.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "ray_placement_config": {
+      "type": "RayPlacementConfig | None",
+      "default": null,
+      "description": "Placement config for RayGPUWorker. Only used with AsyncLLM and orchestrator_type='ray'.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "enable_sleep": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable LLM sleep feature. Sleep feature requires extra setup that may slowdown model loading.Only enable it if you intend to use this feature.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "disable_flashinfer_sampling": {
+      "type": "boolean",
+      "default": false,
+      "description": "Disable the use of FlashInfer.sampling. This option is likely to be removed in the future.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
+    },
+    "max_stats_len": {
+      "type": "integer",
+      "default": 1000,
+      "description": "The max number of performance statistic entries.",
+      "deprecated": false,
+      "backends": [
+        "pytorch"
+      ]
     }
   },
   "sampling_params": {

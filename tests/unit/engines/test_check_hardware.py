@@ -124,7 +124,7 @@ class TestTensorRTCheckHardware:
         _patch_sm(monkeypatch, (8, 0))
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt={"engine_params": {"quant_config": {"quant_algo": "FP8"}}},
+            tensorrt={"engine_params": {"backend": "trt", "quant_config": {"quant_algo": "FP8"}}},
         )
         errors = TensorRTEngine.check_hardware(config)
         assert len(errors) == 1
@@ -136,7 +136,7 @@ class TestTensorRTCheckHardware:
         _patch_sm(monkeypatch, (8, 9))
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt={"engine_params": {"quant_config": {"quant_algo": "FP8"}}},
+            tensorrt={"engine_params": {"backend": "trt", "quant_config": {"quant_algo": "FP8"}}},
         )
         assert TensorRTEngine.check_hardware(config) == []
 
@@ -145,7 +145,12 @@ class TestTensorRTCheckHardware:
         _patch_sm(monkeypatch, (8, 0))
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt={"engine_params": {"quant_config": {"kv_cache_quant_algo": "FP8"}}},
+            tensorrt={
+                "engine_params": {
+                    "backend": "trt",
+                    "quant_config": {"kv_cache_quant_algo": "FP8"},
+                }
+            },
         )
         errors = TensorRTEngine.check_hardware(config)
         assert len(errors) == 1
@@ -158,7 +163,8 @@ class TestTensorRTCheckHardware:
             **_TRT_DEFAULTS,
             tensorrt={
                 "engine_params": {
-                    "quant_config": {"quant_algo": "FP8", "kv_cache_quant_algo": "FP8"}
+                    "backend": "trt",
+                    "quant_config": {"quant_algo": "FP8", "kv_cache_quant_algo": "FP8"},
                 }
             },
         )

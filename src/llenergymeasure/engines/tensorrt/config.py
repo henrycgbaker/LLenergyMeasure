@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -45,7 +45,7 @@ class EngineParams(BaseModel):
     """
     Enable fast build.
     """
-    backend: str | None = None
+    backend: Literal["pytorch", "trt"] | None = "pytorch"
     """
     The backend to use for this LLM instance.
     """

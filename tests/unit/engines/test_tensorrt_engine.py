@@ -248,16 +248,35 @@ class TestBuildLlmKwargs:
 
         assert kwargs["fast_build"] is True
 
+    def test_fast_build_true_pytorch_rejected_at_config(self):
+        """fast_build=True on the pytorch backend is rejected at config construction.
+
+        The backend-applicability corpus rule fires at ExperimentConfig
+        expansion - the config-grain enforcement, ahead of the plugin guard.
+        """
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match=r"fast_build.*requires the trt backend"):
+            make_config(
+                **_TRT_DEFAULTS,
+                tensorrt={"engine_params": {"backend": "pytorch", "fast_build": True}},
+            )
+
     def test_build_llm_kwargs_fast_build_true_pytorch_raises(self):
-        """fast_build=True on the pytorch backend raises ConfigError (no TRT engine build)."""
+        """Plugin-grain guard (defense in depth): if fast_build=True + pytorch bypasses
+        the corpus rule, _build_llm_kwargs still raises ConfigError (no TRT engine build)."""
         import pytest
 
         from llenergymeasure.utils.exceptions import ConfigError
 
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt={"engine_params": {"backend": "pytorch", "fast_build": True}},
+            tensorrt={"engine_params": {"backend": "pytorch"}},
         )
+        # Force the conflicting value past config validation (pydantic does not
+        # validate on assignment) to reach the plugin's own guard.
+        config.tensorrt.engine_params.fast_build = True
         engine = TensorRTEngine()
         with pytest.raises(ConfigError, match="fast_build requires backend='trt'"):
             engine._build_llm_kwargs(config)
@@ -343,18 +362,37 @@ class TestBuildLlmKwargs:
         assert isinstance(kwargs["quant_config"], _MockQuantConfig)
         assert kwargs["quant_config"]._kwargs["quant_algo"] == "INT8"
 
+    def test_quant_config_pytorch_rejected_at_config(self):
+        """Declaring quant_config on the pytorch backend is rejected at config construction.
+
+        The backend-applicability corpus rule fires at ExperimentConfig
+        expansion - the config-grain enforcement, ahead of the plugin guard.
+        """
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="quant_config requires the trt backend"):
+            make_config(
+                **_TRT_DEFAULTS,
+                tensorrt={
+                    "engine_params": {"backend": "pytorch", "quant_config": {"quant_algo": "INT8"}}
+                },
+            )
+
     def test_build_llm_kwargs_quant_config_pytorch_raises(self):
-        """Declaring quant_config on the pytorch backend raises ConfigError (loud, not silent)."""
+        """Plugin-grain guard (defense in depth): if quant_config + pytorch bypasses the
+        corpus rule, _build_llm_kwargs still raises ConfigError (loud, not silent)."""
         import pytest
 
         from llenergymeasure.utils.exceptions import ConfigError
 
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt={
-                "engine_params": {"backend": "pytorch", "quant_config": {"quant_algo": "INT8"}}
-            },
+            tensorrt={"engine_params": {"backend": "pytorch"}},
         )
+        # Force the conflicting value past config validation (pydantic does not
+        # validate on assignment) to reach the plugin's own guard.
+        config.tensorrt.engine_params.quant_config = {"quant_algo": "INT8"}
         engine = TensorRTEngine()
         with pytest.raises(ConfigError, match="quant_config requires backend='trt'"):
             engine._build_llm_kwargs(config)
@@ -775,30 +813,36 @@ class TestResolveLlmClass:
         config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "trt"}})
         assert TensorRTEngine._resolve_llm_class(config) is _MockTrtLLM
 
-    def test_backend_autodeploy_raises_config_error(self, monkeypatch):
-        """_autodeploy is not exposed -> ConfigError naming accepted values {pytorch, trt}."""
+    def test_backend_autodeploy_rejected_at_config(self):
+        """_autodeploy is not exposed: the backend Literal rejects it at config construction."""
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="pytorch"):
+            make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "_autodeploy"}})
+
+    def test_backend_unknown_rejected_at_config(self):
+        """An arbitrary backend value is rejected at config construction by the Literal."""
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="pytorch"):
+            make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "nonsense"}})
+
+    def test_resolve_llm_class_guards_unexposed_backend(self, monkeypatch):
+        """Plugin-grain guard (defense in depth): an unexposed backend that bypasses the
+        Literal still raises ConfigError from _resolve_llm_class, naming {pytorch, trt}."""
         import pytest
 
         from llenergymeasure.utils.exceptions import ConfigError
 
         mock_trt = _make_fake_tensorrt_llm_module()
         _inject_trt(monkeypatch, mock_trt)
-        config = make_config(
-            **_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "_autodeploy"}}
-        )
+        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "pytorch"}})
+        # Force a value the Literal would reject past config validation (pydantic
+        # does not validate on assignment) to reach the plugin's own guard.
+        config.tensorrt.engine_params.backend = "_autodeploy"
         with pytest.raises(ConfigError, match=r"\{pytorch, trt\}"):
-            TensorRTEngine._resolve_llm_class(config)
-
-    def test_backend_unknown_raises_config_error(self, monkeypatch):
-        """An arbitrary backend value -> ConfigError."""
-        import pytest
-
-        from llenergymeasure.utils.exceptions import ConfigError
-
-        mock_trt = _make_fake_tensorrt_llm_module()
-        _inject_trt(monkeypatch, mock_trt)
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "nonsense"}})
-        with pytest.raises(ConfigError, match="Unsupported tensorrt backend"):
             TensorRTEngine._resolve_llm_class(config)
 
 

@@ -7,7 +7,9 @@ typed ``src/llenergymeasure/engines/<engine>/config.py``:
 - ``schema.discovered.json`` - the mined configuration surface (types,
   defaults, enums, bounds);
 - ``curated.yaml`` - the exposure allowlist (only ``exposed_fields`` entries
-  become first-class typed fields).
+  become first-class typed fields), plus an optional ``exposure_overrides``
+  block that narrows a generated field at exposure time (``enum`` -> Literal,
+  ``default``) without touching the mined schema.
 
 Generation is delegated to ``datamodel-code-generator`` (a dev-only tool); this
 wrapper owns the llem-specific parts: reshaping the mined envelope into a JSON
@@ -324,10 +326,65 @@ def _load_curated(outputs: Path) -> dict[str, list[str]]:
     return {section: list(exposed.get(section) or []) for section in SECTIONS}
 
 
+# Exposure-override keys curated.yaml may carry per field. Both are pure
+# EXPOSURE-time narrowings applied to the generated Config only; the mined
+# schema.discovered.json is untouched (the mined type stays what the engine
+# reports). ``enum`` narrows a broad mined scalar (e.g. tensorrt ``backend:
+# str``) to a Literal membership set; ``default`` sets the generated field's
+# default. Anything else is rejected so a typo fails loudly at regen.
+_EXPOSURE_OVERRIDE_KEYS: frozenset[str] = frozenset({"enum", "default"})
+
+
+def _load_exposure_overrides(outputs: Path) -> dict[str, dict[str, dict[str, Any]]]:
+    """Read curated.yaml ``exposure_overrides``; return ``{section: {field: override}}``.
+
+    Optional and additive: a snapshot without an ``exposure_overrides`` block
+    yields an empty map, so codegen is byte-identical to the pre-mechanism
+    output for every engine that declares none (vllm, transformers). Each
+    override maps a curated field to a dict of :data:`_EXPOSURE_OVERRIDE_KEYS`.
+    """
+    raw: dict[str, Any] = (
+        yaml.safe_load((outputs / _outputs.CURATED_FILENAME).read_text("utf-8")) or {}
+    )
+    block = raw.get("exposure_overrides") or {}
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for section in SECTIONS:
+        section_overrides = block.get(section) or {}
+        for field_name, override in section_overrides.items():
+            if not isinstance(override, dict):
+                raise ValueError(
+                    f"exposure_overrides.{section}.{field_name} must be a mapping, "
+                    f"got {type(override).__name__}"
+                )
+            unknown = set(override) - _EXPOSURE_OVERRIDE_KEYS
+            if unknown:
+                raise ValueError(
+                    f"exposure_overrides.{section}.{field_name} has unknown keys "
+                    f"{sorted(unknown)}; allowed: {sorted(_EXPOSURE_OVERRIDE_KEYS)}"
+                )
+            out.setdefault(section, {})[field_name] = dict(override)
+    return out
+
+
+def _apply_exposure_override(prop: dict[str, Any], override: dict[str, Any]) -> None:
+    """Fold a curated exposure override into a composed JSON Schema property in place.
+
+    ``enum`` sets the Literal membership set (datamodel-codegen renders it as a
+    ``Literal[...]`` via ``--enum-field-as-literal all``); ``default`` sets the
+    field default. A ``str`` field carrying ``{type: string}`` plus an injected
+    ``enum`` becomes a real ``Literal`` without touching the mined type.
+    """
+    if "enum" in override:
+        prop["enum"] = list(override["enum"])
+    if "default" in override:
+        prop["default"] = override["default"]
+
+
 def compose_schema(
     engine: str,
     discovered: dict[str, Any],
     curated: dict[str, list[str]],
+    overrides: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Compose a JSON Schema 2020-12 doc from the mined envelope + curation.
 
@@ -346,6 +403,7 @@ def compose_schema(
     """
     discovered_defs: dict[str, Any] = discovered.get("$defs", {}) or {}
     blob_fields = _PROJECTED_NESTED_BLOBS.get(engine, frozenset())
+    section_overrides = overrides or {}
     # Resolve curated fields against the union of discovered sections.
     discovered_fields: dict[str, Any] = {}
     for section in SECTIONS:
@@ -365,9 +423,11 @@ def compose_schema(
                 section_props[name] = {"$ref": f"#/$defs/{blob_class}"}
                 continue
             # Absent from discovery -> permissive debt stub ({} -> Any | None).
-            section_props[name] = (
-                _field_shape_to_property(mined_shape) if mined_shape is not None else {}
-            )
+            prop = _field_shape_to_property(mined_shape) if mined_shape is not None else {}
+            override = section_overrides.get(section, {}).get(name)
+            if override:
+                _apply_exposure_override(prop, override)
+            section_props[name] = prop
 
         title = "".join(part.capitalize() for part in section.split("_"))
         defs[title] = {
@@ -411,7 +471,8 @@ def generate_config(engine: str, version: str, outputs: Path) -> bytes:
     """Generate one engine snapshot's config.py bytes (ruff-normalised)."""
     discovered = json.loads((outputs / _outputs.SCHEMA_FILENAME).read_text(encoding="utf-8"))
     curated = _load_curated(outputs)
-    synthetic = compose_schema(engine, discovered, curated)
+    overrides = _load_exposure_overrides(outputs)
+    synthetic = compose_schema(engine, discovered, curated, overrides)
     safe_version = _outputs.safe_version(str(discovered.get("engine_version", version)))
     header = (
         f"# DO NOT EDIT - regenerated from engine_versions/{engine}/{safe_version}/outputs/"
