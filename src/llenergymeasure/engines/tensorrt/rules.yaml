@@ -99,7 +99,7 @@ rules:
     source: manual
     verified: human
     engine_version: 1.2.1
-    date: '2026-07-12'
+    date: '2026-07-13'
 - id: tensorrt_backend_quant_config_requires_trt
   engine: tensorrt
   severity: error
@@ -115,7 +115,7 @@ rules:
     source: manual
     verified: human
     engine_version: 1.2.1
-    date: '2026-07-12'
+    date: '2026-07-13'
 - id: tensorrt_decodingconfig_raises_acceptance_length_threshold_lt_0
   engine: tensorrt
   severity: error
