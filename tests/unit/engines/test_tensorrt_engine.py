@@ -742,7 +742,7 @@ class TestBuildLlmKwargsEnginePath:
 
 
 # =============================================================================
-# Test Group 9: backend class dispatch (D1)
+# Test Group 9: backend class dispatch
 # =============================================================================
 
 
@@ -803,7 +803,7 @@ class TestResolveLlmClass:
 
 
 # =============================================================================
-# Test Group 10: loud sub-config import failures (D2)
+# Test Group 10: loud sub-config import failures
 # =============================================================================
 
 
