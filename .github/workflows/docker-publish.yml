@@ -1,12 +1,28 @@
 name: Docker Publish
 
+# Release-time publish for the transformers engine image. This is a
+# registry-side TAG-COPY, not a build: it points a new
+# `transformers:<version>` tag ref at the digest the promotion path already
+# published at `transformers:transformers-<pin>`. No rebuild, no compile,
+# seconds to run.
+#
+# Tag contract:
+#   - The promotion path (publish-engine-image.yml) owns `transformers:latest`
+#     and the canonical `transformers:transformers-<pin>` tag. It tag-copies
+#     them at merge from the locally seeded
+#     `transformers-cache:transformers-<pin>` image.
+#   - Release owns `transformers:<version>` as a pointer to that same promoted
+#     digest, so a released version is bit-identical to the promoted seed.
+#
+# CI never compiles flash-attention: the FA3 Hopper build needs far more
+# memory than hosted runners have (a cold compile OOMs / times out), so image
+# production is a LOCAL maintainer task (make docker-seed-transformers),
+# symmetric with rule and schema production. If the promotion source is
+# missing, the tag-copy step fails loudly with recovery instructions.
+#
 # This workflow has no PR-time `paths:` trigger (it's workflow_call /
 # workflow_dispatch only), so edits can't self-test at runtime. Shape
 # validation happens at PR time via the actionlint job in ci.yml.
-#
-# Builds and pushes the transformers engine Docker image to GHCR on
-# release. Called by release.yml after tests pass, or manually via
-# workflow_dispatch.
 #
 # vLLM and TensorRT-LLM are not published here: they run inside upstream
 # images (vllm/vllm-openai, nvcr.io/nvidia/tensorrt-llm/release) with
@@ -40,42 +56,14 @@ jobs:
         with:
           ref: ${{ inputs.version }}
 
-      # The default `docker` buildx driver does not support
-      # cache-to=type=registry. Switching to `docker-container` is required
-      # for the mode=max cache export below to work - without this, the
-      # build-push-action step fails with:
-      #   ERROR: failed to build: Cache export is not supported for the
-      #   docker driver.
-      - uses: docker/setup-buildx-action@v3
-
       - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The promotion path (publish-engine-image.yml) owns the `latest` and
-      # `transformers-<engine version>` tags. This release-time build tags
-      # only the package version so the two producers never write the same
-      # tag with different content.
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/transformers
-          tags: |
-            type=raw,value=${{ inputs.version }}
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install llenergymeasure (base deps only)
-        run: pip install .
-      - id: fingerprint
-        run: |
-          value=$(python3 scripts/compute_expconf_fingerprint.py)
-          echo "value=${value}" >> "$GITHUB_OUTPUT"
-      # Read the transformers engine pin so the build installs the pinned
-      # version instead of the Dockerfile ARG fallback default. yq ships on
+      # Resolve the transformers engine pin so the release tag copies the
+      # promoted image for exactly the version this release ships. yq ships on
       # ubuntu-latest runners.
       - id: pin
         name: Resolve transformers pin from current.yaml
@@ -83,32 +71,50 @@ jobs:
           value=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
           echo "value=${value}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile.transformers
-          # Build the runtime stage, matching the locally seeded promotion
-          # source. The dev stage layers ruff/mypy/pytest on top and is for
-          # local iteration only, not for a published release image.
-          target: runtime
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Cap nvcc parallelism on the 4-core/16 GB hosted runner. The
-          # default MAX_JOBS=32 (set in Dockerfile.transformers for
-          # developer hardware) asks for ~128 GB of peak RAM during the
-          # FA3 hopper compile, which causes the runner agent to lose
-          # its heartbeat under memory pressure.
-          build-args: |
-            LLEM_PKG_VERSION=${{ inputs.version }}
-            LLEM_EXPCONF_SCHEMA_FINGERPRINT=${{ steps.fingerprint.outputs.value }}
-            TRANSFORMERS_VERSION=${{ steps.pin.outputs.value }}
-            MAX_JOBS=2
-          # mode=max exports intermediate layers (including the flash-attn
-          # compile) so downstream builders can reuse them, not just the final
-          # image layers.
-          cache-from: |
-            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
-            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:${{ inputs.version }}
-          cache-to: |
-            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest,mode=max
+      - name: Publish release tag via tag-copy
+        # `docker buildx imagetools create` is a registry-side metadata
+        # operation: it creates a new tag ref pointing at the existing promoted
+        # digest. No rebuild, no layer copy - the release image is bit-identical
+        # to the promoted seed. The plain docker CLI + buildx plugin on
+        # ubuntu-latest handles imagetools without a docker-container builder
+        # (these operate directly against the registry), so no setup-buildx.
+        env:
+          VERSION: ${{ inputs.version }}
+          PIN: ${{ steps.pin.outputs.value }}
+          REPO: ${{ env.REGISTRY }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SOURCE="${REPO}/transformers:transformers-${PIN}"
+          if ! docker buildx imagetools inspect "$SOURCE" >/dev/null 2>&1; then
+            {
+              echo "Promotion source ${SOURCE} not found in the registry."
+              echo
+              echo "The release image is a registry-side tag-copy of the promoted"
+              echo "seed, NOT a hosted build. The seed + promotion must exist first:"
+              echo "  1. make docker-seed-transformers  (local; the FA3 Hopper compile"
+              echo "     needs more RAM than hosted runners have)"
+              echo "  2. publish-engine-image.yml tag-copies the seed to"
+              echo "     ${SOURCE} when the bump lands on main"
+              echo "Then re-run this workflow via workflow_dispatch once the source exists."
+            } >&2
+            echo "::error::Release publish aborted: promotion source ${SOURCE} missing (seed + promote first)"
+            exit 1
+          fi
+          docker buildx imagetools create \
+            -t "${REPO}/transformers:${VERSION}" \
+            "$SOURCE"
+
+      - name: Emit publish summary
+        env:
+          VERSION: ${{ inputs.version }}
+          PIN: ${{ steps.pin.outputs.value }}
+        run: |
+          {
+            echo "## Release image publish"
+            echo
+            echo "- Version: \`${VERSION}\`"
+            echo "- Transformers pin: \`${PIN}\`"
+            echo "- Source: \`transformers:transformers-${PIN}\` (promotion-owned)"
+            echo "- Published: \`transformers:${VERSION}\` (release-owned pointer)"
+            echo "- Mechanism: \`docker buildx imagetools create\` (tag-copy; bit-identical)"
+          } >> "$GITHUB_STEP_SUMMARY"

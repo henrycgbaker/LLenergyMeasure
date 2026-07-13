@@ -9,6 +9,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- TensorRT-LLM backends are now selected by constructor class, not a kwarg: `backend='trt'`
+  resolves `tensorrt_llm._tensorrt_engine.LLM` and `pytorch`/unset resolves `tensorrt_llm.LLM`,
+  validated live at 1.2.1 (the base `LLM` rejects `backend='trt'` at model load). `backend` is
+  no longer forwarded as a kwarg; an unsupported value raises `ConfigError` naming
+  `{pytorch, trt}`. ([#797])
 - TensorRT-LLM pin advanced 1.0.0 -> 1.2.1 through the full bump pipeline: schema re-mined
   byte-stably, the 20-field curation carried forward with no discovery debt, typed config
   regenerated (`max_num_tokens` default now 8192), and the shipped rules corpus grown 15 -> 29
@@ -28,6 +33,27 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   The Dockerfile pins its `ghcr.io/astral-sh/uv` base (was `:latest`, so every uv
   release invalidated every subsequent builder layer) and records that `MAX_JOBS` must never
   be overridden via build-arg in CI, since it participates in the FA3 layer's cache key. ([#799])
+- Release image publish is now a registry-side tag-copy of the promoted seed digest, not a
+  hosted rebuild. `docker-publish.yml` points `transformers:<version>` at the already-promoted
+  `transformers:transformers-<pin>` via `docker buildx imagetools create`, eliminating the
+  flash-attention FA3 compile that OOM'd the hosted runner; the workflow aborts loudly when the
+  seed/promotion source is missing. ([#798])
+- TensorRT-LLM quantisation is passed as the native `quant_config` kwarg, not the
+  long-removed `quantization` name (`TrtLlmArgs` is `extra='forbid'` at 1.2.1, so the old
+  name crashed any quantised run at construction). ([#797])
+- The TensorRT-LLM plugin no longer forwards TRT-build-only knobs (`fast_build`,
+  `quant_config`, the engine build cache) to the pytorch backend, whose `TorchLlmArgs` rejects
+  them under `extra='forbid'` - this crashed the default pytorch-backend config. Declaring
+  `quant_config` or `fast_build=True` on the pytorch backend now raises `ConfigError` rather
+  than silently measuring a different configuration. ([#797])
+- The four silent `ImportError` fallbacks for TensorRT-LLM sub-configs (QuantConfig,
+  BuildCacheConfig, KvCacheConfig, SchedulerConfig) now raise `EngineError` when the user
+  declared that sub-config and the native class cannot be imported, instead of silently
+  dropping it and measuring a different configuration than declared. ([#797])
+- Corrected stale TensorRT-LLM version references: the `RequestOutput.metrics` comment (metrics
+  are absent at 1.2.1 without `return_perf_metrics`, not "usually absent in 0.21.0") and the
+  container entrypoint's engine-version list (now vLLM 0.19.1 / TRT-LLM 1.2.1 / Python 3.12).
+  ([#797])
 - Absorb sign-off records now carry the full withheld rule body, so a maintainer's
   `human_confirmed` mark re-ships a rule even after the withholding run dropped it from the
   corpus; a bodyless mark fails loudly instead of silently skipping. ([#792])
@@ -678,4 +704,6 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#789]: https://github.com/henrycgbaker/llenergymeasure/pull/789
 [#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
 [#792]: https://github.com/henrycgbaker/llenergymeasure/pull/792
+[#797]: https://github.com/henrycgbaker/llenergymeasure/pull/797
+[#798]: https://github.com/henrycgbaker/llenergymeasure/pull/798
 [#799]: https://github.com/henrycgbaker/llenergymeasure/pull/799

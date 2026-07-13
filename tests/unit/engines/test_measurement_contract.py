@@ -19,9 +19,10 @@ What is locked:
     present so the caller dispatches to the beam path).
   - VLLMEngine._build_beam_search_params: the BeamSearchParams kwargs assembled
     from the Any-typed beam_search sub-dict.
-  - TensorRTEngine._build_llm_kwargs: scalar forwarding, the env-gated build
-    cache staying off, and the Any-typed sub-config dicts (quant_config /
-    kv_cache_config / scheduler_config) being popped out of the scalar dump.
+  - TensorRTEngine._build_llm_kwargs: scalar forwarding, backend selecting the
+    constructor class (never forwarded as a kwarg), the TRT-build-only knobs
+    (fast_build / build cache) staying off the pytorch backend, and a declared
+    sub-config raising loudly on a plain host rather than silently vanishing.
   - TensorRTEngine._build_sampling_kwargs: the effective SamplingParams kwargs
     including the injected seed and max_tokens.
 
@@ -257,7 +258,12 @@ class TestVLLMKwargBuilders:
 
 class TestTensorRTKwargBuilders:
     def test_build_llm_kwargs_scalar_forwarding(self) -> None:
-        """Scalar engine_params forward; the env-gated build cache stays off."""
+        """Scalars forward on the pytorch backend; backend + TRT-build knobs stay off.
+
+        ``backend`` selects the constructor class (never a kwarg) and the
+        TRT-build-only ``fast_build`` (absent from the pytorch TorchLlmArgs) is
+        dropped rather than forwarded.
+        """
         config = make_config(
             model="test-model",
             engine="tensorrt",
@@ -277,28 +283,37 @@ class TestTensorRTKwargBuilders:
             "max_batch_size": 8,
             "max_num_tokens": 8192,
             "dtype": "bfloat16",
-            "fast_build": False,
-            "backend": "pytorch",
         }
 
-    def test_build_llm_kwargs_pops_sub_config_dicts(self) -> None:
-        """Any-typed sub-config dicts are popped from the scalar dump.
+    def test_build_llm_kwargs_sub_config_declared_raises_loud_on_host(self) -> None:
+        """A declared sub-config raises loudly on a plain host, never vanishes silently.
 
-        The native QuantConfig / KvCacheConfig / SchedulerConfig objects are built
-        only when tensorrt_llm is importable (container path); on a plain host the
-        import is skipped, so the raw dicts must not leak into kwargs either way.
+        The Any-typed sub-config dicts are popped from the scalar dump; building
+        the native KvCacheConfig object needs tensorrt_llm, so on a plain host the
+        import fails and _build_llm_kwargs raises EngineError rather than silently
+        measuring a different configuration than the user declared.
         """
+        from llenergymeasure.utils.exceptions import EngineError
+
         config = make_config(
             model="test-model",
             engine="tensorrt",
             tensorrt={
                 "engine_params": {
                     "tensor_parallel_size": 1,
-                    "quant_config": {"quant_algo": "FP8"},
                     "kv_cache_config": {"free_gpu_memory_fraction": 0.8},
-                    "scheduler_config": {"capacity_scheduling_policy": "MAX_UTILIZATION"},
                 }
             },
+        )
+        with pytest.raises(EngineError, match="kv_cache_config was declared"):
+            TensorRTEngine()._build_llm_kwargs(config)
+
+    def test_build_llm_kwargs_scalars_only_no_sub_config_keys(self) -> None:
+        """With no sub-configs declared, only scalars forward (no raw dict leakage)."""
+        config = make_config(
+            model="test-model",
+            engine="tensorrt",
+            tensorrt={"engine_params": {"tensor_parallel_size": 1}},
         )
         built = TensorRTEngine()._build_llm_kwargs(config)
         assert built == {
@@ -307,10 +322,9 @@ class TestTensorRTKwargBuilders:
             "pipeline_parallel_size": 1,
             "max_num_tokens": 8192,
             "dtype": "auto",
-            "fast_build": False,
         }
-        # The raw sub-config dicts never forward under their own names.
-        assert "quant_config" not in built
+        for key in ("quant_config", "kv_cache_config", "scheduler_config", "backend", "fast_build"):
+            assert key not in built
 
     def test_build_sampling_kwargs(self) -> None:
         """Sampling dump plus the injected seed and max_tokens."""

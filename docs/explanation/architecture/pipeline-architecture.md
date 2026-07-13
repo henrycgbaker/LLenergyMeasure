@@ -28,16 +28,18 @@ flowchart TD
     promote[publish-engine-image.yml<br/>tag-copy, no rebuild]
     prod[(transformers:transformers-VER<br/>+ transformers:latest)]
     release[Release tag pushed]
-    relbuild[docker-publish.yml<br/>builds the release image]
+    relcopy[docker-publish.yml<br/>tag-copy, no rebuild]
+    relimg[(transformers:VERSION)]
 
     seed --> cache
     cache --> merge --> promote --> prod
-    release --> relbuild
+    release --> relcopy
+    prod --> relcopy --> relimg
 ```
 
 1. **Local seed.** During a transformers bump session the maintainer runs `make docker-seed-transformers`, which builds the runtime image on a machine with enough memory and pushes it to `transformers-cache:transformers-<VER>` (`<VER>` is `library.current_version` from `engine_versions/transformers/current.yaml`).
 2. **Merge-time promotion.** When the bump lands on main, `publish-engine-image.yml` tag-copies the seeded image to the canonical `transformers:transformers-<VER>` and `transformers:latest` tags. There is no rebuild - production gets the bit-identical seeded image.
-3. **Release-time build.** `docker-publish.yml` (called by `release.yml`) builds the package-versioned release image on a hosted runner with capped compile parallelism, reusing the registry build cache that the seed target warmed.
+3. **Release-time tag-copy.** `docker-publish.yml` (called by `release.yml`) tag-copies the promoted `transformers:transformers-<VER>` image to the package-versioned `transformers:<VERSION>` release tag via `docker buildx imagetools create`. No rebuild: the released version is a registry-side pointer to the promoted digest, bit-identical to the seed.
 
 A missing seed fails promotion loudly: the tag-copy step finds no source manifest at `transformers-cache:transformers-<VER>`. Recovery is to run the seed locally, then re-run the promotion.
 
