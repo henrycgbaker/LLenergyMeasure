@@ -20,7 +20,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   hosted rebuild. `docker-publish.yml` points `transformers:<version>` at the already-promoted
   `transformers:transformers-<pin>` via `docker buildx imagetools create`, eliminating the
   flash-attention FA3 compile that OOM'd the hosted runner; the workflow aborts loudly when the
-  seed/promotion source is missing. ([#PRA])
+  seed/promotion source is missing. ([#798])
 - Absorb sign-off records now carry the full withheld rule body, so a maintainer's
   `human_confirmed` mark re-ships a rule even after the withholding run dropped it from the
   corpus; a bodyless mark fails loudly instead of silently skipping. ([#792])
@@ -671,3 +671,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#789]: https://github.com/henrycgbaker/llenergymeasure/pull/789
 [#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
 [#792]: https://github.com/henrycgbaker/llenergymeasure/pull/792
+[#798]: https://github.com/henrycgbaker/llenergymeasure/pull/798
