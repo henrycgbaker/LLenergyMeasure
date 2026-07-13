@@ -25,13 +25,6 @@
 export PUID := $(shell id -u)
 export PGID := $(shell id -g)
 
-# Host/container schema handshake stamps - surfaced to docker compose build
-# via docker-compose.yml's build.args block so every locally-built image is
-# labelled with the same fingerprint llem computes at runtime. Falls back to
-# "dev"/"unknown" on any error (e.g. missing venv).
-export LLEM_PKG_VERSION := $(shell python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo dev)
-export LLEM_EXPCONF_SCHEMA_FINGERPRINT := $(shell python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo unknown)
-
 # =============================================================================
 # Help
 #   Targets with a `## description` suffix are listed by `make help`.
@@ -337,22 +330,27 @@ docker-build: ## Build first-party engine images (currently: transformers)
 	@echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
 	scripts/docker_build_with_cache_report.sh transformers
 
-# Seed the transformers images from a local machine with sufficient RAM
+# Seed the transformers image from a local machine with sufficient RAM
 # (the FA3 Hopper compile, ~30 min, needs more memory than CI hosted
 # runners have). Requires: docker login ghcr.io, llem-builder buildx
 # builder. Uses Dockerfile default MAX_JOBS=32 - matches local layer
-# cache so FA3 is not recompiled if already built locally. Two pushes:
+# cache so FA3 is not recompiled if already built locally.
 #
-#   1. The runtime promotion source transformers-cache:transformers-<VER>
-#      (<VER> = library.current_version from
-#      engine_versions/transformers/current.yaml), which
-#      publish-engine-image.yml tag-copies to canonical tags when a bump
-#      lands on main. Run this during a transformers bump session, before
-#      or alongside the bump PR - a missing seed fails the merge-time
-#      promotion run.
-#   2. The GHCR build cache on transformers:latest, reused by
-#      docker-publish.yml for the release-time hosted build.
-docker-seed-transformers: ## Seed transformers runtime image (promotion source) + GHCR build cache
+# One push, producing the two refs the promotion path consumes:
+#   - transformers-cache:transformers-<VER> - the runnable promotion source
+#     (<VER> = library.current_version from
+#     engine_versions/transformers/current.yaml). publish-engine-image.yml
+#     tag-copies it to the canonical tags when a bump lands on main.
+#   - transformers-cache:transformers-<VER>-buildcache - the mode=max
+#     BuildKit cache manifest (includes the FA3 layer). This is THE cache;
+#     warm re-seeds import it via --cache-from.
+#
+# Run this during a transformers bump session, before or alongside the bump
+# PR - a missing seed fails the merge-time promotion run. The seed never
+# writes the canonical transformers:latest or transformers:<version> tags,
+# and never writes cache to them: those are tag-copies owned by
+# publish-engine-image.yml (merge) and docker-publish.yml (release).
+docker-seed-transformers: ## Seed transformers promotion source image + mode=max build cache
 	@engver=$$(python3 -c "import yaml; print(yaml.safe_load(open('engine_versions/transformers/current.yaml'))['library']['current_version'])"); \
 	cacheref=ghcr.io/henrycgbaker/llenergymeasure/transformers-cache; \
 	echo "Seeding promotion source $$cacheref:transformers-$$engver"; \
@@ -367,22 +365,6 @@ docker-seed-transformers: ## Seed transformers runtime image (promotion source) 
 	  --cache-to   type=registry,ref=$$cacheref:transformers-$$engver-buildcache,mode=max \
 	  --push \
 	  --tag $$cacheref:transformers-$$engver \
-	  .
-	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "dev"); \
-	fingerprint=$$(python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo "unknown"); \
-	ref=ghcr.io/henrycgbaker/llenergymeasure/transformers; \
-	echo "Seeding GHCR cache for transformers (version=$$version)"; \
-	docker buildx build \
-	  --builder $(BUILDER_NAME) \
-	  -f docker/Dockerfile.transformers \
-	  --build-arg LLEM_PKG_VERSION=$$version \
-	  --build-arg LLEM_EXPCONF_SCHEMA_FINGERPRINT=$$fingerprint \
-	  --cache-from type=registry,ref=$$ref:v$$version \
-	  --cache-from type=registry,ref=$$ref:latest \
-	  --cache-to   type=registry,ref=$$ref:latest,mode=max \
-	  --push \
-	  --tag $$ref:v$$version \
-	  --tag $$ref:latest \
 	  .
 
 docker-pull: ## Pull the versioned transformers image from GHCR
