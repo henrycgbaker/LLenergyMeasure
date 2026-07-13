@@ -310,7 +310,7 @@ class TensorRTEngine:
         # attribute at all - populating it needs ``return_perf_metrics=True`` at
         # LLM construction, which llem does not set - so these lists come back
         # empty. Wiring return_perf_metrics into a first-class latency path is a
-        # follow-up (see the F2 activation plan), not done here.
+        # deliberate follow-up, not done here.
         from llenergymeasure.engines._observed import extract_request_metrics
 
         per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
