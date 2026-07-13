@@ -275,6 +275,7 @@ class TestTensorRTKwargBuilders:
             "tensor_parallel_size": 2,
             "pipeline_parallel_size": 1,
             "max_batch_size": 8,
+            "max_num_tokens": 8192,
             "dtype": "bfloat16",
             "fast_build": False,
             "backend": "pytorch",
@@ -304,6 +305,7 @@ class TestTensorRTKwargBuilders:
             "model": "test-model",
             "tensor_parallel_size": 1,
             "pipeline_parallel_size": 1,
+            "max_num_tokens": 8192,
             "dtype": "auto",
             "fast_build": False,
         }

@@ -87,6 +87,19 @@ _IGNORED_RAW = (
     "tensorrt inputs/multimodal.py MultimodalInput.__post_init__",  # runtime input struct
     "tensorrt inputs/multimodal.py MultimodalRuntimeData.__post_init__",  # runtime input struct
     "tensorrt llmapi/llm_args.py _ModelWrapper.__post_init__",  # private internal wrapper
+    # tensorrt, new at 1.2.1: dataset-prep tool args, not engine llm args.
+    "tensorrt bench/dataset/prepare_dataset.py RootArgs.validate_tokenizer",
+    "tensorrt bench/dataset/prepare_real_data.py DatasetConfig.check_prompt",
+    # tensorrt, new at 1.2.1: HTTP API request model, not engine-construction config.
+    "tensorrt serve/openai_protocol.py ChatCompletionRequest.check_cache_salt_support",
+    # tensorrt, new at 1.2.1: per-request / runtime objects and loader plumbing.
+    "tensorrt disaggregated_params.py DisaggregatedParams.__post_init__",  # per-request disagg params
+    "tensorrt inputs/utils.py VideoData.__post_init__",  # runtime input struct
+    "tensorrt _torch/attention_backend/sparse/rocket.py RocketVanillaAttentionMetadata.__post_init__",  # runtime metadata
+    "tensorrt _torch/auto_deploy/utils/_config.py DynamicYamlMixInForSettings.validate_mode_and_yaml_default_not_both_provided",  # settings plumbing
+    # tensorrt, new at 1.2.1: the _autodeploy backend's own args; llem does not
+    # route backend=_autodeploy.
+    "tensorrt _torch/auto_deploy/llm_args.py AutoDeployConfig.model_factory_exists",
 )
 # (engine, engine-relative posix path, "Class.function"), parsed from _IGNORED_RAW.
 IGNORED_SITES: frozenset[tuple[str, ...]] = frozenset(tuple(e.split()) for e in _IGNORED_RAW)

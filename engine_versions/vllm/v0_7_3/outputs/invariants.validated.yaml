@@ -1,9 +1,0 @@
-# Pending validation-gate operationalisation — see issue #445
-schema_version: 1.0.0
-engine: vllm
-engine_version: 0.7.3
-image_ref: vllm/vllm-openai:v0.7.3
-base_image_ref: vllm/vllm-openai:v0.7.3
-validated_at: null
-validation_commit: null
-cases: []

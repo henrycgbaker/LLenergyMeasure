@@ -84,48 +84,23 @@ def test_resolve_missing_current_version_raises() -> None:
     m_load.assert_not_called()
 
 
-def test_make_static_stub_resolver_and_getattr_forward() -> None:
-    produced = _fake_producer(LANDMARKS=("x.y",), main=lambda argv=None: 7)
-    with (
-        patch(_CURRENT, return_value=_current("0.19.1")),
-        patch(_LOAD, return_value=produced),
-    ):
-        resolver, getattr_fn, main = _stub_factory.make_static_stub("vllm")
-        assert resolver() is produced
-        assert getattr_fn("LANDMARKS") == ("x.y",)
-        assert main() == 7  # forwards to produced.main and coerces to int
-
-
-def test_make_static_stub_getattr_dunder_raises_without_resolving() -> None:
+def test_make_schema_stub_getattr_dunder_raises_without_resolving() -> None:
     # Dunder access must short-circuit before any archive resolution.
-    _resolver, getattr_fn, _main = _stub_factory.make_static_stub("vllm")
+    _resolver, getattr_fn, _discover = _stub_factory.make_schema_stub("vllm")
     with pytest.raises(AttributeError):
         getattr_fn("__wrapped__")
 
 
-def test_make_static_stub_getattr_unknown_attr_raises() -> None:
+def test_make_schema_stub_getattr_unknown_attr_raises() -> None:
     produced = _fake_producer(LANDMARKS=("x.y",))
     with (
         patch(_CURRENT, return_value=_current("0.19.1")),
         patch(_LOAD, return_value=produced),
     ):
-        _resolver, getattr_fn, _main = _stub_factory.make_static_stub("vllm")
+        _resolver, getattr_fn, _discover = _stub_factory.make_schema_stub("vllm")
+        assert getattr_fn("LANDMARKS") == ("x.y",)
         with pytest.raises(AttributeError, match="has no attribute"):
             getattr_fn("does_not_exist")
-
-
-def test_make_dynamic_stub_main_coerces_to_int() -> None:
-    produced = _fake_producer(main=lambda argv=None: True)
-    with (
-        patch(_CURRENT, return_value=_current("5.7.0")),
-        patch(_LOAD, return_value=produced) as m_load,
-    ):
-        _resolver, _getattr, main = _stub_factory.make_dynamic_stub("transformers")
-        assert main() == 1
-
-    m_load.assert_called_once_with(
-        engine="transformers", version="5.7.0", producer="dynamic_invariant_miner"
-    )
 
 
 def test_make_schema_stub_discover_forwards_args(tmp_path: Path) -> None:

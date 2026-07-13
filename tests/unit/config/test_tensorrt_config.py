@@ -358,7 +358,9 @@ class TestExperimentConfigIntegration:
         assert ep.max_batch_size is None
         assert ep.max_input_len is None
         assert ep.max_seq_len is None
-        assert ep.max_num_tokens is None
+        # max_num_tokens defaults to 8192 at the 1.2.1 pin (upstream default,
+        # materialized by codegen from the discovered schema).
+        assert ep.max_num_tokens == 8192
         assert ep.quant_config is None
         assert ep.kv_cache_config is None
         assert ep.scheduler_config is None
