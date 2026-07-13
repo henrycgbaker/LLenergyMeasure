@@ -7,6 +7,16 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Added
+
+- Standing plugin-kwarg lint: `scripts/check_plugin_kwargs.py` cross-checks the literal
+  constructor-kwarg names each engine plugin's translation layer hand-types against that
+  engine's discovered schema at the current pin, with a rationale-carrying allowlist for
+  genuine off-surface kwargs (transformers `from_pretrained` open `**kwargs`). Catches
+  upstream kwarg renames the mined schema already knows about but the hand-written glue
+  code missed (the `quantization` -> `quant_config` case). Wired as
+  `make check-plugin-kwargs` and a `plugin-kwarg-check` job in ci.yml. ([#800])
+
 ### Changed
 
 - TensorRT-LLM backends are now selected by constructor class, not a kwarg: `backend='trt'`
@@ -688,3 +698,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
 [#792]: https://github.com/henrycgbaker/llenergymeasure/pull/792
 [#797]: https://github.com/henrycgbaker/llenergymeasure/pull/797
+[#800]: https://github.com/henrycgbaker/llenergymeasure/pull/800
