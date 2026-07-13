@@ -265,9 +265,11 @@ of likelihood:
     on the very first build - first-pull cost is paid once).
 (c) You are offline or GHCR is unreachable.
 (d) Your `TRANSFORMERS_VERSION` (from `engine_versions/transformers/current.yaml`)
-    does not match any published cache tag (`cache_from` resolves to
-    `:transformers-<VERSION>` and falls through to `:latest` - if neither has
-    usable layers, BuildKit silently cold-builds).
+    does not match any seeded cache ref (`cache_from` resolves to
+    `transformers-cache:transformers-<VERSION>-buildcache` and falls through
+    to `:latest` - if neither has usable layers, BuildKit silently
+    cold-builds). The buildcache ref only exists after a local
+    `make docker-seed-transformers` at that pin.
 
 The full BuildKit log for the most recent attempt is at
 `/tmp/llem-build-{engine}.log` - grep it for `importing cache manifest` to
@@ -284,9 +286,11 @@ see whether the registry was even reached.
    the registry.
 2. Verify network: `curl -I https://ghcr.io/v2/henrycgbaker/llenergymeasure/transformers/manifests/latest`
    should return 200 or 401 (both fine; 000/timeout means no connectivity).
-3. If you recently bumped the SSOT version but CI hasn't published the
-   per-version tag yet, fall back to `:latest` (which the cache_from chain
-   already lists as a fallback). No env-var override needed.
+3. If you recently bumped the SSOT version but haven't run
+   `make docker-seed-transformers` at the new pin yet, the per-version
+   buildcache ref does not exist and the build falls back to `:latest`
+   (already last in the cache_from chain). Seed locally to create it; no
+   env-var override needed.
 4. If the cache is corrupt, recreate the builder:
    `make docker-builder-rm && make docker-builder-setup`. Note this discards
    all local layer cache; the first subsequent build will repopulate from

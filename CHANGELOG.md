@@ -16,11 +16,16 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
-- Transformers image seed cache hygiene: `make docker-seed-transformers` no longer runs a
-  harmful second push that wrote plain `transformers:latest` / `transformers:v<version>`
+- Transformers image seed and dev cache hygiene: `make docker-seed-transformers` no longer runs
+  a harmful second push that wrote plain `transformers:latest` / `transformers:v<version>`
   images and a clobber-prone `mode=max` cache to `:latest`. The `-buildcache` ref is now the
   single cache manifest; the canonical tags are written only by the promotion and release
-  tag-copies. The Dockerfile pins its `ghcr.io/astral-sh/uv` base (was `:latest`, so every uv
+  tag-copies. `docker-compose.yml`'s `cache_from` now targets that per-version buildcache ref
+  (the engine pin is exported as `TRANSFORMERS_VERSION` by the `make docker-build` wrapper and
+  also passed as the build arg, so local builds install the pinned version and actually reuse
+  the seeded FA3 layers), and the dead `LLEM_PKG_VERSION` / `LLEM_EXPCONF_SCHEMA_FINGERPRINT`
+  build-args and Makefile exports are removed (the Dockerfile stopped consuming them in 0.10.0).
+  The Dockerfile pins its `ghcr.io/astral-sh/uv` base (was `:latest`, so every uv
   release invalidated every subsequent builder layer) and records that `MAX_JOBS` must never
   be overridden via build-arg in CI, since it participates in the FA3 layer's cache key. ([#799])
 - Absorb sign-off records now carry the full withheld rule body, so a maintainer's
