@@ -50,6 +50,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import date
@@ -418,6 +419,25 @@ def build_construction_kwargs(fields: dict[str, Any]) -> tuple[dict[str, Any], d
     subject_path = list(fields)[-1]
     subject_leaf = ec.leaf_of(subject_path)
 
+    # A bare ``present`` flag on the SUBJECT carries no value information, so
+    # no type-valid firing value is derivable: probing it with an arbitrary
+    # scaffold (``True``) cannot attribute a raise to presence rather than to
+    # the scaffold's type (pydantic type/enum/literal rejection of a bool).
+    # Non-subject present-flag condition fields keep their scaffold - a
+    # wrong-typed condition raises on BOTH legs and lands infra_error, which
+    # cannot false-confirm.
+    subject_spec = fields[subject_path]
+    if (
+        isinstance(subject_spec, dict)
+        and subject_spec.get("present")
+        and _substantive_op(subject_spec) is None
+    ):
+        raise Unprobeable(
+            "present-only error claim: no type-valid firing value is derivable "
+            "from a bare present flag, so a raise cannot be attributed to "
+            "presence rather than the scaffold value's type"
+        )
+
     violating = _firing_kwargs(fields, ref_of, referenced)
     nofire = _nofire_value(fields[subject_path], subject_leaf, ref_of, referenced)
     satisfying = dict(violating)
@@ -454,6 +474,25 @@ def _run_leg(engine: str, cls: type, kwargs: dict[str, Any]) -> str | None:
         return _clip(f"{type(exc).__name__}: {exc}")
 
 
+# Pydantic v2 error kinds that mean "the probe value's TYPE was wrong", not
+# "the claimed constraint fired". A violating-leg raise consisting solely of
+# these is gate noise: e.g. a ``present`` candidate on a str-typed field fires
+# with the boolean ``True`` and pydantic rejects it with ``string_type`` -
+# proving nothing about the claim. Value-constraint kinds (``enum``,
+# ``literal_error``, ``greater_than``, ``value_error``...) never match this
+# predicate, so genuine enum/bound confirms are unaffected. Pydantic-only by
+# construction: non-pydantic engines raise no ``ValidationError`` text.
+_TYPE_NOISE_RE = re.compile(r"\[type=([a-z_]+)")
+
+
+def _is_type_coercion_noise(exception_text: str) -> bool:
+    """True iff a raise is a pydantic ValidationError of only type-mismatch kinds."""
+    if not exception_text.startswith("ValidationError:"):
+        return False
+    kinds = _TYPE_NOISE_RE.findall(exception_text)
+    return bool(kinds) and all(k.endswith("_type") or k == "is_instance_of" for k in kinds)
+
+
 def probe_construction(cand: Candidate, engine: str) -> Verdict:
     leaves = [ec.leaf_of(p) for p in cand.fields]
     try:
@@ -466,6 +505,14 @@ def probe_construction(cand: Candidate, engine: str) -> Verdict:
     negative = _run_leg(engine, cls, satisfying)
     v_show, s_show = _show_kwargs(violating), _show_kwargs(satisfying)
     if positive and not negative:
+        if _is_type_coercion_noise(positive):
+            return Verdict(
+                "unconfirmed",
+                "construction",
+                f"violating {v_show} raised only pydantic type-coercion errors "
+                f"({positive}); the probe value's type, not the claimed "
+                "constraint, caused the raise",
+            )
         return Verdict(
             "confirmed",
             "construction",

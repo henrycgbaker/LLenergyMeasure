@@ -1,5 +1,5 @@
-# DO NOT EDIT - regenerated from engine_versions/tensorrt/v1_0_0/outputs/{curated.yaml,schema.discovered.json}
-# Edit those upstream and run `uv run python scripts/engine_producers/regen_engine_configs.py --engine tensorrt --version 1.0.0 --write`.
+# DO NOT EDIT - regenerated from engine_versions/tensorrt/v1_2_1/outputs/{curated.yaml,schema.discovered.json}
+# Edit those upstream and run `uv run python scripts/engine_producers/regen_engine_configs.py --engine tensorrt --version 1.2.1 --write`.
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class EngineParams(BaseModel):
     """
     The maximum sequence length.
     """
-    max_num_tokens: int | None = None
+    max_num_tokens: int | None = 8192
     """
     The maximum number of tokens.
     """

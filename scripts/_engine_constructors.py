@@ -65,7 +65,17 @@ _CONSTRUCTOR_TABLE: dict[tuple[str, str], tuple[tuple[str, str], ...]] = {
     ("transformers", "sampling"): (("transformers", "GenerationConfig"),),
     ("transformers", "engine_params"): (("transformers", "GenerationConfig"),),
     ("tensorrt", "sampling_params"): (("tensorrt_llm", "SamplingParams"),),
-    ("tensorrt", "engine_params"): (("tensorrt_llm.llmapi.llm_args", "TrtLlmArgs"),),
+    ("tensorrt", "engine_params"): (
+        ("tensorrt_llm.llmapi.llm_args", "TrtLlmArgs"),
+        # Nested-object surface (mirrors the vllm CompilationConfig entry):
+        # engine_params.kv_cache_config.* leaves validate on KvCacheConfig;
+        # engine_params.speculative_config.* leaves resolve on
+        # LookaheadDecodingConfig (DecodingBaseConfig validators are
+        # inherited). Appended last so every flat engine_params leaf keeps
+        # resolving to TrtLlmArgs.
+        ("tensorrt_llm.llmapi.llm_args", "KvCacheConfig"),
+        ("tensorrt_llm.llmapi.llm_args", "LookaheadDecodingConfig"),
+    ),
 }
 
 # transformers quantization fields are validated by BitsAndBytesConfig, not

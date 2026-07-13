@@ -2,8 +2,10 @@
 """Absorb: the one command a maintainer runs per engine-version bump.
 
 Drives the knowledge-refresh loop for ONE engine's validation rules: cold read
-(analyst proposes candidates) -> pool union (analyst + manual seeds, deduped)
--> recall interrogation (ask "is this still present?" for
+(analyst proposes candidates) + cross-field extractor (a deterministic AST walk
+proposes candidates) -> pool union (analyst + extractor + manual seeds, deduped on
+id and on the canonical match spec) -> recall interrogation (ask "is this still
+present?" for
 each shipped rule the fresh pool did not rediscover) -> verification ladder
 (citation check on the host, then construction / identity probes in the engine
 container; the engine is the arbiter) -> promotion (regenerate the shipped rules
@@ -88,6 +90,7 @@ _SOURCE_MAP = {
     "analyst_cold_read": "analyst",
     "recall_interrogation": "analyst",
     "observed_collision": "deterministic_miner",
+    "deterministic_extractor": "deterministic_miner",
     "manual": "manual",
     "manual_seed": "manual",
 }
@@ -111,6 +114,53 @@ def _leaf_key(entry: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
     """Coarse identity: severity + sorted match-field leaves (the brief's key)."""
     leaves = tuple(sorted(leaf_of(f) for f in _match_fields(entry)))
     return str(entry.get("severity")), leaves
+
+
+def _hashable(value: Any) -> Any:
+    """Recursively freeze a match comparand into a hashable, order-stable key part."""
+    if isinstance(value, list):
+        return tuple(_hashable(v) for v in value)
+    if isinstance(value, dict):
+        return tuple(sorted((str(k), _hashable(v)) for k, v in value.items()))
+    return value
+
+
+def match_spec_key(entry: dict[str, Any]) -> tuple[str, tuple[Any, ...]]:
+    """Exact identity of a claim: severity + canonical (field, operators, values).
+
+    Two entries with the same key encode the identical constraint; only metadata
+    (id hash, message wording, provenance) may differ. Match fields are expected
+    canonical (``engine.section.leaf``); a bare scalar spec is treated as ``==``.
+    """
+    norm: list[tuple[str, tuple[Any, ...]]] = []
+    fields = _match_fields(entry)
+    for path in sorted(fields):
+        spec = fields[path]
+        if isinstance(spec, dict):
+            ops = tuple(sorted((str(op), _hashable(val)) for op, val in spec.items()))
+        else:
+            ops = (("==", _hashable(spec)),)
+        norm.append((path, ops))
+    return str(entry.get("severity")), tuple(norm)
+
+
+def dedup_by_match(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse entries sharing a canonical match spec to one deterministic winner.
+
+    Id-keyed dedup keeps two independently-proposed candidates that encode the
+    same constraint with different id hashes / wording; this collapses them on the
+    claim itself. Winner: a verdict-carrying entry beats an unverified one (keep
+    the memory), then the lexicographically smallest id. Output is sorted by id for
+    byte-stable pools/corpora.
+    """
+    groups: dict[tuple[str, tuple[Any, ...]], list[dict[str, Any]]] = {}
+    for entry in entries:
+        groups.setdefault(match_spec_key(entry), []).append(entry)
+    winners = [
+        min(group, key=lambda e: (_status(e) == UNVERIFIED, str(e.get("id"))))
+        for group in groups.values()
+    ]
+    return sorted(winners, key=lambda e: str(e.get("id")))
 
 
 def _digest(text: str) -> str:
@@ -202,16 +252,24 @@ def union_candidates(sources: list[list[dict[str, Any]]]) -> list[dict[str, Any]
 
 
 def build_union(pool_dir: Path, engine: str) -> list[dict[str, Any]]:
-    """Read the analyst and manual-seed pools, dedup, and canonicalise field paths."""
+    """Union the standing candidate sources, canonicalise, dedup on the claim.
+
+    Three standing proposers write into the pool: the analyst cold read, the
+    deterministic cross-field extractor, and the maintainer's manual seeds. They
+    are unioned on id (claim-digest), rewritten to canonical field paths, then
+    collapsed on the canonical match spec so two proposers that independently
+    surface the same constraint ship as one rule, not two.
+    """
     sources = [
         _load_yaml_list(pool_dir / "analyst_cold_read.yaml", "candidates"),
+        _load_yaml_list(pool_dir / "cross_field_extractor.yaml", "candidates"),
         _load_yaml_list(pool_dir / "manual_seeds.yaml", "candidates"),
     ]
     union = union_candidates(sources)
     mapping = canonical_map(engine)
     for candidate in union:
         _canonicalise(candidate, mapping)
-    return union
+    return dedup_by_match(union)
 
 
 # --- Stage 4: recall interrogation ---
@@ -541,6 +599,22 @@ def _mark_human(rule: dict[str, Any], version: str, run_date: str) -> dict[str, 
     return promoted
 
 
+def _restamp_confirmed(rule: dict[str, Any], version: str, run_date: str) -> dict[str, Any]:
+    """Re-stamp a shipped rule the probe re-confirmed at this pin.
+
+    The corpus invariant pins every rule's ``provenance.engine_version`` to the
+    envelope version, so a survivor confirmed at the new pin must carry the new
+    pin, not the version it was first verified at. ``source`` and any citation
+    are preserved (where the knowledge came from does not change); ``verified``
+    becomes ``construction`` because that is what this run's probe proved.
+    """
+    promoted = {k: v for k, v in rule.items() if k != "provenance"}
+    old_provenance = dict(rule.get("provenance") or {})
+    old_provenance.update({"verified": "construction", "engine_version": version, "date": run_date})
+    promoted["provenance"] = old_provenance
+    return promoted
+
+
 class Delta:
     """Mechanical old-vs-new corpus diff, grouped by disposition."""
 
@@ -551,6 +625,7 @@ class Delta:
         self.changed: list[str] = []
         self.residue: list[str] = []
         self.signed: list[str] = []  # residue rules that shipped via sign-off this run
+        self.deduplicated: list[str] = []  # rules dropped as exact-claim duplicates
 
 
 def promote(
@@ -560,7 +635,7 @@ def promote(
     old_rules: list[dict[str, Any]],
     verdicts: dict[str, dict[str, Any]],
     union: list[dict[str, Any]],
-    signed_off: set[str],
+    signoff: list[dict[str, Any]],
     interrogation_absent: list[str],
 ) -> tuple[list[dict[str, Any]], Delta]:
     """Build the new corpus and the review delta from the ladder verdicts.
@@ -575,11 +650,19 @@ def promote(
     untouched. ABSENT ids are surfaced as retirement proposals (in the delta and
     as sign-off annotations); confirmed candidates on a new field family are added
     with their pool ids.
+
+    ``signoff`` is the sign-off record (see :func:`read_signoff`). A
+    ``human_confirmed`` mark on a rule still in the old corpus ships it through
+    the residue path; a mark on a rule an EARLIER run already withheld
+    re-sources the rule from the record's own ``rule:`` body - the withholding
+    run removed it from ``rules.yaml``, so the record is the only place the
+    rule text still lives.
     """
     delta = Delta()
     delta.proposed_retirements = list(interrogation_absent)
     confirmed_leaf_keys = {_leaf_key(c) for c in union if _status(c) == CONFIRMED}
     old_leaf_keys = {_leaf_key(r) for r in old_rules}
+    signed_off = {str(e.get("id")) for e in signoff if e.get("human_confirmed") is True}
     new_rules: list[dict[str, Any]] = []
 
     for rule in old_rules:
@@ -587,10 +670,12 @@ def promote(
         status = verdicts.get(rid, {}).get("status", UNVERIFIED)
         family_confirmed = _leaf_key(rule) in confirmed_leaf_keys
         if status == CONFIRMED or family_confirmed:
-            new_rules.append(rule)
-            delta.survived.append(rid)
-            if status != CONFIRMED:
+            if status == CONFIRMED:
+                new_rules.append(_restamp_confirmed(rule, version, run_date))
+            else:
+                new_rules.append(rule)
                 delta.changed.append(rid)  # kept via a pool candidate: possible in-place drift
+            delta.survived.append(rid)
         elif status in ("unconfirmed", "unprobeable"):
             if rid in signed_off:
                 new_rules.append(_mark_human(rule, version, run_date))
@@ -608,6 +693,35 @@ def promote(
         new_rules.append(candidate_to_rule(candidate, engine, version, run_date))
         delta.added.append(str(candidate["id"]))
 
+    # Re-source signed-off rules an earlier run already withheld: they are in
+    # no live input any more (the withholding run wrote rules.yaml without
+    # them), so the sign-off record's own rule body is the source of truth.
+    shipped_ids = {str(r["id"]) for r in new_rules}
+    for record in sorted(signoff, key=lambda e: str(e.get("id"))):
+        rid = str(record.get("id"))
+        if record.get("human_confirmed") is not True or rid in shipped_ids:
+            continue
+        body = record.get("rule")
+        if not isinstance(body, dict):
+            raise SystemExit(
+                f"sign-off entry {rid!r} is marked human_confirmed but carries no rule "
+                "body under its 'rule:' key, and the rule is no longer in the shipped "
+                "corpus. Recover the rule mapping from git history (rules.yaml at the "
+                "last pin that shipped it), add it to the entry as 'rule:', and re-run "
+                "absorb."
+            )
+        new_rules.append(_mark_human(body, version, run_date))
+        delta.survived.append(rid)
+        delta.signed.append(rid)
+
+    # Collapse any two shipped rules that encode the identical constraint (same
+    # canonical fields/operators/values) to one - a legacy corpus can carry a
+    # duplicate pair minted with different id hashes and message wording. The
+    # winner is the lexicographically smallest id (rules carry no verdict).
+    deduped = dedup_by_match(new_rules)
+    dropped = {str(r["id"]) for r in new_rules} - {str(r["id"]) for r in deduped}
+    delta.deduplicated = sorted(dropped)
+    new_rules = deduped
     new_rules.sort(key=lambda r: str(r["id"]))
     return new_rules, delta
 
@@ -615,15 +729,18 @@ def promote(
 # --- Residue sign-off + review delta report ---
 
 
-def read_signoff(signoff_dir: Path) -> set[str]:
-    """Rule ids the maintainer marked ``human_confirmed: true`` in the sign-off.
+def read_signoff(signoff_dir: Path) -> list[dict[str, Any]]:
+    """The residue sign-off rows the maintainer edits.
 
     ``signoff_dir`` is the versioned, git-tracked ``outputs/`` snapshot dir (not
     the gitignored candidates pool): the human approval record is a durable
-    decision that must survive a fresh clone.
+    decision that must survive a fresh clone. Each row carries the full
+    withheld rule mapping under its ``rule:`` key, so a ``human_confirmed``
+    mark can re-ship the rule even when no live input (the shipped
+    ``rules.yaml`` included) still carries the rule body - the withholding run
+    itself removed it from the corpus.
     """
-    entries = _load_yaml_list(signoff_dir / _SIGNOFF_FILE, "residue")
-    return {str(e["id"]) for e in entries if e.get("human_confirmed") is True}
+    return _load_yaml_list(signoff_dir / _SIGNOFF_FILE, "residue")
 
 
 def write_signoff(
@@ -642,30 +759,56 @@ def write_signoff(
     reported ABSENT carry ``interrogation: absent`` (a retirement proposal; see
     the file header the maintainer reads).
     """
-    prior = {
-        str(e["id"]): bool(e.get("human_confirmed"))
-        for e in _load_yaml_list(signoff_dir / _SIGNOFF_FILE, "residue")
-    }
+    prior_rows = {str(e["id"]): e for e in _load_yaml_list(signoff_dir / _SIGNOFF_FILE, "residue")}
+
+    def body_of(rid: str) -> dict[str, Any] | None:
+        # The prior record body wins over the live corpus copy: once recorded,
+        # the body stays verbatim (a rule re-shipped via sign-off carries human
+        # provenance in rules.yaml, and reading THAT back would rewrite the
+        # record on every run). The corpus copy seeds first-time residue only.
+        prior_body = (prior_rows.get(rid) or {}).get("rule")
+        if isinstance(prior_body, dict):
+            return prior_body
+        return old_by_id.get(rid)
 
     def entry(rid: str, confirmed: bool) -> dict[str, Any]:
+        body = body_of(rid) or {}
         row: dict[str, Any] = {
             "id": rid,
-            "severity": old_by_id[rid].get("severity"),
-            "fields": sorted(old_by_id[rid].get("match", {}).get("fields", {})),
+            "severity": body.get("severity"),
+            "fields": sorted(body.get("match", {}).get("fields", {})),
         }
         if rid in absent:
             row["interrogation"] = "absent"  # retirement proposal; maintainer decides
         row["human_confirmed"] = confirmed
+        if body:
+            row["rule"] = body  # the full withheld rule: rules.yaml no longer carries it
         return row
 
-    rows = [entry(rid, prior.get(rid, False)) for rid in delta.residue]
+    rows = [
+        entry(rid, bool((prior_rows.get(rid) or {}).get("human_confirmed")))
+        for rid in delta.residue
+    ]
     rows += [entry(rid, True) for rid in delta.signed]
+    # Carry forward prior pending rows that neither shipped nor re-entered
+    # residue this run. A rule withheld by an earlier run is absent from every
+    # live input (the shipped rules.yaml included), so dropping its row here
+    # would silently destroy both the pending decision and the rule body.
+    listed = {str(r["id"]) for r in rows}
+    shipped = set(delta.survived) | set(delta.added)
+    for rid, prior_row in prior_rows.items():
+        if rid in listed or rid in shipped:
+            continue
+        rows.append(dict(prior_row))
     rows.sort(key=lambda r: str(r["id"]))
     header = (
         "# Material residue: shipped rules the probe could not exercise this run.\n"
         "# Set human_confirmed: true to keep shipping a rule you have verified by hand;\n"
         "# the next absorb run consumes the mark. Unmarked residue is not shipped\n"
-        "# until you mark it (withheld pending sign-off, not retired). An entry with\n"
+        "# until you mark it (withheld pending sign-off, not retired). Each entry\n"
+        "# records the complete withheld rule under its rule: key - the shipped\n"
+        "# rules.yaml no longer carries it - so marking an entry re-ships the rule\n"
+        "# from this record on the next absorb run. An entry with\n"
         "# interrogation: absent is a retirement proposal: decline the mark to let the\n"
         "# rule lapse, or mark it to keep shipping it.\n"
     )
@@ -688,12 +831,14 @@ def render_delta(delta: Delta, citations: tuple[int, int]) -> str:
         f"changed              : {len(delta.changed)}"
         " (kept via pool candidate; review for in-place drift)",
         f"residue              : {len(delta.residue)} (awaiting human sign-off)",
+        f"deduplicated         : {len(delta.deduplicated)} (dropped as exact-claim duplicates)",
     ]
     for label, ids in (
         ("added", delta.added),
         ("retirement proposals", delta.proposed_retirements),
         ("changed", delta.changed),
         ("residue (sign-off)", delta.residue),
+        ("deduplicated", delta.deduplicated),
     ):
         if ids:
             lines.append(f"\n{label}:")
@@ -746,6 +891,26 @@ def run_cold_read(engine: str, source_root: Path, pool_root: Path, run_date: str
     )
 
 
+def run_extractor(engine: str, source_root: Path, pool_root: Path, run_date: str) -> None:
+    """Run the deterministic cross-field extractor into the candidate pool."""
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/cross_field_extractor.py",
+            "--engine",
+            engine,
+            "--source-root",
+            str(source_root),
+            "--pool-root",
+            str(pool_root),
+            "--date",
+            run_date,
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
 def absorb(args: argparse.Namespace) -> int:
     engine = args.engine
     version = resolve_version(engine)
@@ -772,6 +937,13 @@ def absorb(args: argparse.Namespace) -> int:
                 "--source-root is required for the cold read (or pass --skip-cold-read)"
             )
         run_cold_read(engine, args.source_root, args.pool_root, run_date)
+
+    if not args.skip_extractor:
+        if not args.source_root:
+            raise SystemExit(
+                "--source-root is required for the cross-field extractor (or pass --skip-extractor)"
+            )
+        run_extractor(engine, args.source_root, args.pool_root, run_date)
 
     union = build_union(pool_dir, engine)
     _, old_rules = load_shipped_rules(engine)
@@ -810,9 +982,9 @@ def absorb(args: argparse.Namespace) -> int:
             "probe ladder verified nothing this run; every rule kept untouched, corpus unchanged"
         )
 
-    signed_off = read_signoff(signoff_dir)
+    signoff = read_signoff(signoff_dir)
     new_rules, delta = promote(
-        engine, version, run_date, old_rules, verdicts, union, signed_off, interrogation_absent
+        engine, version, run_date, old_rules, verdicts, union, signoff, interrogation_absent
     )
     write_signoff(signoff_dir, delta, old_by_id, set(interrogation_absent))
 
@@ -861,6 +1033,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--skip-cold-read", action="store_true", help="Reuse the existing analyst pool file."
+    )
+    parser.add_argument(
+        "--skip-extractor",
+        action="store_true",
+        help="Reuse the existing cross-field-extractor pool file (skip re-mining source).",
     )
     parser.add_argument(
         "--skip-interrogation", action="store_true", help="Skip the recall-interrogation pass."
