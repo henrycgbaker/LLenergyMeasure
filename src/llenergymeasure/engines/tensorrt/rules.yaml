@@ -37,22 +37,6 @@ rules:
     engine_version: 1.2.1
     citation: llmapi/llm_args.py:1882
     date: '2026-07-12'
-- id: tensorrt_analyst_error_load_format_946f76bb
-  engine: tensorrt
-  severity: error
-  match:
-    fields:
-      tensorrt.engine_params.load_format:
-        not_in:
-        - auto
-        - dummy
-  message_template: load_format must be one of auto or dummy
-  provenance:
-    source: analyst
-    verified: construction
-    engine_version: 1.2.1
-    citation: llmapi/llm_args.py:1882
-    date: '2026-07-12'
 - id: tensorrt_analyst_error_orchestrator_type_a5b183fd
   engine: tensorrt
   severity: error
@@ -79,22 +63,6 @@ rules:
         - auto
         - slow
   message_template: tokenizer_mode must be one of auto, slow
-  provenance:
-    source: analyst
-    verified: construction
-    engine_version: 1.2.1
-    citation: llmapi/llm_args.py:1903
-    date: '2026-07-12'
-- id: tensorrt_analyst_error_tokenizer_mode_e01b96b3
-  engine: tensorrt
-  severity: error
-  match:
-    fields:
-      tensorrt.engine_params.tokenizer_mode:
-        not_in:
-        - auto
-        - slow
-  message_template: tokenizer_mode must be one of auto or slow
   provenance:
     source: analyst
     verified: construction

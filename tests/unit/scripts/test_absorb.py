@@ -87,6 +87,64 @@ def test_union_first_seen_wins_when_neither_has_verdict() -> None:
     assert union[0]["severity"] == "error"
 
 
+# --- Stage 3: match-spec dedup (two proposers, one claim) ---
+
+
+def test_dedup_by_match_collapses_identical_claim_keeps_lexicographic_winner() -> None:
+    # Same canonical fields/operators/values, different id hash and wording:
+    # one shipped rule, the lexicographically smaller id.
+    hi = _rule(
+        "vllm_zzz", "error", {"vllm.engine_params.load_format": {"not_in": ["auto", "dummy"]}}
+    )
+    lo = _rule(
+        "vllm_aaa", "error", {"vllm.engine_params.load_format": {"not_in": ["auto", "dummy"]}}
+    )
+    kept = ab.dedup_by_match([hi, lo])
+    assert [r["id"] for r in kept] == ["vllm_aaa"]
+
+
+def test_dedup_by_match_prefers_verdict_carrying_over_unverified() -> None:
+    fresh = _cand("vllm_aaa", "error", {"vllm.sampling_params.n": {">": 1}}, status="unverified")
+    remembered = _cand(
+        "vllm_zzz", "error", {"vllm.sampling_params.n": {">": 1}}, status="confirmed"
+    )
+    kept = ab.dedup_by_match([fresh, remembered])
+    # The confirmed entry wins even though its id sorts later - verdict
+    # precedence must beat the lexicographic tiebreak.
+    assert [c["id"] for c in kept] == ["vllm_zzz"]
+
+
+def test_dedup_by_match_keeps_distinct_claims() -> None:
+    a = _rule("r_a", "error", {"vllm.sampling_params.n": {">": 1}})
+    b = _rule("r_b", "error", {"vllm.sampling_params.n": {">": 2}})  # different value
+    c = _rule("r_c", "dormant", {"vllm.sampling_params.n": {">": 1}})  # different severity
+    kept = ab.dedup_by_match([a, b, c])
+    assert {r["id"] for r in kept} == {"r_a", "r_b", "r_c"}
+
+
+def test_dedup_by_match_treats_scalar_and_eq_spec_as_equal() -> None:
+    scalar = _rule("r_a", "error", {"vllm.engine_params.x": "auto"})
+    eq = _rule("r_b", "error", {"vllm.engine_params.x": {"==": "auto"}})
+    kept = ab.dedup_by_match([scalar, eq])
+    assert [r["id"] for r in kept] == ["r_a"]
+
+
+def test_build_union_reads_extractor_source(tmp_path: Path) -> None:
+    pool = tmp_path
+    for name, cid in (
+        ("analyst_cold_read.yaml", "vllm_analyst_a"),
+        ("cross_field_extractor.yaml", "vllm_extractor_b"),
+        ("manual_seeds.yaml", "vllm_manual_c"),
+    ):
+        (pool / name).write_text(
+            yaml.safe_dump({"candidates": [_cand(cid, "error", {"temperature": {"<": 0}})]})
+        )
+    # Each proposer claims temperature<0; canonical match-spec dedup collapses to one.
+    union = ab.build_union(pool, "vllm")
+    assert len(union) == 1
+    assert union[0]["id"] == "vllm_analyst_a"  # lexicographically smallest id wins
+
+
 # --- Canonical field addressing ---
 
 
@@ -553,6 +611,7 @@ def _args(pool_root: Path, **overrides: Any) -> Any:
         clean_room=False,
         dry_run=False,
         skip_cold_read=True,
+        skip_extractor=True,
         skip_interrogation=True,
         skip_probe=True,
         ollama_host="x",
