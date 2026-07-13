@@ -4,6 +4,7 @@
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all scaffold-snapshot promote-schemas
 .PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage check-corpus-literals
+.PHONY: check-plugin-kwargs
 .PHONY: package-check
 .PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
@@ -198,6 +199,14 @@ rules-coverage: ## Report uncovered engine validator sites (ENGINE=vllm SRC=path
 # means a corpus rule references a value the generated typed config would reject.
 check-corpus-literals: ## Report corpus rule literals inexpressible in discovered schema types
 	uv run python -m scripts.engine_producers._runtime_literals --census
+
+# Standing lint between the glue code and the mined knowledge: every
+# constructor-kwarg name an engine plugin's translation layer hand-types as a
+# string literal must exist in that engine's discovered schema at the current
+# pin (or carry an allowlist rationale in the script). Catches upstream kwarg
+# renames the schema already knows about but the hand-written plugin missed.
+check-plugin-kwargs: ## Lint hand-typed plugin constructor kwargs against the mined schema
+	uv run python scripts/check_plugin_kwargs.py
 
 # Build wheel + validate package install + check version consistency
 package-check: ## Build wheel, validate install, and check pyproject/_version sync
