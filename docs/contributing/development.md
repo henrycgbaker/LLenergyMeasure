@@ -163,8 +163,9 @@ schema and rules follow:
    few minutes).
 2. **Local seed for a bump.** `make docker-seed-transformers` builds the
    runtime image and pushes it to the promotion-source ref
-   `transformers-cache:transformers-<VER>` (plus the build cache on
-   `transformers:latest`). Run it during a transformers bump session.
+   `transformers-cache:transformers-<VER>` (plus the `mode=max` BuildKit cache
+   to `transformers-cache:transformers-<VER>-buildcache`). Run it during a
+   transformers bump session.
 3. **Merge-time promotion.** When the bump lands on main,
    `publish-engine-image.yml` tag-copies the seeded image to the canonical
    `transformers:transformers-<VER>` and `transformers:latest` tags via
