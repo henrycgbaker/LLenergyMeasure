@@ -16,6 +16,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Release image publish is now a registry-side tag-copy of the promoted seed digest, not a
+  hosted rebuild. `docker-publish.yml` points `transformers:<version>` at the already-promoted
+  `transformers:transformers-<pin>` via `docker buildx imagetools create`, eliminating the
+  flash-attention FA3 compile that OOM'd the hosted runner; the workflow aborts loudly when the
+  seed/promotion source is missing. ([#PRA])
 - Absorb sign-off records now carry the full withheld rule body, so a maintainer's
   `human_confirmed` mark re-ships a rule even after the withholding run dropped it from the
   corpus; a bodyless mark fails loudly instead of silently skipping. ([#792])

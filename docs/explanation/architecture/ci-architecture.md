@@ -192,10 +192,12 @@ runners have, so CI never builds this image on the PR or merge path.
    `publish-engine-image.yml` tag-copies the seeded image to the canonical
    `transformers:transformers-<VER>` and `transformers:latest` tags. No
    rebuild: production gets the bit-identical seeded image.
-3. **Release-time build.** `docker-publish.yml` (called by `release.yml`)
-   builds the package-versioned release image on a hosted runner with capped
-   compile parallelism, reusing the registry build cache that the seed target
-   also warms.
+3. **Release-time tag-copy.** `docker-publish.yml` (called by `release.yml`)
+   tag-copies the promoted `transformers:transformers-<VER>` image to the
+   package-versioned `transformers:<VERSION>` release tag via
+   `docker buildx imagetools create`. No rebuild: the released version is a
+   registry-side pointer to the promoted digest, bit-identical to the seed.
+   CI never compiles flash-attention on any path.
 
 A missing seed fails the promotion run loudly: the tag-copy step finds no
 source manifest at `transformers-cache:transformers-<VER>`. Recovery is to run

@@ -170,9 +170,10 @@ schema and rules follow:
    `transformers:transformers-<VER>` and `transformers:latest` tags via
    `docker buildx imagetools create` (no rebuild). A missing seed fails the
    promotion loudly.
-4. **Release build.** `docker-publish.yml` (called by `release.yml`) builds
-   the package-versioned release image on a hosted runner, warming off the
-   cache the seed exported.
+4. **Release tag-copy.** `docker-publish.yml` (called by `release.yml`)
+   tag-copies the promoted `transformers:transformers-<VER>` image to the
+   package-versioned `transformers:<VERSION>` release tag via
+   `docker buildx imagetools create` (no rebuild).
 
 See [Pipeline architecture: transformers image lifecycle](/explanation/architecture/pipeline-architecture#transformers-image-lifecycle)
 for the full diagram and [CI architecture](/explanation/architecture/ci-architecture)

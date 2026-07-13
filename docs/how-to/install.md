@@ -171,9 +171,11 @@ docker-seed-transformers` exports the image's intermediate layers to
 `ghcr.io/henrycgbaker/llenergymeasure/transformers-cache:transformers-<VER>-buildcache`
 alongside a runnable promotion-source image. The canonical
 `transformers:transformers-<VER>` (immutable per engine pin) and
-`transformers:latest` (rolling) tags are produced from that seed: tag-copied
-at merge by `publish-engine-image.yml`, rebuilt at release by
-`docker-publish.yml` (see "How the transformers image is published" below).
+`transformers:latest` (rolling) tags are produced from that seed by tag-copy
+at merge (`publish-engine-image.yml`); the package-versioned
+`transformers:<VERSION>` release tag is a further tag-copy of the promoted
+image at release (`docker-publish.yml`). None of these steps rebuilds (see
+"How the transformers image is published" below).
 This lets fresh machines skip the ~30-min flash-attn FA3 Hopper compile.
 vLLM and TensorRT-LLM are pulled from upstream images (`vllm/vllm-openai`,
 `nvcr.io/nvidia/tensorrt-llm/release`) and need no project-side cache.
@@ -231,7 +233,8 @@ schema and rules follow. The refs involved:
 |---|---|---|
 | `transformers-cache:transformers-<VER>` | Runnable promotion-source image | Local `make docker-seed-transformers` |
 | `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`; not a runnable image) | Local `make docker-seed-transformers` |
-| `transformers:transformers-<VER>` + `transformers:latest` | Canonical runtime image | `publish-engine-image.yml` tag-copies the seeded image at merge; `docker-publish.yml` rebuilds it at release |
+| `transformers:transformers-<VER>` + `transformers:latest` | Canonical runtime image | `publish-engine-image.yml` tag-copies the seeded image at merge (no rebuild) |
+| `transformers:<VERSION>` | Package-versioned release image | `docker-publish.yml` tag-copies the promoted image at release (no rebuild) |
 
 Flow:
 
@@ -244,9 +247,10 @@ Flow:
    `transformers:latest` tags via `docker buildx imagetools create` - a
    registry-side metadata operation, no rebuild. A missing seed fails the
    promotion loudly.
-3. At release, `docker-publish.yml` (called by `release.yml`) builds the
-   package-versioned release image on a hosted runner, warming off the cache
-   the seed exported.
+3. At release, `docker-publish.yml` (called by `release.yml`) tag-copies the
+   promoted `transformers:transformers-<VER>` image to the package-versioned
+   `transformers:<VERSION>` release tag via `docker buildx imagetools create` -
+   the same registry-side, no-rebuild operation as the merge-time promotion.
 
 `docker-compose.yml` declares `cache_from: [transformers:v<VERSION>,
 transformers:latest]` for the transformers engine, so a local
@@ -272,9 +276,11 @@ If you hit rate limits or are behind a corporate proxy, `docker login ghcr.io` w
 [personal access token](https://github.com/settings/tokens) (scope `read:packages`) may help.
 
 **Push access (contributors).** You do not need push access to develop on this project -
-contributors only ever pull cache. Cache publication on releases is fully automated by
-`docker-publish.yml` using the repo's auto-issued `GITHUB_TOKEN`, so any merged release
-PR ships a fresh cache without human intervention. Manual seeding via
+contributors only ever pull cache. The merge-time promotion (`publish-engine-image.yml`)
+and the release publish (`docker-publish.yml`) are both automated tag-copies using the
+repo's auto-issued `GITHUB_TOKEN`, so they need no human intervention - but neither one
+builds an image or publishes cache; they only point new tags at the already-seeded
+digest. Manual seeding via
 `make docker-seed-transformers` is restricted to the package owner (the packages live
 under the `henrycgbaker` user namespace, not an org); this is the standard OSS pattern
 for solo-maintained projects and reflects the supply-chain principle that manual pushes
