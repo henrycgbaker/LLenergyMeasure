@@ -82,13 +82,27 @@ def _format_field_name(name: str, deprecated: bool) -> str:
 
 
 def _render_table(params: dict[str, Any]) -> list[str]:
-    """Render a parameter dict as a GFM table; returns list of lines."""
+    """Render a parameter dict as a GFM table; returns list of lines.
+
+    A ``Backends`` column is added only when at least one field carries a
+    per-field ``backends`` applicability list (the tensorrt union surface). For
+    single-backend / backend-shared surfaces (vllm, transformers, and tensorrt
+    sampling_params) no field carries the key, so the column is omitted and the
+    table stays byte-identical to the pre-union rendering.
+    """
     if not params:
         return ["_No parameters discovered._", ""]
-    lines = [
-        "| Field | Type | Default | Description |",
-        "|-------|------|---------|-------------|",
-    ]
+    show_backends = any(isinstance(m, dict) and "backends" in m for m in params.values())
+    if show_backends:
+        lines = [
+            "| Field | Type | Default | Backends | Description |",
+            "|-------|------|---------|----------|-------------|",
+        ]
+    else:
+        lines = [
+            "| Field | Type | Default | Description |",
+            "|-------|------|---------|-------------|",
+        ]
     for name, meta in params.items():
         if not isinstance(meta, dict):
             continue
@@ -107,7 +121,14 @@ def _render_table(params: dict[str, Any]) -> list[str]:
         description = _escape_pipe(description.replace("\n", " "))
         deprecated = bool(meta.get("deprecated"))
         field = _format_field_name(name, deprecated)
-        lines.append(f"| {field} | `{type_str}` | {default_str} | {description} |")
+        if show_backends:
+            backends = meta.get("backends")
+            backends_str = ", ".join(str(b) for b in backends) if backends else "all"
+            lines.append(
+                f"| {field} | `{type_str}` | {default_str} | {backends_str} | {description} |"
+            )
+        else:
+            lines.append(f"| {field} | `{type_str}` | {default_str} | {description} |")
     lines.append("")
     return lines
 

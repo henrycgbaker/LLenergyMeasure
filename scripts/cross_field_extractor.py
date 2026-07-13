@@ -287,6 +287,59 @@ TARGETS: dict[str, tuple[Target, ...]] = {
             "tensorrt",
             "tensorrt_llm.LookaheadDecodingConfig",
         ),
+        # TorchLlmArgs (the pytorch-backend args class) validators - joined to the
+        # mining surface now the schema unions both backend classes. These bind
+        # TorchLlmArgs-only fields (stream_interval, batch_wait_*) and cross-field
+        # ray_* preconditions; candidates the ladder adjudicates like any other.
+        Target(
+            "llmapi/llm_args.py",
+            "TorchLlmArgs",
+            "validate_stream_interval",
+            "tensorrt",
+            "tensorrt_llm.TorchLlmArgs",
+        ),
+        Target(
+            "llmapi/llm_args.py",
+            "TorchLlmArgs",
+            "validate_batch_wait_timeout_ms",
+            "tensorrt",
+            "tensorrt_llm.TorchLlmArgs",
+        ),
+        Target(
+            "llmapi/llm_args.py",
+            "TorchLlmArgs",
+            "validate_batch_wait_timeout_iters",
+            "tensorrt",
+            "tensorrt_llm.TorchLlmArgs",
+        ),
+        Target(
+            "llmapi/llm_args.py",
+            "TorchLlmArgs",
+            "validate_batch_wait_max_tokens_ratio",
+            "tensorrt",
+            "tensorrt_llm.TorchLlmArgs",
+        ),
+        Target(
+            "llmapi/llm_args.py",
+            "TorchLlmArgs",
+            "validate_ray_worker_extension_cls",
+            "tensorrt",
+            "tensorrt_llm.TorchLlmArgs",
+        ),
+        Target(
+            "llmapi/llm_args.py",
+            "TorchLlmArgs",
+            "validate_ray_placement_config",
+            "tensorrt",
+            "tensorrt_llm.TorchLlmArgs",
+        ),
+        Target(
+            "llmapi/llm_args.py",
+            "TorchLlmArgs",
+            "validate_speculative_config",
+            "tensorrt",
+            "tensorrt_llm.TorchLlmArgs",
+        ),
     ),
 }
 

@@ -54,6 +54,8 @@ class TestDottedNestedSweep:
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
+            # quant_config exists only on the trt backend's TrtLlmArgs, so pin it.
+            "tensorrt": {"engine_params": {"backend": "trt"}},
             "sweep": {
                 "tensorrt.engine_params.quant_config.quant_algo": ["INT8", "FP8", "W4A16_AWQ"],
             },
@@ -84,6 +86,7 @@ class TestDottedNestedSweep:
             "engine": "tensorrt",
             "tensorrt": {
                 "engine_params": {
+                    "backend": "trt",
                     "tensor_parallel_size": 2,
                     "max_batch_size": 8,
                     "max_input_len": 1024,
@@ -133,6 +136,8 @@ class TestDottedNestedSweep:
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
+            # quant_config exists only on the trt backend's TrtLlmArgs, so pin it.
+            "tensorrt": {"engine_params": {"backend": "trt"}},
             "sweep": {
                 "tensorrt.engine_params.quant_config.quant_algo": ["INT8", "INVALID_VALUE"],
             },

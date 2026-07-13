@@ -40,3 +40,19 @@ exposed_fields:
     - min_tokens
     - n
     - ignore_eos
+
+# Exposure-time narrowings applied to the generated Config only; the mined
+# schema.discovered.json is untouched (the mined `backend` type stays `str`,
+# because construction accepts arbitrary strings so a runtime-literal
+# recording would be unsound). backend selects the constructor CLASS at
+# construction (pytorch/None -> tensorrt_llm.LLM / TorchLlmArgs; trt ->
+# tensorrt_llm._tensorrt_engine.LLM / TrtLlmArgs), so llem exposes exactly the
+# two backends it dispatches, defaulting to pytorch. _autodeploy is upstream
+# but not exposed. Cross-backend field applicability (e.g. fast_build /
+# quant_config require backend trt) is enforced by loud corpus rules + the
+# plugin guards, never by narrowing here.
+exposure_overrides:
+  engine_params:
+    backend:
+      enum: [pytorch, trt]
+      default: pytorch

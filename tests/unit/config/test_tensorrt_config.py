@@ -32,7 +32,16 @@ _TRT_DEFAULTS = {"task": {"model": "gpt2"}, "engine": "tensorrt"}
 
 
 def _make_trt(**engine_params) -> ExperimentConfig:
-    """Build an ExperimentConfig with the given tensorrt engine_params."""
+    """Build an ExperimentConfig with the given tensorrt engine_params.
+
+    Defaults ``backend`` to ``trt``: this file exercises the trt-backend engine
+    surface (quant_config, fast_build, kv_cache/scheduler build knobs), several
+    fields of which exist ONLY on the trt backend's TrtLlmArgs. The
+    backend-applicability corpus rules reject those fields on the pytorch
+    backend, so a test asserting they round-trip must select the backend that
+    carries them. A test can still pass ``backend="pytorch"`` explicitly.
+    """
+    engine_params.setdefault("backend", "trt")
     return ExperimentConfig(**_TRT_DEFAULTS, tensorrt={"engine_params": engine_params})
 
 
@@ -306,6 +315,7 @@ class TestExperimentConfigIntegration:
             engine="tensorrt",
             tensorrt={
                 "engine_params": {
+                    "backend": "trt",
                     "tensor_parallel_size": 2,
                     "pipeline_parallel_size": 2,
                     "max_batch_size": 8,

@@ -84,6 +84,38 @@ rules:
     engine_version: 1.2.1
     citation: sampling_params.py:321
     date: '2026-07-12'
+- id: tensorrt_backend_fast_build_requires_trt
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.engine_params.backend:
+        '!=': trt
+      tensorrt.engine_params.fast_build:
+        ==: true
+  message_template: fast_build=True requires the trt backend; the pytorch backend (TorchLlmArgs) has no
+    fast_build field. Set backend=trt or remove fast_build.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.2.1
+    date: '2026-07-13'
+- id: tensorrt_backend_quant_config_requires_trt
+  engine: tensorrt
+  severity: error
+  match:
+    fields:
+      tensorrt.engine_params.backend:
+        '!=': trt
+      tensorrt.engine_params.quant_config:
+        present: true
+  message_template: quant_config requires the trt backend; the pytorch backend (TorchLlmArgs) has no quant_config
+    field. Set backend=trt or remove quant_config.
+  provenance:
+    source: manual
+    verified: human
+    engine_version: 1.2.1
+    date: '2026-07-13'
 - id: tensorrt_decodingconfig_raises_acceptance_length_threshold_lt_0
   engine: tensorrt
   severity: error

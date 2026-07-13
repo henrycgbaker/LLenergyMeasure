@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from llenergymeasure.api import load_study
+from llenergymeasure.config.grid import expand_grid
 from llenergymeasure.config.introspection import get_engine_config_model
 from llenergymeasure.config.scaffold import (
     all_engine_names,
@@ -255,25 +256,30 @@ def test_bounds_render_is_byte_deterministic() -> None:
 def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> None:
     """A bounds file expands to the product of its series lengths.
 
-    The declared count equals the full Cartesian product of the series lengths
-    (one declared config per combination member). Resolved-config-hash dedup
+    The full Cartesian product splits into VALID declared configs plus any combo
+    a cross-field error rule prunes (tensorrt: backend=pytorch + fast_build=true
+    violates the backend-applicability rule, since fast_build exists only on the
+    trt backend). The declared count is the valid set; resolved-config-hash dedup
     then folds combinations that resolve to the same effective config, so the
     executed experiments equal the distinct resolved set, which equals the
-    equivalence-group count (<= product). For transformers the collapse is
-    strict: a dormant corpus rule strips early_stopping at resolution time, so
-    its two swept values resolve to the same config.
+    equivalence-group count. For transformers the collapse is strict: a dormant
+    corpus rule strips early_stopping at resolution time, so its two swept values
+    resolve to the same config.
     """
     text = render_study_bounds(MODEL, [engine])
     path = tmp_path / "study.yaml"
     path.write_text(text)
     sweep = _sweep_block(text)
     product = math.prod(len(v) for v in sweep.values())
+    # The full grid = valid combos + combos a cross-field error rule prunes.
+    valid_grid, skipped_grid = expand_grid(yaml.safe_load(text))
     study = _load_without_config_warnings(path)
     assert product > 1
-    # Declared count is the full cartesian product.
-    assert len(study.declared_resolved_config_hashes) == product
-    # Every sweep combination is accounted for in exactly one equivalence group.
-    assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == product
+    assert len(valid_grid) + len(skipped_grid) == product
+    # Declared count is the valid (post-prune, pre-dedup) set.
+    assert len(study.declared_resolved_config_hashes) == len(valid_grid)
+    # Every valid combination is accounted for in exactly one equivalence group.
+    assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == len(valid_grid)
     # Executed experiments are the post-dedup distinct resolved configs.
     assert len(study.experiments) == len(study.pre_run_equivalence_groups)
     assert len(study.experiments) == len(set(study.declared_resolved_config_hashes))
@@ -295,10 +301,14 @@ def test_bounds_all_engines_round_trips_to_sum_of_products(tmp_path: Path) -> No
     for key, values in _sweep_block(text).items():
         per_engine.setdefault(key.split(".")[0], []).append(len(values))
     assert set(per_engine) == set(all_engine_names())
-    expected_members = sum(math.prod(lengths) for lengths in per_engine.values())
+    product = sum(math.prod(lengths) for lengths in per_engine.values())
+    # The full grid = valid combos + combos a cross-field error rule prunes
+    # (tensorrt backend=pytorch + fast_build=true).
+    valid_grid, skipped_grid = expand_grid(yaml.safe_load(text))
     study = _load_without_config_warnings(path)
-    assert len(study.declared_resolved_config_hashes) == expected_members
-    assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == expected_members
+    assert len(valid_grid) + len(skipped_grid) == product
+    assert len(study.declared_resolved_config_hashes) == len(valid_grid)
+    assert sum(g["member_count"] for g in study.pre_run_equivalence_groups) == len(valid_grid)
     assert len(study.experiments) == len(study.pre_run_equivalence_groups)
     assert len(study.experiments) == len(set(study.declared_resolved_config_hashes))
 

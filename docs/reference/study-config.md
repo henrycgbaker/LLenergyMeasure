@@ -173,7 +173,7 @@ All fields except `model` are optional and have sensible defaults.
 | `max_num_tokens` | integer | None | `8192` | The maximum number of tokens. |
 | `dtype` | string | None | `auto` | The data type to use for the model. |
 | `fast_build` | boolean | None | `false` | Enable fast build. |
-| `backend` | string | None | `null` | The backend to use for this LLM instance. |
+| `backend` | 'pytorch' | 'trt' | None | `pytorch` | The backend to use for this LLM instance. |
 | `quant_config` | any | None | `null` | Quantization config. |
 | `kv_cache_config` | any | None | `null` | KV cache config. |
 | `scheduler_config` | any | None | `null` | Scheduler config. |

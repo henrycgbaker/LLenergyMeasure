@@ -143,7 +143,7 @@ def test_probe_errors_equal_check_hardware_for_hardware_only(monkeypatch):
     config = make_config(
         model="test-model",
         engine="tensorrt",
-        tensorrt={"engine_params": {"quant_config": {"quant_algo": "FP8"}}},
+        tensorrt={"engine_params": {"backend": "trt", "quant_config": {"quant_algo": "FP8"}}},
     )
 
     from llenergymeasure.engines.tensorrt import TensorRTEngine
