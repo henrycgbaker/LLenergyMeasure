@@ -19,6 +19,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import scripts.cross_field_extractor as cfe  # noqa: E402
+from scripts._candidate_pool import write_pool  # noqa: E402
+from scripts.check_citations import check_candidate, load_candidates  # noqa: E402
 
 _VLLM_SAMPLING_PARAMS = """
 class SamplingParams:
@@ -136,3 +138,52 @@ def test_id_digest_collapses_re_reached_claim(tmp_path: Path) -> None:
     cands = cfe.extract("vllm", _vllm_source(tmp_path), "0.19.1", "2026-07-13")
     ids = [c["id"] for c in cands]
     assert len(ids) == len(set(ids))  # no duplicate ids within one engine run
+
+
+def _citations_pass(cands: list[dict[str, Any]], engine: str, source_root: Path, out: Path) -> int:
+    """Round-trip candidates through the checker exactly as ``absorb`` does.
+
+    Writes the pool, reloads it via :func:`load_candidates` (the shape gate that
+    used to raise on the single-line, quote-less citation), then verifies each
+    cited candidate's span against the same source tree. Returns the pass count.
+    """
+    write_pool(
+        out,
+        source=cfe.SOURCE,
+        engine=engine,
+        version="test",
+        generated_at="2026-07-13",
+        candidates=cands,
+        header="# test pool\n",
+    )
+    loaded = [c for c in load_candidates(out) if c.citation is not None]
+    assert loaded, "extractor emitted no cited candidates to check"
+    for cand in loaded:
+        verdict = check_candidate(cand, source_root)
+        assert verdict.ok, f"{cand.id}: {verdict.reason}"
+    return len(loaded)
+
+
+def test_every_vllm_citation_passes_the_checker(tmp_path: Path) -> None:
+    # Covers the cross-field raise, single-field raise, and self-assign dormancy
+    # shapes: each emitted citation must load (two-int lines + quote) and entail.
+    src = _vllm_source(tmp_path)
+    cands = cfe.extract("vllm", src, "0.19.1", "2026-07-13")
+    assert _citations_pass(cands, "vllm", src, tmp_path / "pool.yaml") >= 3
+
+
+def test_every_transformers_citation_passes_the_checker(tmp_path: Path) -> None:
+    # Covers the isinstance / is-not-None type-guard shape.
+    src = tmp_path / "transformers"
+    _write(src, "utils/quantization_config.py", _TFM_QUANT)
+    cands = cfe.extract("transformers", src, "5.7.0", "2026-07-13")
+    assert _citations_pass(cands, "transformers", src, tmp_path / "pool.yaml") >= 1
+
+
+def test_citation_lines_are_a_two_int_span_with_quote(tmp_path: Path) -> None:
+    cands = cfe.extract("vllm", _vllm_source(tmp_path), "0.19.1", "2026-07-13")
+    for cand in cands:
+        cite = cand["citation"]
+        start, end = cite["lines"]
+        assert isinstance(start, int) and isinstance(end, int) and 1 <= start <= end
+        assert cite["quote"].strip()
