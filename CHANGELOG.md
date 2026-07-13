@@ -21,6 +21,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Release image publish is now a registry-side tag-copy of the promoted seed digest, not a
+  hosted rebuild. `docker-publish.yml` points `transformers:<version>` at the already-promoted
+  `transformers:transformers-<pin>` via `docker buildx imagetools create`, eliminating the
+  flash-attention FA3 compile that OOM'd the hosted runner; the workflow aborts loudly when the
+  seed/promotion source is missing. ([#798])
 - TensorRT-LLM quantisation is passed as the native `quant_config` kwarg, not the
   long-removed `quantization` name (`TrtLlmArgs` is `extra='forbid'` at 1.2.1, so the old
   name crashed any quantised run at construction). ([#797])
@@ -688,3 +693,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
 [#792]: https://github.com/henrycgbaker/llenergymeasure/pull/792
 [#797]: https://github.com/henrycgbaker/llenergymeasure/pull/797
+[#798]: https://github.com/henrycgbaker/llenergymeasure/pull/798

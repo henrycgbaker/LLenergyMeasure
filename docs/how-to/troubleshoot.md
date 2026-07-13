@@ -294,16 +294,25 @@ see whether the registry was even reached.
 5. Offline is expected-slow. BuildKit degrades gracefully to a cold build -
    no errors, just minutes.
 
-**CI can't build the Transformers image (FA3 compile OOM / heartbeat loss):**
-The FA3 Hopper compile requires ~8-16 GB RAM and multiple hours on a 4-core
-runner. Seed the GHCR cache once from a developer machine with more resources:
+**Release publish fails: promotion source missing (`docker-publish.yml`):**
+CI never compiles flash-attention - the FA3 Hopper build needs far more memory
+than hosted runners have. The release publish is a registry-side tag-copy of
+the image the maintainer seeds locally and the promotion path publishes, so its
+only failure mode is a missing source: `docker-publish.yml` aborts loudly when
+`transformers:transformers-<VER>` does not exist in the registry.
+
+Fix - seed locally, then let the promotion tag-copy run:
 
 ```bash
 docker login ghcr.io           # needs write:packages scope
-make docker-seed-transformers  # builds + pushes cache to ghcr.io (~minutes if locally cached)
+make docker-seed-transformers  # local build + push of the promotion source (~minutes if locally cached)
 ```
 
-After seeding, CI warm-rebuilds from the GHCR cache in <5 min.
+On the next push to main touching `engine_versions/transformers/current.yaml`
+or the Dockerfile, `publish-engine-image.yml` tag-copies the seed to
+`transformers:transformers-<VER>` (or trigger it manually via
+`workflow_dispatch`). Once that source exists, re-run `docker-publish.yml`; the
+tag-copy completes in seconds.
 
 ---
 
