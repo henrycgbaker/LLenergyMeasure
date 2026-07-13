@@ -89,9 +89,9 @@ def _apply_default_build_cache(kwargs: dict[str, Any]) -> None:
     - Disabled by env → ``enable_build_cache`` is not set (TRT-LLM default is
       False, matching the discovered schema).
     - Enabled with a user-supplied path → build a ``BuildCacheConfig`` whose
-      ``cache_root`` is that path. Falls back to bare ``True`` if the
-      ``tensorrt_llm.llmapi`` import is unavailable (mirrors the behaviour of
-      the explicit YAML-driven path).
+      ``cache_root`` is that path. Raises :class:`EngineError` if
+      ``tensorrt_llm.llmapi`` cannot be imported: a measurement instrument must
+      not silently run without a build cache the user configured.
     - Enabled without a path → set ``enable_build_cache = True`` (preserves the
       pre-env-var behaviour).
     """
@@ -104,13 +104,16 @@ def _apply_default_build_cache(kwargs: dict[str, Any]) -> None:
     if cache_root is not None:
         try:
             from tensorrt_llm.llmapi import BuildCacheConfig
-
-            kwargs["enable_build_cache"] = BuildCacheConfig(cache_root=cache_root)
-            return
-        except ImportError:
-            logger.debug(
-                "tensorrt_llm.llmapi not available; falling back to bare enable_build_cache=True"
-            )
+        except ImportError as exc:
+            raise EngineError(
+                f"A build cache path was configured (cache_root={cache_root}) but "
+                "tensorrt_llm.llmapi.BuildCacheConfig could not be imported "
+                f"({exc}). Refusing to silently run without the configured build "
+                "cache. Run inside the tensorrt_llm image, or unset "
+                "LLEM_TRT_BUILD_CACHE_PATH."
+            ) from exc
+        kwargs["enable_build_cache"] = BuildCacheConfig(cache_root=cache_root)
+        return
 
     kwargs["enable_build_cache"] = True
 
@@ -169,7 +172,7 @@ class TensorRTEngine:
         from llenergymeasure.engines._errors import require_import
 
         _trt_mod = require_import("tensorrt_llm")
-        LLM = _trt_mod.LLM
+        LLM = self._resolve_llm_class(config)
 
         kwargs = self._build_llm_kwargs(config)
         logger.info("Loading TRT-LLM model %r (kwargs: %s)", config.task.model, list(kwargs.keys()))
@@ -302,8 +305,12 @@ class TensorRTEngine:
         if config.measurement.latency_profiling:
             extras["latency_profiling_unsupported"] = True
 
-        # Defensive per-request metric capture - RequestOutput.metrics is usually
-        # absent in TRT-LLM 0.21.0, so these lists typically come back empty.
+        # Defensive per-request metric capture. Live-checked at TRT-LLM 1.2.1
+        # (2026-07-13, both backend legs): RequestOutput carries NO ``metrics``
+        # attribute at all - populating it needs ``return_perf_metrics=True`` at
+        # LLM construction, which llem does not set - so these lists come back
+        # empty. Wiring return_perf_metrics into a first-class latency path is a
+        # deliberate follow-up, not done here.
         from llenergymeasure.engines._observed import extract_request_metrics
 
         per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
@@ -440,19 +447,54 @@ class TensorRTEngine:
     # Private: model loading helpers
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _resolve_llm_class(config: ExperimentConfig) -> Any:
+        """Select the TRT-LLM constructor class from the configured backend.
+
+        At 1.2.1 ``tensorrt_llm.LLM`` is ``_TorchLLM``-based (validates against
+        ``TorchLlmArgs``) and REJECTS ``backend='trt'`` at model load; the
+        compiled-TensorRT path is the distinct
+        ``tensorrt_llm._tensorrt_engine.LLM`` (``_TrtLLM``, validates against
+        ``TrtLlmArgs``). We dispatch on the class rather than forwarding the
+        upstream-deprecated ``backend`` kwarg (which is never passed to either
+        constructor - see :meth:`_build_llm_kwargs`).
+
+        - ``backend`` None or ``'pytorch'`` -> ``tensorrt_llm.LLM``
+        - ``backend`` ``'trt'`` -> ``tensorrt_llm._tensorrt_engine.LLM``
+        - anything else -> :class:`ConfigError` naming the accepted values.
+
+        Raises:
+            ConfigError: If ``backend`` is set to an unsupported value.
+            EngineError: If the required TRT-LLM class cannot be imported.
+        """
+        from llenergymeasure.engines._errors import require_import
+
+        engine_params = config.active_engine_params()
+        backend = getattr(engine_params, "backend", None) if engine_params is not None else None
+        if backend is None or backend == "pytorch":
+            return require_import("tensorrt_llm").LLM
+        if backend == "trt":
+            return require_import("tensorrt_llm._tensorrt_engine").LLM
+        raise ConfigError(
+            f"Unsupported tensorrt backend {backend!r}; accepted values are "
+            "{pytorch, trt}. backend selects the TRT-LLM constructor class "
+            "(pytorch -> tensorrt_llm.LLM, trt -> tensorrt_llm._tensorrt_engine.LLM)."
+        )
+
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build kwargs dict for tensorrt_llm.LLM() constructor.
+        """Build kwargs dict for the resolved tensorrt_llm LLM() constructor.
 
         All engine fields live on the generated ``engine_params`` block: typed
-        scalars (tensor_parallel_size, max_batch_size, dtype, backend, ...) and
-        Any-typed sub-config dicts (quant_config, kv_cache_config,
-        scheduler_config). When ``backend`` is unset, TRT-LLM auto-picks
-        (respecting ``TLLM_USE_TRT_ENGINE``).
+        scalars (tensor_parallel_size, max_batch_size, dtype, ...) and Any-typed
+        sub-config dicts (quant_config, kv_cache_config, scheduler_config).
+        ``backend`` is NEVER forwarded as a kwarg: it selects the constructor
+        class instead (see :meth:`_resolve_llm_class`), because at 1.2.1 the
+        kwarg is upstream-deprecated and ``backend='trt'`` is rejected by the
+        base ``LLM``.
 
         When engine_path is set (an extra="allow" passthrough field, not
-        curated), returns early with only {"model": engine_path} plus ``backend``
-        iff supplied. Compile-time kwargs are baked into the engine and must not
-        be re-specified.
+        curated), returns early with only {"model": engine_path}. Compile-time
+        kwargs are baked into the engine and must not be re-specified.
         """
         kwargs: dict[str, Any] = {
             "model": config.task.model,
@@ -473,29 +515,70 @@ class TensorRTEngine:
                 raise ConfigError(f"engine_path validation failed: {'; '.join(errors)}")
             # Pass engine dir as model - TRT-LLM auto-detects TLLM_ENGINE format.
             # Compile-time kwargs are baked into the engine; don't pass them.
-            early_kwargs: dict[str, Any] = {"model": str(raw_engine_path)}
-            if engine_params.backend is not None:
-                early_kwargs["backend"] = engine_params.backend
-            return early_kwargs
+            # backend is not a kwarg - it selects the constructor class.
+            return {"model": str(raw_engine_path)}
+
+        backend = getattr(engine_params, "backend", None) if engine_params is not None else None
+        is_trt = backend == "trt"
 
         if engine_params is None:
-            # No tensorrt section - apply env-var-gated default build cache.
-            _apply_default_build_cache(kwargs)
+            # No tensorrt section -> default (pytorch) backend. The TRT-engine-build
+            # knobs (build cache, fast_build, quant_config) are absent from the
+            # pytorch backend's TorchLlmArgs, so nothing extra is forwarded.
             return kwargs
 
         # Scalar fields and extras: forward non-None values verbatim. The
-        # sub-config dicts are popped and rebuilt into their native classes below.
+        # sub-config dicts and the TRT-build-only knobs are popped and handled
+        # separately below.
         dumped: dict[str, Any] = engine_params.model_dump(exclude_none=True)
         quant_config = dumped.pop("quant_config", None)
         kv_cache_config = dumped.pop("kv_cache_config", None)
         scheduler_config = dumped.pop("scheduler_config", None)
-        kwargs.update(dumped)
+        dumped.pop("backend", None)  # backend selects the class, never a kwarg
+        fast_build = dumped.pop("fast_build", None)  # TRT-build-only; see below
 
-        # Quantisation config
-        if isinstance(quant_config, dict) and quant_config:
-            try:
-                from tensorrt_llm.llmapi import QuantAlgo, QuantConfig
+        # fast_build, quant_config and the on-disk build cache are TRT-engine-build
+        # concepts absent from the pytorch backend's TorchLlmArgs (extra='forbid'),
+        # so forwarding them there crashes construction. On the pytorch backend we
+        # refuse the ones carrying declared measurement intent LOUDLY rather than
+        # silently measure a different configuration, and skip the build cache (a
+        # build-speed knob with no effect on what is measured).
+        if not is_trt:
+            if isinstance(quant_config, dict) and quant_config:
+                raise ConfigError(
+                    "quant_config requires backend='trt'. The pytorch backend does "
+                    "not apply a TRT-LLM quantization config (it loads a "
+                    "pre-quantised checkpoint instead); refusing to silently "
+                    "measure an unquantised model. Set backend='trt' or remove "
+                    "quant_config."
+                )
+            if fast_build:
+                raise ConfigError(
+                    "fast_build requires backend='trt'. There is no TRT engine "
+                    "build on the pytorch backend. Set backend='trt' or remove "
+                    "fast_build."
+                )
 
+        kwargs.update(dumped)  # scalars valid on both backends (tp/pp/max_*/dtype)
+
+        # TRT-build-only surface (guarded above for the pytorch backend).
+        if is_trt:
+            if fast_build is not None:
+                kwargs["fast_build"] = fast_build
+
+            # Quantisation config -> native ``quant_config`` kwarg. NOT
+            # ``quantization``: TrtLlmArgs is extra='forbid' at 1.2.1 and rejects
+            # the old ``quantization`` name.
+            if isinstance(quant_config, dict) and quant_config:
+                try:
+                    from tensorrt_llm.llmapi import QuantAlgo, QuantConfig
+                except ImportError as exc:
+                    raise EngineError(
+                        f"quant_config was declared ({quant_config}) but "
+                        "tensorrt_llm.llmapi QuantConfig/QuantAlgo could not be "
+                        f"imported ({exc}). Refusing to silently measure an "
+                        "unquantised model while the config declares quantisation."
+                    ) from exc
                 qc_kwargs: dict[str, Any] = {}
                 if quant_config.get("quant_algo") is not None:
                     qc_kwargs["quant_algo"] = QuantAlgo[quant_config["quant_algo"]]
@@ -504,39 +587,44 @@ class TensorRTEngine:
                         quant_config["kv_cache_quant_algo"]
                     ]
                 if qc_kwargs:
-                    kwargs["quantization"] = QuantConfig(**qc_kwargs)
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; skipping QuantConfig")
+                    kwargs["quant_config"] = QuantConfig(**qc_kwargs)
 
-        # Build cache - env-var-gated default.
-        # TensorRTBuildCacheConfig was dropped (D1); advanced config via extra="allow".
-        _apply_default_build_cache(kwargs)
+            # On-disk engine build cache - env-var-gated default (trt build only).
+            _apply_default_build_cache(kwargs)
 
-        # KV cache config
+        # KV cache config (a valid field on both backends)
         if isinstance(kv_cache_config, dict) and kv_cache_config:
             try:
                 from tensorrt_llm.llmapi import KvCacheConfig
-
-                kwargs["kv_cache_config"] = KvCacheConfig(
-                    **{k: v for k, v in kv_cache_config.items() if v is not None}
-                )
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; skipping KvCacheConfig")
+            except ImportError as exc:
+                raise EngineError(
+                    f"kv_cache_config was declared ({kv_cache_config}) but "
+                    "tensorrt_llm.llmapi.KvCacheConfig could not be imported "
+                    f"({exc}). Refusing to silently drop a declared KV-cache "
+                    "config that would change what is measured."
+                ) from exc
+            kwargs["kv_cache_config"] = KvCacheConfig(
+                **{k: v for k, v in kv_cache_config.items() if v is not None}
+            )
 
         # Scheduler config
         if isinstance(scheduler_config, dict) and scheduler_config:
             try:
                 from tensorrt_llm.llmapi import CapacitySchedulerPolicy, SchedulerConfig
-
-                sc_kwargs: dict[str, Any] = {}
-                if scheduler_config.get("capacity_scheduling_policy") is not None:
-                    sc_kwargs["capacity_scheduling_policy"] = CapacitySchedulerPolicy[
-                        scheduler_config["capacity_scheduling_policy"]
-                    ]
-                if sc_kwargs:
-                    kwargs["scheduler_config"] = SchedulerConfig(**sc_kwargs)
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; skipping SchedulerConfig")
+            except ImportError as exc:
+                raise EngineError(
+                    f"scheduler_config was declared ({scheduler_config}) but "
+                    "tensorrt_llm.llmapi SchedulerConfig/CapacitySchedulerPolicy "
+                    f"could not be imported ({exc}). Refusing to silently drop a "
+                    "declared scheduler config that would change what is measured."
+                ) from exc
+            sc_kwargs: dict[str, Any] = {}
+            if scheduler_config.get("capacity_scheduling_policy") is not None:
+                sc_kwargs["capacity_scheduling_policy"] = CapacitySchedulerPolicy[
+                    scheduler_config["capacity_scheduling_policy"]
+                ]
+            if sc_kwargs:
+                kwargs["scheduler_config"] = SchedulerConfig(**sc_kwargs)
 
         return kwargs
 

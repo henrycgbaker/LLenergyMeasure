@@ -55,8 +55,9 @@ import sys
 try:
     import tomllib
 except ImportError:
-    # Python < 3.11 - fail loudly; current upstream images (vllm 0.7.3,
-    # TRT-LLM 0.21, transformers first-party) all ship Python >= 3.11.
+    # Python < 3.11 - fail loudly; current upstream images (vllm 0.19.1,
+    # TRT-LLM 1.2.1, transformers first-party) all ship Python >= 3.11
+    # (the TRT-LLM 1.2.1 NGC image ships Python 3.12).
     print("FATAL: tomllib unavailable; container Python < 3.11", file=sys.stderr)
     sys.exit(2)
 
