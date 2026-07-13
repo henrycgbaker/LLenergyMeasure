@@ -31,11 +31,15 @@ Producer-module discovery uses a per-engine convention table (see
 
 The CLI producer kind tokens ("invariants", "schemas") are the probe-contract
 names, NOT the producer-file names. ``_PRODUCER_MODULES`` translates them to
-the underlying module paths.
+the underlying module paths. Only ``schemas`` maps to a live module today; the
+deterministic invariant miners were retired (their standing replacement,
+``scripts/cross_field_extractor.py``, proposes into absorb and needs no
+landmark probe), so ``--producer invariants`` returns the unsupported-pair
+infra error.
 
 Usage::
 
-    python -m scripts._drift --engine vllm --producer invariants
+    python -m scripts._drift --engine vllm --producer schemas
 
 Emits a JSON ``DriftReport`` to stdout (or to ``--output PATH``). Exit 0 on
 either verdict - the binary verdict travels in the JSON's verdict field, and
@@ -68,7 +72,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_producers._base import MinerLandmarkMissingError  # noqa: E402
 from scripts.engine_producers._current import current_path  # noqa: E402
 
 ProducerKind = Literal["invariants", "schemas"]
@@ -77,10 +80,14 @@ ProducerKind = Literal["invariants", "schemas"]
 # producers; this table is the single seam where (engine, producer) cells
 # resolve to a Python module path. Keep it exhaustive - adding a new
 # engine means adding a row here.
+#
+# Only the ``schemas`` producer has a live module: the deterministic
+# invariant miners were retired (their standing replacement is
+# ``scripts/cross_field_extractor.py``, which needs no landmark drift probe -
+# it skips absent targets and lets the verification ladder adjudicate). The
+# ``invariants`` producer kind is kept in the type/CLI vocabulary but maps to
+# nothing, so a real invocation returns the unsupported-pair infra error.
 _PRODUCER_MODULES: dict[tuple[str, ProducerKind], str] = {
-    ("transformers", "invariants"): "scripts.engine_producers.transformers_miner",
-    ("vllm", "invariants"): "scripts.engine_producers.vllm_static_invariant_miner",
-    ("tensorrt", "invariants"): "scripts.engine_producers.tensorrt_static_invariant_miner",
     ("transformers", "schemas"): "scripts.engine_producers.transformers_schema_introspector",
     ("vllm", "schemas"): "scripts.engine_producers.vllm_schema_introspector",
     ("tensorrt", "schemas"): "scripts.engine_producers.tensorrt_schema_introspector",
@@ -299,19 +306,14 @@ def _write_cached_report(engine: str, report: DriftReport) -> None:
 def _import_producer(engine: str, producer: ProducerKind) -> ModuleType:
     """Import the producer module for ``(engine, producer)``.
 
-    Retries once on :class:`MinerLandmarkMissingError` raised at import
-    time - a flaky import is treated as transient and retried before the
-    verdict is finalised. A second failure escalates to caller; the CLI
-    maps it to exit code 2 (infrastructure failure).
+    An unmapped pair raises :class:`KeyError`; an unimportable module lets the
+    :class:`ImportError` escalate to the caller, which the CLI maps to exit
+    code 2 (infrastructure failure).
     """
     key = (engine, producer)
     if key not in _PRODUCER_MODULES:
         raise KeyError(f"Unsupported (engine, producer) pair: {key}")
-    module_path = _PRODUCER_MODULES[key]
-    try:
-        return importlib.import_module(module_path)
-    except MinerLandmarkMissingError:
-        return importlib.import_module(module_path)
+    return importlib.import_module(_PRODUCER_MODULES[key])
 
 
 def _read_landmarks(module: ModuleType) -> tuple[str, ...]:

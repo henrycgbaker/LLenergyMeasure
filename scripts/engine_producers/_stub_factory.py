@@ -67,50 +67,6 @@ def _make_getattr(resolver: Callable[[], ModuleType], module_name: str) -> Calla
     return __getattr__
 
 
-def make_static_stub(
-    engine: str,
-) -> tuple[
-    Callable[[], ModuleType],
-    Callable[[str], Any],
-    Callable[..., int],
-]:
-    """Factory for a static-invariant-miner shim. Returns (resolver, __getattr__, main)."""
-    _ensure_project_root_on_path()
-
-    def resolver() -> ModuleType:
-        return _resolve_producer_cached(engine, "static_invariant_miner")
-
-    module_name = f"scripts.engine_producers.{engine}_static_invariant_miner"
-    getattr_fn = _make_getattr(resolver, module_name)
-
-    def main(argv: list[str] | None = None) -> int:
-        return int(resolver().main(argv))
-
-    return resolver, getattr_fn, main
-
-
-def make_dynamic_stub(
-    engine: str,
-) -> tuple[
-    Callable[[], ModuleType],
-    Callable[[str], Any],
-    Callable[..., int],
-]:
-    """Factory for a dynamic-invariant-miner shim. Returns (resolver, __getattr__, main)."""
-    _ensure_project_root_on_path()
-
-    def resolver() -> ModuleType:
-        return _resolve_producer_cached(engine, "dynamic_invariant_miner")
-
-    module_name = f"scripts.engine_producers.{engine}_dynamic_invariant_miner"
-    getattr_fn = _make_getattr(resolver, module_name)
-
-    def main(argv: list[str] | None = None) -> int:
-        return int(resolver().main(argv))
-
-    return resolver, getattr_fn, main
-
-
 def make_schema_stub(
     engine: str,
 ) -> tuple[

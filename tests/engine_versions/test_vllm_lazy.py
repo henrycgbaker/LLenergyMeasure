@@ -1,10 +1,10 @@
 """Per-engine lazy-LANDMARKS tests for vLLM at v0.19.1.
 
-Asserts that the producer modules' PEP 562 ``__getattr__`` hooks resolve
-``LANDMARKS`` to the same tuple that ``load_producer`` returns directly
-from the per-version archive subpackage. This catches drift between the
-producer-side wiring (script ``_get_landmarks`` + dispatcher call) and
-the archive contents (``engine_versions/vllm/v0_19_1/producers/*.py``).
+Asserts that the schema-introspector producer module's PEP 562 ``__getattr__``
+hook resolves ``LANDMARKS`` to the same tuple that ``load_producer`` returns
+directly from the per-version archive subpackage. This catches drift between
+the producer-side wiring (script ``_get_landmarks`` + dispatcher call) and the
+archive contents (``engine_versions/vllm/v0_19_1/producers/schema_introspector.py``).
 
 Mirror of ``tests/engine_versions/test_dispatcher.py`` style: pytest,
 parametrize across producer kinds, no fixtures.
@@ -22,7 +22,6 @@ from engine_versions._dispatcher import load_producer
 # (producer_module_path, producer_kind) pairs. The producer kind is the
 # dispatcher's producer argument name.
 _PRODUCERS: tuple[tuple[str, str], ...] = (
-    ("scripts.engine_producers.vllm_static_invariant_miner", "static_invariant_miner"),
     ("scripts.engine_producers.vllm_schema_introspector", "schema_introspector"),
 )
 
