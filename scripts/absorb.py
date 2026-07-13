@@ -2,8 +2,10 @@
 """Absorb: the one command a maintainer runs per engine-version bump.
 
 Drives the knowledge-refresh loop for ONE engine's validation rules: cold read
-(analyst proposes candidates) -> pool union (analyst + manual seeds, deduped)
--> recall interrogation (ask "is this still present?" for
+(analyst proposes candidates) + cross-field extractor (a deterministic AST walk
+proposes candidates) -> pool union (analyst + extractor + manual seeds, deduped on
+id and on the canonical match spec) -> recall interrogation (ask "is this still
+present?" for
 each shipped rule the fresh pool did not rediscover) -> verification ladder
 (citation check on the host, then construction / identity probes in the engine
 container; the engine is the arbiter) -> promotion (regenerate the shipped rules
@@ -88,6 +90,7 @@ _SOURCE_MAP = {
     "analyst_cold_read": "analyst",
     "recall_interrogation": "analyst",
     "observed_collision": "deterministic_miner",
+    "deterministic_extractor": "deterministic_miner",
     "manual": "manual",
     "manual_seed": "manual",
 }
@@ -111,6 +114,53 @@ def _leaf_key(entry: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
     """Coarse identity: severity + sorted match-field leaves (the brief's key)."""
     leaves = tuple(sorted(leaf_of(f) for f in _match_fields(entry)))
     return str(entry.get("severity")), leaves
+
+
+def _hashable(value: Any) -> Any:
+    """Recursively freeze a match comparand into a hashable, order-stable key part."""
+    if isinstance(value, list):
+        return tuple(_hashable(v) for v in value)
+    if isinstance(value, dict):
+        return tuple(sorted((str(k), _hashable(v)) for k, v in value.items()))
+    return value
+
+
+def match_spec_key(entry: dict[str, Any]) -> tuple[str, tuple[Any, ...]]:
+    """Exact identity of a claim: severity + canonical (field, operators, values).
+
+    Two entries with the same key encode the identical constraint; only metadata
+    (id hash, message wording, provenance) may differ. Match fields are expected
+    canonical (``engine.section.leaf``); a bare scalar spec is treated as ``==``.
+    """
+    norm: list[tuple[str, tuple[Any, ...]]] = []
+    fields = _match_fields(entry)
+    for path in sorted(fields):
+        spec = fields[path]
+        if isinstance(spec, dict):
+            ops = tuple(sorted((str(op), _hashable(val)) for op, val in spec.items()))
+        else:
+            ops = (("==", _hashable(spec)),)
+        norm.append((path, ops))
+    return str(entry.get("severity")), tuple(norm)
+
+
+def dedup_by_match(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse entries sharing a canonical match spec to one deterministic winner.
+
+    Id-keyed dedup keeps two independently-proposed candidates that encode the
+    same constraint with different id hashes / wording; this collapses them on the
+    claim itself. Winner: a verdict-carrying entry beats an unverified one (keep
+    the memory), then the lexicographically smallest id. Output is sorted by id for
+    byte-stable pools/corpora.
+    """
+    groups: dict[tuple[str, tuple[Any, ...]], list[dict[str, Any]]] = {}
+    for entry in entries:
+        groups.setdefault(match_spec_key(entry), []).append(entry)
+    winners = [
+        min(group, key=lambda e: (_status(e) == UNVERIFIED, str(e.get("id"))))
+        for group in groups.values()
+    ]
+    return sorted(winners, key=lambda e: str(e.get("id")))
 
 
 def _digest(text: str) -> str:
@@ -202,16 +252,24 @@ def union_candidates(sources: list[list[dict[str, Any]]]) -> list[dict[str, Any]
 
 
 def build_union(pool_dir: Path, engine: str) -> list[dict[str, Any]]:
-    """Read the analyst and manual-seed pools, dedup, and canonicalise field paths."""
+    """Union the standing candidate sources, canonicalise, dedup on the claim.
+
+    Three standing proposers write into the pool: the analyst cold read, the
+    deterministic cross-field extractor, and the maintainer's manual seeds. They
+    are unioned on id (claim-digest), rewritten to canonical field paths, then
+    collapsed on the canonical match spec so two proposers that independently
+    surface the same constraint ship as one rule, not two.
+    """
     sources = [
         _load_yaml_list(pool_dir / "analyst_cold_read.yaml", "candidates"),
+        _load_yaml_list(pool_dir / "cross_field_extractor.yaml", "candidates"),
         _load_yaml_list(pool_dir / "manual_seeds.yaml", "candidates"),
     ]
     union = union_candidates(sources)
     mapping = canonical_map(engine)
     for candidate in union:
         _canonicalise(candidate, mapping)
-    return union
+    return dedup_by_match(union)
 
 
 # --- Stage 4: recall interrogation ---
@@ -567,6 +625,7 @@ class Delta:
         self.changed: list[str] = []
         self.residue: list[str] = []
         self.signed: list[str] = []  # residue rules that shipped via sign-off this run
+        self.deduplicated: list[str] = []  # rules dropped as exact-claim duplicates
 
 
 def promote(
@@ -655,6 +714,14 @@ def promote(
         delta.survived.append(rid)
         delta.signed.append(rid)
 
+    # Collapse any two shipped rules that encode the identical constraint (same
+    # canonical fields/operators/values) to one - a legacy corpus can carry a
+    # duplicate pair minted with different id hashes and message wording. The
+    # winner is the lexicographically smallest id (rules carry no verdict).
+    deduped = dedup_by_match(new_rules)
+    dropped = {str(r["id"]) for r in new_rules} - {str(r["id"]) for r in deduped}
+    delta.deduplicated = sorted(dropped)
+    new_rules = deduped
     new_rules.sort(key=lambda r: str(r["id"]))
     return new_rules, delta
 
@@ -764,12 +831,14 @@ def render_delta(delta: Delta, citations: tuple[int, int]) -> str:
         f"changed              : {len(delta.changed)}"
         " (kept via pool candidate; review for in-place drift)",
         f"residue              : {len(delta.residue)} (awaiting human sign-off)",
+        f"deduplicated         : {len(delta.deduplicated)} (dropped as exact-claim duplicates)",
     ]
     for label, ids in (
         ("added", delta.added),
         ("retirement proposals", delta.proposed_retirements),
         ("changed", delta.changed),
         ("residue (sign-off)", delta.residue),
+        ("deduplicated", delta.deduplicated),
     ):
         if ids:
             lines.append(f"\n{label}:")
@@ -822,6 +891,26 @@ def run_cold_read(engine: str, source_root: Path, pool_root: Path, run_date: str
     )
 
 
+def run_extractor(engine: str, source_root: Path, pool_root: Path, run_date: str) -> None:
+    """Run the deterministic cross-field extractor into the candidate pool."""
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/cross_field_extractor.py",
+            "--engine",
+            engine,
+            "--source-root",
+            str(source_root),
+            "--pool-root",
+            str(pool_root),
+            "--date",
+            run_date,
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
 def absorb(args: argparse.Namespace) -> int:
     engine = args.engine
     version = resolve_version(engine)
@@ -848,6 +937,13 @@ def absorb(args: argparse.Namespace) -> int:
                 "--source-root is required for the cold read (or pass --skip-cold-read)"
             )
         run_cold_read(engine, args.source_root, args.pool_root, run_date)
+
+    if not args.skip_extractor:
+        if not args.source_root:
+            raise SystemExit(
+                "--source-root is required for the cross-field extractor (or pass --skip-extractor)"
+            )
+        run_extractor(engine, args.source_root, args.pool_root, run_date)
 
     union = build_union(pool_dir, engine)
     _, old_rules = load_shipped_rules(engine)
@@ -937,6 +1033,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--skip-cold-read", action="store_true", help="Reuse the existing analyst pool file."
+    )
+    parser.add_argument(
+        "--skip-extractor",
+        action="store_true",
+        help="Reuse the existing cross-field-extractor pool file (skip re-mining source).",
     )
     parser.add_argument(
         "--skip-interrogation", action="store_true", help="Skip the recall-interrogation pass."

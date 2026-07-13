@@ -50,25 +50,36 @@ make absorb ENGINE=vllm SRC=engine-src/ ARGS='--dry-run'   # report the delta, w
 `SRC` is the engine's package source at the pinned version (the same tree the
 `rules-coverage` CI check does a blobless sparse checkout of). The stages are:
 
-1. **Cold read.** An assisted read of the pinned source proposes candidate
-   rules (`make analyst-cold-read`, which prompts the local Ollama model per
-   source cluster).
-2. **Pool union.** The proposed candidates are merged with any manual seeds,
-   then deduplicated into a version-scoped working file (the "pool"). Pools are
-   never shipped.
+1. **Candidate proposal.** Two standing proposers read the pinned source: the
+   **cold read** (`make analyst-cold-read`, an assisted read that prompts the
+   local Ollama model per source cluster) and the deterministic **cross-field
+   extractor** (`scripts/cross_field_extractor.py`, an LLM-free AST walk over
+   validator method bodies that turns `if <condition>: raise` and
+   `if <condition>: self.x = <normalised>` sites into match specs). Both only
+   propose; the ladder adjudicates.
+2. **Pool union.** The proposals are merged with any manual seeds and
+   deduplicated into a version-scoped working file (the "pool"): first on
+   candidate id (the claim digest), then on the canonical match spec (severity +
+   fields + operators + values), so two proposers that independently surface the
+   same constraint collapse to one candidate. Pools are never shipped.
 3. **Recall interrogation.** For each shipped rule the fresh pool did not
    rediscover, absorb asks "is this constraint still present?" and annotates
    the answer.
 4. **Verification ladder.** Every candidate (and every shipped rule's precise
    spec) is checked against the real engine. The engine is the arbiter.
 5. **Promotion.** The shipped `rules.yaml` is regenerated from the confirmed
-   candidates and the surviving shipped rules, byte-stably.
+   candidates and the surviving shipped rules, byte-stably. Any two shipped rules
+   that encode the identical constraint (same canonical fields/operators/values)
+   are collapsed to one - the lexicographically smaller id - so a legacy
+   duplicate pair minted with different id hashes lapses on the next run.
 6. **Review delta.** An old-versus-new diff is written for the maintainer to
    review before committing.
 
 Stages can be skipped to resume rather than redo a run:
 
 - `--skip-cold-read` reuses the existing analyst pool file (no Ollama call).
+- `--skip-extractor` reuses the existing cross-field-extractor pool file (no
+  re-mining of source).
 - `--skip-interrogation` skips the recall-interrogation pass.
 - `--skip-probe` runs the citation tier only (no engine container).
 - `--clean-room` ignores the within-version verdict memory and re-probes
@@ -127,6 +138,7 @@ isolation:
 | Target | Does | Produces |
 |---|---|---|
 | `make analyst-cold-read ENGINE=<e> SRC=<src>` | Cold-read the source into candidates | Candidate pool |
+| `python scripts/cross_field_extractor.py --engine <e> --source-root <src>` | Deterministic AST walk of validator bodies into candidates | Candidate pool |
 | `make check-citations CANDIDATES=<f> SRC=<src>` | Ladder tier 1: confirm each citation resolves | Per-candidate citation verdict |
 | `make probe-candidates ENGINE=<e> CANDIDATES=<f>` | Ladder tiers 2-3: construction/identity probes in-engine | Per-candidate probe verdict |
 | `make rules-coverage ENGINE=<e> SRC=<src>` | Advisory: report validator sites no shipped rule covers | Coverage report |
@@ -148,6 +160,7 @@ engine_versions/<engine>/
 └── v<version>/
     ├── candidates/            Version-scoped working pool (gitignored)
     │   ├── analyst_cold_read.yaml   Cold-read proposals
+    │   ├── cross_field_extractor.yaml   Deterministic-extractor proposals
     │   ├── manual_seeds.yaml        Hand-authored seeds
     │   ├── union.yaml               Merged, deduplicated pool
     │   └── ladder.yaml              Persisted probe verdicts (within-version memory)
