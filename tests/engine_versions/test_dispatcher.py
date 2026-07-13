@@ -188,17 +188,17 @@ def test_find_fallback_filters_per_producer_kind(tmp_path: Path) -> None:
 
 def test_load_producer_exact_match() -> None:
     """When the exact version is vendored, the dispatcher returns that one."""
-    module = load_producer(engine="vllm", version="0.7.3", producer="static_invariant_miner")
-    assert module.__name__ == "engine_versions.vllm.v0_7_3.producers.static_invariant_miner"
+    module = load_producer(engine="vllm", version="0.7.3", producer="schema_introspector")
+    assert module.__name__ == "engine_versions.vllm.v0_7_3.producers.schema_introspector"
 
 
 def test_load_producer_falls_back_when_above_all_vendored(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A target above all vendored versions falls back to the highest <= target."""
-    module = load_producer(engine="vllm", version="999.0.0", producer="static_invariant_miner")
+    module = load_producer(engine="vllm", version="999.0.0", producer="schema_introspector")
     assert module.__name__.startswith("engine_versions.vllm.")
-    assert module.__name__.endswith(".producers.static_invariant_miner")
+    assert module.__name__.endswith(".producers.schema_introspector")
     # The fallback version comes from the live tree; just assert it's not v999.
     assert "v999_0_0" not in module.__name__
     # Stderr log surfaces the fallback choice.
@@ -212,10 +212,10 @@ def test_load_producer_falls_back_to_v0_7_3_for_intermediate_target(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """vllm has v0_7_3 vendored; target 0.7.4 (unvendored) falls back to v0_7_3."""
-    module = load_producer(engine="vllm", version="0.7.4", producer="static_invariant_miner")
-    assert module.__name__ == "engine_versions.vllm.v0_7_3.producers.static_invariant_miner"
+    module = load_producer(engine="vllm", version="0.7.4", producer="schema_introspector")
+    assert module.__name__ == "engine_versions.vllm.v0_7_3.producers.schema_introspector"
     captured = capsys.readouterr()
-    assert "falling back to engine_versions.vllm.v0_7_3.producers.static_invariant_miner" in (
+    assert "falling back to engine_versions.vllm.v0_7_3.producers.schema_introspector" in (
         captured.err
     )
 

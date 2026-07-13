@@ -1,14 +1,12 @@
 """Per-engine LANDMARKS resolution tests for tensorrt-llm v1.2.1.
 
 Engine-specific complement to ``tests/engine_versions/test_dispatcher.py``:
-asserts the two tensorrt producer modules expose ``LANDMARKS`` lazily via
-PEP 562 ``__getattr__`` and that the resolved tuple matches the machinery
-loaded directly through the dispatcher.
+asserts the tensorrt schema-introspector producer module exposes
+``LANDMARKS`` lazily via PEP 562 ``__getattr__`` and that the resolved tuple
+matches the machinery loaded directly through the dispatcher.
 
 Mirror style of ``test_dispatcher.py``: keep imports lazy where the
-assertion target is the module attribute, fail loud otherwise. Note the
-miner module name is ``tensorrt_static_invariant_miner`` (not ``tensorrt_miner``) -
-see ``scripts/_drift.py`` ``_PRODUCER_MODULES`` for the canonical mapping.
+assertion target is the module attribute, fail loud otherwise.
 """
 
 from __future__ import annotations
@@ -30,17 +28,6 @@ def _assert_landmark_shape(landmarks: object) -> tuple[str, ...]:
             f"LANDMARKS entry {entry!r} must start with 'tensorrt_llm.'"
         )
     return landmarks  # type: ignore[return-value]
-
-
-def test_tensorrt_static_invariant_miner_landmarks_resolve_lazily() -> None:
-    """``scripts.engine_producers.tensorrt_static_invariant_miner.LANDMARKS`` resolves via PEP 562."""
-    module = importlib.import_module("scripts.engine_producers.tensorrt_static_invariant_miner")
-    landmarks = _assert_landmark_shape(module.LANDMARKS)
-
-    archived = load_producer(
-        engine="tensorrt", version=_TENSORRT_VERSION, producer="static_invariant_miner"
-    ).LANDMARKS
-    assert landmarks == archived
 
 
 def test_tensorrt_schema_introspector_landmarks_resolve_lazily() -> None:
