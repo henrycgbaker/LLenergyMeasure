@@ -22,7 +22,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   single cache manifest; the canonical tags are written only by the promotion and release
   tag-copies. The Dockerfile pins its `ghcr.io/astral-sh/uv` base (was `:latest`, so every uv
   release invalidated every subsequent builder layer) and records that `MAX_JOBS` must never
-  be overridden via build-arg in CI, since it participates in the FA3 layer's cache key. ([#PRB])
+  be overridden via build-arg in CI, since it participates in the FA3 layer's cache key. ([#799])
 - Absorb sign-off records now carry the full withheld rule body, so a maintainer's
   `human_confirmed` mark re-ships a rule even after the withholding run dropped it from the
   corpus; a bodyless mark fails loudly instead of silently skipping. ([#792])
@@ -673,3 +673,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#789]: https://github.com/henrycgbaker/llenergymeasure/pull/789
 [#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
 [#792]: https://github.com/henrycgbaker/llenergymeasure/pull/792
+[#799]: https://github.com/henrycgbaker/llenergymeasure/pull/799
