@@ -19,6 +19,18 @@ log="/tmp/llem-build-${engine}.log"
 # and per-stage "CACHED" markers; auto/tty hides them behind a collapsed UI.
 export BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}"
 
+# Resolve the transformers engine pin (engine_versions/transformers/current.yaml)
+# so docker-compose.yml's cache_from can target the seed's per-version mode=max
+# buildcache ref - the only ref that carries the FA3 builder-stage layers - and
+# so the build installs the pinned transformers version. A caller-provided
+# TRANSFORMERS_VERSION wins; on resolution failure the var stays empty and
+# compose's fallbacks kick in (BuildKit skips the unresolvable cache source
+# silently - a cold build, not an error).
+if [[ -z "${TRANSFORMERS_VERSION:-}" ]]; then
+    TRANSFORMERS_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('engine_versions/transformers/current.yaml'))['library']['current_version'])" 2>/dev/null || true)
+fi
+export TRANSFORMERS_VERSION
+
 start=$(date +%s)
 # tee preserves the on-screen build log; PIPESTATUS captures compose's exit.
 docker compose build "${engine}" 2>&1 | tee "${log}"

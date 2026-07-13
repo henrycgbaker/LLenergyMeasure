@@ -252,9 +252,13 @@ Flow:
    `transformers:<VERSION>` release tag via `docker buildx imagetools create` -
    the same registry-side, no-rebuild operation as the merge-time promotion.
 
-`docker-compose.yml` declares `cache_from: [transformers:v<VERSION>,
-transformers:latest]` for the transformers engine, so a local
-`make docker-build` reuses those published layers; vllm and tensorrt have no
+`docker-compose.yml` declares `cache_from:
+[transformers-cache:transformers-<VER>-buildcache, transformers:latest]` for
+the transformers engine (`<VER>` is the engine pin, exported as
+`TRANSFORMERS_VERSION` by the `make docker-build` wrapper script), so a local
+`make docker-build` imports the seed's `mode=max` cache manifest - the only
+ref carrying the FA3 builder layers - with the plain `:latest` image as a
+last-resort fallback; vllm and tensorrt have no
 first-party `cache_from` chain (they pull upstream directly).
 `make docker-builder-setup` provisions a `docker-container` BuildKit driver
 with a 200 GiB cache limit; the default `docker` driver cannot import
