@@ -219,7 +219,7 @@ def test_unknown_interrogation_neither_mints_nor_retires_and_rule_ships(tmp_path
     assert minted == []  # UNKNOWN mints nothing ...
     assert absent == []  # ... and raises no proposal (no parse-failure conflation)
 
-    new_rules, delta = ab.promote("vllm", "0.19.1", "2026-07-07", [missing], {}, [], set(), absent)
+    new_rules, delta = ab.promote("vllm", "0.19.1", "2026-07-07", [missing], {}, [], [], absent)
     assert "gone" in {r["id"] for r in new_rules}  # unverified verdict -> kept untouched
     assert "gone" not in delta.proposed_retirements
 
@@ -246,7 +246,9 @@ def test_rule_source_prefers_full_path_suffix_over_basename(tmp_path: Path) -> N
 # --- Stage 6: promotion matrix ---
 
 
-def _promote_matrix(signed_off: set[str] | None = None) -> tuple[list[dict[str, Any]], ab.Delta]:
+def _promote_matrix(
+    signoff: list[dict[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], ab.Delta]:
     old_rules = [
         _rule("old_direct", "error", {"vllm.sampling_params.temperature": {"<": 0}}),
         _rule("old_family", "error", {"vllm.sampling_params.top_p": {">": 1}}),
@@ -281,7 +283,7 @@ def _promote_matrix(signed_off: set[str] | None = None) -> tuple[list[dict[str, 
         old_rules,
         verdicts,
         union,
-        signed_off or set(),
+        signoff or [],
         # ABSENT on an unconfirmed rule AND on a probe-confirmed rule: annotation
         # only, so the confirmed one must still ship.
         ["old_absent", "old_direct"],
@@ -311,14 +313,26 @@ def test_promotion_matrix_dispositions() -> None:
     assert "old_family" in delta.changed  # survived via pool candidate, flagged for drift review
 
 
-def test_promotion_survivor_ships_verbatim() -> None:
+def test_promotion_survivor_reconfirmed_is_restamped() -> None:
+    """A directly re-confirmed survivor keeps its claim verbatim but its
+    provenance is re-pinned to the confirming version (the corpus invariant
+    pins provenance.engine_version to the envelope version)."""
     new_rules, _ = _promote_matrix()
     survivor = next(r for r in new_rules if r["id"] == "old_direct")
-    assert survivor == _rule("old_direct", "error", {"vllm.sampling_params.temperature": {"<": 0}})
+    expected = _rule("old_direct", "error", {"vllm.sampling_params.temperature": {"<": 0}})
+    assert {k: v for k, v in survivor.items() if k != "provenance"} == {
+        k: v for k, v in expected.items() if k != "provenance"
+    }
+    assert survivor["provenance"] == {
+        "source": "manual",
+        "verified": "construction",
+        "engine_version": "0.19.1",
+        "date": "2026-07-07",
+    }
 
 
 def test_promotion_residue_ships_only_when_signed_off() -> None:
-    new_rules, delta = _promote_matrix(signed_off={"old_residue"})
+    new_rules, delta = _promote_matrix(signoff=[{"id": "old_residue", "human_confirmed": True}])
     shipped = {r["id"]: r for r in new_rules}
     assert "old_residue" in shipped
     assert shipped["old_residue"]["provenance"]["verified"] == "human"
@@ -380,7 +394,14 @@ def test_promoted_corpus_parses_through_real_shipped_loader(tmp_path: Path) -> N
         )
     ]
     new_rules, _ = ab.promote(
-        "vllm", "0.19.1", "2026-07-07", old_rules, verdicts, union, {"old_signed"}, []
+        "vllm",
+        "0.19.1",
+        "2026-07-07",
+        old_rules,
+        verdicts,
+        union,
+        [{"id": "old_signed", "human_confirmed": True}],
+        [],
     )
 
     corpus_dir = tmp_path / "engines" / "vllm"
@@ -600,7 +621,9 @@ def test_signoff_mark_survives_across_reruns(
     ab.absorb(args)
     first = corpus.read_text()
     assert "vllm_signed" in first  # ships via the sign-off path ...
-    assert ab.read_signoff(signoff_dir) == {"vllm_signed"}  # ... and the mark is retained
+    assert {e["id"] for e in ab.read_signoff(signoff_dir) if e["human_confirmed"]} == {
+        "vllm_signed"
+    }  # mark retained
     # The gitignored candidates/ pool must NOT hold the durable approval record.
     assert not (pool_dir / ab._SIGNOFF_FILE).exists()
 
@@ -608,7 +631,93 @@ def test_signoff_mark_survives_across_reruns(
     second = corpus.read_text()
     assert second == first  # byte-identical: no oscillation across re-runs
     assert "vllm_signed" in second
-    assert ab.read_signoff(signoff_dir) == {"vllm_signed"}  # mark still alive after run two
+    assert {e["id"] for e in ab.read_signoff(signoff_dir) if e["human_confirmed"]} == {
+        "vllm_signed"
+    }  # mark alive after run two
+
+
+def test_signoff_record_resources_withheld_rule_across_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Full sign-off lifecycle across runs. Run 1 withholds two unconfirmed
+    rules and records their complete bodies in the sign-off file (rules.yaml no
+    longer carries them, so the record is the only surviving source). The
+    maintainer marks one; run 2 re-ships it from the record body with human
+    provenance while the declined rule stays withheld WITH its body. Run 3
+    proves double-run byte-stability of both the corpus and the record."""
+    corpus_root = tmp_path / "engines"
+    engine_dir = corpus_root / "vllm"
+    engine_dir.mkdir(parents=True)
+    rule_a = _rule("vllm_keep", "error", {"vllm.engine_params.tensor_parallel_size": {"<": 1}})
+    rule_b = _rule("vllm_lapse", "error", {"vllm.engine_params.tensor_parallel_size": {"<": 0}})
+    (engine_dir / "rules.yaml").write_text(ab.serialize_corpus("vllm", "0.19.1", [rule_a, rule_b]))
+    (engine_dir / "schema.discovered.json").write_text(
+        '{"sampling_params": {}, "engine_params": {"tensor_parallel_size": {}}}'
+    )
+    monkeypatch.setattr(ab, "CORPUS_ROOT", corpus_root)
+    monkeypatch.setattr(ab, "resolve_version", lambda engine: "0.19.1")
+    monkeypatch.setattr(ab, "run_probe", _fake_probe("unconfirmed"))
+
+    pool_root = tmp_path / "pool"
+    pool_dir = ab.pool_path(pool_root, "vllm", "0.19.1", "x").parent
+    pool_dir.mkdir(parents=True)
+    signoff_dir = pool_dir.parent / "outputs"
+    corpus = engine_dir / "rules.yaml"
+    signoff_path = signoff_dir / ab._SIGNOFF_FILE
+    args = _args(pool_root, skip_cold_read=True, skip_interrogation=True, skip_probe=False)
+
+    # Run 1: both rules withheld; the record carries their full bodies.
+    ab.absorb(args)
+    assert "vllm_keep" not in corpus.read_text() and "vllm_lapse" not in corpus.read_text()
+    rows = {e["id"]: e for e in ab.read_signoff(signoff_dir)}
+    assert rows["vllm_keep"]["human_confirmed"] is False
+    assert rows["vllm_keep"]["rule"]["match"]["fields"] == rule_a["match"]["fields"]
+    assert rows["vllm_lapse"]["rule"]["match"]["fields"] == rule_b["match"]["fields"]
+
+    # Maintainer signs off one rule; the other stays declined.
+    doc = yaml.safe_load(signoff_path.read_text())
+    for row in doc["residue"]:
+        if row["id"] == "vllm_keep":
+            row["human_confirmed"] = True
+    signoff_path.write_text(yaml.safe_dump(doc, sort_keys=False))
+
+    # Run 2: the marked rule is re-sourced from the record body (it is in no
+    # live input any more) and ships with human provenance at the consuming
+    # run's pin; the declined rule stays withheld and keeps its body.
+    ab.absorb(args)
+    second = corpus.read_text()
+    assert "vllm_keep" in second and "vllm_lapse" not in second
+    shipped = yaml.safe_load(second)["rules"]
+    by_id = {r["id"]: r for r in shipped}
+    assert by_id["vllm_keep"]["provenance"]["verified"] == "human"
+    assert by_id["vllm_keep"]["provenance"]["engine_version"] == "0.19.1"
+    rows = {e["id"]: e for e in ab.read_signoff(signoff_dir)}
+    assert rows["vllm_keep"]["human_confirmed"] is True
+    assert rows["vllm_lapse"]["human_confirmed"] is False
+    assert isinstance(rows["vllm_lapse"]["rule"], dict)  # body persists for a later decision
+
+    # Run 3: byte-stability of both artifacts.
+    signoff_after_two = signoff_path.read_text()
+    ab.absorb(args)
+    assert corpus.read_text() == second
+    assert signoff_path.read_text() == signoff_after_two
+
+
+def test_signed_entry_without_body_fails_loudly() -> None:
+    """A human_confirmed entry whose rule is in no live input and whose record
+    carries no body must abort with a pointer at git history, never silently
+    skip (the mark exists precisely because the rule text was withheld)."""
+    with pytest.raises(SystemExit, match="git history"):
+        ab.promote(
+            "vllm",
+            "0.19.1",
+            "2026-07-07",
+            [],
+            {},
+            [],
+            [{"id": "vllm_ghost", "human_confirmed": True}],
+            [],
+        )
 
 
 def test_skip_flags_bypass_cold_read_and_probe(

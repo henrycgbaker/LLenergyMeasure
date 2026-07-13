@@ -7,6 +7,24 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Changed
+
+- TensorRT-LLM pin advanced 1.0.0 -> 1.2.1 through the full bump pipeline: schema re-mined
+  byte-stably, the 20-field curation carried forward with no discovery debt, typed config
+  regenerated (`max_num_tokens` default now 8192), and the shipped rules corpus grown 15 -> 29
+  (construction-confirmed additions plus human-signed residue). ([#792])
+
+### Fixed
+
+- Absorb sign-off records now carry the full withheld rule body, so a maintainer's
+  `human_confirmed` mark re-ships a rule even after the withholding run dropped it from the
+  corpus; a bodyless mark fails loudly instead of silently skipping. ([#792])
+- The construction-probe gate rejects pydantic type-coercion noise instead of confirming
+  false-positive rules, and bare present-flag claims are unprobeable by construction. ([#792])
+- TensorRT discovery and probe containers route through the NVIDIA entrypoint: the 1.2.1 NGC
+  image moved `LD_LIBRARY_PATH` setup into `/etc/shinit_v2`, so bypassing the entrypoint broke
+  `import tensorrt`. ([#792])
+
 ## [v0.10.0] - 2026-07-13
 
 The engine-knowledge-as-data milestone. Hand-curated per-engine config was replaced by
@@ -647,3 +665,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#788]: https://github.com/henrycgbaker/llenergymeasure/pull/788
 [#789]: https://github.com/henrycgbaker/llenergymeasure/pull/789
 [#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
+[#792]: https://github.com/henrycgbaker/llenergymeasure/pull/792

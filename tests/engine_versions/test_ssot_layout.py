@@ -25,7 +25,7 @@ from engine_versions import _outputs
 # resolver derives the same set from the directory tree at runtime.
 ACTIVE_PINS: dict[str, tuple[str, ...]] = {
     "vllm": ("0.7.3", "0.19.1"),
-    "tensorrt": ("0.21.0", "1.0.0"),
+    "tensorrt": ("0.21.0", "1.0.0", "1.2.1"),
     "transformers": ("5.7.0",),
 }
 

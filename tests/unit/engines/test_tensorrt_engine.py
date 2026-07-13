@@ -244,7 +244,9 @@ class TestBuildLlmKwargs:
         assert "max_batch_size" not in kwargs
         assert "max_input_len" not in kwargs
         assert "max_seq_len" not in kwargs
-        assert "max_num_tokens" not in kwargs
+        # max_num_tokens carries the upstream 1.2.1 default (8192) in the
+        # generated config, so it forwards even when unset.
+        assert kwargs["max_num_tokens"] == 8192
         assert "backend" not in kwargs
 
     def test_build_llm_kwargs_default_build_cache_when_no_build_cache_section(self, monkeypatch):
