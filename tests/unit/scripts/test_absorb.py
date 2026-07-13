@@ -104,13 +104,14 @@ def test_dedup_by_match_collapses_identical_claim_keeps_lexicographic_winner() -
 
 
 def test_dedup_by_match_prefers_verdict_carrying_over_unverified() -> None:
-    fresh = _cand("vllm_zzz", "error", {"vllm.sampling_params.n": {">": 1}}, status="unverified")
+    fresh = _cand("vllm_aaa", "error", {"vllm.sampling_params.n": {">": 1}}, status="unverified")
     remembered = _cand(
-        "vllm_aaa", "error", {"vllm.sampling_params.n": {">": 1}}, status="confirmed"
+        "vllm_zzz", "error", {"vllm.sampling_params.n": {">": 1}}, status="confirmed"
     )
     kept = ab.dedup_by_match([fresh, remembered])
-    # The confirmed entry wins even though its id sorts later.
-    assert [c["id"] for c in kept] == ["vllm_aaa"]
+    # The confirmed entry wins even though its id sorts later - verdict
+    # precedence must beat the lexicographic tiebreak.
+    assert [c["id"] for c in kept] == ["vllm_zzz"]
 
 
 def test_dedup_by_match_keeps_distinct_claims() -> None:
