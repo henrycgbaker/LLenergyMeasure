@@ -16,20 +16,20 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   carries it. Codegen keeps a single `EngineParams`; the metadata is descriptive (surfaced
   as a Backends column in the schema reference), and cross-backend applicability is enforced
   by loud validation rules, never silent dropping. Absence of the key means "all backends",
-  so the single-class vllm/transformers schemas are byte-unchanged. ([#PR])
+  so the single-class vllm/transformers schemas are byte-unchanged. ([#801])
 - Exposure-time field narrowing via a new optional `exposure_overrides` block in
   `curated.yaml`: narrows a generated config field (`enum` -> `Literal`, `default`) without
   touching the mined schema. Used to expose tensorrt `backend` as `Literal["pytorch", "trt"]`
-  defaulting to `"pytorch"` while the mined type stays `str`. ([#PR])
+  defaulting to `"pytorch"` while the mined type stays `str`. ([#801])
 - Backend-applicability rules in the tensorrt corpus (27 -> 29): `fast_build` and
   `quant_config` require `backend='trt'` (both exist only on `TrtLlmArgs`; the pytorch
   backend's `TorchLlmArgs` rejects them under `extra='forbid'`). Live-verified by direct
   construction at 1.2.1; enforced at the config-expansion grain, complementing the plugin's
-  construction-grain `ConfigError` guards (defense in depth at both grains). ([#PR])
+  construction-grain `ConfigError` guards (defense in depth at both grains). ([#801])
 - The deterministic cross-field extractor's target table now walks the `TorchLlmArgs`
   validator tree (`stream_interval`, `batch_wait_*`, `ray_*` preconditions,
   `speculative_config`), joining the pytorch-backend validators to the standing candidate
-  surface. ([#PR])
+  surface. ([#801])
 - Standing plugin-kwarg lint: `scripts/check_plugin_kwargs.py` cross-checks the literal
   constructor-kwarg names each engine plugin's translation layer hand-types against that
   engine's discovered schema at the current pin, with a rationale-carrying allowlist for
@@ -739,3 +739,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#798]: https://github.com/henrycgbaker/llenergymeasure/pull/798
 [#799]: https://github.com/henrycgbaker/llenergymeasure/pull/799
 [#800]: https://github.com/henrycgbaker/llenergymeasure/pull/800
+[#801]: https://github.com/henrycgbaker/llenergymeasure/pull/801
