@@ -14,11 +14,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   TRT engine build, vLLM torch.compile / CUDA-graph capture). Captured by the harness
   around the load call, so all three engines gain it uniformly. Non-energy run metadata:
   the phase completes before the NVML energy window opens. Additive optional field;
-  result schema_version stays 4.0. ([#PR2])
+  result schema_version stays 4.0. ([#803])
 - `LLEM_DOCKER_GPUS`: docker `--gpus` request for llem-launched experiment and baseline
   containers (default `all`, the historical behaviour). On shared multi-GPU hosts, pin llem
   to free devices (e.g. `device=2`); restricting at the docker level keeps CUDA and NVML
-  indices consistent inside the container. ([#PR2])
+  indices consistent inside the container. ([#803])
 - TensorRT per-request latency metrics under `latency_profiling`: the plugin now sets
   `SamplingParams(return_perf_metrics=True)` when latency profiling is enabled and extracts
   per-request TTFT / E2E / average TPOT from `RequestOutput.metrics_dict` (the TRT-LLM 1.x
@@ -26,7 +26,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `RequestOutput.metrics` namespace does not exist there). Capture mode is
   `per_request_batch`. Default runs are unchanged: the flag is never set without
   latency profiling, and the `latency_profiling_unsupported` degradation warning now
-  fires only when profiling was requested but the engine returned no metrics. ([#PR2])
+  fires only when profiling was requested but the engine returned no metrics. ([#803])
 
 - TensorRT-LLM schema discovery now mines BOTH backend args classes and unions them into
   one discovered engine-params surface (63 -> 95 fields): `TrtLlmArgs` (the `trt` backend)
@@ -76,11 +76,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   plugin constructs the engine, and vLLM's EngineCore worker forks by default. The plugin now
   sets `VLLM_WORKER_MULTIPROC_METHOD=spawn` (setdefault, so a user override wins) - vLLM's
   own prescription for embedding contexts. Found by the first live containerized vllm run at
-  this pin. ([#PR2])
+  this pin. ([#803])
 - Container deps-cache stamp is now keyed per engine: the pyproject-verified stamp was shared
   across all images of one python minor, so whichever engine dispatched first suppressed the
   missing-deps probe for the others (the TRT-LLM NGC image, which ships every llem dep,
-  masked the vllm image's missing pyarrow -> parquet write crash). ([#PR2])
+  masked the vllm image's missing pyarrow -> parquet write crash). ([#803])
 - Transformers image seed and dev cache hygiene: `make docker-seed-transformers` no longer runs
   a harmful second push that wrote plain `transformers:latest` / `transformers:v<version>`
   images and a clobber-prone `mode=max` cache to `:latest`. The `-buildcache` ref is now the
@@ -769,3 +769,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#799]: https://github.com/henrycgbaker/llenergymeasure/pull/799
 [#800]: https://github.com/henrycgbaker/llenergymeasure/pull/800
 [#801]: https://github.com/henrycgbaker/llenergymeasure/pull/801
+[#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
