@@ -193,6 +193,14 @@ class ExperimentResult(BaseModel):
         description="Warmup iterations run before the measurement window "
         "(from WarmupResult.iterations_completed). None when no warmup result.",
     )
+    model_load_time_sec: float | None = Field(
+        default=None,
+        description="Wall-clock seconds spent in engine.load_model(): model load plus "
+        "any engine build/compile the engine performs there (e.g. the tensorrt trt "
+        "backend's TRT engine build, vLLM torch.compile/CUDA-graph capture). "
+        "Non-energy run metadata: this phase completes before the NVML energy "
+        "measurement window opens and contributes nothing to total_energy_j.",
+    )
     reproducibility_notes: str = Field(
         default=(
             "Energy measured via NVML polling. Accuracy +/-5%. "

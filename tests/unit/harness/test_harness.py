@@ -234,6 +234,26 @@ def test_harness_engine_version_none_when_missing(minimal_config):
     assert result.engine_version is None
 
 
+def test_harness_records_model_load_time(minimal_config):
+    """harness.run() persists the engine.load_model() wall-time on the result.
+
+    model_load_time_sec brackets load_model() alone (model load + any engine
+    build/compile the plugin performs there) and is non-energy metadata: the
+    phase precedes the measurement window. It must always be populated on a
+    successful run, and must be a sane non-negative wall-clock value.
+    """
+    engine = FakeBackend()
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(engine, minimal_config)
+
+    assert result.model_load_time_sec is not None
+    assert result.model_load_time_sec >= 0.0
+    # FakeBackend loads instantly; the bracket must not pick up unrelated phases.
+    assert result.model_load_time_sec < 30.0
+
+
 def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
     """thermal_floor_wait_s on WarmupResult must be set by harness (not by engine).
 
@@ -652,8 +672,10 @@ def test_harness_sets_inference_time_sec(minimal_config):
 def test_inference_time_sec_used_in_result(minimal_config):
     """total_inference_time_sec in ExperimentResult must come from harness perf_counter delta.
 
-    We mock time.perf_counter to return controlled values (100.0 then 105.0 → 5.0s delta).
-    The engine returns elapsed_time_sec=99.0. The result must show 5.0, not 99.0.
+    We mock time.perf_counter with controlled values: the model-load bracket
+    (50.0 then 52.0 -> model_load_time_sec=2.0) followed by the inference
+    bracket (100.0 then 105.0 -> 5.0s delta). The engine returns
+    elapsed_time_sec=99.0. The result must show 5.0, not 99.0.
     """
     custom_output = InferenceOutput(
         elapsed_time_sec=99.0,
@@ -665,7 +687,8 @@ def test_inference_time_sec_used_in_result(minimal_config):
     engine = FakeBackend(inference_output=custom_output)
     harness = MeasurementHarness()
 
-    perf_counter_values = iter([100.0, 105.0])  # start=100, end=105 → delta=5.0
+    # load_model bracket: 50 -> 52; inference bracket: 100 -> 105.
+    perf_counter_values = iter([50.0, 52.0, 100.0, 105.0])
 
     with (
         _apply_patches(),
@@ -676,6 +699,9 @@ def test_inference_time_sec_used_in_result(minimal_config):
 
     assert result.total_inference_time_sec == pytest.approx(5.0), (
         f"Expected 5.0 from perf_counter delta, got {result.total_inference_time_sec}"
+    )
+    assert result.model_load_time_sec == pytest.approx(2.0), (
+        f"Expected 2.0 from the load_model perf_counter bracket, got {result.model_load_time_sec}"
     )
 
 

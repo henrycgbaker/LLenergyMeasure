@@ -55,6 +55,30 @@ def default_device_map() -> str | None:
     return os.environ.get(ENV_TRANSFORMERS_DEFAULT_DEVICE_MAP) or None
 
 
+ENV_DOCKER_GPUS: Final = "LLEM_DOCKER_GPUS"
+"""Docker ``--gpus`` request for llem-launched containers (experiment + baseline).
+
+Passed verbatim as the value of ``docker run --gpus``. Unset / empty means
+``all`` (every visible GPU - the historical behaviour). On a shared multi-GPU
+host, set a device selector (e.g. ``device=2`` or ``device=2,3``) to pin
+llem's containers to free GPUs.
+
+Restricting visibility at the DOCKER level keeps measurement indices
+consistent: inside the container the only visible GPU(s) enumerate from 0 for
+BOTH CUDA and NVML, so compute, energy sampling, and thermal monitoring all
+address the same physical device without any index translation.
+"""
+
+
+def docker_gpus() -> str:
+    """Return the ``docker run --gpus`` value for llem-launched containers.
+
+    Pure passthrough with the historical fallback: unset / empty -> ``all``.
+    """
+    raw = os.environ.get(ENV_DOCKER_GPUS, "").strip()
+    return raw or "all"
+
+
 ENV_TRT_BUILD_CACHE_ENABLED: Final = "LLEM_TRT_BUILD_CACHE_ENABLED"
 """Toggle for TRT-LLM on-disk engine build cache.
 

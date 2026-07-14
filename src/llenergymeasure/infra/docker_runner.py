@@ -66,6 +66,7 @@ from llenergymeasure.infra.docker_errors import (
     capture_stderr_snippet,
     translate_docker_error,
 )
+from llenergymeasure.utils.env_config import docker_gpus
 from llenergymeasure.utils.exceptions import DockerError
 from llenergymeasure.utils.io import load_json
 
@@ -959,7 +960,7 @@ class DockerRunner:
             "run",
             "--rm",
             "--gpus",
-            "all",
+            docker_gpus(),
             "-v",
             f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
             "-e",

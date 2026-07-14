@@ -302,7 +302,7 @@ class MeasurementHarness:
         baseline = self._measure_or_reuse_baseline(config, baseline, gpu_indices, progress)
 
         # 3-4. Load model, join env snapshot, capture model memory baseline
-        model, snapshot, model_memory_mb = self._load_model_and_snapshot(
+        model, snapshot, model_memory_mb, model_load_time_sec = self._load_model_and_snapshot(
             engine, config, snapshot, snapshot_future, gpu_indices, progress
         )
 
@@ -330,6 +330,7 @@ class MeasurementHarness:
             baseline=baseline,
             warmup_result=warmup_result,
             model_memory_mb=model_memory_mb,
+            model_load_time_sec=model_load_time_sec,
             prompt_count=len(prompts),
             gpu_indices=gpu_indices,
             window=window,
@@ -399,19 +400,23 @@ class MeasurementHarness:
         snapshot_future: Future[EnvironmentSnapshot] | None,
         gpu_indices: list[int] | None,
         progress: ProgressCallback | None,
-    ) -> tuple[Any, EnvironmentSnapshot | None, float]:
+    ) -> tuple[Any, EnvironmentSnapshot | None, float, float]:
         """Load the model, join the background environment snapshot, and capture the
         post-load GPU memory baseline.
 
-        Returns (model, snapshot, model_memory_mb). The memory baseline must be
-        captured here - before warmup allocates KV cache.
+        Returns (model, snapshot, model_memory_mb, load_time_sec). The memory
+        baseline must be captured here - before warmup allocates KV cache.
+        load_time_sec brackets engine.load_model() alone: model load plus any
+        engine build/compile the plugin performs there. It lands on the result
+        as model_load_time_sec (non-energy metadata; this phase precedes the
+        NVML measurement window).
         """
         _p = progress
 
         # 3. Load model via engine plugin
         if _p:
             _p.on_step_start("model", "Loading", f"model {config.task.model}")
-            t0 = time.perf_counter()
+        t0 = time.perf_counter()
 
         # Build model substep callback
         def _on_model_substep(text: str, elapsed: float) -> None:
@@ -419,8 +424,9 @@ class MeasurementHarness:
 
         model = engine.load_model(config, on_substep=_on_model_substep)
 
+        load_time_sec = time.perf_counter() - t0
         if _p:
-            _p.on_step_done("model", time.perf_counter() - t0)
+            _p.on_step_done("model", load_time_sec)
 
         # 3b. Join snapshot future - collection hidden behind model loading
         if snapshot_future is not None:
@@ -432,7 +438,7 @@ class MeasurementHarness:
         if model_memory_mb > 0:
             _emit_substep(_p, "model", f"model memory: {model_memory_mb:.0f}MB")
 
-        return model, snapshot, model_memory_mb
+        return model, snapshot, model_memory_mb, load_time_sec
 
     def _load_prompts(
         self,
@@ -658,6 +664,7 @@ class MeasurementHarness:
         baseline: BaselineCache | None,
         warmup_result: WarmupResult,
         model_memory_mb: float,
+        model_load_time_sec: float | None,
         prompt_count: int,
         gpu_indices: list[int] | None,
         window: _MeasuredWindow,
@@ -714,6 +721,7 @@ class MeasurementHarness:
             measurement_warnings=measurement_warnings,
             warmup_result=warmup_result,
             prompt_count=prompt_count,
+            model_load_time_sec=model_load_time_sec,
         )
         _emit_substep(_p, "save", "result assembled")
 
@@ -1039,6 +1047,7 @@ class MeasurementHarness:
         warmup_result: Any = None,
         timeseries_samples: list[PowerThermalSample] | None = None,
         prompt_count: int = 0,
+        model_load_time_sec: float | None = None,
     ) -> ExperimentResult:
         """Assemble ExperimentResult from measurement data.
 
@@ -1068,6 +1077,9 @@ class MeasurementHarness:
             timeseries_samples: Raw PowerThermalSample list for GPU-utilisation /
                 memory-bandwidth / total-VRAM extraction. None = no samples.
             prompt_count: Number of prompts in the run (for batch effective size).
+            model_load_time_sec: Wall-clock seconds spent in engine.load_model()
+                (model load + any engine build/compile). Non-energy metadata;
+                the phase precedes the NVML measurement window.
 
         Returns:
             Fully assembled ExperimentResult.
@@ -1354,4 +1366,5 @@ class MeasurementHarness:
             measurement_window_discard_fraction=discard_fraction,
             steady_state_not_detected=steady_state_not_detected,
             warmup_excluded_samples=warmup_excluded_samples,
+            model_load_time_sec=model_load_time_sec,
         )
