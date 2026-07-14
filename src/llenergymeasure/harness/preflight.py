@@ -83,11 +83,16 @@ def _check_model_accessible(model_id: str) -> str | None:
         return None
 
 
-# TRT-LLM cannot load HF pre-quantised checkpoints directly; they require
-# trtllm-build conversion first. The detection signal is the HF-declared
-# quant_method value rather than a regex over model ids, so user-renamed
-# checkpoints (e.g. local forks without the conventional suffix) are still
-# caught - extend by adding the canonical quant_method string, not a pattern.
+# TRT-LLM's LLM API cannot load AutoAWQ / AutoGPTQ community-format HF
+# checkpoints directly on EITHER backend at 1.2.1 (live-verified against
+# Qwen2.5-0.5B-Instruct-AWQ): the trt backend raises NotImplementedError on the
+# config.json quant_method (llm_utils.py only handles fp8/mxfp4 there), and the
+# pytorch backend asserts on the weight layout (linear.py expects the ModelOpt
+# packing, not AutoAWQ's qweight). TRT-LLM's supported pre-quantised path is its
+# own ModelOpt export (hf_quant_config.json) or a pre-built engine via
+# engine_path. Detection keys on the HF-declared quant_method rather than a
+# regex over model ids, so user-renamed forks are still caught - extend by
+# adding the canonical quant_method string, not a pattern.
 _TRT_UNSUPPORTED_HF_QUANT_METHODS: tuple[str, ...] = ("awq", "gptq")
 
 
@@ -151,10 +156,13 @@ def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
         return None
 
     return (
-        f"{config.task.model} is an HF {method.upper()} checkpoint; TRT-LLM cannot "
-        f"load it directly. Pre-build a TRT-LLM engine (`trtllm-build --checkpoint_dir "
-        f"<converted> ...`) and set `tensorrt.engine_params.engine_path` to the build "
-        f"output. See docs/how-to/run-with-tensorrt-llm.md#hf-pre-quantised-checkpoints."
+        f"{config.task.model} is an HF {method.upper()} checkpoint; TRT-LLM's LLM API "
+        f"cannot load it on either backend at 1.2.1 (the trt backend rejects the "
+        f"quant_method, the pytorch backend rejects the weight layout). Use a "
+        f"ModelOpt-quantised checkpoint (with hf_quant_config.json) instead, or "
+        f"pre-build a TRT-LLM engine (`trtllm-build --checkpoint_dir <converted> ...`) "
+        f"and set `tensorrt.engine_params.engine_path` to the build output. See "
+        f"docs/how-to/run-with-tensorrt-llm.md#hf-pre-quantised-checkpoints."
     )
 
 

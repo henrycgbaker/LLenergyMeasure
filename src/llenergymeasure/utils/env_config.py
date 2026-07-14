@@ -90,11 +90,17 @@ via ``.env.example`` - not baked into this helper.
 
 
 ENV_TRT_BUILD_CACHE_PATH: Final = "LLEM_TRT_BUILD_CACHE_PATH"
-"""User-supplied cache directory for TRT-LLM engine build cache.
+"""Cache directory for the TRT-LLM engine build cache.
 
 If set and non-empty, the engine plugin wraps it into TRT-LLM's
 ``BuildCacheConfig.cache_root``. Unset / empty leaves TRT-LLM's internal
-default cache location in place.
+default cache root in place (``/tmp/.cache/tensorrt_llm/llmapi/``).
+
+Under docker dispatch the runner defaults this to the bind-mounted cache
+directory (``/root/.cache/trt-llm``) so the cache persists across ephemeral
+containers out of the box; TRT-LLM's own default root lives on the container
+filesystem and would not survive. A host-set value still overrides the
+docker default.
 """
 
 
@@ -113,7 +119,21 @@ def trt_build_cache_path() -> Path | None:
     """Return the user-supplied TRT-LLM build cache root, if any.
 
     Returns a ``Path`` when set to a non-empty value; otherwise ``None`` so
-    TRT-LLM uses its internal default location (``~/.cache/tensorrt_llm/``).
+    TRT-LLM uses its internal default root (``/tmp/.cache/tensorrt_llm/llmapi/``).
+    Under docker dispatch the runner sets this to the mounted cache directory
+    so the default is the persistent mount, not the ephemeral container path.
     """
     raw = os.environ.get(ENV_TRT_BUILD_CACHE_PATH)
     return Path(raw) if raw else None
+
+
+def trt_build_cache_host_dir() -> Path:
+    """Return the host directory bind-mounted as the TRT-LLM build cache.
+
+    This is the out-of-the-box location the docker runner mounts into the
+    container (``~/.cache/trt-llm``) and the directory ``llem doctor`` reports.
+    A single source of truth so the mount source and the doctor view cannot
+    drift. A user who overrides ``LLEM_TRT_BUILD_CACHE_PATH`` to a custom
+    container path is responsible for their own host mount.
+    """
+    return Path.home() / ".cache" / "trt-llm"

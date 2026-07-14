@@ -914,3 +914,64 @@ class TestLoudSubConfigImportErrors:
         engine = TensorRTEngine()
         with pytest.raises(EngineError, match="build cache path was configured"):
             engine._build_llm_kwargs(config)
+
+
+# =============================================================================
+# Test Group 11: build-cache hit/miss detection (_detect_build_cache_hit)
+# =============================================================================
+
+
+def _fake_llm(engine_dir):
+    """Stand-in LLM exposing TRT-LLM's llm_build_stats.engine_dir."""
+    return types.SimpleNamespace(llm_build_stats=types.SimpleNamespace(engine_dir=engine_dir))
+
+
+class TestDetectBuildCacheHit:
+    """_detect_build_cache_hit reads llm_build_stats.engine_dir (set only on reuse)."""
+
+    def _trt_config(self, **engine_params):
+        return make_config(
+            engine="tensorrt",
+            tensorrt={"engine_params": {"backend": "trt", **engine_params}},
+        )
+
+    def test_hit_when_engine_dir_set(self, monkeypatch):
+        """engine_dir populated => served from cache (True)."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
+        config = self._trt_config()
+        llm = _fake_llm("/root/.cache/trt-llm/engine-abc/content")
+        assert TensorRTEngine._detect_build_cache_hit(config, llm) is True
+
+    def test_miss_when_engine_dir_none(self, monkeypatch):
+        """engine_dir None => built fresh this run (False)."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
+        config = self._trt_config()
+        llm = _fake_llm(None)
+        assert TensorRTEngine._detect_build_cache_hit(config, llm) is False
+
+    def test_none_for_pytorch_backend(self, monkeypatch):
+        """pytorch backend never uses the trt build cache => None."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
+        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"backend": "pytorch"}})
+        llm = _fake_llm(None)
+        assert TensorRTEngine._detect_build_cache_hit(config, llm) is None
+
+    def test_none_when_cache_disabled(self, monkeypatch):
+        """Cache disabled => annotation not applicable (None)."""
+        monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_ENABLED", raising=False)
+        config = self._trt_config()
+        llm = _fake_llm("/root/.cache/trt-llm/engine-abc/content")
+        assert TensorRTEngine._detect_build_cache_hit(config, llm) is None
+
+    def test_none_for_engine_path_override(self, monkeypatch):
+        """engine_path loads a prebuilt engine, bypassing the cache => None."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
+        config = self._trt_config(engine_path="/prebuilt/engine")
+        llm = _fake_llm(None)
+        assert TensorRTEngine._detect_build_cache_hit(config, llm) is None
+
+    def test_none_when_stats_unavailable(self, monkeypatch):
+        """Missing llm_build_stats attribute is swallowed, never raises => None."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
+        config = self._trt_config()
+        assert TensorRTEngine._detect_build_cache_hit(config, types.SimpleNamespace()) is None

@@ -943,6 +943,37 @@ class TestExtraMounts:
 
         assert not any("trt-llm" in arg for arg in cmd)
 
+    def test_tensorrt_cache_path_defaults_to_mount(self, tmp_path, monkeypatch):
+        """Unset LLEM_TRT_BUILD_CACHE_PATH defaults to the mounted cache dir.
+
+        TRT-LLM's own default root is unmounted, so without this the cache would
+        die with each container. The runner pins it to the bind-mount target.
+        """
+        monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_PATH", raising=False)
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
+        runner = DockerRunner(image=IMAGE)
+        cmd = self._build_cmd(config, tmp_path, runner)
+
+        vals = [a for a in cmd if a.startswith("LLEM_TRT_BUILD_CACHE_PATH=")]
+        assert vals == ["LLEM_TRT_BUILD_CACHE_PATH=/root/.cache/trt-llm"]
+
+    def test_tensorrt_cache_path_host_override_wins(self, tmp_path, monkeypatch):
+        """A host-set LLEM_TRT_BUILD_CACHE_PATH is forwarded last (docker -e last-wins)."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_PATH", "/mnt/scratch/trt")
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
+        runner = DockerRunner(image=IMAGE)
+        cmd = self._build_cmd(config, tmp_path, runner)
+
+        # Both the mount default and the forwarded override are present; the
+        # override must come later so docker's last-wins semantics pick it.
+        idx_default = cmd.index("LLEM_TRT_BUILD_CACHE_PATH=/root/.cache/trt-llm")
+        idx_override = cmd.index("LLEM_TRT_BUILD_CACHE_PATH=/mnt/scratch/trt")
+        assert idx_default < idx_override
+
 
 # ---------------------------------------------------------------------------
 # Test: --entrypoint per (engine, tp_size)

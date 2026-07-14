@@ -110,27 +110,45 @@ What happens:
 3. The container compiles the TensorRT engine from the model weights.
    **First run only - this takes several minutes.** Progress is shown in
    the terminal.
-4. The compiled engine is cached on disk
-   (`~/.cache/tensorrt_llm` inside the container, mounted from the host).
+4. The compiled engine is cached on disk. The host directory
+   `~/.cache/trt-llm` is bind-mounted into the container at
+   `/root/.cache/trt-llm`, and llem defaults the build-cache location to that
+   mount so compiled engines persist across ephemeral containers out of the
+   box (override with `LLEM_TRT_BUILD_CACHE_PATH`).
 5. Inference runs against the compiled engine.
 6. Results are printed to stdout and saved to `results/`.
 
 :::tip Engine caching
-The compiled engine is keyed to your config (model, dtype, max_batch_size,
-tp_size, etc.). Running the same experiment config again skips compilation
-and starts inference immediately. Changing any compile-time parameter
-triggers a new build.
+The compiled engine is keyed by TensorRT-LLM to the full build config -
+model, dtype, tensor-parallel size, max-shape (max_seq_len / max_batch_size /
+max_input_len), and quantisation - plus the TRT-LLM version. Running the same
+config again reuses the cached engine and skips compilation; changing any of
+those inputs (or bumping the engine version) triggers a fresh build. The cache
+is manual and visible: llem never auto-evicts. See its location, entry count,
+total size, and the manual clean command with `llem doctor`.
 :::
 
 ## HF pre-quantised checkpoints
 
-TensorRT-LLM cannot load Hugging Face AWQ or GPTQ checkpoints directly:
-the weight-key layout in HF's serialisation differs from what TensorRT-LLM
-expects, so model load raises `KeyError: 'weight'`.
+TensorRT-LLM's `LLM` API cannot load AutoAWQ / AutoGPTQ community-format
+Hugging Face checkpoints directly on **either** backend (live-verified at
+1.2.1 against `Qwen/Qwen2.5-0.5B-Instruct-AWQ`):
 
-Pre-flight catches this and refuses the run with an actionable error. To
-benchmark a pre-quantised checkpoint, convert it once with `trtllm-build`
-and point the experiment at the build output:
+- the **trt** (compiled) backend raises `NotImplementedError: Unsupported
+  quantization_config` - it only recognises `fp8`/`mxfp4` `quant_method` values
+  from `config.json`;
+- the **pytorch** backend raises an `AssertionError` in the weight loader - it
+  expects the NVIDIA ModelOpt weight layout, not AutoAWQ's `qweight` packing.
+
+TensorRT-LLM's supported pre-quantised path is its own ModelOpt export (a
+checkpoint carrying `hf_quant_config.json`), not the AutoAWQ/AutoGPTQ
+`config.json` `quantization_config` format that Qwen's official `*-AWQ` repos
+ship.
+
+Pre-flight catches AutoAWQ/AutoGPTQ checkpoints and refuses the run with an
+actionable error. To benchmark such a checkpoint, either use a ModelOpt-
+quantised equivalent, or convert it once with `trtllm-build` and point the
+experiment at the build output:
 
 ```bash
 trtllm-build \

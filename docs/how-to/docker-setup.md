@@ -422,6 +422,32 @@ Operator notes:
 - If the cache is corrupt, recreate it with `make docker-builder-rm && make docker-builder-setup`.
   The remote buildcache ref repopulates on the next local seed.
 
+### TensorRT-LLM engine build cache
+
+Distinct from the Docker layer cache above: the TensorRT engine build cache
+holds compiled `.engine` artefacts so re-running the same experiment config
+skips the multi-minute compile. It lives on the host at `~/.cache/trt-llm` and
+is bind-mounted into every tensorrt container at `/root/.cache/trt-llm`; llem
+defaults the cache location to that mount out of the box (override with
+`LLEM_TRT_BUILD_CACHE_PATH`). TensorRT-LLM keys each entry by the full build
+config (model, dtype, tensor-parallel size, max-shape, quantisation) plus the
+engine version, so distinct configs and version bumps never collide.
+
+The lifecycle is manual and visible - llem never auto-evicts. Inspect it with:
+
+```bash
+llem doctor
+```
+
+which reports the cache location, engine-entry count, and total size. Entries
+are large (often 1-15 GB each); clean the cache manually when it grows.
+Entries are written by the container's root process, so removing them from the
+host needs `sudo`:
+
+```bash
+sudo rm -rf ~/.cache/trt-llm/engine-*
+```
+
 ### Image labels
 
 `docker/Dockerfile.transformers` stamps a single OCI label:

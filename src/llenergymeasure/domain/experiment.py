@@ -201,6 +201,14 @@ class ExperimentResult(BaseModel):
         "Non-energy run metadata: this phase completes before the NVML energy "
         "measurement window opens and contributes nothing to total_energy_j.",
     )
+    engine_build_cache_hit: bool | None = Field(
+        default=None,
+        description="Whether the tensorrt trt-backend engine build was served from "
+        "the on-disk build cache (True) or compiled fresh this run (False). None when "
+        "the build cache is not in play: the pytorch backend, other engines, an "
+        "engine_path override, or the cache disabled. Detected from TRT-LLM's own "
+        "build stats; annotates model_load_time_sec (a cache hit skips the compile).",
+    )
     reproducibility_notes: str = Field(
         default=(
             "Energy measured via NVML polling. Accuracy +/-5%. "

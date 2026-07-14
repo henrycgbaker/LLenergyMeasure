@@ -9,6 +9,16 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Added
 
+- `ExperimentResult.engine_build_cache_hit`: whether the tensorrt trt-backend engine build
+  was served from the on-disk build cache (`true`) or compiled fresh (`false`); `null` when
+  the cache is not in play (pytorch backend, other engines, an `engine_path` override, or the
+  cache disabled). Detected from TRT-LLM's own `llm_build_stats.engine_dir`, which is
+  populated only on the cache-reuse path (the sibling `cache_hitted` flag is unusable - it is
+  `True` on both the reuse and fresh-build paths). Annotates `model_load_time_sec` (a hit
+  skips the compile). Additive optional field; result schema_version stays 4.0. ([#804])
+- `llem doctor` now reports the TensorRT-LLM engine build cache: location, engine-entry count,
+  total size, and the manual clean command. Informational only (never affects the exit code) -
+  the cache lifecycle is manual and visible, and llem never auto-evicts. ([#804])
 - `ExperimentResult.model_load_time_sec`: wall-clock seconds spent in `engine.load_model()`
   (model load plus any engine build/compile performed there - the tensorrt trt backend's
   TRT engine build, vLLM torch.compile / CUDA-graph capture). Captured by the harness
@@ -71,6 +81,22 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- TensorRT-LLM build cache silently died across containers unless
+  `LLEM_TRT_BUILD_CACHE_PATH` was set by hand: the docker runner bind-mounts the host
+  `~/.cache/trt-llm` at `/root/.cache/trt-llm`, but TRT-LLM's own default cache root
+  (`/tmp/.cache/tensorrt_llm/llmapi/`) is unmounted and evaporates with each ephemeral
+  container. The runner now defaults `LLEM_TRT_BUILD_CACHE_PATH` to the mount target (via the
+  mount's `extra_env`, mirroring the `HF_HOME` pattern), so compiled engines persist out of
+  the box; a host-set value still wins (forwarded last, docker `-e` is last-wins). Verified
+  live: upstream `BuildCacheConfig` keying is sound - identical config hits across containers,
+  and tensor-parallel / max-shape / quantisation / dtype changes each key to a distinct
+  engine hash. ([#804])
+- The TRT-LLM pre-quantised-checkpoint preflight message now names what was live-verified at
+  1.2.1: AutoAWQ / AutoGPTQ community-format HF checkpoints load on neither backend (the trt
+  backend raises `NotImplementedError` on the `quant_method`; the pytorch backend rejects the
+  weight layout), and TRT-LLM's supported pre-quantised path is its own ModelOpt export
+  (`hf_quant_config.json`). The rejection stands for both backends; the `engine_path` escape
+  hatch is unchanged. ([#804])
 - vLLM containerized runs at 0.19.1 crashed at engine start with "Cannot re-initialize CUDA
   in forked subprocess": the harness touches torch.cuda (hardware preflight) before the
   plugin constructs the engine, and vLLM's EngineCore worker forks by default. The plugin now
@@ -770,3 +796,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#800]: https://github.com/henrycgbaker/llenergymeasure/pull/800
 [#801]: https://github.com/henrycgbaker/llenergymeasure/pull/801
 [#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
+[#804]: https://github.com/henrycgbaker/llenergymeasure/pull/804

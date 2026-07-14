@@ -16,13 +16,16 @@ from llenergymeasure.infra.version_handshake import (
     rebuild_hint,
     skip_check_enabled,
 )
+from llenergymeasure.utils.env_config import trt_build_cache_host_dir
 from llenergymeasure.utils.exceptions import ConfigError
 
 __all__ = [
     "DoctorReport",
     "EngineDoctorResult",
     "SchemaStatus",
+    "TrtCacheHealth",
     "run_doctor_checks",
+    "run_trt_cache_check",
 ]
 
 SUPPORTED_ENGINES: tuple[Engine, ...] = tuple(Engine)
@@ -48,6 +51,22 @@ class EngineDoctorResult:
 
 
 @dataclass(frozen=True)
+class TrtCacheHealth:
+    """TensorRT-LLM engine build-cache location and footprint.
+
+    Informational only: the cache lifecycle is manual + visible, so this never
+    affects the doctor exit code. llem NEVER auto-evicts entries; ``clean_hint``
+    is the documented manual clean path.
+    """
+
+    path: str
+    exists: bool
+    entry_count: int
+    total_bytes: int
+    clean_hint: str
+
+
+@dataclass(frozen=True)
 class DoctorReport:
     """Full doctor output: per-engine rows plus host-side context."""
 
@@ -55,10 +74,41 @@ class DoctorReport:
     host_fingerprint: str
     skip_check_active: bool
     results: list[EngineDoctorResult]
+    trt_cache: TrtCacheHealth | None = None
 
     @property
     def any_mismatch(self) -> bool:
         return any(r.status is SchemaStatus.MISMATCH for r in self.results)
+
+
+def run_trt_cache_check() -> TrtCacheHealth:
+    """Report the host TRT-LLM engine build-cache location, entries, and size.
+
+    Host-side only (no container / GPU): stats the directory the docker runner
+    bind-mounts as the build cache. Never raises - unreadable entries are
+    skipped so a permission hiccup cannot break ``llem doctor``.
+    """
+    cache_dir = trt_build_cache_host_dir()
+    # Entries are written by the container's root process, so a non-root host
+    # user needs sudo to remove them - reflect that in the documented path.
+    clean_hint = f"clean manually (llem never auto-evicts): sudo rm -rf {cache_dir}/engine-*"
+    if not cache_dir.is_dir():
+        return TrtCacheHealth(str(cache_dir), False, 0, 0, clean_hint)
+
+    entry_count = 0
+    total_bytes = 0
+    try:
+        entry_count = sum(1 for e in cache_dir.iterdir() if e.name.startswith("engine-"))
+        for path in cache_dir.rglob("*"):
+            try:
+                if path.is_file() and not path.is_symlink():
+                    total_bytes += path.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        pass
+
+    return TrtCacheHealth(str(cache_dir), True, entry_count, total_bytes, clean_hint)
 
 
 def _detail_for(engine: str, status: SchemaStatus) -> str:
@@ -121,4 +171,5 @@ def run_doctor_checks(
         host_fingerprint=host_fp,
         skip_check_active=skip_check_enabled(),
         results=results,
+        trt_cache=run_trt_cache_check(),
     )

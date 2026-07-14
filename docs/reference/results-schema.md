@@ -53,6 +53,7 @@ The scientific record. One JSON file per experiment cell. Schema version `4.0`.
 | `measurement_methodology` | `"total"` &#124; `"steady_state"` &#124; `"windowed"` | Which slice of the run produced the headline metrics |
 | `warmup_excluded_samples` | int &#124; null | Number of warmup iterations run before the measurement window (from `warmup_result.iterations_completed`); `null` when no warmup result is available |
 | `model_load_time_sec` | float &#124; null | Wall-clock seconds spent in `engine.load_model()`: model load plus any engine build/compile performed there (e.g. the tensorrt trt backend's TRT engine build, vLLM torch.compile / CUDA-graph capture). Non-energy metadata: this phase completes before the energy measurement window opens and contributes nothing to `total_energy_j` |
+| `engine_build_cache_hit` | bool &#124; null | Whether the tensorrt trt-backend engine build was served from the on-disk build cache (`true`) or compiled fresh (`false`). `null` when the build cache is not in play: the pytorch backend, other engines, an `engine_path` override, or the cache disabled. Annotates `model_load_time_sec` (a cache hit skips the compile) |
 | `reproducibility_notes` | str | Free-text caveats (default mentions NVML accuracy +/-5 %, thermal drift) |
 
 ### Aggregate metrics

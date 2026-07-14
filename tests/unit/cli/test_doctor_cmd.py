@@ -180,3 +180,43 @@ def test_host_footer_rendered() -> None:
         result = runner.invoke(app, ["doctor"])
     assert "Host llenergymeasure version: 0.9.0" in result.output
     assert "Host ExperimentConfig SHA-256:" in result.output
+
+
+def test_renders_trt_cache_section() -> None:
+    """The doctor output includes the TRT-LLM build-cache location, size, and clean hint."""
+    from llenergymeasure.api.doctor import TrtCacheHealth
+
+    cache = TrtCacheHealth(
+        path="/home/u/.cache/trt-llm",
+        exists=True,
+        entry_count=3,
+        total_bytes=3 * 1024 * 1024 * 1024,
+        clean_hint="clean manually (llem never auto-evicts): rm -rf /home/u/.cache/trt-llm/engine-*",
+    )
+    report = _report(
+        [
+            EngineDoctorResult(
+                engine="tensorrt",
+                image="nvcr.io/nvidia/tensorrt-llm/release:1.2.1",
+                pkg_version="1.2.1",
+                image_fingerprint="a" * 64,
+                status=SchemaStatus.OK,
+            )
+        ]
+    )
+    report = DoctorReport(
+        host_pkg_version=report.host_pkg_version,
+        host_fingerprint=report.host_fingerprint,
+        skip_check_active=report.skip_check_active,
+        results=report.results,
+        trt_cache=cache,
+    )
+    with patch("llenergymeasure.api.doctor.run_doctor_checks", return_value=report):
+        result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "engine build cache" in result.output
+    assert "/home/u/.cache/trt-llm" in result.output
+    assert "3 engine(s)" in result.output
+    assert "3.0 GB" in result.output
+    assert "auto-evicts" in result.output
