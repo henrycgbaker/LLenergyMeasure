@@ -35,6 +35,7 @@ from llenergymeasure.config.ssot import (
 )
 from llenergymeasure.harness.baseline import BaselineCache
 from llenergymeasure.infra.docker_runner import append_package_dispatch
+from llenergymeasure.utils.env_config import docker_gpus
 from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ def build_baseline_docker_cmd(
         "run",
         "--rm",
         "--gpus",
-        "all",
+        docker_gpus(),
         "-v",
         f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
         "-e",

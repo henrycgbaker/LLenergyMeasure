@@ -41,7 +41,15 @@ export PYTHONPATH="/llem-src:${DEPS_TARGET}:${PYTHONPATH:-}"
 # last verified against this cache; matching hash means "deps probe was
 # done, nothing changed, skip it." Mismatch (or absent stamp) triggers a
 # full probe and updates the stamp.
-STAMP="${DEPS_TARGET}/.llem_pyproject_hash"
+#
+# The stamp is keyed by ENGINE as well as python minor: different engines run
+# different images whose site-packages differ, so "verified, nothing missing"
+# is an image-level fact, not a python-minor-level one. With a shared stamp,
+# whichever engine dispatches first would suppress the probe for the others
+# (observed live 2026-07-14: the TRT-LLM NGC image, which ships every llem
+# dep, stamped py3.12 verified; the vllm image, which lacks pyarrow, then
+# skipped the probe and crashed at the parquet write).
+STAMP="${DEPS_TARGET}/.llem_pyproject_hash_${LLEM_ENGINE:-default}"
 PYPROJECT_HASH=$(sha256sum /llem-pyproject.toml | head -c 16)
 
 if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$PYPROJECT_HASH" ]; then

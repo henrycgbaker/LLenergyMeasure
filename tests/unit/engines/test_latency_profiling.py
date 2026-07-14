@@ -218,3 +218,81 @@ class TestVllmModeSelection:
         itl, mode = self._select_mode(True, outputs)
         assert itl == []
         assert mode is None
+
+
+# ---------------------------------------------------------------------------
+# TensorRT metrics_dict extraction + return_perf_metrics opt-in
+# ---------------------------------------------------------------------------
+
+
+class _FakeMetricName:
+    """Mimics TRT-LLM's MetricNames enum members (str(key.value) is the name)."""
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+def _trt_req(ttft: float | None, e2e: float | None, tpot: float | None) -> SimpleNamespace:
+    """A fake TRT-LLM RequestOutput carrying a metrics_dict (values in seconds)."""
+    md: dict[Any, Any] = {"finished_reason": "length"}
+    if ttft is not None:
+        md[_FakeMetricName("ttft")] = ttft
+    if e2e is not None:
+        md[_FakeMetricName("e2e")] = e2e
+    if tpot is not None:
+        md[_FakeMetricName("tpot")] = tpot
+    return SimpleNamespace(metrics_dict=md, outputs=[])
+
+
+class TestTensorrtMetricsDictExtraction:
+    """_extract_metrics_dict: the TRT-LLM 1.x per-request metrics surface."""
+
+    def test_extracts_seconds_as_ms(self):
+        from llenergymeasure.engines.tensorrt.plugin import _extract_metrics_dict
+
+        outputs = [_trt_req(ttft=0.05, e2e=0.25, tpot=0.01)]
+        lat, ttft, itl = _extract_metrics_dict(outputs)
+        assert lat == pytest.approx([250.0])
+        assert ttft == pytest.approx([50.0])
+        assert itl == pytest.approx([10.0])
+
+    def test_empty_metrics_dict_contributes_nothing(self):
+        from llenergymeasure.engines.tensorrt.plugin import _extract_metrics_dict
+
+        outputs = [SimpleNamespace(metrics_dict={}, outputs=[]), SimpleNamespace(outputs=[])]
+        lat, ttft, itl = _extract_metrics_dict(outputs)
+        assert lat == [] and ttft == [] and itl == []
+
+    def test_partial_keys_are_independent(self):
+        from llenergymeasure.engines.tensorrt.plugin import _extract_metrics_dict
+
+        outputs = [_trt_req(ttft=0.1, e2e=None, tpot=None)]
+        lat, ttft, itl = _extract_metrics_dict(outputs)
+        assert lat == [] and itl == []
+        assert ttft == pytest.approx([100.0])
+
+    def test_plain_string_keys_also_accepted(self):
+        from llenergymeasure.engines.tensorrt.plugin import _extract_metrics_dict
+
+        outputs = [SimpleNamespace(metrics_dict={"ttft": 0.2, "e2e": 0.4}, outputs=[])]
+        lat, ttft, _ = _extract_metrics_dict(outputs)
+        assert ttft == pytest.approx([200.0])
+        assert lat == pytest.approx([400.0])
+
+
+class TestTensorrtReturnPerfMetricsOptIn:
+    """return_perf_metrics rides SamplingParams kwargs only under latency_profiling."""
+
+    def test_profiling_on_sets_flag(self):
+        from llenergymeasure.engines.tensorrt.plugin import TensorRTEngine
+
+        config = make_config(engine="tensorrt", latency_profiling=True)
+        kwargs = TensorRTEngine()._build_sampling_kwargs(config)
+        assert kwargs.get("return_perf_metrics") is True
+
+    def test_profiling_off_does_not_set_flag(self):
+        from llenergymeasure.engines.tensorrt.plugin import TensorRTEngine
+
+        config = make_config(engine="tensorrt", latency_profiling=False)
+        kwargs = TensorRTEngine()._build_sampling_kwargs(config)
+        assert "return_perf_metrics" not in kwargs

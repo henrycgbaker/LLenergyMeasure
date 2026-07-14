@@ -86,6 +86,19 @@ class TestBuildBaselineDockerCmd:
         assert any("CUDA_VISIBLE_DEVICES=0,2" in part for part in cmd)
         # image is the LAST arg (the entrypoint script invokes the module itself)
         assert cmd[-1] == "ghcr.io/foo/bar:v1"
+        # default --gpus request is "all"
+        assert cmd[cmd.index("--gpus") + 1] == "all"
+
+    def test_cmd_honours_llem_docker_gpus(self, tmp_path: Path, monkeypatch):
+        """LLEM_DOCKER_GPUS overrides the --gpus value (shared-host pinning)."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=2")
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="ghcr.io/foo/bar:v1",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+        )
+        assert cmd[cmd.index("--gpus") + 1] == "device=2"
 
     def test_cmd_makes_package_importable(self, tmp_path: Path):
         """The baseline command must mount the host package + route through the

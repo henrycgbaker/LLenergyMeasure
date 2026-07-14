@@ -52,6 +52,7 @@ The scientific record. One JSON file per experiment cell. Schema version `4.0`.
 |-------|------|-------------|
 | `measurement_methodology` | `"total"` &#124; `"steady_state"` &#124; `"windowed"` | Which slice of the run produced the headline metrics |
 | `warmup_excluded_samples` | int &#124; null | Number of warmup iterations run before the measurement window (from `warmup_result.iterations_completed`); `null` when no warmup result is available |
+| `model_load_time_sec` | float &#124; null | Wall-clock seconds spent in `engine.load_model()`: model load plus any engine build/compile performed there (e.g. the tensorrt trt backend's TRT engine build, vLLM torch.compile / CUDA-graph capture). Non-energy metadata: this phase completes before the energy measurement window opens and contributes nothing to `total_energy_j` |
 | `reproducibility_notes` | str | Free-text caveats (default mentions NVML accuracy +/-5 %, thermal drift) |
 
 ### Aggregate metrics

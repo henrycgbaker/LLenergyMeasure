@@ -139,7 +139,18 @@ class VLLMEngine:
         Raises:
             EngineError: If vLLM is not installed or model loading fails.
         """
+        import os
+
         from llenergymeasure.engines._errors import require_import
+
+        # The harness touches torch.cuda (hardware preflight, device probes)
+        # before this plugin constructs the engine, so CUDA is already
+        # initialised in this process. vLLM's default fork start method for
+        # its EngineCore worker then dies with "Cannot re-initialize CUDA in
+        # forked subprocess" (observed live at 0.19.1 in the containerized
+        # study path, 2026-07-14). Spawn is vLLM's own prescription for
+        # embedding contexts; setdefault keeps any explicit user override.
+        os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
 
         _vllm = require_import("vllm")
         LLM = _vllm.LLM

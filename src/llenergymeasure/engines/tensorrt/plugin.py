@@ -77,6 +77,40 @@ def _validate_engine_directory(engine_path: Path, tp_size: int) -> list[str]:
     return errors
 
 
+def _extract_metrics_dict(outputs: Any) -> tuple[list[float], list[float], list[float]]:
+    """Per-request (e2e_ms, ttft_ms, tpot_ms) lists from ``RequestOutput.metrics_dict``.
+
+    TRT-LLM 1.x records per-request perf metrics in ``metrics_dict`` - keyed by
+    ``MetricNames`` enum members whose ``.value`` is the plain metric name, with
+    SECOND-valued timings - when ``return_perf_metrics=True`` was requested.
+    Live-verified at 1.2.1 on both backend legs (pytorch and trt): the
+    ``SamplingParams(return_perf_metrics=True)`` flag alone populates
+    ``ttft`` / ``e2e`` / ``tpot`` (+ ``arrival_timestamp`` /
+    ``request_queue_time`` / ``finished_reason``). Without the flag the dict is
+    empty, so this extraction contributes nothing on default runs.
+
+    ``tpot`` is the engine-computed per-request average time-per-output-token,
+    not a per-token timestamp stream - the caller labels the capture
+    ``per_request_batch`` accordingly.
+    """
+    latencies_ms: list[float] = []
+    ttft_ms: list[float] = []
+    itl_ms: list[float] = []
+    for o in outputs:
+        md = getattr(o, "metrics_dict", None) or {}
+        normalized = {str(getattr(k, "value", k)): v for k, v in md.items()}
+        e2e = normalized.get("e2e")
+        ttft = normalized.get("ttft")
+        tpot = normalized.get("tpot")
+        if isinstance(e2e, (int, float)):
+            latencies_ms.append(float(e2e) * 1000.0)
+        if isinstance(ttft, (int, float)):
+            ttft_ms.append(float(ttft) * 1000.0)
+        if isinstance(tpot, (int, float)):
+            itl_ms.append(float(tpot) * 1000.0)
+    return latencies_ms, ttft_ms, itl_ms
+
+
 def _apply_default_build_cache(kwargs: dict[str, Any]) -> None:
     """Apply the env-var-gated default TRT-LLM build cache to ``kwargs``.
 
@@ -299,21 +333,24 @@ class TensorRTEngine:
 
         extras: dict[str, Any] = {}
 
-        # TRT-LLM does not expose a per-token timing stream here, so latency
-        # profiling is unsupported: signal it so the harness can warn. Latency
-        # fields stay empty/None.
-        if config.measurement.latency_profiling:
+        # Per-request latency metrics from RequestOutput.metrics_dict. Populated
+        # only when SamplingParams carried return_perf_metrics=True - which
+        # _build_sampling_kwargs sets exactly when latency_profiling is enabled -
+        # so default energy runs pay nothing and extract nothing. (The vLLM-shaped
+        # ``RequestOutput.metrics`` namespace does NOT exist at TRT-LLM 1.2.1;
+        # metrics_dict is the 1.x surface, live-verified on both backend legs.)
+        per_request_latencies_ms, ttft_ms, itl_ms = _extract_metrics_dict(outputs)
+        latency_measurement_mode: str | None = None
+        if ttft_ms or per_request_latencies_ms:
+            # Engine-recorded per-request TTFT/E2E plus an engine-computed
+            # average TPOT per request - per-request timing without a
+            # per-token stream.
+            latency_measurement_mode = "per_request_batch"
+        elif config.measurement.latency_profiling:
+            # Profiling was requested but the engine returned no per-request
+            # metrics (e.g. an engine_path run where the flag is not applied,
+            # or an upstream regression): keep the loud degradation flag.
             extras["latency_profiling_unsupported"] = True
-
-        # Defensive per-request metric capture. Live-checked at TRT-LLM 1.2.1
-        # (2026-07-13, both backend legs): RequestOutput carries NO ``metrics``
-        # attribute at all - populating it needs ``return_perf_metrics=True`` at
-        # LLM construction, which llem does not set - so these lists come back
-        # empty. Wiring return_perf_metrics into a first-class latency path is a
-        # deliberate follow-up, not done here.
-        from llenergymeasure.engines._observed import extract_request_metrics
-
-        per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
 
         return InferenceOutput(
             elapsed_time_sec=elapsed,
@@ -325,6 +362,8 @@ class TensorRTEngine:
             extras=extras,
             per_request_latencies_ms=per_request_latencies_ms,
             ttft_ms=ttft_ms,
+            itl_ms=itl_ms,
+            latency_measurement_mode=latency_measurement_mode,
             num_batches=1,  # Single batched generate() call
             padding_tokens=None,  # Not measurable from TRT-LLM RequestOutputs
             kv_cache_stats=None,  # TRT-LLM does not expose paged KV-cache stats here
@@ -638,6 +677,15 @@ class TensorRTEngine:
         kwargs["seed"] = config.task.random_seed
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
+        if config.measurement.latency_profiling:
+            # Ask TRT-LLM to record per-request perf metrics
+            # (RequestOutput.metrics_dict: ttft/e2e/tpot). Live-verified at
+            # 1.2.1 on both backend legs: the SamplingParams flag alone
+            # populates the dict; the mined schema carries the field on both
+            # args classes and on SamplingParams. Opt-in only - default energy
+            # runs never set it, so the measured configuration is unchanged
+            # unless the user asked for latency profiling.
+            kwargs["return_perf_metrics"] = True
         return kwargs
 
     def _build_sampling_params(self, config: ExperimentConfig) -> Any:

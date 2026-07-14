@@ -1514,3 +1514,35 @@ class TestReservedEnvForwarding:
         cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
 
         assert self._forwarded_value(cmd, "LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP") == "auto"
+
+
+class TestDockerGpusOverride:
+    def test_llem_docker_gpus_overrides_gpus_value(self, tmp_path, monkeypatch):
+        """LLEM_DOCKER_GPUS pins llem containers to specific devices (shared host)."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=2")
+        config = make_config()
+        exchange_dir = tmp_path / "llem-gpus"
+        exchange_dir.mkdir()
+
+        captured_cmds: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return make_subprocess_result(0)
+            captured_cmds.append(cmd)
+            return make_subprocess_result(1, stderr="No such image")  # fail fast
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerImagePullError):
+                runner.run(config)
+
+        cmd = captured_cmds[0]
+        assert cmd[cmd.index("--gpus") + 1] == "device=2"
+        assert "all" not in cmd[: cmd.index("--gpus") + 2]
