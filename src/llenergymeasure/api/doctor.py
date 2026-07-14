@@ -89,7 +89,9 @@ def run_trt_cache_check() -> TrtCacheHealth:
     skipped so a permission hiccup cannot break ``llem doctor``.
     """
     cache_dir = trt_build_cache_host_dir()
-    clean_hint = f"clean manually (llem never auto-evicts): rm -rf {cache_dir}/engine-*"
+    # Entries are written by the container's root process, so a non-root host
+    # user needs sudo to remove them - reflect that in the documented path.
+    clean_hint = f"clean manually (llem never auto-evicts): sudo rm -rf {cache_dir}/engine-*"
     if not cache_dir.is_dir():
         return TrtCacheHealth(str(cache_dir), False, 0, 0, clean_hint)
 

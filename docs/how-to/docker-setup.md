@@ -440,10 +440,12 @@ llem doctor
 ```
 
 which reports the cache location, engine-entry count, and total size. Entries
-are large (often 1-15 GB each); clean the cache manually when it grows:
+are large (often 1-15 GB each); clean the cache manually when it grows.
+Entries are written by the container's root process, so removing them from the
+host needs `sudo`:
 
 ```bash
-rm -rf ~/.cache/trt-llm/engine-*
+sudo rm -rf ~/.cache/trt-llm/engine-*
 ```
 
 ### Image labels
