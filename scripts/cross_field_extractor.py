@@ -684,10 +684,23 @@ class _Emitter:
     run_date: str
     rel_file: str
     target: Target
+    source_lines: list[str]
     seen_ids: set[str] = field(default_factory=set)
     candidates: list[dict[str, Any]] = field(default_factory=list)
 
-    def emit(self, preds: list[_Predicate], detected: _Detected, line: int) -> None:
+    def _quote(self, line_start: int, line_end: int) -> str:
+        """Verbatim source span [line_start, line_end] (1-based, inclusive).
+
+        This is the exact text the citation checker re-reads and matches against
+        the pinned source: it must contain every constrained field and value the
+        claim asserts, so the span runs from the outermost contributing ``if``
+        test down to the ``raise`` / assignment the walker detected.
+        """
+        return "\n".join(self.source_lines[line_start - 1 : line_end])
+
+    def emit(
+        self, preds: list[_Predicate], detected: _Detected, line_start: int, line_end: int
+    ) -> None:
         effective = list(preds)
         subject = detected.affected_field
         if subject is not None and not any(p.field == subject for p in effective):
@@ -714,7 +727,11 @@ class _Emitter:
         }
         if detected.severity == "dormant":
             candidate["normalised_fields"] = [subject] if subject is not None else []
-        candidate["citation"] = {"file": self.rel_file, "lines": [line]}
+        candidate["citation"] = {
+            "file": self.rel_file,
+            "lines": [line_start, line_end],
+            "quote": self._quote(line_start, line_end),
+        }
         candidate["provenance"] = {
             "source": SOURCE,
             "engine_version": self.version,
@@ -728,34 +745,49 @@ class _Emitter:
         self.candidates.append(candidate)
 
 
-def _walk_body(body: list[ast.stmt], frame: list[_Predicate], emitter: _Emitter) -> None:
-    """Descend statements, accumulating enclosing ``if`` predicates in the frame."""
+def _walk_body(
+    body: list[ast.stmt], frame: list[_Predicate], frame_start: int | None, emitter: _Emitter
+) -> None:
+    """Descend statements, accumulating enclosing ``if`` predicates in the frame.
+
+    ``frame_start`` is the 1-based line of the outermost ``if`` that contributed a
+    predicate to ``frame``; it anchors the start of every citation span emitted
+    below, so the quoted source runs from that guard down to the detected site.
+    """
     for stmt in body:
         if isinstance(stmt, ast.If):
-            _walk_if_chain(stmt, frame, emitter)
+            _walk_if_chain(stmt, frame, frame_start, emitter)
         elif isinstance(stmt, ast.For):
-            _walk_body(stmt.body, frame, emitter)
+            _walk_body(stmt.body, frame, frame_start, emitter)
 
 
-def _walk_if_chain(if_node: ast.If, frame: list[_Predicate], emitter: _Emitter) -> None:
+def _walk_if_chain(
+    if_node: ast.If, frame: list[_Predicate], frame_start: int | None, emitter: _Emitter
+) -> None:
     node: ast.If | None = if_node
     while node is not None:
         preds = extract_predicates(node.test)
         local = [*frame, *preds]
+        # The outermost contributing guard anchors the citation span: an inherited
+        # frame_start wins; else this test opens the span iff it added predicates.
+        local_start = frame_start if frame_start is not None else (node.lineno if preds else None)
         for stmt in node.body:
             detected = _detect(stmt)
             if detected is not None:
-                emitter.emit(local, detected, getattr(stmt, "lineno", node.lineno))
+                stmt_start = getattr(stmt, "lineno", node.lineno)
+                stmt_end = getattr(stmt, "end_lineno", stmt_start)
+                line_start = local_start if local_start is not None else stmt_start
+                emitter.emit(local, detected, line_start, stmt_end)
             if isinstance(stmt, ast.If):
-                _walk_if_chain(stmt, local, emitter)
+                _walk_if_chain(stmt, local, local_start, emitter)
             elif isinstance(stmt, ast.For):
-                _walk_body(stmt.body, local, emitter)
+                _walk_body(stmt.body, local, local_start, emitter)
         # Follow ``elif`` chains with the enclosing (not the if-branch) frame.
         if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
             node = node.orelse[0]
         else:
             if node.orelse:
-                _walk_body(node.orelse, frame, emitter)
+                _walk_body(node.orelse, frame, frame_start, emitter)
             node = None
 
 
@@ -766,13 +798,13 @@ def _walk_target(module: ast.Module, target: Target, rel_file: str, emitter: _Em
     method = find_method(cls, target.method)
     if method is None:
         return
-    _walk_body(method.body, [], emitter)
+    _walk_body(method.body, [], None, emitter)
 
 
 def extract(engine: str, source_root: Path, version: str, run_date: str) -> list[dict[str, Any]]:
     """Walk the pinned source tree and return sorted, deduped pool candidates."""
     candidates: list[dict[str, Any]] = []
-    ast_cache: dict[str, ast.Module] = {}
+    ast_cache: dict[str, tuple[ast.Module, list[str]]] = {}
     for target in TARGETS.get(engine, ()):
         abs_path = source_root / target.rel_file
         if not abs_path.is_file():
@@ -781,16 +813,21 @@ def extract(engine: str, source_root: Path, version: str, run_date: str) -> list
                 file=sys.stderr,
             )
             continue
-        module = ast_cache.get(target.rel_file)
-        if module is None:
-            module = ast.parse(abs_path.read_text())
-            ast_cache[target.rel_file] = module
+        cached = ast_cache.get(target.rel_file)
+        if cached is None:
+            text = abs_path.read_text()
+            # splitlines() matches how the citation checker slices the same file,
+            # so an emitted quote round-trips to byte-identical source there.
+            cached = (ast.parse(text), text.splitlines())
+            ast_cache[target.rel_file] = cached
+        module, source_lines = cached
         emitter = _Emitter(
             engine=engine,
             version=version,
             run_date=run_date,
             rel_file=target.rel_file,
             target=target,
+            source_lines=source_lines,
         )
         _walk_target(module, target, target.rel_file, emitter)
         candidates.extend(emitter.candidates)
