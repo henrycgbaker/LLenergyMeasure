@@ -705,6 +705,43 @@ def test_inference_time_sec_used_in_result(minimal_config):
     )
 
 
+def test_engine_build_cache_hit_mapped_from_extras(minimal_config):
+    """result.engine_build_cache_hit comes from output.extras['engine_build_cache_hit']."""
+    custom_output = InferenceOutput(
+        elapsed_time_sec=1.0,
+        input_tokens=10,
+        output_tokens=20,
+        peak_memory_mb=512.0,
+        model_memory_mb=256.0,
+        extras={"engine_build_cache_hit": True},
+    )
+    engine = FakeBackend(inference_output=custom_output)
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(engine, minimal_config)
+
+    assert result.engine_build_cache_hit is True
+
+
+def test_engine_build_cache_hit_defaults_none_without_extra(minimal_config):
+    """No extras key (non-trt run) leaves engine_build_cache_hit None."""
+    custom_output = InferenceOutput(
+        elapsed_time_sec=1.0,
+        input_tokens=10,
+        output_tokens=20,
+        peak_memory_mb=512.0,
+        model_memory_mb=256.0,
+    )
+    engine = FakeBackend(inference_output=custom_output)
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(engine, minimal_config)
+
+    assert result.engine_build_cache_hit is None
+
+
 def test_datetime_still_used_for_wall_clock(minimal_config):
     """ExperimentResult.start_time and end_time must be datetime objects, not perf_counter values."""
     from datetime import datetime as dt

@@ -644,6 +644,10 @@ def test_trt_checkpoint_compat_rejects_awq(monkeypatch: pytest.MonkeyPatch) -> N
     assert "AWQ" in err
     assert "engine_path" in err
     assert "trtllm-build" in err
+    # Names what was tried at 1.2.1: both backends fail, ModelOpt is the path.
+    assert "1.2.1" in err
+    assert "either backend" in err
+    assert "ModelOpt" in err
 
 
 def test_trt_checkpoint_compat_rejects_gptq(monkeypatch: pytest.MonkeyPatch) -> None:

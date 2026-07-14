@@ -1367,4 +1367,5 @@ class MeasurementHarness:
             steady_state_not_detected=steady_state_not_detected,
             warmup_excluded_samples=warmup_excluded_samples,
             model_load_time_sec=model_load_time_sec,
+            engine_build_cache_hit=output.extras.get("engine_build_cache_hit"),
         )

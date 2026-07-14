@@ -29,7 +29,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 import platformdirs
 
@@ -66,7 +66,11 @@ from llenergymeasure.infra.docker_errors import (
     capture_stderr_snippet,
     translate_docker_error,
 )
-from llenergymeasure.utils.env_config import docker_gpus
+from llenergymeasure.utils.env_config import (
+    ENV_TRT_BUILD_CACHE_PATH,
+    docker_gpus,
+    trt_build_cache_host_dir,
+)
 from llenergymeasure.utils.exceptions import DockerError
 from llenergymeasure.utils.io import load_json
 
@@ -93,6 +97,15 @@ _RESERVED_EXCHANGE_ENV: frozenset[str] = frozenset(
         ENV_BASELINE_SPEC_PATH,
     }
 )
+
+# Container-side mount target for the TRT-LLM engine build cache. The host
+# ~/.cache/trt-llm is bind-mounted here; TRT-LLM's own default cache root
+# (/tmp/.cache/tensorrt_llm/llmapi/) is NOT this path and lives on the
+# ephemeral container filesystem, so without pinning the cache to the mount
+# it would silently die with each container. We default
+# LLEM_TRT_BUILD_CACHE_PATH to this mount so the cache works out of the box;
+# a host-set value still wins (forwarded later, docker -e is last-wins).
+_TRT_BUILD_CACHE_CONTAINER_PATH: Final = "/root/.cache/trt-llm"
 
 # Watchdog poll cadence: small enough to surface timeouts promptly, large
 # enough to keep idle CPU near zero. 0.5s gives users at most a half-second
@@ -973,10 +986,18 @@ class DockerRunner:
         if env_path is not None:
             cmd.extend(["--env-file", str(env_path)])
 
-        # TRT-LLM engine cache: persist compiled engines across ephemeral containers
+        # TRT-LLM engine cache: persist compiled engines across ephemeral
+        # containers. Also default LLEM_TRT_BUILD_CACHE_PATH to the mount target
+        # via extra_env so the cache lands on the mount out of the box (TRT-LLM's
+        # own default root is unmounted); a host-set value overrides this because
+        # the blanket LLEM_* forwarding loop below re-emits it last (docker -e is
+        # last-wins).
         if config.engine == Engine.TENSORRT:
             self._mount_if_absent(
-                cmd, str(Path.home() / ".cache" / "trt-llm"), "/root/.cache/trt-llm"
+                cmd,
+                str(trt_build_cache_host_dir()),
+                _TRT_BUILD_CACHE_CONTAINER_PATH,
+                extra_env=f"{ENV_TRT_BUILD_CACHE_PATH}={_TRT_BUILD_CACHE_CONTAINER_PATH}",
             )
 
         # Auto-mount the host HuggingFace cache so model weights persist across

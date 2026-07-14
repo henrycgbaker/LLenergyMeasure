@@ -51,5 +51,21 @@ def doctor_command() -> None:
             "WARNING: LLEM_SKIP_IMAGE_CHECK=1 is active - runtime schema handshake is bypassed."
         )
 
+    cache = report.trt_cache
+    if cache is not None:
+        from llenergymeasure.utils.formatting import format_bytes
+
+        typer.echo("")
+        typer.echo("TensorRT-LLM engine build cache:")
+        typer.echo(f"  location: {cache.path}")
+        if cache.exists:
+            typer.echo(
+                f"  entries:  {cache.entry_count} engine(s), {format_bytes(cache.total_bytes)} total"
+            )
+            if cache.entry_count:
+                typer.echo(f"  clean:    {cache.clean_hint}")
+        else:
+            typer.echo("  entries:  (none - directory does not exist yet)")
+
     if report.any_mismatch:
         raise typer.Exit(code=1)

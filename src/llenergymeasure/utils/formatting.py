@@ -14,6 +14,24 @@ def bytes_to_mb(n: float) -> float:
     return n / (1024 * 1024)
 
 
+def format_bytes(n: int) -> str:
+    """Format a byte count as a human-readable binary size.
+
+    Examples:
+        0            -> "0 B"
+        1536         -> "1.5 KB"
+        1073741824   -> "1.0 GB"
+    """
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"  # pragma: no cover - unreachable, loop returns first
+
+
 def format_elapsed(seconds: float) -> str:
     """Format seconds as human-readable elapsed time.
 

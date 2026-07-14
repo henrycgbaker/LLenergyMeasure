@@ -333,6 +333,11 @@ class TensorRTEngine:
 
         extras: dict[str, Any] = {}
 
+        # Build-cache hit/miss annotation (trt backend only). Read from TRT-LLM's
+        # own build stats; None when the cache is not in play. Harness maps this
+        # to ExperimentResult.engine_build_cache_hit.
+        extras["engine_build_cache_hit"] = self._detect_build_cache_hit(config, llm)
+
         # Per-request latency metrics from RequestOutput.metrics_dict. Populated
         # only when SamplingParams carried return_perf_metrics=True - which
         # _build_sampling_kwargs sets exactly when latency_profiling is enabled -
@@ -368,6 +373,41 @@ class TensorRTEngine:
             padding_tokens=None,  # Not measurable from TRT-LLM RequestOutputs
             kv_cache_stats=None,  # TRT-LLM does not expose paged KV-cache stats here
         )
+
+    @staticmethod
+    def _detect_build_cache_hit(config: ExperimentConfig, llm: Any) -> bool | None:
+        """Return whether the trt engine build was served from the build cache.
+
+        Detection reads TRT-LLM's own ``llm_build_stats.engine_dir``: at 1.2.1 it
+        is populated ONLY on the cache-reuse path (``llm_utils.py`` sets it just
+        before the early return in the ``is_cached()`` branch) and left ``None``
+        on a fresh build. The sibling ``cache_hitted`` flag is deliberately NOT
+        used - it is set ``True`` on BOTH the reuse path AND after a fresh build
+        writes the cache, so it cannot discriminate hit from miss.
+
+        Returns ``None`` (annotation not applicable) when the build cache is not
+        in play: a non-trt backend, an ``engine_path`` override (loads a prebuilt
+        engine, bypassing the cache), or the cache disabled. Also returns ``None``
+        defensively if the stats attribute is unavailable - never raises.
+
+        Failure modes: relies on an internal TRT-LLM attribute (not public API),
+        re-checked each pin; concurrent processes writing the same cache root do
+        not affect this signal (unlike a directory-count delta) because it reads
+        this construction's own stats object.
+        """
+        from llenergymeasure.utils.env_config import trt_build_cache_enabled
+
+        engine_params = config.active_engine_params()
+        backend = getattr(engine_params, "backend", None) if engine_params is not None else None
+        engine_path = (
+            getattr(engine_params, "engine_path", None) if engine_params is not None else None
+        )
+        if backend != "trt" or engine_path or not trt_build_cache_enabled():
+            return None
+        try:
+            return llm.llm_build_stats.engine_dir is not None
+        except Exception:
+            return None
 
     # -------------------------------------------------------------------------
     # Private: observed-params capture (observed_config_hash)
