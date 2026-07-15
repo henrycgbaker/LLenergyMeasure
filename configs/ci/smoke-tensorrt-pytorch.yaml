@@ -1,0 +1,29 @@
+# GPU-CI smoke: boot the pinned TensorRT-LLM NGC container and run ONE tiny
+# inference through the PyTorch backend (tensorrt_llm.LLM class dispatch).
+#
+# Driven by .github/workflows/gpu-ci.yml (engine-smoke matrix). The workflow
+# sets LLEM_RUNNER_TENSORRT=docker and LLEM_IMAGE_TENSORRT=<pinned NGC image>
+# (resolved from engine_versions/tensorrt/current.yaml), and LLEM_DOCKER_GPUS
+# pins to a free device on the shared box.
+#
+# The pytorch backend is the cheaper leg: no TRT engine compile. It exercises
+# the tensorrt_llm.LLM constructor path. The compiled backend is proved by the
+# sibling smoke-tensorrt-trt.yaml cell.
+#
+# The CI assertion checks result.json exists and total_tokens > 0. It never
+# asserts on energy values.
+task:
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  dataset:
+    n_prompts: 2
+  max_input_tokens: 32
+  max_output_tokens: 8
+engine: tensorrt
+tensorrt:
+  engine_params:
+    backend: pytorch
+measurement:
+  warmup:
+    enabled: false
+  baseline:
+    enabled: false

@@ -203,6 +203,77 @@ A missing seed fails the promotion run loudly: the tag-copy step finds no
 source manifest at `transformers-cache:transformers-<VER>`. Recovery is to run
 the seed locally, then re-run the promotion via `workflow_dispatch`.
 
+## GPU CI
+
+`gpu-ci.yml` is the Tier 2 integration surface: it runs on the self-hosted GPU
+runner (`ds01-gpu`), the only place in CI with a real device. Unlike the rest
+of the CI surface (read-only checks on hosted CPU runners) it boots containers
+and runs inference. It is a reusable workflow (`workflow_call`) so the release
+path gates on it.
+
+### Two concerns
+
+- **`transformers`** (single job): builds the first-party transformers image
+  from source and runs the full test suite (including the `gpu`-marked
+  in-process inference tests), the SIGINT interrupt check, and the replay-
+  fixture refresh inside it. This is the release gate for the first-party image
+  and the only producer of the `tests/fixtures/replay/` fixtures, so it stays a
+  dedicated job rather than folding into the smoke matrix.
+- **`engine-smoke`** (matrix `vllm` / `tensorrt-pytorch` / `tensorrt-trt`):
+  boots each upstream-image engine's pinned container and runs ONE tiny
+  inference through the real `llem run` docker-dispatch path, asserting a
+  `result.json` with `total_tokens > 0`. It never asserts on energy values (CI
+  power numbers are noise). This is the coverage nothing else provides: proof
+  that the vLLM and TensorRT-LLM containers boot, the bind-mount + entrypoint
+  bootstrap works, and inference executes end to end. The transformers `gpu`
+  tests already exercise the transformers plugin in-process on a real device,
+  so transformers is not duplicated in the smoke matrix.
+
+The tensorrt leg runs BOTH backends as separate cells: `tensorrt-pytorch`
+(`tensorrt_llm.LLM`, no compile - the cheap leg) and `tensorrt-trt`
+(`_tensorrt_engine.LLM` plus the trtllm-build compile / on-disk build cache -
+the distinctive path, and the class-dispatch surface where 1.x kwarg drift has
+bitten before). Running both doubles the tensorrt GPU time but proves both
+constructor paths; the build cache (warm on the runner) keeps the compiled
+leg's cost down.
+
+### Image resolution
+
+The smoke legs resolve the pinned UPSTREAM image the production way - the
+per-engine template in `image_registry.DEFAULT_IMAGE_TEMPLATES` filled with the
+bundled engine version (kept equal to `engine_versions/<engine>/current.yaml` by
+CI) - and pin it via the highest-precedence `LLEM_IMAGE_<ENGINE>` override. That
+tracks a pin bump with no hardcoded tag to rot, and it bypasses any stale local
+`llenergymeasure:<engine>` bare tag the smart default would otherwise prefer on
+the shared runner.
+
+### GPU pinning
+
+`LLEM_DOCKER_GPUS` (set at job level) pins llem's experiment and baseline
+containers to a free device via docker-level restriction, so the shared box's
+foreign workloads are untouched and in-container CUDA/NVML indices stay
+consistent. The value is host-specific runner config.
+
+### Triggers
+
+- `workflow_dispatch` and `workflow_call` (release gate) run the GPU jobs
+  unconditionally (the `run_gpu` input defaults true, so the release gate
+  covers all three engines).
+- The `gpu-ci` PR label forces a run on any PR.
+- A `changes` paths-filter job (hosted, cheap) auto-runs the GPU jobs when a PR
+  touches an engine pin (`engine_versions/*/current.yaml`), engine plugin code
+  (`engines/**`), the docker-dispatch surface (`docker_runner.py`,
+  `image_registry.py`, `version_handshake.py`, `baseline_container.py`,
+  `container_entrypoint.sh`), the CI smoke configs (`configs/ci/**`), or this
+  workflow file. So a Renovate engine bump gets live proof automatically, while
+  unrelated PRs never queue on the GPU box.
+
+The label and the paths trigger coexist because the gate is per-job (via the
+`changes` filter output), not a workflow-level `paths:` filter - a workflow-
+level filter would block label-only re-runs on an already-pushed commit.
+`gpu-ci` is not a required context, so a skipped GPU job on an unrelated PR does
+not wedge branch protection.
+
 ## Expected workflow behaviour per PR shape
 
 `engine-rules-check` runs on every PR (no workflow-level `paths:` filter), so
@@ -259,9 +330,13 @@ PR checks tab.
   pass leaves the registry half-pruned), and `renovate.yml` (a single in-flight
   Renovate run; a cancelled run can strand a half-updated dependency dashboard
   or PR).
-- **No `concurrency:` block** on `gpu-ci.yml` and `security.yml`: GPU runs are
-  label-gated and rare, and the security scan is cheap, so neither needs
-  supersession control.
+- **`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`** on
+  `gpu-ci.yml`: like `ci.yml`, supersede a superseded PR push (the PR path is
+  read-only), but let dispatch / release-call / main runs finish (those write
+  back replay fixtures). Now that engine-path changes auto-trigger the GPU
+  jobs, PR runs are no longer rare enough to leave unbounded.
+- **No `concurrency:` block** on `security.yml`: the security scan is cheap, so
+  it needs no supersession control.
 
 Rationale: a read-only check can be cancelled and superseded freely by a newer
 push; cancelling a long build or a registry mutation wastes accumulated layer
@@ -281,6 +356,10 @@ file is edited. Two mechanisms together provide complete coverage:
      every PR), so it self-tests through the `engine-filter` job's filter list,
      which includes `.github/workflows/engine-rules-check.yml`: editing the
      workflow flips `engine-filter.engine` true and runs the full matrix.
+   - `gpu-ci.yml` likewise carries no workflow-level `paths:` (a label-only run
+     must still trigger), so it self-tests through the `changes` job's filter
+     list, which includes `.github/workflows/gpu-ci.yml`: editing the workflow
+     flips `changes.engine` true and runs the GPU jobs.
 2. **Shape validation for everything else.** Workflows that cannot self-test at
    runtime (`workflow_call`-only, label-only, tag-only, or closed-PR triggers)
    are covered by the `actionlint` job in `ci.yml`, which fires on edits to any
