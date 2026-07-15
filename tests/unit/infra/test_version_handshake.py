@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from llenergymeasure.config.ssot import ALL_ENGINES
+from llenergymeasure.infra import version_handshake
 from llenergymeasure.infra.version_handshake import (
     ENV_SKIP_IMAGE_CHECK,
     LABEL_IMAGE_VERSION,
@@ -16,12 +17,16 @@ from llenergymeasure.infra.version_handshake import (
     BundledEngineVersionMismatchError,
     ImageStamp,
     SchemaStatus,
+    _read_probe_cache_entry,
+    _resolve_image_digest,
+    _write_probe_cache_entry,
     classify_engine_version,
     classify_stamp,
     compute_expconf_fingerprint,
     inspect_image_stamp,
     probe_image_engine_version,
     read_bundled_engine_version,
+    resolve_image_engine_version,
     skip_check_enabled,
 )
 
@@ -349,3 +354,185 @@ class TestProbeImageEngineVersion:
         called_cmd = mock_run.call_args[0][0]
         ep_idx = called_cmd.index("--entrypoint")
         assert called_cmd[ep_idx + 1] == "python3"
+
+
+# ---------------------------------------------------------------------------
+# Digest-keyed persistent probe cache
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def probe_cache(tmp_path, monkeypatch):
+    """Point the persistent probe cache at a temp file and reset the in-process memo."""
+    cache_file = tmp_path / "image-probe" / "engine-versions.json"
+    monkeypatch.setattr(version_handshake, "_probe_cache_path", lambda: cache_file)
+    version_handshake._probe_memo.clear()
+    yield cache_file
+    version_handshake._probe_memo.clear()
+
+
+def _inspect_ok(image_id: str) -> MagicMock:
+    result = MagicMock()
+    result.returncode = 0
+    result.stdout = json.dumps([{"Id": image_id}]).encode("utf-8")
+    return result
+
+
+class TestResolveImageDigest:
+    def test_parses_id_from_inspect(self) -> None:
+        with patch(
+            "llenergymeasure.infra.version_handshake.inspect_image",
+            return_value=_inspect_ok("sha256:deadbeef"),
+        ):
+            assert _resolve_image_digest("img:tag") == "sha256:deadbeef"
+
+    def test_none_when_inspect_unavailable(self) -> None:
+        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=None):
+            assert _resolve_image_digest("img:tag") is None
+
+    def test_none_on_nonzero_exit(self) -> None:
+        result = MagicMock()
+        result.returncode = 1
+        result.stdout = b""
+        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=result):
+            assert _resolve_image_digest("missing:tag") is None
+
+    def test_none_on_malformed_json(self) -> None:
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = b"not json"
+        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=result):
+            assert _resolve_image_digest("img:tag") is None
+
+    def test_none_on_empty_array(self) -> None:
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = b"[]"
+        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=result):
+            assert _resolve_image_digest("img:tag") is None
+
+
+class TestProbeCacheFile:
+    def test_round_trip(self, probe_cache) -> None:
+        _write_probe_cache_entry("sha256:aaa", "vllm", "0.19.1")
+        assert _read_probe_cache_entry("sha256:aaa", "vllm") == "0.19.1"
+
+    def test_miss_when_absent(self, probe_cache) -> None:
+        assert _read_probe_cache_entry("sha256:absent", "vllm") is version_handshake._CACHE_ABSENT
+
+    def test_distinct_engines_same_digest(self, probe_cache) -> None:
+        _write_probe_cache_entry("sha256:aaa", "vllm", "0.19.1")
+        _write_probe_cache_entry("sha256:aaa", "tensorrt", "1.2.1")
+        assert _read_probe_cache_entry("sha256:aaa", "vllm") == "0.19.1"
+        assert _read_probe_cache_entry("sha256:aaa", "tensorrt") == "1.2.1"
+
+    def test_corrupt_file_degrades_to_miss(self, probe_cache) -> None:
+        probe_cache.parent.mkdir(parents=True, exist_ok=True)
+        probe_cache.write_text("{ this is not valid json", encoding="utf-8")
+        assert _read_probe_cache_entry("sha256:aaa", "vllm") is version_handshake._CACHE_ABSENT
+        # A subsequent write still succeeds (overwrites the corrupt file).
+        _write_probe_cache_entry("sha256:aaa", "vllm", "0.19.1")
+        assert _read_probe_cache_entry("sha256:aaa", "vllm") == "0.19.1"
+
+    def test_write_failure_is_swallowed(self, probe_cache, monkeypatch) -> None:
+        # An unwritable cache dir must not raise - the probe result is in hand.
+        monkeypatch.setattr(
+            version_handshake.Path,
+            "mkdir",
+            lambda *a, **k: (_ for _ in ()).throw(OSError("read-only fs")),
+        )
+        _write_probe_cache_entry("sha256:aaa", "vllm", "0.19.1")  # no exception
+
+
+class TestResolveImageEngineVersion:
+    def test_full_miss_probes_and_persists(self, probe_cache) -> None:
+        with (
+            patch(
+                "llenergymeasure.infra.version_handshake._resolve_image_digest",
+                return_value="sha256:aaa",
+            ),
+            patch(
+                "llenergymeasure.infra.version_handshake.probe_image_engine_version",
+                return_value="0.19.1",
+            ) as probe,
+        ):
+            assert resolve_image_engine_version("vllm:img", "vllm") == "0.19.1"
+            probe.assert_called_once()
+        # Persisted under the digest.
+        assert _read_probe_cache_entry("sha256:aaa", "vllm") == "0.19.1"
+
+    def test_persistent_hit_skips_cold_probe(self, probe_cache) -> None:
+        _write_probe_cache_entry("sha256:aaa", "vllm", "0.19.1")
+        with (
+            patch(
+                "llenergymeasure.infra.version_handshake._resolve_image_digest",
+                return_value="sha256:aaa",
+            ),
+            patch(
+                "llenergymeasure.infra.version_handshake.probe_image_engine_version",
+            ) as probe,
+        ):
+            assert resolve_image_engine_version("vllm:img", "vllm") == "0.19.1"
+            probe.assert_not_called()
+
+    def test_in_process_memo_skips_docker_on_repeat(self, probe_cache) -> None:
+        with (
+            patch(
+                "llenergymeasure.infra.version_handshake._resolve_image_digest",
+                return_value="sha256:aaa",
+            ) as digest,
+            patch(
+                "llenergymeasure.infra.version_handshake.probe_image_engine_version",
+                return_value="0.19.1",
+            ),
+        ):
+            assert resolve_image_engine_version("vllm:img", "vllm") == "0.19.1"
+            assert resolve_image_engine_version("vllm:img", "vllm") == "0.19.1"
+            # Digest resolved only on the first call; the memo serves the second.
+            digest.assert_called_once()
+
+    def test_unresolvable_digest_probes_without_persisting(self, probe_cache) -> None:
+        with (
+            patch(
+                "llenergymeasure.infra.version_handshake._resolve_image_digest",
+                return_value=None,
+            ),
+            patch(
+                "llenergymeasure.infra.version_handshake.probe_image_engine_version",
+                return_value="0.19.1",
+            ) as probe,
+        ):
+            assert resolve_image_engine_version("vllm:img", "vllm") == "0.19.1"
+            probe.assert_called_once()
+        # Nothing persisted (no digest to key on).
+        assert not probe_cache.exists()
+
+    def test_failed_probe_not_persisted(self, probe_cache) -> None:
+        with (
+            patch(
+                "llenergymeasure.infra.version_handshake._resolve_image_digest",
+                return_value="sha256:aaa",
+            ),
+            patch(
+                "llenergymeasure.infra.version_handshake.probe_image_engine_version",
+                return_value=None,
+            ),
+        ):
+            assert resolve_image_engine_version("vllm:img", "vllm") is None
+        assert _read_probe_cache_entry("sha256:aaa", "vllm") is version_handshake._CACHE_ABSENT
+
+    def test_corrupt_cache_falls_through_to_probe(self, probe_cache) -> None:
+        probe_cache.parent.mkdir(parents=True, exist_ok=True)
+        probe_cache.write_text("garbage", encoding="utf-8")
+        with (
+            patch(
+                "llenergymeasure.infra.version_handshake._resolve_image_digest",
+                return_value="sha256:aaa",
+            ),
+            patch(
+                "llenergymeasure.infra.version_handshake.probe_image_engine_version",
+                return_value="0.19.1",
+            ) as probe,
+        ):
+            assert resolve_image_engine_version("vllm:img", "vllm") == "0.19.1"
+            probe.assert_called_once()

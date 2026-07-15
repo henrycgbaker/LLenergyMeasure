@@ -1595,22 +1595,23 @@ class TestPrepareImages:
     def _bypass_engine_version_probe(self):
         """Short-circuit the SSOT engine-version probe for image-prep tests.
 
-        ``_verify_image_fingerprint`` falls back to ``probe_image_engine_version``
-        whenever the OCI label is UNVERIFIED/UNREACHABLE, which adds a second
-        ``subprocess.run`` call beyond the ``docker image inspect``. These tests
-        check image-prep behaviour (cache hit, pull fall-through), not handshake
-        behaviour, so patching the probe to return ``None`` (probe-inconclusive)
-        keeps assertions about subprocess call counts and side_effect lists
-        stable. Probe behaviour itself is exercised in TestSchemaFingerprintHandshake.
+        ``_verify_image_fingerprint`` falls back to ``resolve_image_engine_version``
+        whenever the OCI label is UNVERIFIED/UNREACHABLE, which adds a digest
+        lookup plus a container probe beyond the ``docker image inspect``. These
+        tests check image-prep behaviour (cache hit, pull fall-through), not
+        handshake behaviour, so patching the resolver to return ``None``
+        (probe-inconclusive) keeps assertions about subprocess call counts and
+        side_effect lists stable. Resolver behaviour itself is exercised in
+        TestSchemaFingerprintHandshake and the version_handshake unit tests.
 
-        Also clears the module-level lru_cache so test ordering across the
-        xdist worker doesn't leak cached probe results between tests.
+        Also clears the resolver's in-process memo so test ordering across the
+        xdist worker doesn't leak cached results between tests.
         """
         from llenergymeasure.infra import version_handshake
 
-        version_handshake.probe_image_engine_version.cache_clear()
+        version_handshake._probe_memo.clear()
         with patch(
-            "llenergymeasure.study.image_prep.probe_image_engine_version",
+            "llenergymeasure.study.image_prep.resolve_image_engine_version",
             return_value=None,
         ):
             yield
@@ -2087,19 +2088,19 @@ class TestSchemaFingerprintHandshake:
         import logging as _logging
 
         # The unlabelled-image path falls through to the SSOT engine-version
-        # probe; this test asserts soft-warn behaviour, which is the same
+        # resolver; this test asserts soft-warn behaviour, which is the same
         # whether the probe returns None because docker is unreachable or
-        # because the output is unparseable. Patch the probe to None
+        # because the output is unparseable. Patch the resolver to None
         # directly so we exercise just the handshake-fallback logic without
         # depending on subprocess output shape.
         from llenergymeasure.infra import version_handshake as vh
 
-        vh.probe_image_engine_version.cache_clear()
+        vh._probe_memo.clear()
         with (
             caplog.at_level(_logging.WARNING, logger="llenergymeasure.study.image_prep"),
             patch("subprocess.run", return_value=ok),
             patch(
-                "llenergymeasure.study.image_prep.probe_image_engine_version",
+                "llenergymeasure.study.image_prep.resolve_image_engine_version",
                 return_value=None,
             ),
         ):
