@@ -88,6 +88,17 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Study GPU advisory locks are now named by the PHYSICAL device a study occupies, not the
+  in-container logical index. Lock names came from `_resolve_gpu_indices` (which enumerates
+  from 0), but the physical device is chosen at the docker level by `LLEM_DOCKER_GPUS`
+  (`--gpus device=N`), which the lock logic never saw. Under pinning the container always sees
+  its GPU as logical 0, so a study pinned to `device=2` locked `gpu-0.lock`, and two studies
+  pinned to DIFFERENT physical GPUs both contended on `gpu-0.lock` and spuriously serialised.
+  A new `env_config.pinned_gpu_lock_ids()` parses the docker selector into physical lock ids
+  (`device=2` -> `["2"]`, `device=2,3` -> `["2","3"]`, a `GPU-<uuid>` selector used verbatim
+  as a stable per-device id); `all` / unset / unrecognised shapes fall back to the logical
+  indices (logical == physical when every GPU is visible). Lock naming only - measurement-side
+  index resolution is unchanged. ([#807])
 - TensorRT-LLM build cache silently died across containers unless
   `LLEM_TRT_BUILD_CACHE_PATH` was set by hand: the docker runner bind-mounts the host
   `~/.cache/trt-llm` at `/root/.cache/trt-llm`, but TRT-LLM's own default cache root
@@ -804,3 +815,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#801]: https://github.com/henrycgbaker/llenergymeasure/pull/801
 [#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
 [#804]: https://github.com/henrycgbaker/llenergymeasure/pull/804
+[#807]: https://github.com/henrycgbaker/llenergymeasure/pull/807
