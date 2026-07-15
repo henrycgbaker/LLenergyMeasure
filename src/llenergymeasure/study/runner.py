@@ -206,6 +206,19 @@ def _save_and_record(
                 finally:
                     config_sidecar_src.unlink(missing_ok=True)
 
+        # Loudness backstop: config.json is the sole home of provenance and
+        # engine/model/methodology identity. A completed experiment that lands
+        # without one is silent data loss - warn (never fail) so the gap is
+        # visible rather than discovered later at analysis time.
+        if not (result_path.parent / CONFIG_SIDECAR_FILENAME).exists():
+            logger.warning(
+                "No config.json materialised for %s (cycle %d) at %s - provenance "
+                "and engine/model identity are missing from this result.",
+                config_hash,
+                cycle,
+                result_path.parent,
+            )
+
         # Clean up the stale flat parquet file after it has been copied into the
         # experiment subdirectory (mirrors cli/run.py line 288).
         if ts_source is not None:
@@ -759,11 +772,15 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         exp_start = time.monotonic()
 
-        # Create a temp dir for timeseries parquet output. The harness receives
-        # output_dir as a runtime param (not from config). The temp dir is
-        # cleaned up after _handle_result copies the parquet into the study directory.
+        # Create a temp dir for harness artefacts. The harness receives it as
+        # output_dir (a runtime param, not from config) and writes config.json
+        # there always, plus timeseries.parquet when save_timeseries is on. The
+        # staging dir is created regardless of save_timeseries so the config.json
+        # sidecar - the sole home of provenance/identity - always materialises;
+        # it is cleaned up after _handle_result copies the artefacts into the
+        # study directory.
         save_ts = self.study.output.save_timeseries
-        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
 
         # Resolve cached snapshot in parent - serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
@@ -778,7 +795,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             target=_run_experiment_worker,
             args=(config, child_conn, progress_queue, snapshot),
             kwargs={
-                "output_dir": str(ts_tmpdir) if ts_tmpdir else None,
+                "output_dir": str(ts_tmpdir),
                 "save_timeseries": save_ts,
                 "baseline": baseline,
                 "study_dir": str(self.study_dir),

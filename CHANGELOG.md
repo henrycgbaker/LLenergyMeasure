@@ -23,7 +23,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   declared/observed config and its provenance. Consumers (including `llem report-gaps`)
   read the `provenance` section; the `_resolution.json` file is no longer written or read.
   Pre-1.0, bundles produced by older versions are not backfilled: their `_resolution.json`
-  is simply ignored.
+  is simply ignored. `config.json` now materialises in the experiment directory on every
+  successful run, including the docker (multi-engine) path and runs with
+  `save_timeseries` off: the docker runner rescues `config.json` from the container
+  exchange dir alongside `timeseries.parquet`, and the local path always stages an output
+  dir for the sidecar. If a completed experiment ends without a `config.json`, the runner
+  logs a warning rather than dropping the provenance silently.
 
 ## [v0.11.0] - 2026-07-16
 
