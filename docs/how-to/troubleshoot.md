@@ -206,7 +206,7 @@ For publication-quality measurements, leave warmup enabled. See
 **Symptom:** `llem run` appears to hang indefinitely - no progress output,
 no error, process does not return.
 
-**Cause:** Most hangs fall into four categories:
+**Cause:** Most hangs fall into five categories:
 
 1. **Docker image pull in progress** - the first run of an engine pulls a
    multi-GB image. Check `docker pull` progress in a separate terminal:
@@ -225,6 +225,13 @@ no error, process does not return.
    `max_new_tokens` with a slow sampler) may legitimately exceed this. Increase
    the timeout in the YAML if needed.
 
+5. **Multi-GPU NCCL collective stuck** - on multi-GPU (tensor-parallel) runs the
+   process can hang at the very first NCCL collective with no output. This is
+   common on PCIe hosts whose GPU topology lacks functional peer-to-peer (P2P)
+   - e.g. boxes where the inter-GPU link is `SYS` in `nvidia-smi topo -m`, often
+   because ACS is enabled in the BIOS. The standard workaround is
+   `NCCL_P2P_DISABLE=1`.
+
 **Fix:**
 
 - For Docker/TRT-LLM hangs: wait, then check `docker logs <container-id>` for progress.
@@ -232,6 +239,11 @@ no error, process does not return.
   to verify GPU access from Docker, then re-run `llem run`.
 - For genuine inference hangs: raise `study_execution.experiment_timeout_seconds` or
   reduce `max_new_tokens`.
+- For a multi-GPU NCCL hang: set the NCCL tuning/workaround var on the host and
+  re-run - llem forwards every `NCCL_*` host variable into both the experiment
+  and baseline containers, so `NCCL_P2P_DISABLE=1 llem run ...` (or exporting it
+  first) applies inside the container. On a PCIe box without working P2P this is
+  the standard fix.
 
 ---
 

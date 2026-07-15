@@ -1579,3 +1579,67 @@ class TestDockerGpusOverride:
         cmd = captured_cmds[0]
         assert cmd[cmd.index("--gpus") + 1] == "device=2"
         assert "all" not in cmd[: cmd.index("--gpus") + 2]
+
+
+# ---------------------------------------------------------------------------
+# Test: NCCL_* host env vars are forwarded into the experiment container
+# ---------------------------------------------------------------------------
+
+
+class TestNcclEnvForwarding:
+    """Host ``NCCL_*`` env vars are forwarded into the container so multi-GPU
+    tuning/workaround settings (e.g. ``NCCL_P2P_DISABLE=1`` on PCIe hosts
+    without functional GPU P2P) reach the engine process inside the container.
+    Non-NCCL host vars are NOT forwarded by this loop.
+    """
+
+    @staticmethod
+    def _e_pairs(cmd: list[str]) -> list[str]:
+        """Return every ``VALUE`` following a ``-e`` flag in *cmd*."""
+        return [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-e" and i + 1 < len(cmd)]
+
+    def test_nccl_vars_forwarded(self, monkeypatch):
+        """Host NCCL_* vars appear as -e KEY=VALUE args in the docker command."""
+        monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
+        monkeypatch.setenv("NCCL_IB_DISABLE", "1")
+        config = make_config()
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+        pairs = self._e_pairs(cmd)
+        assert "NCCL_P2P_DISABLE=1" in pairs
+        assert "NCCL_IB_DISABLE=1" in pairs
+
+    def test_non_nccl_var_not_forwarded(self, monkeypatch):
+        """A non-NCCL, non-LLEM host var must not be forwarded into the container."""
+        monkeypatch.setenv("SOME_UNRELATED_VAR", "leak")
+        config = make_config()
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+        assert not any("SOME_UNRELATED_VAR" in arg for arg in cmd)
+
+    def test_nccl_vars_sorted_deterministically(self, monkeypatch):
+        """NCCL_* vars are emitted in sorted key order (argv is deterministic)."""
+        # Set in non-alphabetical order; the forward loop must sort them.
+        monkeypatch.setenv("NCCL_SOCKET_IFNAME", "eth0")
+        monkeypatch.setenv("NCCL_DEBUG", "INFO")
+        monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
+        config = make_config()
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+        # Filter to just the three we set so a stray host NCCL_* var can't
+        # perturb the assertion; their relative order must be alphabetical.
+        expected = ["NCCL_DEBUG=INFO", "NCCL_P2P_DISABLE=1", "NCCL_SOCKET_IFNAME=eth0"]
+        mine = [p for p in self._e_pairs(cmd) if p in set(expected)]
+        assert mine == expected
+
+    def test_empty_nccl_var_skipped(self, monkeypatch):
+        """An NCCL_* var set to an empty string is not forwarded (matches LLEM_*)."""
+        monkeypatch.setenv("NCCL_P2P_DISABLE", "")
+        config = make_config()
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+        assert not any(arg.startswith("NCCL_P2P_DISABLE") for arg in cmd)

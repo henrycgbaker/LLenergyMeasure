@@ -73,7 +73,7 @@ from llenergymeasure.utils.env_config import (
 from llenergymeasure.utils.exceptions import DockerError
 from llenergymeasure.utils.io import load_json
 
-__all__ = ["DockerRunner", "append_package_dispatch"]
+__all__ = ["DockerRunner", "append_nccl_env", "append_package_dispatch"]
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +280,32 @@ def append_package_dispatch(
     if entry_module is not None:
         cmd.extend(["-e", f"{ENV_ENTRY_MODULE}={entry_module}"])
     cmd.extend(["--entrypoint", "/llem-entry.sh"])
+
+
+def append_nccl_env(cmd: list[str]) -> None:
+    """Forward host ``NCCL_*`` env vars into the container.
+
+    NCCL tuning/workaround settings must reach the engine process, which runs
+    inside the container rather than on the host. The canonical case is
+    ``NCCL_P2P_DISABLE=1`` on PCIe multi-GPU hosts whose topology lacks
+    functional GPU peer-to-peer (P2P): without it, every tensor-parallel run
+    hangs at the first NCCL collective.
+
+    Uses explicit ``-e KEY=VALUE`` (matching the ``LLEM_*`` forwarding idiom in
+    ``DockerRunner._build_docker_cmd``) and iterates keys in sorted order so the
+    built command is deterministic (tests assert on argv). Shared by the
+    experiment dispatch (``DockerRunner._build_docker_cmd``) and the baseline
+    dispatch (``study.baseline_container.build_baseline_docker_cmd``) so the two
+    env-forwarding setups cannot drift.
+
+    Args:
+        cmd: Docker command list to mutate in place (env appended before the
+            image name, which the caller adds afterwards).
+    """
+    for env_key in sorted(k for k in os.environ if k.startswith("NCCL_")):
+        env_val = os.environ[env_key]
+        if env_val:
+            cmd.extend(["-e", f"{env_key}={env_val}"])
 
 
 class DockerRunner:
@@ -1018,6 +1044,11 @@ class DockerRunner:
         for env_key, env_val in os.environ.items():
             if env_key.startswith("LLEM_") and env_val and env_key not in _RESERVED_EXCHANGE_ENV:
                 cmd.extend(["-e", f"{env_key}={env_val}"])
+
+        # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
+        # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P)
+        # reach the engine process, which runs inside the container.
+        append_nccl_env(cmd)
 
         # Extra volume mounts (engine cache, model cache, etc.)
         for host_path, container_path in self.extra_mounts:
