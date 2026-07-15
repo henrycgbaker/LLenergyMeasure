@@ -48,7 +48,6 @@ from llenergymeasure.config.ssot import (
     ENV_HF_TOKEN,
     ENV_HOST_GID,
     ENV_HOST_UID,
-    ENV_MPI_NP,
     ENV_OUTPUT_DIR,
     ENV_SAVE_TIMESERIES,
     TEMP_PREFIX_ENV_FILE,
@@ -93,7 +92,6 @@ _RESERVED_EXCHANGE_ENV: frozenset[str] = frozenset(
         ENV_ENTRY_MODULE,
         ENV_HOST_UID,
         ENV_HOST_GID,
-        ENV_MPI_NP,
         ENV_BASELINE_SPEC_PATH,
     }
 )
@@ -121,7 +119,7 @@ _NO_DEADLINE = float("inf")
 # pyproject.toml against installed dists, primes any missing runtime deps
 # to the host-mounted cache, then exec's the framework's Python entrypoint
 # module (with engine-conditional routing through nvidia_entrypoint.sh for
-# TRT-LLM and an mpirun wrapper when LLEM_MPI_NP is set).
+# TRT-LLM).
 _CONTAINER_ENTRY_SCRIPT_REL = ("scripts", "container_entrypoint.sh")
 
 
@@ -230,7 +228,6 @@ def append_package_dispatch(
     *,
     engine: str,
     entry_module: str | None = None,
-    mpi_np: int | None = None,
 ) -> None:
     """Append the bind-mounts + env + entrypoint that make the package importable.
 
@@ -254,8 +251,6 @@ def append_package_dispatch(
             through ``nvidia_entrypoint.sh`` for the libnvinfer ``LD_LIBRARY_PATH``.
         entry_module: Override for the module the script exec's. ``None`` leaves
             the script default (``llenergymeasure.entrypoints.container``).
-        mpi_np: When > 1, sets ``LLEM_MPI_NP`` so the script wraps the exec in
-            ``mpirun -n N`` (TRT-LLM tensor parallelism).
     """
     pkg_parent = _resolve_package_parent_dir()
     repo_root = _resolve_repo_root()
@@ -284,8 +279,6 @@ def append_package_dispatch(
     )
     if entry_module is not None:
         cmd.extend(["-e", f"{ENV_ENTRY_MODULE}={entry_module}"])
-    if mpi_np is not None and mpi_np > 1:
-        cmd.extend(["-e", f"{ENV_MPI_NP}={mpi_np}"])
     cmd.extend(["--entrypoint", "/llem-entry.sh"])
 
 
@@ -306,8 +299,7 @@ class DockerRunner:
            The entrypoint script primes any missing runtime deps to the
            bind-mounted cache, then exec's
            ``python3 -m llenergymeasure.entrypoints.container`` (routing
-           through ``/opt/nvidia/nvidia_entrypoint.sh`` for TRT-LLM and
-           wrapping in mpirun when ``LLEM_MPI_NP`` is set).
+           through ``/opt/nvidia/nvidia_entrypoint.sh`` for TRT-LLM).
         4. Read ``{config_hash}_result.json`` from exchange dir
         5. Clean up temp dir on success; preserve on failure with debug path logged
 
@@ -947,13 +939,12 @@ class DockerRunner:
         ``PYTHONPATH`` to include the cache and ``/llem-src``, and (c) exec's
         the framework entrypoint module - routing through
         ``/opt/nvidia/nvidia_entrypoint.sh`` when ``LLEM_ENGINE=tensorrt``
-        (sets up LD_LIBRARY_PATH for libnvinfer) and wrapping in
-        ``mpirun -n {n} --allow-run-as-root`` when ``LLEM_MPI_NP`` is set
-        (TRT-LLM tensor parallelism > 1).
+        (sets up LD_LIBRARY_PATH for libnvinfer).
 
-        MPI worker ranks re-import the framework module but do not call
-        ``main()`` because ``container_entrypoint.py`` is guarded by
-        ``if __name__ == "__main__"``.
+        Multi-GPU tensorrt runs are NOT wrapped in mpirun: TensorRT-LLM's LLM
+        API self-manages tensor parallelism (setting ``tensor_parallel_size``
+        makes the LLM class spawn its own worker processes via its MPI/RPC
+        orchestrator), so a single python3 process is correct.
 
         Args:
             config:       ExperimentConfig for the current experiment. Used to
@@ -1032,12 +1023,6 @@ class DockerRunner:
         for host_path, container_path in self.extra_mounts:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
 
-        # Determine TRT-LLM tensor parallel size for MPI injection
-        tp_size = None
-        if config.engine == Engine.TENSORRT and config.tensorrt is not None:
-            engine_params = config.active_engine_params()
-            tp_size = engine_params.tensor_parallel_size if engine_params is not None else None
-
         # All engines: bind-mount the host package source + bootstrap (so the
         # package is importable in images that don't ship it) and point
         # --entrypoint at the script. Shared with the baseline dispatch via
@@ -1046,7 +1031,7 @@ class DockerRunner:
         # (``llenergymeasure.entrypoints.container``), so entry_module stays None.
         # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to the
         # raw value via its ``__str__`` override.
-        append_package_dispatch(cmd, engine=f"{config.engine}", mpi_np=tp_size)
+        append_package_dispatch(cmd, engine=f"{config.engine}")
 
         # Container name and labels for lifecycle management (cleanup, reaper).
         # These must appear before the image name in the docker run command.

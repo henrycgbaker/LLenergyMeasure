@@ -708,16 +708,19 @@ class TestHFTokenSecure:
 
 
 # ---------------------------------------------------------------------------
-# Test 13: TRT-LLM tensor-parallelism (LLEM_MPI_NP env var)
+# Test 13: multi-GPU tensorrt dispatch is NEVER wrapped in mpirun
 # ---------------------------------------------------------------------------
 
 
 class TestEngineDispatchEnvVars:
     """Verify the env vars passed to the in-container entrypoint script
-    (LLEM_ENGINE, LLEM_MPI_NP) and the always-on entrypoint pointer.
+    (LLEM_ENGINE) and the always-on entrypoint pointer.
 
-    The script itself handles the mpirun wrap when LLEM_MPI_NP is set;
-    docker_runner just passes the signal.
+    No engine is launched under mpirun: TensorRT-LLM's LLM API self-manages
+    tensor parallelism (setting tensor_parallel_size spawns its own workers),
+    so LLEM_MPI_NP is never emitted, even at TP>1. Wrapping the container in
+    mpirun -n N previously ran the whole experiment on every rank and corrupted
+    the trt build cache; the signal was removed entirely.
     """
 
     def _capture_cmd(self, config, tmp_path) -> list[str]:
@@ -769,21 +772,21 @@ class TestEngineDispatchEnvVars:
             ep_idx = cmd.index("--entrypoint")
             assert cmd[ep_idx + 1] == "/llem-entry.sh"
 
-    def test_mpi_np_set_for_tensorrt_tp2(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=2 sets LLEM_MPI_NP=2 for the entry script."""
+    def test_mpi_np_absent_for_tensorrt_tp2(self, tmp_path):
+        """TRT-LLM at tensor_parallel_size=2 does NOT set LLEM_MPI_NP (no mpirun wrap)."""
         config = make_config(
             engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 2}}
         )
         cmd = self._capture_cmd(config, tmp_path)
-        assert self._env_value(cmd, "LLEM_MPI_NP") == "2"
+        assert self._env_value(cmd, "LLEM_MPI_NP") is None
 
-    def test_mpi_np_set_for_tensorrt_tp4(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=4 sets LLEM_MPI_NP=4."""
+    def test_mpi_np_absent_for_tensorrt_tp4(self, tmp_path):
+        """TRT-LLM at tensor_parallel_size=4 does NOT set LLEM_MPI_NP (no mpirun wrap)."""
         config = make_config(
             engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 4}}
         )
         cmd = self._capture_cmd(config, tmp_path)
-        assert self._env_value(cmd, "LLEM_MPI_NP") == "4"
+        assert self._env_value(cmd, "LLEM_MPI_NP") is None
 
     def test_mpi_np_absent_for_tensorrt_tp1(self, tmp_path):
         """TRT-LLM with tensor_parallel_size=1 omits LLEM_MPI_NP (single-GPU path)."""
@@ -983,11 +986,10 @@ class TestExtraMounts:
 class TestEntrypointPerEngine:
     """All engines dispatch through ``/llem-entry.sh`` regardless of tp_size.
 
-    The in-container entrypoint script reads ``LLEM_ENGINE`` and
-    ``LLEM_MPI_NP`` (set per-engine and per-TP-size by docker_runner) and
-    performs the engine-conditional routing internally - mpirun wrap for
-    TP > 1, nvidia_entrypoint.sh wrap for tensorrt - so docker_runner's
-    --entrypoint flag is constant.
+    The in-container entrypoint script reads ``LLEM_ENGINE`` and performs the
+    engine-conditional routing internally - nvidia_entrypoint.sh wrap for
+    tensorrt - so docker_runner's --entrypoint flag is constant. No engine is
+    wrapped in mpirun (the TRT-LLM LLM API self-manages tensor parallelism).
     """
 
     @staticmethod
