@@ -53,28 +53,37 @@ Floating point operations estimated from model architecture.
 
 ## Configuration
 
-Energy measurement is configured with a single field in your experiment or study YAML:
+Energy measurement is configured with a single field in the `measurement:` section of
+your experiment YAML:
 
 ```yaml
-energy_sampler: auto   # auto | nvml | zeus | codecarbon | null
+measurement:
+  energy_sampler: auto   # auto | nvml | zeus | codecarbon | null
 ```
 
-This is a flat top-level field - no nesting required. All sampler-specific parameters
+The field is a flat scalar - no per-sampler sub-config. All sampler-specific parameters
 (polling intervals, sampling modes, CPU measurement) are resolved internally by the
 harness. See [Design Rationale](#design-rationale) for why.
 
 ### GPU Telemetry (Parquet Sidecar)
 
-A separate `gpu_telemetry` field controls whether the NVML power/thermal/memory timeseries
-is persisted to a Parquet sidecar file:
+The study-level `output.save_timeseries` field controls whether the NVML
+power/thermal/memory timeseries is persisted to a Parquet sidecar file:
 
 ```yaml
-gpu_telemetry: true    # default: persist timeseries.parquet alongside result JSON
-gpu_telemetry: false   # skip parquet output (useful for large sweeps)
+output:
+  save_timeseries: true    # default: persist timeseries.parquet alongside result JSON
+  # save_timeseries: false # skip parquet output (useful for large sweeps)
 ```
 
+It lives on the study's `output:` block, not on individual experiments, because it only
+controls disk output - an operational concern, not part of the scientific specification.
+For single experiments the sidecar is written alongside the result whenever an output
+directory is given (CLI `--output` or `run_experiment(output_dir=...)`); with no output
+directory, nothing is written to disk at all.
+
 NVML telemetry is always collected during inference for throttle detection and measurement
-quality warnings - `gpu_telemetry` only controls whether the data is written to disk.
+quality warnings - `save_timeseries` only controls whether the data is written to disk.
 The Parquet sidecar is independent of which energy sampler is selected: even with
 `energy_sampler: zeus` or `energy_sampler: null`, the NVML timeseries still runs.
 
@@ -82,8 +91,8 @@ The two systems are independent:
 
 | System | Purpose | Configured by |
 |--------|---------|---------------|
-| Energy sampler (Zeus/NVML/CodeCarbon) | Total energy in joules | `energy_sampler:` |
-| NVML telemetry (PowerThermalSampler) | Power/thermal/memory timeseries + throttle detection | `gpu_telemetry:` (disk output only) |
+| Energy sampler (Zeus/NVML/CodeCarbon) | Total energy in joules | `measurement.energy_sampler:` |
+| NVML telemetry (PowerThermalSampler) | Power/thermal/memory timeseries + throttle detection | `output.save_timeseries:` (disk output only) |
 
 ---
 
