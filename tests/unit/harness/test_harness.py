@@ -1379,6 +1379,11 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
         ) as mock_write_ts,
         patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(engine, config, output_dir=str(tmp_path), save_timeseries=True)
+        result = harness.run(engine, config, output_dir=str(tmp_path), save_timeseries=True)
 
     mock_write_ts.assert_called_once()
+    # The writer is tagged with the assembled result's identity (mirrors the
+    # config.json sidecar), so the parquet stays attributable if orphaned.
+    _, kwargs = mock_write_ts.call_args
+    assert kwargs["experiment_id"] == result.experiment_id
+    assert kwargs["measurement_config_hash"] == result.measurement_config_hash
