@@ -67,7 +67,7 @@ from llenergymeasure.infra.docker_errors import (
 )
 from llenergymeasure.utils.env_config import (
     ENV_TRT_BUILD_CACHE_PATH,
-    docker_gpus,
+    docker_gpus_arg,
     trt_build_cache_host_dir,
 )
 from llenergymeasure.utils.exceptions import DockerError
@@ -964,7 +964,7 @@ class DockerRunner:
             "run",
             "--rm",
             "--gpus",
-            docker_gpus(),
+            docker_gpus_arg(),
             "-v",
             f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
             "-e",
