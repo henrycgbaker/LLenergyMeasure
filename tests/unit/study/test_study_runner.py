@@ -2395,6 +2395,8 @@ def test_gpu_locks_acquired_and_released(study_config: StudyConfig, tmp_path: Pa
         patch("multiprocessing.get_context", return_value=ctx),
         patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks", side_effect=fake_acquire),
         patch("llenergymeasure.study.gpu_locks.release_gpu_locks", side_effect=fake_release),
+        # No docker pinning -> fall back to logical indices (measurement-side).
+        patch("llenergymeasure.utils.env_config.pinned_gpu_lock_ids", return_value=None),
         patch("llenergymeasure.device.gpu_info._resolve_gpu_indices", return_value=[0]),
     ):
         runner = StudyRunner(study_config, manifest, tmp_path, no_lock=False)
@@ -2402,6 +2404,33 @@ def test_gpu_locks_acquired_and_released(study_config: StudyConfig, tmp_path: Pa
 
     assert len(acquired_locks) == 1, "Expected exactly one acquire call"
     assert len(released_locks) == 1, "Expected exactly one release call (in finally)"
+
+
+def test_gpu_locks_use_physical_pinning(study_config: StudyConfig, tmp_path: Path) -> None:
+    """When pinned via LLEM_DOCKER_GPUS, locks are named by the physical device."""
+    manifest = MagicMock()
+
+    acquired_ids: list[list[str]] = []
+
+    def fake_acquire(lock_ids, lock_dir=None):
+        acquired_ids.append(list(lock_ids))
+        return [MagicMock()]
+
+    fake_result = {"status": "ok"}
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks", side_effect=fake_acquire),
+        patch("llenergymeasure.study.gpu_locks.release_gpu_locks"),
+        # Physical device 2 pinned -> lock id "2", NOT the logical index "0".
+        patch("llenergymeasure.utils.env_config.pinned_gpu_lock_ids", return_value=["2"]),
+    ):
+        runner = StudyRunner(study_config, manifest, tmp_path, no_lock=False)
+        runner.run()
+
+    assert acquired_ids == [["2"]]
 
 
 def test_no_lock_skips_gpu_lock_acquisition(study_config: StudyConfig) -> None:

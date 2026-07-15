@@ -18,6 +18,7 @@ consumed by engine plugins in Layer 2.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Final
 
@@ -77,6 +78,60 @@ def docker_gpus() -> str:
     """
     raw = os.environ.get(ENV_DOCKER_GPUS, "").strip()
     return raw or "all"
+
+
+_UNSAFE_LOCK_ID_CHARS: Final = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _sanitize_lock_id(raw: str) -> str:
+    """Make a docker ``--gpus`` device token safe as a lock-file name component.
+
+    Replaces any character outside ``[A-Za-z0-9._-]`` with ``_`` so the token
+    cannot contain a path separator (no directory escape) and is a valid
+    filename. Real device selectors - integer indices and ``GPU-<uuid>`` /
+    ``MIG-<uuid>`` strings - are already within this set, so this is a no-op for
+    them; it only hardens against pathological ``LLEM_DOCKER_GPUS`` values.
+    """
+    return _UNSAFE_LOCK_ID_CHARS.sub("_", raw)
+
+
+def pinned_gpu_lock_ids() -> list[str] | None:
+    """Return per-physical-device lock identifiers parsed from ``LLEM_DOCKER_GPUS``.
+
+    llem's per-GPU advisory locks (``study/gpu_locks.py``) must be named by the
+    PHYSICAL device a study occupies so that two studies pinned to different
+    physical GPUs never share a lock. Under ``docker run --gpus device=N`` the
+    container sees its granted GPU as LOGICAL index ``0``, so the in-container
+    index (what ``device/gpu_info._resolve_gpu_indices`` returns) is the wrong
+    key for a host-side lock. This parses the docker selector back into the
+    physical identity:
+
+    - ``device=2``          -> ``["2"]``
+    - ``device=2,3``        -> ``["2", "3"]``
+    - ``device=GPU-<uuid>`` -> ``["GPU-<uuid>"]`` - a UUID cannot be mapped to a
+      small integer index without an ``nvidia-smi`` lookup, but the UUID string
+      is itself globally unique and stable, so it serves directly as a
+      collision-correct per-device lock id (same UUID -> same lock, distinct
+      UUIDs -> distinct locks).
+    - ``all`` / unset       -> ``None`` - every visible GPU is granted, so
+      logical == physical and the caller falls back to the in-container logical
+      indices (unchanged historical behaviour).
+    - any other shape (e.g. ``count=2``, a bare count, malformed) -> ``None`` -
+      the physical identity is unknowable, so fall back to logical indices.
+
+    This is a LOCK-NAMING concern only. Measurement-side index resolution is
+    deliberately untouched: NVML / CUDA indices inside the container enumerate
+    from ``0`` under pinning, and ``_resolve_gpu_indices`` still returns those
+    logical indices to address the energy samplers.
+    """
+    raw = docker_gpus()
+    prefix = "device="
+    if not raw.startswith(prefix):
+        # "all", unset (-> "all"), count forms, or anything unrecognised.
+        return None
+    tokens = [tok.strip() for tok in raw[len(prefix) :].split(",")]
+    ids = [_sanitize_lock_id(tok) for tok in tokens if tok]
+    return ids or None
 
 
 ENV_TRT_BUILD_CACHE_ENABLED: Final = "LLEM_TRT_BUILD_CACHE_ENABLED"
