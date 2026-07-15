@@ -69,6 +69,13 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- The upstream-image engine-version handshake probe (a ~60s cold `docker run` per engine
+  per study) is now cached on disk keyed by the image content digest, under
+  `platformdirs.user_cache_dir("llem")/image-probe/`. A warm image resolves from the cache
+  (a `docker image inspect`) instead of re-probing, so the per-study cost the F2 plan flagged
+  drops to near zero. The in-process memo remains the first tier; a corrupt, unreadable, or
+  unwritable cache degrades to a fresh probe and never crashes. Entries never go stale: a
+  rebuilt or re-pulled image gets a new digest and a fresh probe, so no TTL is needed.
 - TensorRT-LLM backends are now selected by constructor class, not a kwarg: `backend='trt'`
   resolves `tensorrt_llm._tensorrt_engine.LLM` and `pytorch`/unset resolves `tensorrt_llm.LLM`,
   validated live at 1.2.1 (the base `LLM` rejects `backend='trt'` at model load). `backend` is
