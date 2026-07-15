@@ -32,25 +32,23 @@ results/
 
 ## `result.json` - per-experiment record
 
-The scientific record. One JSON file per experiment cell. Schema version `4.0`.
+The scientific record. One JSON file per experiment cell. Schema version `5.0`.
+
+`result.json` is pure measurement output. Configuration inputs and methodology - `engine`, `engine_version`, `model_name`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected` - live in the `config.json` sidecar, not here.
 
 ### Identification
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | str | Result schema version (currently `"4.0"`) |
+| `schema_version` | str | Result schema version (currently `"5.0"`) |
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
-| `engine` | str | Inference engine: `transformers` &#124; `vllm` &#124; `tensorrt` |
-| `engine_version` | str &#124; null | Engine library version (e.g. `4.57.0` for transformers) |
-| `model_name` | str | Model name or HuggingFace path used |
 
 ### Measurement methodology
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `measurement_methodology` | `"total"` &#124; `"steady_state"` &#124; `"windowed"` | Which slice of the run produced the headline metrics |
 | `warmup_excluded_samples` | int &#124; null | Number of warmup iterations run before the measurement window (from `warmup_result.iterations_completed`); `null` when no warmup result is available |
 | `model_load_time_sec` | float &#124; null | Wall-clock seconds spent in `engine.load_model()`: model load plus any engine build/compile performed there (e.g. the tensorrt trt backend's TRT engine build, vLLM torch.compile / CUDA-graph capture). Non-energy metadata: this phase completes before the energy measurement window opens and contributes nothing to `total_energy_j` |
 | `engine_build_cache_hit` | bool &#124; null | Whether the tensorrt trt-backend engine build was served from the on-disk build cache (`true`) or compiled fresh (`false`). `null` when the build cache is not in play: the pytorch backend, other engines, an `engine_path` override, or the cache disabled. Annotates `model_load_time_sec` (a cache hit skips the compile) |
@@ -106,8 +104,9 @@ For the methodology that motivates baseline subtraction, see [Methodology &gt; B
 (`memory`, `gpu_utilisation`, `batch`, `kv_cache`, `request_latency`) plus two
 scalars (`tpot_ms`, `token_efficiency_index`). Every leaf is `null` when it
 cannot be computed for the engine/run; the harness fills what each engine can
-provide. `latency_stats`, `steady_state_window`, and `warmup_excluded_samples`
-live at the top level of `result.json`.
+provide. `latency_stats` and `warmup_excluded_samples` live at the top level of
+`result.json`; the measurement window itself (`steady_state_window`) lives in the
+`config.json` sidecar.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -123,7 +122,6 @@ live at the top level of `result.json`.
 | `extended_metrics.request_latency.e2e_latency_{mean,median,p95,p99}_ms` | float &#124; null | Per-request end-to-end latency distribution. |
 | `latency_stats` | object &#124; null | TTFT/ITL statistics. vLLM populates per-request TTFT/E2E plus a decode-average ITL only under `measurement.latency_profiling=true`, in `proportional` mode (V1 records `RequestOutput.metrics` only when `disable_log_stats=False`, which profiling sets); `null` otherwise. transformers populates `latency_stats` (TTFT + ITL) only under profiling. tensorrt populates per-request TTFT/E2E plus an average-TPOT-derived ITL only under profiling, in `per_request_batch` mode; `null` otherwise. |
 | `latency_stats.measurement_mode` | str | Provenance of the latency capture: `true_streaming` (real per-token timestamps, transformers under profiling), `proportional` (decode-average ITL estimate, vLLM under profiling), or `per_request_batch` (tensorrt). The mode reflects the weakest signal present. |
-| `steady_state_window` | [float, float] &#124; null | `(0.0, inference_time_sec)` - the measured window relative to inference start. |
 
 #### Per-engine support matrix
 
@@ -270,6 +268,8 @@ For the Python API equivalent (`StudyResult` object), see [Reference &gt; Librar
 ## Schema versioning
 
 `result.json.schema_version` follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
+
+Schema `5.0` is a breaking change: it removes `engine`, `engine_version`, `model_name`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, and `steady_state_not_detected` from `result.json`. Those configuration/methodology fields now live in the `config.json` sidecar. Old bundles remain readable as their own schema version - there is no in-place migration.
 
 ## See also
 

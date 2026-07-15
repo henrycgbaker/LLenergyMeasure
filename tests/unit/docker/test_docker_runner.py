@@ -1103,7 +1103,6 @@ class TestTimeseriesParquetRescue:
         config = make_config()
         result = make_result(
             timeseries="timeseries.parquet",
-            model_name="gpt2",
         )
 
         exchange_dir = tmp_path / "llem-ts-rescue"

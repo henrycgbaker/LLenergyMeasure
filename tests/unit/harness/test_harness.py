@@ -184,7 +184,7 @@ def test_harness_cleanup_called_on_inference_error(minimal_config):
 
 
 def test_harness_returns_experiment_result(minimal_config):
-    """harness.run() must return an ExperimentResult with the correct engine field."""
+    """harness.run() must return an ExperimentResult (engine identity lives in config.json)."""
     from llenergymeasure.domain.experiment import ExperimentResult
 
     engine = FakeBackend(engine_name="fake")
@@ -194,7 +194,7 @@ def test_harness_returns_experiment_result(minimal_config):
         result = harness.run(engine, minimal_config)
 
     assert isinstance(result, ExperimentResult)
-    assert result.engine == "fake"
+    assert result.experiment_id
 
 
 def test_harness_sets_llenergymeasure_version(minimal_config):
@@ -208,30 +208,6 @@ def test_harness_sets_llenergymeasure_version(minimal_config):
         result = harness.run(engine, minimal_config)
 
     assert result.llenergymeasure_version == __version__
-
-
-def test_harness_sets_engine_version_from_engine(minimal_config):
-    """harness.run() populates engine_version via getattr(engine, 'version')."""
-    engine = FakeBackend()
-    engine.version = "1.2.3"  # type: ignore[attr-defined]
-    harness = MeasurementHarness()
-
-    with _apply_patches():
-        result = harness.run(engine, minimal_config)
-
-    assert result.engine_version == "1.2.3"
-
-
-def test_harness_engine_version_none_when_missing(minimal_config):
-    """engine_version is None when engine has no version property."""
-    engine = FakeBackend()
-    # FakeBackend has no .version attribute by default
-    harness = MeasurementHarness()
-
-    with _apply_patches():
-        result = harness.run(engine, minimal_config)
-
-    assert result.engine_version is None
 
 
 def test_harness_records_model_load_time(minimal_config):
@@ -785,15 +761,12 @@ def test_write_config_sidecar_creates_config_json(minimal_config, tmp_path: Path
     result = ExperimentResult(
         experiment_id="test-sidecar-001",
         measurement_config_hash="aabb1122ccdd3344",
-        measurement_methodology="total",
-        model_name="fake/model",
         total_tokens=10,
         total_energy_j=1.0,
         total_inference_time_sec=0.5,
         avg_tokens_per_second=20.0,
         avg_energy_per_token_j=0.1,
         total_flops=0,
-        engine="transformers",
         start_time=datetime(2026, 1, 1),
         end_time=datetime(2026, 1, 1),
     )
@@ -810,10 +783,19 @@ def test_write_config_sidecar_creates_config_json(minimal_config, tmp_path: Path
         },
     )
 
+    from llenergymeasure.harness.measurement import _ConfigMethodology
+
     harness._write_config_sidecar(
         output=output,
         config=minimal_config,
         result=result,
+        engine_name="transformers",
+        methodology=_ConfigMethodology(
+            measurement_methodology="total",
+            steady_state_window=(0.0, 0.5),
+            measurement_window_discard_fraction=None,
+            steady_state_not_detected=False,
+        ),
         output_dir=tmp_path,
     )
 
@@ -825,6 +807,12 @@ def test_write_config_sidecar_creates_config_json(minimal_config, tmp_path: Path
         "observed_config_hash must be a non-null SHA-256 hex string"
     )
     assert len(payload["observed_config_hash"]) == 64
+
+    # Engine identity, model_name, and methodology are the sidecar's job now.
+    assert payload["engine"] == "transformers"
+    assert payload["engine_version"] == "4.50.0"
+    assert payload["model_name"] == "fake/model"
+    assert payload["measurement_methodology"] == "total"
 
     # The full declared config must be recorded so the observed-collision miner
     # can attribute a shared observed hash to declared field differences.
@@ -1099,17 +1087,6 @@ def test_harness_energy_none_still_produces_valid_result(minimal_config):
     assert result.energy_breakdown is None or result.energy_breakdown.raw_j == 0.0
 
 
-def test_build_result_includes_model_name(minimal_config):
-    """_build_result() populates model_name from config.model."""
-    engine = FakeBackend()
-    harness = MeasurementHarness()
-
-    with _apply_patches():
-        result = harness.run(engine, minimal_config)
-
-    assert result.model_name == minimal_config.task.model
-
-
 def test_build_result_populates_mj_per_tok(minimal_config):
     """_build_result() sets mj_per_tok_total when total_tokens > 0."""
     engine = FakeBackend()
@@ -1313,10 +1290,7 @@ def test_harness_populates_extended_metrics(minimal_config):
     assert result.latency_stats is not None
     assert result.latency_stats.ttft_mean_ms == pytest.approx(11.0)
     assert result.latency_stats.itl_mean_ms == pytest.approx(2.5)
-    # Steady-state window + warmup exclusion
-    assert result.steady_state_window is not None
-    assert result.steady_state_window[0] == pytest.approx(0.0)
-    assert result.steady_state_window[1] > 0.0
+    # Warmup exclusion (steady-state window now lives in the config.json sidecar)
     assert result.warmup_excluded_samples == 1
 
 

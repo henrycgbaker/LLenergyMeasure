@@ -232,13 +232,13 @@ measurement:
   fixed number of seconds) and measure the remainder. Setting `steady_state_auto_detect`
   enables a lightweight sliding-window stability test (coefficient-of-variation /
   variance-ratio) that finds the steady-state onset; on failure it falls back to the fixed
-  discard and sets the `steady_state_not_detected` flag in the result.
+  discard and sets the `steady_state_not_detected` flag in the `config.json` sidecar.
 
 For `windowed` and `steady_state`, energy is **re-integrated** by feeding the trapezoidal
 integrator only the power samples inside the window (after dropping zero / impossible
 samples and median-filtering transient NVML dropouts). The realised window, the
 methodology actually used, the discard fraction, and the `steady_state_not_detected` flag
-are recorded in the result for auditability.
+are recorded in the `config.json` sidecar for auditability.
 
 Tokens and throughput are attributed to the sub-window **proportionally by time**: the
 harness captures per-request and inter-token durations but not absolute per-token

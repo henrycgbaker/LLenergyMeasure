@@ -348,9 +348,8 @@ def test_harness_build_result_uses_real_energy_values() -> None:
         value=1e12, method="palm_formula", confidence="medium", precision="n/a"
     )
     now = datetime.now()
-    result = harness._build_result(
+    result, _ = harness._build_result(
         engine_name="transformers",
-        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -405,9 +404,8 @@ def test_harness_build_result_absent_energy_placeholder_and_warns(
     )
     now = datetime.now()
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.harness.measurement"):
-        result = harness._build_result(
+        result, _ = harness._build_result(
             engine_name="transformers",
-            engine_version=None,
             config=config,
             output=output,
             model_memory_mb=0.0,
@@ -485,9 +483,8 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     # Baseline adjustment should use 8.0s, not 10.0s.
     energy_measurement = EnergyMeasurement(total_j=100.0, duration_sec=8.0)
     now = datetime.now()
-    result = harness._build_result(
+    result, _ = harness._build_result(
         engine_name="transformers",
-        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -531,9 +528,8 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     flops_result = FlopsResult(value=0.0, method="palm_formula", confidence="low", precision="n/a")
     now = datetime.now()
 
-    result = harness._build_result(
+    result, _ = harness._build_result(
         engine_name="transformers",
-        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -560,7 +556,7 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
 
 
 def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
-    """Run _build_result with a flat-100W timeseries and return the result."""
+    """Run _build_result with a flat-100W timeseries; return (result, methodology)."""
     from datetime import datetime
 
     from llenergymeasure.config.models import ExperimentConfig
@@ -585,7 +581,6 @@ def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
     now = datetime.now()
     return harness._build_result(
         engine_name="transformers",
-        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -612,26 +607,26 @@ def _flat_samples():
 
 def test_methodology_total_is_unchanged_default() -> None:
     """Default total mode keeps the sampler total and spans the whole run."""
-    result = _methodology_build_result({}, samples=_flat_samples())
-    assert result.measurement_methodology == "total"
+    result, methodology = _methodology_build_result({}, samples=_flat_samples())
+    assert methodology.measurement_methodology == "total"
     assert result.total_energy_j == pytest.approx(100.0)
     assert result.total_inference_time_sec == pytest.approx(1.0)
-    assert result.steady_state_window == (0.0, 1.0)
-    assert result.steady_state_not_detected is False
-    assert result.measurement_window_discard_fraction is None
+    assert methodology.steady_state_window == (0.0, 1.0)
+    assert methodology.steady_state_not_detected is False
+    assert methodology.measurement_window_discard_fraction is None
     # output_tokens=100 over 100 J -> 1.0 J/token, mj 1000.
     assert result.avg_energy_per_token_j == pytest.approx(1.0)
 
 
 def test_methodology_windowed_reintegrates_and_attributes_tokens() -> None:
     """windowed [0.2,0.7] re-integrates 50 J and attributes 50% of tokens."""
-    result = _methodology_build_result(
+    result, methodology = _methodology_build_result(
         {"measurement_methodology": "windowed", "measurement_window": (0.2, 0.7)},
         samples=_flat_samples(),
     )
-    assert result.measurement_methodology == "windowed"
+    assert methodology.measurement_methodology == "windowed"
     assert result.total_energy_j == pytest.approx(50.0)
-    assert result.steady_state_window == (0.2, 0.7)
+    assert methodology.steady_state_window == (0.2, 0.7)
     assert result.total_inference_time_sec == pytest.approx(0.5)
     # 50 J over 50% of 100 output tokens = 50 J / 50 tokens = 1.0 J/token.
     assert result.avg_energy_per_token_j == pytest.approx(1.0)
@@ -642,20 +637,20 @@ def test_methodology_windowed_reintegrates_and_attributes_tokens() -> None:
 
 def test_methodology_steady_state_fixed_discard() -> None:
     """steady_state fixed fraction 0.3 -> window [0.3,1.0], 70 J, discard fraction recorded."""
-    result = _methodology_build_result(
+    result, methodology = _methodology_build_result(
         {"measurement_methodology": "steady_state", "warmup_discard_fraction": 0.3},
         samples=_flat_samples(),
     )
-    assert result.measurement_methodology == "steady_state"
+    assert methodology.measurement_methodology == "steady_state"
     assert result.total_energy_j == pytest.approx(70.0)
-    assert result.steady_state_window[0] == pytest.approx(0.3)
-    assert result.steady_state_window[1] == pytest.approx(1.0)
-    assert result.measurement_window_discard_fraction == pytest.approx(0.3)
-    assert result.steady_state_not_detected is False
+    assert methodology.steady_state_window[0] == pytest.approx(0.3)
+    assert methodology.steady_state_window[1] == pytest.approx(1.0)
+    assert methodology.measurement_window_discard_fraction == pytest.approx(0.3)
+    assert methodology.steady_state_not_detected is False
 
 
 def test_methodology_steady_state_auto_not_detected_flag() -> None:
-    """auto-detect on a never-stable series sets the not-detected flag in the result."""
+    """auto-detect on a never-stable series sets the not-detected flag in the methodology."""
     import math
 
     from llenergymeasure.device.power_thermal import PowerThermalSample
@@ -668,7 +663,7 @@ def test_methodology_steady_state_auto_not_detected_flag() -> None:
         )
         for t in range(60)
     ]
-    result = _methodology_build_result(
+    result, methodology = _methodology_build_result(
         {
             "measurement_methodology": "steady_state",
             "steady_state_auto_detect": True,
@@ -676,19 +671,19 @@ def test_methodology_steady_state_auto_not_detected_flag() -> None:
         },
         samples=noisy,
     )
-    assert result.measurement_methodology == "steady_state"
-    assert result.steady_state_not_detected is True
+    assert methodology.measurement_methodology == "steady_state"
+    assert methodology.steady_state_not_detected is True
     assert any("auto-detection found no stable region" in w for w in result.measurement_warnings)
 
 
 def test_methodology_falls_back_to_total_without_samples() -> None:
     """No timeseries samples -> windowing cannot apply, total figures retained."""
-    result = _methodology_build_result(
+    result, methodology = _methodology_build_result(
         {"measurement_methodology": "windowed", "measurement_window": (0.2, 0.7)},
         samples=[],
     )
     # Keeps the sampler total and reports total methodology (window not applied).
-    assert result.measurement_methodology == "total"
+    assert methodology.measurement_methodology == "total"
     assert result.total_energy_j == pytest.approx(100.0)
 
 
@@ -737,7 +732,6 @@ def _make_build_result_args():
     now = datetime(2026, 1, 1, 12, 0, 0)
     return dict(
         engine_name="transformers",
-        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -762,23 +756,11 @@ def test_harness_build_result_populates_timeseries_field() -> None:
     kwargs = _make_build_result_args()
     kwargs["timeseries_path"] = "timeseries.parquet"
 
-    result = harness._build_result(**kwargs)
+    result, _ = harness._build_result(**kwargs)
 
     assert result.timeseries == "timeseries.parquet", (
         "timeseries field should be populated from timeseries_path argument"
     )
-
-
-def test_harness_build_result_populates_model_name() -> None:
-    """_build_result() populates result.model_name from the config (RES-16)."""
-    from llenergymeasure.harness import MeasurementHarness
-
-    harness = MeasurementHarness()
-    kwargs = _make_build_result_args()
-
-    result = harness._build_result(**kwargs)
-
-    assert result.model_name == "gpt2", "model_name should be 'gpt2' (the configured model name)"
 
 
 def test_harness_build_result_propagates_baseline_fields() -> None:
@@ -796,7 +778,7 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
         duration_sec=30.0,
     )
 
-    result = harness._build_result(**kwargs)
+    result, _ = harness._build_result(**kwargs)
 
     assert result.baseline_power_w == pytest.approx(30.0), (
         "baseline_power_w should be populated from EnergyBreakdown.baseline_power_w"
@@ -827,7 +809,7 @@ def test_mj_per_tok_uses_output_tokens_only() -> None:
         model_memory_mb=0.0,
     )
 
-    result = harness._build_result(**kwargs)
+    result, _ = harness._build_result(**kwargs)
 
     # 100 J / 100 output tokens * 1000 = 1000.0 mJ/output-token.
     # Old (buggy) denominator total_tokens=1000 would give 100.0.

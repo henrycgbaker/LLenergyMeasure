@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.models import StudyConfig
-from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
+from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES, engine_str
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.progress import ProgressCallback
@@ -187,6 +187,8 @@ def run_single_experiment(
         config_hash,
         cycle,
         result_files,
+        model_name=config.task.model,
+        engine=engine_str(config.engine),
         ts_source_dir=ts_tmpdir,
         environment_snapshot=snapshot,
         resolution_log=(resolution_logs or {}).get(config_hash),

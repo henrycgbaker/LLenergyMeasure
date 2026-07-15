@@ -6,7 +6,7 @@ import functools
 import hashlib
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
@@ -98,39 +98,13 @@ class ExperimentResult(BaseModel):
     """
 
     # Identity
-    schema_version: str = Field(default="4.0", description="Result schema version")
+    schema_version: str = Field(default="5.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
     measurement_config_hash: str = Field(
         ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"
     )
     llenergymeasure_version: str | None = Field(
         default=None, description="Package version that produced this result"
-    )
-
-    # Engine
-    engine: str = Field(default="transformers", description="Inference engine used")
-    engine_version: str | None = Field(
-        default=None, description="Engine version string for reproducibility"
-    )
-    model_name: str = Field(default="unknown", description="Model name/path used")
-
-    # Methodology
-    measurement_methodology: Literal["total", "steady_state", "windowed"] = Field(
-        ..., description="What was measured - total run, steady-state window, or explicit window"
-    )
-    steady_state_window: tuple[float, float] | None = Field(
-        default=None,
-        description="(start_sec, end_sec) of measurement window relative to experiment start",
-    )
-    measurement_window_discard_fraction: float | None = Field(
-        default=None,
-        description="Warm-up fraction discarded for steady_state methodology. None for "
-        "total/windowed.",
-    )
-    steady_state_not_detected: bool = Field(
-        default=False,
-        description="True when steady_state auto-detection was requested but found no "
-        "stable region and fell back to the fixed warm-up discard.",
     )
 
     # Core metrics

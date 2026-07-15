@@ -27,20 +27,33 @@ from llenergymeasure.domain.environment import (
     GPUEnvironment,
 )
 from llenergymeasure.domain.experiment import ExperimentResult
-from llenergymeasure.results.persistence import load_result, save_environment, save_result
+from llenergymeasure.results.persistence import (
+    load_result,
+    save_environment,
+)
+from llenergymeasure.results.persistence import save_result as _persist_save_result
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+# model_name/engine now live in the config.json sidecar, so save_result requires
+# them explicitly. This wrapper supplies gpt2/transformers defaults for the
+# fixtures that do not exercise directory-slug specifics; the slug tests pass
+# model_name explicitly.
+_HF_MODEL = "meta-llama/Llama-3.1-8B"
+
+
+def save_result(result, output_dir, *, model_name="gpt2", engine="transformers", **kwargs):
+    return _persist_save_result(result, output_dir, model_name=model_name, engine=engine, **kwargs)
+
 
 @pytest.fixture()
 def minimal_result() -> ExperimentResult:
-    """Minimal valid ExperimentResult with pytorch engine and known model."""
+    """Minimal valid ExperimentResult."""
     return ExperimentResult(
         experiment_id="persist-test-001",
         measurement_config_hash="abcdef0123456789",
-        measurement_methodology="total",
         total_tokens=512,
         total_energy_j=25.6,
         total_inference_time_sec=5.0,
@@ -49,18 +62,15 @@ def minimal_result() -> ExperimentResult:
         total_flops=1e11,
         start_time=datetime(2026, 2, 26, 14, 0, 0),
         end_time=datetime(2026, 2, 26, 14, 0, 5),
-        model_name="gpt2",
     )
 
 
 @pytest.fixture()
 def hf_model_result() -> ExperimentResult:
-    """ExperimentResult with a HuggingFace-style model path containing /."""
+    """ExperimentResult used with a HuggingFace-style model path containing /."""
     return ExperimentResult(
         experiment_id="persist-test-hf",
         measurement_config_hash="fedcba9876543210",
-        measurement_methodology="steady_state",
-        steady_state_window=(1.0, 4.0),
         total_tokens=1024,
         total_energy_j=51.2,
         total_inference_time_sec=10.0,
@@ -69,7 +79,6 @@ def hf_model_result() -> ExperimentResult:
         total_flops=2e11,
         start_time=datetime(2026, 2, 26, 14, 0, 0),
         end_time=datetime(2026, 2, 26, 14, 0, 10),
-        model_name="meta-llama/Llama-3.1-8B",
     )
 
 
@@ -79,7 +88,6 @@ def result_with_timeseries() -> ExperimentResult:
     return ExperimentResult(
         experiment_id="persist-test-ts",
         measurement_config_hash="1122334455667788",
-        measurement_methodology="windowed",
         total_tokens=256,
         total_energy_j=12.8,
         total_inference_time_sec=2.5,
@@ -89,7 +97,6 @@ def result_with_timeseries() -> ExperimentResult:
         timeseries="timeseries.parquet",
         start_time=datetime(2026, 2, 26, 15, 0, 0),
         end_time=datetime(2026, 2, 26, 15, 0, 2, 500000),
-        model_name="gpt2",
     )
 
 
@@ -129,7 +136,7 @@ def test_save_directory_name_format(tmp_path: Path, minimal_result: ExperimentRe
 
 def test_save_model_slug_normalisation(tmp_path: Path, hf_model_result: ExperimentResult) -> None:
     """HuggingFace model path strips org prefix, uses short model name."""
-    result_path = save_result(hf_model_result, tmp_path)
+    result_path = save_result(hf_model_result, tmp_path, model_name=_HF_MODEL)
     dir_name = result_path.parent.name
     # meta-llama/Llama-3.1-8B -> Llama-3.1-8B (short name, no org prefix)
     assert "Llama-3.1-8B-transformers" in dir_name, f"Slug normalisation failed: {dir_name}"
@@ -204,10 +211,8 @@ def test_from_json_loads_correctly(tmp_path: Path, minimal_result: ExperimentRes
     from tests.conftest import EXPERIMENT_SCHEMA_VERSION
 
     assert loaded.schema_version == EXPERIMENT_SCHEMA_VERSION
-    assert loaded.measurement_methodology == minimal_result.measurement_methodology
     assert loaded.total_tokens == minimal_result.total_tokens
     assert loaded.total_energy_j == pytest.approx(minimal_result.total_energy_j)
-    assert loaded.engine == minimal_result.engine
 
 
 def test_from_json_round_trip(tmp_path: Path, minimal_result: ExperimentResult) -> None:
@@ -218,24 +223,6 @@ def test_from_json_round_trip(tmp_path: Path, minimal_result: ExperimentResult) 
     original_json = minimal_result.model_dump_json(indent=2)
     loaded_json = loaded.model_dump_json(indent=2)
     assert original_json == loaded_json
-
-
-def test_model_name_round_trips(tmp_path: Path, minimal_result: ExperimentResult) -> None:
-    """model_name field survives save/load unchanged."""
-    result_path = save_result(minimal_result, tmp_path)
-    loaded = load_result(result_path)
-    assert loaded.model_name == minimal_result.model_name
-
-
-def test_steady_state_window_round_trips(tmp_path: Path, hf_model_result: ExperimentResult) -> None:
-    """steady_state_window tuple (float, float) survives JSON round-trip."""
-    result_path = save_result(hf_model_result, tmp_path)
-    loaded = load_result(result_path)
-
-    assert loaded.steady_state_window is not None
-    assert len(loaded.steady_state_window) == 2
-    assert loaded.steady_state_window[0] == pytest.approx(1.0)
-    assert loaded.steady_state_window[1] == pytest.approx(4.0)
 
 
 # ---------------------------------------------------------------------------
@@ -473,13 +460,18 @@ def test_save_config_sidecar_roundtrips_declared_config(tmp_path: Path) -> None:
         experiment_id="exp-1",
         config_hash="a" * 16,
         engine="vllm",
-        library_version="0.19.1",
+        engine_version="0.19.1",
+        model_name="fake/model",
+        measurement_methodology="total",
         observed_config_hash="b" * 64,
         declared_config=declared,
     )
 
     payload = json.loads(path.read_text())
     assert payload["declared_config"] == declared
+    assert payload["engine_version"] == "0.19.1"
+    assert payload["model_name"] == "fake/model"
+    assert payload["measurement_methodology"] == "total"
 
 
 def test_save_config_sidecar_omits_declared_config_when_absent(tmp_path: Path) -> None:
@@ -493,12 +485,17 @@ def test_save_config_sidecar_omits_declared_config_when_absent(tmp_path: Path) -
         experiment_id="exp-1",
         config_hash="a" * 16,
         engine="vllm",
-        library_version="0.19.1",
+        engine_version="0.19.1",
+        model_name="fake/model",
+        measurement_methodology="total",
         observed_config_hash="b" * 64,
     )
 
     payload = json.loads(path.read_text())
     assert "declared_config" not in payload
+    # steady_state_window/discard_fraction omitted when None (total methodology).
+    assert "steady_state_window" not in payload
+    assert "measurement_window_discard_fraction" not in payload
 
 
 def test_save_config_sidecar_includes_schema_version(tmp_path: Path) -> None:
@@ -515,11 +512,39 @@ def test_save_config_sidecar_includes_schema_version(tmp_path: Path) -> None:
         experiment_id="exp-1",
         config_hash="a" * 16,
         engine="vllm",
-        library_version="0.19.1",
+        engine_version="0.19.1",
+        model_name="fake/model",
+        measurement_methodology="total",
     )
 
     payload = json.loads(path.read_text())
     assert payload["schema_version"] == CONFIG_SIDECAR_SCHEMA_VERSION == "2.0"
+
+
+def test_save_config_sidecar_carries_methodology_window(tmp_path: Path) -> None:
+    """steady_state methodology writes the window + discard fraction + not-detected flag."""
+    import json
+
+    from llenergymeasure.results.persistence import save_config_sidecar
+
+    path = save_config_sidecar(
+        tmp_path,
+        experiment_id="exp-1",
+        config_hash="a" * 16,
+        engine="transformers",
+        engine_version="4.56.0",
+        model_name="gpt2",
+        measurement_methodology="steady_state",
+        steady_state_window=(1.0, 4.0),
+        measurement_window_discard_fraction=0.1,
+        steady_state_not_detected=True,
+    )
+
+    payload = json.loads(path.read_text())
+    assert payload["measurement_methodology"] == "steady_state"
+    assert payload["steady_state_window"] == [1.0, 4.0]
+    assert payload["measurement_window_discard_fraction"] == pytest.approx(0.1)
+    assert payload["steady_state_not_detected"] is True
 
 
 def test_save_result_does_not_write_resolution_sidecar(

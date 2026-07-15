@@ -36,7 +36,7 @@ class TestWriteSerialisation:
                 ObservedCollisionGroup(
                     observed_config_hash="sha256:def",
                     engine="transformers",
-                    library_version="4.56.0",
+                    engine_version="4.56.0",
                     member_resolved_config_hashes=("sha256:abc", "sha256:xyz"),
                     member_experiment_ids=("exp_0001", "exp_0003"),
                     gap_detected=True,
@@ -63,14 +63,14 @@ class TestFindObservedCollisions:
         sidecars = [
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_a",
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_b",  # Distinct resolved - gap!
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
@@ -86,14 +86,14 @@ class TestFindObservedCollisions:
         sidecars = [
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_a",
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_a",
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
@@ -107,14 +107,14 @@ class TestFindObservedCollisions:
         sidecars = [
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_a",
                 "observed_config_hash": "observed_a",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_b",
                 "observed_config_hash": "observed_b",
                 "experiment_id": "exp_b",
@@ -127,14 +127,14 @@ class TestFindObservedCollisions:
         sidecars = [
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_a",
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
-                "library_version": "4.57.0",  # Different version
+                "engine_version": "4.57.0",  # Different version
                 "resolved_config_hash": "resolved_b",
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
@@ -148,12 +148,12 @@ class TestFindObservedCollisions:
         sidecars = [
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_a",
             },
             {
                 "engine": "transformers",
-                "library_version": "4.56.0",
+                "engine_version": "4.56.0",
                 "resolved_config_hash": "resolved_b",
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
