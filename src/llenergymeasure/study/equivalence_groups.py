@@ -58,6 +58,7 @@ class EquivalenceGroups:
     """Top-level equivalence-groups record written as ``equivalence_groups.json``."""
 
     study_id: str
+    study_name: str
     dedup_mode: Literal["resolved", "off"]
     validated_rules_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
@@ -124,6 +125,7 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
     """
     payload = {
         "study_id": groups.study_id,
+        "study_name": groups.study_name,
         "dedup_mode": groups.dedup_mode,
         "validated_rules_version": groups.validated_rules_version,
         "groups": [asdict(g) for g in groups.groups],

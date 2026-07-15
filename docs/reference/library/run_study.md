@@ -99,7 +99,7 @@ print(f"Total energy: {study_result.summary.total_energy_j:.1f} J")
 | `skip_set` | `set[tuple[str, int]] \| None` | `None` | Set of `(config_hash, cycle)` pairs to skip. Populated automatically when resuming; callers rarely need to set this. |
 | `no_lock` | `bool` | `False` | Skip GPU advisory lock acquisition. Equivalent to the `--no-lock` CLI flag. |
 | `config_path` | `Path \| None` | `None` | Original YAML path for artefact copying when `config` is a `StudyConfig` object. Preserved in `_study-artefacts/` for reproducibility. |
-| `cli_overrides` | `dict[str, Any] \| None` | `None` | Flat dict of CLI flag overrides written to per-experiment `_resolution.json` sidecars. Rarely needed outside the CLI. |
+| `cli_overrides` | `dict[str, Any] \| None` | `None` | Flat dict of CLI flag overrides recorded in the per-experiment `config.json` provenance section. Rarely needed outside the CLI. |
 
 ---
 

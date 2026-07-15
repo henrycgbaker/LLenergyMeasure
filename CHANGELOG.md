@@ -7,6 +7,24 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Added
+
+- The per-experiment `config.json` sidecar now carries its own `schema_version`
+  (`"2.0"`), independent of `result.json`'s schema version. It succeeds the retired
+  `_resolution.json` sidecar (`"1.0"`), whose per-field provenance now lives in this file.
+- `equivalence_groups.json` now records `study_name` alongside `study_id`, so the
+  study-level artefact stays attributable if separated from its parent directory.
+
+### Changed
+
+- Per-field config provenance (which fields were overridden and why: CLI flag, sweep, or
+  YAML) is folded into the `config.json` sidecar under a new `provenance` section instead
+  of a standalone `_resolution.json` file. `config.json` is now the single home for both
+  declared/observed config and its provenance. Consumers (including `llem report-gaps`)
+  read the `provenance` section; the `_resolution.json` file is no longer written or read.
+  Pre-1.0, bundles produced by older versions are not backfilled: their `_resolution.json`
+  is simply ignored.
+
 ## [v0.11.0] - 2026-07-16
 
 ### Added

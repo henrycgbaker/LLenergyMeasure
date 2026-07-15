@@ -138,7 +138,8 @@ def _save_and_record(
     Args:
         ts_source_dir: Directory where the harness wrote timeseries.parquet.
         environment_snapshot: EnvironmentSnapshot for per-experiment environment.json sidecar.
-        resolution_log: Pre-built resolution log for this experiment (written as _resolution.json).
+        resolution_log: Pre-built per-field resolution log for this experiment,
+            folded into the config.json sidecar's ``provenance`` section.
         runner_provenance: How the experiment was executed (local vs docker). Attached to the
             frozen result via model_copy before saving so it persists into result.json.
 
@@ -169,7 +170,6 @@ def _save_and_record(
             timeseries_source=ts_source,
             experiment_index=experiment_index,
             cycle=cycle,
-            resolution_log=resolution_log,
         )
 
         # Write per-experiment environment.json sidecar
@@ -182,8 +182,10 @@ def _save_and_record(
             )
 
         # Move config.json sidecar (written by harness to temp dir) to experiment dir.
-        # Also patch in the resolved_config_hash from StudyConfig, which the harness
-        # doesn't have access to at write time.
+        # Patch in two fields the harness subprocess cannot compute: the
+        # resolved_config_hash from StudyConfig, and the per-field provenance
+        # (source + effective + default) from the pre-built resolution log. The
+        # provenance section replaces the retired _resolution.json sidecar.
         if ts_source_dir is not None:
             config_sidecar_src = ts_source_dir / CONFIG_SIDECAR_FILENAME
             if config_sidecar_src.exists():
@@ -191,6 +193,8 @@ def _save_and_record(
                     _payload = load_json(config_sidecar_src)
                     if resolved_config_hash is not None:
                         _payload["resolved_config_hash"] = resolved_config_hash
+                    if resolution_log:
+                        _payload["provenance"] = resolution_log
                     from llenergymeasure.results.persistence import _atomic_write
 
                     _atomic_write(
@@ -264,7 +268,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         self._no_lock = no_lock
         # Set of (config_hash, cycle) pairs to skip (resume mode)
         self._skip_set: set[tuple[str, int]] = skip_set or set()
-        # Pre-built resolution logs keyed by config_hash (written as _resolution.json sidecar)
+        # Pre-built resolution logs keyed by config_hash (folded into the
+        # config.json sidecar's provenance section by _save_and_record).
         self._resolution_logs: dict[str, dict[str, Any]] = resolution_logs or {}
         # Declared-config-hash → resolved-config-hash mapping.
         # Built from study.experiments (post-dedup unique configs) so _save_and_record
@@ -593,6 +598,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
             study = self.study
             study_id = study.study_design_hash or "unknown"
+            study_name = study.study_name or "unnamed-study"
             raw_mode = getattr(study, "dedup_mode", "off")
             dedup_mode: Literal["resolved", "off"] = "resolved" if raw_mode == "resolved" else "off"
 
@@ -623,6 +629,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
             groups = EquivalenceGroups(
                 study_id=study_id,
+                study_name=study_name,
                 dedup_mode=dedup_mode,
                 groups=pre_run_groups,
                 observed_collision_groups=post_run_groups,

@@ -26,9 +26,9 @@ collision-free before writing.
 {output_dir}/
   [{index}_]c{cycle}_{model}-{engine}_{hash}/
     result.json          # ExperimentResult, pydantic model_dump_json (the only typed dump)
-    config.json          # resolved-config sidecar (save_config_sidecar)
+    config.json          # resolved-config sidecar (save_config_sidecar); its
+                         # provenance section records per-field override sources
     environment.json     # environment snapshot (save_environment)
-    _resolution.json     # per-field resolution log (written when provided)
     timeseries.parquet   # GPU power/thermal/memory series (copied in when present)
 ```
 

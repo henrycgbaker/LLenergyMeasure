@@ -18,6 +18,7 @@ class TestWriteSerialisation:
     def test_write_emits_all_fields(self, tmp_path: Path):
         groups = EquivalenceGroups(
             study_id="study_abc",
+            study_name="gpt2-sweep",
             dedup_mode="resolved",
             validated_rules_version="transformers:4.56.0@deadbee",
             groups=[
@@ -47,6 +48,7 @@ class TestWriteSerialisation:
         loaded = json.loads(path.read_text())
 
         assert loaded["study_id"] == "study_abc"
+        assert loaded["study_name"] == "gpt2-sweep"
         assert loaded["dedup_mode"] == "resolved"
         assert loaded["validated_rules_version"].startswith("transformers:")
         assert len(loaded["groups"]) == 1

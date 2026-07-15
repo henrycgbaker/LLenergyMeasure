@@ -76,17 +76,20 @@ These CLI flags **still work** but emit deprecation warnings:
 
 ### Override Tracking
 
-All CLI overrides are recorded in the per-experiment `_resolution.json` sidecar for
-traceability (which fields were overridden and why):
+All overrides are recorded in the `provenance` section of the per-experiment
+`config.json` sidecar for traceability (which fields were overridden, and why -
+CLI flag vs YAML vs sweep):
 
 ```json
 {
-  "batching.batch_size": { "original": 1, "new": 8, "source": "cli" }
+  "provenance": {
+    "batching.batch_size": { "effective": 8, "source": "cli_flag", "default": 1 }
+  }
 }
 ```
 
-The fully resolved configuration (all defaults filled in) is written to the
-`effective_config.json` sidecar next to `result.json`.
+The same `config.json` sidecar also carries the observed engine/sampling params
+and the config hashes next to `result.json`.
 
 ### Workflow Examples
 
@@ -699,16 +702,19 @@ lem config new -o my-config.yaml  # Specify output path
 
 Each experiment directory ships sidecars for full reproducibility next to `result.json`:
 
-- `effective_config.json` - the fully resolved configuration (every parameter value used,
-  including engine defaults that were not explicitly specified).
-- `_resolution.json` - which fields were overridden and why (CLI flag, sweep, YAML).
+- `config.json` - the resolved-config sidecar. Its `provenance` section records which
+  fields were overridden and why (CLI flag, sweep, YAML), alongside the observed
+  engine/sampling params and config hashes.
+- `environment.json` - the hardware/runtime environment snapshot.
 
 ```json
-// effective_config.json
+// config.json (excerpt)
 {
-  "model_name": "meta-llama/Llama-2-7b-hf",
-  "batch_size": 8,
-  "dtype": "float16"
+  "schema_version": "2.0",
+  "provenance": {
+    "task.model": { "effective": "meta-llama/Llama-2-7b-hf", "source": "yaml" },
+    "batching.batch_size": { "effective": 8, "source": "cli_flag", "default": 1 }
+  }
 }
 ```
 

@@ -23,9 +23,9 @@ Design:
   ``logger_warning``, ``logger_warning_once``, and ``runtime_exception``
   only - a documented subset of :data:`EmissionChannel`.
 
-Source of config kwargs: per-experiment ``_resolution.json`` sidecars,
-flattened into ``dict[str, Any]`` per ``config_hash``. Located via
-``manifest.json`` when present (keyed on full hash), with an 8-char
+Source of config kwargs: the ``provenance`` section of each per-experiment
+``config.json`` sidecar, flattened into ``dict[str, Any]`` per ``config_hash``.
+Located via ``manifest.json`` when present (keyed on full hash), with an 8-char
 prefix-scan fallback for manifest-less studies.
 """
 
@@ -42,7 +42,7 @@ from typing import Any, Literal
 import yaml
 
 from llenergymeasure.config.ssot import Engine
-from llenergymeasure.domain.bundle_artefacts import MANIFEST_FILENAME, RESOLUTION_FILENAME
+from llenergymeasure.domain.bundle_artefacts import CONFIG_SIDECAR_FILENAME, MANIFEST_FILENAME
 from llenergymeasure.study.runtime_observations import RUNTIME_OBSERVATIONS_FILENAME
 from llenergymeasure.utils.io import load_json
 
@@ -178,7 +178,7 @@ def find_runtime_gaps(
         sidecar_failures += study_failures
     if sidecar_failures:
         logger.warning(
-            "Skipped %d malformed _resolution.json sidecar(s); see prior WARNING log lines.",
+            "Skipped %d malformed config.json sidecar(s); see prior WARNING log lines.",
             sidecar_failures,
         )
 
@@ -364,7 +364,7 @@ def _load_kwargs_by_hash(study_dir: Path) -> tuple[dict[str, dict[str, Any]], in
     Preferred path: read ``manifest.json`` (written by
     :class:`llenergymeasure.study.manifest.ManifestWriter`) which keys
     entries by full ``config_hash`` and records the ``result_file``
-    relative path - ``_resolution.json`` sits in the same directory.
+    relative path - ``config.json`` sits in the same directory.
 
     Fallback path: scan experiment subdirs and key on the 8-char hex
     suffix. Logged as a warning so operators know the preferred lookup
@@ -402,10 +402,10 @@ def _load_kwargs_via_manifest(
         if config_hash in by_hash:
             # Same config can repeat across cycles; one flat dict suffices.
             continue
-        resolution_path = study_dir / Path(result_file).parent / RESOLUTION_FILENAME
-        if not resolution_path.exists():
+        config_path = study_dir / Path(result_file).parent / CONFIG_SIDECAR_FILENAME
+        if not config_path.exists():
             continue
-        flat, failed = _read_resolution_sidecar(resolution_path)
+        flat, failed = _read_provenance_sidecar(config_path)
         if failed:
             failures += 1
             continue
@@ -432,10 +432,10 @@ def _load_kwargs_via_prefix_scan(
             c in "0123456789abcdef" for c in hash_prefix
         ):
             continue
-        resolution_path = entry / RESOLUTION_FILENAME
-        if not resolution_path.exists():
+        config_path = entry / CONFIG_SIDECAR_FILENAME
+        if not config_path.exists():
             continue
-        flat, failed = _read_resolution_sidecar(resolution_path)
+        flat, failed = _read_provenance_sidecar(config_path)
         if failed:
             failures += 1
             continue
@@ -444,20 +444,24 @@ def _load_kwargs_via_prefix_scan(
     return _PrefixHashLookup(by_prefix), failures
 
 
-def _read_resolution_sidecar(
+def _read_provenance_sidecar(
     path: Path,
 ) -> tuple[dict[str, Any] | None, bool]:
-    """Parse ``_resolution.json`` at ``path``; return (flat_dict or None, failed)."""
+    """Parse ``config.json`` at ``path``; return (flat_kwargs or None, failed).
+
+    Reads the ``provenance`` section (per-field ``{source, effective, default}``
+    entries) and flattens it to ``{dotted_path: effective_value}``.
+    """
     try:
         payload = load_json(path)
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Failed to parse _resolution.json at %s: %s", path, exc)
+        logger.warning("Failed to parse config.json at %s: %s", path, exc)
         return None, True
-    overrides = payload.get("overrides") or {}
-    if not isinstance(overrides, dict):
+    provenance = payload.get("provenance") or {}
+    if not isinstance(provenance, dict):
         return None, False
     flat: dict[str, Any] = {}
-    for key, value in overrides.items():
+    for key, value in provenance.items():
         if isinstance(value, dict) and "effective" in value:
             flat[str(key)] = value["effective"]
     return flat, False
