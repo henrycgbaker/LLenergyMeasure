@@ -39,6 +39,9 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   is still unreleased. Pre-1.0, old bundles are not migrated in place: they load as their own
   `schema_version` and are unaffected on disk. Consumers read engine/model/methodology from
   `config.json` (see the results-schema and `run_study` reference docs for the join pattern).
+  Because engine/model identity now lives only in `config.json`, that sidecar is guaranteed
+  to materialise next to every `result.json` on all successful runs - including the docker
+  (multi-engine) path and runs with `save_timeseries` off - so the join never dangles.
 
 ## [v0.11.0] - 2026-07-16
 

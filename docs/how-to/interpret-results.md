@@ -39,9 +39,11 @@ Result: gpt2_20260507_143208
 
 This is a unique identifier for this specific measurement. It encodes the
 model name and a UTC timestamp in `YYYYMMDD_HHMMSS` form. For full
-configuration provenance, see the `effective_config` block inside
-`result.json` - it records every setting that influenced the measurement,
-including engine choice, dtype, and engine defaults.
+configuration provenance, see the `config.json` sidecar next to
+`result.json` - its `declared_config` block records every setting that
+influenced the measurement (engine choice, dtype, and engine defaults), and
+its `provenance` block records where each non-default value came from (CLI
+flag, sweep, or YAML).
 
 ---
 
@@ -128,9 +130,8 @@ The full result is saved as a JSON file in the `results/` directory. Key fields:
 | `total_inference_time_sec` | Wall-clock inference time in seconds (same as "Duration"). |
 | `total_tokens` | Total tokens processed across all prompts. |
 | `total_flops` | Estimated total floating-point operations. |
-| `effective_config` | The exact configuration used (model, dtype, engine, etc.). |
 
-The `effective_config` section is particularly important for reproducibility - it records every setting that influenced the measurement, including defaults that were not explicitly specified.
+`result.json` is measurement-only (schema 5.0). The exact configuration used - model, dtype, engine, engine version, methodology, and every engine default - lives in the `config.json` sidecar next to it, under `declared_config` plus the top-level `engine` / `model_name` / `measurement_methodology` fields. That sidecar is the reproducibility record: it captures every setting that influenced the measurement, including defaults that were not explicitly specified.
 
 For the full schema, see [Reference: results schema](/reference/results-schema).
 
@@ -144,7 +145,7 @@ Raw numbers only make sense in context. Here is how to compare results fairly:
 
 **Match prompt counts and input lengths.** Output token counts (and therefore energy) vary with input length. Comparing a run with 100 short prompts against a run with 100 long prompts is not a like-for-like comparison.
 
-**Note the hardware.** A result from an A100 GPU is not directly comparable to a result from a consumer GPU. The result file records the GPU model in `effective_config`.
+**Note the hardware.** A result from an A100 GPU is not directly comparable to a result from a consumer GPU. The GPU model is recorded in the `environment.json` sidecar next to each `result.json`.
 
 **Check the dtype setting.** Running at `float16` (16-bit) typically uses less energy than `float32` (32-bit). Results should use the same dtype to be comparable.
 
