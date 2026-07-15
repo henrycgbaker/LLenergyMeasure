@@ -1801,6 +1801,8 @@ class TestConfigSidecarRescue:
             config_hash,
             1,
             result_files,
+            model_name="gpt2",
+            engine="transformers",
             ts_source_dir=artefact_dir,
             resolution_log=resolution_log,
         )
