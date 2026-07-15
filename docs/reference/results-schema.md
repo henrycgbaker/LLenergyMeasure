@@ -18,8 +18,8 @@ results/
 └── <study-name>_<UTC-timestamp>/
     ├── manifest.json                            # study-level checkpoint + summary
     ├── 001_c0_<model>-<engine>_<hash>/          # one experiment cell
-    │   ├── result.json                          # all metrics + resolved config
-    │   ├── effective_config.json                # final config used (post-expansion)
+    │   ├── result.json                          # measurement metrics (schema 5.0)
+    │   ├── config.json                          # engine/model/methodology + resolved config + provenance
     │   └── timeseries.parquet                   # GPU power/thermal/memory samples
     ├── 002_c0_.../
     ├── ...
@@ -180,9 +180,9 @@ batch is attributed `batch_time / batch_size` (the `PER_REQUEST_BATCH` mode in
 |-------|------|-------------|
 | `timeseries` | str &#124; null | Relative filename of the timeseries sidecar (e.g. `"timeseries.parquet"`); `null` when `output.save_timeseries: false` |
 
-### Effective config (sibling file)
+### Config sidecar (sibling file)
 
-`effective_config.json` lives next to `result.json` in each experiment directory. It contains the fully resolved `ExperimentConfig` - every parameter value used, including engine defaults that were not explicitly specified. **This is what reproduces the experiment.**
+`config.json` lives next to `result.json` in each experiment directory. It is the sole home of engine/model/methodology identity (`engine`, `engine_version`, `model_name`, `measurement_methodology`) and carries the full user-declared `ExperimentConfig` under `declared_config` - every parameter value used, including engine defaults that were not explicitly specified - plus per-field `provenance` (where each non-default value came from: CLI flag, sweep, or YAML) and the observed post-construction engine state. **This is what reproduces the experiment.**
 
 ## `manifest.json` - study-level checkpoint
 
