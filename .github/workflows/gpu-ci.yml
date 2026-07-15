@@ -297,11 +297,12 @@ jobs:
 
       - name: Cleanup stray containers
         if: always()
-        env:
-          IMAGE_REF: ${{ env.LLEM_IMAGE_VLLM || '' }}
         run: |
           # Belt-and-suspenders: llem uses `docker run --rm`, but kill anything
           # left over from a timed-out leg so it cannot hold the pinned GPU.
-          for img in "vllm/vllm-openai" "nvcr.io/nvidia/tensorrt-llm/release"; do
-            docker ps -q --filter "ancestor=$img" | xargs -r docker kill 2>/dev/null || true
-          done
+          # Match by repo prefix on the image column, NOT `--filter ancestor=<repo>`:
+          # a no-tag ancestor filter only matches <repo>:latest, never the pinned
+          # tags actually used (vllm/vllm-openai:v0.19.1, .../release:1.2.1).
+          docker ps --format '{{.ID}} {{.Image}}' \
+            | awk '$2 ~ /^(vllm\/vllm-openai|nvcr\.io\/nvidia\/tensorrt-llm\/release)/ {print $1}' \
+            | xargs -r docker kill 2>/dev/null || true
