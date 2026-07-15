@@ -80,6 +80,26 @@ def docker_gpus() -> str:
     return raw or "all"
 
 
+def docker_gpus_arg() -> str:
+    """Return the ``--gpus`` value formatted for use as a docker-run argument.
+
+    A multi-device ``device=<a>,<b>`` selector MUST be wrapped in literal double
+    quotes: docker parses the ``--gpus`` value as CSV, so an unquoted
+    ``device=1,3`` is split at the comma into a device id (``device=1``) and a
+    trailing GPU *count* (``3``), which docker rejects with "cannot set both
+    Count and DeviceIDs on device request". Quoting keeps the whole list a
+    single device-ids field. ``all``, count forms, and a single-device
+    ``device=N`` (no comma) need no quoting and are returned verbatim.
+
+    ``docker_gpus`` stays the raw selector - :func:`pinned_gpu_lock_ids` parses
+    that form for lock naming and must not see the quotes.
+    """
+    raw = docker_gpus()
+    if raw.startswith("device=") and "," in raw:
+        return f'"{raw}"'
+    return raw
+
+
 _UNSAFE_LOCK_ID_CHARS: Final = re.compile(r"[^A-Za-z0-9._-]")
 
 

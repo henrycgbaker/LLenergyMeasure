@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.utils.env_config import ENV_DOCKER_GPUS, pinned_gpu_lock_ids
+from llenergymeasure.utils.env_config import (
+    ENV_DOCKER_GPUS,
+    docker_gpus_arg,
+    pinned_gpu_lock_ids,
+)
 
 
 def test_unset_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -115,3 +119,40 @@ def test_same_device_yields_same_id(monkeypatch: pytest.MonkeyPatch) -> None:
     first = pinned_gpu_lock_ids()
     second = pinned_gpu_lock_ids()
     assert first == second == ["2"]
+
+
+# ---------------------------------------------------------------------------
+# docker_gpus_arg: multi-device selectors must be quoted for `docker run --gpus`
+# ---------------------------------------------------------------------------
+
+
+def test_gpus_arg_multi_device_is_quoted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """device=1,3 -> '"device=1,3"' so docker does not split the comma into a count."""
+    monkeypatch.setenv(ENV_DOCKER_GPUS, "device=1,3")
+    assert docker_gpus_arg() == '"device=1,3"'
+
+
+def test_gpus_arg_single_device_unquoted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A single device=N has no comma and needs no quoting."""
+    monkeypatch.setenv(ENV_DOCKER_GPUS, "device=2")
+    assert docker_gpus_arg() == "device=2"
+
+
+def test_gpus_arg_multi_uuid_is_quoted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A comma-separated UUID device list is quoted too."""
+    monkeypatch.setenv(ENV_DOCKER_GPUS, "device=GPU-abc,GPU-def")
+    assert docker_gpus_arg() == '"device=GPU-abc,GPU-def"'
+
+
+def test_gpus_arg_all_verbatim(monkeypatch: pytest.MonkeyPatch) -> None:
+    """'all' (and the unset default) is returned verbatim."""
+    monkeypatch.setenv(ENV_DOCKER_GPUS, "all")
+    assert docker_gpus_arg() == "all"
+    monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+    assert docker_gpus_arg() == "all"
+
+
+def test_gpus_arg_count_verbatim(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare count is not a device list and is returned verbatim."""
+    monkeypatch.setenv(ENV_DOCKER_GPUS, "2")
+    assert docker_gpus_arg() == "2"
