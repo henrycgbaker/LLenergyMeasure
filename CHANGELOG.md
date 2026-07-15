@@ -88,6 +88,15 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- llem now forwards every `NCCL_*` host environment variable into both the experiment
+  container (`infra.docker_runner`) and the baseline container (`study.baseline_container`),
+  so NCCL tuning/workaround settings set on the host reach the engine process, which runs
+  inside the container. The motivating case is `NCCL_P2P_DISABLE=1` on PCIe multi-GPU hosts
+  whose topology lacks functional peer-to-peer (P2P, e.g. an inter-GPU link reported as `SYS`
+  in `nvidia-smi topo -m`, often because ACS is enabled): without it, tensor-parallel runs
+  hang at the first NCCL collective. Vars are emitted as explicit `-e KEY=VALUE` args
+  (matching the existing `LLEM_*` forwarding idiom) in sorted key order for a deterministic
+  command. ([#814])
 - Study GPU advisory locks are now named by the PHYSICAL device a study occupies, not the
   in-container logical index. Lock names came from `_resolve_gpu_indices` (which enumerates
   from 0), but the physical device is chosen at the docker level by `LLEM_DOCKER_GPUS`
@@ -816,3 +825,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
 [#804]: https://github.com/henrycgbaker/llenergymeasure/pull/804
 [#807]: https://github.com/henrycgbaker/llenergymeasure/pull/807
+[#814]: https://github.com/henrycgbaker/llenergymeasure/pull/814

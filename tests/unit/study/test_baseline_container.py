@@ -143,6 +143,48 @@ class TestBuildBaselineDockerCmd:
         )
         assert any("CUDA_VISIBLE_DEVICES=" in part for part in cmd)
 
+    def test_nccl_vars_forwarded(self, tmp_path: Path, monkeypatch):
+        """Host NCCL_* vars are forwarded into the baseline container, matching
+        the experiment path (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without P2P)."""
+        monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
+        monkeypatch.setenv("NCCL_IB_DISABLE", "1")
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0, 1],
+            engine="vllm",
+        )
+        assert "NCCL_P2P_DISABLE=1" in cmd
+        assert "NCCL_IB_DISABLE=1" in cmd
+
+    def test_non_nccl_var_not_forwarded(self, tmp_path: Path, monkeypatch):
+        """A non-NCCL host var must not be forwarded into the baseline container."""
+        monkeypatch.setenv("SOME_UNRELATED_VAR", "leak")
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+        )
+        assert not any("SOME_UNRELATED_VAR" in part for part in cmd)
+
+    def test_nccl_vars_sorted(self, tmp_path: Path, monkeypatch):
+        """NCCL_* vars are emitted in sorted key order (deterministic argv)."""
+        monkeypatch.setenv("NCCL_SOCKET_IFNAME", "eth0")
+        monkeypatch.setenv("NCCL_DEBUG", "INFO")
+        monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+        )
+        # Filter to the three we set so a stray host NCCL_* var can't perturb
+        # the assertion; their relative order must be alphabetical.
+        expected = ["NCCL_DEBUG=INFO", "NCCL_P2P_DISABLE=1", "NCCL_SOCKET_IFNAME=eth0"]
+        mine = [p for p in cmd if p in set(expected)]
+        assert mine == expected
+
 
 class TestParseStageLine:
     def test_non_marker_returns_none(self):
