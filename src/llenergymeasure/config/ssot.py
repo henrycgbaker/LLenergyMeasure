@@ -113,9 +113,6 @@ deps cache after priming (container runs as root by default, so without
 this the host can't clean the cache without sudo)."""
 ENV_HOST_GID: Final = "LLEM_HOST_GID"
 """Host user GID; paired with ENV_HOST_UID for chown."""
-ENV_MPI_NP: Final = "LLEM_MPI_NP"
-"""TRT-LLM tensor_parallel_size when > 1; signals the entrypoint script to
-wrap the final exec in mpirun -n N --allow-run-as-root."""
 ENV_DEPS_CACHE_DIR: Final = "LLEM_DEPS_CACHE_DIR"
 """Override for the host-side runtime-deps cache directory. Defaults to
 ``platformdirs.user_cache_dir('llem')/deps`` when unset."""
@@ -213,7 +210,6 @@ __all__ = [
     "ENV_HOST_UID",
     "ENV_IMAGE_PREFIX",
     "ENV_LOG_LEVEL",
-    "ENV_MPI_NP",
     "ENV_NO_PROMPT",
     "ENV_OUTPUT_DIR",
     "ENV_RUNNER_PREFIX",
