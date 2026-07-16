@@ -35,8 +35,14 @@ def compute_declared_config_hash(config: ExperimentConfig) -> str:
     Layer 3 fields (datacenter_pue, grid_carbon_intensity) are not in
     ExperimentConfig (they live in user config only), so model_dump()
     naturally excludes them. No special exclusion logic needed.
+
+    Dumps in ``mode="json"`` so numeric coercions match the serialized form:
+    a field typed float but defaulted to an int literal (e.g. vllm
+    ``cpu_offload_gb = 0``) stays int in a python-mode dump but becomes ``0.0``
+    after a JSON round-trip. The host and the container must agree on this hash
+    (it names the result file), so both hash the JSON-stable form.
     """
-    canonical = json.dumps(config.model_dump(), sort_keys=True)
+    canonical = json.dumps(config.model_dump(mode="json"), sort_keys=True)
     return _hash_canonical(canonical)
 
 

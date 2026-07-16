@@ -286,8 +286,12 @@ def compute_study_design_hash(experiments: list[ExperimentConfig]) -> str:
 
     Deterministic: uses json.dumps with sort_keys=True. Identical experiment lists
     produce the same hash across calls and interpreter restarts.
+
+    Dumps in ``mode="json"`` so a field typed float but defaulted to an int
+    literal serialises identically whether or not the config has been through a
+    JSON round-trip (see :func:`compute_declared_config_hash`).
     """
-    canonical = json.dumps([exp.model_dump() for exp in experiments], sort_keys=True)
+    canonical = json.dumps([exp.model_dump(mode="json") for exp in experiments], sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 

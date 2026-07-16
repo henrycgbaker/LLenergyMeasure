@@ -288,6 +288,30 @@ def test_config_hash_different_configs():
     assert h1 != h2
 
 
+def test_config_hash_stable_across_json_round_trip():
+    """Hash is identical before and after a JSON round-trip of the config.
+
+    Regression for the host/container hash split: vllm ``cpu_offload_gb`` is
+    typed float but defaults to the int literal ``0``. Pydantic does not
+    validate defaults, so it stays int ``0`` in memory but becomes ``0.0`` after
+    a JSON round-trip (the container re-validates the config the host wrote via
+    ``model_dump_json``). A python-mode dump hashed those two forms differently,
+    so the container named its result file with a different hash than the host
+    looked for. Hashing the json-mode dump makes both sides agree.
+    """
+    cfg = ExperimentConfig.model_validate(
+        {"engine": "vllm", "task": {"model": "gpt2"}, "vllm": {"engine_params": {}}}
+    )
+    # cpu_offload_gb is int 0 in memory (defaults are not validated)...
+    assert cfg.vllm is not None
+    assert isinstance(cfg.vllm.engine_params.cpu_offload_gb, int)
+    # ...and 0.0 after the exact host-write -> container-read round-trip.
+    round_tripped = ExperimentConfig.model_validate_json(cfg.model_dump_json())
+    assert isinstance(round_tripped.vllm.engine_params.cpu_offload_gb, float)
+
+    assert compute_declared_config_hash(cfg) == compute_declared_config_hash(round_tripped)
+
+
 # ---------------------------------------------------------------------------
 # Task 2.25: MultiGPUMetrics model
 # ---------------------------------------------------------------------------

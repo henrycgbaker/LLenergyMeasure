@@ -59,6 +59,15 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Declared-config and study-design hashes are now computed on a json-mode
+  `model_dump`, so a field typed float but defaulted to an int literal (e.g. vllm
+  `cpu_offload_gb = 0`) hashes identically whether or not the config has been
+  through a JSON round-trip. Previously the host hashed the in-memory int (`0`)
+  while the container re-validated the config the host wrote and hashed the
+  coerced float (`0.0`), producing different hashes; the host then named the
+  result file with a hash the container never wrote and reported "Container
+  exited 0 but no result file found" for a successful run. Configs that pinned
+  such fields explicitly (e.g. `cpu_offload_gb: 0.0`) no longer need to.
 - `environment.json` now records the environment the experiment actually ran in for
   docker-dispatched experiments, instead of the dispatching host's environment. The
   container entrypoint collects the environment snapshot inside the container, threads it
