@@ -106,10 +106,11 @@ dispatch into a host-mounted persistent cache.
    by docker_runner) so the host can clean it without sudo despite the
    container running as root.
 7. Writes the pyproject hash to the stamp file.
-8. Exec's the framework entrypoint - routing through
-   `nvidia_entrypoint.sh` when `LLEM_ENGINE=tensorrt`, wrapping in
-   `mpirun -n {N} --allow-run-as-root` when `LLEM_MPI_NP` is set
-   (TRT-LLM tensor parallelism > 1).
+8. Exec's the framework entrypoint as a single `python3` process, routing
+   through `nvidia_entrypoint.sh` when `LLEM_ENGINE=tensorrt` (sets up
+   `LD_LIBRARY_PATH` for libnvinfer). Multi-GPU tensorrt is NOT wrapped in
+   `mpirun`: TensorRT-LLM's `LLM` API self-manages tensor parallelism by
+   spawning its own workers, so one process per container is correct.
 
 ### Cache location
 

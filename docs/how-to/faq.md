@@ -110,7 +110,7 @@ Yes for Transformers and vLLM. TensorRT-LLM compilation is supported on Ada Love
 
 ### Multi-GPU?
 
-Tensor parallel is supported via engine-native fields (`tensorrt.engine_params.tensor_parallel_size`, `vllm.engine_params.tensor_parallel_size`). `llem` measures aggregate energy across all visible GPUs. Set `CUDA_VISIBLE_DEVICES` to control which GPUs are used. Cross-node distributed is not currently supported.
+Tensor parallel is supported via engine-native fields (`tensorrt.engine_params.tensor_parallel_size`, `vllm.engine_params.tensor_parallel_size`); the engine self-manages the workers inside a single container process (no `mpirun`). `llem` measures aggregate energy across all visible GPUs. To pin which physical GPUs `llem` uses, set `LLEM_DOCKER_GPUS` (the `docker run --gpus` value, e.g. `LLEM_DOCKER_GPUS="device=2,3"`) rather than `CUDA_VISIBLE_DEVICES`, so CUDA and NVML indices stay consistent inside the container. On PCIe hosts without functional peer-to-peer, set `NCCL_P2P_DISABLE=1` (`llem` forwards `NCCL_*` host vars into the container). Cross-node distributed is not currently supported.
 
 ## Citing and reporting
 

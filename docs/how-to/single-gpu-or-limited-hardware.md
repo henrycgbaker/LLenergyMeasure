@@ -87,17 +87,20 @@ vllm:
 vLLM requires a pre-quantised model checkpoint (e.g. `TheBloke/*-AWQ` on
 HuggingFace Hub). It does not quantise on the fly.
 
-**TensorRT-LLM engine** - build-time quantisation:
+**TensorRT-LLM engine** - build-time quantisation (compiled `trt` backend):
 
 ```yaml
 engine: tensorrt
 tensorrt:
-  quant_config:
-    quant_algo: W4A16_AWQ   # or INT8, W4A16_GPTQ, W8A16
+  engine_params:
+    backend: trt          # quant_config requires the compiled trt backend
+    quant_config:
+      quant_algo: W4A16_AWQ   # or INT8, W4A16_GPTQ, W8A16
 ```
 
-TRT-LLM compiles a quantised engine at build time. FP8 is NOT supported on A100
-or consumer Ada Lovelace below SM 8.9.
+TRT-LLM compiles a quantised engine at build time; `quant_config` is rejected
+under the default `pytorch` backend. FP8 requires SM >= 8.9 (Ada Lovelace or
+Hopper) and is NOT supported on A100 (SM 8.0).
 
 For full quantisation options and valid combinations, see
 [Reference: engine configuration](/reference/engines/configuration).
@@ -154,9 +157,11 @@ vllm:
     max_model_len: 2048   # also cap KV cache size
 ```
 
-**TensorRT-LLM** - highest throughput but requires 5-15 minutes of engine
-compilation on first run. Most beneficial for models you will run repeatedly.
-Less flexible than Transformers for ad-hoc measurement.
+**TensorRT-LLM** - highest throughput. The default `pytorch` backend loads
+directly; the compiled `trt` backend adds 5-15 minutes of engine compilation on
+the first run of a config (cached afterwards), which is most beneficial for
+models you will run repeatedly. Less flexible than Transformers for ad-hoc
+measurement.
 
 Rule of thumb for consumer hardware:
 - Quick model survey: use Transformers with 4-bit quantisation.

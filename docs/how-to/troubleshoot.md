@@ -212,9 +212,11 @@ no error, process does not return.
    multi-GB image. Check `docker pull` progress in a separate terminal:
    `docker ps` and `docker images`.
 
-2. **TensorRT-LLM engine compilation** - TRT-LLM compiles a CUDA engine from
-   model weights on first use. For a 7B model this takes 5-15 minutes with no
-   visible progress. Re-run with `LLEM_LOG_LEVEL=DEBUG` to see compilation logs.
+2. **TensorRT-LLM engine compilation (`trt` backend)** - on the compiled `trt`
+   backend, TRT-LLM compiles a CUDA engine from model weights on the first run
+   of a config. For a 7B model this takes 5-15 minutes with no visible
+   progress. Re-run with `LLEM_LOG_LEVEL=DEBUG` to see compilation logs. The
+   default `pytorch` backend has no such compile step.
 
 3. **Pre-flight check stalled** - if the Docker daemon is unreachable or the GPU
    is being held by another process, the pre-flight probe hangs. Run
@@ -371,7 +373,7 @@ the SSOT bumped transformers but the local image is still on an older tag).
 ```bash
 make docker-build                                       # local build, Transformers
 docker pull vllm/vllm-openai:v0.19.1                    # repull vLLM upstream
-docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0   # repull TensorRT-LLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1   # repull TensorRT-LLM upstream
 make docker-pull                                        # pull the newest published Transformers tag
 ```
 

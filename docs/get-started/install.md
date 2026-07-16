@@ -87,7 +87,7 @@ make docker-build
 docker pull vllm/vllm-openai:v0.19.1
 
 # TensorRT-LLM - pull upstream NGC image (pinned engine version)
-docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1
 ```
 
 The upstream tags above track the pinned engine versions
