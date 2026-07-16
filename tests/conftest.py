@@ -91,6 +91,8 @@ def make_result(**overrides) -> ExperimentResult:
         "experiment_id": TEST_EXPERIMENT_ID,
         "measurement_config_hash": TEST_MEASUREMENT_HASH,
         "aggregation": AggregationMetadata(num_processes=1),
+        "input_tokens": 800,
+        "output_tokens": 200,
         "total_tokens": 1000,
         "total_energy_j": 10.0,
         "total_inference_time_sec": 5.0,

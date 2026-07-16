@@ -1407,6 +1407,8 @@ class MeasurementHarness:
                 method="single_process",
                 num_processes=1,
             ),
+            input_tokens=output.input_tokens,
+            output_tokens=output.output_tokens,
             total_tokens=output.total_tokens,
             total_energy_j=total_energy_j,
             total_inference_time_sec=measured_time_sec,

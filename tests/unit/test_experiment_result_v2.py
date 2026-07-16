@@ -32,6 +32,8 @@ def make_result():
         defaults = dict(
             experiment_id="test-001",
             measurement_config_hash="abcdef0123456789",
+            input_tokens=800,
+            output_tokens=200,
             total_tokens=1000,
             total_energy_j=50.0,
             total_inference_time_sec=10.0,

@@ -62,6 +62,8 @@ These are the run totals (post-warmup-exclusion when applicable).
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `input_tokens` | int | Actual input (prefill) tokens observed by the engine after tokenisation (`total_tokens = input_tokens + output_tokens`) |
+| `output_tokens` | int | Actual output (decode) tokens observed by the engine (`total_tokens = input_tokens + output_tokens`) |
 | `total_tokens` | int | Total output tokens generated across all prompts |
 | `total_energy_j` | float | Total GPU energy in joules (raw, no baseline subtraction) |
 | `total_inference_time_sec` | float | Total wall-clock inference time |

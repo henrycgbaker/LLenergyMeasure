@@ -768,6 +768,8 @@ def test_write_config_sidecar_creates_config_json(minimal_config, tmp_path: Path
     result = ExperimentResult(
         experiment_id="test-sidecar-001",
         measurement_config_hash="aabb1122ccdd3344",
+        input_tokens=8,
+        output_tokens=2,
         total_tokens=10,
         total_energy_j=1.0,
         total_inference_time_sec=0.5,
