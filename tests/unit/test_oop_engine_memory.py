@@ -42,7 +42,7 @@ def _fake_request_output(n_in: int = 3, n_out: int = 2) -> SimpleNamespace:
     return SimpleNamespace(
         prompt_token_ids=list(range(n_in)),
         outputs=[SimpleNamespace(token_ids=list(range(n_out)))],
-        metrics=None,  # vLLM extract_request_metrics -> empty
+        metrics=None,  # vLLM _extract_request_stats -> empty
         metrics_dict=None,  # TRT-LLM _extract_metrics_dict -> empty
     )
 
