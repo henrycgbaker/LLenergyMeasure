@@ -190,3 +190,69 @@ def test_single_experiment_writes_runtime_observations(monkeypatch, tmp_path):
     record = json.loads(lines[0])
     assert record["config_hash"]
     assert record["outcome"] == "success"
+
+
+def test_config_sidecar_materialises_without_timeseries(monkeypatch, tmp_path):
+    """Regression: config.json + provenance still materialise when save_timeseries is off.
+
+    config.json is the sole home of provenance and engine/model/methodology
+    identity. Previously the runner passed output_dir=None to the harness when
+    save_timeseries was False, so the harness (which writes config.json only
+    when it has an output dir) wrote nothing and no provenance landed. The
+    staging dir is now created regardless of save_timeseries.
+    """
+    import json as _json
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    import llenergymeasure.engines as engines_module
+    import llenergymeasure.harness as harness_module
+    import llenergymeasure.harness.preflight as pf_module
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+    from llenergymeasure.study.manifest import ManifestWriter
+
+    mock_result = make_result(experiment_id="no-ts-config-test")
+    mock_engine = _MockBackend(mock_result)
+
+    captured_output_dirs: list[str | None] = []
+
+    def fake_run(self, engine, config, **kw):
+        # Mirror the real harness: write config.json whenever it has an output
+        # dir, independent of save_timeseries.
+        output_dir = kw.get("output_dir")
+        captured_output_dirs.append(output_dir)
+        if output_dir is not None:
+            (Path(output_dir) / "config.json").write_text(
+                _json.dumps({"schema_version": "2.0", "engine": "transformers"}),
+                encoding="utf-8",
+            )
+        return mock_result
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
+    monkeypatch.setattr(harness_module.MeasurementHarness, "run", fake_run)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual", lambda *a, **k: None
+    )
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config], output={"save_timeseries": False})
+    resolution_log = {"task.model": {"effective": "gpt2", "source": "yaml"}}
+    resolution_logs = {compute_declared_config_hash(config): resolution_log}
+
+    result_files, _results, _warnings = run_single_experiment(
+        study, mock_manifest, tmp_path, runner_specs=None, resolution_logs=resolution_logs
+    )
+
+    # save_timeseries is off, yet the harness still received a staging dir.
+    assert captured_output_dirs and captured_output_dirs[0] is not None, (
+        "harness must receive an output dir for the config.json sidecar even when "
+        "save_timeseries is off"
+    )
+    # config.json materialised in the experiment dir with provenance folded in.
+    assert len(result_files) == 1
+    dest_config = Path(result_files[0]).parent / "config.json"
+    assert dest_config.exists(), "config.json must materialise even without timeseries"
+    payload = _json.loads(dest_config.read_text())
+    assert payload["provenance"] == resolution_log

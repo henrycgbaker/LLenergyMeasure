@@ -20,7 +20,6 @@ STUDY_ARTEFACTS_DIR = "_study-artefacts"
 RESULT_FILENAME = "result.json"
 CONFIG_SIDECAR_FILENAME = "config.json"
 ENVIRONMENT_FILENAME = "environment.json"
-RESOLUTION_FILENAME = "_resolution.json"
 TIMESERIES_FILENAME = "timeseries.parquet"
 
 # Study-level bundle files.

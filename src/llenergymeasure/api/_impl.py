@@ -218,8 +218,8 @@ def run_study(
             When config is a StudyConfig object, callers should pass the original
             path separately so the YAML is preserved for reproducibility.
         cli_overrides: Flat dict of CLI flag overrides (e.g. {"model": "gpt2"}).
-            Used to build per-experiment ``_resolution.json`` sidecars showing
-            which fields were overridden by CLI flags vs YAML vs sweep.
+            Used to build the per-experiment config.json ``provenance`` section
+            showing which fields were overridden by CLI flags vs YAML vs sweep.
         preresolved: Optional ``(runner_specs, system_overrides)`` already
             computed by a prior ``run_study_preflight`` call (e.g. the CLI runs
             preflight to render the panel). When supplied, ``_run`` reuses it

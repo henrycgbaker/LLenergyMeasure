@@ -1,13 +1,14 @@
 """Config resolution log - tracks provenance of each non-default experiment field.
 
-Produces a per-experiment ``_resolution.json`` sidecar that records which config
-values were overridden relative to Pydantic defaults, and *why* (CLI flag, sweep
-expansion, or YAML file).
+Records which config values were overridden relative to Pydantic defaults, and
+*why* (CLI flag, sweep expansion, or YAML file). The result is folded into the
+per-experiment ``config.json`` sidecar as its ``provenance`` section (there is no
+standalone ``_resolution.json`` file).
 
 Usage::
 
     log = build_resolution_log(config, cli_overrides={"dtype": "float16"}, swept_fields={"model"})
-    # -> {"schema_version": "1.0", "overrides": {"dtype": {...}, "model": {...}}}
+    # -> {"dtype": {"effective": "float16", "source": "cli_flag", "default": ...}, "model": {...}}
 """
 
 from __future__ import annotations
@@ -40,7 +41,10 @@ def build_resolution_log(
         swept_fields: Dotted field paths that vary across experiments (from get_swept_field_paths).
 
     Returns:
-        Resolution log dict with ``schema_version`` and ``overrides``.
+        Provenance map keyed by dotted field path: ``{path: {"effective": value,
+        "source": ..., "default": ...}}`` (``default`` present only when the
+        field has a Pydantic default). Consumed as the ``config.json``
+        ``provenance`` section.
     """
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -73,7 +77,7 @@ def build_resolution_log(
 
         overrides[key] = entry
 
-    return {"schema_version": "1.0", "overrides": overrides}
+    return overrides
 
 
 # ---------------------------------------------------------------------------

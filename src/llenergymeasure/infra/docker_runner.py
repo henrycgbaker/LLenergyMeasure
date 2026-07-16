@@ -57,7 +57,7 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_THREAD_JOIN,
     Engine,
 )
-from llenergymeasure.domain.bundle_artefacts import TIMESERIES_FILENAME
+from llenergymeasure.domain.bundle_artefacts import CONFIG_SIDECAR_FILENAME, TIMESERIES_FILENAME
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerStdoutSilenceError,
@@ -394,11 +394,12 @@ class DockerRunner:
             progress: Optional ProgressCallback for step-by-step progress reporting.
 
         Returns:
-            Tuple of (result, ts_tmpdir):
+            Tuple of (result, artefact_tmpdir):
             - result: ExperimentResult on success, or a dict error payload if the
               container wrote an error JSON.
-            - ts_tmpdir: Path to temp dir containing rescued timeseries.parquet,
-              or None. Caller is responsible for cleanup.
+            - artefact_tmpdir: Path to temp dir containing the rescued artefacts
+              (config.json plus timeseries.parquet when it was written), or None
+              when neither was present. Caller is responsible for cleanup.
 
         Raises:
             DockerTimeoutError:    Container exceeded ``self.timeout`` seconds.
@@ -530,15 +531,22 @@ class DockerRunner:
             # --- Read result ---
             result = self._read_result(exchange_dir, config_hash)
 
-            # --- Rescue timeseries parquet before cleanup ---
-            # The harness inside the container wrote timeseries.parquet to
-            # /run/llem (= exchange_dir on host). Move it to a temp dir so
-            # the caller can copy it into the study directory.
-            ts_parquet = exchange_dir / TIMESERIES_FILENAME
-            ts_tmpdir: Path | None = None
-            if ts_parquet.exists() and not isinstance(result, dict):
-                ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
-                shutil.move(str(ts_parquet), str(ts_tmpdir / TIMESERIES_FILENAME))
+            # --- Rescue artefacts before cleanup ---
+            # The harness inside the container wrote its artefacts to /run/llem
+            # (= exchange_dir on host): config.json always (the sole home of
+            # provenance + engine/model/methodology identity) and
+            # timeseries.parquet when enabled. Move them to a temp dir so the
+            # caller can copy them into the study directory before the exchange
+            # dir is destroyed below. config.json must survive too - otherwise a
+            # successful docker run lands a result.json with no provenance.
+            artefact_tmpdir: Path | None = None
+            if not isinstance(result, dict):
+                for _name in (CONFIG_SIDECAR_FILENAME, TIMESERIES_FILENAME):
+                    _src = exchange_dir / _name
+                    if _src.exists():
+                        if artefact_tmpdir is None:
+                            artefact_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
+                        shutil.move(str(_src), str(artefact_tmpdir / _name))
 
             # --- Success: clean up ---
             self._cleanup_exchange_dir(exchange_dir)
@@ -548,7 +556,7 @@ class DockerRunner:
             if isinstance(result, dict):
                 return result, None
 
-            return result, ts_tmpdir
+            return result, artefact_tmpdir
 
         finally:
             # Exchange dir is set to None when we've handed off or already cleaned up.

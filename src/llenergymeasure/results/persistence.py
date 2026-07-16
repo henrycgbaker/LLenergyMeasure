@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 from llenergymeasure.domain.bundle_artefacts import (
     CONFIG_SIDECAR_FILENAME,
     ENVIRONMENT_FILENAME,
-    RESOLUTION_FILENAME,
     RESULT_FILENAME,
     TIMESERIES_FILENAME,
 )
@@ -29,6 +28,11 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.experiment import ExperimentResult
 
 logger = logging.getLogger(__name__)
+
+# Schema version for the config.json sidecar. Independent of result.json's own
+# schema_version; "2.0" succeeds the retired _resolution.json sidecar ("1.0"),
+# whose per-field provenance now lives in this file's ``provenance`` section.
+CONFIG_SIDECAR_SCHEMA_VERSION = "2.0"
 
 
 def _experiment_dir_name(
@@ -138,12 +142,24 @@ def save_config_sidecar(
       declared configs to find fields whose variation left the engine-effective
       state identical.
 
+    Two further fields are patched into this sidecar later by the study layer
+    (``llenergymeasure.study.runner._save_and_record``) rather than written
+    here, because both need study-level context the harness subprocess lacks:
+
+    - ``resolved_config_hash`` - carried forward from sweep expansion.
+    - ``provenance`` - the per-field resolution log (``{source, effective,
+      default}`` per non-default field) built by
+      :func:`llenergymeasure.config.resolution.build_resolution_log`, whose
+      ``cli_flag``/``sweep``/``yaml`` source labels are only known in the
+      parent process. This replaces the retired ``_resolution.json`` sidecar.
+
     Any missing optional field is omitted from the sidecar (not written as
     null) so downstream consumers distinguish "not available" from
     "explicitly null". The file is small (< 4 KB typical) and atomically
     written.
     """
     payload: dict[str, object] = {
+        "schema_version": CONFIG_SIDECAR_SCHEMA_VERSION,
         "experiment_id": experiment_id,
         "measurement_config_hash": config_hash,
         "engine": engine,
@@ -211,13 +227,14 @@ def save_result(
     timeseries_source: Path | None = None,
     experiment_index: int | None = None,
     cycle: int = 1,
-    resolution_log: dict[str, object] | None = None,
 ) -> Path:
     """Save ExperimentResult to a collision-safe subdirectory of output_dir.
 
     Creates: ``{output_dir}/[{index}_]c{cycle}_{model}-{engine}_{hash}/result.json``
-    Also writes ``_resolution.json`` sidecar when ``resolution_log`` is provided.
     If timeseries_source provided: copies to ``{dir}/timeseries.parquet``.
+
+    Per-field config provenance is no longer written here. It is folded into the
+    ``config.json`` sidecar's ``provenance`` section by the study layer.
 
     Args:
         result: The experiment result to persist.
@@ -226,8 +243,6 @@ def save_result(
         experiment_index: Optional 1-based experiment index for directory prefix
             (used in study context for natural sort ordering).
         cycle: Cycle number (1-based). Embedded in directory name.
-        resolution_log: Per-experiment config resolution log showing which fields
-            were overridden and why (CLI flag, sweep, YAML).
 
     Returns:
         Path to the result.json file (usable with load_result() directly).
@@ -242,12 +257,6 @@ def save_result(
     result_path = target_dir / RESULT_FILENAME
     _atomic_write(result.model_dump_json(indent=2), result_path)
     logger.debug("Saved result to %s", result_path)
-
-    # Write _resolution.json sidecar
-    if resolution_log:
-        res_path = target_dir / RESOLUTION_FILENAME
-        _atomic_write(json.dumps(resolution_log, indent=2, default=str), res_path)
-        logger.debug("Saved resolution log to %s", res_path)
 
     if timeseries_source is not None:
         timeseries_source = Path(timeseries_source)

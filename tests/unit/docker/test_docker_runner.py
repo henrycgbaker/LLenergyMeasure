@@ -1643,3 +1643,173 @@ class TestNcclEnvForwarding:
         cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
 
         assert not any(arg.startswith("NCCL_P2P_DISABLE") for arg in cmd)
+
+
+# ---------------------------------------------------------------------------
+# Test: config.json sidecar rescue before exchange dir cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestConfigSidecarRescue:
+    """DockerRunner must rescue config.json from the exchange dir before cleanup.
+
+    config.json is the sole home of provenance and engine/model/methodology
+    identity. The harness inside the container writes it to /run/llem
+    (= exchange_dir on host) on every successful run, independent of
+    save_timeseries. Previously only timeseries.parquet was rescued, so
+    _cleanup_exchange_dir destroyed config.json and a successful docker run
+    landed a result.json with no provenance.
+    """
+
+    def test_config_sidecar_rescued_when_no_timeseries(self, tmp_path):
+        """config.json is rescued even when no timeseries.parquet was written."""
+        config = make_config()
+        result = make_result()
+
+        exchange_dir = tmp_path / "llem-cfg-exchange"
+        exchange_dir.mkdir()
+        rescue_dir = tmp_path / "llem-cfg-rescued"
+        rescue_dir.mkdir()
+
+        # mkdtemp: 1st = exchange dir, 2nd = artefact rescue dir (created lazily
+        # when the first artefact - config.json - is found).
+        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                side_effect=lambda **kw: next(mkdtemp_returns),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
+        ):
+            config_hash = _docker_config_hash(config)
+            (exchange_dir / f"{config_hash}_result.json").write_text(
+                result.model_dump_json(), encoding="utf-8"
+            )
+            # Container wrote config.json but no timeseries.parquet.
+            (exchange_dir / "config.json").write_text(
+                json.dumps({"schema_version": "2.0", "engine": "transformers"}),
+                encoding="utf-8",
+            )
+
+            runner = DockerRunner(image=IMAGE)
+            _returned, artefact_dir = runner.run(config)
+
+        assert artefact_dir == rescue_dir
+        assert (rescue_dir / "config.json").exists(), (
+            "config.json must be rescued from the exchange dir before cleanup"
+        )
+        # Exchange dir must still be cleaned up on success.
+        mock_rmtree.assert_called_once()
+
+    def test_config_and_timeseries_both_rescued(self, tmp_path):
+        """Both config.json and timeseries.parquet land in the single rescue dir."""
+        config = make_config()
+        result = make_result(timeseries="timeseries.parquet")
+
+        exchange_dir = tmp_path / "llem-both-exchange"
+        exchange_dir.mkdir()
+        rescue_dir = tmp_path / "llem-both-rescued"
+        rescue_dir.mkdir()
+
+        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                side_effect=lambda **kw: next(mkdtemp_returns),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+        ):
+            config_hash = _docker_config_hash(config)
+            (exchange_dir / f"{config_hash}_result.json").write_text(
+                result.model_dump_json(), encoding="utf-8"
+            )
+            (exchange_dir / "config.json").write_text(
+                json.dumps({"schema_version": "2.0"}), encoding="utf-8"
+            )
+            (exchange_dir / "timeseries.parquet").write_bytes(b"PARQUET_CONTENT")
+
+            runner = DockerRunner(image=IMAGE)
+            _returned, artefact_dir = runner.run(config)
+
+        assert artefact_dir == rescue_dir
+        assert (rescue_dir / "config.json").exists()
+        assert (rescue_dir / "timeseries.parquet").read_bytes() == b"PARQUET_CONTENT"
+
+    def test_config_sidecar_lands_in_experiment_dir_with_provenance(self, tmp_path):
+        """End-to-end: a successful docker run lands config.json (with provenance)
+        in the experiment dir.
+
+        Exercises the real DockerRunner rescue feeding the real _save_and_record
+        move - the two halves that together close the docker provenance hole.
+        """
+        from unittest.mock import MagicMock
+
+        from llenergymeasure.study.runner import _save_and_record
+
+        config = make_config()
+        result = make_result()
+
+        exchange_dir = tmp_path / "llem-e2e-exchange"
+        exchange_dir.mkdir()
+        rescue_dir = tmp_path / "llem-e2e-rescued"
+        rescue_dir.mkdir()
+        study_dir = tmp_path / "study"
+        study_dir.mkdir()
+
+        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                side_effect=lambda **kw: next(mkdtemp_returns),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+        ):
+            config_hash = _docker_config_hash(config)
+            (exchange_dir / f"{config_hash}_result.json").write_text(
+                result.model_dump_json(), encoding="utf-8"
+            )
+            (exchange_dir / "config.json").write_text(
+                json.dumps({"schema_version": "2.0", "engine": "transformers"}),
+                encoding="utf-8",
+            )
+
+            runner = DockerRunner(image=IMAGE)
+            returned, artefact_dir = runner.run(config)
+
+        # Feed the rescued dir to _save_and_record exactly as the study runner does.
+        resolution_log = {"task.model": {"effective": "gpt2", "source": "yaml"}}
+        manifest = MagicMock()
+        result_files: list[str] = []
+        _save_and_record(
+            returned,
+            study_dir,
+            manifest,
+            config_hash,
+            1,
+            result_files,
+            ts_source_dir=artefact_dir,
+            resolution_log=resolution_log,
+        )
+
+        assert len(result_files) == 1
+        dest_config = Path(result_files[0]).parent / "config.json"
+        assert dest_config.exists(), "config.json must land in the experiment dir"
+        payload = json.loads(dest_config.read_text())
+        assert payload["provenance"] == resolution_log, (
+            "provenance must be folded into the materialised config.json"
+        )

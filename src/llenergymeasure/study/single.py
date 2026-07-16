@@ -71,7 +71,9 @@ def run_single_experiment(
     manifest.mark_running(config_hash, cycle)
 
     save_ts = study.output.save_timeseries
-    ts_tmpdir: Path | None = None  # Only set for local path
+    # Artefact staging dir. Local path always creates one (below); docker path
+    # inherits the DockerRunner rescue dir, which may be None.
+    ts_tmpdir: Path | None = None
 
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
@@ -116,8 +118,10 @@ def run_single_experiment(
         from llenergymeasure.harness.preflight import run_preflight
         from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
-        # Create temp dir for timeseries parquet (if enabled)
-        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
+        # Staging dir for harness artefacts. The harness writes config.json here
+        # always (the sole home of provenance/identity) and timeseries.parquet
+        # when save_timeseries is on, so the dir is created regardless of save_ts.
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
 
         # Wrap the in-process body (preflight -> engine import -> harness.run) in
         # capture_runtime_observations so single-experiment studies emit
@@ -148,7 +152,7 @@ def run_single_experiment(
                     snapshot=snapshot,
                     gpu_indices=gpu_indices,
                     progress=progress,
-                    output_dir=str(ts_tmpdir) if ts_tmpdir else None,
+                    output_dir=str(ts_tmpdir),
                     save_timeseries=save_ts,
                 )
         except Exception:

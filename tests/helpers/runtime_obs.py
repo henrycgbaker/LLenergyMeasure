@@ -32,19 +32,24 @@ def write_resolution(
     full_hash: str,
     overrides: dict[str, Any],
 ) -> Path:
-    """Create the experiment subdir + ``_resolution.json`` sidecar.
+    """Create the experiment subdir + ``config.json`` sidecar with provenance.
 
-    Returns the experiment subdirectory path so callers can write a
-    matching ``manifest.json`` entry pointing at it.
+    The per-field resolution log now lives in the ``config.json`` sidecar's
+    ``provenance`` section (the standalone ``_resolution.json`` was retired).
+    Returns the experiment subdirectory path so callers can write a matching
+    ``manifest.json`` entry pointing at it.
     """
     dir_name = f"{index:03d}_c{cycle}_gpt2-{engine}_{full_hash[:8]}"
     subdir = study_dir / dir_name
     subdir.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema_version": "1.0",
-        "overrides": {k: {"effective": v, "source": "sweep"} for k, v in overrides.items()},
+        "schema_version": "2.0",
+        "experiment_id": f"exp-{full_hash[:8]}",
+        "measurement_config_hash": full_hash,
+        "engine": engine,
+        "provenance": {k: {"effective": v, "source": "sweep"} for k, v in overrides.items()},
     }
-    (subdir / "_resolution.json").write_text(json.dumps(payload))
+    (subdir / "config.json").write_text(json.dumps(payload))
     return subdir
 
 

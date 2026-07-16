@@ -499,3 +499,36 @@ def test_save_config_sidecar_omits_declared_config_when_absent(tmp_path: Path) -
 
     payload = json.loads(path.read_text())
     assert "declared_config" not in payload
+
+
+def test_save_config_sidecar_includes_schema_version(tmp_path: Path) -> None:
+    """The config.json sidecar carries its own schema_version (independent of result.json)."""
+    import json
+
+    from llenergymeasure.results.persistence import (
+        CONFIG_SIDECAR_SCHEMA_VERSION,
+        save_config_sidecar,
+    )
+
+    path = save_config_sidecar(
+        tmp_path,
+        experiment_id="exp-1",
+        config_hash="a" * 16,
+        engine="vllm",
+        library_version="0.19.1",
+    )
+
+    payload = json.loads(path.read_text())
+    assert payload["schema_version"] == CONFIG_SIDECAR_SCHEMA_VERSION == "2.0"
+
+
+def test_save_result_does_not_write_resolution_sidecar(
+    minimal_result: ExperimentResult, tmp_path: Path
+) -> None:
+    """The retired _resolution.json sidecar is never written by save_result.
+
+    Per-field provenance now lives in the config.json sidecar's provenance
+    section, folded in by the study layer.
+    """
+    result_path = save_result(minimal_result, tmp_path)
+    assert not (result_path.parent / "_resolution.json").exists()
