@@ -116,7 +116,7 @@ Tensor parallel is supported via engine-native fields (`tensorrt.engine_params.t
 
 ### How do I cite `llem` in a paper?
 
-Until a formal release citation is published, cite the GitHub repository: `https://github.com/henrycgbaker/llenergymeasure` plus the version (`llem --version` or pin `llenergymeasure==0.9.0` in your reproducibility appendix). The full effective configuration is in every `result.json`'s `effective_config` block - share that JSON for full reproducibility.
+Until a formal release citation is published, cite the GitHub repository: `https://github.com/henrycgbaker/llenergymeasure` plus the version (`llem --version` or pin `llenergymeasure==0.9.0` in your reproducibility appendix). The full effective configuration is in every experiment's `config.json` sidecar (`declared_config` plus provenance) - share that file for full reproducibility.
 
 ### What should I include in a paper for measurement reproducibility?
 
@@ -127,9 +127,9 @@ Minimum reproducibility set:
 3. The engine + library version (`engine_version` field in result.json)
 4. `llem` version (`llenergymeasure_version` field)
 5. `study_design_hash` from manifest.json
-6. Per-experiment effective configs (or the directory structure they live in)
+6. Per-experiment configs (or the directory structure they live in)
 
-The shipped `manifest.json` plus the per-experiment `effective_config.json` files contain everything in items 3-6. See [Methodology &gt; Reproducibility](/explanation/methodology/methodology#reproducibility) for the full checklist.
+The shipped `manifest.json` plus the per-experiment `config.json` sidecars contain everything in items 3-6. See [Methodology &gt; Reproducibility](/explanation/methodology/methodology#reproducibility) for the full checklist.
 
 ## See also
 

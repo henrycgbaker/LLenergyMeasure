@@ -309,7 +309,7 @@ step (~20 min). On warm rebuilds the FA3 layer is reused from the GHCR cache (se
 build completes in minutes.
 
 FA3 provides Hopper-optimised attention kernels. Use it via
-`transformers.attn_implementation: flash_attention_3` in your experiment configs.
+`transformers.engine_params.attn_implementation: flash_attention_3` in your experiment configs.
 
 **To skip FA3** (e.g. for faster CI builds):
 
