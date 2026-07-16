@@ -27,9 +27,9 @@ other axis - "given a fixed implementation, how do models compare?"
 That's a useful question too, but it's not this one.
 
 > **Compute time:** ~30 minutes on a single A100-class GPU once Docker
-> images are pulled, plus ~5 minutes of one-time TensorRT-LLM engine
-> compilation on first run. The compiled engine is cached, so subsequent
-> runs of the same TRT-LLM cell skip compilation.
+> images are pulled. TensorRT-LLM runs on its default `pytorch` backend
+> here, so there is no engine-compilation wait; switching a cell to the
+> compiled `trt` backend would add a one-time (cached) engine build.
 
 ## Prerequisites
 

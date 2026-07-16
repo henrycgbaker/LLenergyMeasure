@@ -122,7 +122,7 @@ make docker-build
 docker pull vllm/vllm-openai:v0.19.1
 
 # TensorRT-LLM - pull upstream (NGC)
-docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1
 ```
 
 The pinned versions are the SSOT in `engine_versions/{vllm,tensorrt}/current.yaml`
@@ -219,7 +219,7 @@ subsequent rebuilds for vLLM/TRT are seconds - the slow part doesn't repeat.
 ```bash
 make docker-build                                    # build Transformers from source
 docker pull vllm/vllm-openai:v0.19.1                 # pull vLLM upstream
-docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0  # pull TensorRT-LLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1  # pull TensorRT-LLM upstream
 ```
 
 **How the transformers image is published:**

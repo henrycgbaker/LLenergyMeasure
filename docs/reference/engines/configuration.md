@@ -17,7 +17,7 @@ exactly two sub-sections, `engine_params:` and `sampling_params:`, and both
 sub-models set `extra="allow"`, so a parameter the current snapshot does not
 model is still forwarded to the underlying engine. The tables below document
 the fields the generated models name explicitly at the pinned versions
-(transformers 5.7.0, vllm 0.19.1, tensorrt 1.0.0); for the exhaustive
+(transformers 5.7.0, vllm 0.19.1, tensorrt 1.2.1); for the exhaustive
 introspected inventory see the per-engine schema pages, and for which
 parameters are explicitly modelled vs forwarded see the curation pages (both
 linked under [See also](#see-also)).
@@ -295,12 +295,19 @@ Source: `src/llenergymeasure/engines/vllm/config.py`.
 
 ## TensorRT-LLM engine (`tensorrt:`)
 
-TensorRT-LLM compiles a model into an optimised engine on first use;
-subsequent runs reuse the cached engine. Compile-time fields are baked into the
-engine and changing one invalidates the cache. The nested TRT-LLM sub-configs
-(`quant_config`, `kv_cache_config`, `scheduler_config`) are freeform
-(`Any`-typed) dict fields under `engine_params:` on the current pin, so they
-are written as whole dicts (see the worked example).
+TensorRT-LLM exposes two runtimes behind one engine, selected by `backend`:
+`pytorch` (the default) runs the model through TensorRT-LLM's PyTorch runtime
+with no ahead-of-time build, and `trt` compiles the model into an optimised
+TensorRT engine on first use and reuses the cached engine afterwards.
+`backend` is resolved by constructor class (`pytorch` -> `tensorrt_llm.LLM`,
+`trt` -> `tensorrt_llm._tensorrt_engine.LLM`), never forwarded as a kwarg. A
+handful of fields (`quant_config`, `fast_build`) exist only on the `trt`
+backend; declaring them under `pytorch` is a config-load error. On the `trt`
+backend, compile-time fields are baked into the engine and changing one keys to
+a fresh build. The nested TRT-LLM sub-configs (`quant_config`,
+`kv_cache_config`, `scheduler_config`) are freeform (`Any`-typed) dict fields
+under `engine_params:` on the current pin, so they are written as whole dicts
+(see the worked example).
 
 ### `tensorrt.engine_params:`
 
@@ -313,9 +320,9 @@ are written as whole dicts (see the worked example).
 | `max_seq_len` | int \| null | null | Maximum total sequence length (compile-time) |
 | `max_num_tokens` | int \| null | null | Maximum tokens the engine handles per iteration (compile-time) |
 | `dtype` | str \| null | `auto` | Model compute dtype; untyped, forwarded as given |
-| `fast_build` | bool \| null | `false` | Reduced-optimisation build for faster compilation |
-| `backend` | str \| null | null | TRT-LLM runtime selector (e.g. `trt`, `pytorch`, `_autodeploy`); distinct from the top-level `engine:` selector |
-| `quant_config` | any (dict) \| null | null | Quantisation config; freeform dict (e.g. `{quant_algo: W4A16_AWQ}`) |
+| `backend` | `pytorch` \| `trt` \| null | `pytorch` | Runtime selector, resolved by constructor class (see intro); distinct from the top-level `engine:` selector. Any other value is a config-load error |
+| `fast_build` | bool \| null | `false` | Reduced-optimisation build for faster compilation. **`trt` backend only** - rejected under `pytorch` |
+| `quant_config` | any (dict) \| null | null | Quantisation config; freeform dict (e.g. `{quant_algo: W4A16_AWQ}`). **`trt` backend only** - rejected under `pytorch` |
 | `kv_cache_config` | any (dict) \| null | null | KV cache config; freeform dict (e.g. `{enable_block_reuse: true, free_gpu_memory_fraction: 0.9}`) |
 | `scheduler_config` | any (dict) \| null | null | Scheduler config; freeform dict (e.g. `{capacity_scheduling_policy: MAX_UTILIZATION}`) |
 
@@ -480,6 +487,7 @@ engine: tensorrt
 
 tensorrt:
   engine_params:
+    backend: trt          # quant_config requires the compiled trt backend
     dtype: bfloat16
     max_batch_size: 8
     max_input_len: 1024
