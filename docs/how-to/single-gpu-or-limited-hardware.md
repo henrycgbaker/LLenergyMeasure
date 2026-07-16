@@ -66,9 +66,10 @@ available options depend on the engine:
 ```yaml
 engine: transformers
 transformers:
-  load_in_4bit: true    # ~0.5 GB per billion params
-  # or
-  load_in_8bit: true    # ~1 GB per billion params
+  engine_params:
+    load_in_4bit: true    # ~0.5 GB per billion params
+    # or
+    load_in_8bit: true    # ~1 GB per billion params
 ```
 
 4-bit and 8-bit are mutually exclusive. 4-bit uses AWQ/GPTQ-style compression
@@ -80,7 +81,7 @@ inference cost - the GPU still executes the dequantised computation.
 ```yaml
 engine: vllm
 vllm:
-  engine:
+  engine_params:
     quantization: awq   # or gptq
 ```
 
@@ -152,7 +153,7 @@ pre-allocates most VRAM for the KV cache at startup. Reduce
 
 ```yaml
 vllm:
-  engine:
+  engine_params:
     gpu_memory_utilization: 0.7
     max_model_len: 2048   # also cap KV cache size
 ```

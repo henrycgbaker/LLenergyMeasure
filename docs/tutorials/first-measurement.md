@@ -107,11 +107,14 @@ Results are written to `results/` by default:
 ```
 results/
 └── gpt2_20260507_143208/
-    └── result.json        # full record (all metrics, config, metadata)
+    ├── result.json        # measurement metrics, timestamps, warnings
+    └── config.json        # resolved config + provenance
 ```
 
-The JSON file is the scientific record - all raw metrics, the resolved
-config, timestamps, and any measurement warnings. See
+`result.json` is the scientific record for the measurement itself.
+`config.json` is the sidecar next to it: the fully resolved configuration -
+every parameter value used, including engine defaults you didn't set - plus
+provenance for each field. See
 [How to interpret results](/how-to/interpret-results) for a walkthrough.
 
 Specify a different output directory with `--output`:
@@ -121,7 +124,7 @@ llem run study.yaml --output /data/experiments
 ```
 
 :::tip Reproducibility
-Keep the `result.json` and `effective_config.json` together. The config file records every resolved parameter value - including engine defaults you didn't set - so you can reproduce the exact run later.
+Keep `result.json` and `config.json` together - `config.json` is what makes the run reproducible.
 :::
 
 ## What you've learned

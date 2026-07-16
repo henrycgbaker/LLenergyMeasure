@@ -185,15 +185,16 @@ due to hardware, model, or package requirements.
 ```yaml
 engine: transformers
 transformers:
-  load_in_4bit: true
-  bnb_4bit_quant_type: nf4
+  engine_params:
+    load_in_4bit: true
+    bnb_4bit_quant_type: nf4
 ```
 
 ### High Throughput (Production)
 ```yaml
 engine: vllm
 vllm:
-  engine:
+  engine_params:
     gpu_memory_utilization: 0.9
     enable_prefix_caching: true
 ```
@@ -202,7 +203,8 @@ vllm:
 ```yaml
 engine: tensorrt
 tensorrt:
-  dtype: float16
-  quant_config:
-    quant_algo: FP8  # Hopper only
+  engine_params:
+    dtype: float16
+    quant_config:
+      quant_algo: FP8  # Hopper only
 ```

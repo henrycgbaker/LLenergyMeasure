@@ -406,26 +406,32 @@ To maximise reproducibility across runs and machines:
 4. **Control system load.** External processes sharing the GPU affect energy readings.
    For the most reproducible results, run on a dedicated GPU with no other CUDA processes.
 
-5. **Report the effective config.** LLenergyMeasure stores the full resolved experiment
-   config in `effective_config` in the result JSON. This captures every parameter value
-   used, including engine defaults. Sharing the result JSON is sufficient for full
-   reproduction.
+5. **Report the effective config.** LLenergyMeasure writes the full resolved experiment
+   config to the `config.json` sidecar next to each `result.json` (`declared_config` plus
+   per-field provenance). This captures every parameter value used, including engine
+   defaults. Share both files (or the experiment directory) for full reproduction.
 
 6. **Pin model revision.** HuggingFace models update. To ensure the same weights across
    runs, pin the model revision:
    ```yaml
    transformers:
-     revision: "abc1234"   # commit hash or tag from HuggingFace Hub
+     engine_params:
+       revision: "abc1234"   # commit hash or tag from HuggingFace Hub
    ```
 
 ### What is stored in results
 
-Each experiment result JSON includes:
-- `effective_config` - the fully resolved ExperimentConfig (all defaults filled in)
-- `study_design_hash` - SHA-256[:16] of the resolved experiment list (for studies)
-- `baseline_power_w` - measured idle power for this session
-- `thermal_throttle_detected` - whether throttling occurred during measurement
-- Per-prompt timeseries data (power samples, latency) for detailed analysis
+Each experiment directory includes:
+- `result.json` - measurement metrics: `baseline_power_w`, thermal throttle info,
+  latency stats, and more (see [Results schema](/reference/results-schema) for the
+  full field list)
+- `config.json` - the fully resolved `declared_config` (all defaults filled in) plus
+  per-field provenance and observed engine state
+- `timeseries.parquet` - GPU power/thermal/memory samples at 100 ms resolution (when
+  `output.save_timeseries` is enabled)
+
+The study-level `manifest.json` carries `study_design_hash` - a SHA-256[:16] of the
+resolved experiment list, so identical study YAML always produces the same hash.
 
 ---
 
