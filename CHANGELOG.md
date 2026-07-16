@@ -11,6 +11,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Added
 
+- GPU CI engine matrix: `gpu-ci.yml` now boots each pinned upstream engine container
+  (vllm, tensorrt both backends) and runs one tiny inference through the real `llem run`
+  docker-dispatch path, auto-triggered when a PR touches engine pins, engine plugins, or
+  the dispatch surface. GPU jobs serialize to respect the shared runner's free devices;
+  the transformers test container now mounts project source per the image contract. ([#806])
 - `ExperimentResult.engine_build_cache_hit`: whether the tensorrt trt-backend engine build
   was served from the on-disk build cache (`true`) or compiled fresh (`false`); `null` when
   the cache is not in play (pytorch backend, other engines, an `engine_path` override, or the
@@ -905,6 +910,7 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
 [#804]: https://github.com/henrycgbaker/llenergymeasure/pull/804
 [#805]: https://github.com/henrycgbaker/llenergymeasure/pull/805
+[#806]: https://github.com/henrycgbaker/llenergymeasure/pull/806
 [#807]: https://github.com/henrycgbaker/llenergymeasure/pull/807
 [#808]: https://github.com/henrycgbaker/llenergymeasure/pull/808
 [#809]: https://github.com/henrycgbaker/llenergymeasure/pull/809
