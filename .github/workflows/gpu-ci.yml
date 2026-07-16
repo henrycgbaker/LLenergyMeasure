@@ -100,6 +100,21 @@ jobs:
       needs.changes.outputs.engine == 'true'
     runs-on: self-hosted
     timeout-minutes: 60
+    env:
+      # Container-side env for the two docker-run test steps below, forwarded
+      # via flag-only `-e VAR`. The image does NOT ship the project source
+      # (docker/Dockerfile.transformers header: bind-mount + PYTHONPATH
+      # contract, the same contract docker_runner.py implements at dispatch
+      # via its /llem-src mount), so pytest imports llenergymeasure from the
+      # mounted checkout's src/.
+      PYTHONPATH: /app/src
+      # Mirror production dispatch: never write __pycache__ into the
+      # read-only bind-mounted source.
+      PYTHONDONTWRITEBYTECODE: "1"
+      # The repo mount shadows the image's /app/.cache/huggingface (read-
+      # only); use root's cache - the same in-container path production
+      # dispatch mounts the host HF cache onto.
+      HF_HOME: /root/.cache/huggingface
     steps:
       - name: Clean workspace (fix root-owned files from Docker)
         run: |
@@ -115,28 +130,52 @@ jobs:
             -f docker/Dockerfile.transformers \
             -t llenergymeasure-ci:transformers \
             .
-          # Install test dependencies (not in production image)
+          # Derive the CI image: test deps + an `llem` shim. The project
+          # source is NOT baked in (image contract, see header of
+          # docker/Dockerfile.transformers) - the test steps bind-mount it.
+          # datamodel-code-generator backs the regen_engine_configs tests
+          # (invoked as a subprocess CLI, no importorskip guard); its pin
+          # must match pyproject [dependency-groups] dev - the generator's
+          # output formatting is version-sensitive. msgspec backs the
+          # importorskip'd type-recovery tests (parity with hosted CI).
           docker run --name llem-ci-setup llenergymeasure-ci:transformers \
-            pip install --no-cache-dir pytest pytest-xdist
+            pip install --no-cache-dir pytest pytest-xdist \
+              "datamodel-code-generator==0.68.1" msgspec
+          # `llem` console-script shim for sigint_verify.sh (which invokes
+          # `llem` from PATH): replicate pyproject [project.scripts]
+          # llem = "llenergymeasure.cli:app". `exec` keeps the llem PID =
+          # the python PID so the script's SIGINT reaches the process.
+          printf '#!/bin/sh\nexec python3 -c "from llenergymeasure.cli import app; app()" "$@"\n' > /tmp/llem-shim
+          chmod +x /tmp/llem-shim
+          docker cp /tmp/llem-shim llem-ci-setup:/usr/local/bin/llem
           docker commit llem-ci-setup llenergymeasure-ci:transformers
           docker rm llem-ci-setup
 
       - name: Create results directory
         run: mkdir -p results/
 
+      # Both test steps mount the WHOLE checkout read-only at /app (the image
+      # WORKDIR): the suite resolves repo-root siblings of tests/ on disk
+      # (scripts/, configs/, docker/, engine_versions/, pyproject.toml, via
+      # Path(__file__).parents[N]) and the GPU replay-fixture writer hardcodes
+      # /app/results/replay. results/ is overlaid read-write on top for the
+      # replay fixtures and the sigint manifest. -p no:cacheprovider because
+      # the pytest rootdir (/app) is read-only.
       - name: All tests (including GPU)
         run: |
           docker run --rm --gpus all \
-            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}":/app:ro \
             -v "${{ github.workspace }}/results":/app/results \
+            -e PYTHONPATH -e PYTHONDONTWRITEBYTECODE -e HF_HOME \
             llenergymeasure-ci:transformers \
-            python3 -m pytest tests/ -v --tb=short -o "addopts="
+            python3 -m pytest tests/ -v --tb=short -o "addopts=" -p no:cacheprovider
 
       - name: SIGINT verification
         run: |
           docker run --rm --gpus all \
-            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}":/app:ro \
             -v "${{ github.workspace }}/results":/app/results \
+            -e PYTHONPATH -e PYTHONDONTWRITEBYTECODE -e HF_HOME \
             llenergymeasure-ci:transformers \
             bash tests/integration/sigint_verify.sh
 
