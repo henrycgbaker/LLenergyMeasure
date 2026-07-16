@@ -51,6 +51,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   including the docker (multi-engine) path and runs with `save_timeseries` off - so the
   join never dangles.
 
+### Fixed
+
+- `environment.json` now records the environment the experiment actually ran in for
+  docker-dispatched experiments, instead of the dispatching host's environment. The
+  container entrypoint collects the environment snapshot inside the container, threads it
+  into the harness, and persists it to the exchange dir; the docker runner rescues it
+  alongside `config.json` and `timeseries.parquet`, and the study layer prefers the rescued
+  in-container snapshot over its host-collected cache. Previously the host snapshot (wrong
+  python version, `cuda_version` null, `container.detected` false) was written for every
+  docker run, defeating reproducibility metadata on the multi-engine path. Local
+  in-process runs are unchanged. A docker run that completes without a rescued snapshot now
+  logs a warning rather than silently recording host values.
+
 ## [v0.11.0] - 2026-07-16
 
 ### Added

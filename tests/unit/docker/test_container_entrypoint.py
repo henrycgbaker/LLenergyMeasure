@@ -79,6 +79,59 @@ class TestRunContainerExperiment:
         data = json.loads(result_path.read_text())
         assert "experiment_id" in data
 
+    def test_writes_environment_sidecar_from_incontainer_snapshot(self, config, result_dir: Path):
+        """environment.json is written from the in-container snapshot, and the
+        same snapshot is threaded into harness.run for measurement."""
+        from datetime import datetime
+
+        from llenergymeasure.domain.environment import (
+            CPUEnvironment,
+            CUDAEnvironment,
+            EnvironmentMetadata,
+            EnvironmentSnapshot,
+            GPUEnvironment,
+        )
+
+        _cfg, config_path = config
+        fake_result = make_result()
+        snap = EnvironmentSnapshot(
+            hardware=EnvironmentMetadata(
+                gpu=GPUEnvironment(name="NVIDIA A100-SXM4-80GB", vram_total_mb=81920.0),
+                cuda=CUDAEnvironment(version="12.4", driver_version="535.104"),
+                cpu=CPUEnvironment(platform="Linux"),
+                collected_at=datetime(2026, 1, 2, 0, 0, 0),
+            ),
+            python_version="3.10.14",
+            tool_version="0.11.0",
+            cuda_version="12.4",
+            cuda_version_source="torch",
+        )
+
+        with (
+            patch(_PATCH_PREFLIGHT),
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
+            patch(
+                "llenergymeasure.harness.environment.collect_environment_snapshot",
+                return_value=snap,
+            ),
+        ):
+            mock_get_engine.return_value = MagicMock()
+
+            from llenergymeasure.entrypoints.container import run_container_experiment
+
+            run_container_experiment(config_path, result_dir)
+
+        env_path = result_dir / "environment.json"
+        assert env_path.exists(), "environment.json sidecar must be written in the container"
+        payload = json.loads(env_path.read_text())
+        assert payload["python_version"] == "3.10.14"
+        assert payload["cuda_version"] == "12.4"
+        assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
+        # The same snapshot must be threaded into the harness for measurement.
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("snapshot") is snap
+
     def test_calls_preflight_before_engine(self, config, result_dir: Path):
         _cfg, config_path = config
         fake_result = make_result()

@@ -1744,6 +1744,58 @@ class TestConfigSidecarRescue:
         assert (rescue_dir / "config.json").exists()
         assert (rescue_dir / "timeseries.parquet").read_bytes() == b"PARQUET_CONTENT"
 
+    def test_environment_sidecar_rescued_alongside_config(self, tmp_path):
+        """environment.json is rescued from the exchange dir before cleanup.
+
+        The container writes the accurate in-container snapshot to environment.json;
+        it must survive alongside config.json so the host runner can prefer it over
+        its own (dispatching-host) snapshot.
+        """
+        config = make_config()
+        result = make_result()
+
+        exchange_dir = tmp_path / "llem-env-exchange"
+        exchange_dir.mkdir()
+        rescue_dir = tmp_path / "llem-env-rescued"
+        rescue_dir.mkdir()
+
+        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                side_effect=lambda **kw: next(mkdtemp_returns),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
+        ):
+            config_hash = _docker_config_hash(config)
+            (exchange_dir / f"{config_hash}_result.json").write_text(
+                result.model_dump_json(), encoding="utf-8"
+            )
+            (exchange_dir / "config.json").write_text(
+                json.dumps({"schema_version": "2.0"}), encoding="utf-8"
+            )
+            (exchange_dir / "environment.json").write_text(
+                json.dumps({"python_version": "3.10.14", "cuda_version": "12.4"}),
+                encoding="utf-8",
+            )
+
+            runner = DockerRunner(image=IMAGE)
+            _returned, artefact_dir = runner.run(config)
+
+        assert artefact_dir == rescue_dir
+        assert (rescue_dir / "environment.json").exists(), (
+            "environment.json must be rescued from the exchange dir before cleanup"
+        )
+        assert (rescue_dir / "config.json").exists()
+        rescued = json.loads((rescue_dir / "environment.json").read_text())
+        assert rescued["python_version"] == "3.10.14"
+        mock_rmtree.assert_called_once()
+
     def test_config_sidecar_lands_in_experiment_dir_with_provenance(self, tmp_path):
         """End-to-end: a successful docker run lands config.json (with provenance)
         in the experiment dir.

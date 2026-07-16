@@ -57,7 +57,11 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_THREAD_JOIN,
     Engine,
 )
-from llenergymeasure.domain.bundle_artefacts import CONFIG_SIDECAR_FILENAME, TIMESERIES_FILENAME
+from llenergymeasure.domain.bundle_artefacts import (
+    CONFIG_SIDECAR_FILENAME,
+    ENVIRONMENT_FILENAME,
+    TIMESERIES_FILENAME,
+)
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerStdoutSilenceError,
@@ -398,8 +402,9 @@ class DockerRunner:
             - result: ExperimentResult on success, or a dict error payload if the
               container wrote an error JSON.
             - artefact_tmpdir: Path to temp dir containing the rescued artefacts
-              (config.json plus timeseries.parquet when it was written), or None
-              when neither was present. Caller is responsible for cleanup.
+              (config.json and environment.json, plus timeseries.parquet when it
+              was written), or None when none were present. Caller is responsible
+              for cleanup.
 
         Raises:
             DockerTimeoutError:    Container exceeded ``self.timeout`` seconds.
@@ -534,14 +539,16 @@ class DockerRunner:
             # --- Rescue artefacts before cleanup ---
             # The harness inside the container wrote its artefacts to /run/llem
             # (= exchange_dir on host): config.json always (the sole home of
-            # provenance and the authoritative home of identity) and
+            # provenance and the authoritative home of identity), environment.json
+            # (the accurate in-container environment snapshot - the host's own
+            # snapshot describes the dispatching host, not this container), and
             # timeseries.parquet when enabled. Move them to a temp dir so the
             # caller can copy them into the study directory before the exchange
             # dir is destroyed below. config.json must survive too - otherwise a
             # successful docker run lands a result.json with no provenance.
             artefact_tmpdir: Path | None = None
             if not isinstance(result, dict):
-                for _name in (CONFIG_SIDECAR_FILENAME, TIMESERIES_FILENAME):
+                for _name in (CONFIG_SIDECAR_FILENAME, ENVIRONMENT_FILENAME, TIMESERIES_FILENAME):
                     _src = exchange_dir / _name
                     if _src.exists():
                         if artefact_tmpdir is None:
