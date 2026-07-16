@@ -7,6 +7,8 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-07-16
+
 ### Added
 
 - `ExperimentResult.engine_build_cache_hit`: whether the tensorrt trt-backend engine build
@@ -75,7 +77,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   (a `docker image inspect`) instead of re-probing, so the per-study cost the F2 plan flagged
   drops to near zero. The in-process memo remains the first tier; a corrupt, unreadable, or
   unwritable cache degrades to a fresh probe and never crashes. Entries never go stale: a
-  rebuilt or re-pulled image gets a new digest and a fresh probe, so no TTL is needed.
+  rebuilt or re-pulled image gets a new digest and a fresh probe, so no TTL is needed. ([#805])
 - TensorRT-LLM backends are now selected by constructor class, not a kwarg: `backend='trt'`
   resolves `tensorrt_llm._tensorrt_engine.LLM` and `pytorch`/unset resolves `tensorrt_llm.LLM`,
   validated live at 1.2.1 (the base `LLM` rejects `backend='trt'` at model load). `backend` is
@@ -105,7 +107,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   container sees only the pinned device(s), so NVML index resolution matches the experiment's
   own GPUs. The raw memory fields are now nullable and any residual 0.0 is coerced to null at
   the domain boundary - the fields are always either a real measurement or null, never a
-  silently-wrong zero.
+  silently-wrong zero. ([#816])
 - llem now forwards every `NCCL_*` host environment variable into both the experiment
   container (`infra.docker_runner`) and the baseline container (`study.baseline_container`),
   so NCCL tuning/workaround settings set on the host reach the engine process, which runs
@@ -669,7 +671,8 @@ Core measurement functionality establishing the foundation for all subsequent de
 - Major directory restructuring separating config, core, and result handling.
 
 
-[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.11.0...HEAD
+[v0.11.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.10.0
 [v0.9.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.9.0
 [v0.8.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.8.0
@@ -842,5 +845,7 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#801]: https://github.com/henrycgbaker/llenergymeasure/pull/801
 [#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
 [#804]: https://github.com/henrycgbaker/llenergymeasure/pull/804
+[#805]: https://github.com/henrycgbaker/llenergymeasure/pull/805
 [#807]: https://github.com/henrycgbaker/llenergymeasure/pull/807
 [#814]: https://github.com/henrycgbaker/llenergymeasure/pull/814
+[#816]: https://github.com/henrycgbaker/llenergymeasure/pull/816
