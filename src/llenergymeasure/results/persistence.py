@@ -103,6 +103,14 @@ def _atomic_write(content: str, path: Path) -> None:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
+        # tempfile.mkstemp() creates the file mode 0600 regardless of umask.
+        # Every caller writes a results artefact (result.json, config/environment
+        # sidecars, manifest.json, equivalence groups), all of which must be
+        # world-readable so a non-root host can read a sidecar written by a root
+        # container during docker-dispatch rescue - matching the 0644 that
+        # result.json and timeseries.parquet already get. Without this, the host
+        # rescue hits PermissionError and the sidecar is silently dropped.
+        os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, path)
     except Exception:
         with contextlib.suppress(OSError):

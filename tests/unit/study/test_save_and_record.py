@@ -492,6 +492,114 @@ def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) ->
     ), "local dispatch must not emit the docker rescue warning"
 
 
+def test_config_sidecar_rescue_permission_error_warns(tmp_path: Path, monkeypatch, caplog) -> None:
+    """A config.json sidecar the host cannot read (0600, root-owned) warns loudly.
+
+    Regression: under docker dispatch the container runs as root and wrote the
+    sidecar 0600, so the non-root host's load_json raised PermissionError. That
+    error was swallowed at debug level and the sidecar silently vanished. The
+    unreadable file is simulated by monkeypatching load_json to raise
+    PermissionError (a non-root test cannot create a root-owned 0600 file).
+    """
+    import logging
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    # Sidecar is present in the staging dir but "unreadable" (rescued 0600 root).
+    config_sidecar_src = tmp_path / "config.json"
+    config_sidecar_src.write_text("{}", encoding="utf-8")
+
+    def _raise_permission(_path):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("llenergymeasure.study.runner.load_json", _raise_permission)
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+        _save_and_record(
+            result,
+            study_dir,
+            manifest,
+            "aabb1122",
+            1,
+            result_files,
+            model_name="gpt2",
+            engine="transformers",
+            ts_source_dir=tmp_path,
+        )
+
+    warnings = [rec.message for rec in caplog.records if rec.levelno >= logging.WARNING]
+    assert any(
+        "Failed to move config.json sidecar" in m and "Permission denied" in m for m in warnings
+    ), f"unreadable config.json must warn loudly with the reason; got {warnings}"
+    # The path must be named in the warning for the user to act on it.
+    assert any(str(config_sidecar_src) in m for m in warnings), (
+        "the rescue-failure warning must name the offending path"
+    )
+    # result.json still lands (a sidecar failure must never lose the measurement).
+    assert len(result_files) == 1
+    assert Path(result_files[0]).exists()
+    # The unreadable staging file is still cleaned up (finally block).
+    assert not config_sidecar_src.exists()
+
+
+def test_environment_sidecar_rescue_permission_error_warns(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    """An environment.json sidecar the host cannot read warns loudly.
+
+    Same root cause as the config.json path: a 0600 root-owned rescued sidecar
+    raised PermissionError that was swallowed at debug. Simulated by patching
+    load_json to raise.
+    """
+    import logging
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    # A rescued environment.json is present but "unreadable".
+    (tmp_path / "environment.json").write_text("{}", encoding="utf-8")
+
+    def _raise_permission(_path):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("llenergymeasure.study.runner.load_json", _raise_permission)
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+        _save_and_record(
+            result,
+            study_dir,
+            manifest,
+            "aabb1122",
+            1,
+            result_files,
+            model_name="gpt2",
+            engine="transformers",
+            ts_source_dir=tmp_path,
+            environment_snapshot=_make_host_snapshot(),
+            runner_provenance=RunnerProvenance(
+                mode="docker", image="img:1.0", source="yaml", image_source="registry"
+            ),
+        )
+
+    warnings = [rec.message for rec in caplog.records if rec.levelno >= logging.WARNING]
+    assert any(
+        "Failed to rescue in-container environment.json" in m and "Permission denied" in m
+        for m in warnings
+    ), f"unreadable environment.json must warn loudly with the reason; got {warnings}"
+    # result.json still lands; the unreadable staging file is cleaned up.
+    assert len(result_files) == 1
+    assert not (tmp_path / "environment.json").exists()
+
+
 def test_provenance_from_spec_none_defaults_to_local() -> None:
     """No spec (pure in-process local) records mode=local, source=local, no image."""
     provenance = _provenance_from_spec(None)
