@@ -15,7 +15,7 @@ If you use LLenergyMeasure in research, please cite it as:
   title     = {{LLenergyMeasure}: Measure how implementation choices drive
                 LLM inference efficiency},
   year      = {2026},
-  version   = {0.9.0},
+  version   = {0.11.0},
   url       = {https://github.com/henrycgbaker/llenergymeasure},
   note      = {Pre-1.0 release. See GitHub releases for the current version.
                 Multi-engine, methodology-first measurement framework for
@@ -26,7 +26,7 @@ If you use LLenergyMeasure in research, please cite it as:
 For a plain-text reference:
 
 > Baker, H. C. G. (2026). *LLenergyMeasure: Measure how implementation choices
-> drive LLM inference efficiency* (v0.9.0).
+> drive LLM inference efficiency* (v0.11.0).
 > https://github.com/henrycgbaker/llenergymeasure
 
 ---

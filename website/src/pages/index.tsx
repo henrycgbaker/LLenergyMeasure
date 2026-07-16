@@ -477,7 +477,7 @@ const BIBTEX = `@software{baker2026llenergymeasure,
   title     = {{LLenergyMeasure}: Measure how implementation choices drive
                 LLM inference efficiency},
   year      = {2026},
-  version   = {0.9.0},
+  version   = {0.11.0},
   url       = {https://github.com/henrycgbaker/llenergymeasure},
   note      = {Pre-1.0 release. See GitHub releases for the current version.
                 Multi-engine, methodology-first measurement framework for

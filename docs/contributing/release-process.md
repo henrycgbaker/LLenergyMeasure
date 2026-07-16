@@ -30,12 +30,13 @@ Two files hold the version and must stay in sync:
 
 | File | Field | Example |
 |------|-------|---------|
-| `pyproject.toml` | `[project] version = "..."` | `version = "0.9.0"` |
-| `src/llenergymeasure/__init__.py` | `__version__ = "..."` | `__version__ = "0.9.0"` |
+| `pyproject.toml` | `[project] version = "..."` | `version = "0.11.0"` |
+| `src/llenergymeasure/_version.py` | `__version__ = "..."` | `__version__ = "0.11.0"` |
 
 A mismatch between these two files is a bug. The build system reads
 `pyproject.toml`; the runtime API (`llem --version`, `llenergymeasure.__version__`)
-reads `__init__.py`.
+reads `__version__`, which is defined in `src/llenergymeasure/_version.py` and
+re-exported from `__init__.py`.
 
 ---
 
@@ -48,15 +49,15 @@ reads `__init__.py`.
    ```toml
    [project]
    name = "llenergymeasure"
-   version = "0.10.0"
+   version = "0.12.0"
    ```
 
-2. **Bump the version in `__init__.py`**
+2. **Bump the version in `_version.py`**
 
-   Update `__version__` in `src/llenergymeasure/__init__.py`:
+   Update `__version__` in `src/llenergymeasure/_version.py`:
 
    ```python
-   __version__ = "0.10.0"
+   __version__ = "0.12.0"
    ```
 
    Both files must show the same version string.
@@ -72,7 +73,7 @@ reads `__init__.py`.
    Commit the three changed files with the message:
 
    ```
-   chore: release 0.10.0
+   chore: release 0.12.0
    ```
 
    This commit goes directly to `main` via the normal PR flow.
@@ -80,8 +81,8 @@ reads `__init__.py`.
 5. **Create and push the git tag**
 
    ```bash
-   git tag v0.10.0
-   git push origin v0.10.0
+   git tag v0.12.0
+   git push origin v0.12.0
    ```
 
    The tag must use the `v` prefix and match the version string exactly.
