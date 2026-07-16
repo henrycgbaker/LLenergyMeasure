@@ -254,6 +254,12 @@ containers to a free device via docker-level restriction, so the shared box's
 foreign workloads are untouched and in-container CUDA/NVML indices stay
 consistent. The value is host-specific runner config.
 
+The GPU jobs serialize because the shared runner guarantees at most two free
+devices, so concurrent GPU jobs collide on device allocation. `engine-smoke`
+therefore `needs` the `transformers` job (waiting for it to finish and release
+its GPU before the smoke legs claim one), and the smoke matrix runs
+`max-parallel: 1` because all three legs pin the same device.
+
 ### Triggers
 
 - `workflow_dispatch` and `workflow_call` (release gate) run the GPU jobs

@@ -15,6 +15,10 @@ name: GPU CI
 #     and inference executes end to end. It asserts on result files / tokens,
 #     never on energy values (power numbers in CI are noise).
 #
+# GPU jobs serialize (engine-smoke `needs` transformers; smoke matrix is
+# `max-parallel: 1`) because the shared runner guarantees at most two free
+# devices, so concurrent GPU jobs collide on device allocation.
+#
 # Triggers:
 #   1. Manual:      workflow_dispatch (runs all jobs; run_gpu defaults true).
 #   2. Release:     workflow_call from auto-release.yml (release gate; run_gpu
@@ -195,19 +199,43 @@ jobs:
         run: docker rmi llenergymeasure-ci:transformers 2>/dev/null || true
 
   engine-smoke:
-    # Same gate as the transformers job. Boots each upstream-image engine's
-    # pinned container and runs one tiny inference through the real dispatch.
-    needs: changes
+    # Boots each upstream-image engine's pinned container and runs one tiny
+    # inference through the real dispatch. Serialized AFTER transformers so the
+    # two GPU jobs never contend for a device on the two-free-GPU shared runner.
+    #
+    # `needs: [changes, transformers]` makes the smoke legs wait for the
+    # transformers job to finish and RELEASE its GPU before they claim one.
+    #
+    # The `if:` keeps the original trigger gate `(run_gpu || label ||
+    # changes.engine)` verbatim, so it still fires on every trigger shape:
+    # dispatch and workflow_call set `run_gpu` true, the `gpu-ci` label sets the
+    # contains() true, and an engine-path PR sets `changes.engine` true. The new
+    # `needs.transformers.result == 'success' &&` prefix is the serialization
+    # gate: a FAILED transformers job (result != 'success') skips the smoke legs,
+    # which is fine - the run is already red, and skipping avoids a second wave
+    # of allocation contention. Since transformers shares this exact trigger gate,
+    # it is only ever SKIPPED when the gate is false (so the smoke gate is false
+    # too) - it is never skipped out from under a smoke leg that wanted to run.
+    # (The expression carries no status-check function, so GitHub also auto-wraps
+    # it in success(), which additionally requires the always-green `changes` job;
+    # the explicit result check documents the transformers dependency for readers.)
+    needs: [changes, transformers]
     if: >-
-      inputs.run_gpu ||
-      contains(github.event.pull_request.labels.*.name, 'gpu-ci') ||
-      needs.changes.outputs.engine == 'true'
+      needs.transformers.result == 'success' &&
+      (
+        inputs.run_gpu ||
+        contains(github.event.pull_request.labels.*.name, 'gpu-ci') ||
+        needs.changes.outputs.engine == 'true'
+      )
     runs-on: self-hosted
     timeout-minutes: 90
     strategy:
       # One failing engine leg must not cancel the others - each is independent
       # proof, and the trt leg is the slowest.
       fail-fast: false
+      # All legs pin the same free device (LLEM_DOCKER_GPUS=device=2), so they
+      # would collide with each other; run them one at a time.
+      max-parallel: 1
       matrix:
         cell: [vllm, tensorrt-pytorch, tensorrt-trt]
         include:
