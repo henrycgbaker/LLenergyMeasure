@@ -45,6 +45,8 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 
 | Field | Type | Units | Description |
 |-------|------|-------|-------------|
+| `input_tokens` | `int` | tokens | Actual input (prefill) tokens observed by the engine after tokenisation. `total_tokens = input_tokens + output_tokens`. |
+| `output_tokens` | `int` | tokens | Actual output (decode) tokens observed by the engine. `total_tokens = input_tokens + output_tokens`. |
 | `total_tokens` | `int` | tokens | Total tokens generated during the run. |
 | `total_energy_j` | `float` | joules | Total GPU energy for the run. |
 | `energy_adjusted_j` | `float \| None` | joules | Baseline-subtracted energy attributable to inference. `None` when no baseline was taken. |

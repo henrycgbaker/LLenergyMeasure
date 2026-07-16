@@ -122,6 +122,16 @@ class ExperimentResult(BaseModel):
     )
 
     # Core metrics
+    input_tokens: int = Field(
+        ...,
+        description="Actual input (prefill) tokens as observed by the engine after "
+        "tokenisation. total_tokens = input_tokens + output_tokens.",
+    )
+    output_tokens: int = Field(
+        ...,
+        description="Actual output (decode) tokens as observed by the engine. "
+        "total_tokens = input_tokens + output_tokens.",
+    )
     total_tokens: int = Field(..., description="Total tokens across all processes")
     total_energy_j: float = Field(..., description="Total energy (sum across processes)")
     total_inference_time_sec: float = Field(..., description="Total inference time")
