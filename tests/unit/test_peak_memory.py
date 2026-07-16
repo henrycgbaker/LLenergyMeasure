@@ -116,7 +116,8 @@ def test_peak_memory_reset_precedes_measurement():
         patch.object(
             TransformersEngine,
             "_run_batch",
-            return_value=(10, 20, 0.5),
+            # (input_tokens, output_tokens, elapsed, padding_tokens)
+            return_value=(10, 20, 0.5, 0),
         ),
     ):
         engine = TransformersEngine()
@@ -152,7 +153,7 @@ def test_transformers_engine_seeds_rng_before_inference():
         patch("torch.cuda.reset_peak_memory_stats"),
         patch("torch.cuda.max_memory_allocated", return_value=0),
         patch("torch.manual_seed", side_effect=lambda s: seeded_values.append(s)),
-        patch.object(TransformersEngine, "_run_batch", return_value=(10, 20, 0.5)),
+        patch.object(TransformersEngine, "_run_batch", return_value=(10, 20, 0.5, 0)),
     ):
         engine = TransformersEngine()
         config = ExperimentConfig(

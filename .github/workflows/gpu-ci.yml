@@ -161,6 +161,16 @@ jobs:
       # /app/results/replay. results/ is overlaid read-write on top for the
       # replay fixtures and the sigint manifest. -p no:cacheprovider because
       # the pytest rootdir (/app) is read-only.
+      # The regen_engine_configs suite drives the datamodel-codegen config
+      # codegen through `uv run` (cwd=/app), which must create /app/.venv. But
+      # /app is bind-mounted read-only here for production parity, so uv cannot
+      # sync a venv and the codegen aborts. This is host-side developer tooling
+      # (schema -> config.py codegen), env-sensitive and fully exercised by
+      # hosted CI on the writable checkout with the dev group installed. The
+      # container job exists for GPU/engine/integration proof, so the codegen
+      # tests are descoped from it. Kept surgical: the sibling engine_producers
+      # tests (source_walker, runtime_literals, stub_factory) exercise codegen
+      # logic without the uv subprocess and run fine in-container.
       - name: All tests (including GPU)
         run: |
           docker run --rm --gpus all \
@@ -168,7 +178,9 @@ jobs:
             -v "${{ github.workspace }}/results":/app/results \
             -e PYTHONPATH -e PYTHONDONTWRITEBYTECODE -e HF_HOME \
             llenergymeasure-ci:transformers \
-            python3 -m pytest tests/ -v --tb=short -o "addopts=" -p no:cacheprovider
+            python3 -m pytest tests/ \
+              --ignore=tests/unit/scripts/engine_producers/test_regen_engine_configs.py \
+              -v --tb=short -o "addopts=" -p no:cacheprovider
 
       - name: SIGINT verification
         run: |
