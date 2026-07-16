@@ -178,11 +178,20 @@ def estimate_flops_palm_from_config(
 
 
 def write_timeseries_parquet(
-    samples: list[PowerThermalSample], path: Path
+    samples: list[PowerThermalSample],
+    path: Path,
+    *,
+    experiment_id: str | None = None,
+    measurement_config_hash: str | None = None,
 ) -> Path:  # pragma: no cover
     from llenergymeasure.harness.timeseries import write_timeseries_parquet as _wts
 
-    return _wts(samples, path)
+    return _wts(
+        samples,
+        path,
+        experiment_id=experiment_id,
+        measurement_config_hash=measurement_config_hash,
+    )
 
 
 def collect_measurement_warnings(
@@ -690,7 +699,9 @@ class MeasurementHarness:
         """Write the timeseries + config sidecars and assemble the ExperimentResult."""
         _p = progress
 
-        # 14. Write timeseries Parquet sidecar (if output_dir set and save_timeseries enabled)
+        # 14. Decide the timeseries sidecar path. The Parquet file is written after
+        # the result is assembled (step 17) so it can carry the experiment identity
+        # as file-level metadata, mirroring the JSON sidecars.
         resolved_output_dir = Path(output_dir) if output_dir is not None else None
         if _p:
             _p.on_step_start(
@@ -700,14 +711,11 @@ class MeasurementHarness:
             )
             t0_save = time.perf_counter()
 
-        timeseries_path: str | None = None
-        if save_timeseries and resolved_output_dir is not None and window.timeseries_samples:
-            ts_file = write_timeseries_parquet(
-                window.timeseries_samples,
-                resolved_output_dir / TIMESERIES_FILENAME,
-            )
-            timeseries_path = ts_file.name  # relative name in result JSON
-            _emit_substep(_p, "save", "timeseries parquet written")
+        write_timeseries = bool(
+            save_timeseries and resolved_output_dir is not None and window.timeseries_samples
+        )
+        # Relative name recorded in result JSON; the file lands at this basename.
+        timeseries_path: str | None = TIMESERIES_FILENAME if write_timeseries else None
 
         # 15. Collect measurement quality warnings
         duration_sec = (window.end_time - window.start_time).total_seconds()
@@ -738,7 +746,17 @@ class MeasurementHarness:
         )
         _emit_substep(_p, "save", "result assembled")
 
-        # 17. Write config.json sidecar (observed-params + observed_config_hash)
+        # 17. Write timeseries Parquet sidecar, tagged with the assembled identity.
+        if write_timeseries and resolved_output_dir is not None:
+            write_timeseries_parquet(
+                window.timeseries_samples,
+                resolved_output_dir / TIMESERIES_FILENAME,
+                experiment_id=result.experiment_id,
+                measurement_config_hash=result.measurement_config_hash,
+            )
+            _emit_substep(_p, "save", "timeseries parquet written")
+
+        # 18. Write config.json sidecar (observed-params + observed_config_hash)
         # Written to output_dir (temp dir, same as timeseries.parquet) so the
         # runner can move it to the per-experiment directory.
         if resolved_output_dir is not None:

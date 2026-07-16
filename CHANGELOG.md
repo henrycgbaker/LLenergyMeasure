@@ -9,6 +9,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Added
 
+- The `timeseries.parquet` sidecar now carries `experiment_id` and
+  `measurement_config_hash` as Parquet file-level key-value metadata (not columns), so the
+  artefact stays attributable if separated from its result directory. This mirrors the
+  identity fields the JSON sidecars already carry and completes the per-experiment bundle
+  identity rationalisation. Data columns and schema are unchanged; readers that ignore file
+  metadata are unaffected.
 - The per-experiment `config.json` sidecar now carries its own `schema_version`
   (`"2.0"`), independent of `result.json`'s schema version. It succeeds the retired
   `_resolution.json` sidecar (`"1.0"`), whose per-field provenance now lives in this file.
