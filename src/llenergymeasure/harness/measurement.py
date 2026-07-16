@@ -813,28 +813,42 @@ class MeasurementHarness:
             logger.debug("Config sidecar write failed (non-fatal): %s", exc)
 
     def _capture_model_memory_mb(self, gpu_indices: list[int] | None = None) -> float:
-        """Query torch for GPU max_memory_allocated() after model load.
+        """Capture the post-load model-memory baseline in MB.
 
-        Iterates over gpu_indices (defaults to [0] when None), queries
-        max_memory_allocated(device=idx) per GPU, and returns the max across
-        all ranks. This ensures tensor-parallel experiments report the peak
-        across all participating GPUs.
+        In-process engines (Transformers): torch's per-process allocator sees the
+        loaded weights, so ``torch.cuda.max_memory_allocated(device=idx)`` per
+        rank (max across ``gpu_indices``, defaulting to ``[0]``) is authoritative
+        and captures the tensor-parallel peak.
 
-        Returns 0.0 if torch is unavailable or CUDA is not available.
+        Out-of-process engines (vLLM V1 EngineCore, TRT-LLM executor): the weights
+        are loaded in a child process, so torch here reports a silent 0.0. Fall
+        back to NVML device-used memory (whole-device; see
+        :func:`get_nvml_device_memory_mb` for the tenancy caveat).
+
+        Returns 0.0 only when NEITHER source is available (no torch/CUDA and no
+        NVML, or a CPU run). The domain layer coerces a 0.0 baseline to null so
+        the field is never a silently-wrong zero.
         """
+        torch_mb = 0.0
         if importlib.util.find_spec("torch") is not None:
             try:
                 import torch
 
                 if torch.cuda.is_available():
                     indices = gpu_indices if gpu_indices is not None else [0]
-                    if not indices:
-                        return 0.0
-                    peak = max(torch.cuda.max_memory_allocated(device=idx) for idx in indices)
-                    return bytes_to_mb(peak)
+                    if indices:
+                        peak = max(torch.cuda.max_memory_allocated(device=idx) for idx in indices)
+                        torch_mb = bytes_to_mb(peak)
             except Exception:
-                pass
-        return 0.0
+                torch_mb = 0.0
+        if torch_mb > 0:
+            return torch_mb
+
+        # torch saw nothing: out-of-process engine or no in-process CUDA activity.
+        from llenergymeasure.engines._cuda import get_nvml_device_memory_mb
+
+        nvml_mb = get_nvml_device_memory_mb(gpu_indices)
+        return nvml_mb if nvml_mb is not None else 0.0
 
     def _estimate_flops(
         self,
@@ -1212,13 +1226,21 @@ class MeasurementHarness:
             else None
         )
 
-        # Memory metrics: inference-window-only peak and derived delta.
-        inference_memory_mb = max(0.0, output.peak_memory_mb - model_memory_mb)
+        # Memory metrics: inference-window-only peak and derived delta. Both peak
+        # and model baseline are 0.0 when neither torch nor NVML could measure
+        # them (out-of-process engine with NVML unavailable, or a CPU run); the
+        # delta is only meaningful when both are real, otherwise it stays null
+        # rather than reporting a silently-wrong number.
+        inference_memory_mb: float | None
+        if output.peak_memory_mb > 0 and model_memory_mb > 0:
+            inference_memory_mb = max(0.0, output.peak_memory_mb - model_memory_mb)
+        else:
+            inference_memory_mb = None
         logger.debug(
-            "Memory: model=%.1fMB, peak_inference=%.1fMB, inference_delta=%.1fMB",
+            "Memory: model=%.1fMB, peak_inference=%.1fMB, inference_delta=%s",
             model_memory_mb,
             output.peak_memory_mb,
-            inference_memory_mb,
+            f"{inference_memory_mb:.1f}MB" if inference_memory_mb is not None else "null",
         )
 
         # --- Extended efficiency metrics ---

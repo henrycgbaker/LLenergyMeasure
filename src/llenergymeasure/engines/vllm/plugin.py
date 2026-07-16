@@ -269,14 +269,28 @@ class VLLMEngine:
                 hint="reduce n, use gpu_memory_utilization=0.8, or use a smaller model.",
             )
 
-        # Capture peak memory - torch first, NVML fallback for pre-allocation detection.
-        from llenergymeasure.engines._cuda import get_cuda_peak_memory_mb
+        # Capture peak memory - torch first, NVML fallback for out-of-process
+        # (V1) runs and pre-allocation detection.
+        from llenergymeasure.engines._cuda import (
+            get_cuda_peak_memory_mb,
+            get_nvml_device_memory_mb,
+        )
 
         peak_mb = get_cuda_peak_memory_mb()
 
-        # Heuristic: if peak matches gpu_memory_utilization * total_vram within 5%,
-        # it's likely pre-allocation, not actual usage. Fall back to NVML.
-        if peak_mb > 0:
+        if peak_mb == 0.0:
+            # vLLM V1 runs its model in the EngineCore child process, so torch's
+            # per-process allocator here saw nothing (a silent 0.0). Fall back to
+            # NVML device-used memory (whole-device; see get_nvml_device_memory_mb
+            # for the tenancy caveat). None stays 0.0 and is nulled downstream.
+            nvml_peak = get_nvml_device_memory_mb()
+            if nvml_peak is not None:
+                peak_mb = nvml_peak
+        elif peak_mb > 0:
+            # torch saw an in-process allocation (V0-era), but it may just be
+            # vLLM's pre-allocation. Heuristic: if peak matches
+            # gpu_memory_utilization * total_vram within 5%, it's pre-allocation,
+            # not actual usage - NVML device-used is the closer proxy.
             try:
                 import torch
 
@@ -294,7 +308,7 @@ class VLLMEngine:
                         peak_mb,
                         expected_prealloc,
                     )
-                    nvml_peak = self._nvml_peak_memory_mb()
+                    nvml_peak = get_nvml_device_memory_mb()
                     if nvml_peak is not None:
                         peak_mb = nvml_peak
             except Exception:
@@ -533,24 +547,3 @@ class VLLMEngine:
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
         return BeamSearchParams(**kwargs)
-
-    # -------------------------------------------------------------------------
-    # Private: inference helpers
-    # -------------------------------------------------------------------------
-
-    @staticmethod
-    def _nvml_peak_memory_mb() -> float | None:
-        """Query NVML for current GPU memory used. Returns MB or None on failure."""
-        try:
-            import pynvml
-
-            from llenergymeasure.device.gpu_info import nvml_context
-
-            mem_mb: float | None = None
-            with nvml_context():
-                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                mem_mb = bytes_to_mb(float(info.used))
-            return mem_mb
-        except Exception:
-            return None

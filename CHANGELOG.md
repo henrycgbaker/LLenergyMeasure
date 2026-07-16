@@ -88,6 +88,24 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Memory metrics are no longer a silent 0.0 for out-of-process engines. vLLM V1 runs its
+  model in the EngineCore child process and TensorRT-LLM in its executor process, so torch's
+  per-process allocator in the driver process saw nothing and `extended_metrics.memory`
+  `peak_memory_mb` / `model_memory_mb` came back as exactly 0.0 on every vLLM and TRT-LLM
+  experiment (real values only for in-process Transformers). Both capture points now fall
+  back to NVML device-used memory when the torch reading is implausible (`== 0.0`): the
+  harness model-memory baseline, and the plugin peak-memory read (vLLM's NVML fallback was
+  previously gated on the already-broken `peak > 0` torch value so it never fired; TRT-LLM
+  had no fallback at all). Transformers keeps its authoritative torch reading and never
+  consults NVML. The cascade fields that were nulled by the zero (`tokens_per_gb_vram`,
+  `model_memory_utilisation`, `kv_cache_memory_ratio`) now populate. NVML `used` is a
+  whole-device reading (it includes this process's CUDA context and any co-tenants), so the
+  absolute peak/model figures are an upper bound; the derived `inference_memory_mb` delta
+  cancels the shared context term and stays meaningful. Under `LLEM_DOCKER_GPUS` pinning the
+  container sees only the pinned device(s), so NVML index resolution matches the experiment's
+  own GPUs. The raw memory fields are now nullable and any residual 0.0 is coerced to null at
+  the domain boundary - the fields are always either a real measurement or null, never a
+  silently-wrong zero.
 - llem now forwards every `NCCL_*` host environment variable into both the experiment
   container (`infra.docker_runner`) and the baseline container (`study.baseline_container`),
   so NCCL tuning/workaround settings set on the host reach the engine process, which runs

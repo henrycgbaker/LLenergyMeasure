@@ -104,23 +104,28 @@ def _compute_memory_metrics(
     if not memory_stats:
         return mem
 
-    # Raw values
+    # Raw values. model/peak are 0.0 when neither torch nor NVML could measure
+    # them (out-of-process engine with NVML unavailable, or a CPU run). A 0.0 is
+    # not a real measurement, so coerce it to null here at the model boundary -
+    # the field must be either correct or null, never a silent zero.
     mem.total_vram_mb = memory_stats.get("total_vram_mb", 0.0)
-    mem.model_memory_mb = memory_stats.get("model_mb", 0.0)
-    mem.peak_memory_mb = memory_stats.get("peak_mb", 0.0)
+    model_mb = memory_stats.get("model_mb", 0.0)
+    peak_mb = memory_stats.get("peak_mb", 0.0)
+    mem.model_memory_mb = model_mb if model_mb and model_mb > 0 else None
+    mem.peak_memory_mb = peak_mb if peak_mb and peak_mb > 0 else None
     mem.kv_cache_mb = memory_stats.get("kv_cache_mb")
 
-    # Derived metrics
-    if mem.peak_memory_mb > 0 and output_tokens > 0:
+    # Derived metrics (null when their inputs are unmeasured/null)
+    if mem.peak_memory_mb and output_tokens > 0:
         # Tokens per GB of VRAM used
         peak_gb = mem.peak_memory_mb / 1024
         if peak_gb > 0:
             mem.tokens_per_gb_vram = output_tokens / peak_gb
 
-    if mem.total_vram_mb > 0 and mem.model_memory_mb > 0:
+    if mem.total_vram_mb > 0 and mem.model_memory_mb:
         mem.model_memory_utilisation = mem.model_memory_mb / mem.total_vram_mb
 
-    if mem.kv_cache_mb is not None and mem.peak_memory_mb > 0:
+    if mem.kv_cache_mb is not None and mem.peak_memory_mb:
         mem.kv_cache_memory_ratio = mem.kv_cache_mb / mem.peak_memory_mb
 
     return mem
