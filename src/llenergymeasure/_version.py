@@ -5,4 +5,4 @@ by modules at every layer to avoid pulling in the full __init__.py
 import chain.
 """
 
-__version__: str = "0.10.0"
+__version__: str = "0.11.0"

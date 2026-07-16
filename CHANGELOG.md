@@ -7,8 +7,15 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-07-16
+
 ### Added
 
+- GPU CI engine matrix: `gpu-ci.yml` now boots each pinned upstream engine container
+  (vllm, tensorrt both backends) and runs one tiny inference through the real `llem run`
+  docker-dispatch path, auto-triggered when a PR touches engine pins, engine plugins, or
+  the dispatch surface. GPU jobs serialize to respect the shared runner's free devices;
+  the transformers test container now mounts project source per the image contract. ([#806])
 - `ExperimentResult.engine_build_cache_hit`: whether the tensorrt trt-backend engine build
   was served from the on-disk build cache (`true`) or compiled fresh (`false`); `null` when
   the cache is not in play (pytorch backend, other engines, an `engine_path` override, or the
@@ -37,7 +44,6 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `per_request_batch`. Default runs are unchanged: the flag is never set without
   latency profiling, and the `latency_profiling_unsupported` degradation warning now
   fires only when profiling was requested but the engine returned no metrics. ([#803])
-
 - TensorRT-LLM schema discovery now mines BOTH backend args classes and unions them into
   one discovered engine-params surface (63 -> 95 fields): `TrtLlmArgs` (the `trt` backend)
   and `TorchLlmArgs` (the `pytorch` backend). Each field carries a `backends` applicability
@@ -66,16 +72,37 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   upstream kwarg renames the mined schema already knows about but the hand-written glue
   code missed (the `quantization` -> `quant_config` case). Wired as
   `make check-plugin-kwargs` and a `plugin-kwarg-check` job in ci.yml. ([#800])
+- Standing deterministic cross-field extractor (`scripts/cross_field_extractor.py`): the
+  value core of the retired per-version invariant miners - the AST walk extracting
+  cross-field raise/normalisation conditions from validator bodies - generalised into one
+  engine-generic proposer driven by per-engine descriptors. No LLM, no network, no engine
+  import: it reads the pinned source tree on the host, so it covers CUDA-binding engines
+  and is byte-stable. Wired into absorb as a third standing pool source alongside the
+  analyst cold read and manual seeds; the verification ladder still adjudicates every
+  candidate. Pool and corpus dedup now also collapse candidates on the canonical match
+  spec (severity + fields + operators + values), dropping two shipped duplicate tensorrt
+  rule pairs (29 -> 27). ([#795])
 
 ### Changed
 
+- TensorRT-LLM user docs rewritten to match the activated engine at 1.2.1: both measured
+  backends as a config axis, the build-cache lifecycle and result annotations,
+  single-process multi-GPU with `LLEM_DOCKER_GPUS` pinning and `NCCL_*` forwarding, and
+  hardware/quantisation constraints. Stale claims contradicting the code were fixed: the
+  invented `build_metadata` result field, the removed `mpirun` entrypoint wrapping,
+  "latency always null for tensorrt", broken flat-layout YAML examples, and five 1.0.0
+  image pins. ([#815])
+- Energy-methodology doc updated for fields that had moved: the GPU-telemetry section now
+  documents study-level `output.save_timeseries` (its experiment-level `gpu_telemetry`
+  predecessor was renamed when `OutputConfig` was extracted), and `energy_sampler` is shown
+  under `measurement:` rather than as a flat top-level key. ([#808])
 - The upstream-image engine-version handshake probe (a ~60s cold `docker run` per engine
   per study) is now cached on disk keyed by the image content digest, under
   `platformdirs.user_cache_dir("llem")/image-probe/`. A warm image resolves from the cache
   (a `docker image inspect`) instead of re-probing, so the per-study cost the F2 plan flagged
   drops to near zero. The in-process memo remains the first tier; a corrupt, unreadable, or
   unwritable cache degrades to a fresh probe and never crashes. Entries never go stale: a
-  rebuilt or re-pulled image gets a new digest and a fresh probe, so no TTL is needed.
+  rebuilt or re-pulled image gets a new digest and a fresh probe, so no TTL is needed. ([#805])
 - TensorRT-LLM backends are now selected by constructor class, not a kwarg: `backend='trt'`
   resolves `tensorrt_llm._tensorrt_engine.LLM` and `pytorch`/unset resolves `tensorrt_llm.LLM`,
   validated live at 1.2.1 (the base `LLM` rejects `backend='trt'` at model load). `backend` is
@@ -88,6 +115,14 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- vLLM per-request latency was never captured at 0.19.1: the extractor read the V0
+  `RequestOutput.metrics` surface, which no longer exists under V1, and the offline `LLM`
+  entrypoint forces `disable_log_stats=True`, so `latency_stats` came back null on every
+  vLLM run. The plugin now enables engine stats only when latency profiling is requested
+  (mirroring the tensorrt `return_perf_metrics` gate, so default energy runs are untouched)
+  and reads the V1 `RequestStateStats` surface: TTFT from `first_token_latency`, E2E from
+  the monotonic decode interval, and a decode-average ITL; capture mode is `proportional`.
+  The stale V0 extractors were removed. ([#817])
 - Memory metrics are no longer a silent 0.0 for out-of-process engines. vLLM V1 runs its
   model in the EngineCore child process and TensorRT-LLM in its executor process, so torch's
   per-process allocator in the driver process saw nothing and `extended_metrics.memory`
@@ -105,7 +140,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   container sees only the pinned device(s), so NVML index resolution matches the experiment's
   own GPUs. The raw memory fields are now nullable and any residual 0.0 is coerced to null at
   the domain boundary - the fields are always either a real measurement or null, never a
-  silently-wrong zero.
+  silently-wrong zero. ([#816])
 - llem now forwards every `NCCL_*` host environment variable into both the experiment
   container (`infra.docker_runner`) and the baseline container (`study.baseline_container`),
   so NCCL tuning/workaround settings set on the host reach the engine process, which runs
@@ -115,6 +150,20 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   hang at the first NCCL collective. Vars are emitted as explicit `-e KEY=VALUE` args
   (matching the existing `LLEM_*` forwarding idiom) in sorted key order for a deterministic
   command. ([#814])
+- Multi-device GPU pinning (`LLEM_DOCKER_GPUS=device=1,3`) was rejected by docker: the bare
+  `--gpus` value parses as CSV, so it split at the comma into a device id plus a GPU count
+  ("cannot set both Count and DeviceIDs on device request"). Comma-bearing `device=`
+  selectors are now wrapped in literal double quotes via `env_config.docker_gpus_arg()`;
+  the `all`, count, and single-device forms pass through verbatim, and lock-id parsing
+  still sees the raw selector. ([#810])
+- TensorRT-LLM tensor-parallel runs are no longer launched under `mpirun`: the LLM API
+  self-manages TP from a single process at 1.2.x, and the external `mpirun -n {tp}` wrap
+  made every rank re-run the whole experiment entrypoint (under `python -m` every rank
+  passes the `__main__` guard), so TP=2 either corrupted the shared build cache in the
+  upstream write-guard race or OOMed on duplicate executors. The mpirun branch and
+  `LLEM_MPI_NP` are removed; the container entrypoint always execs a single `python3` and
+  the LLM API spawns its own ranks. Verified live at TP=2 on the trt backend, cold build
+  and warm cache hit. ([#809])
 - Study GPU advisory locks are now named by the PHYSICAL device a study occupies, not the
   in-container logical index. Lock names came from `_resolve_gpu_indices` (which enumerates
   from 0), but the physical device is chosen at the docker level by `LLEM_DOCKER_GPUS`
@@ -152,6 +201,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   across all images of one python minor, so whichever engine dispatched first suppressed the
   missing-deps probe for the others (the TRT-LLM NGC image, which ships every llem dep,
   masked the vllm image's missing pyarrow -> parquet write crash). ([#803])
+- The standing cross-field extractor emitted citations the citation checker rejects
+  (single-line spans with no quote), crashing `make absorb` at the `citation_pass_rate`
+  stage whenever the candidate pool held an extractor candidate. Fixed at the emitter:
+  each citation now spans the outermost contributing guard down to the raise/assignment
+  site and carries the verbatim source quote of that span. Claim ids and output stay
+  byte-stable; the shipped corpus is unchanged. ([#802])
 - Transformers image seed and dev cache hygiene: `make docker-seed-transformers` no longer runs
   a harmful second push that wrote plain `transformers:latest` / `transformers:v<version>`
   images and a clobber-prone `mode=max` cache to `:latest`. The `-buildcache` ref is now the
@@ -193,6 +248,14 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 - TensorRT discovery and probe containers route through the NVIDIA entrypoint: the 1.2.1 NGC
   image moved `LD_LIBRARY_PATH` setup into `/etc/shinit_v2`, so bypassing the entrypoint broke
   `import tensorrt`. ([#792])
+
+### Removed
+
+- Vendored per-version invariant-miner machinery, superseded by the standing cross-field
+  extractor: 13 static/dynamic miner bodies under `engine_versions/*/producers/`, their
+  orphaned proposed/validated outputs, the orchestrator and shim modules, and miner-only
+  tests (net -25k lines). The drift check drops the retired miner rows and keeps the live
+  schema-producer path. ([#796])
 
 ## [v0.10.0] - 2026-07-13
 
@@ -669,7 +732,8 @@ Core measurement functionality establishing the foundation for all subsequent de
 - Major directory restructuring separating config, core, and result handling.
 
 
-[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.11.0...HEAD
+[v0.11.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.10.0
 [v0.9.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.9.0
 [v0.8.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.8.0
@@ -835,12 +899,23 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#789]: https://github.com/henrycgbaker/llenergymeasure/pull/789
 [#791]: https://github.com/henrycgbaker/llenergymeasure/pull/791
 [#792]: https://github.com/henrycgbaker/llenergymeasure/pull/792
+[#795]: https://github.com/henrycgbaker/llenergymeasure/pull/795
+[#796]: https://github.com/henrycgbaker/llenergymeasure/pull/796
 [#797]: https://github.com/henrycgbaker/llenergymeasure/pull/797
 [#798]: https://github.com/henrycgbaker/llenergymeasure/pull/798
 [#799]: https://github.com/henrycgbaker/llenergymeasure/pull/799
 [#800]: https://github.com/henrycgbaker/llenergymeasure/pull/800
 [#801]: https://github.com/henrycgbaker/llenergymeasure/pull/801
+[#802]: https://github.com/henrycgbaker/llenergymeasure/pull/802
 [#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
 [#804]: https://github.com/henrycgbaker/llenergymeasure/pull/804
+[#805]: https://github.com/henrycgbaker/llenergymeasure/pull/805
+[#806]: https://github.com/henrycgbaker/llenergymeasure/pull/806
 [#807]: https://github.com/henrycgbaker/llenergymeasure/pull/807
+[#808]: https://github.com/henrycgbaker/llenergymeasure/pull/808
+[#809]: https://github.com/henrycgbaker/llenergymeasure/pull/809
+[#810]: https://github.com/henrycgbaker/llenergymeasure/pull/810
 [#814]: https://github.com/henrycgbaker/llenergymeasure/pull/814
+[#815]: https://github.com/henrycgbaker/llenergymeasure/pull/815
+[#816]: https://github.com/henrycgbaker/llenergymeasure/pull/816
+[#817]: https://github.com/henrycgbaker/llenergymeasure/pull/817
