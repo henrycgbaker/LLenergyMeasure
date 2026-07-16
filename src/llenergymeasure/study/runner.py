@@ -50,6 +50,7 @@ from llenergymeasure.config.ssot import (
 )
 from llenergymeasure.domain.bundle_artefacts import (
     CONFIG_SIDECAR_FILENAME,
+    ENVIRONMENT_FILENAME,
     EQUIVALENCE_GROUPS_FILENAME,
 )
 from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
@@ -144,8 +145,12 @@ def _save_and_record(
             (authoritative home: config.json; the result keeps a convenience copy).
         engine: Inference engine name for the experiment directory slug
             (authoritative home: config.json; the result keeps a convenience copy).
-        ts_source_dir: Directory where the harness wrote timeseries.parquet.
-        environment_snapshot: EnvironmentSnapshot for per-experiment environment.json sidecar.
+        ts_source_dir: Directory where the harness wrote timeseries.parquet. Under
+            docker dispatch this is the rescue dir and also carries the accurate
+            in-container environment.json, which is preferred over environment_snapshot.
+        environment_snapshot: EnvironmentSnapshot for the per-experiment environment.json
+            sidecar. Written first, then overwritten by a rescued in-container
+            environment.json when docker dispatch produced one (see below).
         resolution_log: Pre-built per-field resolution log for this experiment,
             folded into the config.json sidecar's ``provenance`` section.
         runner_provenance: How the experiment was executed (local vs docker). Attached to the
@@ -188,6 +193,38 @@ def _save_and_record(
                 environment_snapshot,
                 result.experiment_id,
                 config_hash,
+                result_path.parent,
+            )
+
+        # Environment sidecar rescue (docker dispatch): the accurate snapshot is
+        # collected INSIDE the container and rescued to ts_source_dir. The host
+        # snapshot written just above describes the dispatching host, not the
+        # container the experiment actually ran in, so prefer the rescued file
+        # when present - it overwrites the host-written environment.json. Local
+        # in-process runs never produce a rescued file, so this is a no-op for them.
+        rescued_env = ts_source_dir / ENVIRONMENT_FILENAME if ts_source_dir is not None else None
+        if rescued_env is not None and rescued_env.exists():
+            try:
+                from llenergymeasure.results.persistence import _atomic_write
+
+                _atomic_write(
+                    json.dumps(load_json(rescued_env), indent=2, default=str),
+                    result_path.parent / ENVIRONMENT_FILENAME,
+                )
+            except Exception as exc:  # pragma: no cover - best-effort
+                logger.debug("environment.json sidecar rescue failed: %s", exc)
+            finally:
+                rescued_env.unlink(missing_ok=True)
+        elif runner_provenance is not None and runner_provenance.mode == RUNNER_DOCKER:
+            # Loudness backstop mirroring the config.json one below: a docker run
+            # that lands without a rescued snapshot means environment.json records
+            # the dispatching host, not the container - a reproducibility defect.
+            logger.warning(
+                "No in-container environment.json rescued for %s (cycle %d) at %s - "
+                "environment.json records the dispatching host, not the container "
+                "the experiment ran in.",
+                config_hash,
+                cycle,
                 result_path.parent,
             )
 

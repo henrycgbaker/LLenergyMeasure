@@ -318,6 +318,180 @@ def test_provenance_from_spec_docker() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Environment sidecar rescue (docker dispatch)
+# ---------------------------------------------------------------------------
+
+
+def _make_host_snapshot():
+    """Host-collected EnvironmentSnapshot with distinctly HOST values.
+
+    Mirrors the audit's observed host bleed-through (python 3.12.12, cuda null,
+    container not detected) so a test can prove the container values win.
+    """
+    from datetime import datetime
+
+    from llenergymeasure.domain.environment import (
+        CPUEnvironment,
+        CUDAEnvironment,
+        EnvironmentMetadata,
+        EnvironmentSnapshot,
+        GPUEnvironment,
+    )
+
+    hardware = EnvironmentMetadata(
+        gpu=GPUEnvironment(name="HOST-GPU", vram_total_mb=1.0),
+        cuda=CUDAEnvironment(version="unknown", driver_version="unknown"),
+        cpu=CPUEnvironment(platform="Linux"),
+        collected_at=datetime(2026, 1, 1, 0, 0, 0),
+    )
+    return EnvironmentSnapshot(
+        hardware=hardware,
+        python_version="3.12.12",
+        tool_version="0.11.0",
+        cuda_version=None,
+        cuda_version_source=None,
+    )
+
+
+def _write_container_environment_sidecar(path: Path) -> dict:
+    """Write a rescued in-container environment.json (distinct CONTAINER values)."""
+    import json
+
+    payload = {
+        "experiment_id": "test-save-record-001",
+        "measurement_config_hash": "aabb1122ccdd3344",
+        "hardware": {
+            "gpu": {"name": "NVIDIA A100-SXM4-80GB", "vram_total_mb": 81920.0},
+            "cuda": {"version": "12.4", "driver_version": "535.104"},
+            "cpu": {"platform": "Linux"},
+            "collected_at": "2026-01-02T00:00:00",
+        },
+        "python_version": "3.10.14",
+        "tool_version": "0.11.0",
+        "cuda_version": "12.4",
+        "cuda_version_source": "torch",
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return payload
+
+
+def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
+    """Under docker dispatch, the rescued in-container environment.json is
+    preferred over the host snapshot for the persisted environment.json."""
+    import json
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    # Container rescued environment.json lives in the artefact (ts_source) dir.
+    _write_container_environment_sidecar(tmp_path / "environment.json")
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    _save_and_record(
+        result,
+        study_dir,
+        manifest,
+        "aabb1122",
+        1,
+        result_files,
+        model_name="gpt2",
+        engine="transformers",
+        ts_source_dir=tmp_path,
+        environment_snapshot=_make_host_snapshot(),
+        runner_provenance=RunnerProvenance(
+            mode="docker", image="img:1.0", source="yaml", image_source="registry"
+        ),
+    )
+
+    assert len(result_files) == 1
+    env_dest = Path(result_files[0]).parent / "environment.json"
+    assert env_dest.exists()
+    payload = json.loads(env_dest.read_text())
+    # Container values must win over the host snapshot written first.
+    assert payload["python_version"] == "3.10.14", "container python must win, not host 3.12.12"
+    assert payload["cuda_version"] == "12.4", "container cuda must win, not host null"
+    assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
+    # The rescued file in the staging dir must be consumed (moved).
+    assert not (tmp_path / "environment.json").exists()
+
+
+def test_docker_without_rescued_environment_warns(tmp_path: Path, caplog) -> None:
+    """A docker run that lands without a rescued snapshot logs a loud warning
+    (the persisted environment.json would carry host, not container, values)."""
+    import logging
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+        _save_and_record(
+            result,
+            study_dir,
+            manifest,
+            "aabb1122",
+            1,
+            result_files,
+            model_name="gpt2",
+            engine="transformers",
+            ts_source_dir=tmp_path,  # no environment.json inside
+            environment_snapshot=_make_host_snapshot(),
+            runner_provenance=RunnerProvenance(
+                mode="docker", image="img:1.0", source="yaml", image_source="registry"
+            ),
+        )
+
+    assert any(
+        "No in-container environment.json rescued" in rec.message for rec in caplog.records
+    ), "docker dispatch without a rescued snapshot must warn loudly"
+
+
+def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) -> None:
+    """Local dispatch is unchanged: host snapshot is written, no rescue, no warning."""
+    import json
+    import logging
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+        _save_and_record(
+            result,
+            study_dir,
+            manifest,
+            "aabb1122",
+            1,
+            result_files,
+            model_name="gpt2",
+            engine="transformers",
+            ts_source_dir=tmp_path,  # local temp dir never holds environment.json
+            environment_snapshot=_make_host_snapshot(),
+            runner_provenance=RunnerProvenance(
+                mode="local", image=None, source="local", image_source=None
+            ),
+        )
+
+    env_dest = Path(result_files[0]).parent / "environment.json"
+    assert env_dest.exists()
+    payload = json.loads(env_dest.read_text())
+    # Local: the host snapshot is authoritative and persisted as-is.
+    assert payload["python_version"] == "3.12.12"
+    assert not any(
+        "No in-container environment.json rescued" in rec.message for rec in caplog.records
+    ), "local dispatch must not emit the docker rescue warning"
+
+
 def test_provenance_from_spec_none_defaults_to_local() -> None:
     """No spec (pure in-process local) records mode=local, source=local, no image."""
     provenance = _provenance_from_spec(None)
