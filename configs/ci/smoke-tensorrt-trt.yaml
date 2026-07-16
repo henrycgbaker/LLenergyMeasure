@@ -1,0 +1,35 @@
+# GPU-CI smoke: boot the pinned TensorRT-LLM NGC container and run ONE tiny
+# inference through the COMPILED TRT backend (_tensorrt_engine.LLM class
+# dispatch + trtllm-build engine compile / build-cache path).
+#
+# Driven by .github/workflows/gpu-ci.yml (engine-smoke matrix). The workflow
+# sets LLEM_RUNNER_TENSORRT=docker, LLEM_IMAGE_TENSORRT=<pinned NGC image>
+# (resolved from engine_versions/tensorrt/current.yaml),
+# LLEM_TRT_BUILD_CACHE_ENABLED=1 (so the on-disk build cache warm on the runner
+# is used), and LLEM_DOCKER_GPUS pins to a free device on the shared box.
+#
+# This is the distinctive tensorrt path: it exercises the _tensorrt_engine.LLM
+# class dispatch and the trtllm-build compile / build-cache round trip. Small
+# build shape is kept modest but must fit the natural aienergyscore prompt
+# lengths (the compiled engine enforces max_seq_len at inference, unlike the
+# pytorch/vllm paths); a warm cache turns the compile into a cache hit.
+#
+# The CI assertion checks result.json exists and total_tokens > 0. It never
+# asserts on energy values.
+task:
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  dataset:
+    n_prompts: 2
+  max_output_tokens: 8
+engine: tensorrt
+tensorrt:
+  engine_params:
+    backend: trt
+    max_batch_size: 4
+    max_input_len: 1024
+    max_seq_len: 2048
+measurement:
+  warmup:
+    enabled: false
+  baseline:
+    enabled: false

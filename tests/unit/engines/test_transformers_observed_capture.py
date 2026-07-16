@@ -78,14 +78,31 @@ class TestEN2MergedGenerationConfig:
         assert sampling["top_p"] == 0.9  # untouched model default kept
 
     def test_falls_back_to_kwargs_when_no_model_config(self) -> None:
-        # No live generation_config (e.g. a mock model without one) and no real
-        # transformers installed: the GenerationConfig(**kwargs) fallback raises
-        # on import, so sampling capture is empty but the call still succeeds.
+        # No live generation_config (e.g. a mock model without one): the
+        # extractor falls back to GenerationConfig(**kwargs). The captured
+        # sampling shape then depends on whether transformers is importable in
+        # this environment:
+        #   - host (no transformers): the import raises, so capture is empty
+        #   - engine container (transformers present): a full default config is
+        #     built with the requested kwargs overlaid, so the kwarg survives
+        # Either way the call must succeed and engine params stay empty.
         model = _FakeHFModel()  # no generation_config attribute
         observed = TransformersEngine._capture_observed_params(
             _config(), model, {"temperature": 0.5}
         )
-        assert observed["sampling"] == {}
+        try:
+            import transformers  # noqa: F401
+
+            transformers_present = True
+        except ImportError:
+            transformers_present = False
+
+        if transformers_present:
+            assert observed["sampling"]["temperature"] == 0.5, (
+                "the requested kwarg must survive the GenerationConfig(**kwargs) fallback"
+            )
+        else:
+            assert observed["sampling"] == {}
         assert observed["engine"] == {}
 
 

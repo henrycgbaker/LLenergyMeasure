@@ -1,0 +1,27 @@
+# GPU-CI smoke: boot the pinned vLLM upstream container and run ONE tiny
+# inference through the real docker-dispatch plugin path.
+#
+# Driven by .github/workflows/gpu-ci.yml (engine-smoke matrix). The workflow
+# sets LLEM_RUNNER_VLLM=docker and LLEM_IMAGE_VLLM=<pinned upstream image>
+# (resolved from engine_versions/vllm/current.yaml) so dispatch uses the
+# pinned image, and LLEM_DOCKER_GPUS pins to a free device on the shared box.
+#
+# The CI assertion checks result.json exists and total_tokens > 0. It never
+# asserts on energy values (power numbers in CI are noise).
+#
+# Single-experiment YAML: no runner/runners key (ExperimentConfig forbids
+# extras). Runner and image come from the LLEM_RUNNER_*/LLEM_IMAGE_* env vars.
+task:
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  dataset:
+    n_prompts: 2
+  max_input_tokens: 32
+  max_output_tokens: 8
+engine: vllm
+measurement:
+  # Warmup + baseline disabled: CI proves boot + inference, not measurement
+  # quality. Skipping them removes the 30s thermal floor and 5s+ baseline.
+  warmup:
+    enabled: false
+  baseline:
+    enabled: false
