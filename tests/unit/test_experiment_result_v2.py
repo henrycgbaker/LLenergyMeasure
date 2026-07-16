@@ -1,8 +1,10 @@
 """Unit tests for the ExperimentResult schema.
 
 Tests cover: schema_version, core/energy/quality fields, JSON round-trip,
-config hash utility, MultiGPUMetrics, frozen model enforcement. Engine identity,
-model_name, and methodology fields live in the config.json sidecar, not here.
+config hash utility, MultiGPUMetrics, frozen model enforcement. The config.json
+sidecar is the authoritative home for identity and methodology; the result keeps
+engine and model_name as convenience copies, while engine_version and the
+methodology fields live in the sidecar only.
 """
 
 from datetime import datetime
@@ -80,6 +82,12 @@ def test_methodology_fields_rejected(make_result):
         make_result(measurement_methodology="total")
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         make_result(steady_state_window=(12.3, 67.8))
+
+
+def test_engine_version_rejected(make_result):
+    """engine_version lives in config.json only; ExperimentResult rejects it."""
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        make_result(engine_version="1.2.3")
 
 
 # ---------------------------------------------------------------------------
@@ -362,14 +370,22 @@ def test_n_prompts_default_matches_dataset_config():
 
 
 # ---------------------------------------------------------------------------
-# model_name moved to the config.json sidecar
+# Convenience identity copies (authoritative home: config.json sidecar)
 # ---------------------------------------------------------------------------
 
 
-def test_model_name_rejected(make_result):
-    """model_name moved to config.json; ExperimentResult rejects it."""
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        make_result(model_name="gpt2")
+def test_model_name_convenience_copy(make_result):
+    """model_name is kept on the result as a convenience copy."""
+    result = make_result(model_name="gpt2")
+    assert result.model_name == "gpt2"
+    assert make_result().model_name == "unknown"
+
+
+def test_engine_convenience_copy(make_result):
+    """engine is kept on the result as a convenience copy."""
+    result = make_result(engine="vllm")
+    assert result.engine == "vllm"
+    assert make_result().engine == "transformers"
 
 
 # ---------------------------------------------------------------------------

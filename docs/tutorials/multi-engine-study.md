@@ -249,13 +249,16 @@ experiment list, study timing, completion status per cell, and the
 effective study-level config. This is what you load when you want to
 *reason about the study as a whole* rather than one cell.
 
-A single `result.json` is pure measurement output (schema 5.0 - it no
-longer carries engine/model/config keys):
+A single `result.json` is measurement output (schema 5.0). Configuration
+moved to the sidecar; only `engine` and `model_name` remain as convenience
+copies so the file is self-describing when separated from its directory:
 
 ```json
 {
   "experiment_id": "qwen-transformers-bf16-bs16-fa2-2026-05-07T14-32-08",
   "schema_version": "5.0",
+  "engine": "transformers",
+  "model_name": "Qwen/Qwen2.5-0.5B",
   "total_tokens": 7680,
   "total_inference_time_sec": 9.8,
   "avg_tokens_per_second": 783.7,
@@ -269,10 +272,10 @@ longer carries engine/model/config keys):
 }
 ```
 
-Engine, model, and methodology identity are configuration inputs, not
-measurement output, so they live in the `config.json` sidecar next to
-`result.json` in the same cell directory - alongside the fully resolved
-config (`declared_config`) and per-field provenance:
+The authoritative home for engine, model, and methodology identity is the
+`config.json` sidecar next to `result.json` in the same cell directory -
+alongside the fully resolved config (`declared_config`) and per-field
+provenance:
 
 ```json
 {

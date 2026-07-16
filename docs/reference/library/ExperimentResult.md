@@ -34,10 +34,12 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | `experiment_id` | `str` | Unique identifier for this experiment run. |
 | `measurement_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
 | `llenergymeasure_version` | `str \| None` | Package version that produced this result. |
+| `engine` | `str` | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar. |
+| `model_name` | `str` | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar. |
 
 ### Engine, model, and methodology
 
-`ExperimentResult` is pure measurement output. Engine identity (`engine`, `engine_version`), `model_name`, and the measurement-methodology fields (`measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected`) are configuration inputs and live in the `config.json` sidecar next to `result.json`, not on this model.
+`ExperimentResult` is measurement output. `engine_version` and the measurement-methodology fields (`measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected`) are configuration inputs and live in the `config.json` sidecar next to `result.json`, not on this model. The model keeps `model_name` and `engine` as convenience copies so a result stays self-describing when separated from its directory; the authoritative home for both is `config.json`.
 
 ### Core metrics
 

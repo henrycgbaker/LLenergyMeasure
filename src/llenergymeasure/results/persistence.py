@@ -47,9 +47,9 @@ def _experiment_dir_name(
 
     Format: ``[{index:03d}_]c{cycle}_{model_short}-{engine}_{hash[:8]}``
 
-    ``model_name`` and ``engine`` are the identity of what was measured; they
-    live in the ``config.json`` sidecar (not ``result.json``) so the caller
-    supplies them explicitly.
+    ``model_name`` and ``engine`` are the identity of what was measured. Their
+    authoritative home is the ``config.json`` sidecar (``result.json`` carries
+    convenience copies only), so the caller supplies them explicitly.
 
     When ``experiment_index`` is provided (study context), the directory is
     prefixed with a zero-padded index for natural sort ordering.
@@ -135,10 +135,12 @@ def save_config_sidecar(
     §3.3. Fields:
 
     - ``engine`` / ``engine_version`` - the inference engine and its library
-      version. This is the sole on-disk home for engine identity; it is no longer
-      duplicated on ``result.json``.
+      version. This sidecar is the authoritative home for engine identity;
+      ``result.json`` keeps ``engine`` as a convenience copy only, and
+      ``engine_version`` lives here exclusively.
     - ``model_name`` - the model name/path that was measured (a configuration
-      input, not a measurement output).
+      input, not a measurement output). Authoritative here; ``result.json``
+      keeps a convenience copy.
     - ``measurement_methodology`` / ``steady_state_window`` /
       ``measurement_window_discard_fraction`` / ``steady_state_not_detected`` -
       how the measurement window was set up. Methodology choices are configuration,
@@ -270,10 +272,10 @@ def save_result(
     Args:
         result: The experiment result to persist.
         output_dir: Parent directory. Created if missing.
-        model_name: Model name/path (used for the directory slug). Lives in the
-            ``config.json`` sidecar, not on the result.
-        engine: Inference engine name (used for the directory slug). Lives in the
-            ``config.json`` sidecar, not on the result.
+        model_name: Model name/path (used for the directory slug). Authoritative
+            home is the ``config.json`` sidecar; the result carries a convenience copy.
+        engine: Inference engine name (used for the directory slug). Authoritative
+            home is the ``config.json`` sidecar; the result carries a convenience copy.
         timeseries_source: Optional path to existing .parquet file to copy in.
         experiment_index: Optional 1-based experiment index for directory prefix
             (used in study context for natural sort ordering).

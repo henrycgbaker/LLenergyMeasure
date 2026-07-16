@@ -30,9 +30,10 @@ file to its config hash.
 
 ## Simple usage
 
-Engine identity and model name live in the `config.json` sidecar next to each
-`result.json` (they are configuration inputs, not measurement output), so read
-them from disk via `result_files`:
+The authoritative home for engine identity and model name is the `config.json`
+sidecar next to each `result.json` (they are configuration inputs; `result.json`
+keeps `engine` and `model_name` as convenience copies only), so analysis code
+reads them from disk via `result_files`:
 
 ```python
 import json
@@ -137,8 +138,8 @@ Each item in `experiments` is an [`ExperimentResult`](./ExperimentResult). See
 
 ## Common patterns
 
-These patterns join each `result.json` with its `config.json` sidecar (which
-carries `engine` and `model_name`) via `result_files`.
+These patterns join each `result.json` with its `config.json` sidecar (the
+authoritative home of `engine` and `model_name`) via `result_files`.
 
 ### Filter results by engine
 

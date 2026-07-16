@@ -131,7 +131,7 @@ The full result is saved as a JSON file in the `results/` directory. Key fields:
 | `total_tokens` | Total tokens processed across all prompts. |
 | `total_flops` | Estimated total floating-point operations. |
 
-`result.json` is measurement-only (schema 5.0). The exact configuration used - model, dtype, engine, engine version, methodology, and every engine default - lives in the `config.json` sidecar next to it, under `declared_config` plus the top-level `engine` / `model_name` / `measurement_methodology` fields. That sidecar is the reproducibility record: it captures every setting that influenced the measurement, including defaults that were not explicitly specified.
+`result.json` is measurement output (schema 5.0), keeping only `model_name` and `engine` as convenience identity copies. The exact configuration used - model, dtype, engine, engine version, methodology, and every engine default - has its authoritative home in the `config.json` sidecar next to it, under `declared_config` plus the top-level `engine` / `model_name` / `measurement_methodology` fields. That sidecar is the reproducibility record: it captures every setting that influenced the measurement, including defaults that were not explicitly specified.
 
 For the full schema, see [Reference: results schema](/reference/results-schema).
 

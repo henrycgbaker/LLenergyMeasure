@@ -140,10 +140,10 @@ def _save_and_record(
     flat file written by MeasurementHarness is removed after the copy.
 
     Args:
-        model_name: Model name/path for the experiment directory slug (lives in
-            the config.json sidecar, not on the result).
-        engine: Inference engine name for the experiment directory slug (lives in
-            the config.json sidecar, not on the result).
+        model_name: Model name/path for the experiment directory slug
+            (authoritative home: config.json; the result keeps a convenience copy).
+        engine: Inference engine name for the experiment directory slug
+            (authoritative home: config.json; the result keeps a convenience copy).
         ts_source_dir: Directory where the harness wrote timeseries.parquet.
         environment_snapshot: EnvironmentSnapshot for per-experiment environment.json sidecar.
         resolution_log: Pre-built per-field resolution log for this experiment,
@@ -217,13 +217,13 @@ def _save_and_record(
                     config_sidecar_src.unlink(missing_ok=True)
 
         # Loudness backstop: config.json is the sole home of provenance and
-        # engine/model/methodology identity. A completed experiment that lands
+        # the authoritative home of identity. A completed experiment that lands
         # without one is silent data loss - warn (never fail) so the gap is
         # visible rather than discovered later at analysis time.
         if not (result_path.parent / CONFIG_SIDECAR_FILENAME).exists():
             logger.warning(
                 "No config.json materialised for %s (cycle %d) at %s - provenance "
-                "and engine/model identity are missing from this result.",
+                "and authoritative engine/model identity are missing from this result.",
                 config_hash,
                 cycle,
                 result_path.parent,
@@ -786,7 +786,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         # output_dir (a runtime param, not from config) and writes config.json
         # there always, plus timeseries.parquet when save_timeseries is on. The
         # staging dir is created regardless of save_timeseries so the config.json
-        # sidecar - the sole home of provenance/identity - always materialises;
+        # sidecar - sole home of provenance, authoritative home of identity -
+        # always materialises;
         # it is cleaned up after _handle_result copies the artefacts into the
         # study directory.
         save_ts = self.study.output.save_timeseries

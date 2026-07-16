@@ -37,10 +37,10 @@ from llenergymeasure.results.persistence import save_result as _persist_save_res
 # Fixtures
 # ---------------------------------------------------------------------------
 
-# model_name/engine now live in the config.json sidecar, so save_result requires
-# them explicitly. This wrapper supplies gpt2/transformers defaults for the
-# fixtures that do not exercise directory-slug specifics; the slug tests pass
-# model_name explicitly.
+# The authoritative home for model_name/engine is the config.json sidecar
+# (result.json keeps convenience copies), so save_result takes them explicitly.
+# This wrapper supplies gpt2/transformers defaults for the fixtures that do not
+# exercise directory-slug specifics; the slug tests pass model_name explicitly.
 _HF_MODEL = "meta-llama/Llama-3.1-8B"
 
 
@@ -223,6 +223,34 @@ def test_from_json_round_trip(tmp_path: Path, minimal_result: ExperimentResult) 
     original_json = minimal_result.model_dump_json(indent=2)
     loaded_json = loaded.model_dump_json(indent=2)
     assert original_json == loaded_json
+
+
+def test_convenience_identity_copies_round_trip(tmp_path: Path) -> None:
+    """engine and model_name convenience copies survive save/load on result.json.
+
+    Deliberate small duplication: the authoritative home is config.json, but
+    result.json keeps the two fields so it is self-describing when separated
+    from its directory.
+    """
+    result = ExperimentResult(
+        experiment_id="persist-convenience-001",
+        measurement_config_hash="abcdef0123456789",
+        engine="vllm",
+        model_name=_HF_MODEL,
+        total_tokens=512,
+        total_energy_j=25.6,
+        total_inference_time_sec=5.0,
+        avg_tokens_per_second=102.4,
+        avg_energy_per_token_j=0.05,
+        total_flops=1e12,
+        start_time=datetime(2026, 2, 26, 14, 0, 0),
+        end_time=datetime(2026, 2, 26, 14, 0, 5),
+    )
+    result_path = save_result(result, tmp_path, model_name=result.model_name, engine=result.engine)
+    loaded = load_result(result_path)
+
+    assert loaded.engine == "vllm"
+    assert loaded.model_name == _HF_MODEL
 
 
 # ---------------------------------------------------------------------------

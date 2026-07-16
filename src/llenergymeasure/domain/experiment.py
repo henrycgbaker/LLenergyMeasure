@@ -107,6 +107,20 @@ class ExperimentResult(BaseModel):
         default=None, description="Package version that produced this result"
     )
 
+    # Convenience identity copies. Deliberate small duplication so a result.json
+    # stays self-describing when separated from its directory; the authoritative
+    # home for both is the config.json sidecar.
+    engine: str = Field(
+        default="transformers",
+        description="Inference engine used. Convenience copy; authoritative home "
+        "is the config.json sidecar.",
+    )
+    model_name: str = Field(
+        default="unknown",
+        description="Model name/path used. Convenience copy; authoritative home "
+        "is the config.json sidecar.",
+    )
+
     # Core metrics
     total_tokens: int = Field(..., description="Total tokens across all processes")
     total_energy_j: float = Field(..., description="Total energy (sum across processes)")

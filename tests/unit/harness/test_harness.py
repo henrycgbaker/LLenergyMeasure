@@ -184,7 +184,12 @@ def test_harness_cleanup_called_on_inference_error(minimal_config):
 
 
 def test_harness_returns_experiment_result(minimal_config):
-    """harness.run() must return an ExperimentResult (engine identity lives in config.json)."""
+    """harness.run() must return an ExperimentResult with convenience identity copies.
+
+    The authoritative home for identity is the config.json sidecar; the result
+    keeps engine and model_name as convenience copies so result.json stays
+    self-describing when separated from its directory.
+    """
     from llenergymeasure.domain.experiment import ExperimentResult
 
     engine = FakeBackend(engine_name="fake")
@@ -195,6 +200,8 @@ def test_harness_returns_experiment_result(minimal_config):
 
     assert isinstance(result, ExperimentResult)
     assert result.experiment_id
+    assert result.engine == "fake"
+    assert result.model_name == minimal_config.task.model
 
 
 def test_harness_sets_llenergymeasure_version(minimal_config):

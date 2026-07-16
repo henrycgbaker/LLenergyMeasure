@@ -534,7 +534,7 @@ class DockerRunner:
             # --- Rescue artefacts before cleanup ---
             # The harness inside the container wrote its artefacts to /run/llem
             # (= exchange_dir on host): config.json always (the sole home of
-            # provenance + engine/model/methodology identity) and
+            # provenance and the authoritative home of identity) and
             # timeseries.parquet when enabled. Move them to a temp dir so the
             # caller can copy them into the study directory before the exchange
             # dir is destroyed below. config.json must survive too - otherwise a

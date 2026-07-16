@@ -778,8 +778,10 @@ class MeasurementHarness:
         ``_save_and_record`` moves this file to the per-experiment directory alongside
         ``result.json``.
 
-        Engine identity (``engine`` / ``engine_version``), ``model_name``, and the
-        measurement ``methodology`` fields live in this sidecar (not ``result.json``).
+        This sidecar is the authoritative home for engine identity (``engine`` /
+        ``engine_version``), ``model_name``, and the measurement ``methodology``
+        fields. ``result.json`` carries ``engine`` and ``model_name`` as
+        convenience copies only; the rest live here exclusively.
 
         Best-effort - failures are logged at DEBUG to avoid masking measurement results.
         """
@@ -1380,6 +1382,9 @@ class MeasurementHarness:
             experiment_id=experiment_id,
             measurement_config_hash=compute_declared_config_hash(config),
             llenergymeasure_version=__version__,
+            # Convenience identity copies; authoritative home is config.json.
+            engine=engine_name,
+            model_name=config.task.model,
             aggregation=AggregationMetadata(
                 method="single_process",
                 num_processes=1,

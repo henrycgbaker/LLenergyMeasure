@@ -34,7 +34,7 @@ results/
 
 The scientific record. One JSON file per experiment cell. Schema version `5.0`.
 
-`result.json` is pure measurement output. Configuration inputs and methodology - `engine`, `engine_version`, `model_name`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected` - live in the `config.json` sidecar, not here.
+`result.json` is measurement output. Configuration inputs and methodology - `engine_version`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected` - live in the `config.json` sidecar, not here. The one deliberate duplication: `result.json` keeps `model_name` and `engine` as convenience copies so a result file is self-describing when separated from its directory; the authoritative home for both is `config.json`.
 
 ### Identification
 
@@ -44,6 +44,8 @@ The scientific record. One JSON file per experiment cell. Schema version `5.0`.
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
+| `engine` | str | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar |
+| `model_name` | str | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar |
 
 ### Measurement methodology
 
@@ -182,7 +184,7 @@ batch is attributed `batch_time / batch_size` (the `PER_REQUEST_BATCH` mode in
 
 ### Config sidecar (sibling file)
 
-`config.json` lives next to `result.json` in each experiment directory. It is the sole home of engine/model/methodology identity (`engine`, `engine_version`, `model_name`, `measurement_methodology`) and carries the full user-declared `ExperimentConfig` under `declared_config` - every parameter value used, including engine defaults that were not explicitly specified - plus per-field `provenance` (where each non-default value came from: CLI flag, sweep, or YAML) and the observed post-construction engine state. **This is what reproduces the experiment.**
+`config.json` lives next to `result.json` in each experiment directory. It is the authoritative home of engine/model/methodology identity (`engine`, `engine_version`, `model_name`, `measurement_methodology`; `result.json` carries convenience copies of `engine` and `model_name` only) and carries the full user-declared `ExperimentConfig` under `declared_config` - every parameter value used, including engine defaults that were not explicitly specified - plus per-field `provenance` (where each non-default value came from: CLI flag, sweep, or YAML) and the observed post-construction engine state. **This is what reproduces the experiment.**
 
 ## `manifest.json` - study-level checkpoint
 
@@ -269,7 +271,7 @@ For the Python API equivalent (`StudyResult` object), see [Reference &gt; Librar
 
 `result.json.schema_version` follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
 
-Schema `5.0` is a breaking change: it removes `engine`, `engine_version`, `model_name`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, and `steady_state_not_detected` from `result.json`. Those configuration/methodology fields now live in the `config.json` sidecar. Old bundles remain readable as their own schema version - there is no in-place migration.
+Schema `5.0` is a breaking change: it removes `engine_version`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, and `steady_state_not_detected` from `result.json`. Those configuration/methodology fields now live in the `config.json` sidecar. `result.json` keeps `model_name` and `engine` as convenience copies (authoritative home: `config.json`). Old bundles remain readable as their own schema version - there is no in-place migration.
 
 ## See also
 

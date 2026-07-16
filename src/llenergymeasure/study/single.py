@@ -119,8 +119,9 @@ def run_single_experiment(
         from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
         # Staging dir for harness artefacts. The harness writes config.json here
-        # always (the sole home of provenance/identity) and timeseries.parquet
-        # when save_timeseries is on, so the dir is created regardless of save_ts.
+        # always (sole home of provenance, authoritative home of identity) and
+        # timeseries.parquet when save_timeseries is on, so the dir is created
+        # regardless of save_ts.
         ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
 
         # Wrap the in-process body (preflight -> engine import -> harness.run) in
