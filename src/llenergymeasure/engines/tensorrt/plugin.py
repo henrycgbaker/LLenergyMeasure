@@ -313,10 +313,21 @@ class TensorRTEngine:
                 hint="reduce n, use a smaller max_batch_size, or use a smaller model.",
             )
 
-        # Capture peak memory
-        from llenergymeasure.engines._cuda import get_cuda_peak_memory_mb
+        # Capture peak memory - torch first, NVML fallback for out-of-process runs.
+        from llenergymeasure.engines._cuda import (
+            get_cuda_peak_memory_mb,
+            get_nvml_device_memory_mb,
+        )
 
         peak_mb = get_cuda_peak_memory_mb()
+        if peak_mb == 0.0:
+            # TRT-LLM runs its model in a separate executor process, so torch's
+            # per-process allocator here saw nothing (a silent 0.0). Fall back to
+            # NVML device-used memory (whole-device; see get_nvml_device_memory_mb
+            # for the tenancy caveat). None stays 0.0 and is nulled downstream.
+            nvml_peak = get_nvml_device_memory_mb()
+            if nvml_peak is not None:
+                peak_mb = nvml_peak
 
         # Count tokens from RequestOutput objects (same pattern as vLLM)
         from llenergymeasure.engines._observed import count_request_tokens

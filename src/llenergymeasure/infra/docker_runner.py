@@ -48,7 +48,6 @@ from llenergymeasure.config.ssot import (
     ENV_HF_TOKEN,
     ENV_HOST_GID,
     ENV_HOST_UID,
-    ENV_MPI_NP,
     ENV_OUTPUT_DIR,
     ENV_SAVE_TIMESERIES,
     TEMP_PREFIX_ENV_FILE,
@@ -68,13 +67,13 @@ from llenergymeasure.infra.docker_errors import (
 )
 from llenergymeasure.utils.env_config import (
     ENV_TRT_BUILD_CACHE_PATH,
-    docker_gpus,
+    docker_gpus_arg,
     trt_build_cache_host_dir,
 )
 from llenergymeasure.utils.exceptions import DockerError
 from llenergymeasure.utils.io import load_json
 
-__all__ = ["DockerRunner", "append_package_dispatch"]
+__all__ = ["DockerRunner", "append_nccl_env", "append_package_dispatch"]
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +92,6 @@ _RESERVED_EXCHANGE_ENV: frozenset[str] = frozenset(
         ENV_ENTRY_MODULE,
         ENV_HOST_UID,
         ENV_HOST_GID,
-        ENV_MPI_NP,
         ENV_BASELINE_SPEC_PATH,
     }
 )
@@ -121,7 +119,7 @@ _NO_DEADLINE = float("inf")
 # pyproject.toml against installed dists, primes any missing runtime deps
 # to the host-mounted cache, then exec's the framework's Python entrypoint
 # module (with engine-conditional routing through nvidia_entrypoint.sh for
-# TRT-LLM and an mpirun wrapper when LLEM_MPI_NP is set).
+# TRT-LLM).
 _CONTAINER_ENTRY_SCRIPT_REL = ("scripts", "container_entrypoint.sh")
 
 
@@ -230,7 +228,6 @@ def append_package_dispatch(
     *,
     engine: str,
     entry_module: str | None = None,
-    mpi_np: int | None = None,
 ) -> None:
     """Append the bind-mounts + env + entrypoint that make the package importable.
 
@@ -254,8 +251,6 @@ def append_package_dispatch(
             through ``nvidia_entrypoint.sh`` for the libnvinfer ``LD_LIBRARY_PATH``.
         entry_module: Override for the module the script exec's. ``None`` leaves
             the script default (``llenergymeasure.entrypoints.container``).
-        mpi_np: When > 1, sets ``LLEM_MPI_NP`` so the script wraps the exec in
-            ``mpirun -n N`` (TRT-LLM tensor parallelism).
     """
     pkg_parent = _resolve_package_parent_dir()
     repo_root = _resolve_repo_root()
@@ -284,9 +279,33 @@ def append_package_dispatch(
     )
     if entry_module is not None:
         cmd.extend(["-e", f"{ENV_ENTRY_MODULE}={entry_module}"])
-    if mpi_np is not None and mpi_np > 1:
-        cmd.extend(["-e", f"{ENV_MPI_NP}={mpi_np}"])
     cmd.extend(["--entrypoint", "/llem-entry.sh"])
+
+
+def append_nccl_env(cmd: list[str]) -> None:
+    """Forward host ``NCCL_*`` env vars into the container.
+
+    NCCL tuning/workaround settings must reach the engine process, which runs
+    inside the container rather than on the host. The canonical case is
+    ``NCCL_P2P_DISABLE=1`` on PCIe multi-GPU hosts whose topology lacks
+    functional GPU peer-to-peer (P2P): without it, every tensor-parallel run
+    hangs at the first NCCL collective.
+
+    Uses explicit ``-e KEY=VALUE`` (matching the ``LLEM_*`` forwarding idiom in
+    ``DockerRunner._build_docker_cmd``) and iterates keys in sorted order so the
+    built command is deterministic (tests assert on argv). Shared by the
+    experiment dispatch (``DockerRunner._build_docker_cmd``) and the baseline
+    dispatch (``study.baseline_container.build_baseline_docker_cmd``) so the two
+    env-forwarding setups cannot drift.
+
+    Args:
+        cmd: Docker command list to mutate in place (env appended before the
+            image name, which the caller adds afterwards).
+    """
+    for env_key in sorted(k for k in os.environ if k.startswith("NCCL_")):
+        env_val = os.environ[env_key]
+        if env_val:
+            cmd.extend(["-e", f"{env_key}={env_val}"])
 
 
 class DockerRunner:
@@ -306,8 +325,7 @@ class DockerRunner:
            The entrypoint script primes any missing runtime deps to the
            bind-mounted cache, then exec's
            ``python3 -m llenergymeasure.entrypoints.container`` (routing
-           through ``/opt/nvidia/nvidia_entrypoint.sh`` for TRT-LLM and
-           wrapping in mpirun when ``LLEM_MPI_NP`` is set).
+           through ``/opt/nvidia/nvidia_entrypoint.sh`` for TRT-LLM).
         4. Read ``{config_hash}_result.json`` from exchange dir
         5. Clean up temp dir on success; preserve on failure with debug path logged
 
@@ -947,13 +965,12 @@ class DockerRunner:
         ``PYTHONPATH`` to include the cache and ``/llem-src``, and (c) exec's
         the framework entrypoint module - routing through
         ``/opt/nvidia/nvidia_entrypoint.sh`` when ``LLEM_ENGINE=tensorrt``
-        (sets up LD_LIBRARY_PATH for libnvinfer) and wrapping in
-        ``mpirun -n {n} --allow-run-as-root`` when ``LLEM_MPI_NP`` is set
-        (TRT-LLM tensor parallelism > 1).
+        (sets up LD_LIBRARY_PATH for libnvinfer).
 
-        MPI worker ranks re-import the framework module but do not call
-        ``main()`` because ``container_entrypoint.py`` is guarded by
-        ``if __name__ == "__main__"``.
+        Multi-GPU tensorrt runs are NOT wrapped in mpirun: TensorRT-LLM's LLM
+        API self-manages tensor parallelism (setting ``tensor_parallel_size``
+        makes the LLM class spawn its own worker processes via its MPI/RPC
+        orchestrator), so a single python3 process is correct.
 
         Args:
             config:       ExperimentConfig for the current experiment. Used to
@@ -973,7 +990,7 @@ class DockerRunner:
             "run",
             "--rm",
             "--gpus",
-            docker_gpus(),
+            docker_gpus_arg(),
             "-v",
             f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
             "-e",
@@ -1028,15 +1045,14 @@ class DockerRunner:
             if env_key.startswith("LLEM_") and env_val and env_key not in _RESERVED_EXCHANGE_ENV:
                 cmd.extend(["-e", f"{env_key}={env_val}"])
 
+        # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
+        # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P)
+        # reach the engine process, which runs inside the container.
+        append_nccl_env(cmd)
+
         # Extra volume mounts (engine cache, model cache, etc.)
         for host_path, container_path in self.extra_mounts:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
-
-        # Determine TRT-LLM tensor parallel size for MPI injection
-        tp_size = None
-        if config.engine == Engine.TENSORRT and config.tensorrt is not None:
-            engine_params = config.active_engine_params()
-            tp_size = engine_params.tensor_parallel_size if engine_params is not None else None
 
         # All engines: bind-mount the host package source + bootstrap (so the
         # package is importable in images that don't ship it) and point
@@ -1046,7 +1062,7 @@ class DockerRunner:
         # (``llenergymeasure.entrypoints.container``), so entry_module stays None.
         # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to the
         # raw value via its ``__str__`` override.
-        append_package_dispatch(cmd, engine=f"{config.engine}", mpi_np=tp_size)
+        append_package_dispatch(cmd, engine=f"{config.engine}")
 
         # Container name and labels for lifecycle management (cleanup, reaper).
         # These must appear before the image name in the docker run command.

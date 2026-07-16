@@ -30,12 +30,18 @@ Bypass with ``LLEM_SKIP_IMAGE_CHECK=1`` when the skew is known harmless.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
+import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
-from functools import cache, lru_cache
+from functools import cache
+from pathlib import Path
+
+import platformdirs
 
 from llenergymeasure.config.ssot import ENGINE_PACKAGES, TIMEOUT_DOCKER_INSPECT, Engine
 from llenergymeasure.infra.image_registry import inspect_image
@@ -57,6 +63,7 @@ __all__ = [
     "probe_image_engine_version",
     "read_bundled_engine_version",
     "rebuild_hint",
+    "resolve_image_engine_version",
     "skip_check_enabled",
 ]
 
@@ -141,7 +148,6 @@ def classify_stamp(stamp: ImageStamp, host_fingerprint: str) -> SchemaStatus:
     return SchemaStatus.MISMATCH
 
 
-@lru_cache(maxsize=32)
 def probe_image_engine_version(
     image: str,
     engine: str,
@@ -151,9 +157,13 @@ def probe_image_engine_version(
     """Probe the engine library's ``__version__`` inside *image*.
 
     Runs ``docker run --rm`` against *image* with an inline ``import X;
-    print(...)`` for the engine module mapped from *engine*. The result
-    is cached per (image, engine) because an image's content is fixed by
-    its digest - the version inside doesn't change without a new tag.
+    print(...)`` for the engine module mapped from *engine*. This is the
+    cold probe: one container start (~60s on the TRT-LLM NGC image). It is
+    intentionally uncached - :func:`resolve_image_engine_version` owns the
+    caching tiers (an in-process memo and a persistent digest-keyed cache)
+    so a repeat probe of the same image content never pays the container
+    cost twice. Callers that want the cached path use that function; this
+    one is the primitive it falls back to on a cache miss.
 
     Engine-conditional entrypoint: TRT-LLM needs
     ``/opt/nvidia/nvidia_entrypoint.sh`` to set up ``LD_LIBRARY_PATH``
@@ -217,6 +227,175 @@ def probe_image_engine_version(
         if line.startswith(_ENGINE_VERSION_MARKER):
             return line[len(_ENGINE_VERSION_MARKER) :].strip() or None
     return None
+
+
+# ---------------------------------------------------------------------------
+# Digest-keyed persistent probe cache
+# ---------------------------------------------------------------------------
+#
+# The cold container probe above is a ~60s ``docker run`` per image, run once
+# per engine per study at study start. Its answer is a pure function of the
+# image *content* (the installed engine library version never changes without
+# a new image), so it is safe to memoise keyed by the image's content digest.
+#
+# Three tiers, cheapest first:
+#   1. in-process memo (this process, keyed by the image reference);
+#   2. persistent on-disk cache keyed by the image DIGEST (survives across
+#      processes / studies - the win the F2 plan asked for);
+#   3. the cold container probe (:func:`probe_image_engine_version`).
+#
+# Invalidation is automatic and total: the key is the content digest, so a
+# rebuilt or re-pulled image gets a fresh key and a fresh probe. Entries for a
+# given digest never go stale - the same digest is byte-identical content, so
+# its engine version cannot change. No TTL is needed or wanted.
+
+_PROBE_CACHE_SUBDIR = "image-probe"
+_PROBE_CACHE_FILENAME = "engine-versions.json"
+
+# Sentinel distinguishing "cached as a real miss" from "not in cache". The
+# cold probe can legitimately return None (probe failed); we do not persist
+# that (a transient failure should be retried next run), so a None here always
+# means "absent from the persistent cache".
+_CACHE_ABSENT = object()
+
+# Tier 1: in-process memo keyed by the image reference (not the digest, so a
+# repeat call skips even the ``docker image inspect`` digest resolution).
+_probe_memo: dict[tuple[str, str], str | None] = {}
+
+
+def _probe_cache_path() -> Path:
+    """Return the on-disk path of the persistent probe cache file.
+
+    Lives under the same XDG cache root the docker runner uses for its deps
+    cache (``platformdirs.user_cache_dir("llem")``), in an ``image-probe``
+    subdirectory, so all llem host caches sit together.
+    """
+    return Path(platformdirs.user_cache_dir("llem")) / _PROBE_CACHE_SUBDIR / _PROBE_CACHE_FILENAME
+
+
+def _resolve_image_digest(image: str, *, timeout: float = TIMEOUT_DOCKER_INSPECT) -> str | None:
+    """Return the local content digest (``Id``) of *image*, or None.
+
+    Reads ``docker image inspect``'s ``Id`` field (the image config digest,
+    e.g. ``sha256:abc...``) via the local daemon. This is always present once
+    an image is pulled and is stable per image content, which is exactly the
+    cache-key property we want.
+
+    Returns None when the digest cannot be resolved - docker missing, the
+    inspect timing out, a non-zero exit (image not pulled yet), or malformed
+    JSON. A None digest means the caller skips the persistent cache and falls
+    back to the cold probe (which pulls the image if absent); it never crashes.
+    RepoDigests (the registry digest) is deliberately not used: it is absent
+    for locally-built images, whereas ``Id`` is always available locally.
+    """
+    result = inspect_image(image, timeout=timeout)
+    if result is None or result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not data:
+        return None
+    image_id = data[0].get("Id")
+    return image_id if isinstance(image_id, str) and image_id else None
+
+
+def _read_probe_cache() -> dict[str, dict[str, str]]:
+    """Load the persistent probe cache, degrading to empty on any error.
+
+    A missing, unreadable, or corrupt cache file yields an empty mapping so
+    the caller re-probes rather than crashing - the file is a pure performance
+    optimisation and is always safe to discard.
+    """
+    path = _probe_cache_path()
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return {}
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        logger.debug("Probe cache at %s is corrupt; ignoring", path)
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _read_probe_cache_entry(digest: str, engine: str) -> object:
+    """Return the cached version for (*digest*, *engine*), or ``_CACHE_ABSENT``."""
+    by_engine = _read_probe_cache().get(digest)
+    if not isinstance(by_engine, dict):
+        return _CACHE_ABSENT
+    version = by_engine.get(engine)
+    return version if isinstance(version, str) else _CACHE_ABSENT
+
+
+def _write_probe_cache_entry(digest: str, engine: str, version: str) -> None:
+    """Persist (*digest*, *engine*) -> *version*, swallowing any write error.
+
+    Read-merge-write with an atomic ``os.replace`` so a reader never sees a
+    half-written file. No lock is taken: a concurrent writer racing on a
+    different digest could clobber this entry, but the only consequence is a
+    redundant re-probe next run (correctness is preserved), so the simplicity
+    is worth it. Any failure (read-only cache dir, disk full) is logged at
+    debug and swallowed - the probe result is already in hand.
+    """
+    path = _probe_cache_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cache = _read_probe_cache()
+        cache.setdefault(digest, {})[engine] = version
+        fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(cache, handle, indent=2, sort_keys=True)
+            os.replace(tmp_name, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_name)
+            raise
+    except OSError as exc:
+        logger.debug("Could not persist probe cache to %s: %s", path, exc)
+
+
+def resolve_image_engine_version(image: str, engine: str) -> str | None:
+    """Return the engine library version inside *image*, using the cache tiers.
+
+    This is the cached entry point that callers should use instead of
+    :func:`probe_image_engine_version` directly. Tiers, cheapest first:
+
+    1. **in-process memo** - a repeat call in the same process returns
+       immediately (no docker calls at all);
+    2. **persistent digest cache** - keyed by the image content digest; a hit
+       skips the cold container probe entirely, even across processes /
+       studies;
+    3. **cold container probe** - :func:`probe_image_engine_version`, the
+       ~60s ``docker run``, run only on a full miss. Its result is written to
+       both caches (the persistent one only when a digest is resolvable and
+       the probe actually succeeded).
+
+    Never raises for cache reasons: an unresolvable digest, a corrupt cache
+    file, or an unwritable cache dir all degrade to a fresh probe.
+    """
+    memo_key = (image, engine)
+    if memo_key in _probe_memo:
+        return _probe_memo[memo_key]
+
+    digest = _resolve_image_digest(image)
+    if digest is not None:
+        cached = _read_probe_cache_entry(digest, engine)
+        if cached is not _CACHE_ABSENT:
+            assert isinstance(cached, str)
+            _probe_memo[memo_key] = cached
+            return cached
+
+    version = probe_image_engine_version(image, engine)
+    if digest is not None and version is not None:
+        _write_probe_cache_entry(digest, engine, version)
+    _probe_memo[memo_key] = version
+    return version
 
 
 class BundledEngineVersionMismatchError(RuntimeError):

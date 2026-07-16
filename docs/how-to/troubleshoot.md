@@ -206,15 +206,17 @@ For publication-quality measurements, leave warmup enabled. See
 **Symptom:** `llem run` appears to hang indefinitely - no progress output,
 no error, process does not return.
 
-**Cause:** Most hangs fall into four categories:
+**Cause:** Most hangs fall into five categories:
 
 1. **Docker image pull in progress** - the first run of an engine pulls a
    multi-GB image. Check `docker pull` progress in a separate terminal:
    `docker ps` and `docker images`.
 
-2. **TensorRT-LLM engine compilation** - TRT-LLM compiles a CUDA engine from
-   model weights on first use. For a 7B model this takes 5-15 minutes with no
-   visible progress. Re-run with `LLEM_LOG_LEVEL=DEBUG` to see compilation logs.
+2. **TensorRT-LLM engine compilation (`trt` backend)** - on the compiled `trt`
+   backend, TRT-LLM compiles a CUDA engine from model weights on the first run
+   of a config. For a 7B model this takes 5-15 minutes with no visible
+   progress. Re-run with `LLEM_LOG_LEVEL=DEBUG` to see compilation logs. The
+   default `pytorch` backend has no such compile step.
 
 3. **Pre-flight check stalled** - if the Docker daemon is unreachable or the GPU
    is being held by another process, the pre-flight probe hangs. Run
@@ -225,6 +227,13 @@ no error, process does not return.
    `max_new_tokens` with a slow sampler) may legitimately exceed this. Increase
    the timeout in the YAML if needed.
 
+5. **Multi-GPU NCCL collective stuck** - on multi-GPU (tensor-parallel) runs the
+   process can hang at the very first NCCL collective with no output. This is
+   common on PCIe hosts whose GPU topology lacks functional peer-to-peer (P2P)
+   - e.g. boxes where the inter-GPU link is `SYS` in `nvidia-smi topo -m`, often
+   because ACS is enabled in the BIOS. The standard workaround is
+   `NCCL_P2P_DISABLE=1`.
+
 **Fix:**
 
 - For Docker/TRT-LLM hangs: wait, then check `docker logs <container-id>` for progress.
@@ -232,6 +241,11 @@ no error, process does not return.
   to verify GPU access from Docker, then re-run `llem run`.
 - For genuine inference hangs: raise `study_execution.experiment_timeout_seconds` or
   reduce `max_new_tokens`.
+- For a multi-GPU NCCL hang: set the NCCL tuning/workaround var on the host and
+  re-run - llem forwards every `NCCL_*` host variable into both the experiment
+  and baseline containers, so `NCCL_P2P_DISABLE=1 llem run ...` (or exporting it
+  first) applies inside the container. On a PCIe box without working P2P this is
+  the standard fix.
 
 ---
 
@@ -359,7 +373,7 @@ the SSOT bumped transformers but the local image is still on an older tag).
 ```bash
 make docker-build                                       # local build, Transformers
 docker pull vllm/vllm-openai:v0.19.1                    # repull vLLM upstream
-docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0   # repull TensorRT-LLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1   # repull TensorRT-LLM upstream
 make docker-pull                                        # pull the newest published Transformers tag
 ```
 

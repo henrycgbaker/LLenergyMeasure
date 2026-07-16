@@ -34,8 +34,8 @@ from llenergymeasure.config.ssot import (
     TEMP_PREFIX_EXCHANGE,
 )
 from llenergymeasure.harness.baseline import BaselineCache
-from llenergymeasure.infra.docker_runner import append_package_dispatch
-from llenergymeasure.utils.env_config import docker_gpus
+from llenergymeasure.infra.docker_runner import append_nccl_env, append_package_dispatch
+from llenergymeasure.utils.env_config import docker_gpus_arg
 from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def build_baseline_docker_cmd(
         "run",
         "--rm",
         "--gpus",
-        docker_gpus(),
+        docker_gpus_arg(),
         "-v",
         f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
         "-e",
@@ -96,6 +96,10 @@ def build_baseline_docker_cmd(
         "-e",
         f"CUDA_VISIBLE_DEVICES={cuda_visible}",
     ]
+    # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
+    # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P) reach
+    # the baseline process inside the container, matching the experiment path.
+    append_nccl_env(cmd)
     # Mount the package + bootstrap and point --entrypoint at /llem-entry.sh,
     # which makes the package importable and exec's the baseline entry module.
     append_package_dispatch(cmd, engine=engine, entry_module=_BASELINE_ENTRY_MODULE)

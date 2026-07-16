@@ -1602,22 +1602,23 @@ class TestPrepareImages:
     def _bypass_engine_version_probe(self):
         """Short-circuit the SSOT engine-version probe for image-prep tests.
 
-        ``_verify_image_fingerprint`` falls back to ``probe_image_engine_version``
-        whenever the OCI label is UNVERIFIED/UNREACHABLE, which adds a second
-        ``subprocess.run`` call beyond the ``docker image inspect``. These tests
-        check image-prep behaviour (cache hit, pull fall-through), not handshake
-        behaviour, so patching the probe to return ``None`` (probe-inconclusive)
-        keeps assertions about subprocess call counts and side_effect lists
-        stable. Probe behaviour itself is exercised in TestSchemaFingerprintHandshake.
+        ``_verify_image_fingerprint`` falls back to ``resolve_image_engine_version``
+        whenever the OCI label is UNVERIFIED/UNREACHABLE, which adds a digest
+        lookup plus a container probe beyond the ``docker image inspect``. These
+        tests check image-prep behaviour (cache hit, pull fall-through), not
+        handshake behaviour, so patching the resolver to return ``None``
+        (probe-inconclusive) keeps assertions about subprocess call counts and
+        side_effect lists stable. Resolver behaviour itself is exercised in
+        TestSchemaFingerprintHandshake and the version_handshake unit tests.
 
-        Also clears the module-level lru_cache so test ordering across the
-        xdist worker doesn't leak cached probe results between tests.
+        Also clears the resolver's in-process memo so test ordering across the
+        xdist worker doesn't leak cached results between tests.
         """
         from llenergymeasure.infra import version_handshake
 
-        version_handshake.probe_image_engine_version.cache_clear()
+        version_handshake._probe_memo.clear()
         with patch(
-            "llenergymeasure.study.image_prep.probe_image_engine_version",
+            "llenergymeasure.study.image_prep.resolve_image_engine_version",
             return_value=None,
         ):
             yield
@@ -2094,19 +2095,19 @@ class TestSchemaFingerprintHandshake:
         import logging as _logging
 
         # The unlabelled-image path falls through to the SSOT engine-version
-        # probe; this test asserts soft-warn behaviour, which is the same
+        # resolver; this test asserts soft-warn behaviour, which is the same
         # whether the probe returns None because docker is unreachable or
-        # because the output is unparseable. Patch the probe to None
+        # because the output is unparseable. Patch the resolver to None
         # directly so we exercise just the handshake-fallback logic without
         # depending on subprocess output shape.
         from llenergymeasure.infra import version_handshake as vh
 
-        vh.probe_image_engine_version.cache_clear()
+        vh._probe_memo.clear()
         with (
             caplog.at_level(_logging.WARNING, logger="llenergymeasure.study.image_prep"),
             patch("subprocess.run", return_value=ok),
             patch(
-                "llenergymeasure.study.image_prep.probe_image_engine_version",
+                "llenergymeasure.study.image_prep.resolve_image_engine_version",
                 return_value=None,
             ),
         ):
@@ -2401,6 +2402,8 @@ def test_gpu_locks_acquired_and_released(study_config: StudyConfig, tmp_path: Pa
         patch("multiprocessing.get_context", return_value=ctx),
         patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks", side_effect=fake_acquire),
         patch("llenergymeasure.study.gpu_locks.release_gpu_locks", side_effect=fake_release),
+        # No docker pinning -> fall back to logical indices (measurement-side).
+        patch("llenergymeasure.utils.env_config.pinned_gpu_lock_ids", return_value=None),
         patch("llenergymeasure.device.gpu_info._resolve_gpu_indices", return_value=[0]),
     ):
         runner = StudyRunner(study_config, manifest, tmp_path, no_lock=False)
@@ -2408,6 +2411,33 @@ def test_gpu_locks_acquired_and_released(study_config: StudyConfig, tmp_path: Pa
 
     assert len(acquired_locks) == 1, "Expected exactly one acquire call"
     assert len(released_locks) == 1, "Expected exactly one release call (in finally)"
+
+
+def test_gpu_locks_use_physical_pinning(study_config: StudyConfig, tmp_path: Path) -> None:
+    """When pinned via LLEM_DOCKER_GPUS, locks are named by the physical device."""
+    manifest = MagicMock()
+
+    acquired_ids: list[list[str]] = []
+
+    def fake_acquire(lock_ids, lock_dir=None):
+        acquired_ids.append(list(lock_ids))
+        return [MagicMock()]
+
+    fake_result = {"status": "ok"}
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks", side_effect=fake_acquire),
+        patch("llenergymeasure.study.gpu_locks.release_gpu_locks"),
+        # Physical device 2 pinned -> lock id "2", NOT the logical index "0".
+        patch("llenergymeasure.utils.env_config.pinned_gpu_lock_ids", return_value=["2"]),
+    ):
+        runner = StudyRunner(study_config, manifest, tmp_path, no_lock=False)
+        runner.run()
+
+    assert acquired_ids == [["2"]]
 
 
 def test_no_lock_skips_gpu_lock_acquisition(study_config: StudyConfig) -> None:

@@ -13,8 +13,9 @@
 #      runtime-deps cache are discoverable.
 #   3. Exec the framework's in-container entrypoint module. For TensorRT-LLM,
 #      route through the upstream nvidia_entrypoint.sh which sets up
-#      LD_LIBRARY_PATH for libnvinfer (closes #608). For TP > 1, wrap in
-#      mpirun (LLEM_MPI_NP set by docker_runner).
+#      LD_LIBRARY_PATH for libnvinfer (closes #608). Always a single python3
+#      process - multi-GPU tensorrt is NOT wrapped in mpirun (the TRT-LLM LLM
+#      API self-manages tensor parallelism by spawning its own workers).
 #
 # The pyproject-vs-container diff is computed at every dispatch. Cached
 # installs in /llem-runtime-deps shadow the comparison naturally: once a
@@ -119,13 +120,15 @@ PYEOF
     fi
 fi
 
-# Build the final launch command. For TP > 1, mpirun wraps python3 (matches
-# the prior docker_runner.py behaviour where mpirun was the entrypoint).
-if [ -n "${LLEM_MPI_NP:-}" ]; then
-    LAUNCH=(mpirun -n "${LLEM_MPI_NP}" --allow-run-as-root python3)
-else
-    LAUNCH=(python3)
-fi
+# Build the final launch command. Always a single python3 process, for every
+# engine including multi-GPU tensorrt. TensorRT-LLM's LLM API (both the trt and
+# pytorch backends at 1.2.x) self-manages tensor parallelism: setting
+# tensor_parallel_size makes the LLM class spawn its own worker processes
+# internally (MPI/RPC orchestrator). Wrapping the container in mpirun -n N
+# instead ran the WHOLE entrypoint on every rank, so each rank redundantly
+# built the engine and constructed a full LLM - corrupting the on-disk build
+# cache (a rank race in the upstream write_guard) and OOMing on the executor.
+LAUNCH=(python3)
 
 # Framework module to exec. Defaults to the experiment container entrypoint;
 # the baseline dispatch overrides it with LLEM_ENTRY_MODULE so it reuses this

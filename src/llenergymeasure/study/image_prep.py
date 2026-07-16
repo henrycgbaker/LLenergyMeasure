@@ -38,9 +38,9 @@ from llenergymeasure.infra.version_handshake import (
     classify_stamp,
     compute_expconf_fingerprint,
     parse_image_stamp,
-    probe_image_engine_version,
     read_bundled_engine_version,
     rebuild_hint,
+    resolve_image_engine_version,
     skip_check_enabled,
 )
 
@@ -306,14 +306,15 @@ class _ImageMixin:
             return "mismatch", error
 
         # label_status is UNVERIFIED or UNREACHABLE: fall back to engine-
-        # version probe. The probe takes one docker-run (a few seconds)
-        # and is cached per (image, engine). The "expected" version comes
-        # from the bundled invariants/schema envelopes (the artefacts llem
-        # actually applies at experiment time), not from current.yaml -
-        # current.yaml isn't shipped in the wheel, so an SSOT-based check
-        # is silently UNREACHABLE for installed users. The bundled envelope
-        # works in both wheel and editable installs.
-        probed = probe_image_engine_version(image, engine_name)
+        # version probe. The cold probe is one ~60s docker-run, but
+        # resolve_image_engine_version serves it from a digest-keyed cache on
+        # a warm image so the steady-state cost is a docker-inspect. The
+        # "expected" version comes from the bundled invariants/schema
+        # envelopes (the artefacts llem actually applies at experiment time),
+        # not from current.yaml - current.yaml isn't shipped in the wheel, so
+        # an SSOT-based check is silently UNREACHABLE for installed users. The
+        # bundled envelope works in both wheel and editable installs.
+        probed = resolve_image_engine_version(image, engine_name)
         try:
             expected = read_bundled_engine_version(engine_name)
         except BundledEngineVersionMismatchError as exc:

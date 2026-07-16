@@ -408,17 +408,16 @@ class TestContainerBaselineLoading:
 
 
 # ---------------------------------------------------------------------------
-# __main__ guard - MPI safety contract
+# __main__ guard
 # ---------------------------------------------------------------------------
 
 
 class TestMainGuard:
     def test_main_guard_exists_at_module_level(self):
-        """The __main__ guard prevents MPI workers from re-executing main().
+        """The entrypoint runs main() only under a ``__main__`` guard.
 
-        When mpirun spawns worker ranks, they re-import the module but
-        __name__ is the dotted module path (not "__main__"), so main()
-        is not called. This test documents that contract.
+        Standard hygiene so importing the module (e.g. in tests) never triggers
+        an experiment. This test documents that the guard is present.
         """
         import inspect
 

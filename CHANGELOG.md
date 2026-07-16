@@ -69,6 +69,13 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- The upstream-image engine-version handshake probe (a ~60s cold `docker run` per engine
+  per study) is now cached on disk keyed by the image content digest, under
+  `platformdirs.user_cache_dir("llem")/image-probe/`. A warm image resolves from the cache
+  (a `docker image inspect`) instead of re-probing, so the per-study cost the F2 plan flagged
+  drops to near zero. The in-process memo remains the first tier; a corrupt, unreadable, or
+  unwritable cache degrades to a fresh probe and never crashes. Entries never go stale: a
+  rebuilt or re-pulled image gets a new digest and a fresh probe, so no TTL is needed.
 - TensorRT-LLM backends are now selected by constructor class, not a kwarg: `backend='trt'`
   resolves `tensorrt_llm._tensorrt_engine.LLM` and `pytorch`/unset resolves `tensorrt_llm.LLM`,
   validated live at 1.2.1 (the base `LLM` rejects `backend='trt'` at model load). `backend` is
@@ -81,6 +88,44 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Memory metrics are no longer a silent 0.0 for out-of-process engines. vLLM V1 runs its
+  model in the EngineCore child process and TensorRT-LLM in its executor process, so torch's
+  per-process allocator in the driver process saw nothing and `extended_metrics.memory`
+  `peak_memory_mb` / `model_memory_mb` came back as exactly 0.0 on every vLLM and TRT-LLM
+  experiment (real values only for in-process Transformers). Both capture points now fall
+  back to NVML device-used memory when the torch reading is implausible (`== 0.0`): the
+  harness model-memory baseline, and the plugin peak-memory read (vLLM's NVML fallback was
+  previously gated on the already-broken `peak > 0` torch value so it never fired; TRT-LLM
+  had no fallback at all). Transformers keeps its authoritative torch reading and never
+  consults NVML. The cascade fields that were nulled by the zero (`tokens_per_gb_vram`,
+  `model_memory_utilisation`, `kv_cache_memory_ratio`) now populate. NVML `used` is a
+  whole-device reading (it includes this process's CUDA context and any co-tenants), so the
+  absolute peak/model figures are an upper bound; the derived `inference_memory_mb` delta
+  cancels the shared context term and stays meaningful. Under `LLEM_DOCKER_GPUS` pinning the
+  container sees only the pinned device(s), so NVML index resolution matches the experiment's
+  own GPUs. The raw memory fields are now nullable and any residual 0.0 is coerced to null at
+  the domain boundary - the fields are always either a real measurement or null, never a
+  silently-wrong zero.
+- llem now forwards every `NCCL_*` host environment variable into both the experiment
+  container (`infra.docker_runner`) and the baseline container (`study.baseline_container`),
+  so NCCL tuning/workaround settings set on the host reach the engine process, which runs
+  inside the container. The motivating case is `NCCL_P2P_DISABLE=1` on PCIe multi-GPU hosts
+  whose topology lacks functional peer-to-peer (P2P, e.g. an inter-GPU link reported as `SYS`
+  in `nvidia-smi topo -m`, often because ACS is enabled): without it, tensor-parallel runs
+  hang at the first NCCL collective. Vars are emitted as explicit `-e KEY=VALUE` args
+  (matching the existing `LLEM_*` forwarding idiom) in sorted key order for a deterministic
+  command. ([#814])
+- Study GPU advisory locks are now named by the PHYSICAL device a study occupies, not the
+  in-container logical index. Lock names came from `_resolve_gpu_indices` (which enumerates
+  from 0), but the physical device is chosen at the docker level by `LLEM_DOCKER_GPUS`
+  (`--gpus device=N`), which the lock logic never saw. Under pinning the container always sees
+  its GPU as logical 0, so a study pinned to `device=2` locked `gpu-0.lock`, and two studies
+  pinned to DIFFERENT physical GPUs both contended on `gpu-0.lock` and spuriously serialised.
+  A new `env_config.pinned_gpu_lock_ids()` parses the docker selector into physical lock ids
+  (`device=2` -> `["2"]`, `device=2,3` -> `["2","3"]`, a `GPU-<uuid>` selector used verbatim
+  as a stable per-device id); `all` / unset / unrecognised shapes fall back to the logical
+  indices (logical == physical when every GPU is visible). Lock naming only - measurement-side
+  index resolution is unchanged. ([#807])
 - TensorRT-LLM build cache silently died across containers unless
   `LLEM_TRT_BUILD_CACHE_PATH` was set by hand: the docker runner bind-mounts the host
   `~/.cache/trt-llm` at `/root/.cache/trt-llm`, but TRT-LLM's own default cache root
@@ -797,3 +842,5 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#801]: https://github.com/henrycgbaker/llenergymeasure/pull/801
 [#803]: https://github.com/henrycgbaker/llenergymeasure/pull/803
 [#804]: https://github.com/henrycgbaker/llenergymeasure/pull/804
+[#807]: https://github.com/henrycgbaker/llenergymeasure/pull/807
+[#814]: https://github.com/henrycgbaker/llenergymeasure/pull/814

@@ -261,8 +261,10 @@ Then run it:
 llem run experiment.yaml
 ```
 
-`llem` will pull the TensorRT-LLM Docker image, compile a TensorRT engine (first run only -
-takes several minutes), cache the engine on disk, then run inference. See [Getting Started](/tutorials/first-measurement)
+`llem` will pull the TensorRT-LLM Docker image and run inference. The default
+`pytorch` backend loads the model directly; the compiled `trt` backend instead
+compiles a TensorRT engine (first run of a config only - several minutes) and
+caches it on disk. See [Getting Started](/tutorials/first-measurement)
 for the full TensorRT-LLM walkthrough.
 
 ---
@@ -331,7 +333,7 @@ make docker-pull
 # TensorRT-LLM are upstream images tagged with the pinned engine version.
 docker pull ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0
 docker pull vllm/vllm-openai:v0.19.1
-docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1
 ```
 
 Replace the transformers tag with your installed version (`llem --version`); the
@@ -350,7 +352,7 @@ Output shows local vs registry source for each engine:
 
 ```
 === Image resolution ===
-  tensorrt   -> nvcr.io/nvidia/tensorrt-llm/release:1.0.0  (registry)
+  tensorrt   -> nvcr.io/nvidia/tensorrt-llm/release:1.2.1  (registry)
   transformers -> ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0  (registry)
   vllm       -> vllm/vllm-openai:v0.19.1  (registry)
 ```
@@ -369,7 +371,7 @@ make docker-build
 docker pull vllm/vllm-openai:v0.19.1
 
 # TensorRT-LLM - pull upstream (NGC)
-docker pull nvcr.io/nvidia/tensorrt-llm/release:1.0.0
+docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1
 ```
 
 `make docker-build` builds the project's first-party engine images
@@ -424,14 +426,19 @@ Operator notes:
 
 ### TensorRT-LLM engine build cache
 
-Distinct from the Docker layer cache above: the TensorRT engine build cache
-holds compiled `.engine` artefacts so re-running the same experiment config
-skips the multi-minute compile. It lives on the host at `~/.cache/trt-llm` and
-is bind-mounted into every tensorrt container at `/root/.cache/trt-llm`; llem
-defaults the cache location to that mount out of the box (override with
-`LLEM_TRT_BUILD_CACHE_PATH`). TensorRT-LLM keys each entry by the full build
-config (model, dtype, tensor-parallel size, max-shape, quantisation) plus the
-engine version, so distinct configs and version bumps never collide.
+Distinct from the Docker layer cache above, and specific to the compiled `trt`
+backend: the TensorRT engine build cache holds compiled `.engine` artefacts so
+re-running the same experiment config skips the multi-minute compile. It ships
+on out of the box - `.env.example` sets `LLEM_TRT_BUILD_CACHE_ENABLED=1`
+(delete the line to fall back to TensorRT-LLM's disabled default). It lives on
+the host at `~/.cache/trt-llm` and is bind-mounted into every tensorrt
+container at `/root/.cache/trt-llm`; llem defaults the cache location to that
+mount out of the box (override with `LLEM_TRT_BUILD_CACHE_PATH`). TensorRT-LLM
+keys each entry by the full build config (model, dtype, tensor-parallel size,
+max-shape, quantisation) plus the engine version: an identical config hits even
+across separate containers, while a TP / quantisation / max-shape change or a
+version bump keys to a distinct engine and misses. Each result records
+`engine_build_cache_hit` so you can tell a reused engine from a fresh compile.
 
 The lifecycle is manual and visible - llem never auto-evicts. Inspect it with:
 
@@ -533,6 +540,13 @@ The `--gpus all` flag is missing from the `docker run` command.
 `llem` adds `--gpus all` automatically when launching engine containers. If you are running
 Docker commands manually, ensure you include `--gpus all` (or `--gpus device=0` for a specific
 GPU).
+
+To make `llem` itself target specific GPUs on a shared host, set `LLEM_DOCKER_GPUS` to the
+`docker run --gpus` value (empty means every visible GPU). Quote multi-device values so the
+shell keeps the comma, e.g. `LLEM_DOCKER_GPUS="device=2,3"`. Restricting at the docker level
+keeps CUDA and NVML indices consistent inside the container (both enumerate from 0). For
+tensor-parallel runs, `llem` also forwards every `NCCL_*` host variable into the container;
+see [multi-GPU with TensorRT-LLM](/how-to/run-with-tensorrt-llm#multi-gpu-tensor-parallelism).
 
 ---
 

@@ -121,8 +121,8 @@ live at the top level of `result.json`.
 | `extended_metrics.batch.num_batches` / `effective_batch_size` / `batch_utilisation` / `padding_overhead` | int/float &#124; null | Static-batching efficiency. `null` for vLLM (continuous batching). |
 | `extended_metrics.kv_cache.*` | float/int &#124; null | Prefix-cache hit rate and block occupancy (vLLM only). |
 | `extended_metrics.request_latency.e2e_latency_{mean,median,p95,p99}_ms` | float &#124; null | Per-request end-to-end latency distribution. |
-| `latency_stats` | object &#124; null | TTFT/ITL statistics. vLLM populates TTFT-only stats on every run (engine-recorded first-token timestamps); ITL stats are added only when `measurement.latency_profiling=true`. transformers populates `latency_stats` (TTFT + ITL) only under profiling. Always `null` for tensorrt. |
-| `latency_stats.measurement_mode` | str | Provenance of the latency capture: `true_streaming` (real per-token / first-token timestamps), `proportional` (decode-average ITL estimate, vLLM under profiling), or `per_request_batch`. The mode reflects the weakest signal present. |
+| `latency_stats` | object &#124; null | TTFT/ITL statistics. vLLM populates per-request TTFT/E2E plus a decode-average ITL only under `measurement.latency_profiling=true`, in `proportional` mode (V1 records `RequestOutput.metrics` only when `disable_log_stats=False`, which profiling sets); `null` otherwise. transformers populates `latency_stats` (TTFT + ITL) only under profiling. tensorrt populates per-request TTFT/E2E plus an average-TPOT-derived ITL only under profiling, in `per_request_batch` mode; `null` otherwise. |
+| `latency_stats.measurement_mode` | str | Provenance of the latency capture: `true_streaming` (real per-token timestamps, transformers under profiling), `proportional` (decode-average ITL estimate, vLLM under profiling), or `per_request_batch` (tensorrt). The mode reflects the weakest signal present. |
 | `steady_state_window` | [float, float] &#124; null | `(0.0, inference_time_sec)` - the measured window relative to inference start. |
 
 #### Per-engine support matrix
@@ -132,9 +132,9 @@ means it stays `null` for that engine.
 
 | Metric group | vLLM | transformers | tensorrt |
 |--------------|:----:|:------------:|:--------:|
-| `request_latency.*` (per-request E2E) | yes (from RequestOutput metrics) | yes (per-batch approximation) | dash (metrics usually absent from the pinned TensorRT-LLM build) |
-| `latency_stats` TTFT | yes (always-on) | profiling only | dash |
-| `latency_stats` ITL / `tpot_ms` | profiling only (`proportional`) | profiling only (`true_streaming`) | dash (unsupported) |
+| `request_latency.*` (per-request E2E) | profiling only (from `RequestOutput.metrics` at 0.19.1) | yes (per-batch approximation) | profiling only (from `RequestOutput.metrics_dict` at 1.2.1) |
+| `latency_stats` TTFT | profiling only | profiling only | profiling only |
+| `latency_stats` ITL / `tpot_ms` | profiling only (`proportional`) | profiling only (`true_streaming`) | profiling only (`per_request_batch`) |
 | `kv_cache.*` | yes (best-effort) | dash | dash |
 | `gpu_utilisation.*` (SM + mem-bw) | yes | yes | yes |
 | `memory.*` ratios | yes | yes | yes |
@@ -148,13 +148,22 @@ capture inter-token latency (and hence `tpot_ms`). Per-engine semantics:
   request) and is incompatible with beam search (`num_beams > 1` falls back to
   the non-profiled path). Mode = `true_streaming`. With profiling off,
   `latency_stats` is `null`.
-- **vLLM**: TTFT comes from engine-recorded first-token timestamps and is
-  populated on every run (mode `true_streaming` when only TTFT is present).
-  Under profiling, a decode-average ITL is derived per request
-  (`(finished - first_token) / (n_out - 1)`); because that averages over the
-  decode phase rather than timing each token, the mode becomes `proportional`.
-- **tensorrt**: latency profiling is unsupported; the fields stay `null` and a
-  warning is recorded in `measurement_warnings`.
+- **vLLM**: under profiling the plugin builds the engine with
+  `disable_log_stats=False` so vLLM records per-request timing in
+  `RequestOutput.metrics` (a V1 `RequestStateStats`; `metrics` is `None` on the
+  default offline path, which forces `disable_log_stats=True`). TTFT is the
+  engine-recorded `first_token_latency`; E2E is TTFT plus the monotonic decode
+  interval (`last_token_ts - first_token_ts`); a decode-average ITL is derived
+  from that interval over the longest output's tokens. Because the ITL averages
+  over the decode phase rather than timing each token, the mode is
+  `proportional`. With profiling off, `latency_stats` is `null`.
+- **tensorrt**: under profiling the plugin sets
+  `SamplingParams(return_perf_metrics=True)` and extracts per-request TTFT / E2E
+  / average TPOT from `RequestOutput.metrics_dict` (the TRT-LLM 1.x surface,
+  live-verified on both backends at 1.2.1), in mode `per_request_batch`. With
+  profiling off, `latency_stats` is `null`. The `latency_profiling_unsupported`
+  warning now fires only when profiling was requested but the engine returned no
+  metrics.
 
 **Energy caveat.** Per-token timing capture adds overhead that can perturb both
 energy and latency. Energy figures from a profiled run are emitted as-is and are

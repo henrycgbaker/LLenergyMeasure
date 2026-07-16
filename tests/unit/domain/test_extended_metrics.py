@@ -74,7 +74,7 @@ class TestComputeExtendedMetrics:
             kv_cache_stats=None,
         )
         assert isinstance(result, ExtendedEfficiencyMetrics)
-        assert result.memory.peak_memory_mb == 0.0
+        assert result.memory.peak_memory_mb is None
         assert result.gpu_utilisation.sm_utilisation_mean is None
 
 
@@ -88,8 +88,19 @@ class TestComputeMemoryMetrics:
 
     def test_none_memory_stats(self):
         mem = _compute_memory_metrics(100, None)
-        assert mem.peak_memory_mb == 0.0
+        assert mem.peak_memory_mb is None
         assert mem.tokens_per_gb_vram is None
+
+    def test_zero_peak_and_model_coerced_to_null(self):
+        """A 0.0 peak/model reading (out-of-process engine, NVML unavailable) is
+        surfaced as null, never a silent zero."""
+        mem = _compute_memory_metrics(
+            100, {"peak_mb": 0.0, "total_vram_mb": 40960.0, "model_mb": 0.0}
+        )
+        assert mem.peak_memory_mb is None
+        assert mem.model_memory_mb is None
+        assert mem.tokens_per_gb_vram is None
+        assert mem.model_memory_utilisation is None
 
     def test_tokens_per_gb_vram(self):
         mem = _compute_memory_metrics(

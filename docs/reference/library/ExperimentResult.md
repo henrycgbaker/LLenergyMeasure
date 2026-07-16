@@ -109,7 +109,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | Field | Type | Description |
 |-------|------|-------------|
 | `timeseries` | `str \| None` | Relative filename of the timeseries Parquet sidecar (e.g. `"timeseries.parquet"`). `None` when timeseries saving is disabled. |
-| `latency_stats` | `LatencyStatistics \| None` | TTFT/ITL statistics from streaming inference. `None` for non-streaming engines. |
+| `latency_stats` | `LatencyStatistics \| None` | TTFT/ITL statistics. `None` when latency capture did not run. All engines populate stats only under `measurement.latency_profiling` (vLLM V1 records `RequestOutput.metrics` only when `disable_log_stats=False`, which profiling sets). |
 | `extended_metrics` | `ExtendedEfficiencyMetrics \| None` | Extended efficiency metrics (TPOT, memory, GPU utilisation). Always present when the harness runs successfully; fields within are `None` when not computable. |
 
 ---
