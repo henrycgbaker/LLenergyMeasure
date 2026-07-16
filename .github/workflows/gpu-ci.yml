@@ -1,40 +1,120 @@
 name: GPU CI
 
-# Tier 2: GPU integration tests on self-hosted runner (ds01-gpu).
-# Builds the transformers Docker image from source, installs test deps, and runs
-# all tests inside the container with GPU access.
+# Tier 2: GPU integration on the self-hosted runner (ds01-gpu). Two concerns:
+#
+#   - `transformers`: builds the first-party transformers image from source and
+#     runs the full test suite (incl. GPU tests) + SIGINT check + replay-fixture
+#     refresh inside it. This is the release gate for the first-party image and
+#     the only producer of the replay fixtures, so it is kept as a dedicated
+#     job. Its GPU tests exercise the transformers plugin in-process on a real
+#     device.
+#   - `engine-smoke`: boots each UPSTREAM-image engine's pinned container and
+#     runs ONE tiny inference through the real `llem run` docker-dispatch path.
+#     This is the coverage nothing else provides: proof that the vLLM and
+#     TensorRT-LLM containers boot, the bind-mount + entrypoint bootstrap works,
+#     and inference executes end to end. It asserts on result files / tokens,
+#     never on energy values (power numbers in CI are noise).
+#
+# GPU jobs serialize (engine-smoke `needs` transformers; smoke matrix is
+# `max-parallel: 1`) because the shared runner guarantees at most two free
+# devices, so concurrent GPU jobs collide on device allocation.
 #
 # Triggers:
-#   1. Manual:     workflow_dispatch
-#                  `gh workflow run gpu-ci.yml`
-#   2. Release:    called by release.yml as reusable workflow (gates GitHub Release)
-#   3. Label-gate: add 'gpu-ci' label to a PR to run GPU tests on that PR
+#   1. Manual:      workflow_dispatch (runs all jobs; run_gpu defaults true).
+#   2. Release:     workflow_call from auto-release.yml (release gate; run_gpu
+#                   defaults true, so the gate covers all three engines).
+#   3. Label-gate:  add the 'gpu-ci' label to a PR to force a GPU run.
+#   4. Auto (PR):   a PR that touches an engine pin, engine plugin code, the
+#                   docker-dispatch surface, the CI smoke configs, or this
+#                   workflow file runs automatically (the `changes` filter). So
+#                   engine bumps arriving via Renovate get live proof, while
+#                   unrelated PRs never queue on the GPU box.
 #
 # Does NOT run on every push to main. See docs/deployment.md for rationale.
 
 on:
   workflow_dispatch:
+    inputs:
+      run_gpu:
+        description: "Run the GPU jobs (default true)."
+        type: boolean
+        default: true
   workflow_call:
+    inputs:
+      run_gpu:
+        description: "Run the GPU jobs. Defaults true so the release gate covers all engines."
+        type: boolean
+        default: true
   pull_request:
-    # Intentionally NOT paths-filtered: gating happens via the 'gpu-ci'
-    # PR label (see job `if:`). Path-filtering would block label-only
-    # re-runs on already-pushed commits. Edits to this file get
-    # shape-validated at PR time by the actionlint job in ci.yml.
-    types: [labeled, synchronize]
+    # No workflow-level paths filter: label-only runs on an already-pushed
+    # commit must still trigger, and a workflow-level filter would block them.
+    # Path-based auto-triggering is done per-job via the `changes` filter, so
+    # both the label and the paths trigger coexist.
+    types: [opened, reopened, labeled, synchronize]
 
 permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  # Supersede queued PR runs on a newer push (read-only on PRs), but let
+  # dispatch / release-call / main runs finish (they write back replay fixtures).
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  gpu-integration:
-    # Skip PR runs unless 'gpu-ci' label is present.
-    # workflow_dispatch and workflow_call always run (no PR label context).
+  # Path filter (hosted, cheap) that decides whether a PR auto-runs the GPU
+  # jobs. Always runs (so it never cascades a skip onto the GPU jobs that need
+  # it); the filter STEP is what is gated to real open-PR events. On
+  # dispatch / reusable-call / closed-PR the step is skipped and the `engine`
+  # output is empty, and the GPU jobs run via the run_gpu input instead.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      engine: ${{ steps.filter.outputs.engine }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        with:
+          filters: |
+            engine:
+              - 'engine_versions/*/current.yaml'
+              - 'src/llenergymeasure/engines/**'
+              - 'src/llenergymeasure/infra/docker_runner.py'
+              - 'src/llenergymeasure/infra/image_registry.py'
+              - 'src/llenergymeasure/infra/version_handshake.py'
+              - 'src/llenergymeasure/study/baseline_container.py'
+              - 'scripts/container_entrypoint.sh'
+              - 'configs/ci/**'
+              - '.github/workflows/gpu-ci.yml'
+
+  transformers:
+    # Run when: reusable-call / dispatch (run_gpu default true), the 'gpu-ci'
+    # label is present, or the PR touched an engine-relevant path.
+    needs: changes
     if: >-
-      github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+      inputs.run_gpu ||
+      contains(github.event.pull_request.labels.*.name, 'gpu-ci') ||
+      needs.changes.outputs.engine == 'true'
     runs-on: self-hosted
     timeout-minutes: 60
+    env:
+      # Container-side env for the two docker-run test steps below, forwarded
+      # via flag-only `-e VAR`. The image does NOT ship the project source
+      # (docker/Dockerfile.transformers header: bind-mount + PYTHONPATH
+      # contract, the same contract docker_runner.py implements at dispatch
+      # via its /llem-src mount), so pytest imports llenergymeasure from the
+      # mounted checkout's src/.
+      PYTHONPATH: /app/src
+      # Mirror production dispatch: never write __pycache__ into the
+      # read-only bind-mounted source.
+      PYTHONDONTWRITEBYTECODE: "1"
+      # The repo mount shadows the image's /app/.cache/huggingface (read-
+      # only); use root's cache - the same in-container path production
+      # dispatch mounts the host HF cache onto.
+      HF_HOME: /root/.cache/huggingface
     steps:
       - name: Clean workspace (fix root-owned files from Docker)
         run: |
@@ -50,28 +130,64 @@ jobs:
             -f docker/Dockerfile.transformers \
             -t llenergymeasure-ci:transformers \
             .
-          # Install test dependencies (not in production image)
+          # Derive the CI image: test deps + an `llem` shim. The project
+          # source is NOT baked in (image contract, see header of
+          # docker/Dockerfile.transformers) - the test steps bind-mount it.
+          # datamodel-code-generator backs the regen_engine_configs tests
+          # (invoked as a subprocess CLI, no importorskip guard); its pin
+          # must match pyproject [dependency-groups] dev - the generator's
+          # output formatting is version-sensitive. msgspec backs the
+          # importorskip'd type-recovery tests (parity with hosted CI).
           docker run --name llem-ci-setup llenergymeasure-ci:transformers \
-            pip install --no-cache-dir pytest pytest-xdist
+            pip install --no-cache-dir pytest pytest-xdist \
+              "datamodel-code-generator==0.68.1" msgspec
+          # `llem` console-script shim for sigint_verify.sh (which invokes
+          # `llem` from PATH): replicate pyproject [project.scripts]
+          # llem = "llenergymeasure.cli:app". `exec` keeps the llem PID =
+          # the python PID so the script's SIGINT reaches the process.
+          printf '#!/bin/sh\nexec python3 -c "from llenergymeasure.cli import app; app()" "$@"\n' > /tmp/llem-shim
+          chmod +x /tmp/llem-shim
+          docker cp /tmp/llem-shim llem-ci-setup:/usr/local/bin/llem
           docker commit llem-ci-setup llenergymeasure-ci:transformers
           docker rm llem-ci-setup
 
       - name: Create results directory
         run: mkdir -p results/
 
+      # Both test steps mount the WHOLE checkout read-only at /app (the image
+      # WORKDIR): the suite resolves repo-root siblings of tests/ on disk
+      # (scripts/, configs/, docker/, engine_versions/, pyproject.toml, via
+      # Path(__file__).parents[N]) and the GPU replay-fixture writer hardcodes
+      # /app/results/replay. results/ is overlaid read-write on top for the
+      # replay fixtures and the sigint manifest. -p no:cacheprovider because
+      # the pytest rootdir (/app) is read-only.
+      # The regen_engine_configs suite drives the datamodel-codegen config
+      # codegen through `uv run` (cwd=/app), which must create /app/.venv. But
+      # /app is bind-mounted read-only here for production parity, so uv cannot
+      # sync a venv and the codegen aborts. This is host-side developer tooling
+      # (schema -> config.py codegen), env-sensitive and fully exercised by
+      # hosted CI on the writable checkout with the dev group installed. The
+      # container job exists for GPU/engine/integration proof, so the codegen
+      # tests are descoped from it. Kept surgical: the sibling engine_producers
+      # tests (source_walker, runtime_literals, stub_factory) exercise codegen
+      # logic without the uv subprocess and run fine in-container.
       - name: All tests (including GPU)
         run: |
           docker run --rm --gpus all \
-            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}":/app:ro \
             -v "${{ github.workspace }}/results":/app/results \
+            -e PYTHONPATH -e PYTHONDONTWRITEBYTECODE -e HF_HOME \
             llenergymeasure-ci:transformers \
-            python3 -m pytest tests/ -v --tb=short -o "addopts="
+            python3 -m pytest tests/ \
+              --ignore=tests/unit/scripts/engine_producers/test_regen_engine_configs.py \
+              -v --tb=short -o "addopts=" -p no:cacheprovider
 
       - name: SIGINT verification
         run: |
           docker run --rm --gpus all \
-            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}":/app:ro \
             -v "${{ github.workspace }}/results":/app/results \
+            -e PYTHONPATH -e PYTHONDONTWRITEBYTECODE -e HF_HOME \
             llenergymeasure-ci:transformers \
             bash tests/integration/sigint_verify.sh
 
@@ -132,3 +248,140 @@ jobs:
       - name: Cleanup transformers image
         if: always()
         run: docker rmi llenergymeasure-ci:transformers 2>/dev/null || true
+
+  engine-smoke:
+    # Boots each upstream-image engine's pinned container and runs one tiny
+    # inference through the real dispatch. Serialized AFTER transformers so the
+    # two GPU jobs never contend for a device on the two-free-GPU shared runner.
+    #
+    # `needs: [changes, transformers]` makes the smoke legs wait for the
+    # transformers job to finish and RELEASE its GPU before they claim one.
+    #
+    # The `if:` keeps the original trigger gate `(run_gpu || label ||
+    # changes.engine)` verbatim, so it still fires on every trigger shape:
+    # dispatch and workflow_call set `run_gpu` true, the `gpu-ci` label sets the
+    # contains() true, and an engine-path PR sets `changes.engine` true. The new
+    # `needs.transformers.result == 'success' &&` prefix is the serialization
+    # gate: a FAILED transformers job (result != 'success') skips the smoke legs,
+    # which is fine - the run is already red, and skipping avoids a second wave
+    # of allocation contention. Since transformers shares this exact trigger gate,
+    # it is only ever SKIPPED when the gate is false (so the smoke gate is false
+    # too) - it is never skipped out from under a smoke leg that wanted to run.
+    # (The expression carries no status-check function, so GitHub also auto-wraps
+    # it in success(), which additionally requires the always-green `changes` job;
+    # the explicit result check documents the transformers dependency for readers.)
+    needs: [changes, transformers]
+    if: >-
+      needs.transformers.result == 'success' &&
+      (
+        inputs.run_gpu ||
+        contains(github.event.pull_request.labels.*.name, 'gpu-ci') ||
+        needs.changes.outputs.engine == 'true'
+      )
+    runs-on: self-hosted
+    timeout-minutes: 90
+    strategy:
+      # One failing engine leg must not cancel the others - each is independent
+      # proof, and the trt leg is the slowest.
+      fail-fast: false
+      # All legs pin the same free device (LLEM_DOCKER_GPUS=device=2), so they
+      # would collide with each other; run them one at a time.
+      max-parallel: 1
+      matrix:
+        cell: [vllm, tensorrt-pytorch, tensorrt-trt]
+        include:
+          - cell: vllm
+            engine: vllm
+            config: configs/ci/smoke-vllm.yaml
+          - cell: tensorrt-pytorch
+            engine: tensorrt
+            config: configs/ci/smoke-tensorrt-pytorch.yaml
+          - cell: tensorrt-trt
+            engine: tensorrt
+            config: configs/ci/smoke-tensorrt-trt.yaml
+            # Exercise the on-disk build cache (warm on this runner) for the
+            # compiled backend - the distinctive tensorrt path.
+            trt_build_cache: "1"
+    env:
+      # --- Shared-box GPU pinning (HOST-SPECIFIC runner config for ds01-gpu) ---
+      # GPU 0 hosts a foreign Ollama workload; GPUs 1-3 are free. Pin llem's
+      # experiment + baseline containers to a free device at the docker level
+      # (keeps CUDA and NVML indices consistent inside the container). Adjust
+      # this value if the free-device layout on the runner changes.
+      LLEM_DOCKER_GPUS: device=2
+      # Force docker dispatch for the upstream-image engines (they auto-elevate
+      # anyway, but be explicit for a single-experiment run).
+      LLEM_RUNNER_VLLM: docker
+      LLEM_RUNNER_TENSORRT: docker
+    steps:
+      - name: Clean workspace (fix root-owned files from Docker)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
+      - uses: actions/checkout@v6
+
+      - name: Set up uv + host llem
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install host orchestration deps
+        # The host only orchestrates docker (no torch / engine libs); core deps
+        # are enough to run `llem run` and resolve the pinned image.
+        run: uv sync --no-dev
+
+      - name: Resolve pinned engine image
+        # Resolve the pinned UPSTREAM image the production way (engine template +
+        # bundled engine version, kept equal to engine_versions/<engine>/current.yaml
+        # by CI) and pin it via LLEM_IMAGE_<ENGINE> (highest-precedence override).
+        # This bypasses any stale local `llenergymeasure:<engine>` bare tag on the
+        # shared runner, which the smart default would otherwise prefer.
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          IMG=$(uv run python -c "from llenergymeasure.infra.image_registry import DEFAULT_IMAGE_TEMPLATES as T; from llenergymeasure.infra.version_handshake import read_bundled_engine_version as v; import os; e=os.environ['ENGINE']; print(T[e].format(version=v(e)))")
+          ENGINE_UPPER=$(printf '%s' "$ENGINE" | tr '[:lower:]' '[:upper:]')
+          echo "Resolved $ENGINE pinned image: $IMG"
+          echo "LLEM_IMAGE_${ENGINE_UPPER}=$IMG" >> "$GITHUB_ENV"
+
+      - name: Run tiny inference through the real dispatch path
+        env:
+          SMOKE_CONFIG: ${{ matrix.config }}
+          SMOKE_NAME: ${{ matrix.cell }}
+          LLEM_TRT_BUILD_CACHE_ENABLED: ${{ matrix.trt_build_cache }}
+        run: |
+          rm -rf "results/ci/${SMOKE_NAME}"
+          mkdir -p "results/ci/${SMOKE_NAME}"
+          uv run llem run "$SMOKE_CONFIG" -o "results/ci/${SMOKE_NAME}" --skip-preflight -q
+
+      - name: Assert result file exists and tokens were generated
+        env:
+          SMOKE_NAME: ${{ matrix.cell }}
+        run: |
+          uv run python - <<'PY'
+          import glob
+          import json
+          import os
+
+          name = os.environ["SMOKE_NAME"]
+          files = glob.glob(f"results/ci/{name}/**/result.json", recursive=True)
+          assert files, f"no result.json produced under results/ci/{name}"
+          data = json.load(open(files[0]))
+          total = data.get("total_tokens") or 0
+          assert total > 0, f"expected total_tokens > 0, got {total!r}"
+          print(f"OK {files[0]}: total_tokens={total} avg_tok_s={data.get('avg_tokens_per_second')}")
+          PY
+
+      - name: Cleanup stray containers
+        if: always()
+        run: |
+          # Belt-and-suspenders: llem uses `docker run --rm`, but kill anything
+          # left over from a timed-out leg so it cannot hold the pinned GPU.
+          # Match by repo prefix on the image column, NOT `--filter ancestor=<repo>`:
+          # a no-tag ancestor filter only matches <repo>:latest, never the pinned
+          # tags actually used (vllm/vllm-openai:v0.19.1, .../release:1.2.1).
+          docker ps --format '{{.ID}} {{.Image}}' \
+            | awk '$2 ~ /^(vllm\/vllm-openai|nvcr\.io\/nvidia\/tensorrt-llm\/release)/ {print $1}' \
+            | xargs -r docker kill 2>/dev/null || true

@@ -600,6 +600,10 @@ def test_worker_no_longer_stub(monkeypatch, tmp_path) -> None:
     )
     fake_result = make_result()
 
+    # Neutralise os.setpgrp(): the worker calls it to become a process-group
+    # leader, but that raises EPERM when the test process is itself a session
+    # leader (as pytest is inside the CI container). Not relevant to this test.
+    monkeypatch.setattr("llenergymeasure.study.runner.os.setpgrp", lambda: None)
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: MagicMock())
     monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
@@ -647,6 +651,9 @@ def test_worker_calls_get_engine(monkeypatch, tmp_path) -> None:
         engine_calls.append(name)
         return MagicMock()
 
+    # See test_worker_no_longer_stub: os.setpgrp() raises EPERM when the test
+    # process is a session leader (pytest inside the CI container).
+    monkeypatch.setattr("llenergymeasure.study.runner.os.setpgrp", lambda: None)
     monkeypatch.setattr("llenergymeasure.engines.get_engine", fake_get_engine)
     monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(

@@ -3,7 +3,7 @@
 # 3 cycles gives enough runtime to interrupt mid-study.
 # Warmup and baseline disabled to reduce pre-experiment wait time.
 
-name: sigint-test
+study_name: sigint-test
 
 experiments:
   - task:

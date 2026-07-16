@@ -65,7 +65,7 @@ class TestM1ExitCriteria:
         _save_replay(result, "gpt2", "transformers")
 
     def test_output_files_written(self, tmp_path):
-        """Timeseries parquet file written to output_dir."""
+        """Timeseries parquet file written under output_dir."""
         from llenergymeasure import ExperimentConfig, run_experiment
         from llenergymeasure.config.models import DatasetConfig
 
@@ -73,13 +73,20 @@ class TestM1ExitCriteria:
             task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=5)},
             engine="transformers",
         )
-        _result = run_experiment(config)
+        # Direct all output under tmp_path; run_experiment creates a timestamped
+        # study subdir there, with the result + timeseries sidecar nested inside
+        # per-experiment directories (results/persistence.save_result layout).
+        run_experiment(config, output_dir=tmp_path)
 
-        # Timeseries parquet written to output directory
-        output_files = list(tmp_path.iterdir())
-        assert len(output_files) >= 1
-        parquet_files = [f for f in output_files if f.suffix == ".parquet"]
-        assert len(parquet_files) >= 1
+        # At least one entry created under the output dir (the study subdir).
+        assert list(tmp_path.iterdir()), f"no output written under {tmp_path}"
+        # Timeseries parquet sidecar written somewhere in the study tree
+        # (save_timeseries defaults True; NVML telemetry is collected on a real GPU).
+        parquet_files = list(tmp_path.rglob("*.parquet"))
+        assert len(parquet_files) >= 1, (
+            f"expected a timeseries parquet under {tmp_path}, "
+            f"found: {[str(p) for p in tmp_path.rglob('*')]}"
+        )
 
     def test_cli_run_produces_valid_output(self, tmp_path):
         """llem run <experiment.yaml> via CLI produces valid output."""
