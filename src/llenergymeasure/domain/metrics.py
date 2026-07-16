@@ -165,25 +165,36 @@ class MemoryEfficiencyMetrics(BaseModel):
     All fields always present in schema. Values are null when not computable.
     """
 
-    # Raw memory values (always available)
+    # Raw memory values (null when not measured, never a silent 0.0)
     total_vram_mb: float = Field(default=0.0, description="Total GPU VRAM in MB")
-    model_memory_mb: float = Field(default=0.0, description="Model weights memory in MB")
-    peak_memory_mb: float = Field(
-        default=0.0,
+    model_memory_mb: float | None = Field(
+        default=None,
+        description=(
+            "Model weights memory after load, before inference (MB). "
+            "For out-of-process engines (vLLM V1, TRT-LLM) this is an NVML "
+            "whole-device reading (includes CUDA context and co-tenants); for "
+            "in-process Transformers it is the torch per-process allocation. "
+            "null = not measured (no torch/NVML reading available)."
+        ),
+    )
+    peak_memory_mb: float | None = Field(
+        default=None,
         description=(
             "Peak GPU memory during inference measurement window (MB). "
             "Reflects KV cache + activations + batch buffers, not model weights. "
-            "0.0 = not measured."
+            "For out-of-process engines this is an NVML whole-device reading "
+            "(see model_memory_mb). null = not measured."
         ),
     )
-    inference_memory_mb: float = Field(
-        default=0.0,
+    inference_memory_mb: float | None = Field(
+        default=None,
         description=(
             "Inference-only memory: peak minus model baseline (MB). "
-            "Derived: max(0.0, peak_memory_mb - model_memory_mb). "
-            "Represents KV cache + activations + batch buffers allocated during inference. "
-            "Computed by harness _build_result(), not by the caller. "
-            "0.0 = not measured or not computable."
+            "Derived: max(0.0, peak_memory_mb - model_memory_mb), computed by the "
+            "harness only when both peak and model baseline were measured. When "
+            "both come from NVML the shared whole-device context term cancels in "
+            "the subtraction, so the delta is meaningful. "
+            "null = not measured or not computable."
         ),
     )
     kv_cache_mb: float | None = Field(default=None, description="KV cache memory in MB (vLLM only)")

@@ -183,9 +183,12 @@ def test_memory_efficiency_metrics_has_three_memory_fields():
     assert "inference_memory_mb" in fields, "MemoryEfficiencyMetrics must have inference_memory_mb"
 
 
-def test_inference_memory_mb_default_is_zero():
-    """MemoryEfficiencyMetrics.inference_memory_mb defaults to 0.0."""
+def test_raw_memory_fields_default_to_null():
+    """MemoryEfficiencyMetrics raw memory fields default to null (not measured),
+    never a silent 0.0."""
     from llenergymeasure.domain.metrics import MemoryEfficiencyMetrics
 
     m = MemoryEfficiencyMetrics()
-    assert m.inference_memory_mb == 0.0
+    assert m.inference_memory_mb is None
+    assert m.peak_memory_mb is None
+    assert m.model_memory_mb is None
