@@ -29,6 +29,21 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   exchange dir alongside `timeseries.parquet`, and the local path always stages an output
   dir for the sidecar. If a completed experiment ends without a `config.json`, the runner
   logs a warning rather than dropping the provenance silently.
+- `result.json` schema bumped `4.0` -> `5.0` (breaking). `result.json` is now measurement
+  output: the configuration/methodology fields `engine_version`, `measurement_methodology`,
+  `steady_state_window`, `measurement_window_discard_fraction`, and
+  `steady_state_not_detected` are removed from it and live in the `config.json` sidecar as
+  top-level fields. `result.json` keeps `model_name` and `engine` as convenience copies -
+  deliberate small duplication so a result file stays self-describing when separated from
+  its directory; the authoritative home for both is `config.json`. In the sidecar, the
+  engine's library version is now named `engine_version` (was `library_version`); the config
+  sidecar schema stays `2.0` because it is still unreleased. Pre-1.0, old bundles are not
+  migrated in place: they load as their own `schema_version` and are unaffected on disk.
+  Consumers read methodology and authoritative identity from `config.json` (see the
+  results-schema and `run_study` reference docs for the join pattern). The `config.json`
+  sidecar is guaranteed to materialise next to every `result.json` on all successful runs -
+  including the docker (multi-engine) path and runs with `save_timeseries` off - so the
+  join never dangles.
 
 ## [v0.11.0] - 2026-07-16
 

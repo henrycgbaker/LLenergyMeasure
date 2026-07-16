@@ -47,7 +47,7 @@ class ObservedCollisionGroup:
 
     observed_config_hash: str
     engine: str
-    library_version: str
+    engine_version: str
     member_resolved_config_hashes: tuple[str, ...]
     member_experiment_ids: tuple[str, ...]
     gap_detected: bool
@@ -71,12 +71,12 @@ class EquivalenceGroups:
 
 
 def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCollisionGroup]:
-    """Group sidecars by ``(engine, library_version, observed_config_hash)``.
+    """Group sidecars by ``(engine, engine_version, observed_config_hash)``.
 
     Any group with size >= 2 AND distinct ``resolved_config_hash`` across its members is
     flagged as a proven library-resolution mechanism gap - per sweep-dedup.md §4.1.
 
-    Each sidecar dict must carry at minimum ``engine``, ``library_version``,
+    Each sidecar dict must carry at minimum ``engine``, ``engine_version``,
     ``resolved_config_hash``, ``observed_config_hash``, and ``experiment_id`` keys. Sidecars missing any
     of these are silently skipped (pre-50.3a data, or runs with dedup_mode=off
     for which observed-config-hash may be partial).
@@ -87,7 +87,7 @@ def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCol
         if not obs_hash:
             continue
         engine = str(sc.get("engine", ""))
-        version = str(sc.get("library_version", ""))
+        version = str(sc.get("engine_version", ""))
         buckets[(engine, version, obs_hash)].append(sc)
 
     groups: list[ObservedCollisionGroup] = []
@@ -103,7 +103,7 @@ def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCol
             ObservedCollisionGroup(
                 observed_config_hash=obs_hash,
                 engine=engine,
-                library_version=version,
+                engine_version=version,
                 member_resolved_config_hashes=resolved_config_hashes,
                 member_experiment_ids=exp_ids,
                 gap_detected=gap_detected,

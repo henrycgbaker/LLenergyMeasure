@@ -241,6 +241,21 @@ class _MeasuredWindow:
     end_time: datetime
 
 
+@dataclass(frozen=True)
+class _ConfigMethodology:
+    """Methodology fields that live in the config.json sidecar, not result.json.
+
+    Derived during result assembly (they depend on the resolved measurement
+    window) and threaded out to the config.json sidecar writer, since they are
+    configuration/methodology, not measurement output.
+    """
+
+    measurement_methodology: str
+    steady_state_window: tuple[float, float] | None
+    measurement_window_discard_fraction: float | None
+    steady_state_not_detected: bool
+
+
 # ---------------------------------------------------------------------------
 # MeasurementHarness
 # ---------------------------------------------------------------------------
@@ -701,10 +716,8 @@ class MeasurementHarness:
         )
 
         # 16. Assemble ExperimentResult
-        engine_version = getattr(engine, "version", None)
-        result = self._build_result(
+        result, methodology = self._build_result(
             engine_name=engine.name,
-            engine_version=engine_version,
             config=config,
             output=window.output,
             model_memory_mb=model_memory_mb,
@@ -733,6 +746,8 @@ class MeasurementHarness:
                 output=window.output,
                 config=config,
                 result=result,
+                engine_name=engine.name,
+                methodology=methodology,
                 output_dir=resolved_output_dir,
             )
             _emit_substep(_p, "save", "config sidecar written")
@@ -751,6 +766,8 @@ class MeasurementHarness:
         output: Any,
         config: Any,
         result: Any,
+        engine_name: str,
+        methodology: _ConfigMethodology,
         output_dir: Path,
     ) -> None:
         """Write ``config.json`` sidecar to ``output_dir`` (temp staging area).
@@ -760,6 +777,11 @@ class MeasurementHarness:
         from the observed-config hashing pipeline, and writes the sidecar atomically. The runner's
         ``_save_and_record`` moves this file to the per-experiment directory alongside
         ``result.json``.
+
+        This sidecar is the authoritative home for engine identity (``engine`` /
+        ``engine_version``), ``model_name``, and the measurement ``methodology``
+        fields. ``result.json`` carries ``engine`` and ``model_name`` as
+        convenience copies only; the rest live here exclusively.
 
         Best-effort - failures are logged at DEBUG to avoid masking measurement results.
         """
@@ -773,7 +795,6 @@ class MeasurementHarness:
             # Compute observed_config_hash from extracted native-type state.
             # harness + measurement come from the ran config so the observed hash
             # covers the same identity dimensions as the resolved hash.
-            engine_name = result.engine
             task_dict = config.task.model_dump(mode="python")
             active_harness = config.active_harness()
             harness_dump = (
@@ -803,7 +824,12 @@ class MeasurementHarness:
                 experiment_id=result.experiment_id,
                 config_hash=result.measurement_config_hash,
                 engine=engine_name,
-                library_version=lib_ver,
+                engine_version=lib_ver,
+                model_name=config.task.model,
+                measurement_methodology=methodology.measurement_methodology,
+                steady_state_window=methodology.steady_state_window,
+                measurement_window_discard_fraction=methodology.measurement_window_discard_fraction,
+                steady_state_not_detected=methodology.steady_state_not_detected,
                 observed_engine_params=obs_engine if obs_engine else None,
                 observed_sampling_params=obs_sampling if obs_sampling else None,
                 observed_config_hash=obs_hash,
@@ -1044,7 +1070,6 @@ class MeasurementHarness:
     def _build_result(
         self,
         engine_name: str,
-        engine_version: str | None,
         config: ExperimentConfig,
         output: InferenceOutput,
         model_memory_mb: float,
@@ -1062,8 +1087,13 @@ class MeasurementHarness:
         timeseries_samples: list[PowerThermalSample] | None = None,
         prompt_count: int = 0,
         model_load_time_sec: float | None = None,
-    ) -> ExperimentResult:
+    ) -> tuple[ExperimentResult, _ConfigMethodology]:
         """Assemble ExperimentResult from measurement data.
+
+        Returns the result plus the :class:`_ConfigMethodology` derived from the
+        resolved measurement window. The methodology fields belong to the
+        config.json sidecar (configuration/methodology), not result.json, so they
+        are threaded back to the caller rather than stored on the result.
 
         Energy/FLOPs fields carry measured values. The one exception: when no energy
         sampler produced a measurement, total_energy_j keeps a 0.0 placeholder that is
@@ -1073,7 +1103,6 @@ class MeasurementHarness:
 
         Args:
             engine_name: Engine identifier string (from engine.name).
-            engine_version: Engine version string (from engine.version), or None.
             config: Experiment configuration.
             output: InferenceOutput from engine.run_inference().
             model_memory_mb: GPU memory after model load, before inference (MB).
@@ -1096,7 +1125,8 @@ class MeasurementHarness:
                 the phase precedes the NVML measurement window.
 
         Returns:
-            Fully assembled ExperimentResult.
+            Tuple of (assembled ExperimentResult, _ConfigMethodology). The
+            methodology fields are written to the config.json sidecar, not result.json.
         """
         from llenergymeasure.domain.extended_metrics import compute_extended_metrics
         from llenergymeasure.domain.metrics import (
@@ -1348,13 +1378,13 @@ class MeasurementHarness:
             warmup_result.iterations_completed if warmup_result is not None else None
         )
 
-        return ExperimentResult(
+        result = ExperimentResult(
             experiment_id=experiment_id,
             measurement_config_hash=compute_declared_config_hash(config),
             llenergymeasure_version=__version__,
-            measurement_methodology=measurement_methodology,
+            # Convenience identity copies; authoritative home is config.json.
             engine=engine_name,
-            engine_version=engine_version,
+            model_name=config.task.model,
             aggregation=AggregationMetadata(
                 method="single_process",
                 num_processes=1,
@@ -1372,7 +1402,6 @@ class MeasurementHarness:
             end_time=end_time,
             thermal_throttle=thermal_info,
             energy_breakdown=energy_breakdown,
-            model_name=config.task.model,
             timeseries=timeseries_path,
             mj_per_tok_total=_mj_total,
             mj_per_tok_adjusted=_mj_adjusted,
@@ -1384,10 +1413,13 @@ class MeasurementHarness:
             measurement_warnings=measurement_warnings,
             extended_metrics=extended_metrics,
             latency_stats=latency_stats,
-            steady_state_window=steady_state_window,
-            measurement_window_discard_fraction=discard_fraction,
-            steady_state_not_detected=steady_state_not_detected,
             warmup_excluded_samples=warmup_excluded_samples,
             model_load_time_sec=model_load_time_sec,
             engine_build_cache_hit=output.extras.get("engine_build_cache_hit"),
+        )
+        return result, _ConfigMethodology(
+            measurement_methodology=measurement_methodology,
+            steady_state_window=steady_state_window,
+            measurement_window_discard_fraction=discard_fraction,
+            steady_state_not_detected=steady_state_not_detected,
         )

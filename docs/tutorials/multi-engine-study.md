@@ -237,8 +237,8 @@ After the run completes, the study directory looks roughly like this:
 results/tutorial-multi-engine_2026-05-07T14-32-08/
 ├── manifest.json                       # study-level: timing, config, completion
 ├── 001_c0_qwen-transformers_a1b2c3.../ # one experiment cell
-│   ├── result.json                     # all metrics + resolved config
-│   ├── effective_config.json           # final config used (after expansion)
+│   ├── result.json                     # measurement metrics only (schema 5.0)
+│   ├── config.json                     # engine/model/methodology + resolved config + provenance
 │   └── timeseries.parquet              # GPU power/thermal/memory samples
 ├── 002_c0_qwen-transformers_d4e5f6.../
 └── ... (36 cells)
@@ -249,13 +249,16 @@ experiment list, study timing, completion status per cell, and the
 effective study-level config. This is what you load when you want to
 *reason about the study as a whole* rather than one cell.
 
-A single `result.json` looks like (truncated for readability):
+A single `result.json` is measurement output (schema 5.0). Configuration
+moved to the sidecar; only `engine` and `model_name` remain as convenience
+copies so the file is self-describing when separated from its directory:
 
 ```json
 {
   "experiment_id": "qwen-transformers-bf16-bs16-fa2-2026-05-07T14-32-08",
+  "schema_version": "5.0",
   "engine": "transformers",
-  "model": "Qwen/Qwen2.5-0.5B",
+  "model_name": "Qwen/Qwen2.5-0.5B",
   "total_tokens": 7680,
   "total_inference_time_sec": 9.8,
   "avg_tokens_per_second": 783.7,
@@ -265,8 +268,24 @@ A single `result.json` looks like (truncated for readability):
   "mj_per_tok_adjusted": 100.4,
   "total_flops": 1.18e+12,
   "flops_per_output_token": 1.54e+8,
-  "energy_breakdown": { "...": "..." },
-  "effective_config": { "...": "..." }
+  "energy_breakdown": { "...": "..." }
+}
+```
+
+The authoritative home for engine, model, and methodology identity is the
+`config.json` sidecar next to `result.json` in the same cell directory -
+alongside the fully resolved config (`declared_config`) and per-field
+provenance:
+
+```json
+{
+  "schema_version": "2.0",
+  "engine": "transformers",
+  "engine_version": "4.57.1",
+  "model_name": "Qwen/Qwen2.5-0.5B",
+  "measurement_methodology": "total",
+  "declared_config": { "...": "..." },
+  "provenance": { "...": "..." }
 }
 ```
 
@@ -295,17 +314,18 @@ from pathlib import Path
 
 study_dir = Path("results/tutorial-multi-engine_2026-05-07T14-32-08")
 
-# Load every result.json under the study.
-results = []
-for p in study_dir.glob("*/result.json"):
-    with p.open() as f:
-        results.append(json.load(f))
-
-# Group by (engine, dtype) and average mJ/token (adjusted).
+# Each experiment cell holds result.json (metrics) plus a config.json
+# sidecar (engine/model identity + the resolved config). Join them per
+# cell: engine and dtype come from config.json, the metric from result.json.
 groups: dict[tuple[str, str], list[float]] = defaultdict(list)
-for r in results:
-    key = (r["engine"], r["effective_config"][r["engine"]]["dtype"])
-    groups[key].append(r["mj_per_tok_adjusted"])
+for result_path in study_dir.glob("*/result.json"):
+    cell = result_path.parent
+    result = json.loads(result_path.read_text())
+    config = json.loads((cell / "config.json").read_text())
+
+    engine = config["engine"]
+    dtype = config["declared_config"][engine]["engine_params"]["dtype"]
+    groups[(engine, dtype)].append(result["mj_per_tok_adjusted"])
 
 print(f"{'engine':<14} {'dtype':<10} {'mJ/tok (adj, mean)':>20} {'n':>4}")
 for (engine, dtype), values in sorted(groups.items()):
@@ -331,11 +351,11 @@ vllm           float16                   86.5    8
 > for the per-token energy figure - but the gap between dtypes is
 > often within noise for a 0.5B model.
 
-To go further: group by `(engine, batch_size_effective)` and plot
-mJ/token vs batch size, or pivot on `attn_implementation` /
-`attention.backend` to compare attention kernels within each engine.
-The result.json schema makes this kind of analysis a few lines of
-Python.
+To go further: group by batch size and plot mJ/token vs batch size, or
+pivot on `attn_implementation` / `attention.backend` to compare attention
+kernels within each engine - all read from each cell's `config.json`
+(`declared_config`) joined to its `result.json`. The two-file schema makes
+this kind of analysis a few lines of Python.
 
 ## Step 6 - What you've learned and where to go next
 

@@ -30,25 +30,16 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | `str` | Result schema version (current: `"4.0"`). |
+| `schema_version` | `str` | Result schema version (current: `"5.0"`). |
 | `experiment_id` | `str` | Unique identifier for this experiment run. |
 | `measurement_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
 | `llenergymeasure_version` | `str \| None` | Package version that produced this result. |
+| `engine` | `str` | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar. |
+| `model_name` | `str` | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar. |
 
-### Engine and model
+### Engine, model, and methodology
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `engine` | `str` | Inference engine used: `"transformers"`, `"vllm"`, or `"tensorrt"`. |
-| `engine_version` | `str \| None` | Engine version string for reproducibility (e.g. `"4.47.0"` for Transformers). |
-| `model_name` | `str` | Model name or path used. |
-
-### Measurement methodology
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `measurement_methodology` | `"total" \| "steady_state" \| "windowed"` | What was measured: the full run, the steady-state window after warmup, or an explicit time window. |
-| `steady_state_window` | `tuple[float, float] \| None` | `(start_sec, end_sec)` relative to inference start. The single-process path sets `(0.0, inference_time_sec)`. `None` only when no inference window was recorded. |
+`ExperimentResult` is measurement output. `engine_version` and the measurement-methodology fields (`measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected`) are configuration inputs and live in the `config.json` sidecar next to `result.json`, not on this model. The model keeps `model_name` and `engine` as convenience copies so a result stays self-describing when separated from its directory; the authoritative home for both is `config.json`.
 
 ### Core metrics
 

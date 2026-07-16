@@ -30,8 +30,6 @@ def _make_result(
     return ExperimentResult(
         experiment_id="test-save-record-001",
         measurement_config_hash="aabb1122ccdd3344",
-        measurement_methodology="total",
-        model_name="gpt2",
         total_tokens=256,
         total_energy_j=10.0,
         total_inference_time_sec=2.0,
@@ -77,7 +75,15 @@ def test_save_and_record_copies_timeseries_sidecar(tmp_path: Path) -> None:
     result_files: list[str] = []
 
     _save_and_record(
-        result, study_dir, manifest, "aabb1122", 1, result_files, ts_source_dir=tmp_path
+        result,
+        study_dir,
+        manifest,
+        "aabb1122",
+        1,
+        result_files,
+        model_name="gpt2",
+        engine="transformers",
+        ts_source_dir=tmp_path,
     )
 
     # result.json should have been saved into a subdirectory under study_dir
@@ -111,7 +117,16 @@ def test_save_and_record_no_timeseries(tmp_path: Path) -> None:
     manifest = MagicMock()
     result_files: list[str] = []
 
-    _save_and_record(result, study_dir, manifest, "ccdd5566", 1, result_files)
+    _save_and_record(
+        result,
+        study_dir,
+        manifest,
+        "ccdd5566",
+        1,
+        result_files,
+        model_name="gpt2",
+        engine="transformers",
+    )
 
     # result.json still saved
     assert len(result_files) == 1
@@ -146,7 +161,15 @@ def test_save_and_record_missing_source_file(tmp_path: Path) -> None:
 
     # Must not raise
     _save_and_record(
-        result, study_dir, manifest, "eeff7788", 1, result_files, ts_source_dir=tmp_path
+        result,
+        study_dir,
+        manifest,
+        "eeff7788",
+        1,
+        result_files,
+        model_name="gpt2",
+        engine="transformers",
+        ts_source_dir=tmp_path,
     )
 
     # result.json still saved
@@ -185,7 +208,7 @@ def test_save_and_record_writes_resolved_config_hash(tmp_path: Path) -> None:
                 "experiment_id": "test-resolved-001",
                 "config_hash": "aabb1122ccdd3344",
                 "engine": "transformers",
-                "library_version": "4.50.0",
+                "engine_version": "4.50.0",
                 "observed_config_hash": "sha256_h3_stub",
             }
         )
@@ -202,6 +225,8 @@ def test_save_and_record_writes_resolved_config_hash(tmp_path: Path) -> None:
         "aabb1122",
         1,
         result_files,
+        model_name="gpt2",
+        engine="transformers",
         ts_source_dir=tmp_path,
         resolved_config_hash="resolved_sha256_h1_value",
     )
@@ -239,7 +264,7 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
                 "experiment_id": "test-prov-001",
                 "measurement_config_hash": "aabb1122ccdd3344",
                 "engine": "transformers",
-                "library_version": "4.50.0",
+                "engine_version": "4.50.0",
             }
         )
     )
@@ -260,6 +285,8 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
         "aabb1122",
         1,
         result_files,
+        model_name="gpt2",
+        engine="transformers",
         ts_source_dir=tmp_path,
         resolution_log=resolution_log,
     )
@@ -316,6 +343,8 @@ def test_save_and_record_attaches_runner_provenance(tmp_path: Path) -> None:
         "aabb1122",
         1,
         result_files,
+        model_name="gpt2",
+        engine="transformers",
         runner_provenance=RunnerProvenance(mode="docker", image="img:2.0", source="env"),
     )
 
@@ -347,7 +376,16 @@ def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:
         "llenergymeasure.results.persistence.save_result",
         side_effect=OSError("disk full"),
     ):
-        _save_and_record(result, study_dir, manifest, "aabb1122", 1, result_files)
+        _save_and_record(
+            result,
+            study_dir,
+            manifest,
+            "aabb1122",
+            1,
+            result_files,
+            model_name="gpt2",
+            engine="transformers",
+        )
 
     # mark_failed must be called - NOT mark_completed
     manifest.mark_failed.assert_called_once()

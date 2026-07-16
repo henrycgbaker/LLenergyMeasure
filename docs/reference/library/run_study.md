@@ -30,13 +30,24 @@ file to its config hash.
 
 ## Simple usage
 
+The authoritative home for engine identity and model name is the `config.json`
+sidecar next to each `result.json` (they are configuration inputs; `result.json`
+keeps `engine` and `model_name` as convenience copies only), so analysis code
+reads them from disk via `result_files`:
+
 ```python
+import json
+from pathlib import Path
+
 from llenergymeasure import run_study
 
 study_result = run_study("study.yaml")
 
-for r in study_result.experiments:
-    print(f"{r.model_name} / {r.engine}: {r.mj_per_tok_total:.3f} mJ/tok")
+for result_file in study_result.result_files:
+    cell = Path(result_file).parent
+    result = json.loads((cell / "result.json").read_text())
+    config = json.loads((cell / "config.json").read_text())
+    print(f"{config['model_name']} / {config['engine']}: {result['mj_per_tok_total']:.3f} mJ/tok")
 ```
 
 `study.yaml` (minimal multi-experiment form):
@@ -127,20 +138,35 @@ Each item in `experiments` is an [`ExperimentResult`](./ExperimentResult). See
 
 ## Common patterns
 
+These patterns join each `result.json` with its `config.json` sidecar (the
+authoritative home of `engine` and `model_name`) via `result_files`.
+
 ### Filter results by engine
 
 ```python
-transformers_results = [r for r in study_result.experiments if r.engine == "transformers"]
+import json
+from pathlib import Path
+
+transformers_cells = [
+    Path(f).parent
+    for f in study_result.result_files
+    if json.loads((Path(f).parent / "config.json").read_text())["engine"] == "transformers"
+]
 ```
 
 ### Compare energy across models
 
 ```python
+import json
 import statistics
+from pathlib import Path
 
 by_model: dict[str, list[float]] = {}
-for r in study_result.experiments:
-    by_model.setdefault(r.model_name, []).append(r.mj_per_tok_total or 0.0)
+for result_file in study_result.result_files:
+    cell = Path(result_file).parent
+    result = json.loads((cell / "result.json").read_text())
+    config = json.loads((cell / "config.json").read_text())
+    by_model.setdefault(config["model_name"], []).append(result["mj_per_tok_total"] or 0.0)
 
 for model, values in by_model.items():
     print(f"{model}: mean {statistics.mean(values):.3f} mJ/tok (n={len(values)})")
@@ -153,16 +179,20 @@ import json
 from pathlib import Path
 import pandas as pd
 
-rows = [
-    {
-        "model": r.model_name,
-        "engine": r.engine,
-        "energy_j": r.total_energy_j,
-        "throughput": r.avg_tokens_per_second,
-        "mj_per_tok": r.mj_per_tok_total,
-    }
-    for r in study_result.experiments
-]
+rows = []
+for result_file in study_result.result_files:
+    cell = Path(result_file).parent
+    result = json.loads((cell / "result.json").read_text())
+    config = json.loads((cell / "config.json").read_text())
+    rows.append(
+        {
+            "model": config["model_name"],
+            "engine": config["engine"],
+            "energy_j": result["total_energy_j"],
+            "throughput": result["avg_tokens_per_second"],
+            "mj_per_tok": result["mj_per_tok_total"],
+        }
+    )
 df = pd.DataFrame(rows)
 ```
 

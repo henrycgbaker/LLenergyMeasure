@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.models import StudyConfig
-from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
+from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES, engine_str
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.progress import ProgressCallback
@@ -119,8 +119,9 @@ def run_single_experiment(
         from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
         # Staging dir for harness artefacts. The harness writes config.json here
-        # always (the sole home of provenance/identity) and timeseries.parquet
-        # when save_timeseries is on, so the dir is created regardless of save_ts.
+        # always (sole home of provenance, authoritative home of identity) and
+        # timeseries.parquet when save_timeseries is on, so the dir is created
+        # regardless of save_ts.
         ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
 
         # Wrap the in-process body (preflight -> engine import -> harness.run) in
@@ -187,6 +188,8 @@ def run_single_experiment(
         config_hash,
         cycle,
         result_files,
+        model_name=config.task.model,
+        engine=engine_str(config.engine),
         ts_source_dir=ts_tmpdir,
         environment_snapshot=snapshot,
         resolution_log=(resolution_logs or {}).get(config_hash),

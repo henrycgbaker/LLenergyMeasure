@@ -38,12 +38,18 @@ CONFIG_SIDECAR_SCHEMA_VERSION = "2.0"
 def _experiment_dir_name(
     result: ExperimentResult,
     *,
+    model_name: str,
+    engine: str,
     experiment_index: int | None = None,
     cycle: int = 1,
 ) -> str:
     """Generate a human-readable directory name for an experiment result.
 
     Format: ``[{index:03d}_]c{cycle}_{model_short}-{engine}_{hash[:8]}``
+
+    ``model_name`` and ``engine`` are the identity of what was measured. Their
+    authoritative home is the ``config.json`` sidecar (``result.json`` carries
+    convenience copies only), so the caller supplies them explicitly.
 
     When ``experiment_index`` is provided (study context), the directory is
     prefixed with a zero-padded index for natural sort ordering.
@@ -54,8 +60,7 @@ def _experiment_dir_name(
     """
     from llenergymeasure.utils.formatting import model_short_name
 
-    model_short = model_short_name(result.model_name)
-    engine = result.engine
+    model_short = model_short_name(model_name)
     config_hash = result.measurement_config_hash[:8]
 
     # Build slug: model_short-engine
@@ -111,7 +116,12 @@ def save_config_sidecar(
     experiment_id: str,
     config_hash: str,
     engine: str,
-    library_version: str,
+    engine_version: str,
+    model_name: str,
+    measurement_methodology: str,
+    steady_state_window: tuple[float, float] | None = None,
+    measurement_window_discard_fraction: float | None = None,
+    steady_state_not_detected: bool = False,
     observed_engine_params: dict[str, object] | None = None,
     observed_sampling_params: dict[str, object] | None = None,
     resolved_config_hash: str | None = None,
@@ -124,6 +134,19 @@ def save_config_sidecar(
     Schema lives in ``.product/designs/config-deduplication-dormancy/sweep-dedup.md``
     §3.3. Fields:
 
+    - ``engine`` / ``engine_version`` - the inference engine and its library
+      version. This sidecar is the authoritative home for engine identity;
+      ``result.json`` keeps ``engine`` as a convenience copy only, and
+      ``engine_version`` lives here exclusively.
+    - ``model_name`` - the model name/path that was measured (a configuration
+      input, not a measurement output). Authoritative here; ``result.json``
+      keeps a convenience copy.
+    - ``measurement_methodology`` / ``steady_state_window`` /
+      ``measurement_window_discard_fraction`` / ``steady_state_not_detected`` -
+      how the measurement window was set up. Methodology choices are configuration,
+      so they live here rather than alongside the metrics in ``result.json``.
+      ``steady_state_window`` and ``measurement_window_discard_fraction`` are
+      omitted when None (total/windowed methodologies).
     - ``observed_engine_params`` / ``observed_sampling_params`` - authoritative
       post-construction library state (populated by
       :func:`llenergymeasure.engines._observed.extract_observed_params`).
@@ -163,8 +186,15 @@ def save_config_sidecar(
         "experiment_id": experiment_id,
         "measurement_config_hash": config_hash,
         "engine": engine,
-        "library_version": library_version,
+        "engine_version": engine_version,
+        "model_name": model_name,
+        "measurement_methodology": measurement_methodology,
+        "steady_state_not_detected": steady_state_not_detected,
     }
+    if steady_state_window is not None:
+        payload["steady_state_window"] = list(steady_state_window)
+    if measurement_window_discard_fraction is not None:
+        payload["measurement_window_discard_fraction"] = measurement_window_discard_fraction
     if observed_engine_params is not None:
         payload["observed_engine_params"] = observed_engine_params
     if observed_sampling_params is not None:
@@ -224,6 +254,9 @@ def save_environment(
 def save_result(
     result: ExperimentResult,
     output_dir: Path,
+    *,
+    model_name: str,
+    engine: str,
     timeseries_source: Path | None = None,
     experiment_index: int | None = None,
     cycle: int = 1,
@@ -239,6 +272,10 @@ def save_result(
     Args:
         result: The experiment result to persist.
         output_dir: Parent directory. Created if missing.
+        model_name: Model name/path (used for the directory slug). Authoritative
+            home is the ``config.json`` sidecar; the result carries a convenience copy.
+        engine: Inference engine name (used for the directory slug). Authoritative
+            home is the ``config.json`` sidecar; the result carries a convenience copy.
         timeseries_source: Optional path to existing .parquet file to copy in.
         experiment_index: Optional 1-based experiment index for directory prefix
             (used in study context for natural sort ordering).
@@ -250,7 +287,13 @@ def save_result(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dir_name = _experiment_dir_name(result, experiment_index=experiment_index, cycle=cycle)
+    dir_name = _experiment_dir_name(
+        result,
+        model_name=model_name,
+        engine=engine,
+        experiment_index=experiment_index,
+        cycle=cycle,
+    )
     base_dir = output_dir / dir_name
     target_dir = _find_collision_free_dir(base_dir)
 

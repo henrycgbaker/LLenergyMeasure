@@ -1,7 +1,10 @@
-"""Unit tests for ExperimentResult v4.0 schema.
+"""Unit tests for the ExperimentResult schema.
 
-Tests cover: schema_version="4.0", all RES-01..RES-11 fields, JSON round-trip,
-config hash utility, MultiGPUMetrics, frozen model enforcement.
+Tests cover: schema_version, core/energy/quality fields, JSON round-trip,
+config hash utility, MultiGPUMetrics, frozen model enforcement. The config.json
+sidecar is the authoritative home for identity and methodology; the result keeps
+engine and model_name as convenience copies, while engine_version and the
+methodology fields live in the sidecar only.
 """
 
 from datetime import datetime
@@ -29,7 +32,6 @@ def make_result():
         defaults = dict(
             experiment_id="test-001",
             measurement_config_hash="abcdef0123456789",
-            measurement_methodology="total",
             total_tokens=1000,
             total_energy_j=50.0,
             total_inference_time_sec=10.0,
@@ -50,8 +52,8 @@ def make_result():
 # ---------------------------------------------------------------------------
 
 
-def test_schema_version_default_is_3_0(make_result):
-    """schema_version defaults to '4.0', not '4.0.0'."""
+def test_schema_version_default(make_result):
+    """schema_version defaults to the current single-segment version (e.g. '5.0')."""
     result = make_result()
     from tests.conftest import EXPERIMENT_SCHEMA_VERSION
 
@@ -70,49 +72,22 @@ def test_measurement_config_hash_field(make_result):
 
 
 # ---------------------------------------------------------------------------
-# Tasks 2.3-2.5: measurement_methodology
+# Methodology fields moved to the config.json sidecar
 # ---------------------------------------------------------------------------
 
 
-def test_measurement_methodology_total(make_result):
-    """measurement_methodology='total' validates."""
-    result = make_result(measurement_methodology="total")
-    assert result.measurement_methodology == "total"
+def test_methodology_fields_rejected(make_result):
+    """methodology fields moved to config.json; ExperimentResult rejects them."""
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        make_result(measurement_methodology="total")
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        make_result(steady_state_window=(12.3, 67.8))
 
 
-def test_measurement_methodology_steady_state(make_result):
-    """measurement_methodology='steady_state' validates."""
-    result = make_result(measurement_methodology="steady_state")
-    assert result.measurement_methodology == "steady_state"
-
-
-def test_measurement_methodology_windowed(make_result):
-    """measurement_methodology='windowed' validates."""
-    result = make_result(measurement_methodology="windowed")
-    assert result.measurement_methodology == "windowed"
-
-
-def test_measurement_methodology_invalid(make_result):
-    """measurement_methodology='invalid' raises ValidationError."""
-    with pytest.raises(ValidationError):
-        make_result(measurement_methodology="invalid")
-
-
-# ---------------------------------------------------------------------------
-# Tasks 2.6-2.7: steady_state_window
-# ---------------------------------------------------------------------------
-
-
-def test_steady_state_window_tuple(make_result):
-    """steady_state_window=(12.3, 67.8) validates and round-trips."""
-    result = make_result(steady_state_window=(12.3, 67.8))
-    assert result.steady_state_window == (12.3, 67.8)
-
-
-def test_steady_state_window_none(make_result):
-    """steady_state_window=None validates when methodology=total."""
-    result = make_result(measurement_methodology="total", steady_state_window=None)
-    assert result.steady_state_window is None
+def test_engine_version_rejected(make_result):
+    """engine_version lives in config.json only; ExperimentResult rejects it."""
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        make_result(engine_version="1.2.3")
 
 
 # ---------------------------------------------------------------------------
@@ -356,8 +331,6 @@ def test_json_round_trip(make_result):
         energy_per_output_token_j=0.05,
     )
     original = make_result(
-        measurement_methodology="steady_state",
-        steady_state_window=(10.0, 60.0),
         baseline_power_w=42.5,
         energy_adjusted_j=45.2,
         energy_per_device_j=[25.0, 25.0],
@@ -371,8 +344,6 @@ def test_json_round_trip(make_result):
 
     assert restored.schema_version == original.schema_version
     assert restored.experiment_id == original.experiment_id
-    assert restored.measurement_methodology == original.measurement_methodology
-    assert restored.steady_state_window == original.steady_state_window
     assert restored.baseline_power_w == original.baseline_power_w
     assert restored.energy_adjusted_j == original.energy_adjusted_j
     assert restored.energy_per_device_j == original.energy_per_device_j
@@ -399,20 +370,22 @@ def test_n_prompts_default_matches_dataset_config():
 
 
 # ---------------------------------------------------------------------------
-# model_name field on ExperimentResult
+# Convenience identity copies (authoritative home: config.json sidecar)
 # ---------------------------------------------------------------------------
 
 
-def test_model_name_field_exists(make_result):
-    """model_name is accessible and stores the provided value."""
+def test_model_name_convenience_copy(make_result):
+    """model_name is kept on the result as a convenience copy."""
     result = make_result(model_name="gpt2")
     assert result.model_name == "gpt2"
+    assert make_result().model_name == "unknown"
 
 
-def test_model_name_defaults_to_unknown(make_result):
-    """model_name defaults to 'unknown' when not supplied."""
-    result = make_result()
-    assert result.model_name == "unknown"
+def test_engine_convenience_copy(make_result):
+    """engine is kept on the result as a convenience copy."""
+    result = make_result(engine="vllm")
+    assert result.engine == "vllm"
+    assert make_result().engine == "transformers"
 
 
 # ---------------------------------------------------------------------------

@@ -46,6 +46,7 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_INTERRUPT_POLL,
     TIMEOUT_SIGTERM_GRACE,
     TIMEOUT_THREAD_JOIN,
+    engine_str,
 )
 from llenergymeasure.domain.bundle_artefacts import (
     CONFIG_SIDECAR_FILENAME,
@@ -122,6 +123,9 @@ def _save_and_record(
     config_hash: str,
     cycle: int,
     result_files: list[str],
+    *,
+    model_name: str,
+    engine: str,
     experiment_index: int | None = None,
     ts_source_dir: Path | None = None,
     environment_snapshot: Any | None = None,
@@ -136,6 +140,10 @@ def _save_and_record(
     flat file written by MeasurementHarness is removed after the copy.
 
     Args:
+        model_name: Model name/path for the experiment directory slug
+            (authoritative home: config.json; the result keeps a convenience copy).
+        engine: Inference engine name for the experiment directory slug
+            (authoritative home: config.json; the result keeps a convenience copy).
         ts_source_dir: Directory where the harness wrote timeseries.parquet.
         environment_snapshot: EnvironmentSnapshot for per-experiment environment.json sidecar.
         resolution_log: Pre-built per-field resolution log for this experiment,
@@ -167,6 +175,8 @@ def _save_and_record(
         result_path = save_result(
             result,
             study_dir,
+            model_name=model_name,
+            engine=engine,
             timeseries_source=ts_source,
             experiment_index=experiment_index,
             cycle=cycle,
@@ -207,13 +217,13 @@ def _save_and_record(
                     config_sidecar_src.unlink(missing_ok=True)
 
         # Loudness backstop: config.json is the sole home of provenance and
-        # engine/model/methodology identity. A completed experiment that lands
+        # the authoritative home of identity. A completed experiment that lands
         # without one is silent data loss - warn (never fail) so the gap is
         # visible rather than discovered later at analysis time.
         if not (result_path.parent / CONFIG_SIDECAR_FILENAME).exists():
             logger.warning(
                 "No config.json materialised for %s (cycle %d) at %s - provenance "
-                "and engine/model identity are missing from this result.",
+                "and authoritative engine/model identity are missing from this result.",
                 config_hash,
                 cycle,
                 result_path.parent,
@@ -776,7 +786,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         # output_dir (a runtime param, not from config) and writes config.json
         # there always, plus timeseries.parquet when save_timeseries is on. The
         # staging dir is created regardless of save_timeseries so the config.json
-        # sidecar - the sole home of provenance/identity - always materialises;
+        # sidecar - sole home of provenance, authoritative home of identity -
+        # always materialises;
         # it is cleaned up after _handle_result copies the artefacts into the
         # study directory.
         save_ts = self.study.output.save_timeseries
@@ -882,6 +893,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         local_spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         self._handle_result(
             result,
+            config,
             config_hash,
             cycle,
             index,
@@ -901,6 +913,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
     def _handle_result(
         self,
         result: Any,
+        config: ExperimentConfig,
         config_hash: str,
         cycle: int,
         index: int,
@@ -910,6 +923,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         runner_provenance: RunnerProvenance | None = None,
     ) -> None:
         """Update manifest and signal study display based on experiment outcome."""
+        model_name = config.task.model
+        engine = engine_str(config.engine)
         if isinstance(result, dict) and "type" in result:
             error_type = result.get("type", "UnknownError")
             error_message = result.get("message", "")
@@ -927,6 +942,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 config_hash,
                 cycle,
                 self.result_files,
+                model_name=model_name,
+                engine=engine,
                 experiment_index=index,
                 ts_source_dir=ts_source_dir,
                 environment_snapshot=environment_snapshot,
@@ -942,11 +959,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                     # Docker experiments: show container path first, then host path.
                     # The original container path is /run/llem; by this point output_dir
                     # has been rewritten to the host temp dir, so use the known constant.
-                    spec = (
-                        self._runner_specs.get(getattr(result, "engine", None) or "")
-                        if self._runner_specs
-                        else None
-                    )
+                    spec = self._runner_specs.get(engine) if self._runner_specs else None
                     is_docker = spec is not None and spec.mode == RUNNER_DOCKER
                     if is_docker:
                         self._progress.on_substep("save", f"container: {CONTAINER_EXCHANGE_DIR}")
@@ -1092,6 +1105,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(
             result,
+            config,
             config_hash,
             cycle,
             index,

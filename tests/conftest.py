@@ -84,13 +84,12 @@ def make_config(**overrides) -> ExperimentConfig:
 def make_result(**overrides) -> ExperimentResult:
     """Return a valid ExperimentResult with sensible defaults.
 
-    Includes all required fields (measurement_config_hash,
-    measurement_methodology, start_time, end_time) to prevent ValidationError.
+    Includes all required fields (measurement_config_hash, start_time, end_time)
+    to prevent ValidationError.
     """
     defaults: dict = {
         "experiment_id": TEST_EXPERIMENT_ID,
         "measurement_config_hash": TEST_MEASUREMENT_HASH,
-        "measurement_methodology": "total",
         "aggregation": AggregationMetadata(num_processes=1),
         "total_tokens": 1000,
         "total_energy_j": 10.0,
