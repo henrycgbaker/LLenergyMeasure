@@ -424,7 +424,7 @@ lem config new --preset benchmark
 
 ## Engine-Specific Configuration
 
-Each inference engine exposes its own configuration section for advanced optimisation. These are defined in `engine_configs.py` and set via `vllm:` or `pytorch:` blocks in YAML.
+Each inference engine exposes its own configuration section for advanced optimisation, set via `vllm:`, `transformers:`, or `tensorrt:` blocks in YAML, with engine-specific fields nested under `engine_params:`.
 
 **Important:** Engine-specific settings are IN ADDITION to shared config (model, batching, decoder, etc.). Some shared settings map to engine params, others may be overridden:
 
@@ -439,16 +439,21 @@ Each inference engine exposes its own configuration section for advanced optimis
 # vLLM engine
 engine: vllm
 vllm:
-  gpu_memory_utilization: 0.9   # Most important: controls KV cache size
-  max_num_seqs: 256             # Max concurrent sequences (replaces batch_size)
-  enable_prefix_caching: true   # 30-50% throughput gain for repeated prefixes
-  kv_cache_dtype: fp8           # Memory-efficient KV cache
+  engine_params:
+    gpu_memory_utilization: 0.9   # Most important: controls KV cache size
+    max_num_seqs: 256             # Max concurrent sequences (replaces batch_size)
+    enable_prefix_caching: true   # 30-50% throughput gain for repeated prefixes
+    kv_cache_dtype: fp8           # Memory-efficient KV cache
 
-# PyTorch engine (default)
+# Transformers engine (default)
 engine: transformers
 transformers:
-  attn_implementation: flash_attention_2
-  torch_compile: reduce-overhead
+  engine_params:
+    attn_implementation: flash_attention_2
+harness:
+  transformers:
+    torch_compile: true
+    torch_compile_mode: reduce-overhead
 ```
 
 **Most users only need:** `gpu_memory_utilization`, `max_num_seqs`, `enable_prefix_caching`

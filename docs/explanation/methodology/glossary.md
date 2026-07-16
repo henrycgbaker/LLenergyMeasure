@@ -34,7 +34,7 @@ The phrase **attention backend** remains standard for kernel selection (FlashAtt
 
 ### Attention backend {#attention-backend}
 
-The kernel implementation used for the attention computation within an inference engine. Common values: `flash_attn`, `flashinfer`, `sdpa`, `eager`, `flash_attention_2`. Configured via engine-scoped parameters such as `transformers.attn_implementation` or `vllm.attention.backend`.
+The kernel implementation used for the attention computation within an inference engine. Common values: `flash_attn`, `flashinfer`, `sdpa`, `eager`, `flash_attention_2`. Configured via engine-scoped parameters such as `transformers.engine_params.attn_implementation` or `vllm.engine_params.attention.backend`.
 
 Attention backend is an industry-standard sub-system term (used by HuggingFace, vLLM, and TensorRT-LLM) and is distinct from the inference [engine](#engine). Selecting the attention backend does not change which engine runs the model.
 

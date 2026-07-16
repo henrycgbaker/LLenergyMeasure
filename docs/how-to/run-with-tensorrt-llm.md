@@ -254,7 +254,8 @@ trtllm-build \
 task:
   model: Qwen/Qwen2.5-7B-Instruct-AWQ   # original HF id, for tokenizer + metadata
 tensorrt:
-  engine_path: /shared/engines/qwen2.5-7b-awq
+  engine_params:
+    engine_path: /shared/engines/qwen2.5-7b-awq
 ```
 
 With `engine_path` set, the pre-flight gate is skipped because the engine
