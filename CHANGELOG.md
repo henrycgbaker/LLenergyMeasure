@@ -59,6 +59,20 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- The `config.json` and `environment.json` sidecars now materialise in the experiment
+  directory under docker dispatch. Atomic writes (`result.json`, both sidecars, the study
+  manifest, and equivalence groups) are now created world-readable (0644) instead of the
+  0600 that `tempfile.mkstemp` produces regardless of umask. Previously a root container
+  wrote these two sidecars 0600, and the non-root host then hit `PermissionError` reading
+  them during the rescue step - swallowed at debug level - so both sidecars were silently
+  dropped from every docker-dispatched bundle (`result.json` and `timeseries.parquet`
+  survived because they were already written 0644). Sidecar-rescue failures now log a
+  warning naming the path and reason rather than vanishing.
+- `llem run` warnings now reach the terminal. The package installs a `NullHandler` at
+  import time, which the logging setup mistook for an already-configured handler and so
+  never attached the real stream handler - suppressing every `WARNING`-level message
+  (including the sidecar-rescue backstops above) on the normal run path. The setup now
+  ignores the placeholder and attaches the stream handler.
 - Declared-config and study-design hashes are now computed on a json-mode
   `model_dump`, so a field typed float but defaulted to an int literal (e.g. vllm
   `cpu_offload_gb = 0`) hashes identically whether or not the config has been

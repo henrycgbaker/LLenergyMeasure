@@ -211,8 +211,16 @@ def _save_and_record(
                     json.dumps(load_json(rescued_env), indent=2, default=str),
                     result_path.parent / ENVIRONMENT_FILENAME,
                 )
-            except Exception as exc:  # pragma: no cover - best-effort
-                logger.debug("environment.json sidecar rescue failed: %s", exc)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to rescue in-container environment.json for %s (cycle %d) "
+                    "from %s: %s - environment.json will record the dispatching host, "
+                    "not the container the experiment ran in.",
+                    config_hash,
+                    cycle,
+                    rescued_env,
+                    exc,
+                )
             finally:
                 rescued_env.unlink(missing_ok=True)
         elif runner_provenance is not None and runner_provenance.mode == RUNNER_DOCKER:
@@ -248,8 +256,16 @@ def _save_and_record(
                         json.dumps(_payload, indent=2, default=str),
                         result_path.parent / CONFIG_SIDECAR_FILENAME,
                     )
-                except Exception as exc:  # pragma: no cover - best-effort
-                    logger.debug("config.json sidecar move failed: %s", exc)
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to move config.json sidecar for %s (cycle %d) from %s: %s - "
+                        "provenance and authoritative engine/model identity will be missing "
+                        "from this result.",
+                        config_hash,
+                        cycle,
+                        config_sidecar_src,
+                        exc,
+                    )
                 finally:
                     config_sidecar_src.unlink(missing_ok=True)
 

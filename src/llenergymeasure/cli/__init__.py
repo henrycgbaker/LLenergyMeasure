@@ -57,8 +57,14 @@ def _setup_logging(verbose: int = 0) -> None:
     root_logger = logging.getLogger("llenergymeasure")
     root_logger.setLevel(level)
 
-    # Avoid adding duplicate handlers on repeated calls
-    if not root_logger.handlers:
+    # The package installs a NullHandler at import time (standard library
+    # hygiene). That placeholder alone must NOT count as "already configured",
+    # or the real stream handler is never attached and WARNING-level messages
+    # (e.g. a silently-dropped sidecar during docker rescue) never reach the
+    # user. Add the stream handler unless a real (non-null) one already exists,
+    # which also keeps repeated calls from stacking duplicate handlers.
+    has_stream_handler = any(not isinstance(h, logging.NullHandler) for h in root_logger.handlers)
+    if not has_stream_handler:
         handler = logging.StreamHandler()
         handler.setLevel(level)
         fmt = logging.Formatter(

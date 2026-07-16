@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -65,6 +66,23 @@ def test_atomic_write_overwrites_existing_file(tmp_path: Path) -> None:
     _atomic_write("new content", target)
 
     assert target.read_text() == "new content"
+
+
+def test_atomic_write_produces_world_readable_file(tmp_path: Path) -> None:
+    """_atomic_write() writes mode 0644, not the 0600 mkstemp defaults to.
+
+    Regression: docker dispatch runs the container as root, so a 0600 sidecar
+    is unreadable by the non-root host during the rescue step and gets silently
+    dropped. Results artefacts must be world-readable like result.json.
+    """
+    target = tmp_path / "output.json"
+    _atomic_write("content", target)
+
+    mode = stat.S_IMODE(target.stat().st_mode)
+    assert mode == 0o644, f"expected 0644, got {oct(mode)}"
+
+    # No temp file should linger with the restrictive default either.
+    assert list(tmp_path.glob("*.tmp")) == []
 
 
 # ---------------------------------------------------------------------------
