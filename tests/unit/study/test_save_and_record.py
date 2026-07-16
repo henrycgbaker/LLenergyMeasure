@@ -30,6 +30,8 @@ def _make_result(
     return ExperimentResult(
         experiment_id="test-save-record-001",
         measurement_config_hash="aabb1122ccdd3344",
+        input_tokens=192,
+        output_tokens=64,
         total_tokens=256,
         total_energy_j=10.0,
         total_inference_time_sec=2.0,

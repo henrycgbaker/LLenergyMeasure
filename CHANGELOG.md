@@ -9,6 +9,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Added
 
+- `result.json` now exposes `input_tokens` and `output_tokens` alongside `total_tokens`
+  (the actual tokenised counts as observed by the engine, where
+  `total_tokens = input_tokens + output_tokens`). The split was already computed in the
+  harness for the FLOPs-per-token fields but never persisted; exposing it enables auditing
+  declared-vs-actual input lengths. Rides the unreleased schema 5.0 (additive, no version
+  bump).
 - The `timeseries.parquet` sidecar now carries `experiment_id` and
   `measurement_config_hash` as Parquet file-level key-value metadata (not columns), so the
   artefact stays attributable if separated from its result directory. This mirrors the
