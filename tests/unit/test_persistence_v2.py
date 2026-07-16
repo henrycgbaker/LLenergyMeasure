@@ -54,6 +54,8 @@ def minimal_result() -> ExperimentResult:
     return ExperimentResult(
         experiment_id="persist-test-001",
         measurement_config_hash="abcdef0123456789",
+        input_tokens=384,
+        output_tokens=128,
         total_tokens=512,
         total_energy_j=25.6,
         total_inference_time_sec=5.0,
@@ -71,6 +73,8 @@ def hf_model_result() -> ExperimentResult:
     return ExperimentResult(
         experiment_id="persist-test-hf",
         measurement_config_hash="fedcba9876543210",
+        input_tokens=768,
+        output_tokens=256,
         total_tokens=1024,
         total_energy_j=51.2,
         total_inference_time_sec=10.0,
@@ -88,6 +92,8 @@ def result_with_timeseries() -> ExperimentResult:
     return ExperimentResult(
         experiment_id="persist-test-ts",
         measurement_config_hash="1122334455667788",
+        input_tokens=192,
+        output_tokens=64,
         total_tokens=256,
         total_energy_j=12.8,
         total_inference_time_sec=2.5,
@@ -211,7 +217,11 @@ def test_from_json_loads_correctly(tmp_path: Path, minimal_result: ExperimentRes
     from tests.conftest import EXPERIMENT_SCHEMA_VERSION
 
     assert loaded.schema_version == EXPERIMENT_SCHEMA_VERSION
+    assert loaded.input_tokens == minimal_result.input_tokens
+    assert loaded.output_tokens == minimal_result.output_tokens
     assert loaded.total_tokens == minimal_result.total_tokens
+    # Token split is consistent: total is the sum of the input/output halves.
+    assert loaded.input_tokens + loaded.output_tokens == loaded.total_tokens
     assert loaded.total_energy_j == pytest.approx(minimal_result.total_energy_j)
 
 
@@ -237,6 +247,8 @@ def test_convenience_identity_copies_round_trip(tmp_path: Path) -> None:
         measurement_config_hash="abcdef0123456789",
         engine="vllm",
         model_name=_HF_MODEL,
+        input_tokens=384,
+        output_tokens=128,
         total_tokens=512,
         total_energy_j=25.6,
         total_inference_time_sec=5.0,

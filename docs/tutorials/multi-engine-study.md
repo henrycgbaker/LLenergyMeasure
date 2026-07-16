@@ -259,6 +259,8 @@ copies so the file is self-describing when separated from its directory:
   "schema_version": "5.0",
   "engine": "transformers",
   "model_name": "Qwen/Qwen2.5-0.5B",
+  "input_tokens": 6144,
+  "output_tokens": 1536,
   "total_tokens": 7680,
   "total_inference_time_sec": 9.8,
   "avg_tokens_per_second": 783.7,
