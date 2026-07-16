@@ -164,15 +164,20 @@ class TestTransformersProfilingPath:
 
 
 # ---------------------------------------------------------------------------
-# vLLM mode-setting (logic exercised via extract_decode_itl + mode rules)
+# vLLM mode-setting (logic exercised via _extract_request_stats + mode rules)
 # ---------------------------------------------------------------------------
 
 
-def _vllm_req(first_token, finished, n_out):
+def _vllm_req(ttft, first_ts, last_ts, n_out):
+    """Fake vLLM V1 RequestOutput with a RequestStateStats-shaped .metrics.
+
+    ``ttft`` = first_token_latency (wall-clock s); ``first_ts`` / ``last_ts`` =
+    engine-core monotonic timestamps.
+    """
     metrics = SimpleNamespace(
-        arrival_time=0.0,
-        finished_time=finished,
-        first_token_time=first_token,
+        first_token_latency=ttft,
+        first_token_ts=first_ts,
+        last_token_ts=last_ts,
     )
     return SimpleNamespace(
         metrics=metrics,
@@ -181,43 +186,50 @@ def _vllm_req(first_token, finished, n_out):
 
 
 class TestVllmModeSelection:
-    """Replicates the vLLM plugin's mode-selection branch (host-safe)."""
+    """Replicates the vLLM plugin's mode-selection branch (host-safe).
+
+    At vLLM V1 (0.19.1) ``RequestOutput.metrics`` populates ONLY when the engine
+    was built with ``disable_log_stats=False`` (which profiling sets), so a
+    non-profiled run has ``metrics=None`` and produces no samples.
+    """
 
     @staticmethod
-    def _select_mode(profiling: bool, outputs: list) -> tuple[list[float], str | None]:
-        from llenergymeasure.engines._observed import (
-            extract_decode_itl,
-            extract_request_metrics,
-        )
+    def _select_mode(profiling: bool, outputs: list) -> tuple[list[float], str | None, bool]:
+        from llenergymeasure.engines.vllm.plugin import _extract_request_stats
 
-        _lat, ttft = extract_request_metrics(outputs)
-        itl: list[float] = []
+        lat, ttft, itl = _extract_request_stats(outputs)
         mode: str | None = None
-        if profiling:
-            itl = extract_decode_itl(outputs)
-            if ttft:
-                mode = LatencyMeasurementMode.PROPORTIONAL_ESTIMATE.value
-        elif ttft:
-            mode = LatencyMeasurementMode.TRUE_STREAMING.value
-        return itl, mode
+        unsupported = False
+        if ttft or lat or itl:
+            mode = LatencyMeasurementMode.PROPORTIONAL_ESTIMATE.value
+        elif profiling:
+            unsupported = True
+        return itl, mode, unsupported
 
     def test_profiling_on_is_proportional(self):
-        outputs = [_vllm_req(first_token=0.1, finished=1.0, n_out=10)]
-        itl, mode = self._select_mode(True, outputs)
+        # Profiling built the engine with log_stats -> metrics populated.
+        outputs = [_vllm_req(ttft=0.1, first_ts=1.0, last_ts=1.9, n_out=10)]
+        itl, mode, unsupported = self._select_mode(True, outputs)
         assert itl  # decode ITL captured
         assert mode == LatencyMeasurementMode.PROPORTIONAL_ESTIMATE.value
+        assert unsupported is False
 
-    def test_profiling_off_with_ttft_is_true_streaming(self):
-        outputs = [_vllm_req(first_token=0.1, finished=1.0, n_out=10)]
-        itl, mode = self._select_mode(False, outputs)
-        assert itl == []  # no ITL without profiling
-        assert mode == LatencyMeasurementMode.TRUE_STREAMING.value
-
-    def test_no_ttft_no_mode(self):
+    def test_profiling_off_has_no_metrics(self):
+        # No profiling -> disable_log_stats stayed True -> metrics is None.
         outputs = [SimpleNamespace(metrics=None, outputs=[])]
-        itl, mode = self._select_mode(True, outputs)
+        itl, mode, unsupported = self._select_mode(False, outputs)
         assert itl == []
         assert mode is None
+        assert unsupported is False
+
+    def test_profiling_on_but_no_metrics_flags_unsupported(self):
+        # Profiling requested but engine returned no per-request metrics
+        # (upstream regression / override): loud degradation flag.
+        outputs = [SimpleNamespace(metrics=None, outputs=[])]
+        itl, mode, unsupported = self._select_mode(True, outputs)
+        assert itl == []
+        assert mode is None
+        assert unsupported is True
 
 
 # ---------------------------------------------------------------------------

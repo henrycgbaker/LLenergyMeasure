@@ -91,6 +91,79 @@ def _capture_kv_cache_stats(llm: Any) -> dict[str, Any] | None:
     return stats or None
 
 
+def _extract_request_stats(outputs: Any) -> tuple[list[float], list[float], list[float]]:
+    """Per-request (e2e_ms, ttft_ms, decode_itl_ms) from vLLM V1 ``RequestStateStats``.
+
+    vLLM 0.19.x records per-request timing in ``RequestOutput.metrics`` (a
+    ``vllm.v1.metrics.stats.RequestStateStats``) ONLY when the engine was built
+    with ``disable_log_stats=False`` - which :meth:`_build_llm_kwargs` sets
+    exactly when ``latency_profiling`` is enabled. The offline ``LLM``
+    entrypoint forces ``disable_log_stats=True`` otherwise
+    (``vllm/entrypoints/llm.py``), so ``metrics`` is ``None`` on default energy
+    runs and this extraction contributes nothing. (The old vLLM V0
+    ``RequestOutput.metrics`` namespace with ``arrival_time`` /
+    ``finished_time`` / ``first_token_time`` no longer exists at V1 - hence the
+    field switch below. Live-verified at 0.19.1.)
+
+    Fields (live-verified at 0.19.1):
+
+    - ``first_token_latency`` is the engine-recorded wall-clock TTFT in seconds
+      (``time.time()`` at the first-token iteration minus frontend arrival).
+    - ``first_token_ts`` / ``last_token_ts`` are engine-core MONOTONIC
+      timestamps - a DIFFERENT clock from ``arrival_time`` (a wall-clock epoch),
+      so the two clocks are NEVER cross-subtracted. Their delta is the decode
+      interval.
+
+    Derivations:
+
+    - TTFT_ms = ``first_token_latency * 1000``
+    - decode_s = ``last_token_ts - first_token_ts`` (monotonic delta)
+    - E2E_ms = ``(first_token_latency + decode_s) * 1000`` (arrival -> last token)
+    - decode ITL_ms = ``decode_s / (decode_len - 1) * 1000``, a
+      PROPORTIONAL_ESTIMATE (uniform decode spacing). ``decode_len`` is the
+      LONGEST single output's token count (n>1 parallel streams share one decode
+      window; summing would N-fold understate the ITL), read from ``o.outputs``.
+
+    Best-effort: any request whose ``metrics`` is ``None`` or lacks usable
+    timestamps contributes nothing rather than a partial/garbage sample. The
+    ``SimpleNamespace`` shape of ``o.metrics`` / ``o.outputs[*].token_ids`` makes
+    this testable without a live engine.
+    """
+    latencies_ms: list[float] = []
+    ttft_ms: list[float] = []
+    itl_ms: list[float] = []
+    for o in outputs:
+        metrics = getattr(o, "metrics", None)
+        if metrics is None:
+            continue
+        ttft_s = getattr(metrics, "first_token_latency", None)
+        first_ts = getattr(metrics, "first_token_ts", None)
+        last_ts = getattr(metrics, "last_token_ts", None)
+
+        ttft_val: float | None = None
+        if isinstance(ttft_s, (int, float)) and ttft_s > 0:
+            ttft_val = float(ttft_s)
+            ttft_ms.append(ttft_val * 1000.0)
+
+        decode_s: float | None = None
+        if (
+            isinstance(first_ts, (int, float))
+            and isinstance(last_ts, (int, float))
+            and last_ts >= first_ts
+        ):
+            decode_s = float(last_ts - first_ts)
+
+        if ttft_val is not None and decode_s is not None:
+            latencies_ms.append((ttft_val + decode_s) * 1000.0)
+
+        request_outputs = getattr(o, "outputs", None)
+        if decode_s is not None and request_outputs:
+            decode_len = max(len(getattr(out, "token_ids", ()) or ()) for out in request_outputs)
+            if decode_len > 1:
+                itl_ms.append(decode_s * 1000.0 / (decode_len - 1))
+    return latencies_ms, ttft_ms, itl_ms
+
+
 class VLLMEngine:
     """vLLM inference engine - offline batch mode, thin plugin.
 
@@ -341,23 +414,25 @@ class VLLMEngine:
 
         # Best-effort extended-metrics capture (continuous batching: no static batches).
         from llenergymeasure.domain.metrics import LatencyMeasurementMode
-        from llenergymeasure.engines._observed import extract_decode_itl, extract_request_metrics
 
-        per_request_latencies_ms, ttft_ms = extract_request_metrics(outputs)
         kv_cache_stats = _capture_kv_cache_stats(llm)
 
-        # TTFT timestamps are engine-recorded (real per-request first_token_time),
-        # so on their own they are TRUE_STREAMING. Under latency profiling we
-        # additionally derive a decode-average ITL, which is only a
-        # PROPORTIONAL_ESTIMATE - the mode then describes that weakest signal.
-        itl_ms: list[float] = []
+        # Per-request latency from RequestOutput.metrics (RequestStateStats).
+        # Populated only when the engine was built with disable_log_stats=False -
+        # which _build_llm_kwargs sets exactly when latency_profiling is enabled -
+        # so default energy runs pay no stat-logging overhead and extract nothing.
+        # The engine-recorded TTFT is real per-request, but the derived decode
+        # ITL is a decode-average (PROPORTIONAL_ESTIMATE), so the mode describes
+        # that weakest signal.
+        per_request_latencies_ms, ttft_ms, itl_ms = _extract_request_stats(outputs)
         latency_measurement_mode: str | None = None
-        if config.measurement.latency_profiling:
-            itl_ms = extract_decode_itl(outputs)
-            if ttft_ms:
-                latency_measurement_mode = LatencyMeasurementMode.PROPORTIONAL_ESTIMATE.value
-        elif ttft_ms:
-            latency_measurement_mode = LatencyMeasurementMode.TRUE_STREAMING.value
+        if ttft_ms or per_request_latencies_ms or itl_ms:
+            latency_measurement_mode = LatencyMeasurementMode.PROPORTIONAL_ESTIMATE.value
+        elif config.measurement.latency_profiling:
+            # Profiling was requested but the engine returned no per-request
+            # metrics (e.g. an upstream regression, or a user override forcing
+            # disable_log_stats=True): keep the loud degradation flag.
+            extras["latency_profiling_unsupported"] = True
 
         return InferenceOutput(
             elapsed_time_sec=elapsed,
@@ -467,6 +542,16 @@ class VLLMEngine:
             "trust_remote_code": trust_remote_code_enabled(),
             "seed": config.task.random_seed,
         }
+
+        if config.measurement.latency_profiling:
+            # The offline LLM entrypoint forces disable_log_stats=True
+            # (vllm/entrypoints/llm.py), which leaves RequestOutput.metrics None.
+            # Flip it so per-request RequestStateStats populate for
+            # _extract_request_stats. Opt-in only: log_stats enables per-iteration
+            # stat aggregation + default loggers (measurable overhead), so default
+            # energy runs never set it and the measured configuration is unchanged
+            # unless the user asked for latency profiling.
+            kwargs["disable_log_stats"] = False
 
         engine_params = config.active_engine_params()
         if engine_params is None:
