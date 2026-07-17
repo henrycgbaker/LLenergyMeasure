@@ -38,15 +38,25 @@ values a researcher would write differently.
 def _normalise(value: Any) -> Any:
     """Normalise a value for deterministic JSON serialisation.
 
-    Applies the locked rules from sweep-dedup.md §9.Q3:
+    Applies the canonicalisation rules from sweep-dedup.md §9.Q3:
 
-    - ``NaN`` → string ``"NaN"`` (NaN != NaN breaks dict hashing otherwise)
-    - float → rounded to 12 significant digits (stable across minor
-      arithmetic jitter)
-    - tuple → list (incidental immutability choice, not semantic)
+    - ``NaN`` -> string ``"NaN"`` (NaN != NaN breaks dict hashing otherwise)
+    - ``+/-Infinity`` -> string literal (stable across platforms)
+    - integral numerics unify on their ``int`` form: a float that is exactly
+      integral (``0.0``, ``1.0``, ``-1.0``) folds to ``int``. This closes the
+      resolved-vs-observed gap where a field typed ``float`` but valued as an
+      int (e.g. vLLM ``cpu_offload_gb = 0``) stays python ``int`` in a
+      ``mode="python"`` resolved dump (pydantic does not validate defaults) but
+      is a genuine ``float`` in the native engine object the observed pipeline
+      captures. Folding toward int (rather than int -> float) keeps genuine
+      integer identity fields - seeds, token counts - bit-exact, so no large
+      distinct ints can collide via a lossy float round-trip.
+    - non-integral float -> rounded to 12 significant digits (stable across
+      minor arithmetic jitter)
+    - tuple -> list (incidental immutability choice, not semantic)
     - bool is preserved as bool (not folded into int even though
       ``True == 1`` in Python)
-    - dict → dict with recursively normalised values (key sorting happens
+    - dict -> dict with recursively normalised values (key sorting happens
       at ``json.dumps(sort_keys=True)`` time)
     - None and missing keys stay distinguishable (by never inserting a
       sentinel for missing)
@@ -59,12 +69,17 @@ def _normalise(value: Any) -> Any:
         if math.isinf(value):
             # Preserve infinity as a string literal for hash stability
             return "Infinity" if value > 0 else "-Infinity"
-        if value == 0.0:
-            return 0.0
-        # Round to sig-figs rather than decimal places
+        if value.is_integer():
+            # Integral float (incl. 0.0) folds to int so it hashes identically
+            # to the int form; also sidesteps log10(0) below.
+            return int(value)
+        # Round to sig-figs rather than decimal places.
         mag = math.floor(math.log10(abs(value)))
         factor = 10 ** (_FLOAT_SIG_DIGITS - 1 - mag)
-        return round(value * factor) / factor
+        rounded = round(value * factor) / factor
+        # Rounding can land on an exact integer (float jitter around N.0); fold
+        # that onto int too so it matches the int / integral-float forms.
+        return int(rounded) if rounded.is_integer() else rounded
     if isinstance(value, (set, frozenset)):
         # Sort for determinism; normalise elements recursively.
         return [_normalise(v) for v in sorted(value, key=str)]
