@@ -352,39 +352,65 @@ checks for at runtime.
 
 ## Verify Installation
 
-Run `llem config` to check your environment:
+Run `llem doctor` to check your environment:
 
 ```bash
-llem config
+llem doctor
 ```
 
-Example output:
+Example output (abridged):
 
 ```
-GPU
-  NVIDIA A100-SXM4-80GB  80.0 GB
+Environment health check
+========================
+
+GPU / driver
+  [ok]   GPU 0: NVIDIA A100-SXM4-80GB (80.0 GB)
+  [ok]   NVIDIA driver: 535.129.03
+  [ok]   Python: 3.12.0
+
 Engines
-  transformers: installed
-  vllm: not installed  (runs in Docker - see docs/development.md)
-  tensorrt: not installed  (runs in Docker - see docs/development.md)
-Energy
-  Energy: nvml
-Config
-  Path: /home/user/.config/llenergymeasure/config.yaml
-  Status: using defaults (no config file)
-Python
-  3.12.0
+  [ok]   transformers: runs via Docker (llenergymeasure:transformers, cached locally)
+  [warn] vllm: runs via Docker (vllm/vllm-openai:v0.19.1, not cached locally)
+           -> docker pull vllm/vllm-openai:v0.19.1  (or it is pulled automatically on first run)
+  [ok]   tensorrt: runs via Docker (nvcr.io/nvidia/tensorrt-llm/release:1.2.1, cached locally)
+
+Energy measurement
+  [ok]   NVML (nvidia-ml-py): available
+  [warn] Zeus: not installed (higher-accuracy energy counter)
+           -> pip install 'llenergymeasure[zeus]'
+  [ok]   Auto-selected sampler: NVMLSampler
+
+Docker
+  [ok]   Docker CLI: found on PATH
+  [ok]   Docker daemon: reachable
+  [ok]   NVIDIA Container Toolkit: detected
+
+Credentials
+  [warn] HF_TOKEN: not set - gated models (e.g. Llama, Mistral) will fail to download
+           -> export HF_TOKEN=... (create one at https://huggingface.co/settings/tokens) or add it to .env
+
+Configuration
+  [ok]   User config: none - using built-in defaults
+  [ok]   runner.transformers: docker (source=auto_detected)
+  ...
+
+Summary: 18 ok, 3 warning(s), 0 error(s)
 ```
 
 What each section means:
 
-- **GPU** - NVIDIA GPU detected via pynvml. If this shows "No GPU detected", experiments will fail.
-- **Engines** - Which inference engines are installed. You need at least one to run experiments.
-- **Energy** - Active energy sampler. `nvml` (pynvml) is the default and ships with the base install.
-- **Config** - Path to the user config file. "Using defaults" is normal for new installs.
-- **Python** - Python version in use.
+- **GPU / driver** - NVIDIA GPU and driver detected via NVML. "No GPU detected" is a warning; measurements need a GPU (or a remote Docker daemon that has one).
+- **Engines** - Whether each engine is importable locally or runs via Docker, plus whether its image is cached.
+- **Energy measurement** - Which energy samplers are available. NVML (nvidia-ml-py) ships with the base install; Zeus and CodeCarbon are optional extras.
+- **Docker** - Docker CLI, daemon reachability, and the NVIDIA Container Toolkit.
+- **Credentials** - Whether `HF_TOKEN` is set (its value is never printed).
+- **Configuration** - User config file status and the key resolved settings with their provenance.
+- **Image schema handshake** - Whether each engine's Docker image matches the host config schema. A `[fail]` MISMATCH here is the one condition that makes `llem doctor` exit non-zero.
 
-Run `llem config --verbose` for driver version, engine versions, and full config values.
+Each line is prefixed `[ok]`/`[warn]`/`[fail]`; anything not OK carries a `->` fix
+hint. `llem doctor --check` exits 0 (all ok), 1 (warnings), or 2 (errors) for
+CI/HPC scripting, and `llem doctor --json` emits the full report as JSON.
 
 ---
 

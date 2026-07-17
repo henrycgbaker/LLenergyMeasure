@@ -8,14 +8,14 @@ Common issues and solutions for LLenergyMeasure.
 
 ### No GPU detected
 
-**Symptom:** `llem config` shows no GPU, or measurement fails with a CUDA error.
+**Symptom:** `llem doctor` shows no GPU, or measurement fails with a CUDA error.
 
 **Cause:** NVIDIA drivers are not installed, the device is not visible in the current
 environment, or the system is CPU-only.
 
 **Fix:**
 1. Run `nvidia-smi` to verify the GPU is visible on the host.
-2. Run `llem config` to see what the tool detects.
+2. Run `llem doctor` to see what the tool detects.
 3. If `nvidia-smi` works but the engine does not, you may be running outside a container
    that has CUDA - for vLLM and TensorRT-LLM, use `llem run study.yaml` with Docker runners
    (see [docker-setup.md](/how-to/docker-setup)).
@@ -47,7 +47,7 @@ Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two) for the other engines. Then run `llem run` with a Docker runner
 configured for the engine - see [docker-setup.md](/how-to/docker-setup).
 
-Run `llem config` to see the current status of each engine.
+Run `llem doctor` to see the current status of each engine.
 
 ---
 
@@ -160,7 +160,7 @@ for full instructions.
 is unavailable, energy measurement falls back gracefully to zero rather than crashing.
 
 **Fix:**
-1. Check `llem config` - it shows the active energy sampler under `Energy:`.
+1. Check `llem doctor` - it shows the active energy sampler under `Energy measurement`.
 2. Verify pynvml can access the GPU: run `python -c "import pynvml; pynvml.nvmlInit(); print('OK')"`.
 3. Check your config. Setting `energy_sampler: null` explicitly disables
    energy measurement (throughput-only mode).
@@ -220,7 +220,7 @@ no error, process does not return.
 
 3. **Pre-flight check stalled** - if the Docker daemon is unreachable or the GPU
    is being held by another process, the pre-flight probe hangs. Run
-   `llem config --verbose` in a second terminal to check daemon and GPU state.
+   `llem doctor` in a second terminal to check daemon and GPU state.
 
 4. **Inference timeout not triggered** - `study_execution.experiment_timeout_seconds`
    defaults to 600 seconds. A model with a very long generation (e.g. high
@@ -387,7 +387,7 @@ docker image inspect llenergymeasure:transformers --format '{{.Id}}'
 
 ## Getting Help
 
-Run `llem config --verbose` to capture full environment details (Python version, installed
+Run `llem doctor --json` to capture full environment details (Python version, installed
 engines, GPU info, energy sampler status, config file path). Include this output when
 filing a bug report.
 

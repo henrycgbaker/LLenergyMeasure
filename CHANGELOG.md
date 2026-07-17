@@ -7,6 +7,24 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Changed
+
+- `llem doctor` is now the single environment health check. It reports GPU/driver,
+  per-engine availability (importable locally or via Docker, with image-cache state),
+  energy samplers (NVML/Zeus/CodeCarbon), Docker (CLI/daemon/NVIDIA Container Toolkit),
+  `HF_TOKEN` presence (detect-and-advise - the value is never printed), the resolved user
+  configuration with per-setting provenance, and the image schema handshake folded in as a
+  section. Every line is prefixed `[ok]`/`[warn]`/`[fail]` with a `-> fix` hint. `--check`
+  exits 0/1/2 (ok/warnings/errors) for CI scripting and `--json` emits the full report as
+  machine-readable JSON. Plain `llem doctor` still exits non-zero only on a hard failure
+  such as an image schema mismatch.
+
+### Removed
+
+- `llem config` is removed. Its environment-diagnostics role is subsumed by the broadened
+  `llem doctor` above. There is no deprecation shim (pre-PyPI); scripts should call
+  `llem doctor` (or `llem doctor --check` / `llem doctor --json`).
+
 ## [v0.12.0] - 2026-07-17
 
 ### Added
