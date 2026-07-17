@@ -47,6 +47,8 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 - Docs: purged stale `effective_config` terminology and pre-consolidation flat-layout
   references across the methodology, how-to, tutorial, and generated reference pages,
   aligning them with the `config.json` sidecar and the current bundle layout. ([#820])
+- Docs: refreshed version and project-status references (citation, release process,
+  roadmap, landing page) to the post-v0.11.0 state. ([#824])
 - `result.json` schema bumped `4.0` -> `5.0` (breaking). `result.json` is now measurement
   output: the configuration/methodology fields `engine_version`, `measurement_methodology`,
   `steady_state_window`, `measurement_window_discard_fraction`, and
@@ -1020,3 +1022,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#821]: https://github.com/henrycgbaker/llenergymeasure/pull/821
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
+[#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
