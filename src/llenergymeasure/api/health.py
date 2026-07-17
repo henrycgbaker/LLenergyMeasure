@@ -22,6 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from llenergymeasure.api import probe_energy_sampler
 from llenergymeasure.api.doctor import DoctorReport, run_doctor_checks
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
@@ -40,9 +41,9 @@ from llenergymeasure.config.user_config import (
 # Reuse the canonical Docker-availability helpers rather than re-implementing the
 # PATH probes (their home is docker_preflight; runner_resolution reuses them too).
 from llenergymeasure.infra.docker_preflight import (
-    _DOCKER_INSTALL_URL,
-    _NVIDIA_TOOLKIT_BINS,
-    _NVIDIA_TOOLKIT_INSTALL_URL,
+    DOCKER_INSTALL_URL,
+    NVIDIA_TOOLKIT_BINS,
+    NVIDIA_TOOLKIT_INSTALL_URL,
 )
 from llenergymeasure.infra.image_registry import get_default_image, image_present_locally
 from llenergymeasure.infra.runner_resolution import RunnerSpec, is_docker_available, resolve_runner
@@ -256,7 +257,9 @@ def _engine_line(engine: str, spec: RunnerSpec) -> CheckLine:
     if importable:
         version = _probe_engine_version(engine)
         installed = f"importable locally ({version})" if version else "importable locally"
-        return CheckLine("ok", f"{engine}: {installed}; runner={spec.mode} (source={spec.source})")
+        # Availability lives here; runner provenance (source=) belongs to the
+        # Configuration section, so it is not repeated on this line.
+        return CheckLine("ok", f"{engine}: {installed}; runner={spec.mode}")
 
     docker_avail = is_docker_available()
     if docker_avail and spec.mode == RUNNER_DOCKER:
@@ -285,8 +288,6 @@ def _engines_section(specs: dict[str, RunnerSpec]) -> HealthSection:
 
 
 def _energy_section() -> HealthSection:
-    from llenergymeasure.api import probe_energy_sampler
-
     lines: list[CheckLine] = []
 
     has_nvml = importlib.util.find_spec("pynvml") is not None
@@ -345,7 +346,7 @@ def _docker_section() -> HealthSection:
             CheckLine(
                 "warn",
                 "Docker CLI: not found on PATH",
-                f"install Docker Engine - {_DOCKER_INSTALL_URL}",
+                f"install Docker Engine - {DOCKER_INSTALL_URL}",
             )
         )
 
@@ -362,7 +363,7 @@ def _docker_section() -> HealthSection:
         )
     # daemon is None -> CLI absent, already reported above.
 
-    toolkit = any(shutil.which(tool) is not None for tool in _NVIDIA_TOOLKIT_BINS)
+    toolkit = any(shutil.which(tool) is not None for tool in NVIDIA_TOOLKIT_BINS)
     if toolkit:
         lines.append(CheckLine("ok", "NVIDIA Container Toolkit: detected"))
     else:
@@ -370,7 +371,7 @@ def _docker_section() -> HealthSection:
             CheckLine(
                 "warn",
                 "NVIDIA Container Toolkit: not detected",
-                f"install the NVIDIA Container Toolkit - {_NVIDIA_TOOLKIT_INSTALL_URL}",
+                f"install the NVIDIA Container Toolkit - {NVIDIA_TOOLKIT_INSTALL_URL}",
             )
         )
     return HealthSection("Docker", lines)

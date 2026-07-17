@@ -16,9 +16,12 @@ Exit codes:
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
+
+if TYPE_CHECKING:
+    from llenergymeasure.api.health import HealthReport
 
 __all__ = ["doctor_command"]
 
@@ -58,11 +61,7 @@ def doctor_command(
         raise typer.Exit(code=exit_code)
 
 
-def _render(report: object) -> None:
-    from llenergymeasure.api.health import HealthReport
-
-    assert isinstance(report, HealthReport)
-
+def _render(report: HealthReport) -> None:
     typer.echo("Environment health check")
     typer.echo("=" * 24)
 

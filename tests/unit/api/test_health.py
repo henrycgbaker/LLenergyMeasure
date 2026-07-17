@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import llenergymeasure.api.health as health
 from llenergymeasure.api.doctor import DoctorReport, EngineDoctorResult, TrtCacheHealth
 from llenergymeasure.api.health import (
@@ -47,16 +49,16 @@ def test_worst_and_counts() -> None:
     assert report.counts == {"ok": 2, "warn": 2, "fail": 1}
 
 
-def test_check_exit_code_all_ok() -> None:
-    assert _report("ok", "ok").check_exit_code == 0
-
-
-def test_check_exit_code_warnings() -> None:
-    assert _report("ok", "warn").check_exit_code == 1
-
-
-def test_check_exit_code_errors() -> None:
-    assert _report("warn", "fail").check_exit_code == 2
+@pytest.mark.parametrize(
+    ("statuses", "expected_code"),
+    [
+        (("ok", "ok"), 0),
+        (("ok", "warn"), 1),
+        (("warn", "fail"), 2),
+    ],
+)
+def test_check_exit_code(statuses: tuple[str, ...], expected_code: int) -> None:
+    assert _report(*statuses).check_exit_code == expected_code
 
 
 def test_report_to_dict_is_json_serialisable() -> None:
@@ -100,55 +102,51 @@ def test_gpu_section_no_gpu_warns() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_engine_line_importable_locally() -> None:
-    spec = RunnerSpec(mode="local", image=None, source="user_config")
+@pytest.mark.parametrize(
+    ("importable", "docker_avail", "cached", "expected_status", "msg_substr", "fix_substr"),
+    [
+        # Importable in the host env -> ok, regardless of runner mode.
+        pytest.param(
+            True, False, False, "ok", "importable locally (0.19.1)", None, id="importable-locally"
+        ),
+        # Not importable, Docker up, image already pulled -> ok.
+        pytest.param(False, True, True, "ok", "cached locally", None, id="docker-cached"),
+        # Not importable, Docker up, image absent -> warn with a pull hint.
+        pytest.param(
+            False, True, False, "warn", "not cached locally", "docker pull", id="docker-not-cached"
+        ),
+        # Not importable and no Docker -> warn; engines are not pip extras, so the
+        # fix must point at Docker.
+        pytest.param(
+            False, False, False, "warn", "Docker unavailable", "Docker", id="no-local-no-docker"
+        ),
+    ],
+)
+def test_engine_line_status(
+    importable: bool,
+    docker_avail: bool,
+    cached: bool,
+    expected_status: str,
+    msg_substr: str,
+    fix_substr: str | None,
+) -> None:
+    spec = RunnerSpec(
+        mode="docker" if docker_avail else "local", image=None, source="auto_detected"
+    )
+    find_spec = _find_spec_for("vllm") if importable else _find_spec_for()
     with (
-        patch("importlib.util.find_spec", side_effect=_find_spec_for("vllm")),
+        patch("importlib.util.find_spec", side_effect=find_spec),
         patch.object(health, "_probe_engine_version", return_value="0.19.1"),
-    ):
-        line = health._engine_line("vllm", spec)
-    assert line.status == "ok"
-    assert "importable locally (0.19.1)" in line.message
-
-
-def test_engine_line_docker_cached() -> None:
-    spec = RunnerSpec(mode="docker", image=None, source="auto_detected")
-    with (
-        patch("importlib.util.find_spec", side_effect=_find_spec_for()),
-        patch.object(health, "is_docker_available", return_value=True),
+        patch.object(health, "is_docker_available", return_value=docker_avail),
         patch.object(health, "get_default_image", return_value="vllm/vllm-openai:v0.19.1"),
-        patch.object(health, "image_present_locally", return_value=True),
+        patch.object(health, "image_present_locally", return_value=cached),
     ):
         line = health._engine_line("vllm", spec)
-    assert line.status == "ok"
-    assert "cached locally" in line.message
-
-
-def test_engine_line_docker_not_cached_warns_with_pull_hint() -> None:
-    spec = RunnerSpec(mode="docker", image=None, source="auto_detected")
-    with (
-        patch("importlib.util.find_spec", side_effect=_find_spec_for()),
-        patch.object(health, "is_docker_available", return_value=True),
-        patch.object(health, "get_default_image", return_value="vllm/vllm-openai:v0.19.1"),
-        patch.object(health, "image_present_locally", return_value=False),
-    ):
-        line = health._engine_line("vllm", spec)
-    assert line.status == "warn"
-    assert line.fix is not None
-    assert "docker pull" in line.fix
-
-
-def test_engine_line_no_local_no_docker_warns() -> None:
-    spec = RunnerSpec(mode="local", image=None, source="default")
-    with (
-        patch("importlib.util.find_spec", side_effect=_find_spec_for()),
-        patch.object(health, "is_docker_available", return_value=False),
-    ):
-        line = health._engine_line("tensorrt", spec)
-    assert line.status == "warn"
-    assert line.fix is not None
-    # Engines are not pip-installable extras - the fix must point at Docker.
-    assert "Docker" in line.fix
+    assert line.status == expected_status
+    assert msg_substr in line.message
+    if fix_substr is not None:
+        assert line.fix is not None
+        assert fix_substr in line.fix
 
 
 # ---------------------------------------------------------------------------
