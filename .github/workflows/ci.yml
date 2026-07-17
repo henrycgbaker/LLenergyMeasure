@@ -200,14 +200,18 @@ jobs:
           cache-suffix: pkg-3.12
           python-version: "3.12"
       - run: uv build --wheel
-      - name: Install and validate
+      - name: Install wheel and smoke-test CLI
+        # Real smoke on the clean venv: the public API imports, and the `llem`
+        # console entry point resolves and runs its read-only commands to a
+        # zero exit. `set -e` (the default GitHub Actions shell flag) fails the
+        # step on any non-zero exit. CPU-only and fast: `llem config` degrades
+        # to "No GPU detected" on a device-less runner and always exits 0.
         run: |
           python -m venv /tmp/pkg-check
           /tmp/pkg-check/bin/pip install dist/*.whl --quiet
-          /tmp/pkg-check/bin/python -c "
-          from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult
-          print('Package install OK')
-          "
+          /tmp/pkg-check/bin/python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('Public API import OK')"
+          /tmp/pkg-check/bin/llem --help
+          /tmp/pkg-check/bin/llem config
       - name: Version sync check
         run: |
           PYPROJECT_VER=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); print(tomllib.load(f)['project']['version'])")
