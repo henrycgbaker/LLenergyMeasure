@@ -7,6 +7,8 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+## [v0.12.0] - 2026-07-17
+
 ### Added
 
 - `result.json` now exposes `input_tokens` and `output_tokens` alongside `total_tokens`
@@ -14,18 +16,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `total_tokens = input_tokens + output_tokens`). The split was already computed in the
   harness for the FLOPs-per-token fields but never persisted; exposing it enables auditing
   declared-vs-actual input lengths. Rides the unreleased schema 5.0 (additive, no version
-  bump).
+  bump). ([#819])
 - The `timeseries.parquet` sidecar now carries `experiment_id` and
   `measurement_config_hash` as Parquet file-level key-value metadata (not columns), so the
   artefact stays attributable if separated from its result directory. This mirrors the
   identity fields the JSON sidecars already carry and completes the per-experiment bundle
   identity rationalisation. Data columns and schema are unchanged; readers that ignore file
-  metadata are unaffected.
+  metadata are unaffected. ([#813])
 - The per-experiment `config.json` sidecar now carries its own `schema_version`
   (`"2.0"`), independent of `result.json`'s schema version. It succeeds the retired
   `_resolution.json` sidecar (`"1.0"`), whose per-field provenance now lives in this file.
+  ([#811])
 - `equivalence_groups.json` now records `study_name` alongside `study_id`, so the
-  study-level artefact stays attributable if separated from its parent directory.
+  study-level artefact stays attributable if separated from its parent directory. ([#811])
 
 ### Changed
 
@@ -40,7 +43,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `save_timeseries` off: the docker runner rescues `config.json` from the container
   exchange dir alongside `timeseries.parquet`, and the local path always stages an output
   dir for the sidecar. If a completed experiment ends without a `config.json`, the runner
-  logs a warning rather than dropping the provenance silently.
+  logs a warning rather than dropping the provenance silently. ([#811])
+- Docs: purged stale `effective_config` terminology and pre-consolidation flat-layout
+  references across the methodology, how-to, tutorial, and generated reference pages,
+  aligning them with the `config.json` sidecar and the current bundle layout. ([#820])
+- Docs: refreshed version and project-status references (citation, release process,
+  roadmap, landing page) to the post-v0.11.0 state. ([#824])
 - `result.json` schema bumped `4.0` -> `5.0` (breaking). `result.json` is now measurement
   output: the configuration/methodology fields `engine_version`, `measurement_methodology`,
   `steady_state_window`, `measurement_window_discard_fraction`, and
@@ -55,7 +63,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   results-schema and `run_study` reference docs for the join pattern). The `config.json`
   sidecar is guaranteed to materialise next to every `result.json` on all successful runs -
   including the docker (multi-engine) path and runs with `save_timeseries` off - so the
-  join never dangles.
+  join never dangles. ([#812])
 
 ### Fixed
 
@@ -67,12 +75,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   them during the rescue step - swallowed at debug level - so both sidecars were silently
   dropped from every docker-dispatched bundle (`result.json` and `timeseries.parquet`
   survived because they were already written 0644). Sidecar-rescue failures now log a
-  warning naming the path and reason rather than vanishing.
+  warning naming the path and reason rather than vanishing. ([#823])
 - `llem run` warnings now reach the terminal. The package installs a `NullHandler` at
   import time, which the logging setup mistook for an already-configured handler and so
   never attached the real stream handler - suppressing every `WARNING`-level message
   (including the sidecar-rescue backstops above) on the normal run path. The setup now
-  ignores the placeholder and attaches the stream handler.
+  ignores the placeholder and attaches the stream handler. ([#823])
 - Declared-config and study-design hashes are now computed on a json-mode
   `model_dump`, so a field typed float but defaulted to an int literal (e.g. vllm
   `cpu_offload_gb = 0`) hashes identically whether or not the config has been
@@ -81,7 +89,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   coerced float (`0.0`), producing different hashes; the host then named the
   result file with a hash the container never wrote and reported "Container
   exited 0 but no result file found" for a successful run. Configs that pinned
-  such fields explicitly (e.g. `cpu_offload_gb: 0.0`) no longer need to.
+  such fields explicitly (e.g. `cpu_offload_gb: 0.0`) no longer need to. ([#822])
 - `environment.json` now records the environment the experiment actually ran in for
   docker-dispatched experiments, instead of the dispatching host's environment. The
   container entrypoint collects the environment snapshot inside the container, threads it
@@ -91,7 +99,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   python version, `cuda_version` null, `container.detected` false) was written for every
   docker run, defeating reproducibility metadata on the multi-engine path. Local
   in-process runs are unchanged. A docker run that completes without a rescued snapshot now
-  logs a warning rather than silently recording host values.
+  logs a warning rather than silently recording host values. ([#821])
 
 ## [v0.11.0] - 2026-07-16
 
@@ -818,7 +826,8 @@ Core measurement functionality establishing the foundation for all subsequent de
 - Major directory restructuring separating config, core, and result handling.
 
 
-[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.12.0...HEAD
+[v0.12.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.12.0
 [v0.11.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.10.0
 [v0.9.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.9.0
@@ -1001,7 +1010,16 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#808]: https://github.com/henrycgbaker/llenergymeasure/pull/808
 [#809]: https://github.com/henrycgbaker/llenergymeasure/pull/809
 [#810]: https://github.com/henrycgbaker/llenergymeasure/pull/810
+[#811]: https://github.com/henrycgbaker/llenergymeasure/pull/811
+[#812]: https://github.com/henrycgbaker/llenergymeasure/pull/812
+[#813]: https://github.com/henrycgbaker/llenergymeasure/pull/813
 [#814]: https://github.com/henrycgbaker/llenergymeasure/pull/814
 [#815]: https://github.com/henrycgbaker/llenergymeasure/pull/815
 [#816]: https://github.com/henrycgbaker/llenergymeasure/pull/816
 [#817]: https://github.com/henrycgbaker/llenergymeasure/pull/817
+[#819]: https://github.com/henrycgbaker/llenergymeasure/pull/819
+[#820]: https://github.com/henrycgbaker/llenergymeasure/pull/820
+[#821]: https://github.com/henrycgbaker/llenergymeasure/pull/821
+[#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
+[#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
+[#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
