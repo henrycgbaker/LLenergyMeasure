@@ -19,6 +19,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   now runs without Docker. Previously every engine in a multi-engine study was
   unconditionally elevated to Docker, which failed when Docker was absent even for engines
   the user had pinned to local. Runner choice is machine-binding and recorded per result.
+  ([#835])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -1036,3 +1037,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#835]: https://github.com/henrycgbaker/llenergymeasure/pull/835
