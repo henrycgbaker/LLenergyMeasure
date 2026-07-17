@@ -361,6 +361,44 @@ class TestExperimentConfigIntegration:
         assert ep.tensor_parallel_size == 1
         assert getattr(ep, "custom_future_field", None) == "value"
 
+    def test_engine_path_with_trt_backend_accepted(self):
+        """engine_path with backend='trt' constructs cleanly (the valid pairing)."""
+        config = _make_trt(engine_path="/engines/gpt2-trt", backend="trt")
+        ep = config.tensorrt.engine_params
+        assert getattr(ep, "engine_path", None) == "/engines/gpt2-trt"
+        assert ep.backend == "trt"
+
+    def test_engine_path_with_pytorch_backend_rejected(self):
+        """engine_path with backend='pytorch' is rejected: only trt reads the compiled format."""
+        with pytest.raises(ValidationError, match="engine_path requires backend='trt'"):
+            _make_trt(engine_path="/engines/gpt2-trt", backend="pytorch")
+
+    def test_engine_path_with_backend_unset_rejected(self):
+        """engine_path with backend unset is rejected (backend defaults to pytorch).
+
+        Ruling: unset+engine_path ERRORS rather than auto-correcting to trt.
+        backend defaults to 'pytorch' at the model layer, so unset is
+        indistinguishable from explicit pytorch by the time validation runs;
+        silently flipping the constructor class off a passthrough field would
+        violate the repo's loud-validation principle. Note ``_make_trt`` defaults
+        backend to trt, so this case builds the section explicitly.
+        """
+        with pytest.raises(ValidationError, match="engine_path requires backend='trt'"):
+            ExperimentConfig(
+                **_TRT_DEFAULTS,
+                tensorrt={"engine_params": {"engine_path": "/engines/gpt2-trt"}},
+            )
+
+    def test_no_engine_path_unaffected_by_guard(self):
+        """A config without engine_path is unaffected regardless of backend."""
+        config = ExperimentConfig(
+            **_TRT_DEFAULTS,
+            tensorrt={"engine_params": {"backend": "pytorch", "tensor_parallel_size": 1}},
+        )
+        ep = config.tensorrt.engine_params
+        assert getattr(ep, "engine_path", None) is None
+        assert ep.backend == "pytorch"
+
     def test_tensorrt_sub_configs_default_none(self):
         """The Any-typed sub-config dicts default to None when not specified."""
         config = _make_trt()

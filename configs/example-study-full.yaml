@@ -558,6 +558,7 @@ experiments:
   #     n_prompts: 50
   #   tensorrt:
   #     engine_params:
+  #       backend: trt              # required with engine_path (only trt reads the compiled engine)
   #       dtype: bfloat16
   #       engine_path: /path/to/precompiled/engine
   #       max_batch_size: 8
