@@ -54,6 +54,10 @@ llem = "llenergymeasure.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/llenergymeasure"]
+# Per-directory README.md files under the package are developer documentation,
+# not runtime data. Nothing reads them at runtime, so exclude every markdown
+# file from the wheel (gitignore-style glob matches at any depth).
+exclude = ["*.md"]
 # Hatchling includes non-Python files in package dirs by default, so the
 # Z-engines runtime data (src/llenergymeasure/engines/<engine>/{rules.yaml,
 # schema.discovered.json}) ships automatically in the wheel - no force-include
