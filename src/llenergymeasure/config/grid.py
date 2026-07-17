@@ -337,6 +337,56 @@ def apply_cycles(
     return result
 
 
+def cycle_boundary_indices(
+    n_unique: int,
+    n_cycles: int,
+    experiment_order: ExperimentOrder,
+) -> frozenset[int]:
+    """Return the sequence indices at which a cycle gap should fire.
+
+    A cycle gap (``cycle_gap_seconds``) is the larger thermal-equalisation pause
+    inserted between the major repeated units of an :func:`apply_cycles`
+    execution sequence, distinct from the small ``experiment_gap_seconds`` that
+    settles the machine between every consecutive pair. Where those boundaries
+    fall depends on how the chosen ``experiment_order`` laid the sequence out,
+    so the semantics live here next to the code that builds the sequence rather
+    than as positional modulo math in the runner.
+
+    Cycle gaps exist only when the sweep is actually repeated (``n_cycles >=
+    2``); with a single cycle there is nothing to gap between, so the result is
+    empty for every order.
+
+    sequential ``[A, A, A, B, B, B]`` (with two or more distinct configs):
+        The sequence is ``n_unique`` contiguous blocks, each block holding all
+        ``n_cycles`` repetitions of one config. Consecutive identical
+        repetitions inside a block are separated only by the small experiment
+        gap; the larger cycle gap fires at the boundary between config blocks,
+        i.e. at indices ``n_cycles, 2*n_cycles, ...``. This is the only coherent
+        contiguous boundary in a sequential layout (the individual cycles are
+        interleaved across the blocks, so a "between full passes" position does
+        not exist), and it matches the thermal intent: a full cooldown when the
+        schedule switches to a genuinely different config so each block starts
+        from a comparable thermal floor.
+
+    interleave / reverse / shuffle / latin_square ``[A, B, A, B, A, B]``:
+        The sequence is ``n_cycles`` contiguous passes over the ``n_unique``
+        configs. The cycle gap fires between full passes, i.e. at indices
+        ``n_unique, 2*n_unique, ...``.
+
+    The single-config case (``n_unique == 1``) has no distinct blocks to
+    separate; there every repetition is itself a full cycle, so sequential
+    falls back to the pass rule and behaves identically to interleave. The
+    final boundary (the end of the sequence) is never included.
+    """
+    if n_unique <= 0 or n_cycles < 2:
+        return frozenset()
+    if experiment_order == ExperimentOrder.SEQUENTIAL and n_unique >= 2:
+        block, n_blocks = n_cycles, n_unique
+    else:
+        block, n_blocks = n_unique, n_cycles
+    return frozenset(block * k for k in range(1, n_blocks))
+
+
 def _williams_latin_square(
     experiments: list[ExperimentConfig],
     n_cycles: int,

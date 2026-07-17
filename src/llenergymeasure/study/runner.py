@@ -38,6 +38,7 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from llenergymeasure.config.grid import ExperimentOrder, cycle_boundary_indices
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     RUNNER_DOCKER,
@@ -400,6 +401,16 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         seen_hashes = {compute_declared_config_hash(c) for c in self.study.experiments}
         n_unique = len(seen_hashes)
 
+        # Cycle-gap boundaries: the positions in `ordered` at which the larger
+        # cycle gap fires. Computed once here (not from positional modulo in the
+        # loop) so the boundaries track experiment_order - they differ between
+        # sequential (between config blocks) and pass-structured orders.
+        cycle_gap_indices = cycle_boundary_indices(
+            n_unique,
+            self.study.study_execution.n_cycles,
+            ExperimentOrder(self.study.study_execution.experiment_order),
+        )
+
         # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
         mp_ctx = multiprocessing.get_context("spawn")
 
@@ -452,7 +463,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                     break
 
                 # Inter-experiment + per-cycle gaps (break if interrupted during a gap)
-                if self._run_inter_experiment_gaps(i, n_unique):
+                if self._run_inter_experiment_gaps(i, cycle_gap_indices):
                     break
 
                 result = self._run_one(config, mp_ctx, index=i + 1)
@@ -592,8 +603,14 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             return True
         return False
 
-    def _run_inter_experiment_gaps(self, index: int, n_unique: int) -> bool:
+    def _run_inter_experiment_gaps(self, index: int, cycle_gap_indices: frozenset[int]) -> bool:
         """Run the inter-experiment gap and, on cycle boundaries, the per-cycle gap.
+
+        ``cycle_gap_indices`` is the set of positions in the ordered execution
+        sequence at which the larger cycle gap must fire, precomputed once by
+        :func:`llenergymeasure.config.grid.cycle_boundary_indices` so the
+        boundaries track the active experiment_order (they differ between
+        sequential and pass-structured orders, and never include index 0).
 
         Returns True if an interrupt arrived during a gap (caller should break).
         """
@@ -605,8 +622,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 if self._interrupt_event.is_set():
                     return True
 
-        # Cycle gap: after every complete round of N unique configs
-        if n_unique > 0 and index > 0 and index % n_unique == 0:
+        # Cycle gap: at the cycle boundaries for the active experiment_order
+        if index in cycle_gap_indices:
             cycle_gap_secs = float(self.study.study_execution.cycle_gap_seconds or 0)
             if cycle_gap_secs > 0:
                 self._run_gap(cycle_gap_secs, "Cycle gap")
