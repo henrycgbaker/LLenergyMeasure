@@ -7,6 +7,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Changed
+
+- Multi-engine Docker elevation is now precedence-based. An engine whose runner is
+  explicitly pinned (env var, the study `runners:` section, or user config) keeps that pin;
+  only engines left on auto-detection are elevated to Docker for isolation. Engines pinned
+  to `local` in a multi-engine study are checked for host importability at preflight, with a
+  specific error naming the engine, the missing package, and the two fixes (install the
+  engine extra, or drop the explicit local pin). Docker is required only when an
+  auto-resolved engine actually needs elevating, so an all-explicit-local multi-engine study
+  now runs without Docker. Previously every engine in a multi-engine study was
+  unconditionally elevated to Docker, which failed when Docker was absent even for engines
+  the user had pinned to local. Runner choice is machine-binding and recorded per result.
+
 ## [v0.12.0] - 2026-07-17
 
 ### Added

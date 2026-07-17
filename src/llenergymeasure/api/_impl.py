@@ -493,9 +493,11 @@ def _resolve_runner_specs(
 ) -> tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]]:
     """Resolve runner specs via preflight, or reuse a caller-provided preresolved result.
 
-    Runs the multi-engine guard + Docker preflight (raising PreFlightError for
-    multi-engine studies without Docker, or auto-elevating when available), emits
-    preflight progress, and warns when the study mixes local and Docker runners.
+    Runs precedence-based multi-engine elevation + Docker preflight (explicit
+    runner pins win; auto-resolved engines elevate to Docker, raising
+    PreFlightError when a local-pinned engine is not importable on the host or an
+    auto-resolved engine needs Docker but it is unavailable), emits preflight
+    progress, and warns when the study mixes local and Docker runners.
     """
     from llenergymeasure.study.preflight import run_study_preflight
 

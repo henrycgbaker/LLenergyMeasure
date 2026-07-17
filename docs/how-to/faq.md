@@ -28,7 +28,7 @@ Most common causes, in order of likelihood:
 
 ### Can I run llem without Docker?
 
-Partially. The Transformers engine runs in `local` mode without Docker if you set `runners: { transformers: local }` in your YAML. vLLM and TensorRT-LLM are Docker-only by design - their dependency closures are too divergent to install side-by-side on a host. See [Contributing &gt; Development](/contributing/development) for the rationale.
+Yes, for engines you have installed on the host. Set `runners: { transformers: local }` (or `vllm`, `tensorrt`) in your YAML to run that engine in the current process without Docker. An explicit `local` pin wins even in a multi-engine study: `llem` keeps the pin and verifies the engine imports on the host at preflight, rather than elevating it to Docker. Only engines you leave on auto-detection are elevated to Docker for a multi-engine study, and Docker is required only when such an engine needs elevating - so a multi-engine study with every engine pinned to `local` runs without Docker. In practice most users only install one engine on the host (typically Transformers) and let the others run in Docker, because engine dependency closures are too divergent to install side-by-side on one host. Runner choice is machine-binding and recorded per result. See [Contributing &gt; Development](/contributing/development) for the rationale.
 
 ### Why are my results different on consecutive runs of the same config?
 

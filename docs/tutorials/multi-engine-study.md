@@ -82,13 +82,26 @@ runners:
 ```
 
 All three engines in Docker. `runners` is what pins each engine to its
-isolated image, so the host doesn't need to import any engine. This is
-the only correct way to compare engines side-by-side - without
-isolation, library-version conflicts (e.g. transformers ↔ vllm pinned
-versions) cross-contaminate the measurement.
+isolated image, so the host doesn't need to import any engine. Docker is
+the recommended way to compare engines side-by-side: engine dependency
+closures (e.g. transformers vs vllm pinned versions) are too divergent to
+coexist on one host, so pinning each engine to its own image is what lets
+you run all three from a single machine.
 
-:::caution Multi-engine studies require Docker
-Running a multi-engine study without Docker raises a `PreFlightError` before any inference starts. Each engine needs its own isolated image to prevent library-version conflicts from affecting the measurements. See [Docker setup](/how-to/docker-setup) if your environment is not yet configured.
+:::note Runner choice is precedence-based
+Each experiment already runs in its own subprocess, so a multi-engine study
+does not *require* Docker for isolation - it needs Docker so the host can
+provide every engine's environment. Docker elevation is precedence-based: an
+engine you pin explicitly here (`runners:`), via env var, or in your user
+config keeps that pin; only engines left on auto-detection are elevated to
+Docker. An engine pinned to `local` is checked for host importability at
+preflight, and Docker is required only when an auto-resolved engine actually
+needs elevating - so `runners:` pinning every engine to `local` (with all
+three installed on the host) runs without Docker. Runner choice is
+machine-binding and recorded per result. `llem` raises a `PreFlightError`
+before any inference starts if an engine pinned to local is not importable, or
+if an auto-resolved engine needs Docker but Docker is unavailable. See
+[Docker setup](/how-to/docker-setup) if your environment is not yet configured.
 :::
 
 ```yaml
