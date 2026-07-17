@@ -446,6 +446,104 @@ def test_sequential_ordering() -> None:
     )
 
 
+def _capture_gap_positions(
+    experiment_order: str,
+    n_cycles: int,
+) -> tuple[list[int], list[int]]:
+    """Run a 2-config study and return (cycle_gap_positions, experiment_gap_positions).
+
+    Each position is the sequence index the gap fired *before* (i.e. the number
+    of experiments already dispatched when the gap ran), so it maps directly to
+    the boundary indices under test. Both gaps are set > 0 so the runner reaches
+    the (patched) ``_run_gap``; the patch records the label instead of sleeping.
+    """
+    from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
+    from llenergymeasure.config.models import DatasetConfig
+
+    exp_a = ExperimentConfig(
+        task={"model": "model-a", "dataset": DatasetConfig(n_prompts=10)}, engine="transformers"
+    )
+    exp_b = ExperimentConfig(
+        task={"model": "model-b", "dataset": DatasetConfig(n_prompts=10)}, engine="transformers"
+    )
+    ordered = apply_cycles(
+        [exp_a, exp_b], n_cycles, ExperimentOrder(experiment_order), "aaaa0000bbbb1111"
+    )
+    study = StudyConfig(
+        experiments=ordered,
+        study_name="gap-position-test",
+        study_execution=ExecutionConfig(
+            n_cycles=n_cycles,
+            experiment_order=experiment_order,
+            experiment_gap_seconds=1.0,
+            cycle_gap_seconds=1.0,
+        ),
+        study_design_hash="aaaa0000bbbb1111",
+    )
+    manifest = MagicMock()
+
+    run_count = 0
+    cycle_positions: list[int] = []
+    experiment_positions: list[int] = []
+
+    def fake_process_factory(**kwargs: Any) -> MagicMock:
+        nonlocal run_count
+        proc = MagicMock()
+        proc.is_alive.return_value = False
+        proc.exitcode = 0
+        proc.pid = 99
+        proc.start.return_value = None
+        proc.join.return_value = None
+        run_count += 1
+        return proc
+
+    def fake_pipe(duplex: bool = True) -> tuple[MagicMock, MagicMock]:
+        parent = MagicMock()
+        parent.poll.return_value = True
+        parent.recv.return_value = {"status": "ok"}
+        return parent, MagicMock()
+
+    ctx = MagicMock()
+    ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
+    ctx.Pipe.side_effect = fake_pipe
+    ctx.Queue.return_value = queue.SimpleQueue()
+
+    def record_gap(seconds: float, label: str) -> None:
+        # run_count == the sequence index this gap fires before (experiments
+        # 0..run_count-1 have already been dispatched).
+        if label == "Cycle gap":
+            cycle_positions.append(run_count)
+        elif label == "Experiment gap":
+            experiment_positions.append(run_count)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
+        with patch.object(runner, "_run_gap", side_effect=record_gap):
+            runner.run()
+
+    return cycle_positions, experiment_positions
+
+
+def test_cycle_gap_fires_between_config_blocks_sequential() -> None:
+    """Regression: sequential 2 configs x 3 cycles fires the cycle gap once, at index 3.
+
+    Before the fix the runner used ``index % n_unique`` (n_unique=2) and fired
+    the cycle gap mid-repetition at indices 2 and 4. The correct sequential
+    boundary is the single config-block transition at index 3 ([A,A,A|B,B,B]).
+    """
+    cycle_positions, experiment_positions = _capture_gap_positions("sequential", n_cycles=3)
+    assert cycle_positions == [3]
+    # The experiment gap still fires between every consecutive pair.
+    assert experiment_positions == [1, 2, 3, 4, 5]
+
+
+def test_cycle_gap_fires_between_full_passes_interleave() -> None:
+    """interleave 2 configs x 3 cycles fires the cycle gap between passes, at indices 2 and 4."""
+    cycle_positions, experiment_positions = _capture_gap_positions("interleave", n_cycles=3)
+    assert cycle_positions == [2, 4]
+    assert experiment_positions == [1, 2, 3, 4, 5]
+
+
 # =============================================================================
 # Task 2: SIGINT handling
 # =============================================================================

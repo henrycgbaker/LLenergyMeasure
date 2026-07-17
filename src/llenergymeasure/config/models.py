@@ -858,7 +858,10 @@ class ExecutionConfig(BaseModel):
         default=None,
         ge=0.0,
         description=(
-            "Seconds to wait between full cycles. None = use machine default from user config."
+            "Longer thermal-equalisation pause at cycle boundaries (only when n_cycles >= 2). "
+            "For sequential order it fires between per-config repetition blocks ([A,A,A|B,B,B]); "
+            "for interleave/reverse/shuffle/latin_square it fires between full passes over the "
+            "configs. None = use machine default from user config."
         ),
     )
     shuffle_seed: int | None = Field(
