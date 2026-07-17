@@ -118,7 +118,7 @@ jobs:
         # fails CI if anyone reintroduces it.
         run: |
           if [ -e docker/Dockerfile.tensorrt ]; then
-            echo "::error::docker/Dockerfile.tensorrt is gone for a reason - see version_handshake.py + scripts/container_entrypoint.sh"
+            echo "::error::docker/Dockerfile.tensorrt is gone for a reason - see version_handshake.py + infra/_container/container_entrypoint.sh"
             exit 1
           fi
 

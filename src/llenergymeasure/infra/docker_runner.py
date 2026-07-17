@@ -211,6 +211,9 @@ def _runtime_requirements() -> tuple[str, ...]:
     container primes only the always-on runtime deps, exactly as the old
     ``[project.dependencies]`` diff did. Sorted so the materialised file is
     deterministic (the container hashes it for the deps-probe fast-path stamp).
+    Non-extra environment markers (none exist on current core deps) are
+    discarded rather than forwarded to pip; revisit if a marker-carrying core
+    dependency is ever added.
     """
     core: list[str] = []
     for spec in importlib.metadata.requires(_DISPATCH_DIST_NAME) or []:
