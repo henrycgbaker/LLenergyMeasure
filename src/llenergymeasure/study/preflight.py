@@ -157,11 +157,13 @@ def _apply_multi_engine_precedence(
     from llenergymeasure.infra.runner_resolution import RunnerSpec, is_docker_available
 
     explicit_local: list[str] = []
+    kept_explicit: list[str] = []
     elevated: list[str] = []
     for engine_name, spec in runner_specs.items():
         if spec.source in EXPLICIT_RUNNER_SOURCES:
-            # User pinned this engine - honour it. A local pin still needs a
-            # host importability check before dispatch.
+            # User pinned this engine - honour it (whether local or docker).
+            kept_explicit.append(engine_name)
+            # A local pin still needs a host importability check before dispatch.
             if spec.mode == RUNNER_LOCAL:
                 explicit_local.append(engine_name)
         else:
@@ -215,15 +217,10 @@ def _apply_multi_engine_precedence(
             mode=RUNNER_DOCKER, image=spec.image, source=SOURCE_MULTI_ENGINE_ELEVATION
         )
 
-    kept_explicit = sorted(
-        engine_name
-        for engine_name, spec in runner_specs.items()
-        if spec.source in EXPLICIT_RUNNER_SOURCES
-    )
     logger.info(
         "Multi-engine study: elevated %s to Docker for isolation; kept explicit "
         "runner pins for %s.",
         ", ".join(sorted(elevated)) or "(none)",
-        ", ".join(kept_explicit) or "(none)",
+        ", ".join(sorted(kept_explicit)) or "(none)",
     )
     return system_overrides
