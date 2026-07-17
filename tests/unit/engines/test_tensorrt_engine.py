@@ -693,13 +693,19 @@ class TestValidateEngineDirectory:
 
 class TestBuildLlmKwargsEnginePath:
     def test_build_llm_kwargs_engine_path(self, tmp_path):
-        """engine_path set -> kwargs has model=engine_path as string; backend kwarg absent."""
+        """engine_path set -> kwargs has model=engine_path as string; backend kwarg absent.
+
+        engine_path requires backend='trt' (the compiled-TRT constructor is the
+        only one that reads the engine directory), enforced at config
+        construction; a valid engine_path config therefore always carries it.
+        """
         config_data = {"pretrained_config": {"mapping": {"tp_size": 1}}, "build_config": {}}
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
         config = make_config(
-            **_TRT_DEFAULTS, tensorrt={"engine_params": {"engine_path": str(tmp_path)}}
+            **_TRT_DEFAULTS,
+            tensorrt={"engine_params": {"engine_path": str(tmp_path), "backend": "trt"}},
         )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
@@ -735,6 +741,7 @@ class TestBuildLlmKwargsEnginePath:
             tensorrt={
                 "engine_params": {
                     "engine_path": str(tmp_path),
+                    "backend": "trt",
                     "tensor_parallel_size": 2,
                     "max_batch_size": 16,
                 }
@@ -757,7 +764,8 @@ class TestBuildLlmKwargsEnginePath:
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
         config = make_config(
-            **_TRT_DEFAULTS, tensorrt={"engine_params": {"engine_path": str(tmp_path)}}
+            **_TRT_DEFAULTS,
+            tensorrt={"engine_params": {"engine_path": str(tmp_path), "backend": "trt"}},
         )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
@@ -772,7 +780,12 @@ class TestBuildLlmKwargsEnginePath:
 
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt={"engine_params": {"engine_path": str(tmp_path / "nonexistent")}},
+            tensorrt={
+                "engine_params": {
+                    "engine_path": str(tmp_path / "nonexistent"),
+                    "backend": "trt",
+                }
+            },
         )
         engine = TensorRTEngine()
         with pytest.raises(ConfigError, match="engine_path validation failed"):
