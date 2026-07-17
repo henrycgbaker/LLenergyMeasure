@@ -1735,6 +1735,7 @@ class TestPrepareImages:
 
         pull_fail = MagicMock(spec=subprocess.CompletedProcess)
         pull_fail.returncode = 1
+        pull_fail.stderr = b"Error response from daemon: manifest unknown"
 
         with (
             patch("subprocess.run", side_effect=[inspect_fail, pull_fail]),

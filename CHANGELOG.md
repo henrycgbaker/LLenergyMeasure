@@ -7,6 +7,18 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Changed
+
+- Study preparation now pulls missing Docker engine images concurrently (one
+  `docker pull` per thread, capped at 3) instead of serialising them. A
+  multi-engine study on a fresh box no longer waits for several multi-GB pulls
+  back to back. Locally cached images are still inspected first, so a cached
+  image never triggers a remote call, and progress output stays coherent (each
+  image's lines are serialised, never interleaved). A single failing pull no
+  longer cancels its siblings: every pull runs to completion and any failures
+  are reported together as one aggregate error that names each image and its
+  cause (registry-unreachable vs image-absent).
+
 ## [v0.12.0] - 2026-07-17
 
 ### Added
