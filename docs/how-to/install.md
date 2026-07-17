@@ -36,13 +36,17 @@ libraries. Install with:
 pip install llenergymeasure
 ```
 
+Distributions are published to PyPI automatically on each tagged release via
+OIDC trusted publishing (no manual upload). See
+[Release process](/contributing/release-process) for the mechanism.
+
 ### Engine code runs in Docker
 
 Each engine (Transformers, vLLM, TensorRT-LLM) runs inside its own image,
 built from the SSOT in `engine_versions/{engine}/current.yaml`. There is no host
 extra for engines: `import transformers`, `import vllm`, and
 `import tensorrt_llm` will fail on host by design. See
-[docs/development.md](/contributing/development) for the build/run pattern.
+[the development guide](/contributing/development) for the build/run pattern.
 
 ### Available extras
 
@@ -66,20 +70,20 @@ pip install "llenergymeasure[zeus,codecarbon]"
 The project uses [uv](https://docs.astral.sh/uv/) as its package manager.
 
 ```bash
-git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool.git
-cd llm-efficiency-measurement-tool
+git clone https://github.com/henrycgbaker/llenergymeasure.git
+cd llenergymeasure
 uv sync --dev
 uv run llem --version
 ```
 
 Engine libraries are not installed on host. See
-[docs/development.md](/contributing/development) for how to build and run engine
+[the development guide](/contributing/development) for how to build and run engine
 images locally.
 
 Expected output:
 
 ```
-llem v0.9.0
+llem v0.12.0
 ```
 
 ---
@@ -180,8 +184,8 @@ This lets fresh machines skip the ~30-min flash-attn FA3 Hopper compile.
 vLLM and TensorRT-LLM are pulled from upstream images (`vllm/vllm-openai`,
 `nvcr.io/nvidia/tensorrt-llm/release`) and need no project-side cache.
 
-Measured on `ds01` (AMD EPYC 7742, 128 cores, 504 GB RAM - Docker 27.0.3 / Buildx
-v0.32.1 / llenergymeasure 0.9.0):
+Example build times on a reference host (AMD EPYC 7742-class, 128 cores, 504 GB
+RAM - Docker 27.0.3 / Buildx v0.32.1 / llenergymeasure 0.12.0):
 
 | Engine | Image size | Cold build | First GHCR pull | Warm local rebuild |
 |--------|-----------|------------|-----------------|--------------------|
@@ -361,8 +365,8 @@ GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
 Engines
   transformers: installed
-  vllm: not installed  (runs in Docker - see docs/development.md)
-  tensorrt: not installed  (runs in Docker - see docs/development.md)
+  vllm: not installed  (runs in Docker - see https://henrycgbaker.github.io/llenergymeasure/contributing/development)
+  tensorrt: not installed  (runs in Docker - see https://henrycgbaker.github.io/llenergymeasure/contributing/development)
 Energy
   Energy: nvml
 Config

@@ -91,8 +91,19 @@ re-exported from `__init__.py`.
 6. **CI publishes to PyPI**
 
    The `release.yml` workflow (`.github/workflows/release.yml`) triggers on
-   `push: tags: ["v*"]`. It runs lint, tests, and then publishes the package to
-   PyPI using `uv build` + `uv publish`. No manual upload is required.
+   `push: tags: ["v*"]`. It runs lint, type-check, tests, and version
+   validation, then the `release` job builds the sdist and wheel with
+   `uv build` and the `publish-pypi` job uploads them to PyPI. Publishing uses
+   [OIDC trusted publishing](https://docs.pypi.org/trusted-publishers/): the
+   runner mints a short-lived identity token that PyPI verifies against a
+   configured trusted publisher, so no API token or secret is stored in the
+   repository. No manual upload is required.
+
+   Trusted publishing requires a one-time setup on pypi.org: the project's
+   trusted publisher must name this repository, the `release.yml` workflow, and
+   the `pypi` environment. Until that publisher is configured, the
+   `publish-pypi` job fails at the publish step (the build and GitHub Release
+   still succeed).
 
 ---
 

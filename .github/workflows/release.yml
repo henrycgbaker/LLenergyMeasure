@@ -111,11 +111,40 @@ jobs:
           python-version: "3.12"
       - name: Build package
         run: uv build
+      - name: Upload built distributions
+        # Publish the exact bytes the release job built: publish-pypi downloads
+        # this artifact rather than rebuilding, so PyPI and the GitHub Release
+        # carry identical sdist/wheel files.
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: dist/*
+
+  publish-pypi:
+    needs: release
+    if: inputs.confirm == true || github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # OIDC trusted publishing: the runner mints a short-lived identity token
+    # PyPI verifies against its pending/configured publisher. No API token or
+    # secret is stored anywhere. id-token: write is the only permission needed;
+    # the job does not check out the repo or touch its contents.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download built distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   docker:
     needs: release
