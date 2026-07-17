@@ -9,6 +9,7 @@ concurrency / error-aggregation behaviour.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -16,7 +17,9 @@ from subprocess import CompletedProcess
 from unittest.mock import MagicMock
 
 import pytest
+from rich.console import Console
 
+from llenergymeasure.cli._step_display import StudyStepDisplay
 from llenergymeasure.infra.docker_errors import DockerImagePullError
 from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study import image_prep
@@ -285,6 +288,52 @@ def test_aggregate_error_is_order_independent(monkeypatch: pytest.MonkeyPatch) -
     first = run_with_completion_order("img/vllm:latest")
     second = run_with_completion_order("img/tensorrt:latest")
     assert first == second
+
+
+def test_concurrent_failures_all_render_in_real_display(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two images failing concurrently both appear in the real display's panel.
+
+    Drives the actual ``StudyStepDisplay`` (not a MagicMock) through
+    ``_prepare_images`` with two failing pulls. Regression guard: the live
+    panel formerly held a single failure slot, so the second concurrent
+    failure overwrote the first and only one rendered.
+    """
+    specs = {
+        "vllm": _docker_spec("img/vllm:latest"),
+        "tensorrt": _docker_spec("img/tensorrt:latest"),
+    }
+    monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
+
+    def fake_run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
+        if argv[:2] == ["docker", "pull"]:
+            image = argv[2]
+            stderr = b"manifest unknown" if image == "img/vllm:latest" else b"dial tcp: i/o timeout"
+            return CompletedProcess(argv, 1, b"", stderr)
+        return _cached()
+
+    monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+
+    # force_terminal drives the live-panel (TTY) code path so _render_image_prep
+    # reflects accumulated state rather than the immediate non-TTY prints.
+    display = StudyStepDisplay(
+        total_experiments=2,
+        console=Console(force_terminal=True, no_color=True, width=120),
+    )
+    harness = _Harness(specs, display)
+    with pytest.raises(DockerImagePullError):
+        harness._prepare_images()
+
+    rendered = display._render_image_prep().plain
+    assert "vllm" in rendered
+    assert "tensorrt" in rendered
+    # Both distinct causes survive, not just the last failure to land.
+    assert "docker compose build vllm" in rendered  # absent-image cause
+    assert "registry unreachable (network)" in rendered  # network cause
+    # Unique, collision-free counters across both concurrent failures.
+    counters = re.findall(r"\[(\d+)/2\]", rendered)
+    assert sorted(counters) == ["1", "2"], f"expected unique counters, got {counters}"
 
 
 def test_pull_timeout_reported_and_aggregated(monkeypatch: pytest.MonkeyPatch) -> None:
