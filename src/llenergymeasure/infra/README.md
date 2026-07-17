@@ -26,7 +26,7 @@ Dispatches one experiment to an ephemeral `docker run --rm --gpus all` container
 ```python
 from llenergymeasure.infra.docker_runner import DockerRunner
 
-runner = DockerRunner(image="ghcr.io/.../llenergymeasure/pytorch:v0.9.0", timeout=600)
+runner = DockerRunner(image="ghcr.io/.../llenergymeasure/transformers:v0.12.0", timeout=600)
 result = runner.run(config)  # ExperimentResult or error dict
 ```
 
@@ -101,7 +101,7 @@ from llenergymeasure.infra.image_registry import get_default_image
 
 image = get_default_image("vllm")
 # → "llenergymeasure:vllm"  (if local image exists)
-# → "ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"  (otherwise)
+# → "ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.12.0"  (otherwise)
 ```
 
 The distinction between `"registry"` and `"registry_cached"` source: when a registry image
@@ -138,7 +138,7 @@ this as a "Preparing Docker images" section with per-image status and metadata.
 runners:
   transformers: local                                         # host, no Docker
   vllm: docker                                           # default (local → registry)
-  tensorrt: "docker:ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0"  # force registry
+  tensorrt: "docker:ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.12.0"  # force registry
 ```
 
 ```python
