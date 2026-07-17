@@ -22,7 +22,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   and observed-collision gap detection (`find_observed_collisions`, which feeds the rules
   corpus). Hash values change only for configs containing an int-valued float field;
   pre-1.0, old persisted bundles keep their recorded hashes (no migration) and a study
-  resumed across the boundary may regroup.
+  resumed across the boundary may regroup. ([#833])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -1040,3 +1040,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
