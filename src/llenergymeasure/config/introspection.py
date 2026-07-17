@@ -523,6 +523,16 @@ _MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
         "computation (validate_transformers_flash_attn_dtype).",
         "resolution": "Set transformers.engine_params.dtype to float16 or bfloat16.",
     },
+    {
+        "engine": "tensorrt",
+        "validator": "validate_tensorrt_engine_path_backend",
+        "combination": "engine_path is set and backend != trt",
+        "reason": "engine_path loads a prebuilt compiled-TensorRT engine directory, which "
+        "only the trt constructor can read; the pytorch backend (the default) would "
+        "misinterpret it as a checkpoint (validate_tensorrt_engine_path_backend).",
+        "resolution": "Set tensorrt.engine_params.backend to trt, or drop engine_path to "
+        "build from the model checkpoint.",
+    },
 ]
 
 

@@ -733,6 +733,42 @@ class ExperimentConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def validate_tensorrt_engine_path_backend(self) -> ExperimentConfig:
+        """A prebuilt TensorRT engine_path requires backend='trt'.
+
+        ``engine_path`` points the TRT-LLM loader at a directory of compiled
+        ``rank*.engine`` files (a prebuilt TensorRT engine). Only the trt
+        constructor (``tensorrt_llm._tensorrt_engine.LLM``) reads that format;
+        the pytorch backend (``tensorrt_llm.LLM``) would misread the directory
+        as a HuggingFace checkpoint and silently construct the wrong flow.
+
+        ``backend`` defaults to 'pytorch' when unset, so an engine_path with no
+        explicit backend is rejected too: we never flip the constructor class
+        silently based on a passthrough field. This is a hand-written cross-field
+        constraint on the curated surface because ``engine_path`` is an
+        extra='allow' passthrough (not a mined field) and the constraint is a
+        llem-orchestration semantic (which constructor to use), not an
+        engine-native validation the rules corpus mines. Mirrors the sibling
+        backend-applicability guards for fast_build / quant_config.
+        """
+        if self.engine != "tensorrt":
+            return self
+        ep = self.active_engine_params()
+        if ep is None:
+            return self
+        engine_path = getattr(ep, "engine_path", None)
+        backend = getattr(ep, "backend", None)
+        if engine_path is not None and backend != "trt":
+            raise ValueError(
+                f"engine_path requires backend='trt' (got backend={backend!r}). "
+                "engine_path loads a prebuilt compiled-TensorRT engine directory, "
+                "which only the trt constructor can read; the pytorch backend "
+                "would misinterpret it as a checkpoint. Set backend: trt, or drop "
+                "engine_path to build from the model checkpoint."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _apply_rules(self) -> ExperimentConfig:
         # ``object.__setattr__`` bypasses Pydantic's ``extra='forbid'``;
         # consumers read via ``cfg._dormant_observations`` (dict keyed by
@@ -858,7 +894,10 @@ class ExecutionConfig(BaseModel):
         default=None,
         ge=0.0,
         description=(
-            "Seconds to wait between full cycles. None = use machine default from user config."
+            "Longer thermal-equalisation pause at cycle boundaries (only when n_cycles >= 2). "
+            "For sequential order it fires between per-config repetition blocks ([A,A,A|B,B,B]); "
+            "for interleave/reverse/shuffle/latin_square it fires between full passes over the "
+            "configs. None = use machine default from user config."
         ),
     )
     shuffle_seed: int | None = Field(

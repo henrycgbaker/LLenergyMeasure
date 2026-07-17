@@ -103,7 +103,7 @@ Controls sequencing, cycles, and failure handling:
 | `n_cycles` | `int` | `1` | Number of times to repeat the full experiment list. |
 | `experiment_order` | `"sequential" \| "interleave" \| "shuffle" \| "reverse" \| "latin_square"` | `"sequential"` | Ordering across cycles. `"interleave"` runs A,B,A,B; `"shuffle"` randomises per-cycle. |
 | `experiment_gap_seconds` | `float \| None` | `None` | Seconds to wait between individual experiments. `None` uses machine default from user config. |
-| `cycle_gap_seconds` | `float \| None` | `None` | Seconds to wait between full cycles. `None` uses machine default. |
+| `cycle_gap_seconds` | `float \| None` | `None` | Longer thermal-equalisation pause at cycle boundaries (only when `n_cycles >= 2`). Boundary depends on `experiment_order`: for `sequential` it fires between the per-config repetition blocks (`[A,A,A\|B,B,B]`); for `interleave`/`reverse`/`shuffle`/`latin_square` it fires between full passes over the configs. `None` uses machine default. |
 | `shuffle_seed` | `int \| None` | `None` | Explicit seed for `shuffle` ordering. `None` derives seed from `study_design_hash` (same study always shuffles identically). |
 | `skip_preflight` | `bool` | `False` | Skip Docker pre-flight checks in the execution block (the `--skip-preflight` CLI flag always overrides). |
 | `max_consecutive_failures` | `int` | `10` | Circuit breaker: abort after N consecutive failures. `0` = disabled. |
