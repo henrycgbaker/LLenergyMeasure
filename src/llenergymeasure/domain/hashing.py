@@ -7,9 +7,13 @@ hash requires imports from upper layers, so these live at Layer 0 (domain).
 ``build_resolved_view`` - the one function that needs ``ExperimentConfig`` -
 stays in :mod:`llenergymeasure.study.hashing` where it belongs (Layer 4).
 
-Normalisation rules are locked by sweep-dedup.md §9.Q3.  Over-normalising
-would hide library-enforced semantics (e.g. ``None`` vs missing in vLLM),
-so the rules are strict.
+Normalisation is strict (over-normalising would hide library-enforced semantics,
+e.g. ``None`` vs missing in vLLM) with one deliberate unification: integral
+numerics fold onto their ``int`` form, superseding the int-vs-float split
+sweep-dedup.md §9.Q3 previously locked (the design doc records the reversal).
+The declared-config hash family folds the opposite way - int -> float via pydantic
+``mode="json"`` (PR #822) - which is harmless because the declared and
+resolved/observed hash namespaces never intersect.
 """
 
 from __future__ import annotations
@@ -38,19 +42,17 @@ values a researcher would write differently.
 def _normalise(value: Any) -> Any:
     """Normalise a value for deterministic JSON serialisation.
 
-    Applies the canonicalisation rules from sweep-dedup.md §9.Q3:
+    Canonicalisation rules; the integral-fold below supersedes the int-vs-float
+    split sweep-dedup.md §9.Q3 previously locked:
 
     - ``NaN`` -> string ``"NaN"`` (NaN != NaN breaks dict hashing otherwise)
     - ``+/-Infinity`` -> string literal (stable across platforms)
     - integral numerics unify on their ``int`` form: a float that is exactly
-      integral (``0.0``, ``1.0``, ``-1.0``) folds to ``int``. This closes the
-      resolved-vs-observed gap where a field typed ``float`` but valued as an
-      int (e.g. vLLM ``cpu_offload_gb = 0``) stays python ``int`` in a
-      ``mode="python"`` resolved dump (pydantic does not validate defaults) but
-      is a genuine ``float`` in the native engine object the observed pipeline
-      captures. Folding toward int (rather than int -> float) keeps genuine
-      integer identity fields - seeds, token counts - bit-exact, so no large
-      distinct ints can collide via a lossy float round-trip.
+      integral (``0.0``, ``1.0``, ``-1.0``) folds to ``int``, so a value written
+      as an int and the same value carried as a float hash identically. Folding
+      toward int (rather than int -> float) keeps genuine integer identity fields
+      - seeds, token counts - bit-exact, so no large distinct ints collide via a
+      lossy float round-trip.
     - non-integral float -> rounded to 12 significant digits (stable across
       minor arithmetic jitter)
     - tuple -> list (incidental immutability choice, not semantic)
