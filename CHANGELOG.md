@@ -44,6 +44,9 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   exchange dir alongside `timeseries.parquet`, and the local path always stages an output
   dir for the sidecar. If a completed experiment ends without a `config.json`, the runner
   logs a warning rather than dropping the provenance silently. ([#811])
+- Docs: purged stale `effective_config` terminology and pre-consolidation flat-layout
+  references across the methodology, how-to, tutorial, and generated reference pages,
+  aligning them with the `config.json` sidecar and the current bundle layout. ([#820])
 - `result.json` schema bumped `4.0` -> `5.0` (breaking). `result.json` is now measurement
   output: the configuration/methodology fields `engine_version`, `measurement_methodology`,
   `steady_state_window`, `measurement_window_discard_fraction`, and
@@ -821,7 +824,8 @@ Core measurement functionality establishing the foundation for all subsequent de
 - Major directory restructuring separating config, core, and result handling.
 
 
-[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.12.0...HEAD
+[v0.12.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.12.0
 [v0.11.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.10.0
 [v0.9.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.9.0
@@ -1012,6 +1016,7 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#816]: https://github.com/henrycgbaker/llenergymeasure/pull/816
 [#817]: https://github.com/henrycgbaker/llenergymeasure/pull/817
 [#819]: https://github.com/henrycgbaker/llenergymeasure/pull/819
+[#820]: https://github.com/henrycgbaker/llenergymeasure/pull/820
 [#821]: https://github.com/henrycgbaker/llenergymeasure/pull/821
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
