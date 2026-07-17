@@ -17,13 +17,13 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   section. Every line is prefixed `[ok]`/`[warn]`/`[fail]` with a `-> fix` hint. `--check`
   exits 0/1/2 (ok/warnings/errors) for CI scripting and `--json` emits the full report as
   machine-readable JSON. Plain `llem doctor` still exits non-zero only on a hard failure
-  such as an image schema mismatch.
+  such as an image schema mismatch. ([#834])
 
 ### Removed
 
 - `llem config` is removed. Its environment-diagnostics role is subsumed by the broadened
   `llem doctor` above. There is no deprecation shim (pre-PyPI); scripts should call
-  `llem doctor` (or `llem doctor --check` / `llem doctor --json`).
+  `llem doctor` (or `llem doctor --check` / `llem doctor --json`). ([#834])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -1041,3 +1041,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#834]: https://github.com/henrycgbaker/llenergymeasure/pull/834
