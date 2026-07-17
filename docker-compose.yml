@@ -60,8 +60,8 @@ x-common: &common
   environment:
     # PUID/PGID for host permission mapping (REQUIRED - set in .env)
     # Copy .env.example to .env and set these from 'id -u' / 'id -g'
-    - PUID=${PUID:?cp .env.example to .env and set PUID (run 'id -u')}
-    - PGID=${PGID:?cp .env.example to .env and set PGID (run 'id -g')}
+    - PUID=${PUID:?copy .env.example to .env and set PUID (run 'id -u')}
+    - PGID=${PGID:?copy .env.example to .env and set PGID (run 'id -g')}
     # Standard config
     - HF_TOKEN
     # Default to GPU 0 if host has empty CUDA_VISIBLE_DEVICES (shared server setup)
