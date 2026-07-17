@@ -17,7 +17,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   image's lines are serialised, never interleaved). A single failing pull no
   longer cancels its siblings: every pull runs to completion and any failures
   are reported together as one aggregate error that names each image and its
-  cause (registry-unreachable vs image-absent).
+  cause (registry-unreachable vs image-absent). ([#832])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -1035,3 +1035,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#832]: https://github.com/henrycgbaker/llenergymeasure/pull/832
