@@ -255,11 +255,14 @@ task:
   model: Qwen/Qwen2.5-7B-Instruct-AWQ   # original HF id, for tokenizer + metadata
 tensorrt:
   engine_params:
+    backend: trt
     engine_path: /shared/engines/qwen2.5-7b-awq
 ```
 
 With `engine_path` set, the pre-flight gate is skipped because the engine
-is already in TensorRT-LLM's native format.
+is already in TensorRT-LLM's native format. `engine_path` requires
+`backend: trt` (the compiled-engine directory is only readable by the trt
+constructor); the config is rejected otherwise.
 
 ## 3. Read the results
 

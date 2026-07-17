@@ -36,6 +36,10 @@ libraries. Install with:
 pip install llenergymeasure
 ```
 
+Distributions are published to PyPI automatically on each tagged release via
+OIDC trusted publishing (no manual upload). See
+[Release process](/contributing/release-process) for the mechanism.
+
 ### Engine code runs in Docker
 
 Each engine (Transformers, vLLM, TensorRT-LLM) runs inside its own image,
