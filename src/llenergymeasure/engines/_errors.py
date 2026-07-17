@@ -58,5 +58,6 @@ def require_import(module: str) -> Any:
     except ImportError as e:
         raise EngineError(
             f"{module} is not available on host. Engine code runs inside Docker - "
-            f"see docs/development.md for the build/run pattern."
+            "see https://henrycgbaker.github.io/llenergymeasure/contributing/development "
+            "for the build/run pattern."
         ) from e
