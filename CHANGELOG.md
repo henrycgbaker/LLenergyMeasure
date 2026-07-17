@@ -16,8 +16,8 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   configuration with per-setting provenance, and the image schema handshake folded in as a
   section. Every line is prefixed `[ok]`/`[warn]`/`[fail]` with a `-> fix` hint. `--check`
   exits 0/1/2 (ok/warnings/errors) for CI scripting and `--json` emits the full report as
-  machine-readable JSON. Plain `llem doctor` still exits non-zero only on a hard failure
-  such as an image schema mismatch. ([#834])
+  machine-readable JSON. Plain `llem doctor` still exits non-zero on a hard failure - an
+  image schema mismatch or an unparseable/invalid user-config file. ([#834])
 
 ### Removed
 

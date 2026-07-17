@@ -382,11 +382,11 @@ docker-check: ## Validate the docker-compose config parses cleanly
 # =============================================================================
 # llem in Docker
 #   `make llem CMD=...` runs the llem CLI inside the transformers container.
-#   The current llem subcommand surface is: run, config, doctor, report-gaps.
+#   The current llem subcommand surface is: run, study, doctor, report-gaps.
 #
 # Examples:
 #   make llem CMD="--help"
-#   make llem CMD="config"
+#   make llem CMD="doctor"
 #   make llem CMD="run configs/example-study-full.yaml"
 # =============================================================================
 
