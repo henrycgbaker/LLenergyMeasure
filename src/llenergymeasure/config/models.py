@@ -965,6 +965,44 @@ class ExecutionConfig(BaseModel):
             "CLI flag is the equivalent."
         ),
     )
+    gpu_indices: list[int] | None = Field(
+        default=None,
+        description=(
+            "HOST GPU indices (as `nvidia-smi` shows) to scope llem's Docker containers to "
+            "via `docker run --gpus device=<indices>`, scoped at the docker level so "
+            "in-container CUDA and NVML indices stay consistent (see the docker-setup docs). "
+            "null = `--gpus all` (every visible GPU, the historical default). This is "
+            "placement/dispatch metadata, NOT part of the declared-config or study-design "
+            "hash, so pinning a study to different physical GPUs never changes dedup grouping. "
+            "The LLEM_DOCKER_GPUS env var overrides this (env>config); when both are set the "
+            "env wins and a warning is logged."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_gpu_indices(self) -> ExecutionConfig:
+        """Reject empty, negative, or duplicate GPU indices (fail loudly).
+
+        Absence is expressed as ``None`` (``--gpus all``); an empty list is a
+        mistake, not "all". Negative indices and duplicates cannot name real
+        distinct host devices.
+        """
+        if self.gpu_indices is None:
+            return self
+        if not self.gpu_indices:
+            raise ValueError(
+                "study_execution.gpu_indices must not be empty; omit it (null) to use all GPUs."
+            )
+        if any(i < 0 for i in self.gpu_indices):
+            raise ValueError(
+                f"study_execution.gpu_indices must be non-negative host device indices, "
+                f"got {self.gpu_indices}."
+            )
+        if len(set(self.gpu_indices)) != len(self.gpu_indices):
+            raise ValueError(
+                f"study_execution.gpu_indices must not contain duplicates, got {self.gpu_indices}."
+            )
+        return self
 
 
 class StudyConfig(BaseModel):

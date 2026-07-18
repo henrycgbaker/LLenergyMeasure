@@ -7,6 +7,33 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Added
+
+- Docker dispatch can now be scoped to specific host GPUs from config via the new
+  `study_execution.gpu_indices` field (a list of host device indices, e.g. `[2, 3]`),
+  translated to `docker run --gpus device=2,3`. Scoping at the docker level keeps CUDA and
+  NVML indices consistent inside the container (both re-enumerate from 0), so energy
+  attribution stays correct. The process-global `LLEM_DOCKER_GPUS` env var overrides this
+  field (env>config); when both are set the env wins and a warning is logged. The field is
+  placement metadata and is excluded from the declared-config and study-design hashes, so
+  pinning a study to different physical GPUs never changes dedup grouping. The same selector
+  drives per-GPU advisory-lock naming, the baseline container's `--gpus`, and the per-target
+  baseline cache key, so config-pinned studies lock, baseline, and cache the correct physical
+  devices. ([#838])
+- The Docker `--shm-size` for llem-launched containers is now configurable via the
+  `LLEM_DOCKER_SHM_SIZE` env var (default `8g`, the previous hardcoded value). Raise it for
+  very large tensor-parallel runs or lower it on memory-constrained hosts. ([#838])
+- The per-experiment `environment.json` sidecar now records a `runner` block
+  restoring runner provenance to every result: `mode` (`docker` vs `local`),
+  `image`, `image_digest` (the resolved registry digest `repo@sha256:...`,
+  pinning the full software stack as the cross-run reproducibility anchor), and
+  `source` (the precedence layer that selected the runner). The sidecar also
+  gains its own `schema_version` (`"1.0"`, independent of `result.json`), its
+  first explicit version. The digest is resolved host-side via
+  `docker image inspect`; resolution is best-effort and records `null` (never
+  fails a run) for local runs, locally-built images, or when docker is
+  unavailable. Older sidecars load with `runner: null`. ([#837])
+
 ### Changed
 
 - Study preparation now pulls missing Docker engine images concurrently (one
@@ -1104,4 +1131,6 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#834]: https://github.com/henrycgbaker/llenergymeasure/pull/834
 [#835]: https://github.com/henrycgbaker/llenergymeasure/pull/835
 [#836]: https://github.com/henrycgbaker/llenergymeasure/pull/836
+[#837]: https://github.com/henrycgbaker/llenergymeasure/pull/837
+[#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
 [#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839

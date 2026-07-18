@@ -5,6 +5,7 @@ enabling post-hoc analysis of environmental factors affecting measurements.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -87,6 +88,43 @@ class ContainerEnvironment(BaseModel):
     )
 
 
+class RunnerEnvironment(BaseModel):
+    """How an experiment was executed - containerized (docker) or on the host (local).
+
+    Records the runner mode (docker vs local), the exact Docker image and its
+    resolved registry digest (the reproducibility anchor pinning the full
+    software stack: base image, CUDA, torch, patches), and the precedence
+    source that selected the runner. The digest is None for local runs, and
+    also None when it cannot be resolved (image built locally with no registry
+    digest, docker unavailable, inspect error) - resolution is best-effort and
+    never fails a run.
+
+    Sibling of ``experiment.RunnerProvenance`` (which persists into result.json):
+    both mirror ``infra.RunnerSpec``'s mode/image/source. They stay separate
+    because their extra fields diverge - this one carries ``image_digest`` (the
+    environment.json reproducibility anchor), RunnerProvenance carries
+    ``image_source`` (result.json image-resolution provenance).
+    """
+
+    mode: Literal["docker", "local"] = Field(
+        ..., description="Execution mode - 'docker' (containerized) or 'local' (host process)"
+    )
+    image: str | None = Field(
+        default=None,
+        description="Docker image reference used (None for local runs)",
+    )
+    image_digest: str | None = Field(
+        default=None,
+        description="Resolved image registry digest ('repo@sha256:...'). None for local "
+        "runs or when the digest could not be resolved (e.g. locally-built image).",
+    )
+    source: str = Field(
+        ...,
+        description="RunnerSpec precedence source that selected the runner (e.g. 'env', "
+        "'yaml', 'user_config', 'auto_detected', 'default', 'multi_engine_elevation', 'local')",
+    )
+
+
 class EnvironmentMetadata(BaseModel):
     """Complete environment metadata for an experiment.
 
@@ -126,3 +164,9 @@ class EnvironmentSnapshot(BaseModel):
     tool_version: str
     cuda_version: str | None = None
     cuda_version_source: str | None = None  # "torch" | "version_txt" | "nvcc" | None
+    runner: RunnerEnvironment | None = Field(
+        default=None,
+        description="How the experiment was executed (docker vs local, image + digest, "
+        "precedence source). None for older sidecars written before runner provenance "
+        "was recorded.",
+    )

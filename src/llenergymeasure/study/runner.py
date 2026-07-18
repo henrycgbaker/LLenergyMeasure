@@ -77,7 +77,7 @@ from llenergymeasure.utils.io import load_json
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
-    from llenergymeasure.domain.environment import EnvironmentSnapshot
+    from llenergymeasure.domain.environment import EnvironmentSnapshot, RunnerEnvironment
     from llenergymeasure.domain.experiment import RunnerProvenance
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
@@ -118,6 +118,42 @@ def _provenance_from_spec(spec: RunnerSpec | None) -> RunnerProvenance:
     )
 
 
+def _runner_environment(
+    spec: RunnerSpec | None, *, resolved_image: str | None = None
+) -> RunnerEnvironment:
+    """Build the environment.json ``runner`` block from a resolved RunnerSpec.
+
+    Records docker-vs-local, the exact image and its resolved registry digest
+    (the reproducibility anchor), and the precedence source. For docker specs
+    the digest is resolved host-side via ``docker image inspect`` on the image
+    that actually ran (``resolved_image`` when the spec left the image implicit).
+    Digest resolution is best-effort: an unresolved digest records None and is
+    debug-logged, never raising - so environment.json provenance never fails a run.
+
+    Local specs (and no spec at all) record ``mode="local"`` with no image or
+    digest and the spec's source (``"local"`` when no spec was resolved).
+    """
+    from llenergymeasure.domain.environment import RunnerEnvironment
+
+    if spec is None or spec.mode != RUNNER_DOCKER:
+        return RunnerEnvironment(
+            mode="local",
+            source=spec.source if spec is not None else "local",
+        )
+
+    from llenergymeasure.infra.image_registry import resolve_image_digest
+
+    image = resolved_image if resolved_image is not None else spec.image
+    digest = resolve_image_digest(image) if image is not None else None
+    if image is not None and digest is None:
+        logger.debug(
+            "Could not resolve registry digest for runner image %s; "
+            "environment.json runner.image_digest will be null.",
+            image,
+        )
+    return RunnerEnvironment(mode="docker", image=image, image_digest=digest, source=spec.source)
+
+
 def _save_and_record(
     result: Any,
     study_dir: Path,
@@ -134,6 +170,7 @@ def _save_and_record(
     resolution_log: dict[str, Any] | None = None,
     resolved_config_hash: str | None = None,
     runner_provenance: RunnerProvenance | None = None,
+    runner_environment: RunnerEnvironment | None = None,
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
@@ -156,11 +193,20 @@ def _save_and_record(
             folded into the config.json sidecar's ``provenance`` section.
         runner_provenance: How the experiment was executed (local vs docker). Attached to the
             frozen result via model_copy before saving so it persists into result.json.
+        runner_environment: The environment.json ``runner`` block (docker vs local, image +
+            registry digest, precedence source). For local runs it is written via
+            save_environment on the host snapshot; for docker runs it is patched into the
+            rescued in-container environment.json (which the container wrote without runner
+            facts the host alone knows).
 
     On save failure, marks the experiment as completed with empty path.
     """
     try:
-        from llenergymeasure.results.persistence import save_environment, save_result
+        from llenergymeasure.results.persistence import (
+            ENVIRONMENT_SCHEMA_VERSION,
+            save_environment,
+            save_result,
+        )
 
         # Attach runner provenance to the frozen result before saving (it
         # serialises into result.json, unlike the environment sidecar).
@@ -188,6 +234,15 @@ def _save_and_record(
             cycle=cycle,
         )
 
+        # Attach the runner block to the host snapshot so save_environment writes
+        # it (local path). On the docker path this host-written file is overwritten
+        # by the rescued in-container snapshot below, so the runner block is
+        # re-applied to the rescued file after the overwrite.
+        if runner_environment is not None and environment_snapshot is not None:
+            environment_snapshot = environment_snapshot.model_copy(
+                update={"runner": runner_environment}
+            )
+
         # Write per-experiment environment.json sidecar
         if environment_snapshot is not None:
             save_environment(
@@ -208,8 +263,17 @@ def _save_and_record(
             try:
                 from llenergymeasure.results.persistence import _atomic_write
 
+                # The container wrote environment.json without runner facts the
+                # host alone knows (image ref, registry digest, precedence source),
+                # so patch the runner block into the rescued snapshot. The rescued
+                # file already carries schema_version from the container's writer;
+                # setdefault stamps it only if an older image omitted it.
+                _rescued_payload = load_json(rescued_env)
+                if runner_environment is not None:
+                    _rescued_payload["runner"] = runner_environment.model_dump()
+                    _rescued_payload.setdefault("schema_version", ENVIRONMENT_SCHEMA_VERSION)
                 _atomic_write(
-                    json.dumps(load_json(rescued_env), indent=2, default=str),
+                    json.dumps(_rescued_payload, indent=2, default=str),
                     result_path.parent / ENVIRONMENT_FILENAME,
                 )
             except Exception as exc:
@@ -528,21 +592,36 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         """
         original_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
 
+        config_gpu_indices = self.study.study_execution.gpu_indices
+        uses_docker = bool(
+            self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values())
+        )
+
+        # Physical GPU selector precedence (env>config): LLEM_DOCKER_GPUS wins
+        # over study_execution.gpu_indices. GPU scoping only affects Docker
+        # containers, so warn about the conflict only when a container will
+        # actually launch (mirrors single.py, which gates this in its Docker
+        # branch) - no container means no warning.
+        if uses_docker:
+            from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
+
+            warn_on_gpu_selector_conflict(config_gpu_indices)
+
         # Acquire per-GPU advisory locks before image preparation.
-        # Lock names use the PHYSICAL device the study occupies, parsed from the
-        # docker --gpus pinning (LLEM_DOCKER_GPUS): two studies on different
-        # physical GPUs must not share a lock. When there is no docker-level
-        # pinning (all / unset), logical == physical, so fall back to the
-        # in-container logical indices. Measurement-side index resolution is
-        # unchanged - _resolve_gpu_indices still yields the logical indices that
-        # address the energy samplers.
+        # Lock names use the PHYSICAL device the study occupies, resolved from
+        # the effective GPU selector (env LLEM_DOCKER_GPUS, else config
+        # gpu_indices): two studies on different physical GPUs must not share a
+        # lock. When there is no docker-level pinning (all / unset), logical ==
+        # physical, so fall back to the in-container logical indices.
+        # Measurement-side index resolution is unchanged - _resolve_gpu_indices
+        # still yields the logical indices that address the energy samplers.
         # Sorted acquisition prevents deadlocks when multiple studies share GPUs.
         gpu_locks: list[Any] = []
         if not self._no_lock and ordered:
             from llenergymeasure.study.gpu_locks import acquire_gpu_locks
             from llenergymeasure.utils.env_config import pinned_gpu_lock_ids
 
-            lock_ids = pinned_gpu_lock_ids()
+            lock_ids = pinned_gpu_lock_ids(config_gpu_indices)
             if lock_ids is None:
                 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
@@ -552,7 +631,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
         # Only activated for studies that use Docker runners.
         original_sigterm: signal.Handlers | None = None
-        if self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values()):
+        if uses_docker:
             from llenergymeasure.study.container_lifecycle import (
                 install_sigterm_bridge,
                 reap_orphaned_containers,
@@ -971,6 +1050,9 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             ts_source_dir=ts_tmpdir,
             environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
             runner_provenance=_provenance_from_spec(local_spec),
+            runner_environment=(
+                _runner_environment(local_spec) if not isinstance(result, dict) else None
+            ),
         )
 
         # Clean up the temp dir created for timeseries parquet output.
@@ -991,6 +1073,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         ts_source_dir: Path | None = None,
         environment_snapshot: Any | None = None,
         runner_provenance: RunnerProvenance | None = None,
+        runner_environment: RunnerEnvironment | None = None,
     ) -> None:
         """Update manifest and signal study display based on experiment outcome."""
         model_name = config.task.model
@@ -1032,6 +1115,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 resolution_log=self._resolution_logs.get(config_hash),
                 resolved_config_hash=self._resolved_hashes.get(config_hash),
                 runner_provenance=runner_provenance,
+                runner_environment=runner_environment,
             )
             if self._progress:
                 host_path = self.result_files[-1] if self.result_files else None
@@ -1157,6 +1241,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             extra_mounts=extra_mounts,
             container_name=container_name,
             labels=labels,
+            gpu_indices=self.study.study_execution.gpu_indices,
         )
 
         # Pre-dispatch GPU memory residual check (same as local path)
@@ -1195,6 +1280,11 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             ts_source_dir=docker_ts_dir,
             environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
             runner_provenance=_provenance_from_spec(spec),
+            runner_environment=(
+                _runner_environment(spec, resolved_image=image)
+                if not isinstance(result, dict)
+                else None
+            ),
         )
 
         # Clean up the temp dir after _save_and_record has copied the parquet.

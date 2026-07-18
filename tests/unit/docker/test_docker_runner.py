@@ -1591,6 +1591,64 @@ class TestDockerGpusOverride:
         assert "all" not in cmd[: cmd.index("--gpus") + 2]
 
 
+class TestDockerGpuIndicesScoping:
+    """DockerRunner(gpu_indices=...) scopes the container via --gpus device=N,
+    with the LLEM_DOCKER_GPUS env var overriding config indices (env>config).
+    """
+
+    @staticmethod
+    def _gpus_value(cmd: list[str]) -> str:
+        return cmd[cmd.index("--gpus") + 1]
+
+    def test_no_gpu_indices_preserves_gpus_all(self, monkeypatch) -> None:
+        """No config gpu_indices and no env -> --gpus all (unchanged default)."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
+        assert self._gpus_value(cmd) == "all"
+
+    def test_single_gpu_index(self, monkeypatch) -> None:
+        """gpu_indices=[2] -> --gpus device=2."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        runner = DockerRunner(image=IMAGE, gpu_indices=[2])
+        cmd = runner._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
+        assert self._gpus_value(cmd) == "device=2"
+
+    def test_multi_gpu_index_is_quoted(self, monkeypatch) -> None:
+        """gpu_indices=[2,3] -> quoted --gpus "device=2,3" (docker CSV guard)."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        runner = DockerRunner(image=IMAGE, gpu_indices=[2, 3])
+        cmd = runner._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
+        assert self._gpus_value(cmd) == '"device=2,3"'
+
+    def test_env_overrides_config_gpu_indices(self, monkeypatch) -> None:
+        """LLEM_DOCKER_GPUS wins over the runner's config gpu_indices."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=5")
+        runner = DockerRunner(image=IMAGE, gpu_indices=[2, 3])
+        cmd = runner._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
+        assert self._gpus_value(cmd) == "device=5"
+
+
+class TestDockerShmSize:
+    """--shm-size is configurable via LLEM_DOCKER_SHM_SIZE, defaulting to 8g."""
+
+    @staticmethod
+    def _shm_value(cmd: list[str]) -> str:
+        return cmd[cmd.index("--shm-size") + 1]
+
+    def test_default_shm_size(self, monkeypatch) -> None:
+        monkeypatch.delenv("LLEM_DOCKER_SHM_SIZE", raising=False)
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
+        assert self._shm_value(cmd) == "8g"
+
+    def test_shm_size_override(self, monkeypatch) -> None:
+        monkeypatch.setenv("LLEM_DOCKER_SHM_SIZE", "16g")
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
+        assert self._shm_value(cmd) == "16g"
+
+
 # ---------------------------------------------------------------------------
 # Test: NCCL_* host env vars are forwarded into the experiment container
 # ---------------------------------------------------------------------------
