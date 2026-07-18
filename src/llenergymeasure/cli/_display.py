@@ -174,13 +174,30 @@ def format_error(error: LLEMError, verbose: bool = False) -> str:
 
     For DockerError subclasses, appends fix_suggestion and stderr_snippet
     so the user sees actionable guidance without needing to dig into logs.
+
+    Under verbose, a Docker container failure surfaces the traceback the
+    container entrypoint captured (``error.error_payload["traceback"]``) - the
+    real engine/CUDA failure inside the container - in preference to the
+    host-side traceback, which would only show the DockerRunner's own raise
+    site and not the actual cause.
     """
     class_name = type(error).__name__
     message = f"{class_name}: {error}"
+
+    # A Docker container failure carries the real in-container traceback in its
+    # error payload (written to ``*_error.json`` by the container entrypoint).
+    # Prefer it over the uninformative host-side traceback of the raise site.
+    container_tb: str | None = None
+    if isinstance(error, DockerError) and error.error_payload:
+        container_tb = error.error_payload.get("traceback")
+
     if verbose:
-        tb = traceback.format_exc()
-        if tb and tb.strip() != "NoneType: None":
-            message = f"{tb}\n{message}"
+        if container_tb:
+            message = f"In-container traceback (real failure cause):\n{container_tb}\n{message}"
+        else:
+            tb = traceback.format_exc()
+            if tb and tb.strip() != "NoneType: None":
+                message = f"{tb}\n{message}"
 
     # Append Docker-specific details when available
     if isinstance(error, DockerError):
