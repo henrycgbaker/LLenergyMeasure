@@ -223,7 +223,7 @@ package-check: ## Build wheel, validate install, and check pyproject/_version sy
 
 # =============================================================================
 # Docker smoke + CI helpers
-#   docker-smoke runs `llem --version` and `llem config` against each
+#   docker-smoke runs `llem --version` and `llem doctor` against each
 #   first-party compose-managed engine image, in an isolated compose project
 #   that is torn down on exit. Assumes the image is already built (use
 #   `make docker-build` first). To add new engines as they get first-party
@@ -234,7 +234,7 @@ docker-smoke: ## Smoke-test compose-managed engine image(s) with guaranteed tear
 	@PROJECT=smoke-llem-$$$$; \
 	trap "docker compose -p $$PROJECT down -v >/dev/null 2>&1" EXIT; \
 	docker compose -p $$PROJECT run --rm transformers llem --version && \
-	docker compose -p $$PROJECT run --rm transformers llem config
+	docker compose -p $$PROJECT run --rm transformers llem doctor
 
 # CI targets - run the same checks as GitHub Actions ci.yml
 ci: lint typecheck test package-check docs-check ## Local equivalent of GitHub Actions ci.yml
@@ -382,11 +382,11 @@ docker-check: ## Validate the docker-compose config parses cleanly
 # =============================================================================
 # llem in Docker
 #   `make llem CMD=...` runs the llem CLI inside the transformers container.
-#   The current llem subcommand surface is: run, config, doctor, report-gaps.
+#   The current llem subcommand surface is: run, study, doctor, report-gaps.
 #
 # Examples:
 #   make llem CMD="--help"
-#   make llem CMD="config"
+#   make llem CMD="doctor"
 #   make llem CMD="run configs/example-study-full.yaml"
 # =============================================================================
 

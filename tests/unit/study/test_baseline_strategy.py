@@ -38,9 +38,10 @@ _SPOT = "llenergymeasure.harness.baseline.measure_spot_check"
 _RESOLVE_GPU = "llenergymeasure.device.gpu_info._resolve_gpu_indices"
 _RUN_BASELINE_CONTAINER = "llenergymeasure.study.baseline_container.run_baseline_container"
 
-# Cache key for purely-local runner targets - all existing tests construct
-# a StudyRunner with runner_specs=None, which maps to "local".
-_LOCAL_KEY = "local"
+# Cache key for purely-local runner targets. Local keys are engine-qualified
+# (``local_<engine>``); every config in this module uses engine="transformers",
+# so the local key is "local_transformers".
+_LOCAL_KEY = "local_transformers"
 
 
 # =============================================================================
@@ -167,7 +168,7 @@ class TestStrategyCached:
 
         mock_save.assert_called_once()
         saved_path = mock_save.call_args[0][0]
-        assert saved_path.name == "baseline_cache_local.json"
+        assert saved_path.name == "baseline_cache_local_transformers.json"
         assert "_study-artefacts" in str(saved_path)
 
     def test_sets_method_to_cached(self, tmp_path: Path, config_cached: ExperimentConfig):
@@ -496,7 +497,7 @@ class TestBaselineCachePath:
         """Cache path is {study_dir}/_study-artefacts/baseline_cache_{key}.json."""
         runner = _make_runner(tmp_path, config_cached)
         path = runner._get_baseline_cache_path(_LOCAL_KEY)
-        assert path == tmp_path / "_study-artefacts" / "baseline_cache_local.json"
+        assert path == tmp_path / "_study-artefacts" / "baseline_cache_local_transformers.json"
 
     def test_artefacts_dir_created(self, tmp_path: Path, config_cached: ExperimentConfig):
         """_get_baseline_cache_path creates the _study-artefacts directory."""
@@ -519,7 +520,7 @@ class TestDockerBaselineMount:
         fake = _make_baseline()
 
         # Pre-populate the cache file on disk under the local cache key.
-        cache_path = tmp_path / "_study-artefacts" / "baseline_cache_local.json"
+        cache_path = tmp_path / "_study-artefacts" / "baseline_cache_local_transformers.json"
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps({"power_w": 50.0}))
 
@@ -990,14 +991,42 @@ class TestBaselineHostProgressEvents:
 class TestBaselineCacheKey:
     def test_cache_key_local_for_no_specs(self, tmp_path: Path, config_cached: ExperimentConfig):
         runner = _make_runner(tmp_path, config_cached)
-        assert runner._baseline_cache_key(config_cached) == "local"
+        assert runner._baseline_cache_key(config_cached) == "local_transformers"
 
     def test_cache_key_local_for_local_spec(self, tmp_path: Path, config_cached: ExperimentConfig):
         spec = RunnerSpec(mode="local", image=None, source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
-        assert runner._baseline_cache_key(config_cached) == "local"
+        assert runner._baseline_cache_key(config_cached) == "local_transformers"
+
+    def test_cache_key_distinct_per_local_engine(
+        self, tmp_path: Path, config_cached: ExperimentConfig
+    ):
+        """Two engines pinned local get distinct, engine-qualified keys (no collision).
+
+        Before precedence-based elevation an all-local multi-engine study was
+        impossible, so both local engines shared the "local" bucket. They must
+        now each measure their own baseline.
+        """
+        specs = {
+            "transformers": RunnerSpec(mode="local", image=None, source="yaml"),
+            "vllm": RunnerSpec(mode="local", image=None, source="yaml"),
+        }
+        runner, _ = _make_runner_with_progress(tmp_path, config_cached, runner_specs=specs)
+        tfm_cfg = ExperimentConfig(task={"model": "m"}, engine="transformers")
+        vllm_cfg = ExperimentConfig(task={"model": "m"}, engine="vllm")
+
+        k_tfm = runner._baseline_cache_key(tfm_cfg)
+        k_vllm = runner._baseline_cache_key(vllm_cfg)
+        assert k_tfm == "local_transformers"
+        assert k_vllm == "local_vllm"
+        assert k_tfm != k_vllm
+
+        # Docker keys remain image-derived and never collide with a local key.
+        docker = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner._runner_specs = {"transformers": docker}
+        assert runner._baseline_cache_key(tfm_cfg).startswith("image_")
 
     def test_cache_key_image_sanitisation(self, tmp_path: Path, config_cached: ExperimentConfig):
         spec = RunnerSpec(
@@ -1028,10 +1057,10 @@ class TestBaselineCacheKey:
 
     def test_disk_path_per_cache_key(self, tmp_path: Path, config_cached: ExperimentConfig):
         runner = _make_runner(tmp_path, config_cached)
-        p1 = runner._get_baseline_cache_path("local")
+        p1 = runner._get_baseline_cache_path("local_transformers")
         p2 = runner._get_baseline_cache_path("image_test_img_v1")
         assert p1 != p2
-        assert p1.name == "baseline_cache_local.json"
+        assert p1.name == "baseline_cache_local_transformers.json"
         assert p2.name == "baseline_cache_image_test_img_v1.json"
         # Regression: the filename must not contain ':' - Docker's bind-mount
         # parser treats it as the mode separator and rejects the mount.

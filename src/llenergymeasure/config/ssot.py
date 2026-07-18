@@ -73,8 +73,21 @@ RUNNER_DOCKER: Final = "docker"
 CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
 """Mount point inside Docker containers for config/result exchange."""
 
+# RunnerSpec.source tags - which layer of the precedence chain produced a runner.
+SOURCE_ENV: Final = "env"
+SOURCE_YAML: Final = "yaml"
+SOURCE_USER_CONFIG: Final = "user_config"
+SOURCE_AUTO_DETECTED: Final = "auto_detected"
+SOURCE_DEFAULT: Final = "default"
 SOURCE_MULTI_ENGINE_ELEVATION: Final = "multi_engine_elevation"
 """RunnerSpec source tag when an engine is auto-elevated to Docker for multi-engine isolation."""
+
+EXPLICIT_RUNNER_SOURCES: Final[frozenset[str]] = frozenset(
+    {SOURCE_ENV, SOURCE_YAML, SOURCE_USER_CONFIG}
+)
+"""Runner source tags that represent an explicit user pin (env var, study YAML, or user
+config). In a multi-engine study these win over Docker elevation; only auto-resolved
+runners (``auto_detected`` / ``default``) are elevated to Docker for isolation."""
 
 RunnerMode = Literal["local", "docker"]
 
@@ -215,10 +228,16 @@ __all__ = [
     "ENV_RUNNER_PREFIX",
     "ENV_SAVE_TIMESERIES",
     "ENV_TABLE_ROWS",
+    "EXPLICIT_RUNNER_SOURCES",
     "RUNNER_DOCKER",
     "RUNNER_LOCAL",
     "SAMPLING_PRESETS",
+    "SOURCE_AUTO_DETECTED",
+    "SOURCE_DEFAULT",
+    "SOURCE_ENV",
     "SOURCE_MULTI_ENGINE_ELEVATION",
+    "SOURCE_USER_CONFIG",
+    "SOURCE_YAML",
     "STAGE_LINE_PREFIX",
     "TEMP_PREFIX_ENV_FILE",
     "TEMP_PREFIX_EXCHANGE",

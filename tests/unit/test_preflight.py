@@ -422,7 +422,7 @@ def test_run_study_preflight_single_engine_passes(monkeypatch: pytest.MonkeyPatc
 def test_run_study_preflight_multi_engine_docker_available_auto_elevates(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Multi-engine study auto-elevates (no error) when Docker is available."""
+    """All-auto multi-engine study elevates every engine (no error) when Docker is available."""
     monkeypatch.setattr("llenergymeasure.infra.runner_resolution.is_docker_available", lambda: True)
     monkeypatch.setattr(
         "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
@@ -432,11 +432,14 @@ def test_run_study_preflight_multi_engine_docker_available_auto_elevates(
         # Should not raise
         run_study_preflight(study)
 
-    # Auto-elevation log message must be present and minimal (one-liner)
+    # Elevation log line must be present, name the elevated engines, and report
+    # which engines kept an explicit pin (none, here).
     info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
-    assert any(
-        "auto-elevating" in m.lower() or "auto-elevation" in m.lower() for m in info_messages
-    ), f"Expected auto-elevation log message, got: {info_messages}"
+    elevation_lines = [m for m in info_messages if "elevated" in m.lower()]
+    assert elevation_lines, f"Expected an elevation log message, got: {info_messages}"
+    line = elevation_lines[0]
+    assert "transformers" in line and "vllm" in line
+    assert "explicit" in line.lower()
 
 
 def test_run_study_preflight_multi_engine_no_docker_raises(

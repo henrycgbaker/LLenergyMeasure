@@ -2,12 +2,11 @@
 
 ## CLI Reference
 
-llem provides five commands and a version flag.
+llem provides four commands and a version flag.
 
 ```
 llem run [CONFIG] [OPTIONS]   # run an experiment or study
-llem config [OPTIONS]         # show environment and configuration status
-llem doctor [OPTIONS]         # verify Docker images match the host toolchain
+llem doctor [OPTIONS]         # check environment health (GPU, engines, energy, Docker, config)
 llem report-gaps [OPTIONS]    # propose engine rule set entries from runtime feedback
 llem study [SUBCOMMAND]       # write and prepare study files (init, plan)
 llem --version                # print version and exit
@@ -36,19 +35,16 @@ Run an LLM efficiency experiment
 | `--resume-dir` |  | path |  | Resume a specific study directory |
 | `--no-lock` |  | flag | `false` | Disable GPU lock files (advanced) |
 
-### `llem config`
+### `llem doctor`
 
-Show environment and configuration status
+Check environment health (GPU, engines, energy, Docker, config, image schema)
 
 **Options:**
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--verbose` | `-v` | int | `0` | Increase verbosity (-v=INFO, -vv=DEBUG) |
-
-### `llem doctor`
-
-Verify Docker images match the host ExperimentConfig schema
+| `--check` |  | flag | `false` | Exit 0=ok, 1=warnings, 2=errors (for CI/scripting). Output is unchanged. |
+| `--json` |  | flag | `false` | Emit the full report as machine-readable JSON. |
 
 ### `llem report-gaps`
 
