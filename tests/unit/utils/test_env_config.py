@@ -8,12 +8,19 @@ pinning). See study/gpu_locks.py.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from llenergymeasure.utils.env_config import (
     ENV_DOCKER_GPUS,
+    ENV_DOCKER_SHM_SIZE,
+    docker_gpus,
     docker_gpus_arg,
+    docker_gpus_cache_token,
+    docker_shm_size,
     pinned_gpu_lock_ids,
+    warn_on_gpu_selector_conflict,
 )
 
 
@@ -156,3 +163,118 @@ def test_gpus_arg_count_verbatim(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bare count is not a device list and is returned verbatim."""
     monkeypatch.setenv(ENV_DOCKER_GPUS, "2")
     assert docker_gpus_arg() == "2"
+
+
+# ---------------------------------------------------------------------------
+# Config gpu_indices -> --gpus selector, with env>config precedence
+# ---------------------------------------------------------------------------
+
+
+class TestConfigGpuIndices:
+    """study_execution.gpu_indices scopes containers via --gpus device=<indices>,
+    but the LLEM_DOCKER_GPUS env var overrides it (env>config).
+    """
+
+    def test_no_env_no_config_is_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Neither set -> 'all' (historical default preserved)."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus(None) == "all"
+        assert docker_gpus_arg(None) == "all"
+
+    def test_config_single_index(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A single config index -> device=N (no comma, no quoting)."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus([2]) == "device=2"
+        assert docker_gpus_arg([2]) == "device=2"
+
+    def test_config_multi_index(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Multiple config indices -> device=a,b, quoted for the docker arg."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus([2, 3]) == "device=2,3"
+        assert docker_gpus_arg([2, 3]) == '"device=2,3"'
+
+    def test_env_overrides_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """LLEM_DOCKER_GPUS wins over config indices (env>config)."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=5")
+        assert docker_gpus([2, 3]) == "device=5"
+        assert docker_gpus_arg([2, 3]) == "device=5"
+
+    def test_lock_ids_from_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Config indices become physical lock ids (no env pinning present)."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert pinned_gpu_lock_ids([2, 3]) == ["2", "3"]
+
+    def test_lock_ids_env_wins_over_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When both set, lock ids come from the env selector (env>config)."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=5")
+        assert pinned_gpu_lock_ids([2, 3]) == ["5"]
+
+
+class TestDockerGpusCacheToken:
+    """docker_gpus_cache_token qualifies the baseline cache key by physical GPU."""
+
+    def test_unpinned_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """'all' selector -> None (baseline cache key stays unqualified)."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus_cache_token(None) is None
+
+    def test_config_pin_sanitised(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Config indices -> filename-safe token (no '=' or ',')."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus_cache_token([2, 3]) == "device_2_3"
+
+    def test_env_pin_sanitised(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Env selector is sanitised the same way and wins over config."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=7")
+        assert docker_gpus_cache_token([2, 3]) == "device_7"
+
+    def test_distinct_pins_distinct_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus_cache_token([2, 3]) != docker_gpus_cache_token([4, 5])
+
+
+class TestGpuSelectorConflictWarning:
+    def test_warns_when_both_set(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A warning fires (naming both) when env and config both scope GPUs."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=5")
+        with caplog.at_level(logging.WARNING):
+            warn_on_gpu_selector_conflict([2, 3])
+        assert any("Env wins" in rec.message for rec in caplog.records)
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+    def test_no_warning_env_only(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Env set but no config indices -> no conflict, no warning."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=5")
+        with caplog.at_level(logging.WARNING):
+            warn_on_gpu_selector_conflict(None)
+        assert caplog.records == []
+
+    def test_no_warning_config_only(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Config indices but no env -> no conflict, no warning."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        with caplog.at_level(logging.WARNING):
+            warn_on_gpu_selector_conflict([2, 3])
+        assert caplog.records == []
+
+
+class TestDockerShmSize:
+    def test_default_is_8g(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unset LLEM_DOCKER_SHM_SIZE -> the historical 8g default."""
+        monkeypatch.delenv(ENV_DOCKER_SHM_SIZE, raising=False)
+        assert docker_shm_size() == "8g"
+
+    def test_empty_is_8g(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty value falls back to 8g."""
+        monkeypatch.setenv(ENV_DOCKER_SHM_SIZE, "")
+        assert docker_shm_size() == "8g"
+
+    def test_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A set value is forwarded verbatim."""
+        monkeypatch.setenv(ENV_DOCKER_SHM_SIZE, "16g")
+        assert docker_shm_size() == "16g"

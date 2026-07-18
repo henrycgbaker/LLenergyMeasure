@@ -82,9 +82,14 @@ def run_single_experiment(
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.study.container_lifecycle import persist_failure_artefacts
+        from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
         from llenergymeasure.utils.exceptions import DockerError
 
         image = spec.image if spec.image is not None else get_default_image(config.engine)
+
+        # Physical GPU scoping precedence (env>config); warn once if both set.
+        gpu_indices = study.study_execution.gpu_indices
+        warn_on_gpu_selector_conflict(gpu_indices)
 
         docker_runner = DockerRunner(
             image=image,
@@ -92,6 +97,7 @@ def run_single_experiment(
             silence_timeout=study.study_execution.stdout_silence_timeout_seconds,
             source=spec.source,
             extra_mounts=spec.extra_mounts,
+            gpu_indices=gpu_indices,
         )
         docker_ts_dir: Path | None = None
         try:

@@ -528,21 +528,36 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         """
         original_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
 
+        config_gpu_indices = self.study.study_execution.gpu_indices
+        uses_docker = bool(
+            self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values())
+        )
+
+        # Physical GPU selector precedence (env>config): LLEM_DOCKER_GPUS wins
+        # over study_execution.gpu_indices. GPU scoping only affects Docker
+        # containers, so warn about the conflict only when a container will
+        # actually launch (mirrors single.py, which gates this in its Docker
+        # branch) - no container means no warning.
+        if uses_docker:
+            from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
+
+            warn_on_gpu_selector_conflict(config_gpu_indices)
+
         # Acquire per-GPU advisory locks before image preparation.
-        # Lock names use the PHYSICAL device the study occupies, parsed from the
-        # docker --gpus pinning (LLEM_DOCKER_GPUS): two studies on different
-        # physical GPUs must not share a lock. When there is no docker-level
-        # pinning (all / unset), logical == physical, so fall back to the
-        # in-container logical indices. Measurement-side index resolution is
-        # unchanged - _resolve_gpu_indices still yields the logical indices that
-        # address the energy samplers.
+        # Lock names use the PHYSICAL device the study occupies, resolved from
+        # the effective GPU selector (env LLEM_DOCKER_GPUS, else config
+        # gpu_indices): two studies on different physical GPUs must not share a
+        # lock. When there is no docker-level pinning (all / unset), logical ==
+        # physical, so fall back to the in-container logical indices.
+        # Measurement-side index resolution is unchanged - _resolve_gpu_indices
+        # still yields the logical indices that address the energy samplers.
         # Sorted acquisition prevents deadlocks when multiple studies share GPUs.
         gpu_locks: list[Any] = []
         if not self._no_lock and ordered:
             from llenergymeasure.study.gpu_locks import acquire_gpu_locks
             from llenergymeasure.utils.env_config import pinned_gpu_lock_ids
 
-            lock_ids = pinned_gpu_lock_ids()
+            lock_ids = pinned_gpu_lock_ids(config_gpu_indices)
             if lock_ids is None:
                 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
@@ -552,7 +567,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
         # Only activated for studies that use Docker runners.
         original_sigterm: signal.Handlers | None = None
-        if self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values()):
+        if uses_docker:
             from llenergymeasure.study.container_lifecycle import (
                 install_sigterm_bridge,
                 reap_orphaned_containers,
@@ -1157,6 +1172,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             extra_mounts=extra_mounts,
             container_name=container_name,
             labels=labels,
+            gpu_indices=self.study.study_execution.gpu_indices,
         )
 
         # Pre-dispatch GPU memory residual check (same as local path)
