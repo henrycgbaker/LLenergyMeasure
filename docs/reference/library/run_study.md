@@ -106,7 +106,7 @@ print(f"Total energy: {study_result.summary.total_energy_j:.1f} J")
 | `progress` | `ProgressCallback \| None` | `None` | Progress callback. Receives per-experiment begin/end events and per-step events from worker processes. |
 | `resume_dir` | `Path \| None` | `None` | Explicit study directory to resume. Overrides `resume`. |
 | `resume` | `bool` | `False` | Auto-detect the most recent resumable study in `output_dir` and resume from the last checkpoint. |
-| `output_dir` | `Path \| None` | `None` | Base directory used by auto-detect resume only. Ignored when `resume_dir` is given. |
+| `output_dir` | `Path \| None` | `None` | Dual role by run mode. Fresh run: results-dir override (precedence `output_dir` > YAML `output.results_dir` > user config > `./results`). Auto-detect resume: base directory searched for the most recent resumable study. Ignored when `resume_dir` is given. |
 | `skip_set` | `set[tuple[str, int]] \| None` | `None` | Set of `(config_hash, cycle)` pairs to skip. Populated automatically when resuming; callers rarely need to set this. |
 | `no_lock` | `bool` | `False` | Skip GPU advisory lock acquisition. Equivalent to the `--no-lock` CLI flag. |
 | `config_path` | `Path \| None` | `None` | Original YAML path for artefact copying when `config` is a `StudyConfig` object. Preserved in `_study-artefacts/` for reproducibility. |
