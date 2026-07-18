@@ -18,7 +18,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   first explicit version. The digest is resolved host-side via
   `docker image inspect`; resolution is best-effort and records `null` (never
   fails a run) for local runs, locally-built images, or when docker is
-  unavailable. Older sidecars load with `runner: null`.
+  unavailable. Older sidecars load with `runner: null`. ([#837])
 
 ### Changed
 
@@ -1075,3 +1075,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#831]: https://github.com/henrycgbaker/llenergymeasure/pull/831
 [#832]: https://github.com/henrycgbaker/llenergymeasure/pull/832
 [#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
+[#837]: https://github.com/henrycgbaker/llenergymeasure/pull/837
