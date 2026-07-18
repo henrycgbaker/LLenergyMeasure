@@ -126,12 +126,11 @@ def render_markdown() -> str:
         "",
         "## CLI Reference",
         "",
-        "llem provides five commands and a version flag.",
+        "llem provides four commands and a version flag.",
         "",
         "```",
         "llem run [CONFIG] [OPTIONS]   # run an experiment or study",
-        "llem config [OPTIONS]         # show environment and configuration status",
-        "llem doctor [OPTIONS]         # verify Docker images match the host toolchain",
+        "llem doctor [OPTIONS]         # check environment health (GPU, engines, energy, Docker, config)",
         "llem report-gaps [OPTIONS]    # propose engine rule set entries from runtime feedback",
         "llem study [SUBCOMMAND]       # write and prepare study files (init, plan)",
         "llem --version                # print version and exit",
@@ -140,7 +139,7 @@ def render_markdown() -> str:
     ]
 
     # Render commands in a fixed order; any others follow in declaration order.
-    command_order = ["run", "config", "doctor", "report-gaps", "study"]
+    command_order = ["run", "doctor", "report-gaps", "study"]
     for cmd_name in command_order:
         if cmd_name in commands:
             lines.extend(_render_command(cmd_name, commands[cmd_name]))

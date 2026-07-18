@@ -27,7 +27,7 @@ llenergymeasure/
 ## Layer Architecture
 
 ```
-Layer 8: cli/ | entrypoints/  - Typer CLI (llem run, llem config) + Docker container entry point
+Layer 8: cli/ | entrypoints/  - Typer CLI (llem run, llem doctor) + Docker container entry point
 Layer 7: api/                 - Public Python API (run_experiment, run_study)
 Layer 6: study/               - Study runner, grid expansion, manifest, study preflight
 Layer 5: harness/ | results/  - MeasurementHarness, experiment preflight, env snapshot; results persistence
@@ -51,9 +51,9 @@ Public Python API entry point:
 - `save_result(result, output_dir)` - re-exported from results.persistence for CLI use
 
 ### cli/
-Modular Typer CLI with two commands:
+Modular Typer CLI:
 - `llem run [config.yaml]` - run single experiment or multi-experiment study
-- `llem config [-v]` - show environment, GPU, engine, and energy status
+- `llem doctor [--check] [--json]` - environment health check (GPU, engines, energy, Docker, config, image schema)
 - Uses `_version.py` directly for version string (not the package root)
 
 ### entrypoints/ (Layer 8)

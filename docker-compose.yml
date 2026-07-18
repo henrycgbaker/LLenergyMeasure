@@ -7,7 +7,7 @@
 #
 # Quick Start:
 #   uv sync                       # Install llenergymeasure + base deps
-#   llem config                   # Check environment
+#   llem doctor                   # Check environment
 #   make docker-build             # Build engine image (wires the GHCR cache;
 #                                 # raw `docker compose build transformers` works
 #                                 # but skips the per-version cache source)

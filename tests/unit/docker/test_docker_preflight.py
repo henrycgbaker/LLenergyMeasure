@@ -12,9 +12,9 @@ import pytest
 
 from llenergymeasure.infra.docker_preflight import (
     _CUDA_COMPAT_URL,
-    _DOCKER_INSTALL_URL,
-    _NVIDIA_TOOLKIT_INSTALL_URL,
     _PROBE_IMAGE,
+    DOCKER_INSTALL_URL,
+    NVIDIA_TOOLKIT_INSTALL_URL,
     run_docker_preflight,
 )
 from llenergymeasure.utils.exceptions import (
@@ -100,7 +100,7 @@ class TestTier1DockerCheck:
         ):
             run_docker_preflight()
 
-        assert _DOCKER_INSTALL_URL in str(exc_info.value)
+        assert DOCKER_INSTALL_URL in str(exc_info.value)
 
     def test_docker_not_on_path_no_container_probe(self) -> None:
         """When Docker is missing, the container probe must never run."""
@@ -157,7 +157,7 @@ class TestTier1NvidiaToolkit:
         ):
             run_docker_preflight()
 
-        assert _NVIDIA_TOOLKIT_INSTALL_URL in str(exc_info.value)
+        assert NVIDIA_TOOLKIT_INSTALL_URL in str(exc_info.value)
 
     def test_nvidia_ctk_found_passes_tier1_toolkit_check(self) -> None:
         """nvidia-ctk on PATH counts as NVIDIA toolkit present."""
@@ -347,7 +347,7 @@ class TestTier2GPUVisibility:
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
 
-        assert _NVIDIA_TOOLKIT_INSTALL_URL in str(exc_info.value)
+        assert NVIDIA_TOOLKIT_INSTALL_URL in str(exc_info.value)
 
     def test_container_probe_timeout_raises(self) -> None:
         """Container probe timeout → DockerPreFlightError."""
@@ -780,7 +780,7 @@ class TestTier2QuotaAndFallbackStderr:
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
 
-        assert _NVIDIA_TOOLKIT_INSTALL_URL in str(exc_info.value)
+        assert NVIDIA_TOOLKIT_INSTALL_URL in str(exc_info.value)
 
 
 class TestWiring:

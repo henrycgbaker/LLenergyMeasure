@@ -18,6 +18,21 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   longer cancels its siblings: every pull runs to completion and any failures
   are reported together as one aggregate error that names each image and its
   cause (registry-unreachable vs image-absent). ([#832])
+- `llem doctor` is now the single environment health check. It reports GPU/driver,
+  per-engine availability (importable locally or via Docker, with image-cache state),
+  energy samplers (NVML/Zeus/CodeCarbon), Docker (CLI/daemon/NVIDIA Container Toolkit),
+  `HF_TOKEN` presence (detect-and-advise - the value is never printed), the resolved user
+  configuration with per-setting provenance, and the image schema handshake folded in as a
+  section. Every line is prefixed `[ok]`/`[warn]`/`[fail]` with a `-> fix` hint. `--check`
+  exits 0/1/2 (ok/warnings/errors) for CI scripting and `--json` emits the full report as
+  machine-readable JSON. Plain `llem doctor` still exits non-zero on a hard failure - an
+  image schema mismatch or an unparseable/invalid user-config file. ([#834])
+
+### Removed
+
+- `llem config` is removed. Its environment-diagnostics role is subsumed by the broadened
+  `llem doctor` above. There is no deprecation shim (pre-PyPI); scripts should call
+  `llem doctor` (or `llem doctor --check` / `llem doctor --json`). ([#834])
 
 ### Fixed
 
@@ -1062,3 +1077,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#831]: https://github.com/henrycgbaker/llenergymeasure/pull/831
 [#832]: https://github.com/henrycgbaker/llenergymeasure/pull/832
 [#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
+[#834]: https://github.com/henrycgbaker/llenergymeasure/pull/834
