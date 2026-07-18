@@ -25,9 +25,11 @@ from llenergymeasure.domain.environment import (
     EnvironmentMetadata,
     EnvironmentSnapshot,
     GPUEnvironment,
+    RunnerEnvironment,
 )
 from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.results.persistence import (
+    ENVIRONMENT_SCHEMA_VERSION,
     load_result,
     save_environment,
 )
@@ -439,6 +441,118 @@ def test_load_result_attaches_environment_sidecar(
     assert loaded.environment.cuda_version == "12.4"
     assert loaded.environment.cuda_version_source == "torch"
     assert loaded.environment.hardware.gpu.name == "NVIDIA A100-SXM4-80GB"
+
+
+def test_save_environment_includes_schema_version(
+    tmp_path: Path,
+    minimal_result: ExperimentResult,
+    env_snapshot: EnvironmentSnapshot,
+) -> None:
+    """environment.json carries its own schema_version (independent of result.json)."""
+    import json
+
+    result_path = save_result(minimal_result, tmp_path)
+    save_environment(
+        env_snapshot,
+        minimal_result.experiment_id,
+        minimal_result.measurement_config_hash,
+        result_path.parent,
+    )
+    payload = json.loads((result_path.parent / "environment.json").read_text())
+    assert payload["schema_version"] == ENVIRONMENT_SCHEMA_VERSION == "1.0"
+
+
+def test_save_environment_writes_docker_runner_block_roundtrip(
+    tmp_path: Path,
+    minimal_result: ExperimentResult,
+    env_snapshot: EnvironmentSnapshot,
+) -> None:
+    """A docker runner block on the snapshot round-trips through save + load_result."""
+    import json
+
+    snapshot = env_snapshot.model_copy(
+        update={
+            "runner": RunnerEnvironment(
+                mode="docker",
+                image="ghcr.io/acme/vllm:1.19.0-cuda12",
+                image_digest="ghcr.io/acme/vllm@sha256:deadbeef",
+                source="auto_detected",
+            )
+        }
+    )
+    result_path = save_result(minimal_result, tmp_path)
+    save_environment(
+        snapshot,
+        minimal_result.experiment_id,
+        minimal_result.measurement_config_hash,
+        result_path.parent,
+    )
+
+    # Raw JSON carries the runner block ...
+    payload = json.loads((result_path.parent / "environment.json").read_text())
+    assert payload["runner"] == {
+        "mode": "docker",
+        "image": "ghcr.io/acme/vllm:1.19.0-cuda12",
+        "image_digest": "ghcr.io/acme/vllm@sha256:deadbeef",
+        "source": "auto_detected",
+    }
+
+    # ... and load_result reconstructs it onto result.environment.runner.
+    loaded = load_result(result_path)
+    assert loaded.environment is not None
+    assert loaded.environment.runner is not None
+    assert loaded.environment.runner.mode == "docker"
+    assert loaded.environment.runner.image == "ghcr.io/acme/vllm:1.19.0-cuda12"
+    assert loaded.environment.runner.image_digest == "ghcr.io/acme/vllm@sha256:deadbeef"
+    assert loaded.environment.runner.source == "auto_detected"
+
+
+def test_save_environment_writes_local_runner_block_roundtrip(
+    tmp_path: Path,
+    minimal_result: ExperimentResult,
+    env_snapshot: EnvironmentSnapshot,
+) -> None:
+    """A local runner block records mode=local with no image or digest."""
+    snapshot = env_snapshot.model_copy(
+        update={"runner": RunnerEnvironment(mode="local", source="default")}
+    )
+    result_path = save_result(minimal_result, tmp_path)
+    save_environment(
+        snapshot,
+        minimal_result.experiment_id,
+        minimal_result.measurement_config_hash,
+        result_path.parent,
+    )
+
+    loaded = load_result(result_path)
+    assert loaded.environment is not None
+    assert loaded.environment.runner is not None
+    assert loaded.environment.runner.mode == "local"
+    assert loaded.environment.runner.image is None
+    assert loaded.environment.runner.image_digest is None
+    assert loaded.environment.runner.source == "default"
+
+
+def test_save_environment_runner_absent_when_snapshot_has_none(
+    tmp_path: Path,
+    minimal_result: ExperimentResult,
+    env_snapshot: EnvironmentSnapshot,
+) -> None:
+    """A snapshot without a runner block writes runner: null and loads back as None."""
+    import json
+
+    result_path = save_result(minimal_result, tmp_path)
+    save_environment(
+        env_snapshot,
+        minimal_result.experiment_id,
+        minimal_result.measurement_config_hash,
+        result_path.parent,
+    )
+    payload = json.loads((result_path.parent / "environment.json").read_text())
+    assert payload["runner"] is None
+    loaded = load_result(result_path)
+    assert loaded.environment is not None
+    assert loaded.environment.runner is None
 
 
 def test_load_result_without_environment_sidecar(

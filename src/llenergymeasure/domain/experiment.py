@@ -62,6 +62,12 @@ class RunnerProvenance(BaseModel):
     Persisted reproducibility metadata mirroring the fields of the infra-layer
     ``RunnerSpec``. Kept in the domain layer (no infra import) so it can live on
     ``ExperimentResult`` and serialise into result.json.
+
+    Sibling of ``environment.RunnerEnvironment`` (which persists into
+    environment.json): both mirror ``RunnerSpec``'s mode/image/source. They stay
+    separate because their extra fields diverge - this one carries
+    ``image_source`` (result.json image-resolution provenance), RunnerEnvironment
+    carries ``image_digest`` (the environment.json reproducibility anchor).
     """
 
     mode: str = Field(..., description='Execution mode - "local" or "docker"')

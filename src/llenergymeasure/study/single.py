@@ -49,7 +49,11 @@ def run_single_experiment(
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_declared_config_hash
-    from llenergymeasure.study.runner import _provenance_from_spec, _save_and_record
+    from llenergymeasure.study.runner import (
+        _provenance_from_spec,
+        _runner_environment,
+        _save_and_record,
+    )
 
     config = study.experiments[0]
     config_hash = compute_declared_config_hash(config)
@@ -75,6 +79,9 @@ def run_single_experiment(
     # Artefact staging dir. Local path always creates one (below); docker path
     # inherits the DockerRunner rescue dir, which may be None.
     ts_tmpdir: Path | None = None
+    # Image that actually ran under docker dispatch (needed for the environment.json
+    # runner block's digest resolution); None on the local path.
+    resolved_docker_image: str | None = None
 
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
@@ -86,6 +93,7 @@ def run_single_experiment(
         from llenergymeasure.utils.exceptions import DockerError
 
         image = spec.image if spec.image is not None else get_default_image(config.engine)
+        resolved_docker_image = image
 
         # Physical GPU scoping precedence (env>config); warn once if both set.
         gpu_indices = study.study_execution.gpu_indices
@@ -230,6 +238,7 @@ def run_single_experiment(
         resolution_log=(resolution_logs or {}).get(config_hash),
         resolved_config_hash=resolved_config_hash,
         runner_provenance=_provenance_from_spec(spec),
+        runner_environment=_runner_environment(spec, resolved_image=resolved_docker_image),
     )
 
     # Clean up temp dirs
