@@ -7,6 +7,17 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Fixed
+
+- Experiment failures now surface their real cause. Under `-v`, a Docker container
+  failure prints the traceback the container entrypoint captured (the actual
+  engine/CUDA error), instead of the uninformative host-side traceback of the
+  DockerRunner raise site. Local and subprocess dispatch failures (single- and
+  multi-experiment) now persist their captured traceback to
+  `failed-runs/{config_hash}_cycle{N}_traceback.txt` and record a `log_file`
+  pointer in the manifest, matching the Docker path so a failure is debuggable
+  regardless of dispatch mode.
+
 ## [v0.12.0] - 2026-07-17
 
 ### Added

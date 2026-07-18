@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import shutil
 import time
+import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -156,7 +157,27 @@ def run_single_experiment(
                     output_dir=str(ts_tmpdir),
                     save_timeseries=save_ts,
                 )
-        except Exception:
+        except Exception as exc:
+            # Persist the captured traceback into failed-runs/ and mark the
+            # manifest failed, mirroring the Docker single-experiment branch so
+            # a local failure leaves the same on-disk breadcrumb. The original
+            # exception is then re-raised unchanged: the real type, message and
+            # traceback still reach the CLI (format_error surfaces the live
+            # traceback under -v), so display fidelity is preserved while the
+            # failure also becomes debuggable from disk.
+            from llenergymeasure.study.container_lifecycle import persist_failure_traceback
+
+            local_failure: dict[str, Any] = {"type": type(exc).__name__, "message": str(exc)}
+            persist_failure_traceback(
+                study_dir, config_hash, cycle, traceback.format_exc(), local_failure
+            )
+            manifest.mark_failed(
+                config_hash,
+                cycle,
+                local_failure["type"],
+                local_failure["message"],
+                log_file=local_failure.get("log_file"),
+            )
             if ts_tmpdir is not None:
                 shutil.rmtree(ts_tmpdir, ignore_errors=True)
             raise

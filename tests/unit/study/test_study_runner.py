@@ -252,6 +252,42 @@ def test_study_runner_subprocess_exception(study_config: StudyConfig) -> None:
     manifest.mark_completed.assert_not_called()
 
 
+def test_local_failure_persists_worker_traceback(study_config: StudyConfig, tmp_path: Path) -> None:
+    """A local/subprocess failure persists the worker's traceback into failed-runs/.
+
+    The worker captures a full traceback string on exception, but only its
+    type/message were being folded into the manifest. This mirrors the Docker
+    path's failed-runs/ + log_file behaviour so a local failure is debuggable.
+    """
+    manifest = MagicMock()
+
+    container_tb = "Traceback (most recent call last):\n  File eng.py\nRuntimeError: CUDA OOM"
+    error_payload = {
+        "type": "RuntimeError",
+        "message": "CUDA OOM",
+        "traceback": container_tb,
+    }
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=1)
+    ctx = _make_mock_context(proc, pipe_data=error_payload, pipe_has_data=True)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest, tmp_path)
+        runner.run()
+
+    # Traceback materialised on disk under failed-runs/.
+    tb_files = list((tmp_path / "failed-runs").glob("*_traceback.txt"))
+    assert len(tb_files) == 1, "worker traceback was not persisted to failed-runs/"
+    assert tb_files[0].read_text() == container_tb
+
+    # The manifest's log_file pointer references the persisted traceback.
+    manifest.mark_failed.assert_called_once()
+    log_file = manifest.mark_failed.call_args.kwargs.get("log_file")
+    assert log_file is not None
+    assert log_file.startswith("failed-runs/")
+    assert log_file.endswith("_traceback.txt")
+
+
 # =============================================================================
 # Task 1e: Timeout path
 # =============================================================================
