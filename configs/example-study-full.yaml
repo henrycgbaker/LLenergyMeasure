@@ -1,585 +1,100 @@
-# Full-suite multi-engine study - comprehensive coverage across all engines
-# Run: llem run configs/example-study-full.yaml
+# Full multi-engine study - a compact, runnable tour of every section of a
+# study spec, exercising all three engines with a small grid.
 #
-# Reference config - not intended for end-to-end execution.
-# Experiment counts depend on sweep axes and groups; run `llem run --dry-run`
-# to see the exact expansion for your configuration.
+# Run:
+#   llem study plan configs/example-study-full.yaml   # preview the grid, no GPU
+#   llem run configs/example-study-full.yaml          # execute
+#
+# This file is deliberately not exhaustive. For the complete per-engine field
+# surface (every tuning field with its type, valid range, and default, derived
+# straight from the engine schemas so it never drifts), generate a scaffold:
+#
+#   llem study init -m Qwen/Qwen2.5-0.5B            # all engines, fields commented
+#   llem study init -m Qwen/Qwen2.5-0.5B --bounds   # a maximal sweep grid to prune
+#
+# For the sweep language (independent axes vs dependent groups, range
+# shorthand), see docs/reference/study-config.md.
 
 study_name: full-suite-all-engines
 
-# =====================================================================
-# Runner configuration
-# =====================================================================
-# Multi-engine runners auto-elevate to docker by default for better isolation and consistency (auto-elevation is configurable (TODO) but recommended).
-
+# --- Runners: where each engine runs (local process or Docker container) ---
+# Pin an engine to `local` to run it in-process (the package must be importable
+# on the host); leave it on auto-detection and a multi-engine study elevates it
+# to Docker for isolation. An explicit pin is always honoured as-is.
 runners:
-  transformers: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
+  transformers: docker
   vllm: docker
   tensorrt: docker
 
-# =====================================================================
-# Execution controls (study-level)
-# =====================================================================
-# Study-level metadata and scheduling parameters.
-# Apply globally to all experiments. Non-sweepable.
-
+# --- Execution controls (study-level, non-sweepable) ---
 study_execution:
-  n_cycles: 3
+  n_cycles: 1                     # repeat the whole grid N times for variance
   experiment_order: shuffle       # sequential | interleave | shuffle | reverse | latin_square
-  shuffle_seed: null              # Explicit override for experiment shuffle order (null = derived from study_design_hash)
-  experiment_gap_seconds: 10.0    # Gap for thermal stabilisation
-  cycle_gap_seconds: 10.0
-  skip_preflight: false           # Skip Docker pre-flight checks (not recommended)
-  max_consecutive_failures: 10    # Circuit breaker: 0=disabled, 1=fail-fast, N=threshold
-  circuit_breaker_cooldown_seconds: 60.0  # Pause before half-open probe
-  wall_clock_timeout_hours: null  # Hard time limit in hours (null = no limit)
-  experiment_timeout_seconds: 600.0  # Per-experiment kill timeout (10 min). Raise for large n_prompts or slow engine builds.
-  stdout_silence_timeout_seconds: 300.0  # Docker watchdog: kill container after this stdout-silent stretch (0=disable; raise for slow TRT-LLM builds)
-  deduplicate_equivalent: true    # Drop sweep configs that resolve to the same effective config (set false to run every declared cell)
+  experiment_gap_seconds: 10.0    # thermal stabilisation between experiments
+  cycle_gap_seconds: 30.0
+  max_consecutive_failures: 3     # circuit breaker: 0=disabled, N=threshold
+  deduplicate_equivalent: true    # drop sweep cells that resolve to the same effective config
 
-# =====================================================================
-# Shared fields (experiment-level)
-# =====================================================================
-# Experiment-level shared parameters.
-# Apply globally to all experiments, unless overridden by sweep or explicit experiments.
-# De facto treated as constant controls/defaults, but sweepable.
-# Add to sweep if you want to compare across different values of these fields
-# (e.g. random_seed for sampling variability, or max_tokens to test throughput scaling).
-
-# --- Task (what to measure) ---
+# --- Task: what to measure (shared across experiments, overridable) ---
 task:
   model: Qwen/Qwen2.5-0.5B
-  random_seed: 42                  # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset.order: shuffled)
+  random_seed: 42
   dataset:
-    source: aienergyscore          # Built-in alias or .jsonl file path
-    n_prompts: 50                  # Number of prompts to load or generate
+    source: aienergyscore          # built-in alias or path to a .jsonl file
+    n_prompts: 30
     order: interleaved             # interleaved | grouped | shuffled
-  # Token limits - for FLOPs/computational workload control
-  max_input_tokens: 256            # null = prompts keep natural length / model generates to EOS; FLOPs uncontrolled between experiments
+  max_input_tokens: 256
   max_output_tokens: 256
 
-# --- Measurement (how to measure) ---
+# --- Measurement: how to measure ---
 measurement:
   energy_sampler: auto             # auto | nvml | zeus | codecarbon | null (disables)
   baseline:
     enabled: true
-    duration_seconds: 30.0         # 5.0 - 120.0
-  # Warmup - Two modes: fixed (default) or CV convergence (opt-in).
-  # Fixed mode: runs exactly n_prompts prompts. CV computed for info only.
-  # CV mode: replaces n_prompts; runs until CV < cv_threshold (up to max_prompts).
-  # After warmup, thermal_floor_seconds wait lets GPU temperature plateau before measurement.
+    duration_seconds: 30.0
   warmup:
     enabled: true
-    n_prompts: 3                     # Fixed mode iteration count (default: 5)
-    thermal_floor_seconds: 30.0     # Post-warmup stabilisation wait. Minimum 30s (default: 60s)
-    #convergence_detection: true   # Enable CV-based warmup (replaces n_prompts). Default: false
-    #cv_threshold: 0.05            # Stop when CV < 5%. Default: 0.05
-    #max_prompts: 20               # Safety cap for CV mode. Default: 20
-    #window_size: 3                # Sliding window for CV calculation. Default: 3
-    #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
+    n_prompts: 3
+    thermal_floor_seconds: 30.0    # post-warmup stabilisation wait (minimum 30s)
 
-# --- Sampling preset (expands into the active engine's sampling_params section) ---
-# sampling_preset: deterministic   # deterministic | standard | creative | factual
-# Explicit values written under <engine>.sampling_params override preset values.
-# Sampling params now live per-engine - see `{transformers|vllm|tensorrt}.sampling_params`
-# in the engine-specific experiments below.
-
-# --- Passthrough kwargs ---
-# passthrough_kwargs:
-#   use_safetensors: true
-
-# =====================================================================
-# Output configuration (study-level)
-# =====================================================================
-# Controls where results are written and what auxiliary artefacts are persisted.
-# These are operational concerns, not part of the scientific specification.
-
+# --- Output: where results are written ---
 output:
-  results_dir: ./results           # Base directory for study results (timestamped subdirectory created within)
-  save_timeseries: true            # Persist GPU power/thermal/memory timeseries as Parquet sidecar
+  results_dir: ./results           # timestamped subdirectory created within
+  save_timeseries: true            # persist GPU power/thermal/memory as Parquet
 
-# =====================================================================
-# Sweep configuration (axes + dependent groups)
-# =====================================================================
-# Two entry types under sweep:
-#   - Independent axes (list of scalars): Cartesian product across all axes.
-#   - Dependent groups (list of dicts): Union of variant dicts. Groups are
-#     crossed with each other and with independent axes, but entries *within*
-#     a group are alternatives (unioned, not crossed).
-#
-# Type-based disambiguation: list[scalar] = axis, list[dict] = group.
-# YAML anchors (&name) + merge keys (<<: *name) reduce repetition in groups.
-# See docs/reference/study-config.md for the sweep and range-shorthand reference.
-#
-# KNOWN-BAD CROSSES (do not add as independent axes):
-#   - harness.transformers.torch_compile=true  x  transformers.engine_params load_in_{4,8}bit
-#     (dequant ops trigger per-call recompilation; see transformers.compile_quant group)
-#   - harness.transformers.torch_compile_mode=max-autotune  x  transformers.engine_params.cache_implementation=static/sliding_window
-#     (per-shape kernel autotune on every cache reshape; slow but correct - follow-up)
-#   - Any engine x dataset.n_prompts > ~200 without raising
-#     study_execution.experiment_timeout_seconds above its 600s default
-# When in doubt, merge axes into a single group with hand-picked variants:
-# within-group variants are unioned (not crossed) while inter-group axes are.
-
-sweep: # TODO: maybe shared_sweep or global_sweep?
-  # --- dtype per engine (each axis applies only when its engine is active) ---
-  transformers.engine_params.dtype: [float32, float16, bfloat16]
-  # vLLM/TRT-LLM accept float32, but it doubles memory and roughly halves
-  # throughput with no accuracy gain for inference, so we sweep fp16/bf16 only.
+# --- Sweep: the grid ---
+# Two entry kinds:
+#   - independent axis (list of scalars): crossed with every other axis
+#   - dependent group (list of dicts): variants are unioned, not crossed
+# An engine-scoped axis applies only to experiments for that engine.
+sweep:
+  # Numeric precision, per engine (a shared concept, one axis per engine).
+  transformers.engine_params.dtype: [float16, bfloat16]
   vllm.engine_params.dtype: [float16, bfloat16]
   tensorrt.engine_params.dtype: [float16, bfloat16]
 
-  # --- Transformers parameter space ---
-  harness.transformers.batch_size: [1, 4, 8, 16, 32]
-  transformers.engine_params.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
+  # Engine-native batching knobs.
+  harness.transformers.batch_size: [1, 8]
+  vllm.engine_params.max_num_seqs: [64, 256]
+  tensorrt.engine_params.max_batch_size: [1, 8]
 
-  # --- Transformers: dependent groups ─────────────────────────────────
-
-  # torch.compile and bitsandbytes quantisation are merged into one group
-  # because their cross-product is pathological: bitsandbytes inserts dynamic
-  # dequant ops that trigger torch.compile recompilation on every call, and
-  # max-autotune compounds this with per-shape kernel search. Within-group
-  # variants are unioned (not crossed), so the variants below are exactly
-  # what runs - no bnb-with-compile cells exist.
-  transformers.compile_quant:
-    # Baseline: no compile, no quantisation
-    - {}
-    # bitsandbytes 8-bit (no compile)
-    - transformers.engine_params.load_in_8bit: true
-    # bitsandbytes 4-bit, nf4 and fp4 (no compile)
-    - transformers.engine_params.load_in_4bit: true
-      transformers.engine_params.bnb_4bit_compute_dtype: float16
-      transformers.engine_params.bnb_4bit_quant_type: [nf4, fp4]
-    # bitsandbytes 4-bit + double-quant (no compile)
-    - transformers.engine_params.load_in_4bit: true
-      transformers.engine_params.bnb_4bit_compute_dtype: float16
-      transformers.engine_params.bnb_4bit_quant_type: nf4
-      transformers.engine_params.bnb_4bit_use_double_quant: true
-    # torch.compile on unquantised weights - all three modes safe here
-    - harness.transformers.torch_compile: true
-      harness.transformers.torch_compile_backend: inductor
-      harness.transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]
-
-  # cache_implementation requires use_cache: true
+  # Dependent group: cache_implementation requires use_cache=true, so the two
+  # fields travel together in one variant rather than as independent axes.
   transformers.caching:
     - {}                                          # baseline: default caching
     - transformers.engine_params.use_cache: true
-      transformers.engine_params.cache_implementation: [static, offloaded_static, sliding_window]
+      transformers.engine_params.cache_implementation: [static]
 
-  # beam search requires do_sample: false (cross-section dependency)
-  transformers.decoding:
-    - {}                                          # baseline: use engine defaults
-    - transformers.sampling_params.do_sample: false
-      transformers.sampling_params.temperature: 0.0
-      transformers.engine_params.num_beams: 4
-      transformers.engine_params.early_stopping: true
-      transformers.engine_params.length_penalty: 1.0
-      transformers.engine_params.no_repeat_ngram_size: 3
-
-  # --- vLLM parameter space ---
-  # (vLLM uses continuous batching - no user-facing batch_size parameter)
-  vllm.engine_params.gpu_memory_utilization: [0.7, 0.85, 0.95]
-  vllm.engine_params.enforce_eager: [true, false]
-  vllm.engine_params.max_num_seqs: [64, 128, 256]
-  vllm.engine_params.enable_chunked_prefill: [true, false]
-  # Moved from explicit experiments: these are independent single-axis variations
-  vllm.engine_params.enable_prefix_caching: [true, false]
-  vllm.engine_params.block_size: [8, 16, 32]
-  vllm.engine_params.kv_cache_dtype: [auto]  # fp8 requires SM >= 8.9 (Ada Lovelace / Hopper); add fp8 if hardware supports it
-  vllm.engine_params.quantization: [null]  # fp8 requires SM >= 8.9; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
-  # attention is Any-typed; path cannot continue past this leaf, so backend
-  # is swept via whole-dict variants in a dependent group rather than a
-  # dotted sub-key axis.
-  vllm.attention_backend:
-    - vllm.engine_params.attention: {backend: flash_attn}
-    - vllm.engine_params.attention: {backend: flashinfer}  # xformers legacy, deprecated
-
-  # --- vLLM: dependent groups ─────────────────────────────────────
-
-  # vLLM requires max_num_batched_tokens >= max_model_len;
-  # independent axes would produce invalid combos (e.g. 2048 < 4096)
-  vllm.token_limits:
-    - vllm.engine_params.max_num_batched_tokens: 2048
-      vllm.engine_params.max_model_len: [1024, 2048]
-    - vllm.engine_params.max_num_batched_tokens: 4096
-      vllm.engine_params.max_model_len: [1024, 2048, 4096]
-    - vllm.engine_params.max_num_batched_tokens: 8192
-      vllm.engine_params.max_model_len: [1024, 2048, 4096]
-
-  # beam_search and sampling sections are mutually exclusive;
-  # beam search requires sampling_params.temperature: 0.0
-  vllm.decoding:
-    - {}                                          # baseline: use shared decoder settings
-    # beam_search requires vLLM >= 0.8; uncomment if installed version supports it:
-    # - vllm.sampling_params.temperature: 0.0
-    #   vllm.engine_params.beam_search: {beam_width: 4, early_stopping: true, length_penalty: 1.0, max_tokens: 256}
-    - vllm.sampling_params.presence_penalty: 0.6
-      vllm.sampling_params.frequency_penalty: 0.6
-
-  # --- TensorRT parameter space ---
-  tensorrt.engine_params.max_batch_size: [1, 4, 8, 16, 32]
-  tensorrt.engine_params.max_seq_len: [1536, 2048]
-  # tensorrt.engine_params.quant_config handled by tensorrt.quant_config group below
-  # (quant_config is Any-typed; quant_algo has dependent sub-params: kv_cache_quant_algo, calib.*)
-  tensorrt.engine_params.max_input_len: [512, 1024]
-  # scheduler_config is Any-typed; capacity_scheduling_policy swept via whole-dict variants
-  tensorrt.scheduler_policy:
-    - tensorrt.engine_params.scheduler_config: {capacity_scheduling_policy: MAX_UTILIZATION}
-    - tensorrt.engine_params.scheduler_config: {capacity_scheduling_policy: STATIC_BATCH}
-  # tensorrt.engine_params.tensor_parallel_size: [1, 2, 4]     # Tensor parallel (requires multi-GPU hardware)
-
-  # --- TensorRT: dependent groups ─────────────────────────────────
-
-  # kv_cache_quant_algo requires quant_algo; calib requires quant_algo
-  # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
-  # quant_config is Any-typed; sub-fields swept as whole-dict values ending at the
-  # declared quant_config leaf (path cannot continue past an Any-typed field).
-  tensorrt.quant_config:
-    - {}                                          # baseline: no quantisation
-    - tensorrt.engine_params.quant_config: {quant_algo: INT8}
-    - tensorrt.engine_params.quant_config: {quant_algo: INT8, kv_cache_quant_algo: INT8}
-    # INT8 calibration sweeps (calib_batches/calib_dataset/calib_max_seq_length)
-    # are not yet supported: the TensorRT plugin consumes pre-quantised checkpoints
-    # and never reads calibration settings, so any calib.* path would be silently dropped.
-    - tensorrt.engine_params.quant_config: {quant_algo: W4A16_AWQ}
-    - tensorrt.engine_params.quant_config: {quant_algo: W8A16}
-    # - tensorrt.engine_params.quant_config: {quant_algo: FP8}  # Requires SM >= 8.9 (Ada Lovelace / Hopper)
-
-  # KV cache compound settings (block_reuse + memory_fraction travel together)
-  # kv_cache_config is Any-typed; sub-fields swept as whole-dict values.
-  tensorrt.kv_cache_config:
-    - {}                                          # baseline: default KV cache
-    - tensorrt.engine_params.kv_cache_config: {enable_block_reuse: true, free_gpu_memory_fraction: 0.9}
-    - tensorrt.engine_params.kv_cache_config: {host_cache_size: 1073741824}
-    - tensorrt.engine_params.kv_cache_config: {max_tokens: 8192, free_gpu_memory_fraction: 0.85}
-
-# =====================================================================
-# Explicit experiments (truly unique overrides only)
-# =====================================================================
-# Most dependent experiments are now handled by sweep groups above.
-# This section is reserved for experiments that:
-#   - Override sweep axes (e.g. harness.transformers.batch_size: 1 for speculative decoding)
-#   - Use params not in any sweep axis or group (e.g. engine_params.cpu_offload_gb)
-#   - Require unique combinations spanning multiple unrelated groups
-# See docs/reference/study-config.md for the sweep and range-shorthand reference.
-
+# --- Explicit experiments: unique cells the sweep cannot express ---
+# Each entry inherits the shared task/measurement above; use it to override a sweep axis.
 experiments:
-
-  # =================================================================
-  # TRANSFORMERS - unique experiments
-  # =================================================================
-  # torch.compile, quantisation, caching, and beam search are now handled
-  # by sweep groups above (transformers.compile_quant, transformers.caching,
-  # transformers.decoding).
-
-  # -----------------------------------------------------------------
-  # Transformers speculative decoding (prompt-lookup)
-  # -----------------------------------------------------------------
-  # Requires harness.transformers.batch_size=1, overriding the sweep axis - must remain explicit.
-  - model: Qwen/Qwen2.5-0.5B
-    engine: transformers
-    dataset:
-      n_prompts: 50
+  # Prompt-lookup speculative decoding needs batch_size=1, overriding the
+  # batch_size sweep axis - so it has to be spelled out here.
+  - engine: transformers
     transformers:
       engine_params:
         dtype: bfloat16
         prompt_lookup_num_tokens: 3
-        device_map: auto
-        trust_remote_code: true
     harness:
       transformers:
         batch_size: 1
-
-  # -----------------------------------------------------------------
-  # Tensor parallelism (requires multi-GPU; tp_plan and device_map are
-  # mutually exclusive, so this is a dependent experiment)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: transformers
-  #   dataset:
-  #     n_prompts: 50
-  #   transformers:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       tp_plan: auto
-  #       tp_size: 2
-  #       trust_remote_code: true
-  #   harness:
-  #     transformers:
-  #       batch_size: 4
-
-  # -----------------------------------------------------------------
-  # Model loading with revision pin + memory limits
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: transformers
-  #   dataset:
-  #     n_prompts: 50
-  #   transformers:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       revision: main
-  #       max_memory:
-  #         0: "10GiB"
-  #         cpu: "50GiB"
-  #       device_map: auto
-  #       trust_remote_code: true
-  #   harness:
-  #     transformers:
-  #       batch_size: 4
-
-  # =================================================================
-  # VLLM - unique experiments
-  # =================================================================
-  # Beam search and sampling penalties are now handled by the
-  # vllm.decoding sweep group above.
-
-  # -----------------------------------------------------------------
-  # Tensor parallel (special: requires multi-GPU hardware)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: vllm
-    dataset:
-      n_prompts: 50
-    vllm:
-      engine_params:
-        dtype: bfloat16
-        tensor_parallel_size: 2
-        disable_custom_all_reduce: false  # Disable custom all-reduce for multi-GPU
-        gpu_memory_utilization: 0.9
-
-  # -----------------------------------------------------------------
-  # Attention backend fine-tuning (advanced: sub-fields of attention config)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       enforce_eager: false
-  #       attention:                       # attention config nests under engine_params (Any-typed)
-  #         backend: flash_attn
-  #         flash_attn_version: 2          # Flash attention version (auto-detected)
-  #         flash_attn_max_num_splits_for_cuda_graph: 0  # Max splits for CUDA graph
-  #         use_prefill_decode_attention: true
-  #         use_prefill_query_quantization: false
-  #         use_cudnn_prefill: false
-  #         disable_flashinfer_prefill: false
-  #         disable_flashinfer_q_quantization: false
-  #         use_trtllm_attention: false    # Use TensorRT-LLM attention backend
-  #         use_trtllm_ragged_deepseek_prefill: false
-
-  # -----------------------------------------------------------------
-  # Speculative decoding (dependent: speculative_model requires
-  # num_speculative_tokens; commented out - requires a real draft model)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       speculative_model: my-org/my-draft-model
-  #       num_speculative_tokens: 5
-  #       gpu_memory_utilization: 0.9
-
-  # -----------------------------------------------------------------
-  # Pipeline parallel (special: requires multi-GPU hardware)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       pipeline_parallel_size: 2
-  #       gpu_memory_utilization: 0.9
-
-  # -----------------------------------------------------------------
-  # CPU offload (offloads model weight layers to CPU RAM)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: vllm
-    dataset:
-      n_prompts: 50
-    vllm:
-      engine_params:
-        dtype: bfloat16
-        cpu_offload_gb: 4
-        gpu_memory_utilization: 0.9
-
-  # -----------------------------------------------------------------
-  # CPU offload fine-tuning (layer-level control over offloading)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       cpu_offload_gb: 8
-  #       offload_group_size: 4          # Groups of layers for CPU offloading
-  #       offload_num_in_group: 2        # Layers offloaded per group
-  #       offload_prefetch_step: 1       # Prefetch steps ahead
-  #       # offload_params: ["lm_head"]  # Specific parameter names to offload
-  #       gpu_memory_utilization: 0.9
-
-  # -----------------------------------------------------------------
-  # Swap space for KV cache offloading
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: vllm
-    dataset:
-      n_prompts: 50
-    vllm:
-      engine_params:
-        dtype: bfloat16
-        swap_space: 8
-        gpu_memory_utilization: 0.85
-
-  # -----------------------------------------------------------------
-  # Sampling extensions (min_tokens, ignore_eos, multi-sequence)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: vllm
-    dataset:
-      n_prompts: 50
-    vllm:
-      engine_params:
-        dtype: bfloat16
-      sampling_params:
-        temperature: 0.8
-        max_tokens: 256              # Overrides universal max_output_tokens for this experiment
-        min_tokens: 10
-        ignore_eos: false
-        n: 1
-
-  # -----------------------------------------------------------------
-  # Compilation config (advanced: full vLLM compilation passthrough)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       compilation_config:
-  #         level: 3
-  #       enforce_eager: false
-
-  # -----------------------------------------------------------------
-  # Absolute KV cache memory (mutually exclusive with gpu_memory_utilization)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       kv_cache_memory_bytes: 4294967296    # 4 GiB
-  #       enforce_eager: false
-
-  # =================================================================
-  # TENSORRT - unique experiments
-  # =================================================================
-  # Quantisation configs and KV cache variants are now handled by the
-  # tensorrt.quant_config and tensorrt.kv_cache_config sweep groups above.
-
-  # -----------------------------------------------------------------
-  # Fast build mode (single flag, not part of any group)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: tensorrt
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      engine_params:
-        dtype: bfloat16
-        max_batch_size: 8
-        max_input_len: 1024
-        max_seq_len: 2048
-        fast_build: true
-        build_cache:
-          max_cache_storage_gb: 256
-
-  # PTQ calibration is now handled by tensorrt.quant_config sweep group above.
-
-  # -----------------------------------------------------------------
-  # TRT-LLM sampling extensions (min_tokens, multi-sequence, perf metrics)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: tensorrt
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      engine_params:
-        dtype: bfloat16
-        max_batch_size: 8
-        max_input_len: 1024
-        max_seq_len: 2048
-        build_cache:
-          max_cache_storage_gb: 256
-      sampling_params:
-        min_tokens: 10
-        ignore_eos: false
-        return_perf_metrics: true
-        n: 1
-
-  # -----------------------------------------------------------------
-  # Tensor parallel (special: requires multi-GPU hardware)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: tensorrt
-  #   dataset:
-  #     n_prompts: 50
-  #   tensorrt:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       max_batch_size: 8
-  #       max_input_len: 1024
-  #       max_seq_len: 2048
-  #       tensor_parallel_size: 2
-  #       build_cache:
-  #         max_cache_storage_gb: 256
-
-  # -----------------------------------------------------------------
-  # Pre-compiled engine (skip compilation, load existing engine)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: tensorrt
-  #   dataset:
-  #     n_prompts: 50
-  #   tensorrt:
-  #     engine_params:
-  #       backend: trt              # required with engine_path (only trt reads the compiled engine)
-  #       dtype: bfloat16
-  #       engine_path: /path/to/precompiled/engine
-  #       max_batch_size: 8
-  #       max_seq_len: 2048
-
-  # KV cache max_tokens is now handled by tensorrt.kv_cache_config sweep group above.
-
-  # -----------------------------------------------------------------
-  # Build cache with custom root and record limits
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: tensorrt
-  #   dataset:
-  #     n_prompts: 50
-  #   tensorrt:
-  #     engine_params:
-  #       dtype: bfloat16
-  #       max_batch_size: 8
-  #       max_input_len: 1024
-  #       max_seq_len: 2048
-  #       build_cache:
-  #         cache_root: /tmp/trt_cache
-  #         max_records: 5
-  #         max_cache_storage_gb: 128

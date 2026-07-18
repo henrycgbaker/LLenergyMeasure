@@ -65,6 +65,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   unconditionally elevated to Docker, which failed when Docker was absent even for engines
   the user had pinned to local. Runner choice is machine-binding and recorded per result.
   ([#835])
+- `configs/example-study-full.yaml` is now a lean, runnable multi-engine example (100 lines,
+  down from 585). The previous file was a 52,032-run reference marked "not intended for
+  end-to-end execution" and carried a "KNOWN-BAD crosses" block plus stale TODOs. It now
+  runs as-is (17 experiments) and covers every top-level section of a study spec. For the
+  exhaustive per-engine field surface it previously duplicated, the header points readers at
+  `llem study init` (schema-derived, so it cannot drift). ([#839])
 
 ### Removed
 - `llem config` is removed. Its environment-diagnostics role is subsumed by the broadened
@@ -1127,3 +1133,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#836]: https://github.com/henrycgbaker/llenergymeasure/pull/836
 [#837]: https://github.com/henrycgbaker/llenergymeasure/pull/837
 [#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
+[#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839
