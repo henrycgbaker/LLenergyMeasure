@@ -19,6 +19,7 @@ from llenergymeasure.config.grid import (
     apply_cycles,
     compute_study_design_hash,
     count_sweep_structure,
+    cycle_boundary_indices,
     expand_grid,
 )
 from llenergymeasure.config.models import (
@@ -876,6 +877,82 @@ class TestApplyCycles:
         """latin_square with 0 experiments returns empty list."""
         result = apply_cycles([], 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert result == []
+
+
+# =============================================================================
+# cycle_boundary_indices() tests
+# =============================================================================
+
+
+class TestCycleBoundaryIndices:
+    """Cycle-gap boundary positions per experiment_order.
+
+    A cycle gap is the larger thermal-equalisation pause. Its position in the
+    execution sequence depends on how apply_cycles() laid the sequence out, so
+    these assert the exact indices for a small 2-config x 3-cycle matrix.
+    """
+
+    def test_sequential_2x3_gap_between_config_blocks(self):
+        """Regression: sequential [A,A,A,B,B,B] gaps between blocks, at index 3 only.
+
+        This is the confirmed-before-fix bug: the old positional modulo used
+        ``index % n_unique`` (n_unique=2), which fired mid-repetition at indices
+        {2, 4}. The correct sequential boundary is the config-block transition
+        at index 3 (last A -> first B).
+        """
+        boundaries = cycle_boundary_indices(2, 3, ExperimentOrder.SEQUENTIAL)
+        assert boundaries == {3}
+        # Guard against the specific pre-fix behaviour ever returning.
+        assert 2 not in boundaries
+        assert 4 not in boundaries
+
+    def test_interleave_2x3_gap_between_full_passes(self):
+        """interleave [A,B,A,B,A,B] gaps between full passes, at indices 2 and 4."""
+        boundaries = cycle_boundary_indices(2, 3, ExperimentOrder.INTERLEAVE)
+        assert boundaries == {2, 4}
+
+    def test_sequential_3x3_gaps_at_each_block_boundary(self):
+        """sequential 3 configs x 3 cycles -> boundaries at 3 and 6 (not 3,6 by modulo)."""
+        boundaries = cycle_boundary_indices(3, 3, ExperimentOrder.SEQUENTIAL)
+        assert boundaries == {3, 6}
+
+    @pytest.mark.parametrize(
+        "order",
+        [
+            ExperimentOrder.INTERLEAVE,
+            ExperimentOrder.REVERSE,
+            ExperimentOrder.SHUFFLE,
+            ExperimentOrder.LATIN_SQUARE,
+        ],
+    )
+    def test_pass_structured_orders_gap_every_n_unique(self, order):
+        """All pass-structured orders gap every n_unique items (unchanged behaviour)."""
+        assert cycle_boundary_indices(2, 3, order) == {2, 4}
+
+    def test_single_cycle_has_no_boundaries(self):
+        """n_cycles=1: nothing to gap between, for every order."""
+        for order in ExperimentOrder:
+            assert cycle_boundary_indices(3, 1, order) == frozenset()
+
+    def test_single_config_sequential_falls_back_to_pass_rule(self):
+        """Single config [A,A,A] has no distinct blocks; each rep is a full cycle.
+
+        Sequential must behave identically to interleave here (the sequences are
+        identical), gapping between every repetition at indices 1 and 2.
+        """
+        seq = cycle_boundary_indices(1, 3, ExperimentOrder.SEQUENTIAL)
+        inter = cycle_boundary_indices(1, 3, ExperimentOrder.INTERLEAVE)
+        assert seq == inter == {1, 2}
+
+    def test_final_boundary_never_included(self):
+        """The end-of-sequence position is never a cycle boundary."""
+        seq_len = 2 * 3
+        assert all(i < seq_len for i in cycle_boundary_indices(2, 3, ExperimentOrder.SEQUENTIAL))
+        assert all(i < seq_len for i in cycle_boundary_indices(2, 3, ExperimentOrder.INTERLEAVE))
+
+    def test_zero_configs_empty(self):
+        """Defensive: no configs -> no boundaries."""
+        assert cycle_boundary_indices(0, 3, ExperimentOrder.SEQUENTIAL) == frozenset()
 
 
 # =============================================================================

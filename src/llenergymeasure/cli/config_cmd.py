@@ -126,7 +126,10 @@ def _print_engine_status(verbose: int) -> None:
                     print(f"  ({version})", end="")
             print()
         else:
-            print(f"  {engine}: not installed  (runs in Docker - see docs/development.md)")
+            print(
+                f"  {engine}: not installed  (runs in Docker - see "
+                "https://henrycgbaker.github.io/llenergymeasure/contributing/development)"
+            )
 
 
 def _print_energy_status() -> None:

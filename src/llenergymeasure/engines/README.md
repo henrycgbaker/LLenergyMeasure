@@ -94,8 +94,8 @@ image, built from the SSOT in `engine_versions/{engine}.yaml`:
 | `vllm` | `vllm` | `vllm/vllm-openai:<version>` (upstream; project source bind-mounted at run time) |
 | `tensorrt` | `tensorrt_llm` | `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC upstream; project source bind-mounted at run time) |
 
-See [docs/development.md](../../../docs/development.md) for the build/run
-pattern. Host imports of these libraries fail by design.
+See [the development guide](../../../docs/contributing/development.md) for the
+build/run pattern. Host imports of these libraries fail by design.
 
 ## Layer constraints
 
