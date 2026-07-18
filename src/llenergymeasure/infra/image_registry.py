@@ -220,7 +220,31 @@ def _image_exists_locally(image: str) -> bool:
     return result is not None and result.returncode == 0
 
 
-def resolve_image_digest(image: str, *, timeout: float = TIMEOUT_DOCKER_CLI) -> str | None:
+def _inspect_first_dict(image: str, *, timeout: float) -> dict[str, object] | None:
+    """Return the first record from ``docker image inspect <image>``, or None.
+
+    Shared skeleton for the field extractors that read a single ``docker image
+    inspect`` object (``resolve_image_digest`` here reads ``RepoDigests``;
+    ``version_handshake._resolve_image_digest`` reads ``Id``). Requires a zero
+    exit and a parseable JSON array whose first element is an object; returns
+    None (never raises) on any failure - docker missing, non-zero exit,
+    malformed/empty JSON - so callers extract their field from a known-good dict.
+    ``json.JSONDecodeError`` subclasses ``ValueError``, so the one except covers both.
+    """
+    result = inspect_image(image, timeout=timeout)
+    if result is None or result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except ValueError:
+        return None
+    if not data or not isinstance(data[0], dict):
+        return None
+    return data[0]
+
+
+@lru_cache(maxsize=8)
+def resolve_image_digest(image: str) -> str | None:
     """Return the registry digest of *image* (``repo@sha256:...``), or None.
 
     Reads ``docker image inspect``'s first ``RepoDigests`` entry - the registry
@@ -236,17 +260,16 @@ def resolve_image_digest(image: str, *, timeout: float = TIMEOUT_DOCKER_CLI) -> 
     RepoDigests (not the local ``Id`` config digest used by the version probe
     cache) is used deliberately: cross-host reproducibility needs the registry
     digest, and locally-built images without one honestly resolve to None.
+
+    Cached (like the sibling ``_image_exists_locally``): an image's digest is
+    invariant for the process lifetime, so the per-experiment-per-cycle call
+    resolves it once. A cached None is retried only next process, matching the
+    sibling's accepted trade-off.
     """
-    result = inspect_image(image, timeout=timeout)
-    if result is None or result.returncode != 0:
+    record = _inspect_first_dict(image, timeout=TIMEOUT_DOCKER_CLI)
+    if record is None:
         return None
-    try:
-        data = json.loads(result.stdout)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if not data:
-        return None
-    repo_digests = data[0].get("RepoDigests")
+    repo_digests = record.get("RepoDigests")
     if isinstance(repo_digests, list) and repo_digests:
         first = repo_digests[0]
         if isinstance(first, str) and first:

@@ -305,6 +305,16 @@ def _fake_inspect(*, repo_digests: object, returncode: int = 0):
 class TestResolveImageDigest:
     """resolve_image_digest reads RepoDigests and degrades to None, never raising."""
 
+    @pytest.fixture(autouse=True)
+    def _clear_digest_cache(self):
+        """resolve_image_digest is @lru_cache'd; clear it so mocked inspects don't
+        leak a cached digest across tests that reuse the same image reference."""
+        from llenergymeasure.infra.image_registry import resolve_image_digest
+
+        resolve_image_digest.cache_clear()
+        yield
+        resolve_image_digest.cache_clear()
+
     def test_returns_first_repo_digest(self):
         from llenergymeasure.infra.image_registry import resolve_image_digest
 

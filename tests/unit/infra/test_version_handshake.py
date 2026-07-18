@@ -381,34 +381,34 @@ def _inspect_ok(image_id: str) -> MagicMock:
 class TestResolveImageDigest:
     def test_parses_id_from_inspect(self) -> None:
         with patch(
-            "llenergymeasure.infra.version_handshake.inspect_image",
+            "llenergymeasure.infra.image_registry.inspect_image",
             return_value=_inspect_ok("sha256:deadbeef"),
         ):
             assert _resolve_image_digest("img:tag") == "sha256:deadbeef"
 
     def test_none_when_inspect_unavailable(self) -> None:
-        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=None):
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=None):
             assert _resolve_image_digest("img:tag") is None
 
     def test_none_on_nonzero_exit(self) -> None:
         result = MagicMock()
         result.returncode = 1
         result.stdout = b""
-        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=result):
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=result):
             assert _resolve_image_digest("missing:tag") is None
 
     def test_none_on_malformed_json(self) -> None:
         result = MagicMock()
         result.returncode = 0
         result.stdout = b"not json"
-        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=result):
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=result):
             assert _resolve_image_digest("img:tag") is None
 
     def test_none_on_empty_array(self) -> None:
         result = MagicMock()
         result.returncode = 0
         result.stdout = b"[]"
-        with patch("llenergymeasure.infra.version_handshake.inspect_image", return_value=result):
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=result):
             assert _resolve_image_digest("img:tag") is None
 
 
