@@ -83,7 +83,7 @@ images locally.
 Expected output:
 
 ```
-llem v0.12.0
+llem v0.6.0
 ```
 
 ---
@@ -185,7 +185,7 @@ vLLM and TensorRT-LLM are pulled from upstream images (`vllm/vllm-openai`,
 `nvcr.io/nvidia/tensorrt-llm/release`) and need no project-side cache.
 
 Example build times on a reference host (AMD EPYC 7742-class, 128 cores, 504 GB
-RAM - Docker 27.0.3 / Buildx v0.32.1 / llenergymeasure 0.12.0):
+RAM - Docker 27.0.3 / Buildx v0.32.1 / llenergymeasure 0.6.0):
 
 | Engine | Image size | Cold build | First GHCR pull | Warm local rebuild |
 |--------|-----------|------------|-----------------|--------------------|
