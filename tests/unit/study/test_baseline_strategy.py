@@ -26,6 +26,7 @@ from llenergymeasure.config.models import (
 from llenergymeasure.config.ssot import CONTAINER_EXCHANGE_DIR
 from llenergymeasure.harness.baseline import BaselineCache
 from llenergymeasure.infra.runner_resolution import RunnerSpec
+from llenergymeasure.study.image_prep import _sanitize_image_for_filename
 from llenergymeasure.study.runner import StudyRunner
 from llenergymeasure.utils.exceptions import DockerError
 from tests.conftest import TEST_CONFIG_HASH
@@ -1065,6 +1066,77 @@ class TestBaselineCacheKey:
         # Regression: the filename must not contain ':' - Docker's bind-mount
         # parser treats it as the mode separator and rejects the mount.
         assert ":" not in p2.name
+
+    def test_cache_key_unqualified_when_unpinned(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """No GPU pin (config None, env unset) keeps the pre-PR key shape."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        assert runner.study.study_execution.gpu_indices is None
+        key = runner._baseline_cache_key(config_cached)
+        assert "_gpu-" not in key
+        assert key == f"image_{_sanitize_image_for_filename('img:v1')}"
+
+    def test_cache_key_qualified_when_config_pinned(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """A config GPU pin appends a sanitised ``_gpu-device_...`` suffix."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        key = runner._baseline_cache_key(config_cached)
+        assert key.endswith("_gpu-device_2_3")
+        # Filesystem/bind-mount safe (no '=' or ',' from the raw selector).
+        assert "=" not in key and "," not in key
+
+    def test_cache_key_same_pin_same_key(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """The same pin yields the same key (a resumed study reuses its baseline)."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        assert runner._baseline_cache_key(config_cached) == runner._baseline_cache_key(
+            config_cached
+        )
+
+    def test_cache_key_distinct_for_different_pins(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """Changing the GPU pin yields a distinct key (no stale cross-device reuse)."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        key_23 = runner._baseline_cache_key(config_cached)
+        runner.study.study_execution.gpu_indices = [4, 5]
+        key_45 = runner._baseline_cache_key(config_cached)
+        assert key_23 != key_45
+
+    def test_cache_key_env_overrides_config_pin(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """LLEM_DOCKER_GPUS wins over the config pin for the cache key too."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=7")
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        key = runner._baseline_cache_key(config_cached)
+        assert key.endswith("_gpu-device_7")
 
 
 # =============================================================================

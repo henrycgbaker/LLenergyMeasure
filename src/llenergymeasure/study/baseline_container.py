@@ -68,6 +68,7 @@ def build_baseline_docker_cmd(
     exchange_dir: str,
     gpu_indices: list[int],
     engine: str,
+    config_gpu_indices: list[int] | None = None,
 ) -> list[str]:
     """Build the ``docker run`` command list for a baseline-only container.
 
@@ -77,6 +78,13 @@ def build_baseline_docker_cmd(
     ``llenergymeasure`` package, so without this the baseline entry module would
     fail with ``ModuleNotFoundError``. The script exec's the baseline entry
     module (set via ``LLEM_ENTRY_MODULE``) instead of the experiment one.
+
+    Two distinct GPU params: ``gpu_indices`` are the LOGICAL in-container
+    monitoring indices (``CUDA_VISIBLE_DEVICES``); ``config_gpu_indices`` are the
+    study's HOST ``--gpus`` selector (``study_execution.gpu_indices``, env>config
+    via ``docker_gpus_arg``; see ``utils.env_config.ENV_DOCKER_GPUS``). Threading
+    the latter scopes the baseline container to the same physical devices as the
+    experiment container, so a config-pinned study does not baseline the wrong GPU.
 
     Kept separate from ``run_baseline_container`` so tests can assert on the
     command shape without mocking subprocess internals.
@@ -88,7 +96,7 @@ def build_baseline_docker_cmd(
         "run",
         "--rm",
         "--gpus",
-        docker_gpus_arg(),
+        docker_gpus_arg(config_gpu_indices),
         "-v",
         f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
         "-e",
@@ -138,6 +146,7 @@ def run_baseline_container(
     engine: str,
     timeout_sec: float | None = None,
     on_stage: StageCallback | None = None,
+    config_gpu_indices: list[int] | None = None,
 ) -> BaselineCache | None:
     """Spawn a short-lived baseline container and return the measurement.
 
@@ -168,6 +177,11 @@ def run_baseline_container(
             callback is passed ``(stage_name, elapsed_since_popen, kv_tags)``
             and is what the CLI hooks to emit live sub-bullets while the
             container is still running.
+        config_gpu_indices: Study-level HOST physical GPU selector
+            (``study_execution.gpu_indices``) threaded into ``--gpus`` so the
+            baseline container is scoped to the same physical devices as the
+            experiment container. ``None`` preserves ``--gpus all`` /
+            ``LLEM_DOCKER_GPUS`` behaviour.
 
     Returns:
         A ``BaselineCache`` with ``method=None`` on success (the caller sets
@@ -193,6 +207,7 @@ def run_baseline_container(
         exchange_dir=str(exchange_dir),
         gpu_indices=list(gpu_indices),
         engine=engine,
+        config_gpu_indices=config_gpu_indices,
     )
 
     logger.debug(

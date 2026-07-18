@@ -25,9 +25,10 @@ from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.domain.bundle_artefacts import STUDY_ARTEFACTS_DIR
 from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.study.image_prep import _sanitize_image_for_filename
+from llenergymeasure.utils.env_config import docker_gpus_cache_token
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import ExperimentConfig, StudyConfig
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
@@ -43,11 +44,12 @@ class _BaselineMixin:
     """Stateful baseline measurement/caching/validation methods for StudyRunner.
 
     Relies on attributes set up by ``StudyRunner.__init__``:
-    ``study_dir``, ``_runner_specs``, ``_progress``, ``_baselines``, and
-    ``_experiments_since_validation``.
+    ``study``, ``study_dir``, ``_runner_specs``, ``_progress``, ``_baselines``,
+    and ``_experiments_since_validation``.
     """
 
     # Attributes provided by StudyRunner.__init__ (declared for the type checker).
+    study: StudyConfig
     study_dir: Path
     _runner_specs: dict[str, RunnerSpec] | None
     _progress: StudyProgressCallback | None
@@ -66,6 +68,12 @@ class _BaselineMixin:
         each must measure its own baseline rather than share one bucket. Docker
         targets key on the sanitised image (``image_<slug>``).
 
+        When GPUs are scoped (``study_execution.gpu_indices`` or ``LLEM_DOCKER_GPUS``,
+        env>config), a ``_gpu-<selector>`` suffix is appended: idle GPU power is
+        per-device, so a study resumed with a changed pin must not reuse a baseline
+        measured on a different physical device. The unpinned (``all``) case keeps
+        the unqualified shape, so default-path cache filenames are unchanged.
+
         Both prefixes use an underscore (not ``:``) so the key is safe to embed
         directly in both filesystem paths and Docker bind-mount sources. A ``:``
         in the mount source string would be parsed by Docker as the mount-mode
@@ -73,8 +81,13 @@ class _BaselineMixin:
         """
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         if spec is None or spec.mode != RUNNER_DOCKER or not spec.image:
-            return f"{_LOCAL_KEY_PREFIX}{config.engine}"
-        return f"image_{_sanitize_image_for_filename(spec.image)}"
+            key = f"{_LOCAL_KEY_PREFIX}{config.engine}"
+        else:
+            key = f"image_{_sanitize_image_for_filename(spec.image)}"
+        gpu_token = docker_gpus_cache_token(self.study.study_execution.gpu_indices)
+        if gpu_token is not None:
+            key = f"{key}_gpu-{gpu_token}"
+        return key
 
     @staticmethod
     def _is_local_key(cache_key: str) -> bool:
@@ -406,6 +419,7 @@ class _BaselineMixin:
             gpu_indices=gpu_indices,
             engine=f"{config.engine}",
             on_stage=on_stage,
+            config_gpu_indices=self.study.study_execution.gpu_indices,
         )
 
     def _spot_check_baseline(
@@ -436,6 +450,7 @@ class _BaselineMixin:
             duration_sec=5.0,
             gpu_indices=gpu_indices,
             engine=f"{config.engine}",
+            config_gpu_indices=self.study.study_execution.gpu_indices,
         )
         return result.power_w if result is not None else None
 
