@@ -219,6 +219,26 @@ def copy_artefact(src: Path, dest: Path) -> str | None:
         return None
 
 
+def _ensure_failed_runs_dir(
+    study_dir: Path, config_hash: str, cycle: int
+) -> tuple[Path, str] | None:
+    """Create ``{study_dir}/failed-runs/`` and return it with the artefact prefix.
+
+    Returns ``(failed_runs_dir, prefix)`` where ``prefix`` is the shared
+    ``{config_hash}_cycle{cycle}`` stem used to name every persisted failure
+    artefact. Returns ``None`` (logging a warning) if the directory cannot be
+    created - failure persistence is best-effort and must never mask the
+    original error.
+    """
+    failed_runs_dir = study_dir / "failed-runs"
+    try:
+        failed_runs_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as mkdir_exc:
+        logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
+        return None
+    return failed_runs_dir, f"{config_hash}_cycle{cycle}"
+
+
 def persist_failure_artefacts(
     exc: DockerError,
     study_dir: Path,
@@ -237,14 +257,10 @@ def persist_failure_artefacts(
         return
 
     exchange_dir = Path(exchange_dir_str)
-    failed_runs_dir = study_dir / "failed-runs"
-    prefix = f"{config_hash}_cycle{cycle}"
-
-    try:
-        failed_runs_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as mkdir_exc:
-        logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
+    ensured = _ensure_failed_runs_dir(study_dir, config_hash, cycle)
+    if ensured is None:
         return
+    failed_runs_dir, prefix = ensured
 
     # Copy container.log (Docker stderr capture)
     log_file = copy_artefact(
@@ -289,14 +305,10 @@ def persist_failure_traceback(
     if not traceback_str:
         return
 
-    failed_runs_dir = study_dir / "failed-runs"
-    prefix = f"{config_hash}_cycle{cycle}"
-
-    try:
-        failed_runs_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as mkdir_exc:
-        logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
+    ensured = _ensure_failed_runs_dir(study_dir, config_hash, cycle)
+    if ensured is None:
         return
+    failed_runs_dir, prefix = ensured
 
     dest = failed_runs_dir / f"{prefix}_traceback.txt"
     try:
