@@ -97,15 +97,11 @@ from llenergymeasure.cli.run import run as _run_cmd  # noqa: E402
 
 app.command(name="run", help="Run an LLM efficiency experiment")(_run_cmd)
 
-from llenergymeasure.cli.config_cmd import config_command as _config_cmd  # noqa: E402
-
-app.command(name="config", help="Show environment and configuration status")(_config_cmd)
-
 from llenergymeasure.cli.doctor_cmd import doctor_command as _doctor_cmd  # noqa: E402
 
 app.command(
     name="doctor",
-    help="Verify Docker images match the host ExperimentConfig schema",
+    help="Check environment health (GPU, engines, energy, Docker, config, image schema)",
 )(_doctor_cmd)
 
 from llenergymeasure.cli.report_gaps import report_gaps_cmd as _report_gaps_cmd  # noqa: E402

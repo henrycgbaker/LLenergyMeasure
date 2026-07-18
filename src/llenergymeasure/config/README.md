@@ -725,7 +725,7 @@ Each experiment directory ships sidecars for full reproducibility next to `resul
 
 ## Related
 
-- See `../cli/` for CLI commands (`llem run`, `llem config`)
+- See `../cli/` for CLI commands (`llem run`, `llem doctor`)
 - See `../harness/measurement.py` for config usage in inference
 - See `./ssot.py` for shared constants
 - See `../domain/experiment.py` for result models with config tracking

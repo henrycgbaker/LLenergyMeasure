@@ -210,7 +210,7 @@ study_result = run_study("sweep.yaml", resume=True)
 | Exception | When |
 |-----------|------|
 | `ConfigError` | Invalid config path or YAML parse error. |
-| `PreFlightError` | Multi-engine study without Docker; Docker not running. |
+| `PreFlightError` | Multi-engine study where an auto-resolved engine needs Docker elevation but Docker is unavailable, or an engine pinned to `local` is not importable on the host. |
 | `StudyError` | `resume=True` but no resumable study found; config drift detected on resume (study hash changed). |
 | `pydantic.ValidationError` | A field value fails validation. Passes through unchanged. |
 
@@ -218,9 +218,18 @@ study_result = run_study("sweep.yaml", resume=True)
 
 ## Pitfalls
 
-**Multi-engine studies require Docker.** A study that references both `engine: transformers`
-and `engine: vllm` in its experiment list requires Docker. Without it, `run_study` raises
-`PreFlightError` at preflight before any inference begins.
+**Multi-engine Docker elevation is precedence-based.** In a study that references more than
+one engine (e.g. both `engine: transformers` and `engine: vllm`), each engine still runs in
+its own subprocess, so process isolation always holds. Docker elevation guards *environment
+feasibility* - divergent engine dependency closures cannot coexist on one host - not
+isolation. An engine whose runner you pin explicitly (via env var, the study `runners:`
+section, or user config) keeps that pin; only engines whose runner resolved from
+auto-detection or the default are elevated to Docker. Because runner choice is machine-binding
+and recorded per result, an explicit `runners: {vllm: local}` is a reproducibility assertion
+that this host can run that engine, so `run_study` verifies the engine imports on the host at
+preflight. It raises `PreFlightError` before any inference begins when an engine pinned to
+local is not importable, or when an auto-resolved engine needs Docker elevation but Docker is
+unavailable. An all-explicit-local multi-engine study runs without Docker.
 
 **Result bundle on disk.** Every `run_study` call creates a timestamped directory under
 `./results/` (or `output.results_dir` from the YAML). That directory is not cleaned up

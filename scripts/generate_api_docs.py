@@ -44,7 +44,7 @@ sidebar_label: API reference
 > minor versions without notice.
 >
 > The supported user-facing interfaces are the **CLI**
-> (`llem run`, `llem config`) and the **YAML study config**. See
+> (`llem run`, `llem doctor`) and the **YAML study config**. See
 > [CLI reference](/reference/cli) and
 > [Study config](/reference/study-config) for stable contracts.
 >

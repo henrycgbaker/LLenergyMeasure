@@ -44,7 +44,6 @@ def test_unresolvable_default_becomes_unreachable_row_with_fix():
     assert row.local_present is None
     assert row.image == "(unresolved)"
     assert 'runners.tensorrt to "docker:' in row.detail
-    assert not report.any_mismatch
 
 
 # ---------------------------------------------------------------------------

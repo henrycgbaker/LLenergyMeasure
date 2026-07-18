@@ -89,7 +89,7 @@ The engine-knowledge subsystem plugs into Layer 0 (`config/`), which the rest of
 
 ```mermaid
 flowchart TD
-    L6["Layer 6 - cli/<br/>llem run, llem config"]
+    L6["Layer 6 - cli/<br/>llem run, llem doctor"]
     L5["Layer 5 - api/<br/>run_experiment&#40;&#41;, run_study&#40;&#41;"]
     L4["Layer 4 - study/<br/>StudyRunner, sweep expansion"]
     L3["Layer 3 - harness/<br/>MeasurementHarness, energy sampling"]

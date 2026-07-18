@@ -1,7 +1,7 @@
 """Study-level baseline measurement, caching, and drift validation.
 
 ``_BaselineMixin`` holds the stateful baseline methods mixed into
-``StudyRunner``. Baselines are keyed per runner target ("local" or
+``StudyRunner``. Baselines are keyed per runner target (``local_<engine>`` or
 ``image_<slug>``) so multi-engine studies don't cross-contaminate, and are
 persisted to disk so mid-study restarts reuse a still-valid measurement.
 
@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Cache-key prefix for host/local baseline targets. Engine-qualified
+# (``local_<engine>``) so all-local multi-engine studies keep a distinct
+# baseline per engine; the Docker path uses the ``image_`` prefix instead.
+_LOCAL_KEY_PREFIX = "local_"
+
 
 class _BaselineMixin:
     """Stateful baseline measurement/caching/validation methods for StudyRunner.
@@ -52,19 +57,29 @@ class _BaselineMixin:
     def _baseline_cache_key(self, config: ExperimentConfig) -> str:
         """Return the cache key for this experiment's runner target.
 
-        Baselines are keyed per runner target because the container's CUDA init
-        footprint (~8.7 W/GPU on A100) is process-local and may differ between
-        engine images. See ``.product/research/baseline-measurement-location.md``.
+        Baselines are keyed per runner target because the CUDA init footprint
+        (~8.7 W/GPU on A100) is process-local and may differ between engines.
+        See ``.product/research/baseline-measurement-location.md``.
 
-        The ``image_`` prefix uses an underscore (not ``:``) so the key is
-        safe to embed directly in both filesystem paths and Docker bind-mount
-        sources. A ``:`` in the mount source string would be parsed by Docker
-        as the mount-mode separator and fail with ``invalid mode``.
+        Local targets are engine-qualified (``local_<engine>``): a multi-engine
+        study may legitimately pin more than one engine to a local runner, and
+        each must measure its own baseline rather than share one bucket. Docker
+        targets key on the sanitised image (``image_<slug>``).
+
+        Both prefixes use an underscore (not ``:``) so the key is safe to embed
+        directly in both filesystem paths and Docker bind-mount sources. A ``:``
+        in the mount source string would be parsed by Docker as the mount-mode
+        separator and fail with ``invalid mode``.
         """
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         if spec is None or spec.mode != RUNNER_DOCKER or not spec.image:
-            return "local"
+            return f"{_LOCAL_KEY_PREFIX}{config.engine}"
         return f"image_{_sanitize_image_for_filename(spec.image)}"
+
+    @staticmethod
+    def _is_local_key(cache_key: str) -> bool:
+        """True if the key targets a host/local measurement (vs a Docker baseline container)."""
+        return cache_key.startswith(_LOCAL_KEY_PREFIX)
 
     def _get_baseline(self, config: ExperimentConfig) -> Any:
         """Return baseline power according to the configured strategy.
@@ -83,7 +98,7 @@ class _BaselineMixin:
             return None
 
         cache_key = self._baseline_cache_key(config)
-        location = "host" if cache_key == "local" else "baseline container"
+        location = "host" if self._is_local_key(cache_key) else "baseline container"
         cached = self._resolve_cached_baseline(config, cache_key, strategy)
 
         # In-memory hit → emit "Reusing" and return
@@ -198,7 +213,7 @@ class _BaselineMixin:
             self._progress.on_step_start(STEP_BASELINE, "Calibrating", "sampling idle GPU draw")
             t0_meas = time.perf_counter()
             # Seed first substep before Popen so the docker cold-start is visible.
-            if cache_key != "local":
+            if not self._is_local_key(cache_key):
                 self._progress.on_substep_start(
                     STEP_BASELINE,
                     f"launching separate {target_label} baseline container",
@@ -233,7 +248,7 @@ class _BaselineMixin:
                     ),
                     elapsed_sec=elapsed,
                 )
-            elif cache_key == "local":
+            elif self._is_local_key(cache_key):
                 # No container subprocess → emit a retroactive sampling substep
                 # so the local path still gets a breakdown. The Docker path
                 # already emitted substeps live via the on_stage callback.
@@ -360,7 +375,7 @@ class _BaselineMixin:
 
         Args:
             config: Experiment config with baseline settings.
-            cache_key: "local" or "image_<slug>" - chooses dispatch path.
+            cache_key: ``local_<engine>`` or ``image_<slug>`` - chooses dispatch path.
             on_stage: Optional callback forwarded to ``run_baseline_container``
                 for streaming stage markers. Ignored on the local path (there
                 is no subprocess to stream from).
@@ -369,7 +384,7 @@ class _BaselineMixin:
 
         gpu_indices = _resolve_gpu_indices(config)
 
-        if cache_key == "local":
+        if self._is_local_key(cache_key):
             from llenergymeasure.harness.baseline import measure_baseline_power
 
             return measure_baseline_power(
@@ -378,7 +393,7 @@ class _BaselineMixin:
             )
 
         # Docker: _baseline_cache_key already guaranteed a resolved image when
-        # it returned a non-"local" key.
+        # it returned an image_ key (not a local_<engine> key).
         assert self._runner_specs is not None
         spec = self._runner_specs[config.engine]
         assert spec.image is not None
@@ -404,7 +419,7 @@ class _BaselineMixin:
         Dispatches to host or baseline container matching the cache key. Returns
         the measured power in watts, or None on failure.
         """
-        if cache_key == "local":
+        if self._is_local_key(cache_key):
             from llenergymeasure.harness.baseline import measure_spot_check
 
             return measure_spot_check(gpu_indices=gpu_indices, duration_sec=5.0)
@@ -441,7 +456,7 @@ class _BaselineMixin:
         from llenergymeasure.harness.baseline import save_baseline_cache
 
         gpu_indices = _resolve_gpu_indices(config)
-        location = "host" if cache_key == "local" else "baseline container"
+        location = "host" if self._is_local_key(cache_key) else "baseline container"
 
         if self._progress is not None:
             self._progress.on_step_start(

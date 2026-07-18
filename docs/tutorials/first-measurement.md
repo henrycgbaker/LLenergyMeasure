@@ -27,13 +27,14 @@ This is a **tutorial** - guided and linear. For goal-driven recipes
 ## Step 1: Verify your environment
 
 ```bash
-llem config
+llem doctor
 ```
 
 Check that the output shows your GPU detected and an energy sampler
-selected. Engines will show as "not installed" on host - that is expected;
-they run inside Docker. See the [Docker setup how-to](/how-to/docker-setup)
-if any of the pre-flight checks fail.
+selected. Engines show as running via Docker on host - that is expected;
+they run inside their per-engine images. Each line is prefixed
+`[ok]`/`[warn]`/`[fail]` with a fix hint for anything that is not ready.
+See the [Docker setup how-to](/how-to/docker-setup) if any of the checks fail.
 
 ## Step 2: Run your first experiment
 

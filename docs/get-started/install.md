@@ -100,27 +100,35 @@ first. See [Docker setup](/how-to/docker-setup) for a full walkthrough.
 ## Verify your install
 
 ```bash
-llem config
+llem doctor
 ```
 
-Expected output (GPU and sampler sections confirm hardware is visible):
+Expected output (GPU and energy sections confirm hardware is visible):
 
 ```
-GPU
-  NVIDIA A100-SXM4-80GB  80.0 GB
+Environment health check
+========================
+
+GPU / driver
+  [ok]   GPU 0: NVIDIA A100-SXM4-80GB (80.0 GB)
+  [ok]   NVIDIA driver: 535.129.03
+  [ok]   Python: 3.12.0
+
 Engines
-  transformers: not installed  (runs in Docker)
-  vllm: not installed          (runs in Docker)
-  tensorrt: not installed      (runs in Docker)
-Energy
-  Energy: nvml
-Python
-  3.12.0
+  [ok]   transformers: runs via Docker (llenergymeasure:transformers, cached locally)
+  [ok]   vllm: runs via Docker (vllm/vllm-openai:v0.19.1, cached locally)
+  [ok]   tensorrt: runs via Docker (nvcr.io/nvidia/tensorrt-llm/release:1.2.1, cached locally)
+
+Energy measurement
+  [ok]   NVML (nvidia-ml-py): available
+  [ok]   Auto-selected sampler: NVMLSampler
+...
 ```
 
-"Not installed" against engine names is expected - engines run in Docker,
-not on the host. The important lines are `GPU` (GPU detected) and
-`Energy` (sampler resolved).
+Engines running "via Docker" is expected - they run inside their per-engine
+images, not on the host. The important lines are the `GPU / driver` section
+(GPU detected) and `Energy measurement` (a sampler resolved). Each line is
+prefixed `[ok]`/`[warn]`/`[fail]` with a `->` fix hint for anything not ready.
 
 ---
 
