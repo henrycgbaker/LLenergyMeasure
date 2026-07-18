@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -139,6 +140,90 @@ class TestGetDefaultImage:
             pytest.raises(ConfigError, match=r'runners\.vllm to "docker:'),
         ):
             get_default_image("vllm")
+
+
+# ---------------------------------------------------------------------------
+# Local-tag shadow warning
+# ---------------------------------------------------------------------------
+
+
+class TestLocalImageShadowWarning:
+    """A local bare tag winning resolution warns once, naming the bypassed default."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_shadow_dedup(self):
+        """``_warn_local_shadow`` is @lru_cache'd for once-per-process dedup; clear
+        it so a warning from one test does not suppress the next."""
+        from llenergymeasure.infra.image_registry import _warn_local_shadow
+
+        _warn_local_shadow.cache_clear()
+        yield
+        _warn_local_shadow.cache_clear()
+
+    def test_warns_and_names_local_tag_and_bypassed_default(self, caplog):
+        from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.infra.version_handshake import read_bundled_engine_version
+
+        bypassed = f"vllm/vllm-openai:v{read_bundled_engine_version('vllm')}"
+
+        with (
+            patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True),
+            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.image_registry"),
+        ):
+            image = get_default_image("vllm")
+
+        # Resolution result is unchanged: local tag still wins.
+        assert image == "llenergymeasure:vllm"
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        text = warnings[0].getMessage()
+        assert "llenergymeasure:vllm" in text  # (1) the local tag used
+        assert bypassed in text  # (2) the version-pinned default it bypassed
+        assert "docker rmi llenergymeasure:vllm" in text  # (3) the remedy
+
+    def test_no_warning_when_local_tag_absent(self, caplog):
+        from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.infra.version_handshake import read_bundled_engine_version
+
+        with (
+            patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=False),
+            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.image_registry"),
+        ):
+            image = get_default_image("vllm")
+
+        # Resolution result is unchanged: pinned default wins, no shadow.
+        assert image == f"vllm/vllm-openai:v{read_bundled_engine_version('vllm')}"
+        assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
+
+    def test_deduplicated_across_repeated_calls(self, caplog):
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with (
+            patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True),
+            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.image_registry"),
+        ):
+            get_default_image("vllm")
+            get_default_image("vllm")
+            get_default_image("vllm")
+
+        assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
+
+
+class TestShadowedDefaultImage:
+    """``shadowed_default_image`` names the bypassed default only for the local tag."""
+
+    def test_returns_bypassed_default_for_local_tag(self):
+        from llenergymeasure.infra.image_registry import shadowed_default_image
+        from llenergymeasure.infra.version_handshake import read_bundled_engine_version
+
+        result = shadowed_default_image("vllm", "llenergymeasure:vllm")
+        assert result == f"vllm/vllm-openai:v{read_bundled_engine_version('vllm')}"
+
+    def test_none_when_resolved_image_is_not_the_local_tag(self):
+        from llenergymeasure.infra.image_registry import shadowed_default_image
+
+        assert shadowed_default_image("vllm", "vllm/vllm-openai:v0.19.1") is None
 
 
 # ---------------------------------------------------------------------------
