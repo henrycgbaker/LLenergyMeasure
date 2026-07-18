@@ -56,15 +56,20 @@ wrapper (equivalently `make discover-schema ENGINE=<engine>`) rather than
 invoking the runner directly - it selects the right image and prints the diff.
 
 For experiment dispatch (the `llem run` path) docker_runner.py emits a
-different shape: the entrypoint script `scripts/container_entrypoint.sh`
-is bind-mounted at `/llem-entry.sh` and set as `--entrypoint`. The script
-diffs `pyproject.toml`'s `[project.dependencies]` against the
-in-container installed dists, pip-installs any missing ones to a host-
-mounted cache (`~/.cache/llem/deps/py{N.M}/`, keyed by container Python
-minor), sets `PYTHONPATH` to include the cache + `/llem-src`, then exec's
-the framework entrypoint module. TRT-LLM dispatches route through
-`/opt/nvidia/nvidia_entrypoint.sh` first so `LD_LIBRARY_PATH` is set up
-for libnvinfer. See "Runtime-deps priming" below for the full mechanism.
+different shape: the entrypoint script (shipped as package data at
+`src/llenergymeasure/infra/_container/container_entrypoint.sh`) is
+materialised to a host tempdir, bind-mounted at `/llem-entry.sh`, and set as
+`--entrypoint`. The script diffs a runtime requirements list (bind-mounted at
+`/llem-requirements.txt`, materialised from the installed distribution
+metadata) against the in-container installed dists, pip-installs any missing
+ones to a host-mounted cache (`~/.cache/llem/deps/py{N.M}/`, keyed by
+container Python minor), sets `PYTHONPATH` to include the cache + `/llem-src`,
+then exec's the framework entrypoint module. Shipping the script + deps list
+as package data (rather than resolving a repo-root `scripts/` + `pyproject.toml`)
+is what makes dispatch work from a plain `pip install`, not only a source
+checkout. TRT-LLM dispatches route through `/opt/nvidia/nvidia_entrypoint.sh`
+first so `LD_LIBRARY_PATH` is set up for libnvinfer. See "Runtime-deps priming"
+below for the full mechanism.
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two - they need a CUDA device) for the other engines.
@@ -88,24 +93,31 @@ dispatch into a host-mounted persistent cache.
 
 ### Mechanism
 
-`scripts/container_entrypoint.sh` runs once per dispatch and:
+The entrypoint script (shipped at
+`src/llenergymeasure/infra/_container/container_entrypoint.sh`) runs once per
+dispatch and:
 
 1. Computes `PY_MINOR` from the container's Python (`sys.version_info`).
 2. Sets `PYTHONPATH=/llem-src:/llem-runtime-deps/py{N.M}:...` so the
    probe and subsequent imports see the cache.
 3. Fast-paths via a stamp file: `sha256sum` the bind-mounted
-   `pyproject.toml`, compare to `/llem-runtime-deps/py{N.M}/.llem_pyproject_hash`.
-   Match means "deps probe already done against this pyproject, nothing
-   changed, skip the probe." Saves ~200ms per dispatch on warm cache.
-4. If stamp missing or mismatched: a small Python helper parses
-   `[project.dependencies]`, calls `importlib.metadata.distribution(name)`
-   per dep, and accumulates the missing ones.
+   `/llem-requirements.txt`, compare to
+   `/llem-runtime-deps/py{N.M}/.llem_requirements_hash_{engine}`.
+   Match means "deps probe already done against this requirements list,
+   nothing changed, skip the probe." Saves ~200ms per dispatch on warm cache.
+   The list is materialised on the host from the installed distribution
+   metadata, so a re-install (or edited-then-reinstalled checkout) changes its
+   hash and re-triggers the probe.
+4. If stamp missing or mismatched: a small Python helper reads the requirement
+   specs from `/llem-requirements.txt`, calls
+   `importlib.metadata.distribution(name)` per dep, and accumulates the
+   missing ones.
 5. Pip-installs missing deps via
    `pip install --no-deps --no-cache-dir --only-binary=:all: --target $DEPS_TARGET`.
 6. Chowns the cache directory to `LLEM_HOST_UID:LLEM_HOST_GID` (passed
    by docker_runner) so the host can clean it without sudo despite the
    container running as root.
-7. Writes the pyproject hash to the stamp file.
+7. Writes the requirements hash to the stamp file.
 8. Exec's the framework entrypoint as a single `python3` process, routing
    through `nvidia_entrypoint.sh` when `LLEM_ENGINE=tensorrt` (sets up
    `LD_LIBRARY_PATH` for libnvinfer). Multi-GPU tensorrt is NOT wrapped in

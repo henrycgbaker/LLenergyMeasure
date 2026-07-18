@@ -28,6 +28,7 @@ from llenergymeasure.infra.docker_errors import (
     DockerTimeoutError,
 )
 from llenergymeasure.infra.docker_runner import DockerRunner, _env_file, _mask_secrets
+from llenergymeasure.utils.exceptions import DockerPreFlightError
 from tests.conftest import make_config, make_result
 from tests.unit.docker.conftest import make_subprocess_result
 
@@ -884,19 +885,19 @@ class TestExtraMounts:
 
     def test_no_extra_mounts_no_extra_volumes(self, tmp_path):
         """Without extra_mounts, six -v flags appear for a non-TRT engine: exchange dir, HF cache,
-        package source, pyproject.toml (single-file), entrypoint script (single-file), deps cache."""
+        package source, requirements list (single-file), entrypoint script (single-file), deps cache."""
         config = make_config()
         runner = DockerRunner(image=IMAGE)
         cmd = self._build_cmd(config, tmp_path, runner)
 
-        # Six -v flags: exchange dir, HF cache auto-mount, llem-src, pyproject,
-        # entrypoint script, deps cache.
+        # Six -v flags: exchange dir, HF cache auto-mount, llem-src, requirements
+        # list, entrypoint script, deps cache.
         v_count = cmd.count("-v")
         assert v_count == 6
         assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
         assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
         assert any(arg.endswith(":/root/.cache/huggingface") for arg in cmd)
-        assert any(arg.endswith("/pyproject.toml:/llem-pyproject.toml:ro") for arg in cmd)
+        assert any(arg.endswith("/requirements.txt:/llem-requirements.txt:ro") for arg in cmd)
         assert any(arg.endswith("/container_entrypoint.sh:/llem-entry.sh:ro") for arg in cmd)
         assert any(arg.endswith(":/llem-runtime-deps") for arg in cmd)
 
@@ -1397,7 +1398,7 @@ class TestMountPivot:
     """Verify the host bind-mounts that feed the in-container entrypoint script.
 
     All three engines run via ``/llem-entry.sh``, which reads
-    ``/llem-pyproject.toml`` to diff runtime deps, primes any missing ones
+    ``/llem-requirements.txt`` to diff runtime deps, primes any missing ones
     into ``/llem-runtime-deps``, sets ``PYTHONPATH`` itself (including the
     cache + ``/llem-src``), and exec's the framework entrypoint module.
     docker_runner doesn't need to set ``PYTHONPATH`` directly; the script
@@ -1426,22 +1427,32 @@ class TestMountPivot:
         assert cmd[mount_idx - 1] == "-v"
 
     @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
-    def test_pyproject_mount_present(self, engine, tmp_path):
-        """pyproject.toml is bind-mounted at /llem-pyproject.toml for the entrypoint's dep diff."""
+    def test_requirements_mount_present(self, engine, tmp_path):
+        """The runtime requirements list is bind-mounted at /llem-requirements.txt.
+
+        It is materialised on the host from the installed distribution metadata,
+        so the host path is a tempfile (not the repo pyproject.toml) - what
+        matters is that the container target is /llem-requirements.txt.
+        """
         cmd = self._build(engine, tmp_path)
-        mount_args = [arg for arg in cmd if arg.endswith(":/llem-pyproject.toml:ro")]
+        mount_args = [arg for arg in cmd if arg.endswith(":/llem-requirements.txt:ro")]
         assert len(mount_args) == 1
-        host_path = mount_args[0].split(":/llem-pyproject.toml:ro")[0]
-        assert host_path.endswith("/pyproject.toml")
+        host_path = mount_args[0].split(":/llem-requirements.txt:ro")[0]
+        assert host_path.endswith("/requirements.txt")
 
     @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
     def test_entry_script_mount_present(self, engine, tmp_path):
-        """The container entrypoint script is bind-mounted at /llem-entry.sh."""
+        """The container entrypoint script is bind-mounted at /llem-entry.sh.
+
+        The script is shipped as package data and materialised to a host
+        tempdir, so the host path is a tempfile whose basename is
+        container_entrypoint.sh (no repo scripts/ prefix).
+        """
         cmd = self._build(engine, tmp_path)
         mount_args = [arg for arg in cmd if arg.endswith(":/llem-entry.sh:ro")]
         assert len(mount_args) == 1
         host_path = mount_args[0].split(":/llem-entry.sh:ro")[0]
-        assert host_path.endswith("scripts/container_entrypoint.sh")
+        assert host_path.endswith("/container_entrypoint.sh")
 
     @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
     def test_deps_cache_mount_present(self, engine, tmp_path):
@@ -1866,3 +1877,133 @@ class TestConfigSidecarRescue:
         assert payload["provenance"] == resolution_log, (
             "provenance must be folded into the materialised config.json"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test: dispatch assets materialised from installed package data (pip-install fix)
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchAssetMaterialisation:
+    """The entrypoint script + requirements list are shipped as package data and
+    materialised to a real host tempdir before bind-mounting.
+
+    These tests exercise the resolver from an ordinary installed-package import
+    (``import llenergymeasure``) and assert it returns existing files WITHOUT
+    assuming a repo checkout layout - the previous ``__file__``-relative
+    resolution broke for a site-packages install, letting docker auto-create
+    empty bind-mount dirs that failed the entrypoint exec.
+    """
+
+    @staticmethod
+    def _fresh():
+        """Clear the process-lifetime caches so each test materialises anew."""
+        from llenergymeasure.infra.docker_runner import (
+            _materialise_dispatch_assets,
+            _runtime_requirements,
+        )
+
+        _runtime_requirements.cache_clear()
+        _materialise_dispatch_assets.cache_clear()
+
+    def test_assets_materialised_to_existing_real_files(self):
+        """Both dispatch assets resolve to real, non-empty files on disk."""
+        from llenergymeasure.infra.docker_runner import _materialise_dispatch_assets
+
+        self._fresh()
+        entry_script, requirements_file = _materialise_dispatch_assets()
+
+        assert entry_script.is_file()
+        assert requirements_file.is_file()
+        assert entry_script.name == "container_entrypoint.sh"
+        assert requirements_file.name == "requirements.txt"
+        # The script is a real bootstrap, not an empty docker-auto-created dir.
+        assert entry_script.read_text(encoding="utf-8").startswith("#!/bin/bash")
+        assert requirements_file.read_text(encoding="utf-8").strip()
+
+    def test_entry_script_is_executable(self):
+        """The materialised script carries the execute bit (docker execs it)."""
+        import os
+
+        from llenergymeasure.infra.docker_runner import _materialise_dispatch_assets
+
+        self._fresh()
+        entry_script, _ = _materialise_dispatch_assets()
+        assert os.access(entry_script, os.X_OK)
+
+    def test_materialised_script_matches_package_resource(self):
+        """The materialised script bytes equal the shipped package-data resource."""
+        import importlib.resources
+
+        from llenergymeasure.infra.docker_runner import (
+            _ENTRY_SCRIPT_PACKAGE,
+            _ENTRY_SCRIPT_RESOURCE,
+            _materialise_dispatch_assets,
+        )
+
+        self._fresh()
+        entry_script, _ = _materialise_dispatch_assets()
+        packaged = (
+            importlib.resources.files(_ENTRY_SCRIPT_PACKAGE)
+            .joinpath(_ENTRY_SCRIPT_RESOURCE)
+            .read_bytes()
+        )
+        assert entry_script.read_bytes() == packaged
+
+    def test_runtime_requirements_include_core_exclude_extras(self):
+        """Core runtime deps are present; optional-extra deps (zeus/codecarbon) are not."""
+        from llenergymeasure.infra.docker_runner import _runtime_requirements
+
+        self._fresh()
+        specs = _runtime_requirements()
+        bare = {s.split(">")[0].split("<")[0].split("=")[0].split("[")[0].strip() for s in specs}
+
+        assert "pydantic" in bare
+        assert "pyarrow" in bare
+        # Extras carry an `extra == ...` marker and must be filtered out - the
+        # container primes only the always-on runtime deps.
+        assert "zeus" not in bare
+        assert "codecarbon" not in bare
+        # No environment markers leak into the materialised specs.
+        assert all(";" not in s for s in specs)
+
+    def test_requirements_file_content_matches_metadata(self):
+        """The materialised requirements.txt lines equal _runtime_requirements()."""
+        from llenergymeasure.infra.docker_runner import (
+            _materialise_dispatch_assets,
+            _runtime_requirements,
+        )
+
+        self._fresh()
+        _, requirements_file = _materialise_dispatch_assets()
+        lines = requirements_file.read_text(encoding="utf-8").splitlines()
+        assert tuple(line for line in lines if line.strip()) == _runtime_requirements()
+
+    def test_preflight_error_when_entry_script_unreadable(self):
+        """A missing/unreadable script resource raises DockerPreFlightError before docker run."""
+        import importlib.resources
+
+        from llenergymeasure.infra.docker_runner import append_package_dispatch
+
+        self._fresh()
+        try:
+            with patch.object(importlib.resources, "files", side_effect=FileNotFoundError("boom")):
+                cmd: list[str] = []
+                with pytest.raises(DockerPreFlightError, match="entrypoint script"):
+                    append_package_dispatch(cmd, engine="vllm")
+        finally:
+            self._fresh()
+
+    def test_preflight_error_when_requirements_empty(self):
+        """Underivable runtime deps raise DockerPreFlightError before docker run."""
+        from llenergymeasure.infra import docker_runner
+        from llenergymeasure.infra.docker_runner import append_package_dispatch
+
+        self._fresh()
+        try:
+            with patch.object(docker_runner, "_runtime_requirements", return_value=()):
+                cmd: list[str] = []
+                with pytest.raises(DockerPreFlightError, match="runtime dependencies"):
+                    append_package_dispatch(cmd, engine="vllm")
+        finally:
+            self._fresh()
