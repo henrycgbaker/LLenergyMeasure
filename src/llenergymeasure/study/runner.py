@@ -1014,6 +1014,18 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             error_type = result.get("type", "UnknownError")
             error_message = result.get("message", "")
             log_file = result.get("log_file")
+            # Local/subprocess dispatch: the worker captured a full traceback but
+            # only its type/message were being kept. Persist it into failed-runs/
+            # so a local failure is as debuggable as the Docker path (which sets
+            # log_file via persist_failure_artefacts). Docker failure dicts carry
+            # no "traceback" key, so this only fires for local dispatch.
+            if log_file is None and result.get("traceback"):
+                from llenergymeasure.study.container_lifecycle import persist_failure_traceback
+
+                persist_failure_traceback(
+                    self.study_dir, config_hash, cycle, result["traceback"], result
+                )
+                log_file = result.get("log_file")
             self.manifest.mark_failed(
                 config_hash, cycle, error_type, error_message, log_file=log_file
             )

@@ -6,6 +6,8 @@ studies. These tests verify it without GPU hardware (uses monkeypatching).
 
 from __future__ import annotations
 
+import pytest
+
 from llenergymeasure import ExperimentConfig, ExperimentResult, StudyConfig
 from llenergymeasure.study.single import run_single_experiment
 from tests.conftest import make_result
@@ -256,3 +258,99 @@ def test_config_sidecar_materialises_without_timeseries(monkeypatch, tmp_path):
     assert dest_config.exists(), "config.json must materialise even without timeseries"
     payload = _json.loads(dest_config.read_text())
     assert payload["provenance"] == resolution_log
+
+
+def test_local_single_failure_persists_traceback(monkeypatch, tmp_path):
+    """A local single-experiment failure persists its traceback into failed-runs/.
+
+    The local branch previously just rmtree'd the staging dir and re-raised, so
+    the real failure was never marked in the manifest nor kept on disk. It now
+    mirrors the Docker single-experiment branch (persist traceback + mark_failed)
+    while still re-raising the original exception so the real cause reaches the CLI.
+    """
+    from unittest.mock import MagicMock
+
+    import llenergymeasure.engines as engines_module
+    import llenergymeasure.harness as harness_module
+    import llenergymeasure.harness.preflight as pf_module
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+    from llenergymeasure.study.manifest import ManifestWriter
+
+    mock_engine = _MockBackend(make_result(experiment_id="local-fail-test"))
+
+    def _raise(self, engine, config, **kw):
+        raise RuntimeError("engine blew up inside the measurement window")
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
+    monkeypatch.setattr(harness_module.MeasurementHarness, "run", _raise)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual", lambda *a, **k: None
+    )
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+    config_hash = compute_declared_config_hash(config)
+
+    # The original exception is re-raised so the real cause still reaches the CLI.
+    with pytest.raises(RuntimeError, match="engine blew up"):
+        run_single_experiment(study, mock_manifest, tmp_path, runner_specs=None)
+
+    # Traceback persisted under failed-runs/ with the expected name.
+    tb_file = tmp_path / "failed-runs" / f"{config_hash}_cycle1_traceback.txt"
+    assert tb_file.exists(), "local single-experiment traceback was not persisted"
+    assert "engine blew up inside the measurement window" in tb_file.read_text()
+
+    # Manifest marked failed with a log_file pointer to the traceback.
+    mock_manifest.mark_failed.assert_called_once()
+    log_file = mock_manifest.mark_failed.call_args.kwargs.get("log_file")
+    assert log_file == "failed-runs/" + tb_file.name
+
+
+def test_docker_single_failure_marks_log_file(monkeypatch, tmp_path):
+    """A Docker single-experiment failure points the manifest at the persisted log.
+
+    persist_failure_artefacts copies container.log/error JSON into failed-runs/ and
+    records failure["log_file"]; the docker branch must forward that to mark_failed
+    so single-mode docker does not persist artefacts the manifest never references.
+    """
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.study.manifest import ManifestWriter
+    from llenergymeasure.utils.exceptions import DockerError
+
+    # Fake exchange dir with a container.log so persist_failure_artefacts has
+    # something to copy and therefore sets failure["log_file"].
+    exchange_dir = tmp_path / "exchange"
+    exchange_dir.mkdir()
+    (exchange_dir / "container.log").write_text("boom", encoding="utf-8")
+
+    def _raise_docker(self, config, **kw):
+        exc = DockerError("container failed to start")
+        exc.exchange_dir = str(exchange_dir)
+        raise exc
+
+    monkeypatch.setattr("llenergymeasure.infra.docker_runner.DockerRunner.run", _raise_docker)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual", lambda *a, **k: None
+    )
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+    spec = RunnerSpec(mode="docker", image="img:test", source="yaml")
+
+    _files, results, _warnings = run_single_experiment(
+        study, mock_manifest, tmp_path, runner_specs={"transformers": spec}
+    )
+
+    assert results == [None]
+    mock_manifest.mark_failed.assert_called_once()
+    log_file = mock_manifest.mark_failed.call_args.kwargs.get("log_file")
+    assert log_file is not None, "docker single failure must forward log_file to mark_failed"
+    assert log_file.startswith("failed-runs/")
+    assert list((tmp_path / "failed-runs").glob("*_container.log")), (
+        "container.log was not persisted into failed-runs/"
+    )

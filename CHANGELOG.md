@@ -63,6 +63,14 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Experiment failures now surface their real cause. Under `-v`, a Docker container
+  failure prints the traceback the container entrypoint captured (the actual
+  engine/CUDA error), instead of the uninformative host-side traceback of the
+  DockerRunner raise site. Local and subprocess dispatch failures (single- and
+  multi-experiment) now persist their captured traceback to
+  `failed-runs/{config_hash}_cycle{N}_traceback.txt` and record a `log_file`
+  pointer in the manifest, matching the Docker path so a failure is debuggable
+  regardless of dispatch mode. ([#836])
 - Resolved-config and observed-config hashes now canonicalise integral numerics onto a
   single form, closing an int-vs-float gap of the same class #822 fixed for the declared
   hash. A field typed `float` but valued as an int (e.g. vLLM `cpu_offload_gb = 0`) stayed
@@ -1106,4 +1114,5 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
 [#834]: https://github.com/henrycgbaker/llenergymeasure/pull/834
 [#835]: https://github.com/henrycgbaker/llenergymeasure/pull/835
+[#836]: https://github.com/henrycgbaker/llenergymeasure/pull/836
 [#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
