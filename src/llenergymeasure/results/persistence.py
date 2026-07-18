@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 # whose per-field provenance now lives in this file's ``provenance`` section.
 CONFIG_SIDECAR_SCHEMA_VERSION = "2.0"
 
+# Schema version for the environment.json sidecar. Independent of result.json's
+# and config.json's schema versions. "1.0" is the first explicit version:
+# environment.json previously carried no schema_version. It records the runner
+# block (docker vs local, image + registry digest, precedence source) alongside
+# the hardware/runtime snapshot.
+ENVIRONMENT_SCHEMA_VERSION = "1.0"
+
 
 def _experiment_dir_name(
     result: ExperimentResult,
@@ -243,6 +250,7 @@ def save_environment(
         Path to the written environment.json file.
     """
     env_data: dict[str, object] = {
+        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
         "experiment_id": experiment_id,
         "measurement_config_hash": measurement_config_hash,
     }
@@ -252,6 +260,10 @@ def save_environment(
     env_data["tool_version"] = snapshot_dict["tool_version"]
     env_data["cuda_version"] = snapshot_dict.get("cuda_version")
     env_data["cuda_version_source"] = snapshot_dict.get("cuda_version_source")
+    # Runner provenance block (docker vs local, image + registry digest,
+    # precedence source). None when the snapshot carries no runner block (e.g.
+    # the in-container snapshot, whose runner facts the host patches in later).
+    env_data["runner"] = snapshot_dict.get("runner")
 
     path = experiment_dir / ENVIRONMENT_FILENAME
     _atomic_write(json.dumps(env_data, indent=2, default=str), path)

@@ -278,3 +278,83 @@ class TestResolveImage:
 
         assert image == "llenergymeasure:vllm"
         assert source == "local_build"
+
+
+# ---------------------------------------------------------------------------
+# resolve_image_digest
+# ---------------------------------------------------------------------------
+
+_MISSING = object()
+
+
+def _fake_inspect(*, repo_digests: object, returncode: int = 0):
+    """Build a fake ``docker image inspect`` CompletedProcess with RepoDigests."""
+    import json
+    import subprocess
+    from unittest.mock import MagicMock
+
+    body: list[dict[str, object]] = [{"Id": "sha256:local-config-digest"}]
+    if repo_digests is not _MISSING:
+        body[0]["RepoDigests"] = repo_digests
+    result = MagicMock(spec=subprocess.CompletedProcess)
+    result.returncode = returncode
+    result.stdout = json.dumps(body).encode("utf-8")
+    return result
+
+
+class TestResolveImageDigest:
+    """resolve_image_digest reads RepoDigests and degrades to None, never raising."""
+
+    def test_returns_first_repo_digest(self):
+        from llenergymeasure.infra.image_registry import resolve_image_digest
+
+        fake = _fake_inspect(
+            repo_digests=[
+                "ghcr.io/acme/vllm@sha256:aaaa",
+                "ghcr.io/acme/vllm@sha256:bbbb",
+            ]
+        )
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=fake):
+            assert resolve_image_digest("ghcr.io/acme/vllm:1.0") == "ghcr.io/acme/vllm@sha256:aaaa"
+
+    def test_none_when_repo_digests_empty(self):
+        """Locally-built image (no registry digest) resolves to None, not the local Id."""
+        from llenergymeasure.infra.image_registry import resolve_image_digest
+
+        fake = _fake_inspect(repo_digests=[])
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=fake):
+            assert resolve_image_digest("localbuild:dev") is None
+
+    def test_none_when_repo_digests_absent(self):
+        from llenergymeasure.infra.image_registry import resolve_image_digest
+
+        fake = _fake_inspect(repo_digests=_MISSING)
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=fake):
+            assert resolve_image_digest("localbuild:dev") is None
+
+    def test_none_when_docker_unavailable(self):
+        """inspect_image returns None (docker missing / timeout) -> digest None."""
+        from llenergymeasure.infra.image_registry import resolve_image_digest
+
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=None):
+            assert resolve_image_digest("ghcr.io/acme/vllm:1.0") is None
+
+    def test_none_when_nonzero_returncode(self):
+        """Image not pulled yet (non-zero exit) -> digest None."""
+        from llenergymeasure.infra.image_registry import resolve_image_digest
+
+        fake = _fake_inspect(repo_digests=["x@sha256:aaaa"], returncode=1)
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=fake):
+            assert resolve_image_digest("ghcr.io/acme/vllm:1.0") is None
+
+    def test_none_when_malformed_json(self):
+        import subprocess
+        from unittest.mock import MagicMock
+
+        from llenergymeasure.infra.image_registry import resolve_image_digest
+
+        bad = MagicMock(spec=subprocess.CompletedProcess)
+        bad.returncode = 0
+        bad.stdout = b"not json"
+        with patch("llenergymeasure.infra.image_registry.inspect_image", return_value=bad):
+            assert resolve_image_digest("ghcr.io/acme/vllm:1.0") is None

@@ -20,6 +20,7 @@ results/
     ├── 001_c0_<model>-<engine>_<hash>/          # one experiment cell
     │   ├── result.json                          # measurement metrics (schema 5.0)
     │   ├── config.json                          # engine/model/methodology + resolved config + provenance
+    │   ├── environment.json                     # hardware/runtime snapshot + runner provenance
     │   └── timeseries.parquet                   # GPU power/thermal/memory samples
     ├── 002_c0_.../
     ├── ...
@@ -187,6 +188,21 @@ batch is attributed `batch_time / batch_size` (the `PER_REQUEST_BATCH` mode in
 ### Config sidecar (sibling file)
 
 `config.json` lives next to `result.json` in each experiment directory. It is the authoritative home of engine/model/methodology identity (`engine`, `engine_version`, `model_name`, `measurement_methodology`; `result.json` carries convenience copies of `engine` and `model_name` only) and carries the full user-declared `ExperimentConfig` under `declared_config` - every parameter value used, including engine defaults that were not explicitly specified - plus per-field `provenance` (where each non-default value came from: CLI flag, sweep, or YAML) and the observed post-construction engine state. **This is what reproduces the experiment.**
+
+### Environment sidecar (sibling file)
+
+`environment.json` lives next to `result.json` and records the hardware/runtime environment the experiment ran in (schema `1.0`, independent of `result.json`): GPU, CUDA, driver, CPU, platform, Python and tool versions. Under Docker dispatch it captures the *in-container* environment, not the dispatching host.
+
+It also carries a `runner` block - the reproducibility anchor for cross-run comparability:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | str | `"docker"` (containerized) or `"local"` (host process) - a first-order variable for energy/latency comparability |
+| `image` | str &#124; null | Docker image reference that ran (`null` for local) |
+| `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for local runs, and for locally-built images with no registry digest |
+| `source` | str | Which precedence layer selected the runner (`env`, `yaml`, `user_config`, `auto_detected`, `default`, `multi_engine_elevation`, or `local`) |
+
+Sidecars written before this block existed load with `runner: null`.
 
 ## `manifest.json` - study-level checkpoint
 

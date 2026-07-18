@@ -7,6 +7,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Added
+
+- The per-experiment `environment.json` sidecar now records a `runner` block
+  restoring runner provenance to every result: `type` (`docker` vs `local`),
+  `image`, `image_digest` (the resolved registry digest `repo@sha256:...`,
+  pinning the full software stack as the cross-run reproducibility anchor), and
+  `source` (the precedence layer that selected the runner). The sidecar also
+  gains its own `schema_version` (`"1.0"`, independent of `result.json`), its
+  first explicit version. The digest is resolved host-side via
+  `docker image inspect`; resolution is best-effort and records `null` (never
+  fails a run) for local runs, locally-built images, or when docker is
+  unavailable. Older sidecars load with `runner: null`.
+
 ### Changed
 
 - Study preparation now pulls missing Docker engine images concurrently (one

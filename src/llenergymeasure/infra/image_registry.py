@@ -42,6 +42,7 @@ tuple consumed by the runner resolution chain.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -67,6 +68,7 @@ __all__ = [
     "image_present_locally",
     "parse_runner_value",
     "resolve_image",
+    "resolve_image_digest",
     "show_image_resolution",
 ]
 
@@ -216,6 +218,40 @@ def _image_exists_locally(image: str) -> bool:
     """Check whether a Docker image tag exists in the local cache."""
     result = inspect_image(image, timeout=TIMEOUT_DOCKER_CLI)
     return result is not None and result.returncode == 0
+
+
+def resolve_image_digest(image: str, *, timeout: float = TIMEOUT_DOCKER_CLI) -> str | None:
+    """Return the registry digest of *image* (``repo@sha256:...``), or None.
+
+    Reads ``docker image inspect``'s first ``RepoDigests`` entry - the registry
+    content digest that pins the full image (base image, CUDA, torch, patches)
+    and is portable across hosts, making it the reproducibility anchor recorded
+    in ``environment.json``.
+
+    Returns None (never raises) when the digest cannot be resolved: docker
+    missing, the image not pulled, a locally-built image with no registry
+    digest, an inspect timeout / non-zero exit, or malformed JSON. Callers
+    record the None verbatim so a run is never failed by digest resolution.
+
+    RepoDigests (not the local ``Id`` config digest used by the version probe
+    cache) is used deliberately: cross-host reproducibility needs the registry
+    digest, and locally-built images without one honestly resolve to None.
+    """
+    result = inspect_image(image, timeout=timeout)
+    if result is None or result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not data:
+        return None
+    repo_digests = data[0].get("RepoDigests")
+    if isinstance(repo_digests, list) and repo_digests:
+        first = repo_digests[0]
+        if isinstance(first, str) and first:
+            return first
+    return None
 
 
 def resolve_image(

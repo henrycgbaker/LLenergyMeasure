@@ -13,9 +13,14 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from llenergymeasure.domain.environment import RunnerEnvironment
 from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
 from llenergymeasure.infra.runner_resolution import RunnerSpec
-from llenergymeasure.study.runner import _provenance_from_spec, _save_and_record
+from llenergymeasure.study.runner import (
+    _provenance_from_spec,
+    _runner_environment,
+    _save_and_record,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -680,3 +685,176 @@ def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:
     assert "disk full" in call_args[3]  # error_message
 
     manifest.mark_completed.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Runner block (environment.json)
+# ---------------------------------------------------------------------------
+
+
+def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
+    """Local dispatch: the runner block is written into environment.json via the host snapshot."""
+    import json
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    _save_and_record(
+        result,
+        study_dir,
+        manifest,
+        "aabb1122",
+        1,
+        result_files,
+        model_name="gpt2",
+        engine="transformers",
+        ts_source_dir=tmp_path,  # local temp dir never holds environment.json
+        environment_snapshot=_make_host_snapshot(),
+        runner_provenance=RunnerProvenance(
+            mode="local", image=None, source="default", image_source=None
+        ),
+        runner_environment=RunnerEnvironment(
+            type="local", image=None, image_digest=None, source="default"
+        ),
+    )
+
+    env_dest = Path(result_files[0]).parent / "environment.json"
+    payload = json.loads(env_dest.read_text())
+    assert payload["schema_version"] == "1.0"
+    assert payload["runner"] == {
+        "type": "local",
+        "image": None,
+        "image_digest": None,
+        "source": "default",
+    }
+
+
+def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> None:
+    """Docker dispatch: the runner block (image + digest) is patched into the rescued env.json.
+
+    The container writes environment.json without runner facts the host alone
+    knows (image ref, registry digest, source), so the host patches them into
+    the rescued snapshot while the container's hardware values still win.
+    """
+    import json
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    _write_container_environment_sidecar(tmp_path / "environment.json")
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    _save_and_record(
+        result,
+        study_dir,
+        manifest,
+        "aabb1122",
+        1,
+        result_files,
+        model_name="gpt2",
+        engine="transformers",
+        ts_source_dir=tmp_path,
+        environment_snapshot=_make_host_snapshot(),
+        runner_provenance=RunnerProvenance(
+            mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
+        ),
+        runner_environment=RunnerEnvironment(
+            type="docker",
+            image="ghcr.io/acme/vllm:1.0",
+            image_digest="ghcr.io/acme/vllm@sha256:abc123",
+            source="yaml",
+        ),
+    )
+
+    env_dest = Path(result_files[0]).parent / "environment.json"
+    payload = json.loads(env_dest.read_text())
+    # Runner block (host-only facts) patched into the rescued snapshot.
+    assert payload["runner"] == {
+        "type": "docker",
+        "image": "ghcr.io/acme/vllm:1.0",
+        "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
+        "source": "yaml",
+    }
+    # schema_version stamped in when the (old-style) container payload omitted it.
+    assert payload["schema_version"] == "1.0"
+    # Container hardware/runtime values still win over the host snapshot.
+    assert payload["python_version"] == "3.10.14"
+    assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
+    # Rescued staging file consumed.
+    assert not (tmp_path / "environment.json").exists()
+
+
+def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Path) -> None:
+    """Docker dispatch without a rescued snapshot: runner block still lands via host snapshot."""
+    import json
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    _save_and_record(
+        result,
+        study_dir,
+        manifest,
+        "aabb1122",
+        1,
+        result_files,
+        model_name="gpt2",
+        engine="transformers",
+        ts_source_dir=tmp_path,  # no environment.json rescued
+        environment_snapshot=_make_host_snapshot(),
+        runner_provenance=RunnerProvenance(
+            mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
+        ),
+        runner_environment=RunnerEnvironment(
+            type="docker",
+            image="ghcr.io/acme/vllm:1.0",
+            image_digest=None,
+            source="yaml",
+        ),
+    )
+
+    env_dest = Path(result_files[0]).parent / "environment.json"
+    payload = json.loads(env_dest.read_text())
+    # Runner block present even in the degraded no-rescue case (host snapshot carries it).
+    assert payload["runner"]["type"] == "docker"
+    assert payload["runner"]["image"] == "ghcr.io/acme/vllm:1.0"
+    assert payload["runner"]["image_digest"] is None
+
+
+def test_runner_environment_local_and_none_spec() -> None:
+    """_runner_environment maps local specs (and no spec) onto a local runner block."""
+    local = _runner_environment(RunnerSpec(mode="local", image=None, source="user_config"))
+    assert local.type == "local"
+    assert local.image is None
+    assert local.image_digest is None
+    assert local.source == "user_config"
+
+    no_spec = _runner_environment(None)
+    assert no_spec.type == "local"
+    assert no_spec.source == "local"
+
+
+def test_runner_environment_docker_digest_failure_is_none() -> None:
+    """A docker spec whose digest cannot be resolved records image_digest=None (never raises)."""
+    from unittest.mock import patch
+
+    with patch("llenergymeasure.infra.image_registry.resolve_image_digest", return_value=None):
+        env = _runner_environment(
+            RunnerSpec(mode="docker", image=None, source="auto_detected"),
+            resolved_image="ghcr.io/acme/vllm:1.0",
+        )
+    assert env.type == "docker"
+    assert env.image == "ghcr.io/acme/vllm:1.0"
+    assert env.image_digest is None
+    assert env.source == "auto_detected"
