@@ -67,10 +67,15 @@ Passed verbatim as the value of ``docker run --gpus``. Unset / empty means
 host, set a device selector (e.g. ``device=2`` or ``device=2,3``) to pin
 llem's containers to free GPUs.
 
-Restricting visibility at the DOCKER level keeps measurement indices
-consistent: inside the container the only visible GPU(s) enumerate from 0 for
-BOTH CUDA and NVML, so compute, energy sampling, and thermal monitoring all
-address the same physical device without any index translation.
+Index space and why docker-level scoping (the canonical rationale referenced
+elsewhere): GPU indices - both here and in ``study_execution.gpu_indices`` - are
+HOST device indices as the NVIDIA driver / NVML enumerate them (the ordering
+``nvidia-smi`` shows and ``docker run --gpus device=N`` selects). Restricting
+visibility at the DOCKER level (rather than via ``CUDA_VISIBLE_DEVICES`` inside
+the container) keeps measurement indices consistent: inside the container the
+only visible GPU(s) re-enumerate from 0 for BOTH CUDA and NVML, so compute,
+energy sampling, and thermal monitoring all address the same physical device
+without any index translation.
 
 Precedence over the config ``study_execution.gpu_indices`` field: this env var
 WINS (env > config, matching llem's env>config convention). When both are set
@@ -84,9 +89,8 @@ case to disambiguate.
 def _gpu_indices_to_selector(gpu_indices: list[int]) -> str:
     """Format host GPU indices as a docker device selector.
 
-    ``[2]`` -> ``"device=2"``; ``[2, 3]`` -> ``"device=2,3"``. The indices are
-    HOST device indices as the NVIDIA driver / NVML enumerate them (the same
-    ordering ``nvidia-smi`` shows and ``docker run --gpus device=N`` selects).
+    ``[2]`` -> ``"device=2"``; ``[2, 3]`` -> ``"device=2,3"``. Indices are host
+    device indices - see :data:`ENV_DOCKER_GPUS` for the index space.
     """
     return "device=" + ",".join(str(i) for i in gpu_indices)
 
@@ -101,10 +105,8 @@ def docker_gpus(config_gpu_indices: list[int] | None = None) -> str:
     - else ``config_gpu_indices`` non-empty -> ``device=<comma-joined host ids>``.
     - else -> ``all`` (every visible GPU - the historical default).
 
-    ``config_gpu_indices`` are HOST device indices (driver / NVML enumeration).
-    Scoping at the docker level keeps CUDA and NVML consistent inside the
-    container (both re-enumerate from 0), so energy attribution stays correct
-    without any index translation.
+    ``config_gpu_indices`` are host device indices; see :data:`ENV_DOCKER_GPUS`
+    for the index space and why scoping happens at the docker level.
     """
     raw = os.environ.get(ENV_DOCKER_GPUS, "").strip()
     if raw:
@@ -216,6 +218,23 @@ def pinned_gpu_lock_ids(config_gpu_indices: list[int] | None = None) -> list[str
     tokens = [tok.strip() for tok in raw[len(prefix) :].split(",")]
     ids = [_sanitize_lock_id(tok) for tok in tokens if tok]
     return ids or None
+
+
+def docker_gpus_cache_token(config_gpu_indices: list[int] | None = None) -> str | None:
+    """Return a filename-safe token for the effective ``--gpus`` selector.
+
+    ``None`` when the selector resolves to ``all`` (unrestricted); otherwise a
+    sanitised form of the effective selector (env>config, via :func:`docker_gpus`),
+    e.g. ``device=2,3`` -> ``device_2_3``. Used to qualify the per-target baseline
+    cache key so a study resumed with a different GPU pin does not reuse a baseline
+    measured on a different physical device (idle GPU power is per-device). The
+    ``all`` -> ``None`` case keeps the unqualified cache-key shape unchanged for the
+    default (unpinned) path.
+    """
+    selector = docker_gpus(config_gpu_indices)
+    if selector == "all":
+        return None
+    return _sanitize_lock_id(selector)
 
 
 _DEFAULT_DOCKER_SHM_SIZE: Final = "8g"

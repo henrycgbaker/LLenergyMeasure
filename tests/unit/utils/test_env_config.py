@@ -17,6 +17,7 @@ from llenergymeasure.utils.env_config import (
     ENV_DOCKER_SHM_SIZE,
     docker_gpus,
     docker_gpus_arg,
+    docker_gpus_cache_token,
     docker_shm_size,
     pinned_gpu_lock_ids,
     warn_on_gpu_selector_conflict,
@@ -207,6 +208,29 @@ class TestConfigGpuIndices:
         """When both set, lock ids come from the env selector (env>config)."""
         monkeypatch.setenv(ENV_DOCKER_GPUS, "device=5")
         assert pinned_gpu_lock_ids([2, 3]) == ["5"]
+
+
+class TestDockerGpusCacheToken:
+    """docker_gpus_cache_token qualifies the baseline cache key by physical GPU."""
+
+    def test_unpinned_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """'all' selector -> None (baseline cache key stays unqualified)."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus_cache_token(None) is None
+
+    def test_config_pin_sanitised(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Config indices -> filename-safe token (no '=' or ',')."""
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus_cache_token([2, 3]) == "device_2_3"
+
+    def test_env_pin_sanitised(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Env selector is sanitised the same way and wins over config."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=7")
+        assert docker_gpus_cache_token([2, 3]) == "device_7"
+
+    def test_distinct_pins_distinct_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(ENV_DOCKER_GPUS, raising=False)
+        assert docker_gpus_cache_token([2, 3]) != docker_gpus_cache_token([4, 5])
 
 
 class TestGpuSelectorConflictWarning:

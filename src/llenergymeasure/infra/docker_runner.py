@@ -439,12 +439,10 @@ class DockerRunner:
                  wall-clock - the watchdog raises whichever fires first.
         source:  Runner resolution source string (e.g. ``"yaml"``, ``"auto_detected"``).
                  Recorded in the result's runner_provenance for traceability.
-        gpu_indices: Optional HOST GPU indices (driver / NVML enumeration, as
-                 ``nvidia-smi`` shows) to scope the container to via
-                 ``--gpus device=<indices>``. Sourced from the study's
-                 ``study_execution.gpu_indices``. The process-global
-                 ``LLEM_DOCKER_GPUS`` env var overrides this (env>config); when
-                 both are set the env wins and these indices are ignored.
+        gpu_indices: Optional host GPU indices to scope the container to via
+                 ``--gpus device=<indices>`` (see ``utils.env_config.ENV_DOCKER_GPUS``
+                 for the index space). Sourced from ``study_execution.gpu_indices``;
+                 the ``LLEM_DOCKER_GPUS`` env var overrides it (env>config).
                  ``None`` / empty preserves the default ``--gpus all``.
     """
 

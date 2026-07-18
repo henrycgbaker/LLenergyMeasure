@@ -79,13 +79,12 @@ def build_baseline_docker_cmd(
     fail with ``ModuleNotFoundError``. The script exec's the baseline entry
     module (set via ``LLEM_ENTRY_MODULE``) instead of the experiment one.
 
-    ``gpu_indices`` are the LOGICAL in-container monitoring indices
-    (``CUDA_VISIBLE_DEVICES``); ``config_gpu_indices`` are the study's HOST
-    physical GPU selector (``study_execution.gpu_indices``) threaded into
-    ``--gpus`` so the baseline container is scoped to the SAME physical devices
-    as the experiment container (env>config precedence via ``docker_gpus_arg``).
-    Without this a config-pinned study would measure baseline idle power on the
-    wrong physical GPU.
+    Two distinct GPU params: ``gpu_indices`` are the LOGICAL in-container
+    monitoring indices (``CUDA_VISIBLE_DEVICES``); ``config_gpu_indices`` are the
+    study's HOST ``--gpus`` selector (``study_execution.gpu_indices``, env>config
+    via ``docker_gpus_arg``; see ``utils.env_config.ENV_DOCKER_GPUS``). Threading
+    the latter scopes the baseline container to the same physical devices as the
+    experiment container, so a config-pinned study does not baseline the wrong GPU.
 
     Kept separate from ``run_baseline_container`` so tests can assert on the
     command shape without mocking subprocess internals.
