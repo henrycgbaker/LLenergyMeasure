@@ -100,6 +100,43 @@ class TestBuildBaselineDockerCmd:
         )
         assert cmd[cmd.index("--gpus") + 1] == "device=2"
 
+    def test_cmd_scopes_gpus_from_config_indices(self, tmp_path: Path, monkeypatch):
+        """config_gpu_indices scopes the baseline --gpus to the same physical
+        devices as the experiment container (single -> device=N)."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+            config_gpu_indices=[2],
+        )
+        assert cmd[cmd.index("--gpus") + 1] == "device=2"
+
+    def test_cmd_scopes_gpus_from_config_indices_multi(self, tmp_path: Path, monkeypatch):
+        """Multi config indices are quoted for docker's CSV parser."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0, 1],
+            engine="vllm",
+            config_gpu_indices=[2, 3],
+        )
+        assert cmd[cmd.index("--gpus") + 1] == '"device=2,3"'
+
+    def test_env_overrides_config_gpu_indices(self, tmp_path: Path, monkeypatch):
+        """LLEM_DOCKER_GPUS still wins over config_gpu_indices for the baseline."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=5")
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+            config_gpu_indices=[2, 3],
+        )
+        assert cmd[cmd.index("--gpus") + 1] == "device=5"
+
     def test_cmd_makes_package_importable(self, tmp_path: Path):
         """The baseline command must mount the host package + route through the
         entrypoint script so the upstream engine image can import the package.

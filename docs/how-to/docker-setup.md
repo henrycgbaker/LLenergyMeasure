@@ -555,11 +555,26 @@ The `--gpus all` flag is missing from the `docker run` command.
 Docker commands manually, ensure you include `--gpus all` (or `--gpus device=0` for a specific
 GPU).
 
-To make `llem` itself target specific GPUs on a shared host, set `LLEM_DOCKER_GPUS` to the
-`docker run --gpus` value (empty means every visible GPU). Quote multi-device values so the
-shell keeps the comma, e.g. `LLEM_DOCKER_GPUS="device=2,3"`. Restricting at the docker level
-keeps CUDA and NVML indices consistent inside the container (both enumerate from 0). For
-tensor-parallel runs, `llem` also forwards every `NCCL_*` host variable into the container;
+To make `llem` itself target specific GPUs on a shared host, there are two levers:
+
+- **`LLEM_DOCKER_GPUS` (env var, host-wide).** Set it to the `docker run --gpus` value (empty
+  means every visible GPU). Quote multi-device values so the shell keeps the comma, e.g.
+  `LLEM_DOCKER_GPUS="device=2,3"`.
+- **`study_execution.gpu_indices` (study YAML, per study).** A list of host GPU indices, e.g.
+  `gpu_indices: [2, 3]`, translated to `--gpus device=2,3`. This lets a study YAML declare its
+  own GPU placement without an env var.
+
+Both are **host device indices** as the NVIDIA driver / NVML enumerate them (what `nvidia-smi`
+shows). Restricting at the docker level (rather than setting `CUDA_VISIBLE_DEVICES` inside the
+container) keeps CUDA and NVML indices consistent inside the container - both re-enumerate from
+0 - so energy attribution addresses the correct physical device without any index translation.
+
+**Precedence: `LLEM_DOCKER_GPUS` (env) overrides `study_execution.gpu_indices` (config).** When
+both are set the env wins and `llem` logs a one-line warning; the config indices are ignored.
+Because the env fully overrides the config, the two never compose - there is no "config indices
+index into the env-restricted set" case to reason about. Pick one lever per run.
+
+For tensor-parallel runs, `llem` also forwards every `NCCL_*` host variable into the container;
 see [multi-GPU with TensorRT-LLM](/how-to/run-with-tensorrt-llm#multi-gpu-tensor-parallelism).
 
 `LLEM_DOCKER_GPUS` also accepts a Multi-Instance GPU (MIG) instance UUID
@@ -572,8 +587,10 @@ for the operational steps and the power-telemetry caveat.
 ### Shared memory errors with vLLM
 
 vLLM requires more than the default 64 MB of shared memory (`/dev/shm`). `llem` automatically
-sets `--shm-size 8g` when launching vLLM containers. If you are running the vLLM container
-manually, add `--shm-size 8g` to your `docker run` command.
+sets `--shm-size 8g` when launching engine containers. Override the size with the
+`LLEM_DOCKER_SHM_SIZE` env var (e.g. `LLEM_DOCKER_SHM_SIZE=16g` for very large tensor-parallel
+runs, or a smaller value on memory-constrained hosts); empty means the `8g` default. If you are
+running the vLLM container manually, add `--shm-size 8g` to your `docker run` command.
 
 ---
 

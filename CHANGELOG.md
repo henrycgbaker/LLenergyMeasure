@@ -9,6 +9,30 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Added
 
+- Docker dispatch can now be scoped to specific host GPUs from config via the new
+  `study_execution.gpu_indices` field (a list of host device indices, e.g. `[2, 3]`),
+  translated to `docker run --gpus device=2,3`. Scoping at the docker level keeps CUDA and
+  NVML indices consistent inside the container (both re-enumerate from 0), so energy
+  attribution stays correct. The process-global `LLEM_DOCKER_GPUS` env var overrides this
+  field (env>config); when both are set the env wins and a warning is logged. The field is
+  placement metadata and is excluded from the declared-config and study-design hashes, so
+  pinning a study to different physical GPUs never changes dedup grouping. The same selector
+  drives per-GPU advisory-lock naming, the baseline container's `--gpus`, and the per-target
+  baseline cache key, so config-pinned studies lock, baseline, and cache the correct physical
+  devices. ([#838])
+- The Docker `--shm-size` for llem-launched containers is now configurable via the
+  `LLEM_DOCKER_SHM_SIZE` env var (default `8g`, the previous hardcoded value). Raise it for
+  very large tensor-parallel runs or lower it on memory-constrained hosts. ([#838])
+- The per-experiment `environment.json` sidecar now records a `runner` block
+  restoring runner provenance to every result: `mode` (`docker` vs `local`),
+  `image`, `image_digest` (the resolved registry digest `repo@sha256:...`,
+  pinning the full software stack as the cross-run reproducibility anchor), and
+  `source` (the precedence layer that selected the runner). The sidecar also
+  gains its own `schema_version` (`"1.0"`, independent of `result.json`), its
+  first explicit version. The digest is resolved host-side via
+  `docker image inspect`; resolution is best-effort and records `null` (never
+  fails a run) for local runs, locally-built images, or when docker is
+  unavailable. Older sidecars load with `runner: null`. ([#837])
 - Generic-environment documentation. A new how-to page, "Running on a cloud GPU
   VM", covers AWS/GCP/Azure GPU instances end to end: prerequisites (linking the
   canonical NVIDIA driver, Docker, and NVIDIA Container Toolkit guides),
@@ -54,6 +78,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   unconditionally elevated to Docker, which failed when Docker was absent even for engines
   the user had pinned to local. Runner choice is machine-binding and recorded per result.
   ([#835])
+- `configs/example-study-full.yaml` is now a lean, runnable multi-engine example (100 lines,
+  down from 585). The previous file was a 52,032-run reference marked "not intended for
+  end-to-end execution" and carried a "KNOWN-BAD crosses" block plus stale TODOs. It now
+  runs as-is (17 experiments) and covers every top-level section of a study spec. For the
+  exhaustive per-engine field surface it previously duplicated, the header points readers at
+  `llem study init` (schema-derived, so it cannot drift). ([#839])
 
 ### Removed
 - `llem config` is removed. Its environment-diagnostics role is subsumed by the broadened
@@ -1114,4 +1144,7 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#834]: https://github.com/henrycgbaker/llenergymeasure/pull/834
 [#835]: https://github.com/henrycgbaker/llenergymeasure/pull/835
 [#836]: https://github.com/henrycgbaker/llenergymeasure/pull/836
+[#837]: https://github.com/henrycgbaker/llenergymeasure/pull/837
+[#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
+[#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839
 [#840]: https://github.com/henrycgbaker/llenergymeasure/pull/840

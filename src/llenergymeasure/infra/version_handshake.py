@@ -44,7 +44,7 @@ from pathlib import Path
 import platformdirs
 
 from llenergymeasure.config.ssot import ENGINE_PACKAGES, TIMEOUT_DOCKER_INSPECT, Engine
-from llenergymeasure.infra.image_registry import inspect_image
+from llenergymeasure.infra.image_registry import _inspect_first_dict, inspect_image
 from llenergymeasure.utils.compat import StrEnum
 
 __all__ = [
@@ -286,18 +286,14 @@ def _resolve_image_digest(image: str, *, timeout: float = TIMEOUT_DOCKER_INSPECT
     JSON. A None digest means the caller skips the persistent cache and falls
     back to the cold probe (which pulls the image if absent); it never crashes.
     RepoDigests (the registry digest) is deliberately not used: it is absent
-    for locally-built images, whereas ``Id`` is always available locally.
+    for locally-built images, whereas ``Id`` is always available locally. The
+    sibling ``image_registry.resolve_image_digest`` reads ``RepoDigests`` from
+    the same inspect record for the cross-host reproducibility anchor.
     """
-    result = inspect_image(image, timeout=timeout)
-    if result is None or result.returncode != 0:
+    record = _inspect_first_dict(image, timeout=timeout)
+    if record is None:
         return None
-    try:
-        data = json.loads(result.stdout)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if not data:
-        return None
-    image_id = data[0].get("Id")
+    image_id = record.get("Id")
     return image_id if isinstance(image_id, str) and image_id else None
 
 

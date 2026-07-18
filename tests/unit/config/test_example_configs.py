@@ -83,18 +83,7 @@ def _swept_paths(raw_study: dict) -> set[str]:
     return {p for p in paths if "." in p}
 
 
-# example-study-full.yaml expands to a ~46k-cell grid; loading it through the
-# full study loader (expand + per-cell validation + resolved-config dedup) is
-# CPU-bound and costs ~20s. That is genuine work, not a wait, and it is the exact
-# path a user hits, so we keep the full-fidelity guard but mark it slow so local
-# fast runs can skip it. CI runs everything, so the docs-example guard still holds.
-_PARSE_CONFIGS = [
-    pytest.param(CONFIGS_DIR / "example-study-full.yaml", marks=pytest.mark.slow),
-    CONFIGS_DIR / "tutorials" / "tutorial-multi-engine.yaml",
-]
-
-
-@pytest.mark.parametrize("config_path", _PARSE_CONFIGS, ids=lambda p: p.name)
+@pytest.mark.parametrize("config_path", STUDY_CONFIGS, ids=lambda p: p.name)
 def test_study_config_parses(config_path: Path) -> None:
     """The config loads through the study loader and yields >=1 experiment."""
     study = load_study(config_path)
