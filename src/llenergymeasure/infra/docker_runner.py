@@ -15,7 +15,10 @@ This module is consumed by StudyRunner as the dispatch mechanism when
 
 from __future__ import annotations
 
+import atexit
 import functools
+import importlib.metadata
+import importlib.resources
 import json
 import logging
 import os
@@ -74,7 +77,7 @@ from llenergymeasure.utils.env_config import (
     docker_gpus_arg,
     trt_build_cache_host_dir,
 )
-from llenergymeasure.utils.exceptions import DockerError
+from llenergymeasure.utils.exceptions import DockerError, DockerPreFlightError
 from llenergymeasure.utils.io import load_json
 
 __all__ = ["DockerRunner", "append_nccl_env", "append_package_dispatch"]
@@ -118,13 +121,21 @@ _WATCHDOG_POLL_INTERVAL = 0.5
 # Sentinel for "budget disabled" in the deadline comparison.
 _NO_DEADLINE = float("inf")
 
-# Host paths the container expects to find as bind-mount targets.
-# scripts/container_entrypoint.sh is the in-container bootstrap: it diffs
-# pyproject.toml against installed dists, primes any missing runtime deps
-# to the host-mounted cache, then exec's the framework's Python entrypoint
-# module (with engine-conditional routing through nvidia_entrypoint.sh for
-# TRT-LLM).
-_CONTAINER_ENTRY_SCRIPT_REL = ("scripts", "container_entrypoint.sh")
+# The in-container entrypoint script is shipped as package data (rather than
+# resolved from a repo-root scripts/ dir) so container dispatch works from an
+# installed wheel, not only a source checkout. It is read via
+# importlib.resources and materialised to a host tempdir before bind-mounting
+# (see _materialise_dispatch_assets); docker bind-mounts need a real host path.
+_ENTRY_SCRIPT_PACKAGE: Final = "llenergymeasure.infra"
+_ENTRY_SCRIPT_RESOURCE: Final = "_container/container_entrypoint.sh"
+# Distribution name whose metadata declares the runtime deps the container
+# primes. Read from importlib.metadata so it resolves identically from a
+# checkout and a site-packages install (the old path read the repo-root
+# pyproject.toml, which does not exist for a pip-installed user).
+_DISPATCH_DIST_NAME: Final = "llenergymeasure"
+# Temp-dir prefix for the materialised dispatch assets (entrypoint script +
+# requirements list). One dir per process, cleaned up at interpreter exit.
+_TEMP_PREFIX_DISPATCH: Final = "llem-dispatch-"
 
 
 @contextmanager
@@ -190,24 +201,95 @@ def _resolve_package_parent_dir() -> Path:
 
 
 @functools.cache
-def _resolve_repo_root() -> Path:
-    """Return the repository root (one level above the ``src/`` package parent).
+def _runtime_requirements() -> tuple[str, ...]:
+    """Return llenergymeasure's always-on runtime dependency specs.
 
-    The repo root holds ``pyproject.toml`` and ``scripts/`` - both consumed by
-    the in-container entrypoint script. Resolved relative to
-    ``_resolve_package_parent_dir`` so a future src-layout change only needs
-    to touch one helper.
+    Read from the installed distribution metadata (``importlib.metadata``)
+    rather than a repo-root ``pyproject.toml``, so it resolves identically from
+    a source checkout and a site-packages install. Optional-extra requirements
+    (those carrying an ``extra == ...`` environment marker) are excluded: the
+    container primes only the always-on runtime deps, exactly as the old
+    ``[project.dependencies]`` diff did. Sorted so the materialised file is
+    deterministic (the container hashes it for the deps-probe fast-path stamp).
+    Non-extra environment markers (none exist on current core deps) are
+    discarded rather than forwarded to pip; revisit if a marker-carrying core
+    dependency is ever added.
     """
-    return _resolve_package_parent_dir().parent
+    core: list[str] = []
+    for spec in importlib.metadata.requires(_DISPATCH_DIST_NAME) or []:
+        requirement, _, marker = spec.partition(";")
+        if "extra" in marker:
+            continue
+        requirement = requirement.strip()
+        if requirement:
+            core.append(requirement)
+    return tuple(sorted(core))
+
+
+@functools.cache
+def _materialise_dispatch_assets() -> tuple[Path, Path]:
+    """Materialise the dispatch assets to a host tempdir; return their paths.
+
+    Returns ``(entry_script, requirements_file)`` as real on-disk paths suitable
+    for a docker bind-mount. Both are sourced from the installed package (the
+    script via ``importlib.resources``, the requirements via
+    ``importlib.metadata``) so they resolve from an installed wheel, not only a
+    source checkout - the defect this fixes was resolving them relative to
+    ``__file__``, which landed outside the package for a site-packages install
+    and let docker auto-create empty bind-mount dirs that broke the entrypoint
+    exec.
+
+    Materialised once per process (cached): the content is process-invariant and
+    the mounts are read-only, so a sweep dispatching the same assets hundreds of
+    times pays the extraction cost once. The tempdir is removed at interpreter
+    exit. Raises :class:`DockerPreFlightError` (before any ``docker run``) if an
+    asset cannot be produced, rather than letting docker silently mount an empty
+    directory.
+    """
+    try:
+        script_bytes = (
+            importlib.resources.files(_ENTRY_SCRIPT_PACKAGE)
+            .joinpath(_ENTRY_SCRIPT_RESOURCE)
+            .read_bytes()
+        )
+    except (FileNotFoundError, ModuleNotFoundError, OSError) as exc:
+        raise DockerPreFlightError(
+            "Cannot read the container entrypoint script from the installed "
+            "llenergymeasure package "
+            f"({_ENTRY_SCRIPT_RESOURCE}). The package data is "
+            "incomplete: reinstall llenergymeasure (e.g. "
+            "'pip install --force-reinstall llenergymeasure'), or in a source "
+            "checkout confirm the file exists under src/llenergymeasure/infra/."
+        ) from exc
+
+    requirements = _runtime_requirements()
+    if not requirements:
+        raise DockerPreFlightError(
+            "Cannot derive llenergymeasure's runtime dependencies from the "
+            "installed distribution metadata. Reinstall llenergymeasure so its "
+            "metadata is present (e.g. 'pip install llenergymeasure')."
+        )
+
+    asset_dir = Path(tempfile.mkdtemp(prefix=_TEMP_PREFIX_DISPATCH))
+    atexit.register(shutil.rmtree, asset_dir, ignore_errors=True)
+
+    entry_script = asset_dir / "container_entrypoint.sh"
+    entry_script.write_bytes(script_bytes)
+    entry_script.chmod(0o755)
+
+    requirements_file = asset_dir / "requirements.txt"
+    requirements_file.write_text("\n".join(requirements) + "\n", encoding="utf-8")
+
+    return entry_script, requirements_file
 
 
 @functools.cache
 def _ensure_deps_cache_dir() -> Path:
     """Resolve the host-side runtime-deps cache directory, creating it if absent.
 
-    The entrypoint script (``scripts/container_entrypoint.sh``) primes any
-    missing runtime deps here on first dispatch and short-circuits subsequent
-    dispatches via a pyproject-hash stamp. The cache is keyed by container
+    The in-container entrypoint script primes any missing runtime deps here on
+    first dispatch and short-circuits subsequent dispatches via a
+    requirements-hash stamp. The cache is keyed by container
     Python minor (script writes to ``$DEPS_CACHE_ROOT/py{N}.{M}/``), so a
     single host directory serves multiple engine images even when their
     Python minors differ.
@@ -238,11 +320,17 @@ def append_package_dispatch(
     Upstream engine images (vllm, tensorrt) and even our transformers image do
     NOT have ``llenergymeasure`` installed; the framework runs from the host
     source bind-mounted at ``/llem-src``. This appends the four mounts the
-    in-container entrypoint script needs (package source, pyproject.toml, the
-    script itself, and the host deps cache), the env it reads, and points
-    ``--entrypoint`` at the script. The script sets ``PYTHONPATH`` to include
-    ``/llem-src`` and primes any missing runtime deps, then exec's the module
-    named by ``LLEM_ENTRY_MODULE``.
+    in-container entrypoint script needs (package source, the runtime
+    requirements list, the script itself, and the host deps cache), the env it
+    reads, and points ``--entrypoint`` at the script. The script sets
+    ``PYTHONPATH`` to include ``/llem-src`` and primes any missing runtime deps,
+    then exec's the module named by ``LLEM_ENTRY_MODULE``.
+
+    The entrypoint script and the requirements list are shipped as package data
+    and materialised to a host tempdir (see ``_materialise_dispatch_assets``) so
+    dispatch works from an installed wheel, not only a source checkout. The
+    package source at ``/llem-src`` still resolves from ``__file__`` because a
+    site-packages install already puts it on a real host path.
 
     Shared by the experiment dispatch (``DockerRunner._build_docker_cmd``) and
     the baseline dispatch (``study.baseline_container.build_baseline_docker_cmd``)
@@ -255,18 +343,22 @@ def append_package_dispatch(
             through ``nvidia_entrypoint.sh`` for the libnvinfer ``LD_LIBRARY_PATH``.
         entry_module: Override for the module the script exec's. ``None`` leaves
             the script default (``llenergymeasure.entrypoints.container``).
+
+    Raises:
+        DockerPreFlightError: A dispatch asset (entrypoint script or requirements
+            list) could not be materialised from the installed package. Raised
+            before ``docker run`` so a missing source never becomes a silent
+            docker-auto-created empty-dir mount.
     """
     pkg_parent = _resolve_package_parent_dir()
-    repo_root = _resolve_repo_root()
-    entry_script = repo_root / "scripts" / "container_entrypoint.sh"
-    pyproject = repo_root / "pyproject.toml"
+    entry_script, requirements_file = _materialise_dispatch_assets()
     deps_cache = _ensure_deps_cache_dir()
     cmd.extend(
         [
             "-v",
             f"{pkg_parent}:/llem-src:ro",
             "-v",
-            f"{pyproject}:/llem-pyproject.toml:ro",
+            f"{requirements_file}:/llem-requirements.txt:ro",
             "-v",
             f"{entry_script}:/llem-entry.sh:ro",
             "-v",
@@ -320,7 +412,7 @@ class DockerRunner:
         2. Write ExperimentConfig as JSON to ``{config_hash}_config.json``
         3. ``docker run --rm --gpus all -v {exchange_dir}:/run/llem``
                ``-v {pkg_parent}:/llem-src:ro``
-               ``-v {pyproject}:/llem-pyproject.toml:ro``
+               ``-v {requirements_file}:/llem-requirements.txt:ro``
                ``-v {entry_script}:/llem-entry.sh:ro``
                ``-v {deps_cache}:/llem-runtime-deps``
                ``-e LLEM_ENGINE={engine}``
@@ -969,14 +1061,15 @@ class DockerRunner:
 
         All three engines (transformers, vllm, tensorrt) follow the same
         dispatch shape: the image carries only the engine substrate, the host
-        package source is bind-mounted at ``/llem-src``, pyproject.toml is
-        bind-mounted as a single-file mount at ``/llem-pyproject.toml``, the
-        in-container entrypoint script is bind-mounted at ``/llem-entry.sh``,
-        and a host-side deps cache is bind-mounted at ``/llem-runtime-deps``.
-        ``--entrypoint`` always points at ``/llem-entry.sh``; that script
-        (a) diffs ``pyproject.toml``'s ``[project.dependencies]`` against
-        installed dists and pip-installs any missing ones to the cache (fast-
-        path skips this when a pyproject-hash stamp matches), (b) sets
+        package source is bind-mounted at ``/llem-src``, the runtime
+        requirements list is bind-mounted as a single-file mount at
+        ``/llem-requirements.txt``, the in-container entrypoint script is
+        bind-mounted at ``/llem-entry.sh``, and a host-side deps cache is
+        bind-mounted at ``/llem-runtime-deps``. ``--entrypoint`` always points
+        at ``/llem-entry.sh``; that script
+        (a) diffs the requirements list against installed dists and
+        pip-installs any missing ones to the cache (fast-path skips this when a
+        requirements-hash stamp matches), (b) sets
         ``PYTHONPATH`` to include the cache and ``/llem-src``, and (c) exec's
         the framework entrypoint module - routing through
         ``/opt/nvidia/nvidia_entrypoint.sh`` when ``LLEM_ENGINE=tensorrt``

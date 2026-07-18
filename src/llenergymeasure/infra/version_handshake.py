@@ -454,9 +454,11 @@ def read_bundled_engine_version(engine: str) -> str | None:
             f"rules envelope says {inv_version!r}, schema envelope says "
             f"{sch_version!r}. This indicates a build-time bundling bug - "
             f"both artefacts must be sourced from the same per-version "
-            f"engine_versions/<engine>/v<safe>/outputs/ directory. Check "
-            f"pyproject.toml's [tool.hatch.build.targets.wheel.force-include] "
-            f"entries for the engine and rebuild the wheel."
+            f"engine_versions/<engine>/v<safe>/outputs/ directory. Re-run the "
+            f"absorb step so src/llenergymeasure/engines/{engine}/ holds a "
+            f"matching rules.yaml + schema.discovered.json pair (hatchling "
+            f"ships everything under src/llenergymeasure/ as package data), "
+            f"then rebuild the wheel."
         )
     return inv_version
 
