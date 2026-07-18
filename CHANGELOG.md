@@ -7,6 +7,8 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+## [v0.13.0] - 2026-07-18
+
 ### Added
 
 - Docker dispatch can now be scoped to specific host GPUs from config via the new
@@ -46,6 +48,18 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   conservative rootless-Docker/Podman note (detected but untested) and a MIG
   cross-reference. This documents capabilities the dispatch code already had.
   ([#840])
+- Distributions are now published to PyPI automatically on tagged releases via OIDC trusted
+  publishing (no API tokens or stored secrets). The release pipeline builds the sdist and
+  wheel once, attaches them to the GitHub Release, and a separate `publish-pypi` job uploads
+  those same bytes to PyPI, so both carry identical artefacts. `pip install llenergymeasure`
+  becomes the supported install path from the next tag onward. This is the package's first
+  PyPI onboarding: the maintainer configures the trusted publisher on pypi.org before the
+  first tagged publish, and a not-yet-configured publisher fails only the publish step (the
+  build and GitHub Release still succeed). The `package-validation` CI check was also upgraded
+  from an import-only probe to a real CPU-only smoke that installs the built wheel into a clean
+  virtualenv, imports the public API, and exercises the CLI to a zero exit. Release-process and
+  install docs were corrected to describe the actual trusted-publishing mechanism (the previous
+  release doc claimed a publish step that was never implemented). ([#826])
 
 ### Changed
 
@@ -121,6 +135,43 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   the real instructions: `cp .env.example .env`, then set `PUID`/`PGID` from `id -u` /
   `id -g`. Also removed the dead `LEM_ENGINE=pytorch` block from `.env.example` (wrong
   prefix, pre-rename engine name, and no consumer anywhere in the codebase). ([#831])
+- Corrected stale user-facing strings a pip-installed user could encounter. Shipped error
+  messages in `llem doctor`, the host engine-import guard, and the run preflight now point at
+  the published documentation site instead of a `docs/development.md` filesystem path that was
+  never packaged. The install docs' `git clone` URL was corrected to the real repository name
+  (`llenergymeasure.git`), and stale v0.9.0-era version strings in example output across the
+  install, FAQ, troubleshooting, and docker-setup how-tos were refreshed to the current
+  release. Build-time benchmark figures that named an internal host are reframed against a
+  generic reference machine. The wheel no longer ships the developer `README.md` files it
+  previously bundled (`*.md` excluded from the wheel build; runtime data and `py.typed` still
+  ship). ([#827])
+- A TensorRT-LLM config that sets a prebuilt `engine_path` without `backend: trt` is now
+  rejected at config validation with an actionable error, instead of silently constructing the
+  pytorch flow against a compiled-engine directory. `engine_path` points the loader at a
+  directory of compiled `rank*.engine` files that only the trt constructor can read; the
+  pytorch constructor (the default when `backend` is unset) treats its model argument as a
+  HuggingFace checkpoint, so the mismatch previously surfaced as an opaque model-load failure
+  deep in the engine rather than a clear config error. The guard fires whenever `engine_path`
+  is set and `backend` is not `trt` (covering unset, explicit `pytorch`, and explicit null);
+  set `backend: trt`, or drop `engine_path` to build from the model checkpoint. ([#828])
+- `cycle_gap_seconds`, the longer thermal-equalisation pause between cycles, no longer fires
+  mid-repetition under `sequential` experiment order. The runner placed the cycle gap using
+  positional modulo math that is only valid when experiments are laid out as full passes over
+  the configs (`interleave`/`reverse`/`shuffle`/`latin_square`); under `sequential` order the
+  sequence is `[A,A,A,B,B,B,...]`, so the gap landed inside a config's repetition block rather
+  than at a cycle boundary. Under `sequential` order the cycle gap now fires between the
+  per-config repetition blocks (once per transition to a different config); back-to-back
+  identical repetitions are separated only by the smaller `experiment_gap_seconds`. All
+  pass-structured orders are unchanged. ([#829])
+- Container dispatch (`runner: docker`) now works from a plain `pip install`, not only from a
+  source checkout. The dispatch inputs (the container entrypoint script and the runtime
+  dependency list) were previously resolved by walking up from the repo layout, which does not
+  exist under a site-packages install: docker then bind-mounted nonexistent sources, the
+  entrypoint mount became an empty directory, and every engine's docker run failed immediately.
+  The entrypoint script now ships as package data and both dispatch inputs are materialised
+  from the installed package, so dispatch behaves identically from a checkout and from an
+  installed wheel. A preflight error is raised before `docker run` if a dispatch asset cannot
+  be materialised, replacing the silent empty-directory mount. ([#830])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -941,7 +992,8 @@ Core measurement functionality establishing the foundation for all subsequent de
 - Major directory restructuring separating config, core, and result handling.
 
 
-[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.13.0...HEAD
+[v0.13.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.13.0
 [v0.12.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.12.0
 [v0.11.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.10.0
@@ -1138,6 +1190,11 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#826]: https://github.com/henrycgbaker/llenergymeasure/pull/826
+[#827]: https://github.com/henrycgbaker/llenergymeasure/pull/827
+[#828]: https://github.com/henrycgbaker/llenergymeasure/pull/828
+[#829]: https://github.com/henrycgbaker/llenergymeasure/pull/829
+[#830]: https://github.com/henrycgbaker/llenergymeasure/pull/830
 [#831]: https://github.com/henrycgbaker/llenergymeasure/pull/831
 [#832]: https://github.com/henrycgbaker/llenergymeasure/pull/832
 [#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
