@@ -21,6 +21,20 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Resolved-config and observed-config hashes now canonicalise integral numerics onto a
+  single form, closing an int-vs-float gap of the same class #822 fixed for the declared
+  hash. A field typed `float` but valued as an int (e.g. vLLM `cpu_offload_gb = 0`) stayed
+  a python `int` in the resolved view's `mode="python"` dump but was a genuine `float` in
+  the native engine object the observed pipeline captured, so semantically identical
+  configs hashed differently. The shared `_normalise` helper (`domain/hashing.py`) now
+  folds any integral-valued float onto its `int` form, so all three hash paths (declared,
+  resolved, observed) agree. Folding toward `int` (not `int -> float`) keeps genuine
+  integer identity fields (seeds, token counts) bit-exact. This corrects both dedup
+  grouping (`resolve_library_effective`, which decides how many experiments physically run)
+  and observed-collision gap detection (`find_observed_collisions`, which feeds the rules
+  corpus). Hash values change only for configs containing an int-valued float field;
+  pre-1.0, old persisted bundles keep their recorded hashes (no migration) and a study
+  resumed across the boundary may regroup. ([#833])
 - `.env.example` and `docker-compose.yml` no longer point at bootstrap tooling that does
   not exist. The file header and PUID/PGID guidance referenced a `setup.sh` auto-generator
   that was never shipped, and the `docker compose` PUID/PGID error told users to run
@@ -1047,3 +1061,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
 [#831]: https://github.com/henrycgbaker/llenergymeasure/pull/831
 [#832]: https://github.com/henrycgbaker/llenergymeasure/pull/832
+[#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
