@@ -448,6 +448,106 @@ def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     )
 
 
+# =============================================================================
+# run_study output_dir routing: -o overrides the results dir for fresh runs
+# =============================================================================
+
+
+def _capture_results_base(monkeypatch, tmp_path) -> dict:
+    """Patch _run's dependencies so a study 'runs' in-process, capturing the
+    results-dir base passed to create_study_dir.
+
+    Returns a dict populated with ``base`` (the Path handed to create_study_dir).
+    """
+    import llenergymeasure.engines as engines_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
+
+    captured: dict = {}
+    mock_result = make_result()
+    mock_engine = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    _patch_harness(monkeypatch, mock_result)
+
+    def _capture_create(name, output_dir):
+        captured["base"] = output_dir
+        return tmp_path
+
+    monkeypatch.setattr("llenergymeasure.study.manifest.create_study_dir", _capture_create)
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+    return captured
+
+
+def test_run_study_fresh_honors_output_dir(monkeypatch, tmp_path):
+    """Fresh run: output_dir (CLI -o) overrides the results-dir base."""
+    captured = _capture_results_base(monkeypatch, tmp_path)
+
+    study = StudyConfig(experiments=[make_config()])
+    custom = tmp_path / "custom-out"
+    run_study(study, skip_preflight=True, output_dir=custom)
+
+    assert captured["base"] == custom
+
+
+def test_run_study_fresh_without_output_dir_uses_yaml_results_dir(monkeypatch, tmp_path):
+    """Fresh run without output_dir falls back to YAML output.results_dir."""
+    from llenergymeasure.config.models import OutputConfig
+
+    captured = _capture_results_base(monkeypatch, tmp_path)
+
+    yaml_dir = tmp_path / "yaml-results"
+    study = StudyConfig(
+        experiments=[make_config()],
+        output=OutputConfig(results_dir=str(yaml_dir)),
+    )
+    run_study(study, skip_preflight=True)
+
+    assert captured["base"] == yaml_dir
+
+
+def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
+    """Resume: output_dir stays the resumable-study search base, not a results override."""
+    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.resume as resume_module
+
+    search_bases: list = []
+    fake_resume_dir = tmp_path / "study_2026"
+
+    def _fake_find(base):
+        search_bases.append(base)
+        return fake_resume_dir
+
+    monkeypatch.setattr(resume_module, "find_resumable_study", _fake_find)
+    monkeypatch.setattr(resume_module, "load_resume_state", lambda d: ({}, set()))
+    monkeypatch.setattr(resume_module, "validate_config_drift", lambda old, study: None)
+    monkeypatch.setattr(resume_module, "prepare_resume_manifest", lambda d, old: None)
+
+    captured: dict = {}
+
+    def _capture_run(study, **kw):
+        captured.update(kw)
+        return make_study_result()
+
+    monkeypatch.setattr(api_module, "_run", _capture_run)
+
+    study = StudyConfig(experiments=[make_config()])
+    search_base = tmp_path / "search-here"
+    run_study(study, resume=True, output_dir=search_base)
+
+    assert search_bases == [search_base]
+    assert captured["resume_dir"] == fake_resume_dir
+    assert captured["results_dir_override"] is None
+
+
 def test_run_preresolved_without_skip_preflight_raises():
     """Passing preresolved with skip_preflight=False is rejected, not silently honoured."""
     import llenergymeasure.api._impl as api_module

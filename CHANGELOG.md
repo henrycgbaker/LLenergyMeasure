@@ -20,6 +20,33 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   once per resolution. `llem doctor` surfaces the same shadowing fact on the
   affected engine's row. Resolution behaviour is unchanged. ([#843])
 
+### Fixed
+
+- `llem run -o/--output-dir` is now honored for fresh (non-resume) studies. The flag
+  was documented as "Output directory for results" but was silently a no-op on a fresh
+  run: `run_study` only consumed `output_dir` as the auto-detect-resume search base and
+  never threaded it into the results-dir resolution, so results always landed in the YAML
+  `output.results_dir` (default `./results`). Fresh runs now resolve the base with
+  precedence `-o` override > YAML `output.results_dir` > user config > `./results`, and the
+  preflight/dry-run panel's "Study results path" reflects the same precedence so the
+  preview matches where results actually land. Resume semantics are unchanged (`-o` stays
+  the search base for `--resume`). The results path is placement metadata, excluded from
+  the declared-config, study-design, and dedup hashes, so pointing a study at a different
+  output directory never changes dedup grouping. ([#842])
+- Fresh `pip install` + Docker dispatch no longer crashes the transformers and
+  TensorRT-LLM engines inside their containers. The package bind-mount now
+  exposes only the `llenergymeasure` package (mounted at
+  `/llem-src/llenergymeasure`) instead of the package's parent directory. For a
+  wheel install that parent is the venv's entire `site-packages`, and because
+  the container entrypoint prepends `/llem-src` to `PYTHONPATH` (which precedes
+  the container's own site-packages on `sys.path`), every host third-party
+  package used to shadow the image's native copy - a host `pydantic_core` C
+  extension built for a different Python minor broke transformers, and a fresh
+  `huggingface-hub` broke TensorRT-LLM's version guard. Mounting the package
+  directory alone makes `/llem-src` contain nothing but `llenergymeasure`, so
+  host dependencies can no longer shadow container-native ones. One uniform
+  mount serves editable and wheel installs alike. ([#844])
+
 ## [v0.13.0] - 2026-07-18
 
 ### Added
@@ -1218,4 +1245,6 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
 [#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839
 [#840]: https://github.com/henrycgbaker/llenergymeasure/pull/840
+[#842]: https://github.com/henrycgbaker/llenergymeasure/pull/842
 [#843]: https://github.com/henrycgbaker/llenergymeasure/pull/843
+[#844]: https://github.com/henrycgbaker/llenergymeasure/pull/844

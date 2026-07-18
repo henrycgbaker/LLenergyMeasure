@@ -574,7 +574,13 @@ def _run_study_impl(
     except Exception:
         runner_specs = None  # graceful: Docker unavailable, show YAML runners
 
-    study_dir_preview = Path("results") / study_dir_name(study_config.study_name)
+    # Mirror the fresh-run results-dir precedence used by _run() so the preflight
+    # panel and dry-run preview show where results will actually land:
+    # CLI -o override > YAML output.results_dir > user config > default.
+    _preview_base = (
+        output or study_config.output.results_dir or user_config.output.results_dir or "results"
+    )
+    study_dir_preview = Path(_preview_base) / study_dir_name(study_config.study_name)
 
     # --- Dry-run branch ---
     if dry_run:

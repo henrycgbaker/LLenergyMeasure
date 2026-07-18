@@ -895,7 +895,7 @@ class TestExtraMounts:
         v_count = cmd.count("-v")
         assert v_count == 6
         assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
-        assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
+        assert any(arg.endswith(":/llem-src/llenergymeasure:ro") for arg in cmd)
         assert any(arg.endswith(":/root/.cache/huggingface") for arg in cmd)
         assert any(arg.endswith("/requirements.txt:/llem-requirements.txt:ro") for arg in cmd)
         assert any(arg.endswith("/container_entrypoint.sh:/llem-entry.sh:ro") for arg in cmd)
@@ -1418,13 +1418,20 @@ class TestMountPivot:
 
     @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
     def test_llem_src_mount_triple_present(self, engine, tmp_path):
-        """Each engine's docker cmd contains the ``-v {pkg_parent}:/llem-src:ro`` triple."""
+        """Each engine's docker cmd contains the nested package-dir mount triple.
+
+        The package dir is mounted at ``/llem-src/llenergymeasure`` (not the
+        package PARENT at ``/llem-src``) so ``/llem-src`` exposes only the
+        package and never a host site-packages sibling.
+        """
         cmd = self._build(engine, tmp_path)
-        mount_args = [arg for arg in cmd if arg.endswith(":/llem-src:ro")]
+        mount_args = [arg for arg in cmd if arg.endswith(":/llem-src/llenergymeasure:ro")]
         assert len(mount_args) == 1
         # The triple is ordered: -v {host}:{container}
         mount_idx = cmd.index(mount_args[0])
         assert cmd[mount_idx - 1] == "-v"
+        # Nothing is ever mounted at the bare /llem-src parent target.
+        assert not any(arg.endswith(":/llem-src:ro") for arg in cmd)
 
     @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
     def test_requirements_mount_present(self, engine, tmp_path):
@@ -1483,21 +1490,82 @@ class TestMountPivot:
         idx = cmd.index("PYTHONDONTWRITEBYTECODE=1")
         assert cmd[idx - 1] == "-e"
 
-    def test_resolve_package_parent_dir_contains_llenergymeasure(self):
-        """The helper points at the directory containing the ``llenergymeasure`` package."""
-        from llenergymeasure.infra.docker_runner import _resolve_package_parent_dir
+    def test_resolve_package_dir_is_llenergymeasure(self):
+        """The helper points at the ``llenergymeasure`` package directory itself."""
+        from llenergymeasure.infra.docker_runner import _resolve_package_dir
 
-        pkg_parent = _resolve_package_parent_dir()
-        assert (pkg_parent / "llenergymeasure").is_dir()
-        assert (pkg_parent / "llenergymeasure" / "infra" / "docker_runner.py").is_file()
+        pkg_dir = _resolve_package_dir()
+        assert pkg_dir.name == "llenergymeasure"
+        assert (pkg_dir / "infra" / "docker_runner.py").is_file()
 
     def test_mount_host_path_matches_resolver(self, tmp_path):
-        """The host side of the bind-mount equals ``_resolve_package_parent_dir()``."""
-        from llenergymeasure.infra.docker_runner import _resolve_package_parent_dir
+        """The host side of the bind-mount equals ``_resolve_package_dir()``."""
+        from llenergymeasure.infra.docker_runner import _resolve_package_dir
 
         cmd = self._build("transformers", tmp_path)
-        expected_mount = f"{_resolve_package_parent_dir()}:/llem-src:ro"
+        expected_mount = f"{_resolve_package_dir()}:/llem-src/llenergymeasure:ro"
         assert expected_mount in cmd
+
+    def test_mount_excludes_host_site_packages_siblings(self, tmp_path, monkeypatch):
+        """Regression (v0.13.0 exit-gate defect): the package mount must expose
+        ONLY the ``llenergymeasure`` package, never its on-disk siblings.
+
+        For a pip/wheel install the package's parent directory is the venv's
+        ``site-packages``. The historical whole-parent mount put every host
+        third-party package at ``/llem-src``; since ``container_entrypoint.sh``
+        prepends ``/llem-src`` to ``PYTHONPATH`` (which precedes the container's
+        own site-packages on ``sys.path``), every host copy shadowed the image's
+        native one - crashing transformers (host ``pydantic_core`` C ext for the
+        wrong Python minor) and tensorrt (fresh ``huggingface-hub``) in-container.
+
+        Build a site-packages-like directory holding ``llenergymeasure`` plus a
+        foreign package dir and a foreign ``*.dist-info``, point the resolver at
+        the package dir, and assert the docker args mount only the package dir
+        and never expose the foreign sibling.
+        """
+        from llenergymeasure.infra import docker_runner
+
+        site_packages = tmp_path / "site-packages"
+        pkg_dir = site_packages / "llenergymeasure"
+        (pkg_dir / "infra").mkdir(parents=True)
+        (pkg_dir / "__init__.py").touch()
+        (pkg_dir / "infra" / "docker_runner.py").touch()
+        # A foreign third-party package + its dist-info, siblings of the package.
+        foreign_pkg = site_packages / "pydantic_core"
+        foreign_pkg.mkdir()
+        (foreign_pkg / "__init__.py").touch()
+        (foreign_pkg / "_pydantic_core.so").touch()
+        foreign_dist_info = site_packages / "pydantic_core-2.14.5.dist-info"
+        foreign_dist_info.mkdir()
+        (foreign_dist_info / "METADATA").write_text("Name: pydantic-core\n", encoding="utf-8")
+
+        # Point the resolver at the package dir. Replacing the module attribute
+        # sidesteps the functools.cache on the real resolver entirely.
+        monkeypatch.setattr(docker_runner, "_resolve_package_dir", lambda: pkg_dir)
+
+        cmd = DockerRunner(image=IMAGE)._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
+
+        # The one llem mount targets the nested package path and its host source
+        # is exactly the package dir - nothing broader.
+        mount_args = [arg for arg in cmd if arg.endswith(":/llem-src/llenergymeasure:ro")]
+        assert len(mount_args) == 1
+        host_src = mount_args[0].split(":/llem-src/llenergymeasure:ro")[0]
+        assert Path(host_src) == pkg_dir
+
+        # The mount source does not expose the foreign package or its dist-info:
+        # both are siblings of the mounted dir, not children of it.
+        assert not (Path(host_src) / "pydantic_core").exists()
+        assert not (Path(host_src) / "pydantic_core-2.14.5.dist-info").exists()
+
+        # No bind-mount anywhere in the command has the whole site-packages
+        # parent as its host source, and none exposes the foreign sibling.
+        v_sources = [cmd[i + 1].split(":")[0] for i, a in enumerate(cmd) if a == "-v"]
+        assert str(site_packages) not in v_sources
+        for src in v_sources:
+            assert not (Path(src) / "pydantic_core").exists(), (
+                f"mount host source {src!r} exposes the foreign package - "
+                "host site-packages leaked into /llem-src"
+            )
 
 
 # ---------------------------------------------------------------------------

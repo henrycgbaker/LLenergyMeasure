@@ -208,7 +208,10 @@ def run_study(
         resume_dir: Explicit study directory to resume. Overrides ``resume``.
         resume: When True and resume_dir is None, auto-detect the most recent
             resumable study in ``output_dir`` (default ``results/``).
-        output_dir: Base output directory used by auto-detect resume. Ignored when
+        output_dir: Dual role by run mode. For a fresh run it is the results-dir
+            override (precedence: ``output_dir`` > YAML ``output.results_dir`` >
+            user config > ``./results``). For an auto-detect resume it is the base
+            directory searched for the most recent resumable study. Ignored when
             ``resume_dir`` is given explicitly.
         skip_set: Set of (config_hash, cycle) pairs to skip (already completed in a
             previous run). Populated automatically when resuming; callers rarely
@@ -270,6 +273,9 @@ def run_study(
         skip_preflight=skip_preflight,
         progress=progress,
         resume_dir=resume_dir,
+        # Fresh runs (resume_dir is None) use output_dir as the results-dir
+        # override; resume runs already consumed it as the search base above.
+        results_dir_override=output_dir if resume_dir is None else None,
         skip_set=skip_set,
         no_lock=no_lock,
         config_path=config_path,
@@ -363,6 +369,7 @@ def _run(
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
     resume_dir: Path | None = None,
+    results_dir_override: Path | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     config_path: Path | None = None,
@@ -396,7 +403,8 @@ def _run(
         study, user_config, preresolved, skip_preflight, progress
     )
 
-    # Resolve results_dir: resume_dir takes priority, then YAML > user config > built-in default
+    # Resolve results_dir: resume_dir takes priority, then the fresh-run chain
+    # (CLI -o override > YAML output.results_dir > user config > built-in default).
     if resume_dir is not None:
         study_dir = resume_dir
         # Resume: load the existing manifest written by prepare_resume_manifest()
@@ -406,7 +414,12 @@ def _run(
         loaded_manifest, _ = load_resume_state(study_dir)
         manifest = ManifestWriter.from_existing(study_dir, loaded_manifest)
     else:
-        results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
+        if results_dir_override is not None:
+            results_dir_str = str(results_dir_override)
+        else:
+            results_dir_str = (
+                study.output.results_dir or user_config.output.results_dir or "./results"
+            )
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
 
