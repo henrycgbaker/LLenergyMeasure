@@ -178,27 +178,44 @@ def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
 
 
 @functools.cache
-def _resolve_package_parent_dir() -> Path:
-    """Return the directory that *contains* the ``llenergymeasure/`` package.
+def _resolve_package_dir() -> Path:
+    """Return the ``llenergymeasure`` package directory itself.
 
     Used to bind-mount the host package source into upstream engine images
-    that don't have llenergymeasure pre-installed (vllm, tensorrt). Resolved
-    from ``__file__`` rather than via ``import llenergymeasure`` to keep the
-    infra layer free of upper-layer imports (import-linter contract).
+    that don't ship llenergymeasure (vllm, tensorrt) and into our own
+    transformers image. Resolved from ``__file__`` rather than via
+    ``import llenergymeasure`` to keep the infra layer free of upper-layer
+    imports (import-linter contract).
 
     Layout::
 
-        <pkg_parent>/
-            llenergymeasure/
+        <site-packages-or-src>/
+            llenergymeasure/       <-- returned (the package dir)
                 infra/
                     docker_runner.py   <-- __file__
 
-    Three ``.parent`` hops walk docker_runner.py -> infra/ -> llenergymeasure/
-    -> <pkg_parent>. Encapsulation here localises path knowledge so a future
-    relayout only needs to touch this helper. Cached because ``__file__`` is
-    fixed for the life of the process.
+    Two ``.parent`` hops walk docker_runner.py -> infra/ -> llenergymeasure/.
+    Encapsulation here localises path knowledge so a future relayout only needs
+    to touch this helper. Cached because ``__file__`` is fixed for the life of
+    the process.
+
+    INVARIANT - why the package dir and not its parent: the mount this feeds
+    (``/llem-src/llenergymeasure``) must expose the ``llenergymeasure`` package
+    and NOTHING else - never the package's on-disk siblings. For a pip/wheel
+    install the parent IS the venv's ``site-packages``. Mounting the parent (the
+    historical ``parent.parent.parent`` walk) put every host third-party package
+    at ``/llem-src``, and ``container_entrypoint.sh`` prepends ``/llem-src`` to
+    ``PYTHONPATH``, so ``PYTHONPATH`` entries always precede the container's own
+    site-packages on ``sys.path`` - every host copy then shadowed the image's
+    native one. Observed: a py3.12 host ``pydantic_core`` C extension shadowing
+    the image's py3.11 build (transformers), and a fresh ``huggingface-hub``
+    shadowing the pinned engine stack (tensorrt). Mounting the package dir alone
+    makes ``/llem-src`` contain only ``llenergymeasure``, so nothing can shadow a
+    container-native dependency. A source checkout is safe either way (its parent
+    is ``src/``, holding only the package); resolving the package dir makes the
+    two install shapes one uniform, always-safe path.
     """
-    return Path(__file__).resolve().parent.parent.parent
+    return Path(__file__).resolve().parent.parent
 
 
 @functools.cache
@@ -320,18 +337,31 @@ def append_package_dispatch(
 
     Upstream engine images (vllm, tensorrt) and even our transformers image do
     NOT have ``llenergymeasure`` installed; the framework runs from the host
-    source bind-mounted at ``/llem-src``. This appends the four mounts the
-    in-container entrypoint script needs (package source, the runtime
-    requirements list, the script itself, and the host deps cache), the env it
-    reads, and points ``--entrypoint`` at the script. The script sets
-    ``PYTHONPATH`` to include ``/llem-src`` and primes any missing runtime deps,
-    then exec's the module named by ``LLEM_ENTRY_MODULE``.
+    package source bind-mounted at ``/llem-src/llenergymeasure``. This appends
+    the four mounts the in-container entrypoint script needs (package dir, the
+    runtime requirements list, the script itself, and the host deps cache), the
+    env it reads, and points ``--entrypoint`` at the script. The script prepends
+    ``/llem-src`` to ``PYTHONPATH`` and primes any missing runtime deps, then
+    exec's the module named by ``LLEM_ENTRY_MODULE``.
+
+    INVARIANT - ``/llem-src`` must expose the ``llenergymeasure`` package and
+    NOTHING else. The package dir is mounted at the nested target
+    ``/llem-src/llenergymeasure`` (not the package's PARENT at ``/llem-src``)
+    precisely so that no on-disk sibling of the package leaks in. For a
+    pip/wheel install the parent is the venv's ``site-packages``; because the
+    script prepends ``/llem-src`` to ``PYTHONPATH`` and ``PYTHONPATH`` precedes
+    the container's own site-packages on ``sys.path``, mounting the parent let
+    every host third-party package shadow the image's native copy (e.g. a host
+    ``pydantic_core`` C extension built for a different Python minor, or a fresh
+    ``huggingface-hub`` over a pinned engine stack). See ``_resolve_package_dir``.
 
     The entrypoint script and the requirements list are shipped as package data
     and materialised to a host tempdir (see ``_materialise_dispatch_assets``) so
     dispatch works from an installed wheel, not only a source checkout. The
-    package source at ``/llem-src`` still resolves from ``__file__`` because a
-    site-packages install already puts it on a real host path.
+    package dir at ``/llem-src/llenergymeasure`` resolves from ``__file__``
+    (see ``_resolve_package_dir``): one uniform path for editable and wheel
+    installs, no editable-detection, no llem dist-info in-container (the editable
+    flow has always run without it, proving container-side code never needs it).
 
     Shared by the experiment dispatch (``DockerRunner._build_docker_cmd``) and
     the baseline dispatch (``study.baseline_container.build_baseline_docker_cmd``)
@@ -351,13 +381,13 @@ def append_package_dispatch(
             before ``docker run`` so a missing source never becomes a silent
             docker-auto-created empty-dir mount.
     """
-    pkg_parent = _resolve_package_parent_dir()
+    pkg_dir = _resolve_package_dir()
     entry_script, requirements_file = _materialise_dispatch_assets()
     deps_cache = _ensure_deps_cache_dir()
     cmd.extend(
         [
             "-v",
-            f"{pkg_parent}:/llem-src:ro",
+            f"{pkg_dir}:/llem-src/llenergymeasure:ro",
             "-v",
             f"{requirements_file}:/llem-requirements.txt:ro",
             "-v",
@@ -412,7 +442,7 @@ class DockerRunner:
         1. Create temp exchange dir (``tempfile.mkdtemp(prefix='llem-')``)
         2. Write ExperimentConfig as JSON to ``{config_hash}_config.json``
         3. ``docker run --rm --gpus all -v {exchange_dir}:/run/llem``
-               ``-v {pkg_parent}:/llem-src:ro``
+               ``-v {pkg_dir}:/llem-src/llenergymeasure:ro``
                ``-v {requirements_file}:/llem-requirements.txt:ro``
                ``-v {entry_script}:/llem-entry.sh:ro``
                ``-v {deps_cache}:/llem-runtime-deps``
@@ -1071,8 +1101,8 @@ class DockerRunner:
 
         All three engines (transformers, vllm, tensorrt) follow the same
         dispatch shape: the image carries only the engine substrate, the host
-        package source is bind-mounted at ``/llem-src``, the runtime
-        requirements list is bind-mounted as a single-file mount at
+        package source is bind-mounted at ``/llem-src/llenergymeasure``, the
+        runtime requirements list is bind-mounted as a single-file mount at
         ``/llem-requirements.txt``, the in-container entrypoint script is
         bind-mounted at ``/llem-entry.sh``, and a host-side deps cache is
         bind-mounted at ``/llem-runtime-deps``. ``--entrypoint`` always points

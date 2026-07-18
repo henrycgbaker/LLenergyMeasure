@@ -151,7 +151,9 @@ class TestBuildBaselineDockerCmd:
             engine="vllm",
         )
         # Package source bind-mount (makes the package importable via PYTHONPATH).
-        assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
+        # The package dir is mounted at the nested target so /llem-src exposes
+        # only llenergymeasure, never a host site-packages sibling.
+        assert any(arg.endswith(":/llem-src/llenergymeasure:ro") for arg in cmd)
         # Dispatch routes through the shared in-container bootstrap script.
         ep_idx = cmd.index("--entrypoint")
         assert cmd[ep_idx + 1] == "/llem-entry.sh"

@@ -158,8 +158,12 @@ The developer-relevant summary:
 | tensorrt | Upstream `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC) | Bind-mounted at runtime |
 
 For all three engines the `llenergymeasure` package is bind-mounted (via
-`-v <repo>:/llem-src` + `PYTHONPATH=/llem-src`), never baked into the image,
-so `src/` edits never invalidate an image layer. The transformers Dockerfile
+`-v <package-dir>:/llem-src/llenergymeasure` + `PYTHONPATH=/llem-src`), never
+baked into the image, so `src/` edits never invalidate an image layer. Only the
+package directory is mounted - never its parent - so `/llem-src` exposes just
+`llenergymeasure` and never a host site-packages sibling that could shadow a
+container-native dependency (`PYTHONPATH` precedes the image's own
+site-packages on `sys.path`). The transformers Dockerfile
 ships transformers plus FA2/FA3 plus the accelerate / bitsandbytes /
 sentencepiece toolchain and llem's non-engine runtime deps; vllm and tensorrt
 inherit everything they need from their upstream images.
