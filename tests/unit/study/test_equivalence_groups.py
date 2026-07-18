@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.domain.hashing import build_observed_view, hash_config
 from llenergymeasure.study.equivalence_groups import (
     EquivalenceGroups,
     ObservedCollisionGroup,
@@ -12,6 +14,7 @@ from llenergymeasure.study.equivalence_groups import (
     find_observed_collisions,
     write_equivalence_groups,
 )
+from llenergymeasure.study.hashing import build_resolved_view
 
 
 class TestWriteSerialisation:
@@ -162,3 +165,65 @@ class TestFindObservedCollisions:
         # Only one valid sidecar; no group formed.
         groups = find_observed_collisions(sidecars)
         assert groups == []
+
+    def test_coerced_numeric_types_do_not_manufacture_false_gap(self):
+        # Two sweep points that both mean cpu_offload_gb=0 - one left the int
+        # literal default, one set 0.0 explicitly - and both produced the same
+        # native engine object (float-coerced). After int/float unification
+        # their resolved hashes match, so the shared observed hash is NOT
+        # flagged as a library-resolution gap. Pre-fix the resolved hashes
+        # differed (int 0 vs float 0.0) and this was a false-positive gap fed
+        # into the rules-corpus mining loop.
+        cfg_int = ExperimentConfig(
+            task={"model": "gpt2"}, engine="vllm", vllm={"engine_params": {}}
+        )
+        cfg_float = ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {"cpu_offload_gb": 0.0}},
+        )
+        resolved_int = hash_config(build_resolved_view(cfg_int))
+        resolved_float = hash_config(build_resolved_view(cfg_float))
+        assert resolved_int == resolved_float  # unified by the fix
+
+        # A native engine object carrying the coerced float 0.0 hashes the same
+        # as one carrying int 0 over an identical field set - coerced numeric
+        # types collide with their declared counterparts.
+        task = cfg_int.task.model_dump(mode="python")
+        observed_from_float = hash_config(
+            build_observed_view(
+                engine="vllm",
+                task=task,
+                observed_engine_params={"cpu_offload_gb": 0.0},
+                observed_sampling_params={},
+            )
+        )
+        observed_from_int = hash_config(
+            build_observed_view(
+                engine="vllm",
+                task=task,
+                observed_engine_params={"cpu_offload_gb": 0},
+                observed_sampling_params={},
+            )
+        )
+        assert observed_from_float == observed_from_int
+
+        sidecars = [
+            {
+                "engine": "vllm",
+                "engine_version": "0.11.0",
+                "resolved_config_hash": resolved_int,
+                "observed_config_hash": observed_from_float,
+                "experiment_id": "exp_int",
+            },
+            {
+                "engine": "vllm",
+                "engine_version": "0.11.0",
+                "resolved_config_hash": resolved_float,
+                "observed_config_hash": observed_from_float,
+                "experiment_id": "exp_float",
+            },
+        ]
+        groups = find_observed_collisions(sidecars)
+        assert len(groups) == 1
+        assert groups[0].gap_detected is False

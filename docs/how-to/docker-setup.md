@@ -211,11 +211,12 @@ the container.
 With Docker and NVIDIA CT installed, verify that `llem` sees the GPU:
 
 ```bash
-llem config
+llem doctor
 ```
 
-Expected output will show your GPU under the `GPU` section and Docker runner availability.
-See [Installation](/how-to/install) for the full `llem config` output format.
+Expected output shows your GPU under the `GPU / driver` section and the Docker
+runner availability under `Docker` and `Engines`.
+See [Installation](/how-to/install) for the full `llem doctor` output format.
 
 **Run a vLLM experiment** by creating a YAML file:
 

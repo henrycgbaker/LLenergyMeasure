@@ -473,6 +473,53 @@ class TestVllmDormantDedup:
         assert kept.would_dedup is True
 
 
+class TestIntFloatDedup:
+    """Physical-dedup regression for the int-vs-float canonicalisation gap.
+
+    ``resolve_library_effective`` groups sweep points by resolved hash, and only
+    the group representative runs on GPU. Two configs that mean the same
+    ``cpu_offload_gb = 0`` - one leaving the int-literal default untouched, one
+    setting ``0.0`` explicitly - must land in a single dedup group so they do not
+    burn two GPU runs for one measurement.
+    """
+
+    def _vllm(self, engine=None):
+        payload: dict = {}
+        if engine is not None:
+            payload["engine_params"] = engine
+        return ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm=payload)
+
+    def test_int_default_and_explicit_float_collapse_into_one_group(self):
+        cfg_int = self._vllm(engine={})  # cpu_offload_gb default -> python int 0
+        cfg_float = self._vllm(engine={"cpu_offload_gb": 0.0})  # explicit float 0.0
+
+        # Characterisation: the two resolved views carry genuinely different
+        # python types for the same value, so before the fix (int 0 vs float
+        # 0.0 serialise differently) they hashed apart and split into two
+        # groups. This asserts they are the split-prone pair, not already-equal.
+        v_int = build_resolved_view(cfg_int).observed_engine_params["cpu_offload_gb"]
+        v_float = build_resolved_view(cfg_float).observed_engine_params["cpu_offload_gb"]
+        assert isinstance(v_int, int) and isinstance(v_float, float)
+        assert v_int == v_float  # same numeric value, different representation
+
+        deduped = resolve_library_effective([cfg_int, cfg_float], deduplicate=True)
+        assert len(deduped.groups) == 1
+        assert len(deduped.canonical_configs) == 1
+        assert deduped.would_dedup is True
+        assert deduped.deduplicated is True
+
+    def test_distinct_offload_values_do_not_collapse(self):
+        # Guard against over-collapse: a genuinely different offload value must
+        # still produce two groups.
+        cfg_zero = self._vllm(engine={})
+        cfg_two = self._vllm(engine={"cpu_offload_gb": 2.0})
+
+        deduped = resolve_library_effective([cfg_zero, cfg_two], deduplicate=True)
+        assert len(deduped.groups) == 2
+        assert len(deduped.canonical_configs) == 2
+        assert deduped.would_dedup is False
+
+
 class TestH1HashSymmetry:
     def test_equivalent_canonical_forms_share_h1(self):
         cfg_a = _mk_config(

@@ -24,10 +24,10 @@ import logging
 import shutil
 import subprocess
 
-from llenergymeasure.config.ssot import TIMEOUT_NVIDIA_SMI
+from llenergymeasure.config.ssot import TIMEOUT_DOCKER_CLI, TIMEOUT_NVIDIA_SMI
 from llenergymeasure.utils.exceptions import DockerPreFlightError
 
-__all__ = ["run_docker_preflight"]
+__all__ = ["docker_daemon_reachable", "run_docker_preflight"]
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +37,14 @@ logger = logging.getLogger(__name__)
 
 _PROBE_IMAGE = "nvidia/cuda:12.0.0-base-ubuntu22.04"
 _PROBE_TIMEOUT = 30  # seconds for container probe
-_NVIDIA_TOOLKIT_INSTALL_URL = (
+# Public constants - also consumed by runner_resolution and api.health.
+NVIDIA_TOOLKIT_INSTALL_URL = (
     "https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
 )
 _CUDA_COMPAT_URL = "https://docs.nvidia.com/deploy/cuda-compatibility/"
-_DOCKER_INSTALL_URL = "https://docs.docker.com/engine/install/"
+DOCKER_INSTALL_URL = "https://docs.docker.com/engine/install/"
 
-_NVIDIA_TOOLKIT_BINS = (
+NVIDIA_TOOLKIT_BINS = (
     "nvidia-container-runtime",
     "nvidia-ctk",
     "nvidia-container-cli",
@@ -58,18 +59,39 @@ _NVIDIA_TOOLKIT_BINS = (
 def _check_docker_cli() -> str | None:
     """Return an error string if docker CLI is not on PATH, else None."""
     if shutil.which("docker") is None:
-        return f"Docker not found on PATH\n     Fix: Install Docker Engine - {_DOCKER_INSTALL_URL}"
+        return f"Docker not found on PATH\n     Fix: Install Docker Engine - {DOCKER_INSTALL_URL}"
     return None
 
 
 def _check_nvidia_toolkit() -> str | None:
     """Return an error string if no NVIDIA Container Toolkit binary is on PATH, else None."""
-    if not any(shutil.which(tool) is not None for tool in _NVIDIA_TOOLKIT_BINS):
+    if not any(shutil.which(tool) is not None for tool in NVIDIA_TOOLKIT_BINS):
         return (
             "NVIDIA Container Toolkit not found\n"
-            f"     Fix: Install NVIDIA Container Toolkit - {_NVIDIA_TOOLKIT_INSTALL_URL}"
+            f"     Fix: Install NVIDIA Container Toolkit - {NVIDIA_TOOLKIT_INSTALL_URL}"
         )
     return None
+
+
+def docker_daemon_reachable() -> bool | None:
+    """Return whether the Docker daemon is reachable.
+
+    Tier-1 host probe (no container): distinguishes "daemon actually up" from the
+    coarser "docker CLI on PATH" check. Returns None when the Docker CLI is not on
+    PATH (nothing to probe), True/False otherwise. Never raises - a missing binary
+    or timeout is reported as False.
+    """
+    if shutil.which("docker") is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.ServerVersion}}"],
+            capture_output=True,
+            timeout=TIMEOUT_DOCKER_CLI,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+    return result.returncode == 0
 
 
 def _get_host_driver_version() -> str | None:
@@ -144,14 +166,14 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
         errors.append(
             "Container GPU probe timed out after "
             f"{_PROBE_TIMEOUT}s\n"
-            f"     Fix: Check Docker daemon and GPU availability - {_NVIDIA_TOOLKIT_INSTALL_URL}"
+            f"     Fix: Check Docker daemon and GPU availability - {NVIDIA_TOOLKIT_INSTALL_URL}"
         )
         return errors
     except FileNotFoundError:
         # docker not on PATH - should have been caught by tier 1, but guard defensively
         errors.append(
             "Docker not found when launching container probe\n"
-            f"     Fix: Install Docker Engine - {_DOCKER_INSTALL_URL}"
+            f"     Fix: Install Docker Engine - {DOCKER_INSTALL_URL}"
         )
         return errors
 
@@ -202,7 +224,7 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
             errors.append(
                 "GPU not accessible inside Docker container\n"
                 "     Possible cause: NVIDIA Container Toolkit not configured correctly.\n"
-                f"     Fix: {_NVIDIA_TOOLKIT_INSTALL_URL}"
+                f"     Fix: {NVIDIA_TOOLKIT_INSTALL_URL}"
                 f"{detail_suffix}"
             )
         return errors

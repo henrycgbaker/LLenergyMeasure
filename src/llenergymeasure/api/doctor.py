@@ -76,10 +76,6 @@ class DoctorReport:
     results: list[EngineDoctorResult]
     trt_cache: TrtCacheHealth | None = None
 
-    @property
-    def any_mismatch(self) -> bool:
-        return any(r.status is SchemaStatus.MISMATCH for r in self.results)
-
 
 def run_trt_cache_check() -> TrtCacheHealth:
     """Report the host TRT-LLM engine build-cache location, entries, and size.

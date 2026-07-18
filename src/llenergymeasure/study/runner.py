@@ -360,7 +360,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         self._cycle_counters: dict[str, int] = {}
         # Study-level environment snapshot cache - collected once, reused across experiments
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
-        # Study-level baseline cache, keyed per runner target ("local" or
+        # Study-level baseline cache, keyed per runner target ("local_<engine>" or
         # "image_<sanitized>") so multi-engine studies don't cross-contaminate.
         self._baselines: dict[str, Any] = {}  # dict[str, BaselineCache]
         self._experiments_since_validation: dict[str, int] = {}
@@ -528,13 +528,20 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         """
         original_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
 
-        # Physical GPU selector precedence (env>config): LLEM_DOCKER_GPUS wins
-        # over study_execution.gpu_indices. Warn once per study when both are
-        # set, independent of locking (the scoping applies either way).
-        from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
-
         config_gpu_indices = self.study.study_execution.gpu_indices
-        warn_on_gpu_selector_conflict(config_gpu_indices)
+        uses_docker = bool(
+            self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values())
+        )
+
+        # Physical GPU selector precedence (env>config): LLEM_DOCKER_GPUS wins
+        # over study_execution.gpu_indices. GPU scoping only affects Docker
+        # containers, so warn about the conflict only when a container will
+        # actually launch (mirrors single.py, which gates this in its Docker
+        # branch) - no container means no warning.
+        if uses_docker:
+            from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
+
+            warn_on_gpu_selector_conflict(config_gpu_indices)
 
         # Acquire per-GPU advisory locks before image preparation.
         # Lock names use the PHYSICAL device the study occupies, resolved from
@@ -560,7 +567,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
         # Only activated for studies that use Docker runners.
         original_sigterm: signal.Handlers | None = None
-        if self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values()):
+        if uses_docker:
             from llenergymeasure.study.container_lifecycle import (
                 install_sigterm_bridge,
                 reap_orphaned_containers,

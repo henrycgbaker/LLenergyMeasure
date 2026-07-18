@@ -17,11 +17,73 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   field (env>config); when both are set the env wins and a warning is logged. The field is
   placement metadata and is excluded from the declared-config and study-design hashes, so
   pinning a study to different physical GPUs never changes dedup grouping. The same selector
-  drives per-GPU advisory-lock naming and the baseline container's `--gpus`, so config-pinned
-  studies lock and baseline the correct physical devices. ([#838])
+  drives per-GPU advisory-lock naming, the baseline container's `--gpus`, and the per-target
+  baseline cache key, so config-pinned studies lock, baseline, and cache the correct physical
+  devices. ([#838])
 - The Docker `--shm-size` for llem-launched containers is now configurable via the
   `LLEM_DOCKER_SHM_SIZE` env var (default `8g`, the previous hardcoded value). Raise it for
   very large tensor-parallel runs or lower it on memory-constrained hosts. ([#838])
+
+### Changed
+
+- Study preparation now pulls missing Docker engine images concurrently (one
+  `docker pull` per thread, capped at 3) instead of serialising them. A
+  multi-engine study on a fresh box no longer waits for several multi-GB pulls
+  back to back. Locally cached images are still inspected first, so a cached
+  image never triggers a remote call, and progress output stays coherent (each
+  image's lines are serialised, never interleaved). A single failing pull no
+  longer cancels its siblings: every pull runs to completion and any failures
+  are reported together as one aggregate error that names each image and its
+  cause (registry-unreachable vs image-absent). ([#832])
+- `llem doctor` is now the single environment health check. It reports GPU/driver,
+  per-engine availability (importable locally or via Docker, with image-cache state),
+  energy samplers (NVML/Zeus/CodeCarbon), Docker (CLI/daemon/NVIDIA Container Toolkit),
+  `HF_TOKEN` presence (detect-and-advise - the value is never printed), the resolved user
+  configuration with per-setting provenance, and the image schema handshake folded in as a
+  section. Every line is prefixed `[ok]`/`[warn]`/`[fail]` with a `-> fix` hint. `--check`
+  exits 0/1/2 (ok/warnings/errors) for CI scripting and `--json` emits the full report as
+  machine-readable JSON. Plain `llem doctor` still exits non-zero on a hard failure - an
+  image schema mismatch or an unparseable/invalid user-config file. ([#834])
+- Multi-engine Docker elevation is now precedence-based. An engine whose runner is
+  explicitly pinned (env var, the study `runners:` section, or user config) keeps that pin;
+  only engines left on auto-detection are elevated to Docker for isolation. Engines pinned
+  to `local` in a multi-engine study are checked for host importability at preflight, with a
+  specific error naming the engine, the missing package, and the two fixes (install the
+  engine extra, or drop the explicit local pin). Docker is required only when an
+  auto-resolved engine actually needs elevating, so an all-explicit-local multi-engine study
+  now runs without Docker. Previously every engine in a multi-engine study was
+  unconditionally elevated to Docker, which failed when Docker was absent even for engines
+  the user had pinned to local. Runner choice is machine-binding and recorded per result.
+  ([#835])
+
+### Removed
+- `llem config` is removed. Its environment-diagnostics role is subsumed by the broadened
+  `llem doctor` above. There is no deprecation shim (pre-PyPI); scripts should call
+  `llem doctor` (or `llem doctor --check` / `llem doctor --json`). ([#834])
+
+### Fixed
+
+- Resolved-config and observed-config hashes now canonicalise integral numerics onto a
+  single form, closing an int-vs-float gap of the same class #822 fixed for the declared
+  hash. A field typed `float` but valued as an int (e.g. vLLM `cpu_offload_gb = 0`) stayed
+  a python `int` in the resolved view's `mode="python"` dump but was a genuine `float` in
+  the native engine object the observed pipeline captured, so semantically identical
+  configs hashed differently. The shared `_normalise` helper (`domain/hashing.py`) now
+  folds any integral-valued float onto its `int` form, so all three hash paths (declared,
+  resolved, observed) agree. Folding toward `int` (not `int -> float`) keeps genuine
+  integer identity fields (seeds, token counts) bit-exact. This corrects both dedup
+  grouping (`resolve_library_effective`, which decides how many experiments physically run)
+  and observed-collision gap detection (`find_observed_collisions`, which feeds the rules
+  corpus). Hash values change only for configs containing an int-valued float field;
+  pre-1.0, old persisted bundles keep their recorded hashes (no migration) and a study
+  resumed across the boundary may regroup. ([#833])
+- `.env.example` and `docker-compose.yml` no longer point at bootstrap tooling that does
+  not exist. The file header and PUID/PGID guidance referenced a `setup.sh` auto-generator
+  that was never shipped, and the `docker compose` PUID/PGID error told users to run
+  `llem doctor` to auto-generate `.env` (doctor never writes `.env`). All three now give
+  the real instructions: `cp .env.example .env`, then set `PUID`/`PGID` from `id -u` /
+  `id -g`. Also removed the dead `LEM_ENGINE=pytorch` block from `.env.example` (wrong
+  prefix, pre-rename engine name, and no consumer anywhere in the codebase). ([#831])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -1039,4 +1101,9 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#831]: https://github.com/henrycgbaker/llenergymeasure/pull/831
+[#832]: https://github.com/henrycgbaker/llenergymeasure/pull/832
+[#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
+[#834]: https://github.com/henrycgbaker/llenergymeasure/pull/834
+[#835]: https://github.com/henrycgbaker/llenergymeasure/pull/835
 [#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838

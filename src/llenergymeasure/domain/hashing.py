@@ -7,9 +7,13 @@ hash requires imports from upper layers, so these live at Layer 0 (domain).
 ``build_resolved_view`` - the one function that needs ``ExperimentConfig`` -
 stays in :mod:`llenergymeasure.study.hashing` where it belongs (Layer 4).
 
-Normalisation rules are locked by sweep-dedup.md §9.Q3.  Over-normalising
-would hide library-enforced semantics (e.g. ``None`` vs missing in vLLM),
-so the rules are strict.
+Normalisation is strict (over-normalising would hide library-enforced semantics,
+e.g. ``None`` vs missing in vLLM) with one deliberate unification: integral
+numerics fold onto their ``int`` form, superseding the int-vs-float split
+sweep-dedup.md §9.Q3 previously locked (the design doc records the reversal).
+The declared-config hash family folds the opposite way - int -> float via pydantic
+``mode="json"`` (PR #822) - which is harmless because the declared and
+resolved/observed hash namespaces never intersect.
 """
 
 from __future__ import annotations
@@ -38,15 +42,23 @@ values a researcher would write differently.
 def _normalise(value: Any) -> Any:
     """Normalise a value for deterministic JSON serialisation.
 
-    Applies the locked rules from sweep-dedup.md §9.Q3:
+    Canonicalisation rules; the integral-fold below supersedes the int-vs-float
+    split sweep-dedup.md §9.Q3 previously locked:
 
-    - ``NaN`` → string ``"NaN"`` (NaN != NaN breaks dict hashing otherwise)
-    - float → rounded to 12 significant digits (stable across minor
-      arithmetic jitter)
-    - tuple → list (incidental immutability choice, not semantic)
+    - ``NaN`` -> string ``"NaN"`` (NaN != NaN breaks dict hashing otherwise)
+    - ``+/-Infinity`` -> string literal (stable across platforms)
+    - integral numerics unify on their ``int`` form: a float that is exactly
+      integral (``0.0``, ``1.0``, ``-1.0``) folds to ``int``, so a value written
+      as an int and the same value carried as a float hash identically. Folding
+      toward int (rather than int -> float) keeps genuine integer identity fields
+      - seeds, token counts - bit-exact, so no large distinct ints collide via a
+      lossy float round-trip.
+    - non-integral float -> rounded to 12 significant digits (stable across
+      minor arithmetic jitter)
+    - tuple -> list (incidental immutability choice, not semantic)
     - bool is preserved as bool (not folded into int even though
       ``True == 1`` in Python)
-    - dict → dict with recursively normalised values (key sorting happens
+    - dict -> dict with recursively normalised values (key sorting happens
       at ``json.dumps(sort_keys=True)`` time)
     - None and missing keys stay distinguishable (by never inserting a
       sentinel for missing)
@@ -59,12 +71,17 @@ def _normalise(value: Any) -> Any:
         if math.isinf(value):
             # Preserve infinity as a string literal for hash stability
             return "Infinity" if value > 0 else "-Infinity"
-        if value == 0.0:
-            return 0.0
-        # Round to sig-figs rather than decimal places
+        if value.is_integer():
+            # Integral float (incl. 0.0) folds to int so it hashes identically
+            # to the int form; also sidesteps log10(0) below.
+            return int(value)
+        # Round to sig-figs rather than decimal places.
         mag = math.floor(math.log10(abs(value)))
         factor = 10 ** (_FLOAT_SIG_DIGITS - 1 - mag)
-        return round(value * factor) / factor
+        rounded = round(value * factor) / factor
+        # Rounding can land on an exact integer (float jitter around N.0); fold
+        # that onto int too so it matches the int / integral-float forms.
+        return int(rounded) if rounded.is_integer() else rounded
     if isinstance(value, (set, frozenset)):
         # Sort for determinism; normalise elements recursively.
         return [_normalise(v) for v in sorted(value, key=str)]

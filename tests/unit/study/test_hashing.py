@@ -33,11 +33,32 @@ class TestCanonicalSerialise:
         b: dict = {}
         assert canonical_serialise(a) != canonical_serialise(b)
 
-    def test_int_and_float_differ(self):
+    def test_int_and_integral_float_unify(self):
+        # An int and an integral-valued float for the same field now serialise
+        # identically. This closes the resolved-vs-observed gap: a float-typed
+        # field left at an int-literal default (python int in a mode="python"
+        # resolved dump) must hash the same as the genuine float the native
+        # engine object carries. Superseded the previous "int != float" rule.
         a = {"top_k": 0}
         b = {"top_k": 0.0}
-        # Type difference preserved: int 0 and float 0.0 serialise differently
-        assert canonical_serialise(a) != canonical_serialise(b)
+        assert canonical_serialise(a) == canonical_serialise(b)
+        assert canonical_serialise({"n": 1}) == canonical_serialise({"n": 1.0})
+        assert canonical_serialise({"n": -1}) == canonical_serialise({"n": -1.0})
+
+    def test_non_integral_float_stays_distinct_from_int(self):
+        # Unification only collapses integral values; a fractional float must
+        # never collapse onto an int (dedup must not over-collapse).
+        assert canonical_serialise({"x": 0.5}) != canonical_serialise({"x": 0})
+        assert canonical_serialise({"x": 1.5}) != canonical_serialise({"x": 1})
+
+    def test_large_distinct_ints_stay_bit_exact(self):
+        # Folding is integral-float -> int (never int -> float), so two large
+        # distinct ints that a float round-trip would collapse (both sit above
+        # 2**53) stay distinct - no lossy dedup of genuine integer identity
+        # fields (seeds, token counts).
+        big1 = 9007199254740993  # 2**53 + 1
+        big2 = 9007199254740992  # 2**53
+        assert canonical_serialise({"seed": big1}) != canonical_serialise({"seed": big2})
 
     def test_bool_and_int_differ(self):
         a = {"do_sample": True}
@@ -185,3 +206,55 @@ class TestHashStability:
         h1 = hash_config(build_resolved_view(cfg))
         h2 = hash_config(build_resolved_view(cfg))
         assert h1 == h2
+
+
+class TestIntFloatCanonicalisation:
+    """Regression guard for the resolved-vs-observed int/float canonicalisation gap.
+
+    Analogous to ``test_config_hash_stable_across_json_round_trip`` (#822) but for
+    the resolved/observed pipeline: a float-typed field left at an int-literal
+    default is python ``int`` in the resolved view (``mode="python"`` skips
+    default validation) yet a genuine ``float`` in the native engine object the
+    observed pipeline captures. The two must hash identically.
+    """
+
+    def test_int_default_resolved_matches_float_observed(self):
+        # vLLM ``cpu_offload_gb`` is ``Annotated[float | None, ...] = 0``: the
+        # int literal default survives a python-mode dump as int 0. Populating
+        # engine_params (even empty) materialises the field at its default.
+        cfg = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm={"engine_params": {}})
+        resolved_view = build_resolved_view(cfg)
+        assert resolved_view.observed_engine_params["cpu_offload_gb"] == 0
+        assert isinstance(resolved_view.observed_engine_params["cpu_offload_gb"], int)
+
+        # The native engine object coerces the same field to float 0.0.
+        observed_view = build_observed_view(
+            engine="vllm",
+            task=cfg.task.model_dump(mode="python"),
+            observed_engine_params={
+                **resolved_view.observed_engine_params,
+                "cpu_offload_gb": 0.0,
+            },
+            observed_sampling_params=resolved_view.observed_sampling_params,
+            harness=resolved_view.harness,
+            measurement=resolved_view.measurement,
+        )
+        assert isinstance(observed_view.observed_engine_params["cpu_offload_gb"], float)
+
+        # Same value, different python type -> identical hash after the fix.
+        assert hash_config(resolved_view) == hash_config(observed_view)
+
+    def test_distinct_offload_values_stay_distinct(self):
+        # Dedup must not over-collapse: a genuinely different offload value keeps
+        # a distinct resolved hash.
+        cfg_zero = ExperimentConfig(
+            task={"model": "gpt2"}, engine="vllm", vllm={"engine_params": {}}
+        )
+        cfg_two = ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {"cpu_offload_gb": 2.0}},
+        )
+        assert hash_config(build_resolved_view(cfg_zero)) != hash_config(
+            build_resolved_view(cfg_two)
+        )

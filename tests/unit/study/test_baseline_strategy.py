@@ -26,6 +26,7 @@ from llenergymeasure.config.models import (
 from llenergymeasure.config.ssot import CONTAINER_EXCHANGE_DIR
 from llenergymeasure.harness.baseline import BaselineCache
 from llenergymeasure.infra.runner_resolution import RunnerSpec
+from llenergymeasure.study.image_prep import _sanitize_image_for_filename
 from llenergymeasure.study.runner import StudyRunner
 from llenergymeasure.utils.exceptions import DockerError
 from tests.conftest import TEST_CONFIG_HASH
@@ -38,9 +39,10 @@ _SPOT = "llenergymeasure.harness.baseline.measure_spot_check"
 _RESOLVE_GPU = "llenergymeasure.device.gpu_info._resolve_gpu_indices"
 _RUN_BASELINE_CONTAINER = "llenergymeasure.study.baseline_container.run_baseline_container"
 
-# Cache key for purely-local runner targets - all existing tests construct
-# a StudyRunner with runner_specs=None, which maps to "local".
-_LOCAL_KEY = "local"
+# Cache key for purely-local runner targets. Local keys are engine-qualified
+# (``local_<engine>``); every config in this module uses engine="transformers",
+# so the local key is "local_transformers".
+_LOCAL_KEY = "local_transformers"
 
 
 # =============================================================================
@@ -167,7 +169,7 @@ class TestStrategyCached:
 
         mock_save.assert_called_once()
         saved_path = mock_save.call_args[0][0]
-        assert saved_path.name == "baseline_cache_local.json"
+        assert saved_path.name == "baseline_cache_local_transformers.json"
         assert "_study-artefacts" in str(saved_path)
 
     def test_sets_method_to_cached(self, tmp_path: Path, config_cached: ExperimentConfig):
@@ -496,7 +498,7 @@ class TestBaselineCachePath:
         """Cache path is {study_dir}/_study-artefacts/baseline_cache_{key}.json."""
         runner = _make_runner(tmp_path, config_cached)
         path = runner._get_baseline_cache_path(_LOCAL_KEY)
-        assert path == tmp_path / "_study-artefacts" / "baseline_cache_local.json"
+        assert path == tmp_path / "_study-artefacts" / "baseline_cache_local_transformers.json"
 
     def test_artefacts_dir_created(self, tmp_path: Path, config_cached: ExperimentConfig):
         """_get_baseline_cache_path creates the _study-artefacts directory."""
@@ -519,7 +521,7 @@ class TestDockerBaselineMount:
         fake = _make_baseline()
 
         # Pre-populate the cache file on disk under the local cache key.
-        cache_path = tmp_path / "_study-artefacts" / "baseline_cache_local.json"
+        cache_path = tmp_path / "_study-artefacts" / "baseline_cache_local_transformers.json"
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps({"power_w": 50.0}))
 
@@ -990,14 +992,42 @@ class TestBaselineHostProgressEvents:
 class TestBaselineCacheKey:
     def test_cache_key_local_for_no_specs(self, tmp_path: Path, config_cached: ExperimentConfig):
         runner = _make_runner(tmp_path, config_cached)
-        assert runner._baseline_cache_key(config_cached) == "local"
+        assert runner._baseline_cache_key(config_cached) == "local_transformers"
 
     def test_cache_key_local_for_local_spec(self, tmp_path: Path, config_cached: ExperimentConfig):
         spec = RunnerSpec(mode="local", image=None, source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
-        assert runner._baseline_cache_key(config_cached) == "local"
+        assert runner._baseline_cache_key(config_cached) == "local_transformers"
+
+    def test_cache_key_distinct_per_local_engine(
+        self, tmp_path: Path, config_cached: ExperimentConfig
+    ):
+        """Two engines pinned local get distinct, engine-qualified keys (no collision).
+
+        Before precedence-based elevation an all-local multi-engine study was
+        impossible, so both local engines shared the "local" bucket. They must
+        now each measure their own baseline.
+        """
+        specs = {
+            "transformers": RunnerSpec(mode="local", image=None, source="yaml"),
+            "vllm": RunnerSpec(mode="local", image=None, source="yaml"),
+        }
+        runner, _ = _make_runner_with_progress(tmp_path, config_cached, runner_specs=specs)
+        tfm_cfg = ExperimentConfig(task={"model": "m"}, engine="transformers")
+        vllm_cfg = ExperimentConfig(task={"model": "m"}, engine="vllm")
+
+        k_tfm = runner._baseline_cache_key(tfm_cfg)
+        k_vllm = runner._baseline_cache_key(vllm_cfg)
+        assert k_tfm == "local_transformers"
+        assert k_vllm == "local_vllm"
+        assert k_tfm != k_vllm
+
+        # Docker keys remain image-derived and never collide with a local key.
+        docker = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner._runner_specs = {"transformers": docker}
+        assert runner._baseline_cache_key(tfm_cfg).startswith("image_")
 
     def test_cache_key_image_sanitisation(self, tmp_path: Path, config_cached: ExperimentConfig):
         spec = RunnerSpec(
@@ -1028,14 +1058,85 @@ class TestBaselineCacheKey:
 
     def test_disk_path_per_cache_key(self, tmp_path: Path, config_cached: ExperimentConfig):
         runner = _make_runner(tmp_path, config_cached)
-        p1 = runner._get_baseline_cache_path("local")
+        p1 = runner._get_baseline_cache_path("local_transformers")
         p2 = runner._get_baseline_cache_path("image_test_img_v1")
         assert p1 != p2
-        assert p1.name == "baseline_cache_local.json"
+        assert p1.name == "baseline_cache_local_transformers.json"
         assert p2.name == "baseline_cache_image_test_img_v1.json"
         # Regression: the filename must not contain ':' - Docker's bind-mount
         # parser treats it as the mode separator and rejects the mount.
         assert ":" not in p2.name
+
+    def test_cache_key_unqualified_when_unpinned(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """No GPU pin (config None, env unset) keeps the pre-PR key shape."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        assert runner.study.study_execution.gpu_indices is None
+        key = runner._baseline_cache_key(config_cached)
+        assert "_gpu-" not in key
+        assert key == f"image_{_sanitize_image_for_filename('img:v1')}"
+
+    def test_cache_key_qualified_when_config_pinned(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """A config GPU pin appends a sanitised ``_gpu-device_...`` suffix."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        key = runner._baseline_cache_key(config_cached)
+        assert key.endswith("_gpu-device_2_3")
+        # Filesystem/bind-mount safe (no '=' or ',' from the raw selector).
+        assert "=" not in key and "," not in key
+
+    def test_cache_key_same_pin_same_key(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """The same pin yields the same key (a resumed study reuses its baseline)."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        assert runner._baseline_cache_key(config_cached) == runner._baseline_cache_key(
+            config_cached
+        )
+
+    def test_cache_key_distinct_for_different_pins(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """Changing the GPU pin yields a distinct key (no stale cross-device reuse)."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        key_23 = runner._baseline_cache_key(config_cached)
+        runner.study.study_execution.gpu_indices = [4, 5]
+        key_45 = runner._baseline_cache_key(config_cached)
+        assert key_23 != key_45
+
+    def test_cache_key_env_overrides_config_pin(
+        self, tmp_path: Path, config_cached: ExperimentConfig, monkeypatch
+    ):
+        """LLEM_DOCKER_GPUS wins over the config pin for the cache key too."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=7")
+        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        runner, _ = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"transformers": spec}
+        )
+        runner.study.study_execution.gpu_indices = [2, 3]
+        key = runner._baseline_cache_key(config_cached)
+        assert key.endswith("_gpu-device_7")
 
 
 # =============================================================================
