@@ -118,7 +118,7 @@ jobs:
         # fails CI if anyone reintroduces it.
         run: |
           if [ -e docker/Dockerfile.tensorrt ]; then
-            echo "::error::docker/Dockerfile.tensorrt is gone for a reason - see version_handshake.py + scripts/container_entrypoint.sh"
+            echo "::error::docker/Dockerfile.tensorrt is gone for a reason - see version_handshake.py + infra/_container/container_entrypoint.sh"
             exit 1
           fi
 
@@ -204,14 +204,16 @@ jobs:
         # Real smoke on the clean venv: the public API imports, and the `llem`
         # console entry point resolves and runs its read-only commands to a
         # zero exit. `set -e` (the default GitHub Actions shell flag) fails the
-        # step on any non-zero exit. CPU-only and fast: `llem config` degrades
-        # to "No GPU detected" on a device-less runner and always exits 0.
+        # step on any non-zero exit. CPU-only and fast: `llem doctor` degrades
+        # to warnings (no GPU, no Docker) on a device-less runner and exits 0 -
+        # it only exits non-zero on a hard failure such as an image schema
+        # mismatch, which cannot occur without Docker present.
         run: |
           python -m venv /tmp/pkg-check
           /tmp/pkg-check/bin/pip install dist/*.whl --quiet
           /tmp/pkg-check/bin/python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('Public API import OK')"
           /tmp/pkg-check/bin/llem --help
-          /tmp/pkg-check/bin/llem config
+          /tmp/pkg-check/bin/llem doctor
       - name: Version sync check
         run: |
           PYPROJECT_VER=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); print(tomllib.load(f)['project']['version'])")

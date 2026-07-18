@@ -109,15 +109,17 @@ class TestM1ExitCriteria:
         )
         assert result.exit_code == 0
 
-    def test_cli_config_shows_gpu_info(self):
-        """llem config shows GPU and engine information."""
+    def test_cli_doctor_shows_gpu_info(self):
+        """llem doctor shows GPU and engine information."""
         from typer.testing import CliRunner
 
         from llenergymeasure.cli import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["config"])
-        assert result.exit_code == 0
+        result = runner.invoke(app, ["doctor"])
+        # doctor exits 0 normally, or 1 only on a hard failure such as an image
+        # schema mismatch - orthogonal to GPU visibility, which is asserted here.
+        assert result.exit_code in (0, 1)
         assert "GPU" in result.output or "gpu" in result.output
 
     def test_cli_version(self):

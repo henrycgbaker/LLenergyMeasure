@@ -86,7 +86,7 @@ jobs:
               - 'src/llenergymeasure/infra/image_registry.py'
               - 'src/llenergymeasure/infra/version_handshake.py'
               - 'src/llenergymeasure/study/baseline_container.py'
-              - 'scripts/container_entrypoint.sh'
+              - 'src/llenergymeasure/infra/_container/**'
               - 'configs/ci/**'
               - '.github/workflows/gpu-ci.yml'
 

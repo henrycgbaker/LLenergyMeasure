@@ -41,9 +41,9 @@ from llenergymeasure.config.ssot import (
     RunnerMode,
 )
 
-# Cross-module private import: the NVIDIA Container Toolkit binary list lives in
-# docker_preflight (its canonical home) and is reused for the docker-availability check.
-from llenergymeasure.infra.docker_preflight import _NVIDIA_TOOLKIT_BINS
+# The NVIDIA Container Toolkit binary list lives in docker_preflight (its canonical
+# home) and is reused here for the docker-availability check.
+from llenergymeasure.infra.docker_preflight import NVIDIA_TOOLKIT_BINS
 
 # Re-exported from image_registry for convenience - parse_runner_value is defined
 # there (canonical home) but used heavily in this module and its tests.
@@ -100,7 +100,7 @@ def is_docker_available() -> bool:
     if shutil.which("docker") is None:
         return False
 
-    return any(shutil.which(tool) is not None for tool in _NVIDIA_TOOLKIT_BINS)
+    return any(shutil.which(tool) is not None for tool in NVIDIA_TOOLKIT_BINS)
 
 
 # ---------------------------------------------------------------------------

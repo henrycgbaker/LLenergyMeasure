@@ -3,9 +3,11 @@
 ``_ImageMixin`` holds the stateful image-prep methods mixed into
 ``StudyRunner``: it checks (or pulls) each Docker engine's image once at study
 start, parses display metadata, and verifies the image's schema fingerprint
-against the host before any experiments run. Two pure free functions
-(``_sanitize_image_for_filename`` and ``_parse_image_metadata``) sit alongside
-the mixin.
+against the host before any experiments run. Locally cached images are
+inspected inline; images missing from the cache are pulled concurrently (one
+``docker pull`` per thread). Free functions (``_sanitize_image_for_filename``,
+``_parse_image_metadata``, ``_classify_pull_failure``,
+``_aggregate_image_errors``) sit alongside the mixin.
 
 These methods read ``self._runner_specs`` and ``self._progress`` and set
 ``self._images_prepared``, all initialised in ``StudyRunner.__init__``.
@@ -16,7 +18,9 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -26,6 +30,7 @@ from llenergymeasure.config.ssot import (
     RUNNER_DOCKER,
     TIMEOUT_DOCKER_INSPECT,
 )
+from llenergymeasure.infra.docker_errors import DockerImagePullError
 from llenergymeasure.infra.image_registry import inspect_image
 from llenergymeasure.infra.version_handshake import (
     ENV_SKIP_IMAGE_CHECK,
@@ -49,6 +54,29 @@ if TYPE_CHECKING:
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on simultaneous ``docker pull`` threads. A study rarely spans
+# more than three engines, and the daemon serialises layer writes anyway, so a
+# small cap keeps memory/disk pressure bounded without throttling the common
+# case.
+_MAX_CONCURRENT_PULLS = 3
+
+# Substrings in ``docker pull`` stderr that point to a connectivity problem
+# rather than a genuinely absent image. Matched case-insensitively. Kept
+# distinct because the fix differs: retry the pull vs build the image locally.
+_PULL_NETWORK_PATTERNS: tuple[str, ...] = (
+    "timeout",
+    "timed out",
+    "temporary failure in name resolution",
+    "no such host",
+    "connection refused",
+    "network is unreachable",
+    "dial tcp",
+    "i/o timeout",
+    "tls handshake timeout",
+    "could not resolve",
+    "server misbehaving",
+)
 
 
 def _sanitize_image_for_filename(image: str) -> str:
@@ -117,6 +145,48 @@ def _parse_image_metadata(inspect_stdout: bytes) -> dict[str, str] | None:
         return None
 
 
+def _classify_pull_failure(
+    engine_name: str, image: str, stderr: str
+) -> tuple[str, DockerImagePullError]:
+    """Classify a non-zero ``docker pull`` into an actionable error.
+
+    Distinguishes a connectivity failure (registry unreachable) from a
+    genuinely absent image, since the fix differs: retry the pull vs build the
+    image locally. Returns ``(short_reason, error)`` - the short reason feeds
+    the progress display, the error carries the full message + fix suggestion.
+    """
+    if any(pat in stderr.lower() for pat in _PULL_NETWORK_PATTERNS):
+        reason = "registry unreachable (network)"
+        return reason, DockerImagePullError(
+            message=f"Image pull failed - registry unreachable: {image}",
+            fix_suggestion="Check network/registry connectivity, then re-run.",
+        )
+    tip = f"docker compose build {engine_name}"
+    return f"not found - run: {tip}", DockerImagePullError(
+        message=f"Image not found: {image}",
+        fix_suggestion=tip,
+    )
+
+
+def _aggregate_image_errors(errors: list[Exception]) -> Exception:
+    """Collapse one or more image-prep errors into a single exception.
+
+    A single error is returned unchanged so its type, message, and
+    ``fix_suggestion`` survive intact. Multiple errors are combined into one
+    ``DockerImagePullError`` whose message names each failure on its own line.
+    Messages and fixes are sorted so the aggregate is identical regardless of
+    the order pulls happened to finish in.
+    """
+    if len(errors) == 1:
+        return errors[0]
+    body = "\n".join(f"  - {m}" for m in sorted(str(e) for e in errors))
+    fixes = sorted({f for e in errors if (f := getattr(e, "fix_suggestion", ""))})
+    return DockerImagePullError(
+        message=f"{len(errors)} Docker images could not be prepared:\n{body}",
+        fix_suggestion="\n".join(fixes),
+    )
+
+
 class _ImageMixin:
     """Stateful Docker image-prep + fingerprint-verification methods for StudyRunner.
 
@@ -132,9 +202,19 @@ class _ImageMixin:
     def _prepare_images(self) -> None:
         """Check/pull Docker images for all Docker engines before experiments.
 
-        Runs once at the start of the study. Each engine's image is verified
-        (or pulled) sequentially. On failure, raises so the study aborts early.
-        Sets ``_images_prepared`` so per-experiment image_check is skipped.
+        Runs once at the start of the study. Every image is inspected locally
+        first (cheap), so a cached image never triggers a remote call; cached
+        images are finalised inline. Images missing from the local cache are
+        pulled concurrently (one ``docker pull`` per thread, capped at
+        ``_MAX_CONCURRENT_PULLS``) so a multi-engine study on a fresh box does
+        not serialise several multi-GB pulls.
+
+        Failures do not cancel their siblings: every pull runs to completion
+        and any failures (plus post-pull fingerprint mismatches) are raised
+        together as one aggregate error. A cached-image fingerprint mismatch
+        aborts before any pull, so the study never waits on a multi-GB
+        download only to reject an already-skewed image. Sets
+        ``_images_prepared`` so the per-experiment image_check is skipped.
         """
 
         if not self._runner_specs:
@@ -151,26 +231,59 @@ class _ImageMixin:
         if self._progress:
             self._progress.begin_image_prep([e for e, _ in docker_engines])
 
-        for engine_name, spec in docker_engines:
-            image = spec.image
-            assert image is not None  # narrowing for type checker
+        try:
+            # Inspect every image locally first. Cached images are finalised
+            # inline; the rest are queued for a concurrent pull.
+            cached_errors: list[Exception] = []
+            missing: list[tuple[str, str]] = []
+            for engine_name, spec in docker_engines:
+                image = spec.image
+                assert image is not None  # narrowing for type checker
+                t0 = time.monotonic()
+                check = inspect_image(image, timeout=TIMEOUT_DOCKER_INSPECT)
+                if check is not None and check.returncode == 0:
+                    elapsed = time.monotonic() - t0
+                    mismatch_error = self._finalise_image(
+                        engine_name, image, check.stdout, cached=True, elapsed=elapsed
+                    )
+                    if mismatch_error is not None:
+                        cached_errors.append(mismatch_error)
+                else:
+                    missing.append((engine_name, image))
+
+            # A cached-image fingerprint mismatch aborts before any multi-GB pull.
+            if cached_errors:
+                raise _aggregate_image_errors(cached_errors)
+
+            if missing:
+                pull_errors = self._pull_missing_images(missing)
+                if pull_errors:
+                    raise _aggregate_image_errors(pull_errors)
+        finally:
+            if self._progress:
+                self._progress.end_image_prep()
+
+        self._images_prepared = True
+
+    def _pull_missing_images(self, missing: list[tuple[str, str]]) -> list[Exception]:
+        """Pull *missing* ``(engine, image)`` pairs concurrently and finalise each.
+
+        One ``docker pull`` per thread, capped at ``_MAX_CONCURRENT_PULLS``.
+        Pulls are subprocess calls and thread-safe. Progress callbacks are
+        serialised under a lock so each image's (possibly multi-line) output
+        stays coherent and never interleaves with a sibling's.
+
+        Returns the list of errors (pull failures + post-pull fingerprint
+        mismatches); an empty list means every image was pulled and verified.
+        A single pull failing does not cancel the others - all threads run to
+        completion before the aggregate is returned.
+        """
+        progress_lock = threading.Lock()
+        results_lock = threading.Lock()
+        errors: list[Exception] = []
+
+        def _pull_one(engine_name: str, image: str) -> None:
             t0 = time.monotonic()
-
-            # Check if image exists locally
-            check = inspect_image(image, timeout=TIMEOUT_DOCKER_INSPECT)
-
-            if check is not None and check.returncode == 0:
-                elapsed = time.monotonic() - t0
-                mismatch_error = self._finalise_image(
-                    engine_name, image, check.stdout, cached=True, elapsed=elapsed
-                )
-                if mismatch_error is not None:
-                    if self._progress:
-                        self._progress.end_image_prep()
-                    raise mismatch_error
-                continue
-
-            # Image not found locally - try to pull
             logger.info("Image %s not found locally, pulling...", image)
             try:
                 pull = subprocess.run(
@@ -178,28 +291,28 @@ class _ImageMixin:
                     capture_output=True,
                     timeout=DOCKER_PULL_TIMEOUT,
                 )
-            except subprocess.TimeoutExpired as exc:
-                if self._progress:
-                    self._progress.image_failed(engine_name, image, "pull timed out (30min)")
-                    self._progress.end_image_prep()
-                from llenergymeasure.infra.docker_errors import DockerImagePullError
-
-                raise DockerImagePullError(
+            except subprocess.TimeoutExpired:
+                error = DockerImagePullError(
                     message=f"Image pull timed out: {image}",
                     fix_suggestion=f"docker compose build {engine_name}",
-                ) from exc
+                )
+                with progress_lock:
+                    if self._progress:
+                        self._progress.image_failed(engine_name, image, "pull timed out (30min)")
+                with results_lock:
+                    errors.append(error)
+                return
 
             if pull.returncode != 0:
-                tip = f"docker compose build {engine_name}"
-                if self._progress:
-                    self._progress.image_failed(engine_name, image, f"not found \u2014 run: {tip}")
-                    self._progress.end_image_prep()
-                from llenergymeasure.infra.docker_errors import DockerImagePullError
-
-                raise DockerImagePullError(
-                    message=f"Image not found: {image}",
-                    fix_suggestion=tip,
+                reason, error = _classify_pull_failure(
+                    engine_name, image, pull.stderr.decode("utf-8", "replace")
                 )
+                with progress_lock:
+                    if self._progress:
+                        self._progress.image_failed(engine_name, image, reason)
+                with results_lock:
+                    errors.append(error)
+                return
 
             elapsed = time.monotonic() - t0
             try:
@@ -213,17 +326,28 @@ class _ImageMixin:
                 inspect_stdout = b""
 
             mismatch_error = self._finalise_image(
-                engine_name, image, inspect_stdout, cached=False, elapsed=elapsed
+                engine_name,
+                image,
+                inspect_stdout,
+                cached=False,
+                elapsed=elapsed,
+                progress_lock=progress_lock,
             )
             if mismatch_error is not None:
-                if self._progress:
-                    self._progress.end_image_prep()
-                raise mismatch_error
+                with results_lock:
+                    errors.append(mismatch_error)
 
-        if self._progress:
-            self._progress.end_image_prep()
+        max_workers = min(len(missing), _MAX_CONCURRENT_PULLS)
+        with ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="image-pull"
+        ) as executor:
+            futures = [
+                executor.submit(_pull_one, engine_name, image) for engine_name, image in missing
+            ]
+            for future in futures:
+                future.result()  # surface any unexpected worker exception
 
-        self._images_prepared = True
+        return errors
 
     def _finalise_image(
         self,
@@ -233,6 +357,7 @@ class _ImageMixin:
         *,
         cached: bool,
         elapsed: float,
+        progress_lock: threading.Lock | None = None,
     ) -> Exception | None:
         """Report an image-ready progress event and return any mismatch error.
 
@@ -240,6 +365,11 @@ class _ImageMixin:
         classifies the schema status, renders it through
         ``progress.image_ready`` so the engine row appears before any abort,
         and returns the ``VersionMismatchError`` for the caller to raise.
+
+        The fingerprint verification (potentially a cold docker-run probe)
+        runs outside *progress_lock* so concurrent callers keep verifying in
+        parallel; only the ``image_ready`` emission is serialised, which is
+        what keeps interleaved per-image output coherent.
         """
         metadata = _parse_image_metadata(inspect_stdout) or {}
         stamp = parse_image_stamp(inspect_stdout)
@@ -247,9 +377,15 @@ class _ImageMixin:
         metadata["schema"] = schema_status
 
         if self._progress:
-            self._progress.image_ready(
-                engine_name, image, cached=cached, elapsed=elapsed, metadata=metadata
-            )
+            if progress_lock is None:
+                self._progress.image_ready(
+                    engine_name, image, cached=cached, elapsed=elapsed, metadata=metadata
+                )
+            else:
+                with progress_lock:
+                    self._progress.image_ready(
+                        engine_name, image, cached=cached, elapsed=elapsed, metadata=metadata
+                    )
         return mismatch_error
 
     def _verify_image_fingerprint(

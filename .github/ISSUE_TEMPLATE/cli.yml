@@ -8,7 +8,8 @@ body:
       label: Command
       options:
         - llem run
-        - llem config / info / doctor
+        - llem doctor
+        - llem study / report-gaps
         - llem --version
         - other
     validations:

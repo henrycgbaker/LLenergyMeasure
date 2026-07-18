@@ -116,7 +116,7 @@ Tensor parallel is supported via engine-native fields (`tensorrt.engine_params.t
 
 ### How do I cite `llem` in a paper?
 
-Until a formal release citation is published, cite the GitHub repository: `https://github.com/henrycgbaker/llenergymeasure` plus the version (`llem --version` or pin `llenergymeasure==0.9.0` in your reproducibility appendix). The full effective configuration is in every experiment's `config.json` sidecar (`declared_config` plus provenance) - share that file for full reproducibility.
+Until a formal release citation is published, cite the GitHub repository: `https://github.com/henrycgbaker/llenergymeasure` plus the version (`llem --version` or pin `llenergymeasure==0.12.0` in your reproducibility appendix). The full effective configuration is in every experiment's `config.json` sidecar (`declared_config` plus provenance) - share that file for full reproducibility.
 
 ### What should I include in a paper for measurement reproducibility?
 

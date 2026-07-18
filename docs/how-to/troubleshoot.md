@@ -8,14 +8,14 @@ Common issues and solutions for LLenergyMeasure.
 
 ### No GPU detected
 
-**Symptom:** `llem config` shows no GPU, or measurement fails with a CUDA error.
+**Symptom:** `llem doctor` shows no GPU, or measurement fails with a CUDA error.
 
 **Cause:** NVIDIA drivers are not installed, the device is not visible in the current
 environment, or the system is CPU-only.
 
 **Fix:**
 1. Run `nvidia-smi` to verify the GPU is visible on the host.
-2. Run `llem config` to see what the tool detects.
+2. Run `llem doctor` to see what the tool detects.
 3. If `nvidia-smi` works but the engine does not, you may be running outside a container
    that has CUDA - for vLLM and TensorRT-LLM, use `llem run study.yaml` with Docker runners
    (see [docker-setup.md](/how-to/docker-setup)).
@@ -47,7 +47,7 @@ Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two) for the other engines. Then run `llem run` with a Docker runner
 configured for the engine - see [docker-setup.md](/how-to/docker-setup).
 
-Run `llem config` to see the current status of each engine.
+Run `llem doctor` to see the current status of each engine.
 
 ---
 
@@ -143,10 +143,10 @@ bind-mount host source at run time, so they always see the current schema.
 **Fix:** Rebuild the Transformers image from the current source:
 
 ```bash
-docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0 .
+docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.12.0 .
 ```
 
-Replace `v0.9.0` with your installed version (`llem --version`). See
+Replace `v0.12.0` with your installed version (`llem --version`). See
 [Installation - Getting Engine Images](/how-to/install#getting-engine-images)
 for full instructions.
 
@@ -160,7 +160,7 @@ for full instructions.
 is unavailable, energy measurement falls back gracefully to zero rather than crashing.
 
 **Fix:**
-1. Check `llem config` - it shows the active energy sampler under `Energy:`.
+1. Check `llem doctor` - it shows the active energy sampler under `Energy measurement`.
 2. Verify pynvml can access the GPU: run `python -c "import pynvml; pynvml.nvmlInit(); print('OK')"`.
 3. Check your config. Setting `energy_sampler: null` explicitly disables
    energy measurement (throughput-only mode).
@@ -220,7 +220,7 @@ no error, process does not return.
 
 3. **Pre-flight check stalled** - if the Docker daemon is unreachable or the GPU
    is being held by another process, the pre-flight probe hangs. Run
-   `llem config --verbose` in a second terminal to check daemon and GPU state.
+   `llem doctor` in a second terminal to check daemon and GPU state.
 
 4. **Inference timeout not triggered** - `study_execution.experiment_timeout_seconds`
    defaults to 600 seconds. A model with a very long generation (e.g. high
@@ -340,8 +340,8 @@ tag-copy completes in seconds.
 like:
 
 ```
-Docker image 'llenergymeasure:transformers' was built from llenergymeasure 0.9.0
-(schema 9988776655ff) but the host is running 0.9.0 (schema a1b2c3d4e5f6).
+Docker image 'llenergymeasure:transformers' was built from llenergymeasure 0.12.0
+(schema 9988776655ff) but the host is running 0.12.0 (schema a1b2c3d4e5f6).
 The container will reject ExperimentConfig fields added on the host after
 the image was built.
 ```
@@ -387,7 +387,7 @@ docker image inspect llenergymeasure:transformers --format '{{.Id}}'
 
 ## Getting Help
 
-Run `llem config --verbose` to capture full environment details (Python version, installed
+Run `llem doctor --json` to capture full environment details (Python version, installed
 engines, GPU info, energy sampler status, config file path). Include this output when
 filing a bug report.
 

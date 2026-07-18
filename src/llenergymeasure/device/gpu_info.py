@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
@@ -40,6 +40,36 @@ def nvml_context() -> Generator[None, None, None]:
         # changing the swallow-and-continue behaviour.
         logger.debug("NVML unavailable; proceeding without it", exc_info=True)
         yield  # pynvml absent or nvmlInit failed - caller proceeds without NVML
+
+
+def gpu_inventory() -> tuple[list[dict[str, Any]], str | None]:
+    """Return ``(per-device info, driver version)`` from one NVML session.
+
+    Each device dict carries ``name`` (str) and ``vram_gb`` (float). The list is
+    empty when no NVIDIA GPU is visible; the driver string is None when it cannot
+    be read. Best-effort: pynvml/NVML absent or failing yields ``([], None)`` and
+    never raises. Opening a single ``nvml_context()`` covers both queries, so
+    diagnostics (e.g. ``llem doctor``) do not pay two init/shutdown cycles.
+    """
+    gpus: list[dict[str, Any]] = []
+    driver: str | None = None
+    try:
+        import pynvml
+
+        with nvml_context():
+            count = pynvml.nvmlDeviceGetCount()
+            for i in range(count):
+                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                name = pynvml.nvmlDeviceGetName(handle)
+                if isinstance(name, bytes):
+                    name = name.decode()
+                mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                gpus.append({"name": name, "vram_gb": mem.total / 1e9})
+            raw = pynvml.nvmlSystemGetDriverVersion()
+            driver = raw.decode() if isinstance(raw, bytes) else str(raw)
+    except Exception:
+        return [], None
+    return gpus, driver
 
 
 def get_compute_capability(gpu_index: int = 0) -> tuple[int, int] | None:

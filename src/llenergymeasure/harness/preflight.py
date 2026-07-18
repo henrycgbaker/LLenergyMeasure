@@ -223,7 +223,9 @@ def run_preflight(config: ExperimentConfig) -> None:
         failures.append(
             f"{config.engine} not available on host (missing: {package}). "
             f"Engine code runs inside Docker - dispatch via `llem run` with a Docker "
-            f"runner, or see docs/development.md for the build/run pattern."
+            "runner, or see "
+            "https://henrycgbaker.github.io/llenergymeasure/contributing/development "
+            "for the build/run pattern."
         )
 
     # Check 3: Model accessible
