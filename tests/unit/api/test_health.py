@@ -286,6 +286,31 @@ def test_handshake_mismatch_is_fail() -> None:
     assert "rebuild" in (fail.fix or "")
 
 
+def test_handshake_local_tag_shadow_renders_warn_line() -> None:
+    report = DoctorReport(
+        host_pkg_version="0.13.0",
+        host_fingerprint="a" * 64,
+        skip_check_active=False,
+        results=[
+            EngineDoctorResult(
+                engine="vllm",
+                image="llenergymeasure:vllm",
+                pkg_version="0.19.1",
+                image_fingerprint="a" * 64,
+                status=SchemaStatus.OK,
+                local_present=True,
+                shadows_default="vllm/vllm-openai:v0.19.1",
+            )
+        ],
+    )
+    section = health._image_handshake_section(report)
+    shadow = next(line for line in section.lines if "shadows pinned default" in line.message)
+    assert shadow.status == "warn"
+    assert "llenergymeasure:vllm" in shadow.message
+    assert "vllm/vllm-openai:v0.19.1" in shadow.message
+    assert "docker rmi llenergymeasure:vllm" in (shadow.fix or "")
+
+
 def test_handshake_unreachable_is_warn() -> None:
     report = _doctor_report(SchemaStatus.UNREACHABLE)
     section = health._image_handshake_section(report)

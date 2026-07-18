@@ -6,7 +6,11 @@ from dataclasses import dataclass
 
 from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import Engine
-from llenergymeasure.infra.image_registry import get_default_image, image_present_locally
+from llenergymeasure.infra.image_registry import (
+    get_default_image,
+    image_present_locally,
+    shadowed_default_image,
+)
 from llenergymeasure.infra.version_handshake import (
     BundledEngineVersionMismatchError,
     SchemaStatus,
@@ -48,6 +52,9 @@ class EngineDoctorResult:
     status: SchemaStatus
     local_present: bool | None = None
     detail: str = ""
+    # Set when a local bare tag (``llenergymeasure:{engine}``) won resolution:
+    # names the version-pinned default it shadows, else None.
+    shadows_default: str | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +166,7 @@ def run_doctor_checks(
                 status=status,
                 local_present=local_present,
                 detail=_detail_for(engine, status),
+                shadows_default=shadowed_default_image(engine, image),
             )
         )
 

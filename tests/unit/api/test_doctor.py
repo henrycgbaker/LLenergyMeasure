@@ -29,6 +29,40 @@ def test_reports_resolved_image_and_local_presence():
     assert row.local_present is True
 
 
+def test_local_tag_win_surfaces_shadowed_default():
+    """When a local bare tag wins resolution, the row names the pinned default it
+    shadows so ``llem doctor`` surfaces the same fact the resolution warning logs."""
+    from llenergymeasure.infra.version_handshake import read_bundled_engine_version
+
+    with (
+        patch("llenergymeasure.api.doctor.compute_expconf_fingerprint", return_value="f" * 64),
+        patch("llenergymeasure.api.doctor.get_default_image", return_value="llenergymeasure:vllm"),
+        patch("llenergymeasure.api.doctor.image_present_locally", return_value=True),
+        patch("llenergymeasure.api.doctor.inspect_image_stamp", return_value=_EMPTY_STAMP),
+    ):
+        report = run_doctor_checks(engines=("vllm",))
+
+    (row,) = report.results
+    assert row.image == "llenergymeasure:vllm"
+    assert row.shadows_default == f"vllm/vllm-openai:v{read_bundled_engine_version('vllm')}"
+
+
+def test_remote_image_has_no_shadowed_default():
+    with (
+        patch("llenergymeasure.api.doctor.compute_expconf_fingerprint", return_value="f" * 64),
+        patch(
+            "llenergymeasure.api.doctor.get_default_image",
+            return_value="vllm/vllm-openai:v0.19.1",
+        ),
+        patch("llenergymeasure.api.doctor.image_present_locally", return_value=False),
+        patch("llenergymeasure.api.doctor.inspect_image_stamp", return_value=_EMPTY_STAMP),
+    ):
+        report = run_doctor_checks(engines=("vllm",))
+
+    (row,) = report.results
+    assert row.shadows_default is None
+
+
 def test_unresolvable_default_becomes_unreachable_row_with_fix():
     def _raise(engine):
         raise ConfigError(f'Set runners.{engine} to "docker:<image>:<tag>"')

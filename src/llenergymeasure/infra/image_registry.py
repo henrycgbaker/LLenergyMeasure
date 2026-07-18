@@ -46,7 +46,7 @@ import json
 import logging
 import os
 import subprocess
-from functools import lru_cache
+from functools import cache, lru_cache
 
 from llenergymeasure.config.ssot import (
     ALL_ENGINES,
@@ -69,6 +69,7 @@ __all__ = [
     "parse_runner_value",
     "resolve_image",
     "resolve_image_digest",
+    "shadowed_default_image",
     "show_image_resolution",
 ]
 
@@ -131,22 +132,16 @@ def get_default_image(engine: str) -> str:
             tells the user to set ``runners.<engine>`` to an explicit
             ``docker:<image>`` reference.
     """
-    # 1. Prefer a locally-built image (fast local iteration).
+    # 1. Prefer a locally-built image (fast local iteration). This precedence is
+    #    intentional, but a months-stale dev tag can hijack resolution
+    #    invisibly, so warn (once) and name the pinned default it bypasses.
     local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
     if _image_exists_locally(local_image):
-        logger.info("Using local image %s (from docker compose build)", local_image)
+        _warn_local_shadow(engine)
         return local_image
 
     # 2. Per-engine default remote image at the resolved version.
-    engine_name = engine_str(engine)
-    template = DEFAULT_IMAGE_TEMPLATES.get(engine_name)
-    if template is None:
-        raise ConfigError(
-            f"No default Docker image is defined for engine {engine_name!r}. "
-            f'Set runners.{engine_name} to "docker:<image>:<tag>" in your study '
-            f"YAML to pin an explicit image."
-        )
-    image = template.format(version=_default_image_version(engine_name))
+    image = _resolve_pinned_default(engine_str(engine))
     logger.info("No local image found; using default image %s", image)
     return image
 
@@ -183,6 +178,87 @@ def _default_image_version(engine: str) -> str:
             f"pin an explicit image."
         )
     return version
+
+
+def _resolve_pinned_default(engine: str) -> str:
+    """Resolve *engine*'s version-pinned default remote image.
+
+    Shared by ``get_default_image`` (step 2) and the shadow-warning path so the
+    warning always names the exact image a local bare tag bypassed.
+
+    Raises:
+        ConfigError: the engine has no default template, or its pinned engine
+            version is unavailable at runtime (a partial or broken wheel).
+    """
+    template = DEFAULT_IMAGE_TEMPLATES.get(engine)
+    if template is None:
+        raise ConfigError(
+            f"No default Docker image is defined for engine {engine!r}. "
+            f'Set runners.{engine} to "docker:<image>:<tag>" in your study '
+            f"YAML to pin an explicit image."
+        )
+    return template.format(version=_default_image_version(engine))
+
+
+@cache
+def _pinned_default_or_none(engine: str) -> str | None:
+    """Best-effort name of the version-pinned default a local bare tag bypasses.
+
+    Returns None when it cannot be resolved (unknown engine or a broken wheel),
+    so naming the bypassed default never fails a run.
+
+    Cached on the engine so the shadow warning and ``shadowed_default_image``
+    (both called per engine within ``run_doctor_checks``) resolve the bypassed
+    default once, sharing a single file read instead of two. ``cache_clear()``
+    resets the memoization (used by tests).
+    """
+    from llenergymeasure.infra.version_handshake import BundledEngineVersionMismatchError
+
+    try:
+        return _resolve_pinned_default(engine_str(engine))
+    except (ConfigError, BundledEngineVersionMismatchError):
+        return None
+
+
+@cache
+def _warn_local_shadow(engine: str) -> None:
+    """Warn (once per process) that a local bare tag shadows the pinned default.
+
+    ``get_default_image`` runs repeatedly per engine within a single study prep
+    (preflight, then once per experiment and cycle), so the warning is
+    deduplicated with ``functools.cache`` keyed on the engine: the same shadow is
+    logged only once. ``cache_clear()`` resets the dedup (used by tests).
+    """
+    local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
+    pinned_default = _pinned_default_or_none(engine)
+    shadowed = (
+        f"the version-pinned default {pinned_default}"
+        if pinned_default is not None
+        else "this engine's version-pinned default"
+    )
+    logger.warning(
+        "Using local Docker image %s, which shadows %s. A stale local tag can "
+        "silently win image resolution. Run `docker rmi %s` to restore the "
+        "pinned default, or pin an explicit image via runners.<engine> or "
+        "LLEM_IMAGE_<ENGINE>.",
+        local_image,
+        shadowed,
+        local_image,
+    )
+
+
+def shadowed_default_image(engine: str, resolved_image: str) -> str | None:
+    """Return the version-pinned default *resolved_image* bypasses, or None.
+
+    When *resolved_image* is the local bare tag for *engine* (a locally built
+    image won resolution), return the version-pinned default it shadows;
+    otherwise None. Lets diagnostics (``llem doctor``) surface the same
+    shadowing fact the resolution warning logs. Best-effort: returns None when
+    the pinned default cannot be resolved.
+    """
+    if resolved_image != LOCAL_IMAGE_TEMPLATE.format(engine=engine):
+        return None
+    return _pinned_default_or_none(engine)
 
 
 def image_present_locally(image: str) -> bool:
