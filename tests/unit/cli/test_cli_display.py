@@ -244,6 +244,57 @@ def test_format_error_regular_llem_error_no_docker_fields():
     assert "Container stderr" not in result
 
 
+def test_format_error_verbose_surfaces_container_traceback():
+    """Under verbose, a DockerError surfaces the in-container traceback from its payload.
+
+    The container entrypoint writes the real engine/CUDA failure traceback into
+    ``*_error.json``; DockerRunner stores it on ``error.error_payload``. format_error
+    must print that traceback (the real cause) rather than the uninformative host-side
+    raise-site traceback.
+    """
+    from llenergymeasure.infra.docker_errors import DockerContainerError
+
+    container_tb = (
+        "Traceback (most recent call last):\n"
+        '  File "/opt/llem/engine.py", line 42, in load_model\n'
+        "    raise torch.cuda.OutOfMemoryError(...)\n"
+        "torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB"
+    )
+    err = DockerContainerError(message="RuntimeError: CUDA OOM")
+    err.error_payload = {
+        "type": "OutOfMemoryError",
+        "message": "CUDA out of memory",
+        "traceback": container_tb,
+    }
+
+    result = format_error(err, verbose=True)
+
+    assert "In-container traceback" in result
+    assert "/opt/llem/engine.py" in result
+    assert "torch.cuda.OutOfMemoryError: CUDA out of memory" in result
+
+
+def test_format_error_container_traceback_hidden_without_verbose():
+    """Without verbose, the container traceback stays hidden and output is concise."""
+    from llenergymeasure.infra.docker_errors import DockerContainerError
+
+    err = DockerContainerError(message="OutOfMemoryError: CUDA out of memory")
+    err.error_payload = {
+        "type": "OutOfMemoryError",
+        "message": "CUDA out of memory",
+        "traceback": 'Traceback (most recent call last):\n  File "/opt/llem/engine.py", ...',
+    }
+
+    result = format_error(err, verbose=False)
+
+    # The one-line cause (type: message) is preserved, but no traceback leaks in.
+    assert "OutOfMemoryError" in result
+    assert "CUDA out of memory" in result
+    assert "In-container traceback" not in result
+    assert "/opt/llem/engine.py" not in result
+    assert "Traceback (most recent call last)" not in result
+
+
 # =============================================================================
 # print_result_summary tests
 # =============================================================================
