@@ -143,10 +143,10 @@ bind-mount host source at run time, so they always see the current schema.
 **Fix:** Rebuild the Transformers image from the current source:
 
 ```bash
-docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0 .
+docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.12.0 .
 ```
 
-Replace `v0.9.0` with your installed version (`llem --version`). See
+Replace `v0.12.0` with your installed version (`llem --version`). See
 [Installation - Getting Engine Images](/how-to/install#getting-engine-images)
 for full instructions.
 
@@ -340,8 +340,8 @@ tag-copy completes in seconds.
 like:
 
 ```
-Docker image 'llenergymeasure:transformers' was built from llenergymeasure 0.9.0
-(schema 9988776655ff) but the host is running 0.9.0 (schema a1b2c3d4e5f6).
+Docker image 'llenergymeasure:transformers' was built from llenergymeasure 0.12.0
+(schema 9988776655ff) but the host is running 0.12.0 (schema a1b2c3d4e5f6).
 The container will reject ExperimentConfig fields added on the host after
 the image was built.
 ```

@@ -788,6 +788,7 @@ def test_viewport_hidden_indicator_absent_when_fits():
 def test_image_prep_result_named_fields():
     """_ImagePrepResult supports both named field access and positional destructuring."""
     r = _ImagePrepResult(
+        idx=1,
         engine="transformers",
         image="llem-pytorch:latest",
         cached=True,
@@ -795,26 +796,61 @@ def test_image_prep_result_named_fields():
         metadata={"size": "2GB"},
     )
     # Named access
+    assert r.idx == 1
     assert r.engine == "transformers"
     assert r.image == "llem-pytorch:latest"
     assert r.cached is True
     assert r.elapsed == 1.5
     assert r.metadata == {"size": "2GB"}
-    # Positional destructuring (backward compatibility)
-    engine, _image, cached, _elapsed, _metadata = r
+    # Positional destructuring
+    idx, engine, _image, cached, _elapsed, _metadata = r
+    assert idx == 1
     assert engine == "transformers"
     assert cached is True
 
 
 def test_image_prep_failure_named_fields():
     """_ImagePrepFailure supports both named field access and positional destructuring."""
-    f = _ImagePrepFailure(engine="vllm", image="llem-vllm:latest", error="pull failed")
+    f = _ImagePrepFailure(idx=2, engine="vllm", image="llem-vllm:latest", error="pull failed")
+    assert f.idx == 2
     assert f.engine == "vllm"
     assert f.image == "llem-vllm:latest"
     assert f.error == "pull failed"
-    # Positional destructuring (backward compatibility)
-    _b, _i, e = f
+    # Positional destructuring
+    idx, _b, _i, e = f
+    assert idx == 2
     assert e == "pull failed"
+
+
+def test_image_prep_panel_renders_every_concurrent_failure():
+    """Two concurrent failures + a success all appear with unique counters.
+
+    Regression guard: the panel formerly stored a single failure slot, so a
+    second failure overwrote the first and only the most recent rendered.
+    Concurrent pulls no longer cancel siblings, so 2+ can fail at once.
+    """
+    import re
+
+    console = _make_tty_console()
+    display = StudyStepDisplay(total_experiments=3, console=console)
+    display.begin_image_prep(["transformers", "vllm", "tensorrt"])
+
+    display.image_ready("transformers", "llem-pytorch:latest", cached=False, elapsed=1.0)
+    display.image_failed("vllm", "llem-vllm:latest", "not found - run: docker compose build vllm")
+    display.image_failed("tensorrt", "llem-trt:latest", "registry unreachable (network)")
+
+    rendered = display._render_image_prep().plain
+
+    # Both failures survive; the pre-fix single-slot model dropped the first.
+    assert "vllm" in rendered
+    assert "tensorrt" in rendered
+    assert "docker compose build vllm" in rendered
+    assert "registry unreachable (network)" in rendered
+    # The interleaved success is still present.
+    assert "transformers" in rendered
+    # Counters are unique and sequential (no duplicate "[1/3]" collision).
+    counters = re.findall(r"\[(\d+)/3\]", rendered)
+    assert counters == ["1", "2", "3"], f"counters not unique/sequential: {counters}"
 
 
 # ---------------------------------------------------------------------------

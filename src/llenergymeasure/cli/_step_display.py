@@ -47,8 +47,14 @@ _VIEWPORT_RESERVED_LINES = 12
 
 
 class _ImagePrepResult(NamedTuple):
-    """Result of a successfully prepared Docker image."""
+    """Result of a successfully prepared Docker image.
 
+    ``idx`` is the shared monotonic display position assigned when the event
+    arrives, so successes and failures render with unique, stable counters
+    regardless of the order concurrent pulls finish in.
+    """
+
+    idx: int
     engine: str
     image: str
     cached: bool
@@ -57,8 +63,12 @@ class _ImagePrepResult(NamedTuple):
 
 
 class _ImagePrepFailure(NamedTuple):
-    """Result of a failed Docker image preparation."""
+    """Result of a failed Docker image preparation.
 
+    ``idx`` is the shared monotonic display position (see ``_ImagePrepResult``).
+    """
+
+    idx: int
     engine: str
     image: str
     error: str
@@ -720,11 +730,18 @@ class StudyStepDisplay:
         self._total_start: float = 0.0
         self._gap_text: str = ""
 
-        # Image prep state (study-level Docker image preparation)
+        # Image prep state (study-level Docker image preparation). Successes and
+        # failures share one monotonically increasing display index
+        # (``_image_prep_seq``, bumped under ``_lock``) so concurrent pulls that
+        # finish or fail in any order still render with unique, stable
+        # [x/total] counters. Failures are a list, not a single slot: pulls no
+        # longer cancel their siblings, so 2+ images can fail and every failure
+        # must stay visible in the live panel.
         self._image_prep_active: bool = False
         self._image_prep_total: int = 0
+        self._image_prep_seq: int = 0
         self._image_prep_done: list[_ImagePrepResult] = []
-        self._image_prep_failed: _ImagePrepFailure | None = None
+        self._image_prep_failed: list[_ImagePrepFailure] = []
 
     def start(self, *, print_header: bool = True) -> None:
         """Begin the display. Optionally prints study header and starts Rich Live if TTY.
@@ -1026,9 +1043,12 @@ class StudyStepDisplay:
     ) -> None:
         """Signal that a Docker image is ready."""
         with self._lock:
-            self._image_prep_done.append(_ImagePrepResult(engine, image, cached, elapsed, metadata))
+            self._image_prep_seq += 1
+            idx = self._image_prep_seq
+            self._image_prep_done.append(
+                _ImagePrepResult(idx, engine, image, cached, elapsed, metadata)
+            )
         if not self._is_tty:
-            idx = len(self._image_prep_done)
             total = self._image_prep_total
             status = "cached" if cached else "pulled"
             short_img = _short_image(image)
@@ -1048,9 +1068,10 @@ class StudyStepDisplay:
     def image_failed(self, engine: str, image: str, error: str) -> None:
         """Signal that a Docker image could not be prepared."""
         with self._lock:
-            self._image_prep_failed = _ImagePrepFailure(engine, image, error)
+            self._image_prep_seq += 1
+            idx = self._image_prep_seq
+            self._image_prep_failed.append(_ImagePrepFailure(idx, engine, image, error))
         if not self._is_tty:
-            idx = len(self._image_prep_done) + 1
             total = self._image_prep_total
             short_img = _short_image(image)
             self._console.print(
@@ -1073,7 +1094,7 @@ class StudyStepDisplay:
     def _render_image_prep(self) -> Text:
         """Render the Docker image preparation section."""
         lines = Text()
-        if not self._image_prep_done and self._image_prep_failed is None:
+        if not self._image_prep_done and not self._image_prep_failed:
             if self._image_prep_active:
                 lines.append("\n  Preparing Docker images\n", style="bold")
             return lines
@@ -1081,27 +1102,31 @@ class StudyStepDisplay:
         lines.append("\n  Preparing Docker images\n")
         total = self._image_prep_total
 
-        for idx, (engine, image, cached, elapsed, metadata) in enumerate(self._image_prep_done, 1):
-            status = "cached" if cached else "pulled"
-            short_img = _short_image(image)
+        # Successes and failures share one monotonic counter, so render them
+        # interleaved in arrival order for a coherent [x/total] sequence. Every
+        # failure is shown - concurrent pulls can produce more than one.
+        successes = {r.idx: r for r in self._image_prep_done}
+        failures = {f.idx: f for f in self._image_prep_failed}
+        for idx in sorted(successes.keys() | failures.keys()):
             counter = f"[{idx}/{total}]"
-            lines.append(f"      {counter:>7s}  {engine:<16s}{short_img} ({status})")
-            lines.append("  \u2713", style="bold green")
-            lines.append(f"  {_format_elapsed(elapsed)}\n")
-            if metadata:
-                parts = [f"{k}: {v}" for k, v in metadata.items()]
-                meta_text = " \u00b7 ".join(parts)
-                lines.append(f"                    \u00b7 {meta_text}\n", style="dim")
-
-        if self._image_prep_failed:
-            fail_engine, fail_image, fail_error = self._image_prep_failed
-            idx = len(self._image_prep_done) + 1
-            short_img = _short_image(fail_image)
-            counter = f"[{idx}/{total}]"
-            lines.append(f"      {counter:>7s}  {fail_engine:<16s}{short_img}")
-            lines.append("  \u2717", style="bold red")
-            lines.append("\n")
-            lines.append(f"                    \u00b7 {fail_error}\n", style="dim")
+            if idx in successes:
+                r = successes[idx]
+                status = "cached" if r.cached else "pulled"
+                short_img = _short_image(r.image)
+                lines.append(f"      {counter:>7s}  {r.engine:<16s}{short_img} ({status})")
+                lines.append("  \u2713", style="bold green")
+                lines.append(f"  {_format_elapsed(r.elapsed)}\n")
+                if r.metadata:
+                    parts = [f"{k}: {v}" for k, v in r.metadata.items()]
+                    meta_text = " \u00b7 ".join(parts)
+                    lines.append(f"                    \u00b7 {meta_text}\n", style="dim")
+            else:
+                f = failures[idx]
+                short_img = _short_image(f.image)
+                lines.append(f"      {counter:>7s}  {f.engine:<16s}{short_img}")
+                lines.append("  \u2717", style="bold red")
+                lines.append("\n")
+                lines.append(f"                    \u00b7 {f.error}\n", style="dim")
 
         return lines
 
