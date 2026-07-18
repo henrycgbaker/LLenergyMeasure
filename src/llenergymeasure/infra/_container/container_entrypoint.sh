@@ -40,12 +40,13 @@ mkdir -p "$DEPS_TARGET"
 export PYTHONPATH="/llem-src:${DEPS_TARGET}:${PYTHONPATH:-}"
 
 # Fast-path stamp: a sweep typically dispatches the same image hundreds of
-# times with an unchanged requirements list. Running the importlib.metadata
-# probe every dispatch is ~200ms of pure overhead that the steady-state
-# path doesn't need. The stamp file records the requirements hash that was
-# last verified against this cache; matching hash means "deps probe was
-# done, nothing changed, skip it." Mismatch (or absent stamp) triggers a
-# full probe and updates the stamp.
+# times with an unchanged requirements list. Running the import-verification
+# probe every dispatch is pure overhead that the steady-state path doesn't
+# need. The stamp file records the requirements hash that was last verified
+# against this cache; matching hash means "deps probe was done, nothing
+# changed, skip it." Mismatch (or absent stamp) triggers a full probe and
+# updates the stamp. The stamp is written only after a fully-verified prime,
+# so a hit is a sound skip.
 #
 # The stamp is keyed by ENGINE as well as python minor: different engines run
 # different images whose site-packages differ, so "verified, nothing missing"
@@ -58,24 +59,89 @@ STAMP="${DEPS_TARGET}/.llem_requirements_hash_${LLEM_ENGINE:-default}"
 REQUIREMENTS_HASH=$(sha256sum /llem-requirements.txt | head -c 16)
 
 if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$REQUIREMENTS_HASH" ]; then
-    # Diff the runtime requirements list against installed dists
-    # (importlib.metadata sees both site-packages and our cache mount,
-    # since we already added the cache to PYTHONPATH above).
+    # Diff the runtime requirements list against what actually imports in
+    # this interpreter. A dist-info presence check is not sufficient: metadata
+    # can be present while the package fails to import - a compiled extension
+    # built for the wrong ABI, or an otherwise broken install - so each present
+    # requirement is verified by importing its resolved module(s), and primed
+    # if the import raises. Absent metadata short-circuits as missing with no
+    # import attempt. importlib.metadata sees both the image site-packages and
+    # our cache mount, since we already added the cache to PYTHONPATH above.
     MISSING=$(python3 - <<'PYEOF'
+import functools
+import importlib
 import importlib.metadata
+import sys
 from pathlib import Path
 
-# Strip version bounds to get the bare distribution name for the
-# installation probe. Keep the full spec for pip install.
+# The requirements list is bind-mounted here inside the container. An optional
+# argv override (defaulting to the mount path) lets the probe run against a
+# synthetic requirements file without changing container behaviour.
+REQUIREMENTS_FILE = sys.argv[1] if len(sys.argv) > 1 else "/llem-requirements.txt"
+
+# Distributions whose top-level import name differs from the distribution name.
+# Keys are canonical (lowercase, dashes) distribution names; values are the
+# module to import. Authoritative: consulted before top_level.txt so noisy or
+# absent top-level metadata cannot mis-resolve these known cases.
+IMPORT_NAME_OVERRIDES = {
+    "nvidia-ml-py": "pynvml",
+    "pyyaml": "yaml",
+    "python-dotenv": "dotenv",
+}
+
+
 def bare_name(spec: str) -> str:
+    # Strip version bounds / extras to get the bare distribution name for the
+    # metadata lookup. The full spec is kept for pip install.
     name = spec
     for sep in (">=", "<=", "==", "!=", "~=", "<", ">", "["):
         if sep in name:
             name = name.split(sep)[0]
     return name.strip()
 
+
+def canonical(name: str) -> str:
+    return name.strip().lower().replace("_", "-")
+
+
+@functools.cache
+def reverse_packages() -> dict[str, list[str]]:
+    # Invert importlib.metadata.packages_distributions() (import name -> dist
+    # names) into dist name -> import names, so a distribution's top-level
+    # module(s) can be recovered even when its top_level.txt is absent.
+    mapping: dict[str, list[str]] = {}
+    try:
+        items = importlib.metadata.packages_distributions().items()
+    except Exception:
+        return mapping
+    for import_name, dists in items:
+        for dist_name in dists:
+            mapping.setdefault(canonical(dist_name), []).append(import_name)
+    return mapping
+
+
+def import_names(dist_name, dist) -> list[str]:
+    # Resolve the top-level import name(s) for an installed distribution.
+    key = canonical(dist_name)
+    if key in IMPORT_NAME_OVERRIDES:
+        return [IMPORT_NAME_OVERRIDES[key]]
+    try:
+        top_level = dist.read_text("top_level.txt")
+    except Exception:
+        top_level = None
+    if top_level:
+        names = [ln.strip() for ln in top_level.splitlines() if ln.strip()]
+        if names:
+            return names
+    resolved = reverse_packages().get(key)
+    if resolved:
+        return resolved
+    # Fall back to the normalised distribution name (dashes to underscores).
+    return [dist_name.replace("-", "_")]
+
+
 missing = []
-for line in Path("/llem-requirements.txt").read_text().splitlines():
+for line in Path(REQUIREMENTS_FILE).read_text().splitlines():
     spec = line.strip()
     if not spec or spec.startswith("#"):
         continue
@@ -83,8 +149,18 @@ for line in Path("/llem-requirements.txt").read_text().splitlines():
     if not name:
         continue
     try:
-        importlib.metadata.distribution(name)
+        dist = importlib.metadata.distribution(name)
     except importlib.metadata.PackageNotFoundError:
+        # Absent metadata: definitely missing, no import attempt needed.
+        missing.append(spec)
+        continue
+    try:
+        for import_name in import_names(name, dist):
+            importlib.import_module(import_name)
+    except Exception:
+        # Present metadata but the module does not import (wrong-ABI extension,
+        # broken install): prime it so the container's pip reinstalls an
+        # ABI-correct copy into the deps cache.
         missing.append(spec)
 
 print(" ".join(missing))

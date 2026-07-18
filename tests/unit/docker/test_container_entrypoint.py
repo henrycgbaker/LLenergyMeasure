@@ -8,6 +8,9 @@ the source modules (since container_entrypoint uses lazy local imports).
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -478,3 +481,125 @@ class TestMainGuard:
 
         source = inspect.getsource(container)
         assert 'if __name__ == "__main__":' in source
+
+
+# ---------------------------------------------------------------------------
+# Dependency-priming probe (bash entrypoint heredoc)
+# ---------------------------------------------------------------------------
+
+
+def _extract_probe_source() -> str:
+    """Return the Python probe embedded in the container entrypoint heredoc.
+
+    The bash entrypoint runs the dep-priming probe as an inline
+    ``python3 - <<'PYEOF' ... PYEOF`` heredoc. Nothing else shells the script,
+    so the probe is exercised here by extracting that block verbatim and
+    running it the way the container does (``python3 <file> [reqs_path]``).
+    Resolved from the repo tree this test lives in (not the installed package)
+    so it validates the script under test.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    script_path = (
+        repo_root / "src" / "llenergymeasure" / "infra" / "_container" / "container_entrypoint.sh"
+    )
+    script = script_path.read_text(encoding="utf-8")
+    _, open_marker, rest = script.partition("<<'PYEOF'\n")
+    assert open_marker, "probe heredoc opening marker not found in entrypoint script"
+    probe_src, close_marker, _ = rest.partition("\nPYEOF")
+    assert close_marker, "probe heredoc closing marker not found in entrypoint script"
+    return probe_src
+
+
+def _make_dist(
+    site: Path,
+    dist_name: str,
+    version: str,
+    *,
+    module: str | None = None,
+    module_body: str = "",
+    top_level: str | None = None,
+) -> None:
+    """Create a minimal installed distribution under a fake site-packages dir."""
+    dist_info = site / f"{dist_name.replace('-', '_')}-{version}.dist-info"
+    dist_info.mkdir(parents=True)
+    (dist_info / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: {dist_name}\nVersion: {version}\n",
+        encoding="utf-8",
+    )
+    if top_level is not None:
+        (dist_info / "top_level.txt").write_text(top_level + "\n", encoding="utf-8")
+    if module is not None:
+        pkg = site / module
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text(module_body, encoding="utf-8")
+
+
+def _run_probe(tmp_path: Path, site: Path, requirements: str) -> list[str]:
+    """Run the extracted probe against a fake site-packages; return missing specs."""
+    probe_py = tmp_path / "probe.py"
+    probe_py.write_text(_extract_probe_source(), encoding="utf-8")
+    reqs = tmp_path / "requirements.txt"
+    reqs.write_text(requirements, encoding="utf-8")
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(site), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
+    proc = subprocess.run(
+        [sys.executable, str(probe_py), str(reqs)],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, f"probe crashed: {proc.stderr}"
+    return proc.stdout.split()
+
+
+class TestDepProbeImportCheck:
+    """The entrypoint probe verifies each requirement actually imports.
+
+    Metadata presence alone is insufficient: a package can be installed yet
+    fail to import (e.g. a compiled extension built for the wrong ABI). These
+    tests build a synthetic site-packages and exercise the probe the way the
+    container does.
+    """
+
+    def test_flags_broken_and_absent_deps(self, tmp_path: Path):
+        """Present-but-importable stays; broken-import and absent are primed."""
+        site = tmp_path / "site"
+        site.mkdir()
+        # (a) present + importable
+        _make_dist(site, "good", "1.0", module="good")
+        # (b) present metadata but the module raises on import (wrong-ABI class)
+        _make_dist(
+            site,
+            "broken",
+            "1.0",
+            module="broken",
+            module_body="raise ImportError('extension built for wrong ABI')",
+        )
+        # (c) absent: no dist-info and no module, only listed in requirements
+        missing = _run_probe(tmp_path, site, "good>=1.0\nbroken>=1.0\nabsent>=1.0\n")
+        assert missing == ["broken>=1.0", "absent>=1.0"]
+
+    def test_resolves_import_name_via_top_level_txt(self, tmp_path: Path):
+        """A dist whose import name differs is resolved via top_level.txt.
+
+        The normalised-name fallback ('mydist') would not import, so a pass
+        proves the top_level.txt resolution path is used.
+        """
+        site = tmp_path / "site"
+        site.mkdir()
+        _make_dist(site, "mydist", "2.0", module="myimportname", top_level="myimportname")
+        missing = _run_probe(tmp_path, site, "mydist>=2.0\n")
+        assert missing == []
+
+    def test_applies_known_import_name_override(self, tmp_path: Path):
+        """pyyaml -> yaml is a hardcoded override.
+
+        The dist provides only a 'yaml' module (no 'pyyaml'), so the normalised
+        fallback would fail to import; a pass proves the override is applied.
+        """
+        site = tmp_path / "site"
+        site.mkdir()
+        _make_dist(site, "pyyaml", "6.0", module="yaml")
+        missing = _run_probe(tmp_path, site, "pyyaml>=6.0\n")
+        assert missing == []
