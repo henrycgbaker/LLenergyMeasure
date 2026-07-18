@@ -7,6 +7,16 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Fixed
+
+- `.env.example` and `docker-compose.yml` no longer point at bootstrap tooling that does
+  not exist. The file header and PUID/PGID guidance referenced a `setup.sh` auto-generator
+  that was never shipped, and the `docker compose` PUID/PGID error told users to run
+  `llem doctor` to auto-generate `.env` (doctor never writes `.env`). All three now give
+  the real instructions: `cp .env.example .env`, then set `PUID`/`PGID` from `id -u` /
+  `id -g`. Also removed the dead `LEM_ENGINE=pytorch` block from `.env.example` (wrong
+  prefix, pre-rename engine name, and no consumer anywhere in the codebase). ([#831])
+
 ## [v0.12.0] - 2026-07-17
 
 ### Added
@@ -1023,3 +1033,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#831]: https://github.com/henrycgbaker/llenergymeasure/pull/831
