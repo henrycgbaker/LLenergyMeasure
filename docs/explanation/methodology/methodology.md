@@ -182,7 +182,7 @@ energy comparisons remain apples-to-apples.
 ### Multi-engine studies: per-engine scoping
 
 Baseline caches, TTL expiry, and the `validated` strategy's spot-check
-counter are all keyed per engine target (``local`` for host runs,
+counter are all keyed per engine target (``local_<engine>`` for host runs,
 ``image:<sanitised-tag>`` for each Docker image). In a mixed-engine
 study - for example 300 experiments randomly interleaving Transformers, vLLM,
 and TensorRT-LLM - each engine behaves as if it had its own independent

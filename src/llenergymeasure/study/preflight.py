@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
-    EXPLICIT_RUNNER_SOURCES,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
     SOURCE_MULTI_ENGINE_ELEVATION,
@@ -160,7 +159,7 @@ def _apply_multi_engine_precedence(
     kept_explicit: list[str] = []
     elevated: list[str] = []
     for engine_name, spec in runner_specs.items():
-        if spec.source in EXPLICIT_RUNNER_SOURCES:
+        if spec.is_explicit:
             # User pinned this engine - honour it (whether local or docker).
             kept_explicit.append(engine_name)
             # A local pin still needs a host importability check before dispatch.

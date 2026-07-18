@@ -359,7 +359,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         self._cycle_counters: dict[str, int] = {}
         # Study-level environment snapshot cache - collected once, reused across experiments
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
-        # Study-level baseline cache, keyed per runner target ("local" or
+        # Study-level baseline cache, keyed per runner target ("local_<engine>" or
         # "image_<sanitized>") so multi-engine studies don't cross-contaminate.
         self._baselines: dict[str, Any] = {}  # dict[str, BaselineCache]
         self._experiments_since_validation: dict[str, int] = {}

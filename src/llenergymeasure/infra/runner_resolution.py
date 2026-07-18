@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 from llenergymeasure.config.ssot import (
     ENV_RUNNER_PREFIX,
+    EXPLICIT_RUNNER_SOURCES,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
     SOURCE_AUTO_DETECTED,
@@ -127,6 +128,16 @@ class RunnerSpec:
     source: str
     image_source: str | None = None
     extra_mounts: list[tuple[str, str]] = field(default_factory=list)
+
+    @property
+    def is_explicit(self) -> bool:
+        """True if this runner was an explicit user pin (env var / YAML / user config).
+
+        Explicit pins win over multi-engine Docker elevation; auto-resolved
+        runners (``auto_detected`` / ``default``) do not. Classification lives
+        here, next to the ``source`` taxonomy it describes.
+        """
+        return self.source in EXPLICIT_RUNNER_SOURCES
 
     def to_runner_info(self) -> dict[str, str | None]:
         """Build runner info dict for progress display callbacks."""
