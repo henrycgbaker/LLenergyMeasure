@@ -137,7 +137,7 @@ def get_default_image(engine: str) -> str:
     #    invisibly, so warn (once) and name the pinned default it bypasses.
     local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
     if _image_exists_locally(local_image):
-        _warn_local_shadow(engine, local_image)
+        _warn_local_shadow(engine)
         return local_image
 
     # 2. Per-engine default remote image at the resolved version.
@@ -200,11 +200,17 @@ def _resolve_pinned_default(engine: str) -> str:
     return template.format(version=_default_image_version(engine))
 
 
+@cache
 def _pinned_default_or_none(engine: str) -> str | None:
     """Best-effort name of the version-pinned default a local bare tag bypasses.
 
     Returns None when it cannot be resolved (unknown engine or a broken wheel),
     so naming the bypassed default never fails a run.
+
+    Cached on the engine so the shadow warning and ``shadowed_default_image``
+    (both called per engine within ``run_doctor_checks``) resolve the bypassed
+    default once, sharing a single file read instead of two. ``cache_clear()``
+    resets the memoization (used by tests).
     """
     from llenergymeasure.infra.version_handshake import BundledEngineVersionMismatchError
 
@@ -215,33 +221,28 @@ def _pinned_default_or_none(engine: str) -> str | None:
 
 
 @cache
-def _warn_local_shadow(engine: str, local_image: str) -> None:
+def _warn_local_shadow(engine: str) -> None:
     """Warn (once per process) that a local bare tag shadows the pinned default.
 
     ``get_default_image`` runs repeatedly per engine within a single study prep
-    (preflight, then once per experiment and cycle), so both the warning and the
-    (comparatively expensive) resolution of the bypassed default are deduplicated
-    with ``functools.cache`` keyed on the engine: the same shadow is logged only
-    once. ``cache_clear()`` resets the dedup (used by tests).
+    (preflight, then once per experiment and cycle), so the warning is
+    deduplicated with ``functools.cache`` keyed on the engine: the same shadow is
+    logged only once. ``cache_clear()`` resets the dedup (used by tests).
     """
+    local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
     pinned_default = _pinned_default_or_none(engine)
-    if pinned_default is None:
-        logger.warning(
-            "Using local Docker image %s, which shadows this engine's "
-            "version-pinned default. A stale local tag can silently win image "
-            "resolution. Run `docker rmi %s` to restore the pinned default, or "
-            "pin an explicit image via runners.<engine> or LLEM_IMAGE_<ENGINE>.",
-            local_image,
-            local_image,
-        )
-        return
+    shadowed = (
+        f"the version-pinned default {pinned_default}"
+        if pinned_default is not None
+        else "this engine's version-pinned default"
+    )
     logger.warning(
-        "Using local Docker image %s, which shadows the version-pinned default "
-        "%s. A stale local tag can silently win image resolution. Run "
-        "`docker rmi %s` to restore the pinned default, or pin an explicit image "
-        "via runners.<engine> or LLEM_IMAGE_<ENGINE>.",
+        "Using local Docker image %s, which shadows %s. A stale local tag can "
+        "silently win image resolution. Run `docker rmi %s` to restore the "
+        "pinned default, or pin an explicit image via runners.<engine> or "
+        "LLEM_IMAGE_<ENGINE>.",
         local_image,
-        pinned_default,
+        shadowed,
         local_image,
     )
 

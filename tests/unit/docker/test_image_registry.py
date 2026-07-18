@@ -152,13 +152,19 @@ class TestLocalImageShadowWarning:
 
     @pytest.fixture(autouse=True)
     def _clear_shadow_dedup(self):
-        """``_warn_local_shadow`` is @lru_cache'd for once-per-process dedup; clear
-        it so a warning from one test does not suppress the next."""
-        from llenergymeasure.infra.image_registry import _warn_local_shadow
+        """``_warn_local_shadow`` (warn-once) and ``_pinned_default_or_none``
+        (shared resolution) are both @cache'd; clear both so a warning from one
+        test does not suppress the next and no stale default leaks across tests."""
+        from llenergymeasure.infra.image_registry import (
+            _pinned_default_or_none,
+            _warn_local_shadow,
+        )
 
         _warn_local_shadow.cache_clear()
+        _pinned_default_or_none.cache_clear()
         yield
         _warn_local_shadow.cache_clear()
+        _pinned_default_or_none.cache_clear()
 
     def test_warns_and_names_local_tag_and_bypassed_default(self, caplog):
         from llenergymeasure.infra.image_registry import get_default_image
