@@ -528,21 +528,29 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         """
         original_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
 
+        # Physical GPU selector precedence (env>config): LLEM_DOCKER_GPUS wins
+        # over study_execution.gpu_indices. Warn once per study when both are
+        # set, independent of locking (the scoping applies either way).
+        from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
+
+        config_gpu_indices = self.study.study_execution.gpu_indices
+        warn_on_gpu_selector_conflict(config_gpu_indices)
+
         # Acquire per-GPU advisory locks before image preparation.
-        # Lock names use the PHYSICAL device the study occupies, parsed from the
-        # docker --gpus pinning (LLEM_DOCKER_GPUS): two studies on different
-        # physical GPUs must not share a lock. When there is no docker-level
-        # pinning (all / unset), logical == physical, so fall back to the
-        # in-container logical indices. Measurement-side index resolution is
-        # unchanged - _resolve_gpu_indices still yields the logical indices that
-        # address the energy samplers.
+        # Lock names use the PHYSICAL device the study occupies, resolved from
+        # the effective GPU selector (env LLEM_DOCKER_GPUS, else config
+        # gpu_indices): two studies on different physical GPUs must not share a
+        # lock. When there is no docker-level pinning (all / unset), logical ==
+        # physical, so fall back to the in-container logical indices.
+        # Measurement-side index resolution is unchanged - _resolve_gpu_indices
+        # still yields the logical indices that address the energy samplers.
         # Sorted acquisition prevents deadlocks when multiple studies share GPUs.
         gpu_locks: list[Any] = []
         if not self._no_lock and ordered:
             from llenergymeasure.study.gpu_locks import acquire_gpu_locks
             from llenergymeasure.utils.env_config import pinned_gpu_lock_ids
 
-            lock_ids = pinned_gpu_lock_ids()
+            lock_ids = pinned_gpu_lock_ids(config_gpu_indices)
             if lock_ids is None:
                 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
@@ -1145,6 +1153,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             extra_mounts=extra_mounts,
             container_name=container_name,
             labels=labels,
+            gpu_indices=self.study.study_execution.gpu_indices,
         )
 
         # Pre-dispatch GPU memory residual check (same as local path)

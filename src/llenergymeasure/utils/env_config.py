@@ -17,10 +17,13 @@ consumed by engine plugins in Layer 2.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Final
+
+logger = logging.getLogger(__name__)
 
 _TRUTHY: Final = frozenset({"1", "true", "yes", "on"})
 
@@ -68,19 +71,50 @@ Restricting visibility at the DOCKER level keeps measurement indices
 consistent: inside the container the only visible GPU(s) enumerate from 0 for
 BOTH CUDA and NVML, so compute, energy sampling, and thermal monitoring all
 address the same physical device without any index translation.
+
+Precedence over the config ``study_execution.gpu_indices`` field: this env var
+WINS (env > config, matching llem's env>config convention). When both are set
+the config indices are ignored and :func:`warn_on_gpu_selector_conflict` logs a
+one-line warning. Because the env fully overrides config, the two selectors
+never compose - there is no "config indices index into the env-restricted set"
+case to disambiguate.
 """
 
 
-def docker_gpus() -> str:
-    """Return the ``docker run --gpus`` value for llem-launched containers.
+def _gpu_indices_to_selector(gpu_indices: list[int]) -> str:
+    """Format host GPU indices as a docker device selector.
 
-    Pure passthrough with the historical fallback: unset / empty -> ``all``.
+    ``[2]`` -> ``"device=2"``; ``[2, 3]`` -> ``"device=2,3"``. The indices are
+    HOST device indices as the NVIDIA driver / NVML enumerate them (the same
+    ordering ``nvidia-smi`` shows and ``docker run --gpus device=N`` selects).
+    """
+    return "device=" + ",".join(str(i) for i in gpu_indices)
+
+
+def docker_gpus(config_gpu_indices: list[int] | None = None) -> str:
+    """Return the raw ``docker run --gpus`` selector for llem-launched containers.
+
+    Single precedence point for GPU scoping (env > config > default):
+
+    - ``LLEM_DOCKER_GPUS`` set / non-empty -> its value verbatim (config indices
+      ignored; the env WINS per llem's env>config convention).
+    - else ``config_gpu_indices`` non-empty -> ``device=<comma-joined host ids>``.
+    - else -> ``all`` (every visible GPU - the historical default).
+
+    ``config_gpu_indices`` are HOST device indices (driver / NVML enumeration).
+    Scoping at the docker level keeps CUDA and NVML consistent inside the
+    container (both re-enumerate from 0), so energy attribution stays correct
+    without any index translation.
     """
     raw = os.environ.get(ENV_DOCKER_GPUS, "").strip()
-    return raw or "all"
+    if raw:
+        return raw
+    if config_gpu_indices:
+        return _gpu_indices_to_selector(config_gpu_indices)
+    return "all"
 
 
-def docker_gpus_arg() -> str:
+def docker_gpus_arg(config_gpu_indices: list[int] | None = None) -> str:
     """Return the ``--gpus`` value formatted for use as a docker-run argument.
 
     A multi-device ``device=<a>,<b>`` selector MUST be wrapped in literal double
@@ -91,13 +125,36 @@ def docker_gpus_arg() -> str:
     single device-ids field. ``all``, count forms, and a single-device
     ``device=N`` (no comma) need no quoting and are returned verbatim.
 
-    ``docker_gpus`` stays the raw selector - :func:`pinned_gpu_lock_ids` parses
-    that form for lock naming and must not see the quotes.
+    ``config_gpu_indices`` follows the same env>config precedence as
+    :func:`docker_gpus` (which this delegates to). :func:`docker_gpus` stays the
+    raw selector - :func:`pinned_gpu_lock_ids` parses that form for lock naming
+    and must not see the quotes.
     """
-    raw = docker_gpus()
+    raw = docker_gpus(config_gpu_indices)
     if raw.startswith("device=") and "," in raw:
         return f'"{raw}"'
     return raw
+
+
+def warn_on_gpu_selector_conflict(config_gpu_indices: list[int] | None) -> None:
+    """Log one warning when both ``LLEM_DOCKER_GPUS`` and config indices are set.
+
+    Precedence resolution (env wins) is silent inside :func:`docker_gpus`; this
+    is the loud surface for the conflict so the researcher is told their config
+    ``gpu_indices`` are being ignored. Call once per study/experiment dispatch,
+    not once per ``docker run`` build, to avoid per-experiment log spam.
+    """
+    raw = os.environ.get(ENV_DOCKER_GPUS, "").strip()
+    if raw and config_gpu_indices:
+        logger.warning(
+            "Both %s=%r (env) and study_execution.gpu_indices=%s (config) are set. "
+            "Env wins (env>config): containers are scoped to %r and the config "
+            "gpu_indices are ignored. Unset one to silence this warning.",
+            ENV_DOCKER_GPUS,
+            raw,
+            config_gpu_indices,
+            raw,
+        )
 
 
 _UNSAFE_LOCK_ID_CHARS: Final = re.compile(r"[^A-Za-z0-9._-]")
@@ -115,16 +172,18 @@ def _sanitize_lock_id(raw: str) -> str:
     return _UNSAFE_LOCK_ID_CHARS.sub("_", raw)
 
 
-def pinned_gpu_lock_ids() -> list[str] | None:
-    """Return per-physical-device lock identifiers parsed from ``LLEM_DOCKER_GPUS``.
+def pinned_gpu_lock_ids(config_gpu_indices: list[int] | None = None) -> list[str] | None:
+    """Return per-physical-device lock identifiers for the effective GPU selector.
 
     llem's per-GPU advisory locks (``study/gpu_locks.py``) must be named by the
     PHYSICAL device a study occupies so that two studies pinned to different
     physical GPUs never share a lock. Under ``docker run --gpus device=N`` the
     container sees its granted GPU as LOGICAL index ``0``, so the in-container
     index (what ``device/gpu_info._resolve_gpu_indices`` returns) is the wrong
-    key for a host-side lock. This parses the docker selector back into the
-    physical identity:
+    key for a host-side lock. This resolves the effective selector (via
+    :func:`docker_gpus`, so the same env>config precedence applies:
+    ``LLEM_DOCKER_GPUS`` wins, else ``config_gpu_indices``) and parses it back
+    into the physical identity:
 
     - ``device=2``          -> ``["2"]``
     - ``device=2,3``        -> ``["2", "3"]``
@@ -139,12 +198,17 @@ def pinned_gpu_lock_ids() -> list[str] | None:
     - any other shape (e.g. ``count=2``, a bare count, malformed) -> ``None`` -
       the physical identity is unknowable, so fall back to logical indices.
 
+    Threading ``config_gpu_indices`` here keeps lock naming correct when a study
+    pins physical GPUs via config rather than the env var: without it, two
+    config-pinned studies on different physical GPUs would both fall back to the
+    logical index ``0`` and collide on one lock.
+
     This is a LOCK-NAMING concern only. Measurement-side index resolution is
     deliberately untouched: NVML / CUDA indices inside the container enumerate
     from ``0`` under pinning, and ``_resolve_gpu_indices`` still returns those
     logical indices to address the energy samplers.
     """
-    raw = docker_gpus()
+    raw = docker_gpus(config_gpu_indices)
     prefix = "device="
     if not raw.startswith(prefix):
         # "all", unset (-> "all"), count forms, or anything unrecognised.
@@ -152,6 +216,27 @@ def pinned_gpu_lock_ids() -> list[str] | None:
     tokens = [tok.strip() for tok in raw[len(prefix) :].split(",")]
     ids = [_sanitize_lock_id(tok) for tok in tokens if tok]
     return ids or None
+
+
+_DEFAULT_DOCKER_SHM_SIZE: Final = "8g"
+
+ENV_DOCKER_SHM_SIZE: Final = "LLEM_DOCKER_SHM_SIZE"
+"""Docker ``--shm-size`` for llem-launched experiment containers.
+
+Passed verbatim as the value of ``docker run --shm-size``. Unset / empty means
+``8g`` - large inference engines (notably vLLM) need far more than docker's
+64 MB ``/dev/shm`` default or they fail at startup. Raise it (e.g. ``16g``) for
+very large tensor-parallel runs, or lower it on memory-constrained hosts. Any
+docker-accepted size string (``512m``, ``8g``, ...) is forwarded as-is.
+"""
+
+
+def docker_shm_size() -> str:
+    """Return the ``docker run --shm-size`` value for llem experiment containers.
+
+    Pure passthrough with the historical fallback: unset / empty -> ``8g``.
+    """
+    return os.environ.get(ENV_DOCKER_SHM_SIZE, "").strip() or _DEFAULT_DOCKER_SHM_SIZE
 
 
 ENV_TRT_BUILD_CACHE_ENABLED: Final = "LLEM_TRT_BUILD_CACHE_ENABLED"

@@ -27,7 +27,7 @@ from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.study.image_prep import _sanitize_image_for_filename
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import ExperimentConfig, StudyConfig
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
@@ -38,11 +38,12 @@ class _BaselineMixin:
     """Stateful baseline measurement/caching/validation methods for StudyRunner.
 
     Relies on attributes set up by ``StudyRunner.__init__``:
-    ``study_dir``, ``_runner_specs``, ``_progress``, ``_baselines``, and
-    ``_experiments_since_validation``.
+    ``study``, ``study_dir``, ``_runner_specs``, ``_progress``, ``_baselines``,
+    and ``_experiments_since_validation``.
     """
 
     # Attributes provided by StudyRunner.__init__ (declared for the type checker).
+    study: StudyConfig
     study_dir: Path
     _runner_specs: dict[str, RunnerSpec] | None
     _progress: StudyProgressCallback | None
@@ -391,6 +392,7 @@ class _BaselineMixin:
             gpu_indices=gpu_indices,
             engine=f"{config.engine}",
             on_stage=on_stage,
+            config_gpu_indices=self.study.study_execution.gpu_indices,
         )
 
     def _spot_check_baseline(
@@ -421,6 +423,7 @@ class _BaselineMixin:
             duration_sec=5.0,
             gpu_indices=gpu_indices,
             engine=f"{config.engine}",
+            config_gpu_indices=self.study.study_execution.gpu_indices,
         )
         return result.power_w if result is not None else None
 

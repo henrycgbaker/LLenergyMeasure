@@ -75,6 +75,7 @@ from llenergymeasure.infra.docker_errors import (
 from llenergymeasure.utils.env_config import (
     ENV_TRT_BUILD_CACHE_PATH,
     docker_gpus_arg,
+    docker_shm_size,
     trt_build_cache_host_dir,
 )
 from llenergymeasure.utils.exceptions import DockerError, DockerPreFlightError
@@ -417,7 +418,9 @@ class DockerRunner:
                ``-v {deps_cache}:/llem-runtime-deps``
                ``-e LLEM_ENGINE={engine}``
                ``-e LLEM_CONFIG_PATH=/run/llem/{config_hash}_config.json``
-               ``--entrypoint /llem-entry.sh --shm-size 8g {image}``.
+               ``--entrypoint /llem-entry.sh --shm-size 8g {image}``
+               (``--gpus`` and ``--shm-size`` values are configurable - see
+               ``gpu_indices`` / ``LLEM_DOCKER_GPUS`` and ``LLEM_DOCKER_SHM_SIZE``).
            The entrypoint script primes any missing runtime deps to the
            bind-mounted cache, then exec's
            ``python3 -m llenergymeasure.entrypoints.container`` (routing
@@ -436,6 +439,13 @@ class DockerRunner:
                  wall-clock - the watchdog raises whichever fires first.
         source:  Runner resolution source string (e.g. ``"yaml"``, ``"auto_detected"``).
                  Recorded in the result's runner_provenance for traceability.
+        gpu_indices: Optional HOST GPU indices (driver / NVML enumeration, as
+                 ``nvidia-smi`` shows) to scope the container to via
+                 ``--gpus device=<indices>``. Sourced from the study's
+                 ``study_execution.gpu_indices``. The process-global
+                 ``LLEM_DOCKER_GPUS`` env var overrides this (env>config); when
+                 both are set the env wins and these indices are ignored.
+                 ``None`` / empty preserves the default ``--gpus all``.
     """
 
     def __init__(
@@ -447,6 +457,7 @@ class DockerRunner:
         extra_mounts: list[tuple[str, str]] | None = None,
         container_name: str | None = None,
         labels: dict[str, str] | None = None,
+        gpu_indices: list[int] | None = None,
     ) -> None:
         self.image = image
         self.timeout = timeout
@@ -459,6 +470,7 @@ class DockerRunner:
         self.extra_mounts = extra_mounts or []
         self._container_name = container_name
         self._labels = labels or {}
+        self.gpu_indices = gpu_indices
 
     @property
     def short_image(self) -> str:
@@ -1098,13 +1110,13 @@ class DockerRunner:
             "run",
             "--rm",
             "--gpus",
-            docker_gpus_arg(),
+            docker_gpus_arg(self.gpu_indices),
             "-v",
             f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
             "-e",
             f"{ENV_CONFIG_PATH}={CONTAINER_EXCHANGE_DIR}/{config_hash}_config.json",
             "--shm-size",
-            "8g",
+            docker_shm_size(),
         ]
 
         # Propagate secrets via --env-file (never as -e KEY=VALUE CLI args)

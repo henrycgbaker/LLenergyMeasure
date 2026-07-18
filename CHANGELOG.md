@@ -7,6 +7,22 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Added
+
+- Docker dispatch can now be scoped to specific host GPUs from config via the new
+  `study_execution.gpu_indices` field (a list of host device indices, e.g. `[2, 3]`),
+  translated to `docker run --gpus device=2,3`. Scoping at the docker level keeps CUDA and
+  NVML indices consistent inside the container (both re-enumerate from 0), so energy
+  attribution stays correct. The process-global `LLEM_DOCKER_GPUS` env var overrides this
+  field (env>config); when both are set the env wins and a warning is logged. The field is
+  placement metadata and is excluded from the declared-config and study-design hashes, so
+  pinning a study to different physical GPUs never changes dedup grouping. The same selector
+  drives per-GPU advisory-lock naming and the baseline container's `--gpus`, so config-pinned
+  studies lock and baseline the correct physical devices.
+- The Docker `--shm-size` for llem-launched containers is now configurable via the
+  `LLEM_DOCKER_SHM_SIZE` env var (default `8g`, the previous hardcoded value). Raise it for
+  very large tensor-parallel runs or lower it on memory-constrained hosts.
+
 ## [v0.12.0] - 2026-07-17
 
 ### Added
