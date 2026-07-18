@@ -18,10 +18,10 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   placement metadata and is excluded from the declared-config and study-design hashes, so
   pinning a study to different physical GPUs never changes dedup grouping. The same selector
   drives per-GPU advisory-lock naming and the baseline container's `--gpus`, so config-pinned
-  studies lock and baseline the correct physical devices.
+  studies lock and baseline the correct physical devices. ([#838])
 - The Docker `--shm-size` for llem-launched containers is now configurable via the
   `LLEM_DOCKER_SHM_SIZE` env var (default `8g`, the previous hardcoded value). Raise it for
-  very large tensor-parallel runs or lower it on memory-constrained hosts.
+  very large tensor-parallel runs or lower it on memory-constrained hosts. ([#838])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -1039,3 +1039,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
