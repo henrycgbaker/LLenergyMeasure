@@ -90,7 +90,7 @@ llem v0.12.0
 
 ## Docker Setup
 
-For vLLM or TensorRT-LLM engines, Docker with NVIDIA Container Toolkit is required. See the [Docker Setup Guide](/how-to/docker-setup) for a complete walkthrough covering driver installation, toolkit setup, and verification.
+For vLLM or TensorRT-LLM engines, Docker with NVIDIA Container Toolkit is required. See the [Docker Setup Guide](/how-to/docker-setup) for a complete walkthrough covering driver installation, toolkit setup, and verification. On a cloud GPU VM (AWS, GCP, Azure), see [Running on a cloud GPU VM](/how-to/cloud-gpu-vm) for provider-image notes (what is preinstalled) and the network egress the pulls need.
 
 ---
 

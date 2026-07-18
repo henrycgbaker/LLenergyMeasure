@@ -4,6 +4,7 @@ const sidebarsHowTo: SidebarsConfig = {
   howToSidebar: [
     'install',
     'docker-setup',
+    'cloud-gpu-vm',
     'run-with-docker-vllm',
     'run-with-tensorrt-llm',
     'interpret-results',

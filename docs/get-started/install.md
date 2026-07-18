@@ -136,6 +136,9 @@ prefixed `[ok]`/`[warn]`/`[fail]` with a `->` fix hint for anything not ready.
 
 Run your first measurement: [Quick start](/get-started/quick-start).
 
+On a cloud GPU VM (AWS, GCP, Azure)? See [Running on a cloud GPU VM](/how-to/cloud-gpu-vm)
+for a provider-aware quickstart from a fresh instance to a multi-engine study.
+
 ---
 
 ## Advanced install topics
