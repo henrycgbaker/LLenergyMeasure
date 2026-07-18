@@ -87,6 +87,19 @@ docker run hello-world
 
 Expected output includes `Hello from Docker!`.
 
+### Rootless Docker and Podman
+
+The tested and supported runtime is rootful Docker Engine (the standard install
+above). `llem` resolves whatever `docker` binary is on `PATH`, so a
+Docker-compatible CLI - rootless Docker, or Podman exposed as `docker` - may work,
+and `llem` records the detected runtime in its environment snapshot. These paths
+are **not tested and GPU passthrough on them is not validated**: rootless Docker
+and Podman each have their own NVIDIA Container Toolkit / CDI setup that differs
+from rootful Docker. If you must use one, verify GPU passthrough with the container
+check in [Step 4](#step-4-verify-gpu-access-in-docker) first, and configure the
+toolkit per your runtime's own documentation. For a supported setup, use rootful
+Docker.
+
 ### BuildKit builder setup (recommended)
 
 Docker image builds use BuildKit under the hood. The default builder has a conservative
@@ -564,6 +577,11 @@ index into the env-restricted set" case to reason about. Pick one lever per run.
 For tensor-parallel runs, `llem` also forwards every `NCCL_*` host variable into the container;
 see [multi-GPU with TensorRT-LLM](/how-to/run-with-tensorrt-llm#multi-gpu-tensor-parallelism).
 
+`LLEM_DOCKER_GPUS` also accepts a Multi-Instance GPU (MIG) instance UUID
+(`device=MIG-<uuid>`) to pin `llem` to a single MIG slice on a partitioned A100 or
+H100. See [Running on a cloud GPU VM - MIG and partitioned GPUs](/how-to/cloud-gpu-vm#mig-and-partitioned-gpus)
+for the operational steps and the power-telemetry caveat.
+
 ---
 
 ### Shared memory errors with vLLM
@@ -621,3 +639,4 @@ workflow and the `schema-version-check` CI guard.
 - [Getting Started](/tutorials/first-measurement) - run your first vLLM or TensorRT-LLM experiment
 - [Engine Configuration](/reference/engines/configuration) - configure vLLM, TensorRT-LLM, and switch between engines
 - [Fast rebuilds and first-pull cost](/how-to/install#fast-rebuilds-and-first-pull-cost) - how the GHCR layer cache speeds up local Docker builds
+- [Running on a cloud GPU VM](/how-to/cloud-gpu-vm) - AWS/GCP/Azure quickstart, provider images, and MIG guidance

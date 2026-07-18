@@ -33,6 +33,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `docker image inspect`; resolution is best-effort and records `null` (never
   fails a run) for local runs, locally-built images, or when docker is
   unavailable. Older sidecars load with `runner: null`. ([#837])
+- Generic-environment documentation. A new how-to page, "Running on a cloud GPU
+  VM", covers AWS/GCP/Azure GPU instances end to end: prerequisites (linking the
+  canonical NVIDIA driver, Docker, and NVIDIA Container Toolkit guides),
+  known-good provider images and network egress needs, `pip install
+  llenergymeasure` through `llem doctor`, a first measurement, and a multi-engine
+  study. It states the supported-environment matrix (supported: bare-metal GPU
+  hosts, any Docker-capable GPU host, cloud GPU VMs; out of scope for now:
+  Slurm/apptainer, Windows native, fractional-GPU power measurement) and adds MIG
+  operational guidance (`LLEM_DOCKER_GPUS=device=MIG-<uuid>` slice pinning with
+  the per-physical-GPU power-telemetry caveat). The Docker setup guide gains a
+  conservative rootless-Docker/Podman note (detected but untested) and a MIG
+  cross-reference. This documents capabilities the dispatch code already had.
+  ([#840])
 
 ### Changed
 
@@ -1134,3 +1147,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#837]: https://github.com/henrycgbaker/llenergymeasure/pull/837
 [#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
 [#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839
+[#840]: https://github.com/henrycgbaker/llenergymeasure/pull/840
