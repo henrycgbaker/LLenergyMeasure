@@ -16,7 +16,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   multi-experiment) now persist their captured traceback to
   `failed-runs/{config_hash}_cycle{N}_traceback.txt` and record a `log_file`
   pointer in the manifest, matching the Docker path so a failure is debuggable
-  regardless of dispatch mode.
+  regardless of dispatch mode. ([#836])
 
 ## [v0.12.0] - 2026-07-17
 
@@ -1034,3 +1034,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#822]: https://github.com/henrycgbaker/llenergymeasure/pull/822
 [#823]: https://github.com/henrycgbaker/llenergymeasure/pull/823
 [#824]: https://github.com/henrycgbaker/llenergymeasure/pull/824
+[#836]: https://github.com/henrycgbaker/llenergymeasure/pull/836
