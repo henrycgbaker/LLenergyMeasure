@@ -223,4 +223,16 @@ def _apply_multi_engine_precedence(
         ", ".join(sorted(elevated)) or "(none)",
         ", ".join(sorted(kept_explicit)) or "(none)",
     )
+
+    # All engines explicitly pinned to local: allowed, but the isolation the
+    # Docker path would give is now the user's responsibility. Warn once (the
+    # "mixed runners" warning downstream only fires when modes actually differ,
+    # so it never covers this all-local multi-engine state).
+    if all(spec.mode == RUNNER_LOCAL for spec in runner_specs.values()):
+        logger.warning(
+            "Multi-engine study running all engines locally: ensure the host "
+            "environment genuinely satisfies every engine; Docker per engine "
+            "remains the recommended isolation."
+        )
+
     return system_overrides

@@ -88,20 +88,17 @@ closures (e.g. transformers vs vllm pinned versions) are too divergent to
 coexist on one host, so pinning each engine to its own image is what lets
 you run all three from a single machine.
 
-:::note Runner choice is precedence-based
-Each experiment already runs in its own subprocess, so a multi-engine study
-does not *require* Docker for isolation - it needs Docker so the host can
-provide every engine's environment. Docker elevation is precedence-based: an
-engine you pin explicitly here (`runners:`), via env var, or in your user
-config keeps that pin; only engines left on auto-detection are elevated to
-Docker. An engine pinned to `local` is checked for host importability at
-preflight, and Docker is required only when an auto-resolved engine actually
-needs elevating - so `runners:` pinning every engine to `local` (with all
-three installed on the host) runs without Docker. Runner choice is
-machine-binding and recorded per result. `llem` raises a `PreFlightError`
-before any inference starts if an engine pinned to local is not importable, or
-if an auto-resolved engine needs Docker but Docker is unavailable. See
-[Docker setup](/how-to/docker-setup) if your environment is not yet configured.
+:::caution Docker is recommended, and elevation is precedence-based
+Docker elevation is precedence-based: an engine you pin explicitly (`runners:`,
+env var, or user config) keeps that pin; only engines left on auto-detection are
+elevated to Docker. An engine pinned to `local` is checked for host
+importability at preflight, so `runners:` pinning every engine to `local` runs
+without Docker - **but only do this if the host genuinely provides every engine;
+Docker per engine remains the recommended isolation.** `llem` raises a
+`PreFlightError` before any inference starts if a local-pinned engine is not
+importable, or if an auto-resolved engine needs Docker but Docker is
+unavailable. See [Docker setup](/how-to/docker-setup) if your environment is not
+yet configured.
 :::
 
 ```yaml

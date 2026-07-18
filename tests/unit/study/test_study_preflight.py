@@ -7,6 +7,7 @@ isolation. Engines pinned to local are checked for host importability; Docker is
 only required when an auto-resolved engine actually needs elevating.
 """
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,6 +15,8 @@ import pytest
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.utils.exceptions import PreFlightError
+
+_ALL_LOCAL_CAUTION = "running all engines locally"
 
 
 @pytest.fixture
@@ -169,6 +172,38 @@ def test_multi_engine_all_explicit_local_without_docker_passes(monkeypatch, two_
     assert overrides == {}
     # No Docker runner resolved -> Docker pre-flight is never invoked.
     docker_preflight.assert_not_called()
+
+
+def test_multi_engine_all_local_caution_fires_once(monkeypatch, two_engine_study, caplog):
+    """An all-explicit-local multi-engine study warns once about lost isolation."""
+    patch_env(monkeypatch, docker=False, importable=True)
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+        run_study_preflight(
+            two_engine_study, yaml_runners={"transformers": "local", "vllm": "local"}
+        )
+    cautions = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.WARNING and _ALL_LOCAL_CAUTION in r.message
+    ]
+    assert len(cautions) == 1
+
+
+def test_single_engine_no_all_local_caution(monkeypatch, caplog):
+    """The all-local caution is a multi-engine concern - single-engine must not fire it."""
+    patch_env(monkeypatch, docker=False, importable=True)
+    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+        run_study_preflight(study, yaml_runners={"transformers": "local"})
+    assert not [r for r in caplog.records if _ALL_LOCAL_CAUTION in r.message]
+
+
+def test_multi_engine_mixed_no_all_local_caution(monkeypatch, two_engine_study, caplog):
+    """A mixed local+elevated study is not all-local, so the caution must not fire."""
+    patch_env(monkeypatch, docker=True, importable=True)
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+        run_study_preflight(two_engine_study, yaml_runners={"transformers": "local"})
+    assert not [r for r in caplog.records if _ALL_LOCAL_CAUTION in r.message]
 
 
 def test_preflight_forwards_runner_context(monkeypatch):
