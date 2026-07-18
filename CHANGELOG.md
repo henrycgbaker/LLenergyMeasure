@@ -7,6 +7,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Changed
+
+- Image resolution now warns when a locally-built `llenergymeasure:{engine}` tag
+  wins over the version-pinned default. That precedence is intentional (fast local
+  iteration), but a months-stale dev tag could hijack resolution invisibly: on one
+  host a stale local vLLM tag even failed the schema handshake as a hard mismatch
+  while the user had no idea a local image was being preferred. The warning names
+  the local tag in use, the version-pinned default it bypassed, and the remedy
+  (`docker rmi llenergymeasure:{engine}` to restore the pinned default, or pin an
+  explicit image via `runners.<engine>` / `LLEM_IMAGE_<ENGINE>`); it is emitted
+  once per resolution. `llem doctor` surfaces the same shadowing fact on the
+  affected engine's row. Resolution behaviour is unchanged. ([#843])
+
 ### Fixed
 
 - `llem run -o/--output-dir` is now honored for fresh (non-resume) studies. The flag
@@ -1233,4 +1246,5 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839
 [#840]: https://github.com/henrycgbaker/llenergymeasure/pull/840
 [#842]: https://github.com/henrycgbaker/llenergymeasure/pull/842
+[#843]: https://github.com/henrycgbaker/llenergymeasure/pull/843
 [#844]: https://github.com/henrycgbaker/llenergymeasure/pull/844

@@ -374,6 +374,16 @@ def _image_handshake_section(report: DoctorReport | None) -> HealthSection:
         status = _SCHEMA_TO_STATUS.get(row.status, "warn")
         message = f"{row.engine}: {row.status.value} ({row.image})"
         lines.append(CheckLine(status, message, row.detail or None))
+        if row.shadows_default:
+            lines.append(
+                CheckLine(
+                    "warn",
+                    f"{row.engine}: local tag {row.image} shadows pinned default "
+                    f"{row.shadows_default}",
+                    f"docker rmi {row.image} to restore the pinned default, "
+                    f"or pin an explicit image via runners.{row.engine}",
+                )
+            )
 
     if report.skip_check_active:
         lines.append(
@@ -466,6 +476,7 @@ def _image_report_to_dict(report: DoctorReport | None) -> dict[str, Any] | None:
                 "status": row.status.value,
                 "local_present": row.local_present,
                 "detail": row.detail,
+                "shadows_default": row.shadows_default,
             }
             for row in report.results
         ],

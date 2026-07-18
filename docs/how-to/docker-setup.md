@@ -312,6 +312,14 @@ the first-party GHCR image for transformers (at the package version), and the ca
 upstream image for vLLM / TensorRT-LLM (`vllm/vllm-openai`,
 `nvcr.io/nvidia/tensorrt-llm/release`, at the pinned engine version).
 
+> **Heads-up: a stale local tag silently wins.** Because the local build takes
+> precedence, a months-old `llenergymeasure:{engine}` tag keeps winning level 5 long
+> after the pinned default has moved on, which can surface as a schema-handshake
+> mismatch. When a local tag wins, `llem` logs a warning naming the pinned default it
+> bypassed, and `llem doctor` flags it on the engine's row. To restore the pinned
+> default, remove the local tag with `docker rmi llenergymeasure:{engine}`; to keep a
+> specific image, pin it explicitly at level 1-4 (for example `LLEM_IMAGE_{ENGINE}`).
+
 ### Auto-pull on first use
 
 When `llem` needs a registry image that is not cached locally, it pulls it automatically
