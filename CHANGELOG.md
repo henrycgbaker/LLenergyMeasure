@@ -120,6 +120,18 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- The container dependency-priming probe now verifies each runtime requirement
+  actually imports in the container interpreter, not just that its distribution
+  metadata is present. Metadata presence does not prove importability: a package
+  can be installed yet fail to import when a compiled extension was built for the
+  wrong ABI or the install is otherwise broken, and the old presence-only check
+  left such a dependency unprimed. The probe now resolves each distribution's
+  top-level import name (a small override table covers the known non-identity
+  cases `nvidia-ml-py` to `pynvml`, `pyyaml` to `yaml`, and `python-dotenv` to
+  `dotenv`, then `top_level.txt` / `packages_distributions`, falling back to the
+  normalised distribution name) and imports it, priming any requirement whose
+  import raises. Absent metadata still short-circuits as missing with no import
+  attempt, and the requirements-hash fast-path stamp is unchanged. ([#845])
 - Experiment failures now surface their real cause. Under `-v`, a Docker container
   failure prints the traceback the container entrypoint captured (the actual
   engine/CUDA error), instead of the uninformative host-side traceback of the
@@ -1220,3 +1232,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839
 [#840]: https://github.com/henrycgbaker/llenergymeasure/pull/840
 [#842]: https://github.com/henrycgbaker/llenergymeasure/pull/842
+[#845]: https://github.com/henrycgbaker/llenergymeasure/pull/845
