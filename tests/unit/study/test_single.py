@@ -306,3 +306,51 @@ def test_local_single_failure_persists_traceback(monkeypatch, tmp_path):
     mock_manifest.mark_failed.assert_called_once()
     log_file = mock_manifest.mark_failed.call_args.kwargs.get("log_file")
     assert log_file == "failed-runs/" + tb_file.name
+
+
+def test_docker_single_failure_marks_log_file(monkeypatch, tmp_path):
+    """A Docker single-experiment failure points the manifest at the persisted log.
+
+    persist_failure_artefacts copies container.log/error JSON into failed-runs/ and
+    records failure["log_file"]; the docker branch must forward that to mark_failed
+    so single-mode docker does not persist artefacts the manifest never references.
+    """
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.study.manifest import ManifestWriter
+    from llenergymeasure.utils.exceptions import DockerError
+
+    # Fake exchange dir with a container.log so persist_failure_artefacts has
+    # something to copy and therefore sets failure["log_file"].
+    exchange_dir = tmp_path / "exchange"
+    exchange_dir.mkdir()
+    (exchange_dir / "container.log").write_text("boom", encoding="utf-8")
+
+    def _raise_docker(self, config, **kw):
+        exc = DockerError("container failed to start")
+        exc.exchange_dir = str(exchange_dir)
+        raise exc
+
+    monkeypatch.setattr("llenergymeasure.infra.docker_runner.DockerRunner.run", _raise_docker)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual", lambda *a, **k: None
+    )
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    study = StudyConfig(experiments=[config])
+    spec = RunnerSpec(mode="docker", image="img:test", source="yaml")
+
+    _files, results, _warnings = run_single_experiment(
+        study, mock_manifest, tmp_path, runner_specs={"transformers": spec}
+    )
+
+    assert results == [None]
+    mock_manifest.mark_failed.assert_called_once()
+    log_file = mock_manifest.mark_failed.call_args.kwargs.get("log_file")
+    assert log_file is not None, "docker single failure must forward log_file to mark_failed"
+    assert log_file.startswith("failed-runs/")
+    assert list((tmp_path / "failed-runs").glob("*_container.log")), (
+        "container.log was not persisted into failed-runs/"
+    )

@@ -105,7 +105,15 @@ def run_single_experiment(
             # container.log + error JSON in failed-runs/ for debugging.
             failure: dict[str, Any] = docker_exc_to_failure(exc, config_hash)
             persist_failure_artefacts(exc, study_dir, config_hash, cycle, failure)
-            manifest.mark_failed(config_hash, cycle, failure["type"], failure["message"])
+            # persist_failure_artefacts sets failure["log_file"]; pass it through so
+            # the manifest actually points at the persisted container.log/error JSON.
+            manifest.mark_failed(
+                config_hash,
+                cycle,
+                failure["type"],
+                failure["message"],
+                log_file=failure.get("log_file"),
+            )
             return [], [None], [failure["message"]]
         # Docker path: ts_tmpdir comes from DockerRunner
         ts_tmpdir = docker_ts_dir
