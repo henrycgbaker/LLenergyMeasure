@@ -1,5 +1,13 @@
-"""Tests for study-level pre-flight checks (CM-10, DOCK-05)."""
+"""Tests for study-level pre-flight checks (CM-10, DOCK-05).
 
+Multi-engine Docker elevation is precedence-based: engines the user explicitly
+pinned (env / YAML / user config) keep their runner, while engines whose runner
+resolved from auto-detection or the default are elevated to Docker for
+isolation. Engines pinned to local are checked for host importability; Docker is
+only required when an auto-resolved engine actually needs elevating.
+"""
+
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,12 +16,48 @@ from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.utils.exceptions import PreFlightError
 
+_ALL_LOCAL_CAUTION = "running all engines locally"
+
+
+@pytest.fixture
+def two_engine_study() -> StudyConfig:
+    """A minimal multi-engine study (transformers + vllm)."""
+    return StudyConfig(
+        experiments=[
+            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
+        ]
+    )
+
+
+def patch_env(monkeypatch, *, docker: bool, importable: bool = True) -> MagicMock:
+    """Patch the three preflight collaborators and return the docker-preflight mock.
+
+    Args:
+        docker: value returned by ``is_docker_available``.
+        importable: value returned by the reused host-availability check
+            (``harness.preflight._check_engine_installed``).
+
+    Returns:
+        The ``run_docker_preflight`` MagicMock, so a caller can assert whether it
+        was invoked.
+    """
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: docker
+    )
+    docker_preflight = MagicMock()
+    monkeypatch.setattr(
+        "llenergymeasure.infra.docker_preflight.run_docker_preflight", docker_preflight
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.harness.preflight._check_engine_installed", lambda engine: importable
+    )
+    return docker_preflight
+
 
 def test_single_engine_passes(monkeypatch):
     """Single-engine study passes pre-flight without error."""
-    monkeypatch.setattr(
-        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
-    )
+    patch_env(monkeypatch, docker=False)
     study = StudyConfig(
         experiments=[
             ExperimentConfig(task={"model": "m1"}, engine="transformers"),
@@ -23,77 +67,143 @@ def test_single_engine_passes(monkeypatch):
     run_study_preflight(study)  # should not raise
 
 
-def test_multi_engine_raises_preflight_error(monkeypatch):
-    """Multi-engine study raises PreFlightError when Docker is not available."""
-    monkeypatch.setattr(
-        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
-    )
-    study = StudyConfig(
-        experiments=[
-            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
-            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
-        ]
-    )
+def test_single_engine_local_pin_not_import_checked(monkeypatch):
+    """Single-engine studies are unaffected by the multi-engine import pre-flight.
+
+    A single-engine local pin passes even if the engine is not importable on the
+    host - per-experiment pre-flight runs later in the subprocess.
+    """
+    # importable=False would trip the multi-engine import check; single engine must not run it.
+    patch_env(monkeypatch, docker=False, importable=False)
+    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="vllm")])
+    specs, overrides = run_study_preflight(study, yaml_runners={"vllm": "local"})
+    assert specs["vllm"].mode == "local"
+    assert specs["vllm"].source == "yaml"
+    assert overrides == {}
+
+
+def test_multi_engine_all_auto_without_docker_raises(monkeypatch, two_engine_study):
+    """Multi-engine all-auto study raises PreFlightError when Docker is unavailable."""
+    patch_env(monkeypatch, docker=False)
     with pytest.raises(PreFlightError, match="Multi-engine"):
-        run_study_preflight(study)
+        run_study_preflight(two_engine_study)
 
 
-def test_multi_engine_error_mentions_docker(monkeypatch):
-    """Error message directs user to Docker runner."""
-    monkeypatch.setattr(
-        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
-    )
-    study = StudyConfig(
-        experiments=[
-            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
-            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
-        ]
-    )
+def test_multi_engine_error_mentions_docker(monkeypatch, two_engine_study):
+    """Error message directs user to Docker when an auto engine needs elevating."""
+    patch_env(monkeypatch, docker=False)
     with pytest.raises(PreFlightError, match="Docker"):
-        run_study_preflight(study)
+        run_study_preflight(two_engine_study)
 
 
-def test_multi_engine_error_lists_engines(monkeypatch):
-    """Error message lists the detected engines."""
-    monkeypatch.setattr(
-        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
-    )
-    study = StudyConfig(
-        experiments=[
-            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
-            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
-        ]
-    )
+def test_multi_engine_error_lists_engines(monkeypatch, two_engine_study):
+    """Docker-unavailable error names the engines that need elevating."""
+    patch_env(monkeypatch, docker=False)
     with pytest.raises(PreFlightError) as exc_info:
-        run_study_preflight(study)
+        run_study_preflight(two_engine_study)
     assert "transformers" in str(exc_info.value)
     assert "vllm" in str(exc_info.value)
 
 
-def test_multi_engine_auto_elevates_local_to_docker(monkeypatch):
-    """Multi-engine study overrides local runners to Docker when Docker is available."""
-    monkeypatch.setattr("llenergymeasure.infra.runner_resolution.is_docker_available", lambda: True)
-    # Mock docker preflight to avoid real Docker checks
-    monkeypatch.setattr(
-        "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
-    )
+def test_multi_engine_all_auto_elevates_to_docker(monkeypatch, two_engine_study):
+    """All-auto multi-engine study elevates every engine to Docker (unchanged)."""
+    patch_env(monkeypatch, docker=True)
+    specs, overrides = run_study_preflight(two_engine_study)  # no explicit runner pins
 
-    study = StudyConfig(
-        experiments=[
-            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
-            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
-        ]
-    )
-    specs, overrides = run_study_preflight(
-        study, yaml_runners={"transformers": "local", "vllm": "docker"}
-    )
     assert specs["transformers"].mode == "docker"
     assert specs["transformers"].source == "multi_engine_elevation"
     assert specs["vllm"].mode == "docker"
-    # System overrides should capture the auto-elevation
-    assert "runner.transformers" in overrides
-    assert overrides["runner.transformers"]["declared"] == "local"
+    assert specs["vllm"].source == "multi_engine_elevation"
+    # Both engines recorded as elevated.
     assert overrides["runner.transformers"]["effective"] == "docker"
+    assert overrides["runner.vllm"]["effective"] == "docker"
+    assert "multi-engine" in overrides["runner.transformers"]["reason"]
+
+
+def test_multi_engine_explicit_local_kept_auto_elevated(monkeypatch, two_engine_study):
+    """Explicit local pin is kept; auto-resolved engines are elevated to Docker."""
+    # transformers is pinned local and importable on the host.
+    patch_env(monkeypatch, docker=True, importable=True)
+    specs, overrides = run_study_preflight(two_engine_study, yaml_runners={"transformers": "local"})
+
+    # Explicit local pin kept.
+    assert specs["transformers"].mode == "local"
+    assert specs["transformers"].source == "yaml"
+    # Auto-resolved engine elevated.
+    assert specs["vllm"].mode == "docker"
+    assert specs["vllm"].source == "multi_engine_elevation"
+    # Only the elevated engine appears in the overrides record.
+    assert "runner.vllm" in overrides
+    assert "runner.transformers" not in overrides
+
+
+def test_multi_engine_explicit_local_missing_package_raises(monkeypatch):
+    """Explicit local pin for an engine missing from the host raises a specific error."""
+    # tensorrt is pinned local but not importable on the host.
+    patch_env(monkeypatch, docker=True, importable=False)
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m2"}, engine="tensorrt"),
+        ]
+    )
+    with pytest.raises(PreFlightError) as exc_info:
+        run_study_preflight(study, yaml_runners={"tensorrt": "local"})
+
+    msg = str(exc_info.value)
+    assert "tensorrt" in msg
+    assert "tensorrt_llm" in msg  # the missing package, distinct from the engine name
+    assert "pip install 'llenergymeasure[tensorrt]'" in msg  # fix 1: install the extra
+    assert "drop the explicit" in msg  # fix 2: drop the local pin
+
+
+def test_multi_engine_all_explicit_local_without_docker_passes(monkeypatch, two_engine_study):
+    """All-explicit-local multi-engine study passes without Docker."""
+    # Both engines pinned local and importable on the host.
+    docker_preflight = patch_env(monkeypatch, docker=False, importable=True)
+    specs, overrides = run_study_preflight(
+        two_engine_study, yaml_runners={"transformers": "local", "vllm": "local"}
+    )
+
+    assert specs["transformers"].mode == "local"
+    assert specs["transformers"].source == "yaml"
+    assert specs["vllm"].mode == "local"
+    assert specs["vllm"].source == "yaml"
+    assert overrides == {}
+    # No Docker runner resolved -> Docker pre-flight is never invoked.
+    docker_preflight.assert_not_called()
+
+
+def test_multi_engine_all_local_caution_fires_once(monkeypatch, two_engine_study, caplog):
+    """An all-explicit-local multi-engine study warns once about lost isolation."""
+    patch_env(monkeypatch, docker=False, importable=True)
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+        run_study_preflight(
+            two_engine_study, yaml_runners={"transformers": "local", "vllm": "local"}
+        )
+    cautions = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.WARNING and _ALL_LOCAL_CAUTION in r.message
+    ]
+    assert len(cautions) == 1
+
+
+def test_single_engine_no_all_local_caution(monkeypatch, caplog):
+    """The all-local caution is a multi-engine concern - single-engine must not fire it."""
+    patch_env(monkeypatch, docker=False, importable=True)
+    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+        run_study_preflight(study, yaml_runners={"transformers": "local"})
+    assert not [r for r in caplog.records if _ALL_LOCAL_CAUTION in r.message]
+
+
+def test_multi_engine_mixed_no_all_local_caution(monkeypatch, two_engine_study, caplog):
+    """A mixed local+elevated study is not all-local, so the caution must not fire."""
+    patch_env(monkeypatch, docker=True, importable=True)
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+        run_study_preflight(two_engine_study, yaml_runners={"transformers": "local"})
+    assert not [r for r in caplog.records if _ALL_LOCAL_CAUTION in r.message]
 
 
 def test_preflight_forwards_runner_context(monkeypatch):

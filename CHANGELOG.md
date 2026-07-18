@@ -27,9 +27,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   exits 0/1/2 (ok/warnings/errors) for CI scripting and `--json` emits the full report as
   machine-readable JSON. Plain `llem doctor` still exits non-zero on a hard failure - an
   image schema mismatch or an unparseable/invalid user-config file. ([#834])
+- Multi-engine Docker elevation is now precedence-based. An engine whose runner is
+  explicitly pinned (env var, the study `runners:` section, or user config) keeps that pin;
+  only engines left on auto-detection are elevated to Docker for isolation. Engines pinned
+  to `local` in a multi-engine study are checked for host importability at preflight, with a
+  specific error naming the engine, the missing package, and the two fixes (install the
+  engine extra, or drop the explicit local pin). Docker is required only when an
+  auto-resolved engine actually needs elevating, so an all-explicit-local multi-engine study
+  now runs without Docker. Previously every engine in a multi-engine study was
+  unconditionally elevated to Docker, which failed when Docker was absent even for engines
+  the user had pinned to local. Runner choice is machine-binding and recorded per result.
+  ([#835])
 
 ### Removed
-
 - `llem config` is removed. Its environment-diagnostics role is subsumed by the broadened
   `llem doctor` above. There is no deprecation shim (pre-PyPI); scripts should call
   `llem doctor` (or `llem doctor --check` / `llem doctor --json`). ([#834])
@@ -57,7 +67,6 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   the real instructions: `cp .env.example .env`, then set `PUID`/`PGID` from `id -u` /
   `id -g`. Also removed the dead `LEM_ENGINE=pytorch` block from `.env.example` (wrong
   prefix, pre-rename engine name, and no consumer anywhere in the codebase). ([#831])
-
 ## [v0.12.0] - 2026-07-17
 
 ### Added
@@ -1078,3 +1087,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#832]: https://github.com/henrycgbaker/llenergymeasure/pull/832
 [#833]: https://github.com/henrycgbaker/llenergymeasure/pull/833
 [#834]: https://github.com/henrycgbaker/llenergymeasure/pull/834
+[#835]: https://github.com/henrycgbaker/llenergymeasure/pull/835

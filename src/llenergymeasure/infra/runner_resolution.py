@@ -28,7 +28,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserRunnersConfig
 
-from llenergymeasure.config.ssot import ENV_RUNNER_PREFIX, RUNNER_DOCKER, RUNNER_LOCAL, RunnerMode
+from llenergymeasure.config.ssot import (
+    ENV_RUNNER_PREFIX,
+    EXPLICIT_RUNNER_SOURCES,
+    RUNNER_DOCKER,
+    RUNNER_LOCAL,
+    SOURCE_AUTO_DETECTED,
+    SOURCE_DEFAULT,
+    SOURCE_ENV,
+    SOURCE_USER_CONFIG,
+    SOURCE_YAML,
+    RunnerMode,
+)
 
 # The NVIDIA Container Toolkit binary list lives in docker_preflight (its canonical
 # home) and is reused here for the docker-availability check.
@@ -118,6 +129,16 @@ class RunnerSpec:
     image_source: str | None = None
     extra_mounts: list[tuple[str, str]] = field(default_factory=list)
 
+    @property
+    def is_explicit(self) -> bool:
+        """True if this runner was an explicit user pin (env var / YAML / user config).
+
+        Explicit pins win over multi-engine Docker elevation; auto-resolved
+        runners (``auto_detected`` / ``default``) do not. Classification lives
+        here, next to the ``source`` taxonomy it describes.
+        """
+        return self.source in EXPLICIT_RUNNER_SOURCES
+
     def to_runner_info(self) -> dict[str, str | None]:
         """Build runner info dict for progress display callbacks."""
         return {
@@ -171,13 +192,13 @@ def resolve_runner(
     env_key = f"{ENV_RUNNER_PREFIX}{engine.upper()}"
     if env_val := os.environ.get(env_key):
         mode, image = parse_runner_value(env_val)
-        return RunnerSpec(mode=mode, image=image, source="env")
+        return RunnerSpec(mode=mode, image=image, source=SOURCE_ENV)
     # 2. Study/experiment YAML runners section
     if yaml_runners is not None and engine in yaml_runners:
         yaml_val = yaml_runners[engine]
         if yaml_val is not None:
             mode, image = parse_runner_value(yaml_val)
-            return RunnerSpec(mode=mode, image=image, source="yaml")
+            return RunnerSpec(mode=mode, image=image, source=SOURCE_YAML)
     # 3. User config - "auto" means no explicit preference, fall through to auto-detection.
     #    Passing user_config=None means "no user config file present" → auto-detect.
     if user_config is not None:
@@ -185,20 +206,20 @@ def resolve_runner(
         if user_val != "auto":
             mode, image = parse_runner_value(user_val)
             return RunnerSpec(
-                mode=mode, image=image, source="user_config"
+                mode=mode, image=image, source=SOURCE_USER_CONFIG
             )  # "auto" -> fall through to auto-detection
 
     # 4. Auto-detection: Docker + NVIDIA Container Toolkit available?
     if is_docker_available():
         logger.info("Docker detected. Using containerised execution for reproducible measurements.")
-        return RunnerSpec(mode=RUNNER_DOCKER, image=None, source="auto_detected")
+        return RunnerSpec(mode=RUNNER_DOCKER, image=None, source=SOURCE_AUTO_DETECTED)
 
     # 5. Default: local with nudge message
     logger.info(
         "Docker not detected. Install Docker + NVIDIA Container Toolkit "
         "for reproducible isolated measurements."
     )
-    return RunnerSpec(mode=RUNNER_LOCAL, image=None, source="default")
+    return RunnerSpec(mode=RUNNER_LOCAL, image=None, source=SOURCE_DEFAULT)
 
 
 # ---------------------------------------------------------------------------

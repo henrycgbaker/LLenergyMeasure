@@ -287,8 +287,11 @@ Two senses in this codebase: (1) llem execution mode (`local` or `docker`); (2) 
   vLLM and TensorRT-LLM (Docker-only by design). Default for all engines in
   production use.
 
-Set via `runners:` in the study YAML. Multi-engine studies without Docker
-are blocked at config load time.
+Set via `runners:` in the study YAML. In a multi-engine study, Docker elevation is
+precedence-based: an explicit runner pin (env var, `runners:`, or user config) wins,
+and only engines left on auto-detection are elevated to Docker. Engines pinned to
+`local` are checked for host importability at preflight, and Docker is required only
+when an auto-resolved engine actually needs elevating.
 
 **CI runner** - the GitHub Actions compute host (`ubuntu-latest`; CI is hosted-CPU only and never runs the engines). Used in contributing and CI documentation only.
 
