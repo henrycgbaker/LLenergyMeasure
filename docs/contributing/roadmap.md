@@ -11,17 +11,18 @@ Released milestones:
 
 | Version | What shipped |
 |---------|-------------|
-| v0.7.0 | Core single-experiment: CLI, config system, Transformers engine, energy measurement, results schema |
-| v0.8.0 | Study/sweep: multi-experiment grid sweeps, manifest writer, deduplication, subprocess isolation |
-| v0.9.0 | Docker + vLLM: containerised engine architecture, vLLM engine, Docker CI, logging overhaul |
-| v0.10.0 | Engine-knowledge-as-data: each engine's config, schema, and validation rules are generated from version-pinned upstream snapshots rather than hand-curated; terminology renames; study-authoring improvements |
-| v0.11.0 | TensorRT-LLM activated as a measured third engine (both the PyTorch and compiled-TRT backends), with in-framework build caching and GPU hardware preflight |
+| v0.2.0 | Core single-experiment: CLI, config system, Transformers engine, energy measurement, results schema |
+| v0.3.0 | Study/sweep: multi-experiment grid sweeps, manifest writer, deduplication, subprocess isolation |
+| v0.4.0 | Docker + vLLM: containerised engine architecture, vLLM engine, Docker CI, logging overhaul |
+| v0.4.1 | Engine-knowledge-as-data: each engine's config, schema, and validation rules are generated from version-pinned upstream snapshots rather than hand-curated; terminology renames; study-authoring improvements |
+| v0.5.0 | TensorRT-LLM activated as a measured third engine (both the PyTorch and compiled-TRT backends), with in-framework build caching and GPU hardware preflight |
+| v0.5.1 | Results correctness: a single coherent per-experiment results bundle, schema consolidation, and provenance sidecars |
+| v0.6.0 | Public packaging: first PyPI release, pip-install Docker dispatch, a lean CLI surface, and cloud-VM documentation |
 
-The current focus is results-correctness hardening: a single coherent
-per-experiment results bundle and verified field population. An internal
-refactor-and-tidy pass follows, ahead of the stable 1.0.0 release. Run
-`llem --version` against your installed package for the authoritative current
-version.
+The current milestone is public packaging: the first PyPI release, pip-install
+Docker dispatch, and a lean CLI surface. An internal refactor-and-tidy pass
+follows, ahead of the stable 1.0.0 release. Run `llem --version` against your
+installed package for the authoritative current version.
 
 Pre-1.0 disclaimer: the tool is research-grade for single-machine use. It is
 not yet at the stability and API-stability bar of a 1.0 release.
@@ -73,7 +74,7 @@ without a deprecation notice:
   a config path plus session flags (`--output`, `--resume`, `--dry-run`);
   experiment parameters live in the YAML config, not in flags.
 
-Pre-1.0 disclaimer: minor-version bumps (0.10 to 0.11 etc.) may include
+Pre-1.0 disclaimer: minor-version bumps (0.5 to 0.6 etc.) may include
 breaking changes to internal APIs, engine plugin interfaces, and sampler
 backends. Changes that break the stable contracts above will be called out
 explicitly in the changelog.

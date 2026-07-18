@@ -7,47 +7,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
-### Changed
-
-- Image resolution now warns when a locally-built `llenergymeasure:{engine}` tag
-  wins over the version-pinned default. That precedence is intentional (fast local
-  iteration), but a months-stale dev tag could hijack resolution invisibly: on one
-  host a stale local vLLM tag even failed the schema handshake as a hard mismatch
-  while the user had no idea a local image was being preferred. The warning names
-  the local tag in use, the version-pinned default it bypassed, and the remedy
-  (`docker rmi llenergymeasure:{engine}` to restore the pinned default, or pin an
-  explicit image via `runners.<engine>` / `LLEM_IMAGE_<ENGINE>`); it is emitted
-  once per resolution. `llem doctor` surfaces the same shadowing fact on the
-  affected engine's row. Resolution behaviour is unchanged. ([#843])
-
-### Fixed
-
-- `llem run -o/--output-dir` is now honored for fresh (non-resume) studies. The flag
-  was documented as "Output directory for results" but was silently a no-op on a fresh
-  run: `run_study` only consumed `output_dir` as the auto-detect-resume search base and
-  never threaded it into the results-dir resolution, so results always landed in the YAML
-  `output.results_dir` (default `./results`). Fresh runs now resolve the base with
-  precedence `-o` override > YAML `output.results_dir` > user config > `./results`, and the
-  preflight/dry-run panel's "Study results path" reflects the same precedence so the
-  preview matches where results actually land. Resume semantics are unchanged (`-o` stays
-  the search base for `--resume`). The results path is placement metadata, excluded from
-  the declared-config, study-design, and dedup hashes, so pointing a study at a different
-  output directory never changes dedup grouping. ([#842])
-- Fresh `pip install` + Docker dispatch no longer crashes the transformers and
-  TensorRT-LLM engines inside their containers. The package bind-mount now
-  exposes only the `llenergymeasure` package (mounted at
-  `/llem-src/llenergymeasure`) instead of the package's parent directory. For a
-  wheel install that parent is the venv's entire `site-packages`, and because
-  the container entrypoint prepends `/llem-src` to `PYTHONPATH` (which precedes
-  the container's own site-packages on `sys.path`), every host third-party
-  package used to shadow the image's native copy - a host `pydantic_core` C
-  extension built for a different Python minor broke transformers, and a fresh
-  `huggingface-hub` broke TensorRT-LLM's version guard. Mounting the package
-  directory alone makes `/llem-src` contain nothing but `llenergymeasure`, so
-  host dependencies can no longer shadow container-native ones. One uniform
-  mount serves editable and wheel installs alike. ([#844])
-
-## [v0.13.0] - 2026-07-18
+## [v0.6.0] - 2026-07-18
 
 ### Added
 
@@ -103,6 +63,16 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- Image resolution now warns when a locally-built `llenergymeasure:{engine}` tag
+  wins over the version-pinned default. That precedence is intentional (fast local
+  iteration), but a months-stale dev tag could hijack resolution invisibly: on one
+  host a stale local vLLM tag even failed the schema handshake as a hard mismatch
+  while the user had no idea a local image was being preferred. The warning names
+  the local tag in use, the version-pinned default it bypassed, and the remedy
+  (`docker rmi llenergymeasure:{engine}` to restore the pinned default, or pin an
+  explicit image via `runners.<engine>` / `LLEM_IMAGE_<ENGINE>`); it is emitted
+  once per resolution. `llem doctor` surfaces the same shadowing fact on the
+  affected engine's row. Resolution behaviour is unchanged. ([#843])
 - Study preparation now pulls missing Docker engine images concurrently (one
   `docker pull` per thread, capped at 3) instead of serialising them. A
   multi-engine study on a fresh box no longer waits for several multi-GB pulls
@@ -158,6 +128,30 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   normalised distribution name) and imports it, priming any requirement whose
   import raises. Absent metadata still short-circuits as missing with no import
   attempt, and the requirements-hash fast-path stamp is unchanged. ([#845])
+- Fresh `pip install` + Docker dispatch no longer crashes the transformers and
+  TensorRT-LLM engines inside their containers. The package bind-mount now
+  exposes only the `llenergymeasure` package (mounted at
+  `/llem-src/llenergymeasure`) instead of the package's parent directory. For a
+  wheel install that parent is the venv's entire `site-packages`, and because
+  the container entrypoint prepends `/llem-src` to `PYTHONPATH` (which precedes
+  the container's own site-packages on `sys.path`), every host third-party
+  package used to shadow the image's native copy - a host `pydantic_core` C
+  extension built for a different Python minor broke transformers, and a fresh
+  `huggingface-hub` broke TensorRT-LLM's version guard. Mounting the package
+  directory alone makes `/llem-src` contain nothing but `llenergymeasure`, so
+  host dependencies can no longer shadow container-native ones. One uniform
+  mount serves editable and wheel installs alike. ([#844])
+- `llem run -o/--output-dir` is now honored for fresh (non-resume) studies. The flag
+  was documented as "Output directory for results" but was silently a no-op on a fresh
+  run: `run_study` only consumed `output_dir` as the auto-detect-resume search base and
+  never threaded it into the results-dir resolution, so results always landed in the YAML
+  `output.results_dir` (default `./results`). Fresh runs now resolve the base with
+  precedence `-o` override > YAML `output.results_dir` > user config > `./results`, and the
+  preflight/dry-run panel's "Study results path" reflects the same precedence so the
+  preview matches where results actually land. Resume semantics are unchanged (`-o` stays
+  the search base for `--resume`). The results path is placement metadata, excluded from
+  the declared-config, study-design, and dedup hashes, so pointing a study at a different
+  output directory never changes dedup grouping. ([#842])
 - Experiment failures now surface their real cause. Under `-v`, a Docker container
   failure prints the traceback the container entrypoint captured (the actual
   engine/CUDA error), instead of the uninformative host-side traceback of the
@@ -225,7 +219,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   installed wheel. A preflight error is raised before `docker run` if a dispatch asset cannot
   be materialised, replacing the silent empty-directory mount. ([#830])
 
-## [v0.12.0] - 2026-07-17
+## [v0.5.1] - 2026-07-17
 
 ### Added
 
@@ -319,7 +313,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   in-process runs are unchanged. A docker run that completes without a rescued snapshot now
   logs a warning rather than silently recording host values. ([#821])
 
-## [v0.11.0] - 2026-07-16
+## [v0.5.0] - 2026-07-16
 
 ### Added
 
@@ -569,7 +563,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   tests (net -25k lines). The drift check drops the retired miner rows and keeps the live
   schema-producer path. ([#796])
 
-## [v0.10.0] - 2026-07-13
+## [v0.4.1] - 2026-07-13
 
 The engine-knowledge-as-data milestone. Hand-curated per-engine config was replaced by
 typed Pydantic configs code-generated from validation rules mined directly from engine
@@ -842,7 +836,7 @@ this line. Engine pins advanced to vLLM 0.19.1, TensorRT-LLM 1.0.0, and Transfor
   `parameter-discovery.yml`, and predecessors. ([#483], [#485])
 
 
-## [v0.9.0] - 2026-03-20
+## [v0.4.0] - 2026-03-20
 
 Docker infrastructure, vLLM engine, TensorRT-LLM engine, package restructure, test hardening, and CI.
 
@@ -879,7 +873,7 @@ Docker infrastructure, vLLM engine, TensorRT-LLM engine, package restructure, te
 - Dead code, stale type annotations, and unused dependencies. ([#130])
 
 
-## [v0.8.0] - 2026-02-27
+## [v0.3.0] - 2026-02-27
 
 Multi-experiment study sweeps.
 
@@ -893,7 +887,7 @@ Multi-experiment study sweeps.
 - Manifest-based progress tracking with resume support. ([#23])
 
 
-## [v0.7.0] - 2026-02-27
+## [v0.2.0] - 2026-02-27
 
 First end-to-end single-experiment release.
 
@@ -907,114 +901,33 @@ First end-to-end single-experiment release.
 - Results persistence in Parquet format. ([#22])
 
 
----
+## [v0.1.1] - 2025-12-29
 
-## Historical (pre-0.x)
+Post-thesis re-founding. One December development burst rebuilt the frozen thesis
+prototype into an installable, tested package.
 
-> The entries below predate the current 0.x versioning scheme introduced in early 2026.
-> They describe the research prototype and early CLI rewrites that were restructured and
-> re-versioned starting from v0.1.0. Version numbers v1.x and v2.0.0 referenced here are
-> legacy labels from that era; they do not correspond to any published release under the
-> current scheme. The 2026-03-04 history reset remapped these to sequential 0.x tags
-> (v0.1.0-v0.6.0) for consistency with the current versioning scheme.
+- Package renamed `llm-bench` -> `lem`; all imports moved to `llenergymeasure`.
+- Energy-backend plugin registry with automatic CodeCarbon registration; `FlopsEstimator`
+  with a three-strategy fallback chain (calflops, architecture, parameter estimate), each
+  returning a confidence level; results aggregation with temporal-overlap detection and
+  GPU-attribution verification; CSV/JSON export; structured logging replacing `print()`.
+- Typer-based CLI with `experiment`, `aggregate`, `config`, `results`, and `datasets`
+  subcommands; `ExperimentOrchestrator` with protocol-based dependency injection; the
+  earlier `MAIN_*.py` entry points removed.
+- A 416-test suite (unit, integration, and end-to-end) runnable without GPU access via
+  mocked data; `requirements.txt` retired in favour of the Poetry lockfile; methodology
+  documentation added.
+- Production containerisation: a multi-stage Dockerfile on a CUDA 12.4 base, Docker Compose
+  production and dev profiles, a VS Code devcontainer with GPU passthrough, and Makefile
+  targets for common Docker operations.
 
-### v0.6.0 (2025-12-29) - formerly v1.16.0
+## [v0.1.0] - 2025-05-17
 
-Production-ready containerisation with full GPU support and streamlined developer experience.
+Thesis research prototype complete: stable multi-model benchmarking on production
+hardware. The code was frozen at this point for the maintainer's thesis (submitted
+~2025-07).
 
-#### Added
-
-- Multi-stage Dockerfile with `nvidia/cuda:12.4.1-runtime-ubuntu22.04` base image (builder,
-  runtime, and dev stages).
-- Docker Compose profiles separating production and development workflows (`lem-app`, `lem-dev`).
-- VS Code devcontainer configuration with GPU passthrough and Ruff/Pylance extensions.
-- Makefile targets for common Docker operations (`make docker-build`, `make experiment`,
-  `make datasets`).
-
-#### Changed
-
-- CI workflow reliability improved with concurrency groups preventing parallel releases.
-- Dev container runs as root, eliminating permission complexity with virtual environments.
-
-#### Fixed
-
-- Docker CUDA 12.4 base image aligned with host driver requirements.
-- Volume permission errors resolved by running dev containers as root.
-- Deprecated `torch_dtype` parameter replaced with `dtype` in model loading.
-- Removed obsolete `TRANSFORMERS_CACHE` environment variable (superseded by `HF_HOME`).
-- CodeCarbon pandas `FutureWarning` suppressed.
-- `nvidia-smi` GPU utilisation parsing handles `[N/A]` values gracefully.
-
----
-
-### v0.5.0 (2025-12-21) - formerly v1.15.0
-
-Comprehensive test coverage ensuring reliability across all components.
-
-#### Added
-
-- End-to-end CLI tests (8 tests) validating complete benchmark workflows.
-- Integration tests (47 tests) covering non-GPU workflows.
-- Methodology documentation (`docs/methodology.md`) explaining measurement approach.
-
-#### Changed
-
-- Total test count: 416 passing tests (unit + integration + e2e).
-- All tests run without GPU access using mocked/simulated data.
-
-#### Removed
-
-- `requirements.txt` (306 frozen packages) - all dependencies now managed via Poetry lockfile.
-
----
-
-### v0.4.0 (2025-12-21) - formerly v1.13.0
-
-User-friendly command-line interface replacing legacy entry points.
-
-#### Added
-
-- Typer-based CLI (`lem`) with subcommands: `experiment`, `aggregate`, `config validate`,
-  `config show`, `results list`, `results show`, `datasets`.
-- `ExperimentOrchestrator` with protocol-based dependency injection.
-- `ExperimentContext` dataclass for runtime state management.
-- Accelerate launcher with configurable retry logic.
-- 25 CLI tests and 27 orchestration unit tests.
-
-#### Removed
-
-- Legacy `MAIN_*.py` entry points (6 files).
-
----
-
-### v0.3.0 (2025-12-20) - formerly v1.10.0
-
-Major architectural refactor establishing clean module boundaries.
-
-#### Breaking Changes
-
-- Package renamed: `llm-bench` to `lem`. All imports now use `llenergymeasure`.
-
-#### Added
-
-- Energy backend plugin registry with automatic CodeCarbon registration.
-- `FlopsEstimator` with three-strategy fallback chain (calflops, architecture, parameter
-  estimate), each returning a confidence level.
-- Results aggregation with temporal overlap detection and GPU attribution verification.
-- Export functionality for CSV and JSON formats.
-- 296 unit tests covering all new modules.
-
-#### Changed
-
-- Replaced `print()` statements with Loguru structured logging.
-
----
-
-### v0.2.0 (2025-05-17) - formerly v1.0.0
-
-Research phase complete - stable multi-model benchmarking validated on production hardware.
-
-#### Added
+### Added
 
 - Multi-model experiment support with scenario-based configuration.
 - Experiment suite CSV export with consistent naming conventions.
@@ -1025,33 +938,34 @@ Research phase complete - stable multi-model benchmarking validated on productio
 - Plotting functionality for efficiency metrics visualisation.
 - FLOPs caching preventing redundant calculations.
 
----
+## [v0.0.1] - 2025-03-22
 
-### v0.1.0 (2025-03-22) - formerly v0.5.0
+Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-benchmark).
 
-Core measurement functionality establishing the foundation for all subsequent development.
-
-#### Added
+### Added
 
 - Distributed results aggregation across multiple GPUs with per-process JSON files.
 - FLOPs calculation with quantisation awareness and `calflops` integration.
 - Robust process cleanup with signal handlers and distributed barrier synchronisation.
 - Optimum benchmark integration for standardised measurements.
 
-#### Changed
+### Changed
 
 - Distributed execution stability improved: proper NCCL initialisation and teardown.
 - Major directory restructuring separating config, core, and result handling.
 
 
-[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.13.0...HEAD
-[v0.13.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.13.0
-[v0.12.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.12.0
-[v0.11.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.11.0
-[v0.10.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.10.0
-[v0.9.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.9.0
-[v0.8.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.8.0
-[v0.7.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.7.0
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.6.0
+[v0.5.1]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.5.1
+[v0.5.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.5.0
+[v0.4.1]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.4.1
+[v0.4.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.4.0
+[v0.3.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.3.0
+[v0.2.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.2.0
+[v0.1.1]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.1.1
+[v0.1.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.1.0
+[v0.0.1]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.0.1
 
 [#22]: https://github.com/henrycgbaker/llenergymeasure/pull/22
 [#23]: https://github.com/henrycgbaker/llenergymeasure/pull/23

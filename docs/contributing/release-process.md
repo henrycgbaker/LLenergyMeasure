@@ -30,8 +30,8 @@ Two files hold the version and must stay in sync:
 
 | File | Field | Example |
 |------|-------|---------|
-| `pyproject.toml` | `[project] version = "..."` | `version = "0.11.0"` |
-| `src/llenergymeasure/_version.py` | `__version__ = "..."` | `__version__ = "0.11.0"` |
+| `pyproject.toml` | `[project] version = "..."` | `version = "0.6.0"` |
+| `src/llenergymeasure/_version.py` | `__version__ = "..."` | `__version__ = "0.6.0"` |
 
 A mismatch between these two files is a bug. The build system reads
 `pyproject.toml`; the runtime API (`llem --version`, `llenergymeasure.__version__`)
@@ -49,7 +49,7 @@ re-exported from `__init__.py`.
    ```toml
    [project]
    name = "llenergymeasure"
-   version = "0.12.0"
+   version = "0.6.0"
    ```
 
 2. **Bump the version in `_version.py`**
@@ -57,7 +57,7 @@ re-exported from `__init__.py`.
    Update `__version__` in `src/llenergymeasure/_version.py`:
 
    ```python
-   __version__ = "0.12.0"
+   __version__ = "0.6.0"
    ```
 
    Both files must show the same version string.
@@ -73,7 +73,7 @@ re-exported from `__init__.py`.
    Commit the three changed files with the message:
 
    ```
-   chore: release 0.12.0
+   chore: release 0.6.0
    ```
 
    This commit goes directly to `main` via the normal PR flow.
@@ -81,8 +81,8 @@ re-exported from `__init__.py`.
 5. **Create and push the git tag**
 
    ```bash
-   git tag v0.12.0
-   git push origin v0.12.0
+   git tag v0.6.0
+   git push origin v0.6.0
    ```
 
    The tag must use the `v` prefix and match the version string exactly.

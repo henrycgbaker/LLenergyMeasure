@@ -331,7 +331,7 @@ Runners
   vllm              docker
     ↳ llenergymeasure:vllm                              ← local build
   transformers      docker
-    ↳ ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.12.0  ← registry
+    ↳ ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.6.0  ← registry
 ```
 
 ### Study-level image preparation
@@ -353,7 +353,7 @@ make docker-pull
 # Or pull each engine's default image individually. transformers is a
 # first-party GHCR image tagged with the llenergymeasure version; vLLM and
 # TensorRT-LLM are upstream images tagged with the pinned engine version.
-docker pull ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.12.0
+docker pull ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.6.0
 docker pull vllm/vllm-openai:v0.19.1
 docker pull nvcr.io/nvidia/tensorrt-llm/release:1.2.1
 ```
@@ -375,7 +375,7 @@ Output shows local vs registry source for each engine:
 ```
 === Image resolution ===
   tensorrt   -> nvcr.io/nvidia/tensorrt-llm/release:1.2.1  (registry)
-  transformers -> ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.12.0  (registry)
+  transformers -> ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.6.0  (registry)
   vllm       -> vllm/vllm-openai:v0.19.1  (registry)
 ```
 
