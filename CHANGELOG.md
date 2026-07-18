@@ -7,6 +7,20 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Fixed
+
+- `llem run -o/--output-dir` is now honored for fresh (non-resume) studies. The flag
+  was documented as "Output directory for results" but was silently a no-op on a fresh
+  run: `run_study` only consumed `output_dir` as the auto-detect-resume search base and
+  never threaded it into the results-dir resolution, so results always landed in the YAML
+  `output.results_dir` (default `./results`). Fresh runs now resolve the base with
+  precedence `-o` override > YAML `output.results_dir` > user config > `./results`, and the
+  preflight/dry-run panel's "Study results path" reflects the same precedence so the
+  preview matches where results actually land. Resume semantics are unchanged (`-o` stays
+  the search base for `--resume`). The results path is placement metadata, excluded from
+  the declared-config, study-design, and dedup hashes, so pointing a study at a different
+  output directory never changes dedup grouping. ([#842])
+
 ## [v0.13.0] - 2026-07-18
 
 ### Added
@@ -1205,3 +1219,4 @@ Core measurement functionality establishing the foundation for all subsequent de
 [#838]: https://github.com/henrycgbaker/llenergymeasure/pull/838
 [#839]: https://github.com/henrycgbaker/llenergymeasure/pull/839
 [#840]: https://github.com/henrycgbaker/llenergymeasure/pull/840
+[#842]: https://github.com/henrycgbaker/llenergymeasure/pull/842
