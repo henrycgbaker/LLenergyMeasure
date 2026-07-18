@@ -130,16 +130,14 @@ def _runner_environment(
     Digest resolution is best-effort: an unresolved digest records None and is
     debug-logged, never raising - so environment.json provenance never fails a run.
 
-    Local specs (and no spec at all) record ``type="local"`` with no image or
+    Local specs (and no spec at all) record ``mode="local"`` with no image or
     digest and the spec's source (``"local"`` when no spec was resolved).
     """
     from llenergymeasure.domain.environment import RunnerEnvironment
 
     if spec is None or spec.mode != RUNNER_DOCKER:
         return RunnerEnvironment(
-            type="local",
-            image=None,
-            image_digest=None,
+            mode="local",
             source=spec.source if spec is not None else "local",
         )
 
@@ -153,7 +151,7 @@ def _runner_environment(
             "environment.json runner.image_digest will be null.",
             image,
         )
-    return RunnerEnvironment(type="docker", image=image, image_digest=digest, source=spec.source)
+    return RunnerEnvironment(mode="docker", image=image, image_digest=digest, source=spec.source)
 
 
 def _save_and_record(

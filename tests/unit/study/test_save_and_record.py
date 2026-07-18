@@ -717,16 +717,14 @@ def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
         runner_provenance=RunnerProvenance(
             mode="local", image=None, source="default", image_source=None
         ),
-        runner_environment=RunnerEnvironment(
-            type="local", image=None, image_digest=None, source="default"
-        ),
+        runner_environment=RunnerEnvironment(mode="local", source="default"),
     )
 
     env_dest = Path(result_files[0]).parent / "environment.json"
     payload = json.loads(env_dest.read_text())
     assert payload["schema_version"] == "1.0"
     assert payload["runner"] == {
-        "type": "local",
+        "mode": "local",
         "image": None,
         "image_digest": None,
         "source": "default",
@@ -766,7 +764,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
             mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
         ),
         runner_environment=RunnerEnvironment(
-            type="docker",
+            mode="docker",
             image="ghcr.io/acme/vllm:1.0",
             image_digest="ghcr.io/acme/vllm@sha256:abc123",
             source="yaml",
@@ -777,7 +775,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
     payload = json.loads(env_dest.read_text())
     # Runner block (host-only facts) patched into the rescued snapshot.
     assert payload["runner"] == {
-        "type": "docker",
+        "mode": "docker",
         "image": "ghcr.io/acme/vllm:1.0",
         "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
         "source": "yaml",
@@ -817,7 +815,7 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
             mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
         ),
         runner_environment=RunnerEnvironment(
-            type="docker",
+            mode="docker",
             image="ghcr.io/acme/vllm:1.0",
             image_digest=None,
             source="yaml",
@@ -827,7 +825,7 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
     env_dest = Path(result_files[0]).parent / "environment.json"
     payload = json.loads(env_dest.read_text())
     # Runner block present even in the degraded no-rescue case (host snapshot carries it).
-    assert payload["runner"]["type"] == "docker"
+    assert payload["runner"]["mode"] == "docker"
     assert payload["runner"]["image"] == "ghcr.io/acme/vllm:1.0"
     assert payload["runner"]["image_digest"] is None
 
@@ -835,13 +833,13 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
 def test_runner_environment_local_and_none_spec() -> None:
     """_runner_environment maps local specs (and no spec) onto a local runner block."""
     local = _runner_environment(RunnerSpec(mode="local", image=None, source="user_config"))
-    assert local.type == "local"
+    assert local.mode == "local"
     assert local.image is None
     assert local.image_digest is None
     assert local.source == "user_config"
 
     no_spec = _runner_environment(None)
-    assert no_spec.type == "local"
+    assert no_spec.mode == "local"
     assert no_spec.source == "local"
 
 
@@ -854,7 +852,78 @@ def test_runner_environment_docker_digest_failure_is_none() -> None:
             RunnerSpec(mode="docker", image=None, source="auto_detected"),
             resolved_image="ghcr.io/acme/vllm:1.0",
         )
-    assert env.type == "docker"
+    assert env.mode == "docker"
     assert env.image == "ghcr.io/acme/vllm:1.0"
     assert env.image_digest is None
     assert env.source == "auto_detected"
+
+
+def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    """If the rescue write raises, the host-written environment.json (already carrying
+    the runner block via the host snapshot) survives and a loud warning fires.
+
+    Covers the combination the earlier permission-error test omitted: rescue fails
+    *and* a runner_environment is present. The runner block must not be lost - it was
+    attached to the host snapshot and written by save_environment before the rescue.
+    """
+    import json
+    import logging
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    # A rescued environment.json is present but "unreadable" (0600 root simulated).
+    (tmp_path / "environment.json").write_text("{}", encoding="utf-8")
+
+    def _raise_permission(_path):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("llenergymeasure.study.runner.load_json", _raise_permission)
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+        _save_and_record(
+            result,
+            study_dir,
+            manifest,
+            "aabb1122",
+            1,
+            result_files,
+            model_name="gpt2",
+            engine="transformers",
+            ts_source_dir=tmp_path,
+            environment_snapshot=_make_host_snapshot(),
+            runner_provenance=RunnerProvenance(
+                mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
+            ),
+            runner_environment=RunnerEnvironment(
+                mode="docker",
+                image="ghcr.io/acme/vllm:1.0",
+                image_digest="ghcr.io/acme/vllm@sha256:abc123",
+                source="yaml",
+            ),
+        )
+
+    # Rescue failure warned loudly (never silent).
+    warnings = [rec.message for rec in caplog.records if rec.levelno >= logging.WARNING]
+    assert any("Failed to rescue in-container environment.json" in m for m in warnings), (
+        f"rescue failure must warn loudly; got {warnings}"
+    )
+    # result.json still lands.
+    assert len(result_files) == 1
+    # The host-written environment.json survived with its runner block intact
+    # (attached to the host snapshot and written by save_environment before rescue).
+    env_dest = Path(result_files[0]).parent / "environment.json"
+    payload = json.loads(env_dest.read_text())
+    assert payload["runner"] == {
+        "mode": "docker",
+        "image": "ghcr.io/acme/vllm:1.0",
+        "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
+        "source": "yaml",
+    }
+    assert payload["schema_version"] == "1.0"

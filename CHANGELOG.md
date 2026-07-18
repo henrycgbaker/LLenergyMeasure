@@ -10,7 +10,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 ### Added
 
 - The per-experiment `environment.json` sidecar now records a `runner` block
-  restoring runner provenance to every result: `type` (`docker` vs `local`),
+  restoring runner provenance to every result: `mode` (`docker` vs `local`),
   `image`, `image_digest` (the resolved registry digest `repo@sha256:...`,
   pinning the full software stack as the cross-run reproducibility anchor), and
   `source` (the precedence layer that selected the runner). The sidecar also

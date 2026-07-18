@@ -473,7 +473,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     snapshot = env_snapshot.model_copy(
         update={
             "runner": RunnerEnvironment(
-                type="docker",
+                mode="docker",
                 image="ghcr.io/acme/vllm:1.19.0-cuda12",
                 image_digest="ghcr.io/acme/vllm@sha256:deadbeef",
                 source="auto_detected",
@@ -491,7 +491,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     # Raw JSON carries the runner block ...
     payload = json.loads((result_path.parent / "environment.json").read_text())
     assert payload["runner"] == {
-        "type": "docker",
+        "mode": "docker",
         "image": "ghcr.io/acme/vllm:1.19.0-cuda12",
         "image_digest": "ghcr.io/acme/vllm@sha256:deadbeef",
         "source": "auto_detected",
@@ -501,7 +501,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     loaded = load_result(result_path)
     assert loaded.environment is not None
     assert loaded.environment.runner is not None
-    assert loaded.environment.runner.type == "docker"
+    assert loaded.environment.runner.mode == "docker"
     assert loaded.environment.runner.image == "ghcr.io/acme/vllm:1.19.0-cuda12"
     assert loaded.environment.runner.image_digest == "ghcr.io/acme/vllm@sha256:deadbeef"
     assert loaded.environment.runner.source == "auto_detected"
@@ -512,13 +512,9 @@ def test_save_environment_writes_local_runner_block_roundtrip(
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """A local runner block records type=local with no image or digest."""
+    """A local runner block records mode=local with no image or digest."""
     snapshot = env_snapshot.model_copy(
-        update={
-            "runner": RunnerEnvironment(
-                type="local", image=None, image_digest=None, source="default"
-            )
-        }
+        update={"runner": RunnerEnvironment(mode="local", source="default")}
     )
     result_path = save_result(minimal_result, tmp_path)
     save_environment(
@@ -531,7 +527,7 @@ def test_save_environment_writes_local_runner_block_roundtrip(
     loaded = load_result(result_path)
     assert loaded.environment is not None
     assert loaded.environment.runner is not None
-    assert loaded.environment.runner.type == "local"
+    assert loaded.environment.runner.mode == "local"
     assert loaded.environment.runner.image is None
     assert loaded.environment.runner.image_digest is None
     assert loaded.environment.runner.source == "default"

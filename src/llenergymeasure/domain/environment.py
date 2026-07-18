@@ -91,16 +91,22 @@ class ContainerEnvironment(BaseModel):
 class RunnerEnvironment(BaseModel):
     """How an experiment was executed - containerized (docker) or on the host (local).
 
-    Records the runner type (docker vs local), the exact Docker image and its
+    Records the runner mode (docker vs local), the exact Docker image and its
     resolved registry digest (the reproducibility anchor pinning the full
     software stack: base image, CUDA, torch, patches), and the precedence
     source that selected the runner. The digest is None for local runs, and
     also None when it cannot be resolved (image built locally with no registry
     digest, docker unavailable, inspect error) - resolution is best-effort and
     never fails a run.
+
+    Sibling of ``experiment.RunnerProvenance`` (which persists into result.json):
+    both mirror ``infra.RunnerSpec``'s mode/image/source. They stay separate
+    because their extra fields diverge - this one carries ``image_digest`` (the
+    environment.json reproducibility anchor), RunnerProvenance carries
+    ``image_source`` (result.json image-resolution provenance).
     """
 
-    type: Literal["docker", "local"] = Field(
+    mode: Literal["docker", "local"] = Field(
         ..., description="Execution mode - 'docker' (containerized) or 'local' (host process)"
     )
     image: str | None = Field(

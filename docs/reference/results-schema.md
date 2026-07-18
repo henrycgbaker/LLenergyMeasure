@@ -197,7 +197,7 @@ It also carries a `runner` block - the reproducibility anchor for cross-run comp
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `type` | str | `"docker"` (containerized) or `"local"` (host process) - a first-order variable for energy/latency comparability |
+| `mode` | str | `"docker"` (containerized) or `"local"` (host process) - a first-order variable for energy/latency comparability. Mirrors `result.json`'s `runner_provenance.mode` |
 | `image` | str &#124; null | Docker image reference that ran (`null` for local) |
 | `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for local runs, and for locally-built images with no registry digest |
 | `source` | str | Which precedence layer selected the runner (`env`, `yaml`, `user_config`, `auto_detected`, `default`, `multi_engine_elevation`, or `local`) |
