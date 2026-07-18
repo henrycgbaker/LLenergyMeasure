@@ -154,7 +154,7 @@ def test_engine_line_status(
 def test_energy_section_nvml_only() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=_find_spec_for("pynvml")),
-        patch("llenergymeasure.api.probe_energy_sampler", return_value="NVMLSampler"),
+        patch("llenergymeasure.api.health.probe_energy_sampler", return_value="NVMLSampler"),
     ):
         section = health._energy_section()
     by_status = {line.status for line in section.lines}
@@ -168,7 +168,7 @@ def test_energy_section_nvml_only() -> None:
 def test_energy_section_none_available() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=_find_spec_for()),
-        patch("llenergymeasure.api.probe_energy_sampler", return_value=None),
+        patch("llenergymeasure.api.health.probe_energy_sampler", return_value=None),
     ):
         section = health._energy_section()
     messages = "\n".join(line.message for line in section.lines)
@@ -337,7 +337,7 @@ def test_build_health_report_smoke() -> None:
         patch.object(health, "image_present_locally", return_value=True),
         patch.object(health, "docker_daemon_reachable", return_value=True),
         patch("importlib.util.find_spec", side_effect=_find_spec_for("pynvml")),
-        patch("llenergymeasure.api.probe_energy_sampler", return_value="NVMLSampler"),
+        patch("llenergymeasure.api.health.probe_energy_sampler", return_value="NVMLSampler"),
     ):
         report = build_health_report()
 
@@ -365,7 +365,7 @@ def test_build_health_report_survives_image_check_crash() -> None:
         patch.object(health, "is_docker_available", return_value=False),
         patch.object(health, "docker_daemon_reachable", return_value=None),
         patch("importlib.util.find_spec", side_effect=_find_spec_for("pynvml")),
-        patch("llenergymeasure.api.probe_energy_sampler", return_value="NVMLSampler"),
+        patch("llenergymeasure.api.health.probe_energy_sampler", return_value="NVMLSampler"),
     ):
         report = build_health_report()
 
