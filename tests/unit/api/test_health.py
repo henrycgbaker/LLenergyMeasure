@@ -77,10 +77,7 @@ def test_report_to_dict_is_json_serialisable() -> None:
 
 def test_gpu_section_with_gpus() -> None:
     gpus = [{"name": "NVIDIA A100", "vram_gb": 80.0}]
-    with (
-        patch.object(health, "_probe_gpu", return_value=gpus),
-        patch.object(health, "_probe_driver_version", return_value="535.129.03"),
-    ):
+    with patch.object(health, "gpu_inventory", return_value=(gpus, "535.129.03")):
         section = health._gpu_section()
     text = " ".join(line.message for line in section.lines)
     assert "NVIDIA A100" in text
@@ -89,7 +86,7 @@ def test_gpu_section_with_gpus() -> None:
 
 
 def test_gpu_section_no_gpu_warns() -> None:
-    with patch.object(health, "_probe_gpu", return_value=None):
+    with patch.object(health, "gpu_inventory", return_value=([], None)):
         section = health._gpu_section()
     statuses = {line.status for line in section.lines}
     assert "warn" in statuses
@@ -186,7 +183,7 @@ def test_energy_section_none_available() -> None:
 def test_docker_section_all_present() -> None:
     with (
         patch.object(health.shutil, "which", return_value="/usr/bin/x"),
-        patch.object(health, "_docker_daemon_running", return_value=True),
+        patch.object(health, "docker_daemon_reachable", return_value=True),
     ):
         section = health._docker_section()
     assert all(line.status == "ok" for line in section.lines)
@@ -197,7 +194,7 @@ def test_docker_section_all_present() -> None:
 def test_docker_section_cli_absent_warns() -> None:
     with (
         patch.object(health.shutil, "which", return_value=None),
-        patch.object(health, "_docker_daemon_running", return_value=None),
+        patch.object(health, "docker_daemon_reachable", return_value=None),
     ):
         section = health._docker_section()
     statuses = [line.status for line in section.lines]
@@ -334,11 +331,11 @@ def test_build_health_report_smoke() -> None:
         patch.object(health, "_load_user_config_safe", return_value=(UserConfig(), None)),
         patch.object(health, "resolve_runner", return_value=spec),
         patch.object(health, "run_doctor_checks", return_value=_doctor_report(SchemaStatus.OK)),
-        patch.object(health, "_probe_gpu", return_value=None),
+        patch.object(health, "gpu_inventory", return_value=([], None)),
         patch.object(health, "is_docker_available", return_value=True),
         patch.object(health, "get_default_image", return_value="img:tag"),
         patch.object(health, "image_present_locally", return_value=True),
-        patch.object(health, "_docker_daemon_running", return_value=True),
+        patch.object(health, "docker_daemon_reachable", return_value=True),
         patch("importlib.util.find_spec", side_effect=_find_spec_for("pynvml")),
         patch("llenergymeasure.api.probe_energy_sampler", return_value="NVMLSampler"),
     ):
@@ -364,9 +361,9 @@ def test_build_health_report_survives_image_check_crash() -> None:
         patch.object(health, "_load_user_config_safe", return_value=(UserConfig(), None)),
         patch.object(health, "resolve_runner", return_value=spec),
         patch.object(health, "run_doctor_checks", side_effect=RuntimeError("docker exploded")),
-        patch.object(health, "_probe_gpu", return_value=None),
+        patch.object(health, "gpu_inventory", return_value=([], None)),
         patch.object(health, "is_docker_available", return_value=False),
-        patch.object(health, "_docker_daemon_running", return_value=None),
+        patch.object(health, "docker_daemon_reachable", return_value=None),
         patch("importlib.util.find_spec", side_effect=_find_spec_for("pynvml")),
         patch("llenergymeasure.api.probe_energy_sampler", return_value="NVMLSampler"),
     ):

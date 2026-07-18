@@ -24,10 +24,10 @@ import logging
 import shutil
 import subprocess
 
-from llenergymeasure.config.ssot import TIMEOUT_NVIDIA_SMI
+from llenergymeasure.config.ssot import TIMEOUT_DOCKER_CLI, TIMEOUT_NVIDIA_SMI
 from llenergymeasure.utils.exceptions import DockerPreFlightError
 
-__all__ = ["run_docker_preflight"]
+__all__ = ["docker_daemon_reachable", "run_docker_preflight"]
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,27 @@ def _check_nvidia_toolkit() -> str | None:
             f"     Fix: Install NVIDIA Container Toolkit - {NVIDIA_TOOLKIT_INSTALL_URL}"
         )
     return None
+
+
+def docker_daemon_reachable() -> bool | None:
+    """Return whether the Docker daemon is reachable.
+
+    Tier-1 host probe (no container): distinguishes "daemon actually up" from the
+    coarser "docker CLI on PATH" check. Returns None when the Docker CLI is not on
+    PATH (nothing to probe), True/False otherwise. Never raises - a missing binary
+    or timeout is reported as False.
+    """
+    if shutil.which("docker") is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.ServerVersion}}"],
+            capture_output=True,
+            timeout=TIMEOUT_DOCKER_CLI,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+    return result.returncode == 0
 
 
 def _get_host_driver_version() -> str | None:

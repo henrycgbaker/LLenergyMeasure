@@ -17,7 +17,6 @@ from __future__ import annotations
 import importlib.util
 import os
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -28,7 +27,6 @@ from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
     ENV_HF_TOKEN,
     RUNNER_DOCKER,
-    TIMEOUT_DOCKER_CLI,
     Engine,
     engine_str,
 )
@@ -37,13 +35,15 @@ from llenergymeasure.config.user_config import (
     get_user_config_path,
     load_user_config,
 )
+from llenergymeasure.device.gpu_info import gpu_inventory
 
-# Reuse the canonical Docker-availability helpers rather than re-implementing the
-# PATH probes (their home is docker_preflight; runner_resolution reuses them too).
+# Reuse the canonical host probes rather than re-implementing them (their home is
+# docker_preflight; runner_resolution reuses the toolkit list too).
 from llenergymeasure.infra.docker_preflight import (
     DOCKER_INSTALL_URL,
     NVIDIA_TOOLKIT_BINS,
     NVIDIA_TOOLKIT_INSTALL_URL,
+    docker_daemon_reachable,
 )
 from llenergymeasure.infra.image_registry import get_default_image, image_present_locally
 from llenergymeasure.infra.runner_resolution import RunnerSpec, is_docker_available, resolve_runner
@@ -120,11 +120,12 @@ class HealthReport:
 
     @property
     def worst(self) -> Status:
-        worst: Status = "ok"
-        for line in self.all_lines:
-            if _SEVERITY[line.status] > _SEVERITY[worst]:
-                worst = line.status
-        return worst
+        counts = self.counts
+        if counts["fail"]:
+            return "fail"
+        if counts["warn"]:
+            return "warn"
+        return "ok"
 
     @property
     def check_exit_code(self) -> int:
@@ -142,74 +143,30 @@ class HealthReport:
 
 
 # ---------------------------------------------------------------------------
-# Low-level probes (moved from the former cli/config_cmd.py)
+# Low-level probes
 # ---------------------------------------------------------------------------
 
 
-def _probe_gpu() -> list[dict[str, Any]] | None:
-    """Return a list of GPU info dicts, or None if none are visible."""
-    try:
-        import pynvml
-
-        from llenergymeasure.device.gpu_info import nvml_context
-
-        gpus: list[dict[str, Any]] = []
-        with nvml_context():
-            count = pynvml.nvmlDeviceGetCount()
-            for i in range(count):
-                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                name = pynvml.nvmlDeviceGetName(handle)
-                if isinstance(name, bytes):
-                    name = name.decode()
-                mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                gpus.append({"name": name, "vram_gb": mem.total / 1e9})
-        return gpus if gpus else None
-    except Exception:
-        return None
-
-
-def _probe_driver_version() -> str | None:
-    """Return the NVIDIA driver version string, or None if unavailable."""
-    try:
-        import pynvml
-
-        from llenergymeasure.device.gpu_info import nvml_context
-
-        with nvml_context():
-            raw = pynvml.nvmlSystemGetDriverVersion()
-        return raw.decode() if isinstance(raw, bytes) else str(raw)
-    except Exception:
-        return None
-
-
 def _probe_engine_version(engine: str) -> str | None:
-    """Return the installed version of *engine*'s host package, or None."""
-    try:
-        package = ENGINE_PACKAGES[Engine(engine)]
-        module = importlib.import_module(package)
-    except Exception:
-        return None
-    version = getattr(module, "__version__", None)
-    return str(version) if version else None
+    """Return the installed version of *engine*'s host package, or None.
 
-
-def _docker_daemon_running() -> bool | None:
-    """Return whether the Docker daemon is reachable.
-
-    None when the Docker CLI is not on PATH (nothing to probe); True/False
-    otherwise. Never raises - a missing binary or timeout is reported as False.
+    Thin bridge over ``engines._observed.library_version`` (the SSOT for reading
+    an installed library's ``__version__``), mapping its ``"unknown"`` sentinel
+    back to None for this module's presence semantics.
     """
-    if shutil.which("docker") is None:
-        return None
-    try:
-        result = subprocess.run(
-            ["docker", "info", "--format", "{{.ServerVersion}}"],
-            capture_output=True,
-            timeout=TIMEOUT_DOCKER_CLI,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
-    return result.returncode == 0
+    from llenergymeasure.engines._observed import library_version
+
+    version = library_version(ENGINE_PACKAGES[Engine(engine)])
+    return None if version == "unknown" else version
+
+
+def _availability_line(
+    present: bool, ok_msg: str, warn_msg: str, fix: str | None = None
+) -> CheckLine:
+    """An ``ok`` line when *present*, else a ``warn`` line carrying *fix*."""
+    if present:
+        return CheckLine("ok", ok_msg)
+    return CheckLine("warn", warn_msg, fix)
 
 
 # ---------------------------------------------------------------------------
@@ -219,11 +176,10 @@ def _docker_daemon_running() -> bool | None:
 
 def _gpu_section() -> HealthSection:
     lines: list[CheckLine] = []
-    gpus = _probe_gpu()
+    gpus, driver = gpu_inventory()
     if gpus:
         for i, gpu in enumerate(gpus):
             lines.append(CheckLine("ok", f"GPU {i}: {gpu['name']} ({gpu['vram_gb']:.1f} GB)"))
-        driver = _probe_driver_version()
         if driver:
             lines.append(CheckLine("ok", f"NVIDIA driver: {driver}"))
     else:
@@ -288,69 +244,47 @@ def _engines_section(specs: dict[str, RunnerSpec]) -> HealthSection:
 
 
 def _energy_section() -> HealthSection:
-    lines: list[CheckLine] = []
-
-    has_nvml = importlib.util.find_spec("pynvml") is not None
-    has_zeus = importlib.util.find_spec("zeus") is not None
-    has_codecarbon = importlib.util.find_spec("codecarbon") is not None
-
-    if has_nvml:
-        lines.append(CheckLine("ok", "NVML (nvidia-ml-py): available"))
-    else:
-        lines.append(
-            CheckLine("warn", "NVML (nvidia-ml-py): not installed", "pip install nvidia-ml-py")
-        )
-    if has_zeus:
-        lines.append(CheckLine("ok", "Zeus: available (higher-accuracy energy counter)"))
-    else:
-        lines.append(
-            CheckLine(
-                "warn",
-                "Zeus: not installed (higher-accuracy energy counter)",
-                "pip install 'llenergymeasure[zeus]'",
-            )
-        )
-    if has_codecarbon:
-        lines.append(CheckLine("ok", "CodeCarbon: available (fallback sampler)"))
-    else:
-        lines.append(
-            CheckLine(
-                "warn",
-                "CodeCarbon: not installed (fallback sampler)",
-                "pip install 'llenergymeasure[codecarbon]'",
-            )
-        )
-
     selected = probe_energy_sampler()
-    if selected:
-        lines.append(CheckLine("ok", f"Auto-selected sampler: {selected}"))
-    else:
-        lines.append(
-            CheckLine(
-                "warn",
-                "No energy sampler available on this host",
-                "install nvidia-ml-py (NVML) or run inside a GPU container",
-            )
-        )
+    lines = [
+        _availability_line(
+            importlib.util.find_spec("pynvml") is not None,
+            "NVML (nvidia-ml-py): available",
+            "NVML (nvidia-ml-py): not installed",
+            "pip install nvidia-ml-py",
+        ),
+        _availability_line(
+            importlib.util.find_spec("zeus") is not None,
+            "Zeus: available (higher-accuracy energy counter)",
+            "Zeus: not installed (higher-accuracy energy counter)",
+            "pip install 'llenergymeasure[zeus]'",
+        ),
+        _availability_line(
+            importlib.util.find_spec("codecarbon") is not None,
+            "CodeCarbon: available (fallback sampler)",
+            "CodeCarbon: not installed (fallback sampler)",
+            "pip install 'llenergymeasure[codecarbon]'",
+        ),
+        _availability_line(
+            selected is not None,
+            f"Auto-selected sampler: {selected}",
+            "No energy sampler available on this host",
+            "install nvidia-ml-py (NVML) or run inside a GPU container",
+        ),
+    ]
     return HealthSection("Energy measurement", lines)
 
 
 def _docker_section() -> HealthSection:
-    lines: list[CheckLine] = []
-
-    docker_cli = shutil.which("docker") is not None
-    if docker_cli:
-        lines.append(CheckLine("ok", "Docker CLI: found on PATH"))
-    else:
-        lines.append(
-            CheckLine(
-                "warn",
-                "Docker CLI: not found on PATH",
-                f"install Docker Engine - {DOCKER_INSTALL_URL}",
-            )
+    lines = [
+        _availability_line(
+            shutil.which("docker") is not None,
+            "Docker CLI: found on PATH",
+            "Docker CLI: not found on PATH",
+            f"install Docker Engine - {DOCKER_INSTALL_URL}",
         )
+    ]
 
-    daemon = _docker_daemon_running()
+    daemon = docker_daemon_reachable()
     if daemon is True:
         lines.append(CheckLine("ok", "Docker daemon: reachable"))
     elif daemon is False:
@@ -363,31 +297,25 @@ def _docker_section() -> HealthSection:
         )
     # daemon is None -> CLI absent, already reported above.
 
-    toolkit = any(shutil.which(tool) is not None for tool in NVIDIA_TOOLKIT_BINS)
-    if toolkit:
-        lines.append(CheckLine("ok", "NVIDIA Container Toolkit: detected"))
-    else:
-        lines.append(
-            CheckLine(
-                "warn",
-                "NVIDIA Container Toolkit: not detected",
-                f"install the NVIDIA Container Toolkit - {NVIDIA_TOOLKIT_INSTALL_URL}",
-            )
+    lines.append(
+        _availability_line(
+            any(shutil.which(tool) is not None for tool in NVIDIA_TOOLKIT_BINS),
+            "NVIDIA Container Toolkit: detected",
+            "NVIDIA Container Toolkit: not detected",
+            f"install the NVIDIA Container Toolkit - {NVIDIA_TOOLKIT_INSTALL_URL}",
         )
+    )
     return HealthSection("Docker", lines)
 
 
 def _credentials_section() -> HealthSection:
     # Detect-and-advise only: NEVER print the token value.
-    token = os.environ.get(ENV_HF_TOKEN)
-    if token:
-        line = CheckLine("ok", "HF_TOKEN: set (value hidden)")
-    else:
-        line = CheckLine(
-            "warn",
-            "HF_TOKEN: not set - gated models (e.g. Llama, Mistral) will fail to download",
-            f"export HF_TOKEN=... (create one at {_HF_TOKEN_URL}) or add it to .env",
-        )
+    line = _availability_line(
+        bool(os.environ.get(ENV_HF_TOKEN)),
+        "HF_TOKEN: set (value hidden)",
+        "HF_TOKEN: not set - gated models (e.g. Llama, Mistral) will fail to download",
+        f"export HF_TOKEN=... (create one at {_HF_TOKEN_URL}) or add it to .env",
+    )
     return HealthSection("Credentials", [line])
 
 
