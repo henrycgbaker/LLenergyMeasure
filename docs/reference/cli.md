@@ -26,7 +26,7 @@ Run an LLM efficiency experiment
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--output` | `-o` | str |  | Output directory for results |
+| `--output` | `-o` | str |  | Results directory for a fresh run; with --resume, the base directory searched for the study to resume |
 | `--dry-run` |  | flag | `false` | Validate config and estimate VRAM without running |
 | `--quiet` | `-q` | flag | `false` | Suppress progress bars |
 | `--verbose` | `-v` | int | `0` | Increase verbosity (-v=INFO, -vv=DEBUG) |
