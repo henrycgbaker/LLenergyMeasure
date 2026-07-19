@@ -49,13 +49,16 @@ flowchart TB
         rc_trt[tensorrt]
     end
     sic[seed-image-check - gating]
+    abc[absorbed-bump-check - gating]
     gate[engine-rules-gate - fan-in, always runs]
 
     ef --> config-codegen
     ef --> rules-coverage
     ef --> sic
+    ef --> abc
     config-codegen --> gate
     sic --> gate
+    abc --> gate
 ```
 
 `engine-filter` runs on every PR and decides whether the work jobs do anything
@@ -94,11 +97,22 @@ requires; `rules-coverage` feeds nothing downstream because it is advisory.
   GHCR seed for the current pin already exists, so a bump PR that forgot to seed
   fails at PR time rather than at merge-time promotion.
 
+- **`absorbed-bump-check`** (gating): fails a PR that advances an engine pin
+  (`engine_versions/<engine>/current.yaml`) without shipping the regenerated
+  knowledge `make absorb` produces - the versioned snapshot outputs
+  (`engine_versions/<engine>/<version>/outputs/`) AND the packaged src copies
+  (`src/llenergymeasure/engines/<engine>/` config.py / rules.yaml /
+  schema.discovered.json). A bare pin bump (the Renovate regex-manager shape,
+  which edits `current_version` and nothing else) would otherwise merge a
+  config typed against the old engine surface. The check
+  (`scripts/ci/check_absorbed_bump.py`) is a pure path comparison over the PR's
+  changed files and needs no engine source or install.
+
 - **`engine-rules-gate`** (fan-in, always runs, matrix-free): depends on
-  `config-codegen` and `seed-image-check` and fails iff a gating job failed
-  (skipped gating jobs count as satisfied). This is the only context from this
-  workflow branch protection requires - see below for why the matrix job names
-  cannot be required directly.
+  `config-codegen`, `seed-image-check`, and `absorbed-bump-check` and fails iff
+  a gating job failed (skipped gating jobs count as satisfied). This is the only
+  context from this workflow branch protection requires - see below for why the
+  matrix job names cannot be required directly.
 
 `transformers` is absent from `rules-coverage` on purpose: its config
 validation uses imperative post-init idioms that the validator-site model does
@@ -289,10 +303,10 @@ its `engine-filter`, `engine-rules-gate`, and - on `transformers` engines -
 
 | PR shape | `engine-filter.engine` | Work jobs that run |
 |---|---|---|
-| **Workflow-only edit** (`engine-rules-check.yml` changed) | `true` (self-test) | Both matrices, seed check, gate |
-| **Pin bump** (`engine_versions/<engine>/current.yaml`) | `true` | Both matrices, seed check, gate |
-| **Config or snapshot change** (`engines/<engine>/config.py`, or an `outputs/` snapshot) | `true` | Both matrices, seed check, gate |
-| **Rules edit** (`engines/<engine>/rules.yaml`) or loader change | `true` | Both matrices, seed check, gate |
+| **Workflow-only edit** (`engine-rules-check.yml` changed) | `true` (self-test) | Both matrices, seed check, absorbed-bump-check, gate |
+| **Pin bump** (`engine_versions/<engine>/current.yaml`) | `true` | Both matrices, seed check, absorbed-bump-check, gate |
+| **Config or snapshot change** (`engines/<engine>/config.py`, or an `outputs/` snapshot) | `true` | Both matrices, seed check, absorbed-bump-check, gate |
+| **Rules edit** (`engines/<engine>/rules.yaml`) or loader change | `true` | Both matrices, seed check, absorbed-bump-check, gate |
 | **Pure ci.yml / docs change** | `false` | Work jobs **skip**; `engine-filter` and `engine-rules-gate` still report (green) |
 
 The load-bearing observation is that the last shape does not omit the workflow:

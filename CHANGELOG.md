@@ -7,6 +7,17 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Added
+
+- CI now fails a bare engine version-pin bump. A PR that advances
+  `engine_versions/<engine>/current.yaml` must also ship the regenerated
+  knowledge `make absorb` produces - the versioned snapshot outputs under
+  `engine_versions/<engine>/<version>/outputs/` and the packaged
+  `src/llenergymeasure/engines/<engine>/` copies (config.py / rules.yaml /
+  schema.discovered.json) - so a pin bump can never merge with a config typed
+  against the old engine surface. The guard is a pure path check
+  (`scripts/ci/check_absorbed_bump.py`) wired into `engine-rules-check.yml`.
+
 ## [v0.6.0] - 2026-07-18
 
 ### Added
