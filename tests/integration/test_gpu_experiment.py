@@ -18,7 +18,7 @@ def _save_replay(result, model: str, engine: str) -> None:
     """Save ExperimentResult JSON as a replay fixture for offline unit tests."""
     _REPLAY_DIR.mkdir(parents=True, exist_ok=True)
     slug = model.replace("/", "-").lower()
-    filename = f"{slug}_{engine}_v{result.schema_version}.json"
+    filename = f"{slug}_{engine}_v{result.bundle_version}.json"
     (_REPLAY_DIR / filename).write_text(result.model_dump_json(indent=2), encoding="utf-8")
 
 
@@ -43,9 +43,9 @@ class TestM1ExitCriteria:
 
         # Core result assertions
         assert isinstance(result, ExperimentResult)
-        from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+        from tests.conftest import EXPERIMENT_BUNDLE_VERSION
 
-        assert result.schema_version == EXPERIMENT_SCHEMA_VERSION
+        assert result.bundle_version == EXPERIMENT_BUNDLE_VERSION
         assert result.measurement_config_hash  # non-empty string
         assert len(result.measurement_config_hash) == 16
 

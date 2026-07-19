@@ -23,7 +23,6 @@ without data corruption.
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import multiprocessing
 import os  # noqa: F401 - patch target: tests patch study.runner.os.{killpg,setpgrp}
@@ -51,7 +50,6 @@ from llenergymeasure.config.ssot import (
 )
 from llenergymeasure.domain.bundle_artefacts import (
     CONFIG_SIDECAR_FILENAME,
-    ENVIRONMENT_FILENAME,
     EQUIVALENCE_GROUPS_FILENAME,
 )
 from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
@@ -172,185 +170,52 @@ def _save_and_record(
     runner_provenance: RunnerProvenance | None = None,
     runner_environment: RunnerEnvironment | None = None,
 ) -> None:
-    """Save result to disk and update manifest. Appends result path to result_files.
+    """Assemble the results bundle and update the manifest.
 
-    Resolves the timeseries parquet sidecar from the result object and passes it
-    to save_result() so it is copied into the experiment subdirectory. The stale
-    flat file written by MeasurementHarness is removed after the copy.
+    Thin orchestrator over :class:`llenergymeasure.results.bundle.BundleWriter`,
+    which owns the assembly policy (dir creation, result + provenance write,
+    environment rescue-preference + runner-block patch, config-sidecar move +
+    patch, and the registry-driven loudness backstops). This function only wires
+    the inputs together, appends the result path to ``result_files``, and records
+    the summary metrics on the manifest.
 
     Args:
-        model_name: Model name/path for the experiment directory slug
+        model_name / engine: Identity for the experiment directory slug
             (authoritative home: config.json; the result keeps a convenience copy).
-        engine: Inference engine name for the experiment directory slug
-            (authoritative home: config.json; the result keeps a convenience copy).
-        ts_source_dir: Directory where the harness wrote timeseries.parquet. Under
-            docker dispatch this is the rescue dir and also carries the accurate
-            in-container environment.json, which is preferred over environment_snapshot.
-        environment_snapshot: EnvironmentSnapshot for the per-experiment environment.json
-            sidecar. Written first, then overwritten by a rescued in-container
-            environment.json when docker dispatch produced one (see below).
-        resolution_log: Pre-built per-field resolution log for this experiment,
-            folded into the config.json sidecar's ``provenance`` section.
-        runner_provenance: How the experiment was executed (local vs docker). Attached to the
-            frozen result via model_copy before saving so it persists into result.json.
-        runner_environment: The environment.json ``runner`` block (docker vs local, image +
-            registry digest, precedence source). For local runs it is written via
-            save_environment on the host snapshot; for docker runs it is patched into the
-            rescued in-container environment.json (which the container wrote without runner
-            facts the host alone knows).
+        ts_source_dir: Staging dir where the harness/container wrote config.json,
+            timeseries.parquet, and (under docker) the rescued environment.json.
+        environment_snapshot: Host EnvironmentSnapshot for environment.json (a
+            rescued in-container snapshot is preferred over it when present).
+        resolution_log / resolved_config_hash: Patched into the config.json sidecar.
+        runner_provenance: Execution mode; folded into result.json.
+        runner_environment: The environment.json ``runner`` block (image + digest,
+            precedence source).
 
-    On save failure, marks the experiment as completed with empty path.
+    On any save failure, marks the experiment failed on the manifest.
     """
     try:
-        from llenergymeasure.results.persistence import (
-            ENVIRONMENT_SCHEMA_VERSION,
-            save_environment,
-            save_result,
-        )
+        from llenergymeasure.results.bundle import BundleWriter
 
-        # Attach runner provenance to the frozen result before saving (it
-        # serialises into result.json, unlike the environment sidecar).
-        if runner_provenance is not None and hasattr(result, "model_copy"):
-            result = result.model_copy(update={"runner_provenance": runner_provenance})
-
-        # Resolve timeseries sidecar from result fields.
-        # MeasurementHarness writes timeseries.parquet to the output_dir and
-        # sets result.timeseries = "timeseries.parquet". Both must be present for
-        # the copy to proceed.
-        ts_source: Path | None = None
-        ts_filename = getattr(result, "timeseries", None)
-        if ts_filename and ts_source_dir is not None:
-            candidate = ts_source_dir / ts_filename
-            if candidate.exists():
-                ts_source = candidate
-
-        result_path = save_result(
-            result,
+        writer = BundleWriter(
             study_dir,
             model_name=model_name,
             engine=engine,
-            timeseries_source=ts_source,
-            experiment_index=experiment_index,
+            config_hash=config_hash,
             cycle=cycle,
+            experiment_index=experiment_index,
+            ts_source_dir=ts_source_dir,
         )
-
-        # Attach the runner block to the host snapshot so save_environment writes
-        # it (local path). On the docker path this host-written file is overwritten
-        # by the rescued in-container snapshot below, so the runner block is
-        # re-applied to the rescued file after the overwrite.
-        if runner_environment is not None and environment_snapshot is not None:
-            environment_snapshot = environment_snapshot.model_copy(
-                update={"runner": runner_environment}
-            )
-
-        # Write per-experiment environment.json sidecar
-        if environment_snapshot is not None:
-            save_environment(
-                environment_snapshot,
-                result.experiment_id,
-                config_hash,
-                result_path.parent,
-            )
-
-        # Environment sidecar rescue (docker dispatch): the accurate snapshot is
-        # collected INSIDE the container and rescued to ts_source_dir. The host
-        # snapshot written just above describes the dispatching host, not the
-        # container the experiment actually ran in, so prefer the rescued file
-        # when present - it overwrites the host-written environment.json. Local
-        # in-process runs never produce a rescued file, so this is a no-op for them.
-        rescued_env = ts_source_dir / ENVIRONMENT_FILENAME if ts_source_dir is not None else None
-        if rescued_env is not None and rescued_env.exists():
-            try:
-                from llenergymeasure.results.persistence import _atomic_write
-
-                # The container wrote environment.json without runner facts the
-                # host alone knows (image ref, registry digest, precedence source),
-                # so patch the runner block into the rescued snapshot. The rescued
-                # file already carries schema_version from the container's writer;
-                # setdefault stamps it only if an older image omitted it.
-                _rescued_payload = load_json(rescued_env)
-                if runner_environment is not None:
-                    _rescued_payload["runner"] = runner_environment.model_dump()
-                    _rescued_payload.setdefault("schema_version", ENVIRONMENT_SCHEMA_VERSION)
-                _atomic_write(
-                    json.dumps(_rescued_payload, indent=2, default=str),
-                    result_path.parent / ENVIRONMENT_FILENAME,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to rescue in-container environment.json for %s (cycle %d) "
-                    "from %s: %s - environment.json will record the dispatching host, "
-                    "not the container the experiment ran in.",
-                    config_hash,
-                    cycle,
-                    rescued_env,
-                    exc,
-                )
-            finally:
-                rescued_env.unlink(missing_ok=True)
-        elif runner_provenance is not None and runner_provenance.mode == RUNNER_DOCKER:
-            # Loudness backstop mirroring the config.json one below: a docker run
-            # that lands without a rescued snapshot means environment.json records
-            # the dispatching host, not the container - a reproducibility defect.
-            logger.warning(
-                "No in-container environment.json rescued for %s (cycle %d) at %s - "
-                "environment.json records the dispatching host, not the container "
-                "the experiment ran in.",
-                config_hash,
-                cycle,
-                result_path.parent,
-            )
-
-        # Move config.json sidecar (written by harness to temp dir) to experiment dir.
-        # Patch in two fields the harness subprocess cannot compute: the
-        # resolved_config_hash from StudyConfig, and the per-field provenance
-        # (source + effective + default) from the pre-built resolution log. The
-        # provenance section replaces the retired _resolution.json sidecar.
-        if ts_source_dir is not None:
-            config_sidecar_src = ts_source_dir / CONFIG_SIDECAR_FILENAME
-            if config_sidecar_src.exists():
-                try:
-                    _payload = load_json(config_sidecar_src)
-                    if resolved_config_hash is not None:
-                        _payload["resolved_config_hash"] = resolved_config_hash
-                    if resolution_log:
-                        _payload["provenance"] = resolution_log
-                    from llenergymeasure.results.persistence import _atomic_write
-
-                    _atomic_write(
-                        json.dumps(_payload, indent=2, default=str),
-                        result_path.parent / CONFIG_SIDECAR_FILENAME,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to move config.json sidecar for %s (cycle %d) from %s: %s - "
-                        "provenance and authoritative engine/model identity will be missing "
-                        "from this result.",
-                        config_hash,
-                        cycle,
-                        config_sidecar_src,
-                        exc,
-                    )
-                finally:
-                    config_sidecar_src.unlink(missing_ok=True)
-
-        # Loudness backstop: config.json is the sole home of provenance and
-        # the authoritative home of identity. A completed experiment that lands
-        # without one is silent data loss - warn (never fail) so the gap is
-        # visible rather than discovered later at analysis time.
-        if not (result_path.parent / CONFIG_SIDECAR_FILENAME).exists():
-            logger.warning(
-                "No config.json materialised for %s (cycle %d) at %s - provenance "
-                "and authoritative engine/model identity are missing from this result.",
-                config_hash,
-                cycle,
-                result_path.parent,
-            )
-
-        # Clean up the stale flat parquet file after it has been copied into the
-        # experiment subdirectory (mirrors cli/run.py line 288).
-        if ts_source is not None:
-            ts_source.unlink(missing_ok=True)
+        result_path = writer.write_result(result, runner_provenance=runner_provenance)
+        writer.write_environment(
+            host_snapshot=environment_snapshot,
+            runner_environment=runner_environment,
+            runner_provenance=runner_provenance,
+        )
+        writer.move_config_sidecar(
+            resolved_config_hash=resolved_config_hash,
+            resolution_log=resolution_log,
+        )
+        writer.finalize()
 
         result_files.append(str(result_path))
         rel_path = str(result_path.relative_to(study_dir))

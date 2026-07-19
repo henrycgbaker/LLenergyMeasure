@@ -18,9 +18,35 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   against the old engine surface. The guard is a pure path check
   (`scripts/ci/check_absorbed_bump.py`) wired into `engine-rules-check.yml`.
   ([#849])
+- A new `BundleWriter` (`llenergymeasure.results.bundle`) owns the per-experiment
+  results-bundle write policy in one place: experiment-dir creation, result.json
+  (with runner provenance), environment.json (host snapshot vs the preferred
+  in-container rescue, plus the host-only runner block), the config.json sidecar
+  move + patch, the timeseries attach, and a `finalize()` step that runs the
+  loudness backstops uniformly from the artefact registry. A completed experiment
+  that references a timeseries whose parquet did not land in the bundle now warns
+  at write time (previously only surfaced at read time). ([#853])
+- The results-bundle artefact set is now a declarative registry (`ARTEFACTS` in
+  `llenergymeasure.domain.bundle_artefacts`): each entry records the filename,
+  whether it is required, whether its absence warrants a loud warning, and
+  whether it is JSON or Parquet. This is the extension point for future bundle
+  artefacts - one registry entry plus one writer method, swept automatically by
+  `finalize()`. ([#853])
 
 ### Changed
 
+- **Breaking (results bundle):** the three independent per-artefact
+  `schema_version` counters are replaced by a single `bundle_version` ("1.0")
+  stamped into `result.json`, `config.json`, and `environment.json`. The bundle
+  version now covers the on-disk layout, the artefact set, and each artefact's
+  schema as one contract, with one number to bump per documented break
+  (`timeseries.parquet` stays unversioned as self-describing columnar data). The
+  `ExperimentResult.schema_version` field is renamed to `bundle_version`, and the
+  `CONFIG_SIDECAR_SCHEMA_VERSION` / `ENVIRONMENT_SCHEMA_VERSION` constants are
+  retired in favour of `BUNDLE_VERSION`. This is a deliberate one-time bundle
+  break: results written by earlier versions remain readable best-effort (the
+  retired `schema_version` key is dropped on load rather than rejected), and no
+  converter tooling is provided. ([#853])
 - The Renovate config now documents its one-engine-per-bump-PR policy: each
   engine's regex-managed pin (`engine_versions/<engine>/current.yaml`) keeps its
   own package rule with no shared `groupName`, so a version bump opens a separate
@@ -1223,3 +1249,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#850]: https://github.com/henrycgbaker/llenergymeasure/pull/850
 [#851]: https://github.com/henrycgbaker/llenergymeasure/pull/851
 [#852]: https://github.com/henrycgbaker/llenergymeasure/pull/852
+[#853]: https://github.com/henrycgbaker/llenergymeasure/pull/853

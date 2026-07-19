@@ -29,7 +29,7 @@ TEST_POWER_MW = 200_000  # 200 W in milliwatts (pynvml convention)
 TEST_POWER_W = 200.0
 
 # Derived from model defaults - single source of truth for schema assertions
-EXPERIMENT_SCHEMA_VERSION = ExperimentResult.model_fields["schema_version"].default
+EXPERIMENT_BUNDLE_VERSION = ExperimentResult.model_fields["bundle_version"].default
 
 _EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
@@ -154,6 +154,32 @@ def make_user_config(**overrides):
     defaults: dict = {}
     defaults.update(overrides)
     return UserConfig(**defaults)
+
+
+def write_container_environment_sidecar(path: Path) -> dict:
+    """Write a rescued in-container environment.json (distinct CONTAINER values).
+
+    Shared by the docker-rescue tests: distinct hardware/runtime values so a test
+    can prove the container snapshot wins over the dispatching-host snapshot.
+    """
+    import json
+
+    payload = {
+        "experiment_id": "test-save-record-001",
+        "measurement_config_hash": "aabb1122ccdd3344",
+        "hardware": {
+            "gpu": {"name": "NVIDIA A100-SXM4-80GB", "vram_total_mb": 81920.0},
+            "cuda": {"version": "12.4", "driver_version": "535.104"},
+            "cpu": {"platform": "Linux"},
+            "collected_at": "2026-01-02T00:00:00",
+        },
+        "python_version": "3.10.14",
+        "tool_version": "0.11.0",
+        "cuda_version": "12.4",
+        "cuda_version_source": "torch",
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return payload
 
 
 @pytest.fixture

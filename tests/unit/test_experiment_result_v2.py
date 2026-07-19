@@ -50,16 +50,16 @@ def make_result():
 
 
 # ---------------------------------------------------------------------------
-# Task 2.1: schema_version
+# Task 2.1: bundle_version
 # ---------------------------------------------------------------------------
 
 
-def test_schema_version_default(make_result):
-    """schema_version defaults to the current single-segment version (e.g. '5.0')."""
+def test_bundle_version_default(make_result):
+    """bundle_version defaults to the current bundle contract version (e.g. '1.0')."""
     result = make_result()
-    from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+    from tests.conftest import EXPERIMENT_BUNDLE_VERSION
 
-    assert result.schema_version == EXPERIMENT_SCHEMA_VERSION
+    assert result.bundle_version == EXPERIMENT_BUNDLE_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ def test_frozen_model(make_result):
     """Assignment after construction raises ValidationError (frozen=True)."""
     result = make_result()
     with pytest.raises((ValidationError, TypeError)):
-        result.schema_version = "3.0"  # type: ignore[misc]
+        result.bundle_version = "3.0"  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ def test_json_round_trip(make_result):
     json_str = original.model_dump_json()
     restored = ExperimentResult.model_validate_json(json_str)
 
-    assert restored.schema_version == original.schema_version
+    assert restored.bundle_version == original.bundle_version
     assert restored.experiment_id == original.experiment_id
     assert restored.baseline_power_w == original.baseline_power_w
     assert restored.energy_adjusted_j == original.energy_adjusted_j

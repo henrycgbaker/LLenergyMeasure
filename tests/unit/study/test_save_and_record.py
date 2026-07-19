@@ -21,6 +21,7 @@ from llenergymeasure.study.runner import (
     _runner_environment,
     _save_and_record,
 )
+from tests.conftest import write_container_environment_sidecar
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -267,7 +268,7 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
     config_sidecar_src.write_text(
         json.dumps(
             {
-                "schema_version": "2.0",
+                "bundle_version": "1.0",
                 "experiment_id": "test-prov-001",
                 "measurement_config_hash": "aabb1122ccdd3344",
                 "engine": "transformers",
@@ -307,8 +308,8 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
     assert payload.get("provenance") == resolution_log, (
         "resolution_log must be folded into config.json as its provenance section"
     )
-    # schema_version from the harness sidecar survives the fold.
-    assert payload["schema_version"] == "2.0"
+    # bundle_version from the harness sidecar survives the fold.
+    assert payload["bundle_version"] == "1.0"
     # The retired standalone sidecar must not appear.
     assert not (result_json_path.parent / "_resolution.json").exists()
     assert not config_sidecar_src.exists()
@@ -359,28 +360,6 @@ def _make_host_snapshot():
     )
 
 
-def _write_container_environment_sidecar(path: Path) -> dict:
-    """Write a rescued in-container environment.json (distinct CONTAINER values)."""
-    import json
-
-    payload = {
-        "experiment_id": "test-save-record-001",
-        "measurement_config_hash": "aabb1122ccdd3344",
-        "hardware": {
-            "gpu": {"name": "NVIDIA A100-SXM4-80GB", "vram_total_mb": 81920.0},
-            "cuda": {"version": "12.4", "driver_version": "535.104"},
-            "cpu": {"platform": "Linux"},
-            "collected_at": "2026-01-02T00:00:00",
-        },
-        "python_version": "3.10.14",
-        "tool_version": "0.11.0",
-        "cuda_version": "12.4",
-        "cuda_version_source": "torch",
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    return payload
-
-
 def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
     """Under docker dispatch, the rescued in-container environment.json is
     preferred over the host snapshot for the persisted environment.json."""
@@ -390,7 +369,7 @@ def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
     study_dir.mkdir()
 
     # Container rescued environment.json lives in the artefact (ts_source) dir.
-    _write_container_environment_sidecar(tmp_path / "environment.json")
+    write_container_environment_sidecar(tmp_path / "environment.json")
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
@@ -436,7 +415,7 @@ def test_docker_without_rescued_environment_warns(tmp_path: Path, caplog) -> Non
     manifest = MagicMock()
     result_files: list[str] = []
 
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         _save_and_record(
             result,
             study_dir,
@@ -470,7 +449,7 @@ def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) ->
     manifest = MagicMock()
     result_files: list[str] = []
 
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         _save_and_record(
             result,
             study_dir,
@@ -518,13 +497,13 @@ def test_config_sidecar_rescue_permission_error_warns(tmp_path: Path, monkeypatc
     def _raise_permission(_path):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr("llenergymeasure.study.runner.load_json", _raise_permission)
+    monkeypatch.setattr("llenergymeasure.results.bundle.load_json", _raise_permission)
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
     result_files: list[str] = []
 
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         _save_and_record(
             result,
             study_dir,
@@ -572,13 +551,13 @@ def test_environment_sidecar_rescue_permission_error_warns(
     def _raise_permission(_path):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr("llenergymeasure.study.runner.load_json", _raise_permission)
+    monkeypatch.setattr("llenergymeasure.results.bundle.load_json", _raise_permission)
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
     result_files: list[str] = []
 
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         _save_and_record(
             result,
             study_dir,
@@ -722,7 +701,7 @@ def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
 
     env_dest = Path(result_files[0]).parent / "environment.json"
     payload = json.loads(env_dest.read_text())
-    assert payload["schema_version"] == "1.0"
+    assert payload["bundle_version"] == "1.0"
     assert payload["runner"] == {
         "mode": "local",
         "image": None,
@@ -743,7 +722,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    _write_container_environment_sidecar(tmp_path / "environment.json")
+    write_container_environment_sidecar(tmp_path / "environment.json")
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
@@ -780,8 +759,8 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
         "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
         "source": "yaml",
     }
-    # schema_version stamped in when the (old-style) container payload omitted it.
-    assert payload["schema_version"] == "1.0"
+    # bundle_version stamped in when the (old-style) container payload omitted it.
+    assert payload["bundle_version"] == "1.0"
     # Container hardware/runtime values still win over the host snapshot.
     assert payload["python_version"] == "3.10.14"
     assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
@@ -880,13 +859,13 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
     def _raise_permission(_path):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr("llenergymeasure.study.runner.load_json", _raise_permission)
+    monkeypatch.setattr("llenergymeasure.results.bundle.load_json", _raise_permission)
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
     result_files: list[str] = []
 
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.runner"):
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         _save_and_record(
             result,
             study_dir,
@@ -926,4 +905,4 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
         "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
         "source": "yaml",
     }
-    assert payload["schema_version"] == "1.0"
+    assert payload["bundle_version"] == "1.0"

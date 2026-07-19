@@ -8,8 +8,9 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from llenergymeasure.domain.bundle_artefacts import BUNDLE_VERSION
 from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.metrics import (
     EnergyBreakdown,
@@ -110,7 +111,11 @@ class ExperimentResult(BaseModel):
     """
 
     # Identity
-    schema_version: str = Field(default="5.0", description="Result schema version")
+    bundle_version: str = Field(
+        default=BUNDLE_VERSION,
+        description="Results-bundle version (layout + artefact set + per-artefact schema, "
+        "as one contract). Replaces the retired per-artefact result schema_version.",
+    )
     experiment_id: str = Field(..., description="Unique experiment identifier")
     measurement_config_hash: str = Field(
         ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"
@@ -274,6 +279,22 @@ class ExperimentResult(BaseModel):
     )
 
     model_config = {"frozen": True, "extra": "forbid"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_schema_version(cls, data: Any) -> Any:
+        """Read a legacy (pre-bundle_version) result.json best-effort.
+
+        Older bundles stamped result.json with a per-artefact ``schema_version``
+        that no longer exists on this model, which forbids extra fields. Drop the
+        retired key before validation (both ``model_validate`` and
+        ``model_validate_json`` run before-validators on the parsed structure) so
+        a legacy result.json falls back to the current default ``bundle_version``
+        rather than being rejected.
+        """
+        if isinstance(data, dict) and "schema_version" in data:
+            data = {k: v for k, v in data.items() if k != "schema_version"}
+        return data
 
     @property
     def duration_sec(self) -> float:
