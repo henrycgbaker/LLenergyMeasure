@@ -26,6 +26,10 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   own package rule with no shared `groupName`, so a version bump opens a separate
   reviewable PR per engine rather than batching several engines into one diff.
   ([#850])
+- Consolidated per-engine facts (identity package, dtypes, plugin dispatch,
+  parallelism model, default-image version source) behind a single `ssot.ENGINES`
+  descriptor registry; the previously hand-rolled per-engine branch sites now
+  route through it (internal refactor, no behavior change). ([#851])
 
 ### Removed
 
@@ -1210,8 +1214,6 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#843]: https://github.com/henrycgbaker/llenergymeasure/pull/843
 [#844]: https://github.com/henrycgbaker/llenergymeasure/pull/844
 [#845]: https://github.com/henrycgbaker/llenergymeasure/pull/845
-<<<<<<< HEAD
-[#850]: https://github.com/henrycgbaker/llenergymeasure/pull/850
-=======
 [#849]: https://github.com/henrycgbaker/llenergymeasure/pull/849
->>>>>>> origin/main
+[#850]: https://github.com/henrycgbaker/llenergymeasure/pull/850
+[#851]: https://github.com/henrycgbaker/llenergymeasure/pull/851
