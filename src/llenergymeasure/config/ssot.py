@@ -14,6 +14,7 @@ import from here.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Final, Literal
 
@@ -185,32 +186,106 @@ TIMEOUT_INTERRUPT_POLL: Final = 1
 """Interrupt event wait loop tick."""
 
 # ---------------------------------------------------------------------------
-# Engine capability dicts
+# Per-engine descriptor registry
 # ---------------------------------------------------------------------------
+# ENGINES is the single source of truth for per-engine facts. Every fact an
+# engine carries (identity package, availability probe, plugin location,
+# supported dtypes, parallelism model, default-image version source) lives in
+# one shape here, so a backend is described in exactly one place. Consumers
+# read the descriptor directly, or take a narrow derived view (ENGINE_PACKAGES).
 
-# Precision modes supported by each engine.
-# "float32" = full precision, "float16" = half, "bfloat16" = brain float16.
-# Note: fp16/bf16 require GPU. The cpu engine (future) would be fp32-only.
-# GPU detection and cpu-dtype cross-validation is handled at pre-flight.
-DTYPE_SUPPORT: dict[Engine, list[str]] = {
-    Engine.TRANSFORMERS: ["float32", "float16", "bfloat16"],
-    Engine.VLLM: ["float16", "bfloat16"],  # vLLM does not support fp32 inference
-    Engine.TENSORRT: ["float16", "bfloat16"],  # TRT-LLM does not support fp32 inference
+
+@dataclass(frozen=True)
+class ParallelismModel:
+    """How an engine's config fields map to the set of GPUs to monitor.
+
+    ``multiply_fields`` names the active engine-params attributes whose product
+    (each defaulting to 1 when unset) gives the GPU count - e.g. vLLM multiplies
+    tensor- by pipeline-parallel size. ``all_visible_field``, when set, names an
+    attribute that (when non-None) means the engine shards across every
+    NVML-visible GPU - e.g. transformers ``device_map``. The two are mutually
+    exclusive; an engine with neither always monitors a single GPU.
+    """
+
+    multiply_fields: tuple[str, ...] = ()
+    all_visible_field: str | None = None
+
+
+@dataclass(frozen=True)
+class EngineDescriptor:
+    """Consolidated per-engine facts (see ``ENGINES``)."""
+
+    package: str
+    """Importable package that identifies the engine (version + preflight)."""
+
+    availability_probe: str
+    """Package imported to test whether the engine can run. Transformers probes
+    ``torch`` (its GPU stack), not the always-present ``transformers`` package."""
+
+    plugin_module: str
+    """Module holding the engine's ``EnginePlugin`` implementation."""
+
+    plugin_class: str
+    """Class name of the engine's ``EnginePlugin`` implementation."""
+
+    dtypes: tuple[str, ...]
+    """Precision modes the engine supports ("float32" = full, "float16" = half,
+    "bfloat16" = brain float16). fp16/bf16 require GPU; GPU detection and
+    cpu-dtype cross-validation happen at pre-flight."""
+
+    parallelism: ParallelismModel
+    """How the engine's config maps to the set of GPUs to monitor."""
+
+    image_version_source: Literal["package", "engine"]
+    """Which version tags the engine's default image: the llenergymeasure
+    ``package`` version (first-party GHCR image) or the pinned ``engine`` version
+    (upstream image)."""
+
+
+ENGINES: dict[Engine, EngineDescriptor] = {
+    Engine.TRANSFORMERS: EngineDescriptor(
+        package="transformers",
+        availability_probe="torch",
+        plugin_module="llenergymeasure.engines.transformers",
+        plugin_class="TransformersEngine",
+        dtypes=("float32", "float16", "bfloat16"),
+        parallelism=ParallelismModel(all_visible_field="device_map"),
+        image_version_source="package",
+    ),
+    Engine.VLLM: EngineDescriptor(
+        package="vllm",
+        availability_probe="vllm",
+        plugin_module="llenergymeasure.engines.vllm",
+        plugin_class="VLLMEngine",
+        dtypes=("float16", "bfloat16"),  # vLLM does not support fp32 inference
+        parallelism=ParallelismModel(
+            multiply_fields=("tensor_parallel_size", "pipeline_parallel_size")
+        ),
+        image_version_source="engine",
+    ),
+    Engine.TENSORRT: EngineDescriptor(
+        package="tensorrt_llm",
+        availability_probe="tensorrt_llm",
+        plugin_module="llenergymeasure.engines.tensorrt",
+        plugin_class="TensorRTEngine",
+        dtypes=("float16", "bfloat16"),  # TRT-LLM does not support fp32 inference
+        parallelism=ParallelismModel(multiply_fields=("tensor_parallel_size",)),
+        image_version_source="engine",
+    ),
 }
 
-# Map from engine name to the Python package that provides it.
-# Used by preflight checks and CLI to verify engine availability.
+# Map each engine to the importable package that identifies it - a narrow view
+# derived from ENGINES. Used by preflight checks, health reporting, and the
+# version handshake.
 ENGINE_PACKAGES: dict[Engine, str] = {
-    Engine.TRANSFORMERS: "transformers",
-    Engine.VLLM: "vllm",
-    Engine.TENSORRT: "tensorrt_llm",
+    engine: descriptor.package for engine, descriptor in ENGINES.items()
 }
 
 __all__ = [
     "ALL_ENGINES",
     "CONTAINER_EXCHANGE_DIR",
     "DOCKER_PULL_TIMEOUT",
-    "DTYPE_SUPPORT",
+    "ENGINES",
     "ENGINE_PACKAGES",
     "ENV_BASELINE_SPEC_PATH",
     "ENV_CARBON_INTENSITY",
@@ -251,5 +326,7 @@ __all__ = [
     "TIMEOUT_SIGTERM_GRACE",
     "TIMEOUT_THREAD_JOIN",
     "Engine",
+    "EngineDescriptor",
+    "ParallelismModel",
     "RunnerMode",
 ]

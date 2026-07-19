@@ -52,6 +52,10 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   own package rule with no shared `groupName`, so a version bump opens a separate
   reviewable PR per engine rather than batching several engines into one diff.
   ([#850])
+- Consolidated per-engine facts (identity package, dtypes, plugin dispatch,
+  parallelism model, default-image version source) behind a single `ssot.ENGINES`
+  descriptor registry; the previously hand-rolled per-engine branch sites now
+  route through it (internal refactor, no behavior change). ([#851])
 - Config and engine layer tidy: the three copy-paste engine-section validators collapse to a
   loop, the sweep and scaffold series writers share one order-preserving dedupe helper, the
   `EnginePlugin.load_model` protocol return type tightens to `tuple[Any, Any]`, and two
@@ -1243,5 +1247,6 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#845]: https://github.com/henrycgbaker/llenergymeasure/pull/845
 [#849]: https://github.com/henrycgbaker/llenergymeasure/pull/849
 [#850]: https://github.com/henrycgbaker/llenergymeasure/pull/850
+[#851]: https://github.com/henrycgbaker/llenergymeasure/pull/851
 [#852]: https://github.com/henrycgbaker/llenergymeasure/pull/852
 [#853]: https://github.com/henrycgbaker/llenergymeasure/pull/853

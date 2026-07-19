@@ -378,13 +378,13 @@ cross-engine validators - is in [invalid-combos.md](invalid-combos.md).
   bounds, dormant normalisations) come from each engine's shipped rule corpus.
   Note that the old hand-written `dtype: float32` rejection was dropped with
   the generated configs: vLLM's `dtype` now includes `float32` in its Literal,
-  and the informational `DTYPE_SUPPORT` map (in `ssot.py`) drives
-  pre-flight checks, not Pydantic parsing.
+  and the informational per-engine `dtypes` (on the `ssot.ENGINES` descriptor)
+  drive pre-flight checks, not Pydantic parsing.
 
 ### Engine x dtype support (pre-flight)
 
-From `ssot.DTYPE_SUPPORT` - an informational pre-flight
-map, not a parse-time constraint:
+From the per-engine `dtypes` on the `ssot.ENGINES` descriptor - an informational
+pre-flight map, not a parse-time constraint:
 
 | Engine | `float32` | `float16` | `bfloat16` |
 |--------|-----------|-----------|------------|

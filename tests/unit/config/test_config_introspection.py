@@ -20,7 +20,7 @@ from llenergymeasure.config.introspection import (
     get_validation_rules,
 )
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.ssot import DTYPE_SUPPORT
+from llenergymeasure.config.ssot import ENGINES
 from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
@@ -111,9 +111,9 @@ def test_get_experiment_config_schema_contains_engine_field():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
+@pytest.mark.parametrize("dt", ENGINES["transformers"].dtypes)  # type: ignore[index]  # Engine is str-enum
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
-    """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
+    """Schema-driven: each SSOT ENGINES['transformers'].dtypes value creates a valid config."""
     config = make_config(dtype=dt)
     assert config.transformers.engine_params.dtype == dt
 
@@ -268,8 +268,8 @@ def test_capability_matrix_transformers_supports_tensor_parallel():
 
 
 def test_capability_matrix_cells_match_engine_dtype_support():
-    """Each engine's float32 cell must agree with SSOT DTYPE_SUPPORT."""
-    from llenergymeasure.config.ssot import DTYPE_SUPPORT, Engine
+    """Each engine's float32 cell must agree with SSOT ENGINES dtypes."""
+    from llenergymeasure.config.ssot import ENGINES, Engine
 
     caps = get_engine_capabilities()
     for engine, key in (
@@ -277,7 +277,7 @@ def test_capability_matrix_cells_match_engine_dtype_support():
         (Engine.VLLM, "vllm"),
         (Engine.TENSORRT, "tensorrt"),
     ):
-        expected = "float32" in DTYPE_SUPPORT[engine]
+        expected = "float32" in ENGINES[engine].dtypes
         assert caps["float32_precision"][key] is expected
 
 
