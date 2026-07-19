@@ -51,7 +51,11 @@ def run(
     ] = None,
     output: Annotated[
         str | None,
-        typer.Option("--output", "-o", help="Output directory for results"),
+        typer.Option(
+            "--output",
+            "-o",
+            help="Results directory for a fresh run; with --resume, the base directory searched for the study to resume",
+        ),
     ] = None,
     dry_run: Annotated[
         bool,
