@@ -40,10 +40,13 @@ Experiment result models.
 **ExperimentResult** - The user-visible output of a single-process measurement
 run. Holds the final metrics (energy, throughput, FLOPs, latency) directly.
 
-## Schema Version
+## Bundle Version
 
-Results include a `schema_version` field on `ExperimentResult` (see its default in
-`experiment.py`) for forward compatibility.
+`ExperimentResult` carries a `bundle_version` field (see its default in
+`experiment.py`, sourced from `bundle_artefacts.BUNDLE_VERSION`). It is the single
+version for the whole per-experiment bundle - the same value is stamped into
+`config.json` and `environment.json` - and it replaces the retired per-artefact
+`schema_version` counters.
 
 ## Related
 

@@ -12,7 +12,6 @@ import logging
 import os
 import shutil
 import tempfile
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -325,14 +324,13 @@ def save_result(
 def load_result(path: Path) -> ExperimentResult:
     """Load ExperimentResult from a result.json path.
 
-    Auto-discovers timeseries.parquet and environment.json sidecars
-    in the same directory. If the result references a timeseries sidecar
-    but the file is missing, loads successfully and emits a UserWarning
-    (graceful degradation).
-
-    When an environment.json sidecar is present, it is parsed and attached
-    to ``result.environment``. This is best-effort: a missing or corrupt
-    sidecar leaves ``result.environment`` as None and never raises.
+    Thin wrapper over :meth:`llenergymeasure.results.bundle.BundleReader.read`,
+    kept as public API for stability. The reader owns the read policy: it
+    auto-discovers the timeseries.parquet and environment.json sidecars in the
+    same directory, parses result.json (dropping the retired ``schema_version``
+    key on legacy bundles), attaches the environment snapshot to
+    ``result.environment`` when present, and emits a UserWarning when the result
+    references a timeseries whose parquet is missing (graceful degradation).
 
     Args:
         path: Path to result.json (as returned by save_result()).
@@ -341,46 +339,6 @@ def load_result(path: Path) -> ExperimentResult:
         ExperimentResult loaded from disk, with ``environment`` populated
         from the environment.json sidecar when one is present.
     """
-    from llenergymeasure.domain.experiment import ExperimentResult
+    from llenergymeasure.results.bundle import BundleReader
 
-    path = Path(path)
-    content = path.read_text(encoding="utf-8")
-    # A legacy (pre-bundle_version) result.json remains readable best-effort: the
-    # ExperimentResult before-validator drops the retired ``schema_version`` key.
-    # (The full legacy-fallback + read path lands with the bundle reader.)
-    result = ExperimentResult.model_validate_json(content)
-
-    sidecar = path.parent / TIMESERIES_FILENAME
-    if result.timeseries is not None and not sidecar.exists():
-        warnings.warn(
-            f"Timeseries sidecar missing at {sidecar}. "
-            "result.timeseries field preserved but file is not present.",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    environment = _load_environment_sidecar(path.parent / ENVIRONMENT_FILENAME)
-    if environment is not None:
-        result = result.model_copy(update={"environment": environment})
-
-    return result
-
-
-def _load_environment_sidecar(path: Path) -> EnvironmentSnapshot | None:
-    """Load an environment.json sidecar into an EnvironmentSnapshot.
-
-    Best-effort: returns None when the sidecar is absent or cannot be parsed,
-    so a missing or corrupt sidecar never breaks load_result. The sidecar's
-    extra ``experiment_id`` / ``measurement_config_hash`` keys are ignored by
-    EnvironmentSnapshot validation.
-    """
-    if not path.exists():
-        return None
-
-    from llenergymeasure.domain.environment import EnvironmentSnapshot
-
-    try:
-        return EnvironmentSnapshot.model_validate_json(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        logger.warning("Could not load environment sidecar %s: %s", path, exc)
-        return None
+    return BundleReader.read(Path(path).parent).result

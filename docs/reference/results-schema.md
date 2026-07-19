@@ -18,7 +18,7 @@ results/
 └── <study-name>_<UTC-timestamp>/
     ├── manifest.json                            # study-level checkpoint + summary
     ├── 001_c0_<model>-<engine>_<hash>/          # one experiment cell
-    │   ├── result.json                          # measurement metrics (schema 5.0)
+    │   ├── result.json                          # measurement metrics (bundle_version 1.0)
     │   ├── config.json                          # engine/model/methodology + resolved config + provenance
     │   ├── environment.json                     # hardware/runtime snapshot + runner provenance
     │   └── timeseries.parquet                   # GPU power/thermal/memory samples
@@ -33,7 +33,7 @@ results/
 
 ## `result.json` - per-experiment record
 
-The scientific record. One JSON file per experiment cell. Schema version `5.0`.
+The scientific record. One JSON file per experiment cell. Stamped with `bundle_version` `"1.0"` (the single version shared across every artefact in the bundle).
 
 `result.json` is measurement output. Configuration inputs and methodology - `engine_version`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected` - live in the `config.json` sidecar, not here. The one deliberate duplication: `result.json` keeps `model_name` and `engine` as convenience copies so a result file is self-describing when separated from its directory; the authoritative home for both is `config.json`.
 
@@ -41,7 +41,7 @@ The scientific record. One JSON file per experiment cell. Schema version `5.0`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | str | Result schema version (currently `"5.0"`) |
+| `bundle_version` | str | Results-bundle version (currently `"1.0"`), shared across `result.json`, `config.json`, and `environment.json` as one contract |
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
@@ -285,11 +285,11 @@ ts = pd.read_parquet(study / "001_c0_qwen-transformers_a1b2c3" / "timeseries.par
 
 For the Python API equivalent (`StudyResult` object), see [Reference &gt; Library API](/reference/api/llenergymeasure).
 
-## Schema versioning
+## Bundle versioning
 
-`result.json.schema_version` follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
+The whole bundle carries one `bundle_version` (currently `"1.0"`), stamped identically into `result.json`, `config.json`, and `environment.json` (`timeseries.parquet` is self-describing columnar data and stays unversioned). It versions the on-disk layout, the artefact set, and each artefact's schema as a single contract, so there is one number to bump and one changelog line per documented break. This replaces the three independent per-artefact `schema_version` counters that earlier releases carried. It follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
 
-Schema `5.0` is a breaking change: it removes `engine_version`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, and `steady_state_not_detected` from `result.json`. Those configuration/methodology fields now live in the `config.json` sidecar. `result.json` keeps `model_name` and `engine` as convenience copies (authoritative home: `config.json`). Old bundles remain readable as their own schema version - there is no in-place migration.
+Bundles written before `bundle_version` existed remain readable best-effort: the canonical reader (`llenergymeasure.results.bundle.BundleReader`, wrapped by `load_result`) drops the retired `schema_version` key rather than rejecting it and emits a single warning. There is no in-place migration and no converter tooling.
 
 ## See also
 

@@ -1,7 +1,8 @@
-"""Unit tests for BundleWriter - the per-experiment results-bundle owner.
+"""Unit tests for the per-experiment results-bundle owner (writer + reader).
 
-These exercise the writer policies directly (not through study.runner._save_and_record,
-which the tests in tests/unit/study/test_save_and_record.py cover end-to-end):
+The writer tests exercise the BundleWriter policies directly (not through
+study.runner._save_and_record, which tests/unit/study/test_save_and_record.py
+covers end-to-end):
 
 - bundle_version stamping across result.json / config.json / environment.json
 - runner-provenance attach on result.json
@@ -9,6 +10,13 @@ which the tests in tests/unit/study/test_save_and_record.py cover end-to-end):
 - the config-sidecar move + patch
 - the finalize loudness backstops (missing config, declared-but-missing timeseries)
 - the artefact registry as the server-mode extension point (register + sweep)
+
+The reader tests exercise BundleReader:
+
+- happy-path read into a LoadedBundle (result + environment + config + paths)
+- registry-driven discovery, including a newly-registered artefact surfacing
+- the strict required-artefact contract and the legacy best-effort fallback
+- the read_sidecar single-artefact accessor
 """
 
 from __future__ import annotations
@@ -17,6 +25,8 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 from llenergymeasure.domain.bundle_artefacts import ARTEFACTS, BUNDLE_VERSION, ArtefactSpec
 from llenergymeasure.domain.environment import (
@@ -28,7 +38,7 @@ from llenergymeasure.domain.environment import (
     RunnerEnvironment,
 )
 from llenergymeasure.domain.experiment import RunnerProvenance
-from llenergymeasure.results.bundle import BundleWriter
+from llenergymeasure.results.bundle import BundleReader, BundleWriter, LoadedBundle
 from tests.conftest import make_result, write_container_environment_sidecar
 
 # ---------------------------------------------------------------------------
@@ -288,3 +298,179 @@ def test_finalize_sweeps_newly_registered_artefact(tmp_path: Path, caplog, monke
         "request_series" in rec.message and "request_series.parquet" in rec.message
         for rec in caplog.records
     ), "finalize must sweep any registered warn_if_missing artefact"
+
+
+# ---------------------------------------------------------------------------
+# BundleReader - read side
+# ---------------------------------------------------------------------------
+
+
+def _write_full_bundle(tmp_path: Path) -> Path:
+    """Write a complete bundle (result + environment + config) and return its dir."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "config.json").write_text(
+        json.dumps(
+            {
+                "experiment_id": "test-001",
+                "engine": "transformers",
+                "provenance": {"task.model": {"effective": "gpt2", "source": "yaml"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    writer = _writer(study_dir, ts_source_dir=staging)
+    writer.write_result(make_result())
+    writer.write_environment(
+        host_snapshot=_make_snapshot(),
+        runner_environment=RunnerEnvironment(mode="local", source="default"),
+        runner_provenance=RunnerProvenance(mode="local", source="local"),
+    )
+    writer.move_config_sidecar(resolved_config_hash="resolved_h1", resolution_log=None)
+    writer.finalize()
+    return writer.bundle_dir
+
+
+def test_bundle_reader_happy_path(tmp_path: Path) -> None:
+    """read() returns a LoadedBundle with result + environment + config + paths."""
+    bundle_dir = _write_full_bundle(tmp_path)
+
+    loaded = BundleReader.read(bundle_dir)
+
+    assert isinstance(loaded, LoadedBundle)
+    assert loaded.bundle_dir == bundle_dir
+    assert loaded.result.experiment_id == "test-001"
+    # Environment parsed and attached to the result (matching load_result).
+    assert loaded.environment is not None
+    assert loaded.result.environment is loaded.environment
+    assert loaded.environment.python_version == "3.12.12"
+    # Config payload surfaced as a raw dict.
+    assert loaded.config is not None
+    assert loaded.config["provenance"]["task.model"]["effective"] == "gpt2"
+    # Registry-keyed paths for every present artefact.
+    assert loaded.paths["result"].name == "result.json"
+    assert loaded.paths["config"].name == "config.json"
+    assert loaded.paths["environment"].name == "environment.json"
+
+
+def test_bundle_reader_registry_driven_discovery(tmp_path: Path, monkeypatch) -> None:
+    """A newly-registered artefact present in the dir surfaces in LoadedBundle.paths.
+
+    Discovery is driven by the ARTEFACTS registry, so a future artefact (e.g. a
+    server-mode per-request series) is picked up by read() with one registry
+    entry - no reader plumbing changes.
+    """
+    monkeypatch.setitem(
+        ARTEFACTS,
+        "request_series",
+        ArtefactSpec(
+            "request_series.parquet", required=False, warn_if_missing=False, kind="parquet"
+        ),
+    )
+    bundle_dir = _write_full_bundle(tmp_path)
+    (bundle_dir / "request_series.parquet").write_bytes(b"PAR1")
+
+    loaded = BundleReader.read(bundle_dir)
+    assert loaded.paths["request_series"].name == "request_series.parquet"
+
+
+def test_bundle_reader_missing_result_raises(tmp_path: Path) -> None:
+    """A bundle dir without the required result.json raises (strict contract)."""
+    empty = tmp_path / "empty-bundle"
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError):
+        BundleReader.read(empty)
+
+
+def test_bundle_reader_optional_sidecars_absent(tmp_path: Path) -> None:
+    """A result-only bundle reads with environment and config as None."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result())
+
+    loaded = BundleReader.read(writer.bundle_dir)
+    assert loaded.environment is None
+    assert loaded.config is None
+    assert "config" not in loaded.paths
+    assert "environment" not in loaded.paths
+
+
+def test_bundle_reader_legacy_fallback_warns(tmp_path: Path) -> None:
+    """A pre-bundle_version result.json reads best-effort with ONE UserWarning."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    result_path = writer.write_result(make_result())
+    # Simulate a legacy bundle: retired per-artefact key, no bundle_version.
+    raw = json.loads(result_path.read_text(encoding="utf-8"))
+    raw.pop("bundle_version", None)
+    raw["schema_version"] = "5.0"
+    result_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.warns(UserWarning, match="pre-bundle_version result; readable best-effort"):
+        loaded = BundleReader.read(writer.bundle_dir)
+    assert loaded.result.experiment_id == "test-001"
+    assert loaded.result.bundle_version == BUNDLE_VERSION
+
+
+def test_bundle_reader_declared_but_missing_timeseries_warns(tmp_path: Path) -> None:
+    """read() warns when the result references a parquet that did not land."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result(timeseries="timeseries.parquet"))
+
+    with pytest.warns(UserWarning, match="Timeseries sidecar missing"):
+        BundleReader.read(writer.bundle_dir)
+
+
+def test_bundle_reader_corrupt_environment_is_best_effort(tmp_path: Path) -> None:
+    """A corrupt environment.json yields environment=None, never an error."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result())
+    (writer.bundle_dir / "environment.json").write_text("{ not valid json", encoding="utf-8")
+
+    loaded = BundleReader.read(writer.bundle_dir)
+    assert loaded.environment is None
+    assert loaded.result.experiment_id == "test-001"
+
+
+# ---------------------------------------------------------------------------
+# BundleReader.read_sidecar - registry-driven single-artefact accessor
+# ---------------------------------------------------------------------------
+
+
+def test_read_sidecar_returns_config_payload(tmp_path: Path) -> None:
+    """read_sidecar reads the config.json payload without loading result.json."""
+    bundle_dir = _write_full_bundle(tmp_path)
+    payload = BundleReader.read_sidecar(bundle_dir, "config")
+    assert payload is not None
+    assert payload["provenance"]["task.model"]["effective"] == "gpt2"
+
+
+def test_read_sidecar_absent_returns_none(tmp_path: Path) -> None:
+    """An absent sidecar returns None (not an error)."""
+    empty = tmp_path / "bundle"
+    empty.mkdir()
+    assert BundleReader.read_sidecar(empty, "config") is None
+
+
+def test_read_sidecar_corrupt_raises(tmp_path: Path) -> None:
+    """A present-but-unparseable sidecar raises so callers can flag it a failure."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "config.json").write_text("{ not valid json", encoding="utf-8")
+    with pytest.raises(json.JSONDecodeError):
+        BundleReader.read_sidecar(bundle, "config")
+
+
+def test_read_sidecar_rejects_non_json_artefact(tmp_path: Path) -> None:
+    """read_sidecar is JSON-only: a parquet artefact key is a programming error."""
+    with pytest.raises(ValueError, match="not a JSON sidecar"):
+        BundleReader.read_sidecar(tmp_path, "timeseries")

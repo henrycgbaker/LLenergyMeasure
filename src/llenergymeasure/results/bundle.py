@@ -1,4 +1,4 @@
-"""Per-experiment results-bundle owner (writer side).
+"""Per-experiment results-bundle owner (writer + reader).
 
 ``BundleWriter`` is the single home for the assembly policy that decides how a
 completed experiment becomes an on-disk bundle: the collision-free experiment
@@ -7,24 +7,37 @@ directory, result.json (with runner provenance folded in), environment.json
 block), the config.json sidecar move + patch, the timeseries attach, and the
 loudness backstops that make a silently-missing artefact visible.
 
+``BundleReader`` is its read-side counterpart: given a bundle directory it
+discovers the artefacts via the same ``ARTEFACTS`` registry, parses result.json
+(the one required artefact), attaches the environment.json snapshot, and returns
+a :class:`LoadedBundle` (result + environment + config payload + the discovered
+paths). ``persistence.load_result`` is a thin wrapper over it, kept for API
+stability. A registry-driven single-artefact accessor (:meth:`BundleReader.read_sidecar`)
+serves consumers that need one JSON sidecar (e.g. ``report-gaps`` reading config
+provenance) without materialising the whole bundle.
+
 Previously this policy was smeared across ``results.persistence`` (atomic writes
 + dir naming) and ``study.runner._save_and_record`` (~215 lines of assembly). It
 now lives here, driven by the ``domain.bundle_artefacts.ARTEFACTS`` registry, so
 a future artefact type (e.g. a server-mode per-request series) is added with one
-registry entry plus one writer method - ``finalize()`` sweeps it automatically.
+registry entry plus one writer method - ``finalize()`` sweeps it automatically
+and ``read()`` surfaces it in ``LoadedBundle.paths``.
 
 The low-level mechanics (collision-free dir + atomic result/timeseries write,
 the host environment write) stay in ``results.persistence`` and are delegated to:
 ``persistence.save_result`` is public API, and keeping the primitive there
 preserves the atomic-write + chmod semantics and the existing regression tests.
-BundleWriter owns the policy; persistence owns the primitives.
+BundleWriter owns the write policy; BundleReader owns the read policy;
+persistence owns the primitives.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import warnings
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +47,7 @@ from llenergymeasure.domain.bundle_artefacts import (
     BUNDLE_VERSION,
     CONFIG_SIDECAR_FILENAME,
     ENVIRONMENT_FILENAME,
+    TIMESERIES_FILENAME,
 )
 from llenergymeasure.results import persistence
 from llenergymeasure.utils.io import load_json
@@ -321,3 +335,179 @@ class BundleWriter:
                     self._cycle,
                     f" - {spec.missing_note}" if spec.missing_note else "",
                 )
+
+
+@dataclass(frozen=True)
+class LoadedBundle:
+    """Everything :class:`BundleReader` recovers from one per-experiment bundle.
+
+    Attributes:
+        bundle_dir: The directory the bundle was read from.
+        result: The parsed ``result.json`` (the one required artefact), with the
+            environment snapshot attached to ``result.environment`` when present.
+        environment: The parsed ``environment.json`` snapshot, or None when the
+            sidecar is absent or unparseable. The same object attached to
+            ``result.environment``; exposed here for direct access.
+        config: The raw ``config.json`` payload dict (provenance, declared
+            config, observed hashes), or None when the sidecar is absent.
+        paths: Registry key -> on-disk path for every artefact present in the
+            bundle. A newly-registered artefact appears here automatically.
+    """
+
+    bundle_dir: Path
+    result: ExperimentResult
+    environment: EnvironmentSnapshot | None
+    config: dict[str, Any] | None
+    paths: dict[str, Path]
+
+
+class BundleReader:
+    """Read a per-experiment results bundle, discovery driven by the registry.
+
+    The counterpart to :class:`BundleWriter`. :meth:`read` iterates the
+    ``ARTEFACTS`` registry to discover which artefacts are present, enforces the
+    ``required`` contract (raising when result.json is missing), parses the JSON
+    artefacts with their typed models, and returns a :class:`LoadedBundle`.
+    :meth:`read_sidecar` is the registry-driven single-artefact accessor for
+    consumers that need one JSON sidecar without materialising the whole bundle.
+    """
+
+    @staticmethod
+    def read(bundle_dir: Path) -> LoadedBundle:
+        """Read the bundle under ``bundle_dir`` into a :class:`LoadedBundle`.
+
+        Discovery is registry-driven: every entry in ``ARTEFACTS`` is checked for
+        presence (populating ``LoadedBundle.paths``) and a missing ``required``
+        artefact raises. result.json is parsed strictly via the shared payload
+        parser; environment.json and config.json are best-effort (a corrupt or
+        absent optional sidecar yields None, never an error). When the result
+        references a timeseries whose parquet did not land, a ``UserWarning`` is
+        emitted (matching the historical ``load_result`` behaviour).
+
+        Args:
+            bundle_dir: The per-experiment bundle directory (the parent of
+                result.json).
+
+        Returns:
+            The assembled :class:`LoadedBundle`.
+
+        Raises:
+            FileNotFoundError: A required artefact (result.json) is missing.
+        """
+        bundle_dir = Path(bundle_dir)
+
+        paths: dict[str, Path] = {}
+        for name, spec in ARTEFACTS.items():
+            candidate = bundle_dir / spec.filename
+            if candidate.exists():
+                paths[name] = candidate
+            elif spec.required:
+                raise FileNotFoundError(
+                    f"Required bundle artefact '{name}' ({spec.filename}) missing from {bundle_dir}"
+                )
+
+        result = BundleReader._read_result_artefact(paths["result"])
+
+        environment = BundleReader._read_environment_artefact(paths.get("environment"))
+        if environment is not None:
+            result = result.model_copy(update={"environment": environment})
+
+        # config.json is best-effort here (a corrupt sidecar must not break the
+        # whole read); read_sidecar's strict variant is for consumers that need
+        # to distinguish absent from corrupt.
+        config: dict[str, Any] | None = None
+        if "config" in paths:
+            try:
+                config = load_json(paths["config"])
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Could not load config sidecar %s: %s", paths["config"], exc)
+
+        # Declared-but-missing timeseries: the result references a parquet that is
+        # not in the bundle. Preserves the historical load_result degradation.
+        if result.timeseries is not None and "timeseries" not in paths:
+            warnings.warn(
+                f"Timeseries sidecar missing at {bundle_dir / TIMESERIES_FILENAME}. "
+                "result.timeseries field preserved but file is not present.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        return LoadedBundle(
+            bundle_dir=bundle_dir,
+            result=result,
+            environment=environment,
+            config=config,
+            paths=paths,
+        )
+
+    @staticmethod
+    def read_sidecar(bundle_dir: Path, key: str) -> dict[str, Any] | None:
+        """Read one registry JSON artefact's raw payload from a bundle dir.
+
+        The registry-driven single-artefact read for consumers that want one
+        sidecar (e.g. ``report-gaps`` reading the config.json ``provenance``
+        section) without loading result.json or the whole bundle. Returns the
+        decoded payload, or None when the artefact is absent. A present but
+        unparseable file raises so callers can distinguish an absent sidecar
+        from a corrupt one.
+
+        Args:
+            bundle_dir: The per-experiment bundle directory.
+            key: The ``ARTEFACTS`` registry key (e.g. ``"config"``).
+
+        Returns:
+            The decoded JSON payload, or None when the artefact is absent.
+
+        Raises:
+            ValueError: The keyed artefact is not a JSON artefact.
+            OSError / json.JSONDecodeError: The artefact is present but unreadable.
+        """
+        spec = ARTEFACTS[key]
+        if spec.kind != "json":
+            raise ValueError(f"Artefact '{key}' is {spec.kind}, not a JSON sidecar")
+        path = Path(bundle_dir) / spec.filename
+        if not path.exists():
+            return None
+        payload: dict[str, Any] = load_json(path)
+        return payload
+
+    @staticmethod
+    def _read_result_artefact(path: Path) -> ExperimentResult:
+        """Parse result.json strictly, with the legacy best-effort fallback.
+
+        A pre-bundle_version result.json (no ``bundle_version`` key) is still
+        read best-effort with a single ``UserWarning`` - the one documented
+        pre-1.0 bundle break. The shared parser (tolerant=False) validates the
+        payload; the ExperimentResult before-validator drops the retired
+        ``schema_version`` key so the legacy file falls back to the default
+        ``bundle_version`` rather than being rejected.
+        """
+        from llenergymeasure.domain.result_payload import parse_experiment_result_payload
+
+        raw = load_json(path)
+        if isinstance(raw, dict) and "bundle_version" not in raw:
+            warnings.warn(
+                "pre-bundle_version result; readable best-effort",
+                UserWarning,
+                stacklevel=2,
+            )
+        return parse_experiment_result_payload(raw, tolerant=False, expected_version=None)
+
+    @staticmethod
+    def _read_environment_artefact(path: Path | None) -> EnvironmentSnapshot | None:
+        """Load environment.json into an EnvironmentSnapshot (best-effort).
+
+        Returns None when the sidecar is absent or cannot be parsed, so a missing
+        or corrupt sidecar never breaks the read. The sidecar's extra
+        ``experiment_id`` / ``measurement_config_hash`` / ``bundle_version`` keys
+        are ignored by EnvironmentSnapshot validation.
+        """
+        if path is None:
+            return None
+        from llenergymeasure.domain.environment import EnvironmentSnapshot
+
+        try:
+            return EnvironmentSnapshot.model_validate_json(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Could not load environment sidecar %s: %s", path, exc)
+            return None
