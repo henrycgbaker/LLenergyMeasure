@@ -156,6 +156,32 @@ def make_user_config(**overrides):
     return UserConfig(**defaults)
 
 
+def write_container_environment_sidecar(path: Path) -> dict:
+    """Write a rescued in-container environment.json (distinct CONTAINER values).
+
+    Shared by the docker-rescue tests: distinct hardware/runtime values so a test
+    can prove the container snapshot wins over the dispatching-host snapshot.
+    """
+    import json
+
+    payload = {
+        "experiment_id": "test-save-record-001",
+        "measurement_config_hash": "aabb1122ccdd3344",
+        "hardware": {
+            "gpu": {"name": "NVIDIA A100-SXM4-80GB", "vram_total_mb": 81920.0},
+            "cuda": {"version": "12.4", "driver_version": "535.104"},
+            "cpu": {"platform": "Linux"},
+            "collected_at": "2026-01-02T00:00:00",
+        },
+        "python_version": "3.10.14",
+        "tool_version": "0.11.0",
+        "cuda_version": "12.4",
+        "cuda_version_source": "torch",
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return payload
+
+
 @pytest.fixture
 def sample_config() -> ExperimentConfig:
     return make_config()

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -42,14 +43,6 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
 
 logger = logging.getLogger(__name__)
-
-# Per-artefact intent notes for the finalize loudness backstops. The wording of
-# each backstop moved here from the smeared _save_and_record; the intent (why a
-# missing artefact matters) is preserved.
-_MISSING_NOTES: dict[str, str] = {
-    "config": ("provenance and authoritative engine/model identity are missing from this result"),
-    "timeseries": ("the result references a timeseries but the parquet did not land in the bundle"),
-}
 
 
 class BundleWriter:
@@ -201,26 +194,51 @@ class BundleWriter:
         already carries the runner block) in place. The staged rescue file is
         always consumed.
         """
+        self._stage_json_artefact(
+            rescued,
+            ENVIRONMENT_FILENAME,
+            lambda payload: self._patch_runner_block(payload, runner_environment),
+            failure_note=(
+                "Failed to rescue in-container environment.json - environment.json will "
+                "record the dispatching host, not the container the experiment ran in"
+            ),
+        )
+
+    def _stage_json_artefact(
+        self,
+        src: Path,
+        dest_filename: str,
+        patch: Callable[[dict[str, Any]], dict[str, Any]],
+        *,
+        failure_note: str,
+    ) -> None:
+        """Move a staged JSON artefact into the bundle, applying ``patch``.
+
+        Shared scaffolding for the environment rescue and the config-sidecar move,
+        which differ only in their patch callback and failure message: load the
+        staged file, apply ``patch``, atomically write it into the bundle dir
+        under ``dest_filename``. Best-effort - a read/write failure logs
+        ``failure_note`` with context and never raises; the staged source is
+        always consumed.
+        """
         assert self._dir is not None
         try:
-            payload = load_json(rescued)
-            payload = self._patch_runner_block(payload, runner_environment)
+            payload = patch(load_json(src))
             persistence._atomic_write(
                 json.dumps(payload, indent=2, default=str),
-                self._dir / ENVIRONMENT_FILENAME,
+                self._dir / dest_filename,
             )
         except Exception as exc:
             logger.warning(
-                "Failed to rescue in-container environment.json for %s (cycle %d) from %s: %s - "
-                "environment.json will record the dispatching host, not the container the "
-                "experiment ran in.",
+                "%s (%s, cycle %d, from %s): %s",
+                failure_note,
                 self._config_hash,
                 self._cycle,
-                rescued,
+                src,
                 exc,
             )
         finally:
-            rescued.unlink(missing_ok=True)
+            src.unlink(missing_ok=True)
 
     @staticmethod
     def _patch_runner_block(
@@ -260,29 +278,24 @@ class BundleWriter:
         src = self._ts_source_dir / CONFIG_SIDECAR_FILENAME
         if not src.exists():
             return
-        try:
-            payload = load_json(src)
+
+        def _patch(payload: dict[str, Any]) -> dict[str, Any]:
             if resolved_config_hash is not None:
                 payload["resolved_config_hash"] = resolved_config_hash
             if resolution_log:
                 payload["provenance"] = resolution_log
             payload.setdefault("bundle_version", BUNDLE_VERSION)
-            persistence._atomic_write(
-                json.dumps(payload, indent=2, default=str),
-                self._dir / CONFIG_SIDECAR_FILENAME,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Failed to move config.json sidecar for %s (cycle %d) from %s: %s - "
-                "provenance and authoritative engine/model identity will be missing "
-                "from this result.",
-                self._config_hash,
-                self._cycle,
-                src,
-                exc,
-            )
-        finally:
-            src.unlink(missing_ok=True)
+            return payload
+
+        self._stage_json_artefact(
+            src,
+            CONFIG_SIDECAR_FILENAME,
+            _patch,
+            failure_note=(
+                "Failed to move config.json sidecar - provenance and authoritative "
+                "engine/model identity will be missing from this result"
+            ),
+        )
 
     def finalize(self) -> None:
         """Run the loudness backstops uniformly from the artefact registry.
@@ -299,7 +312,6 @@ class BundleWriter:
             if not spec.warn_if_missing or name in self._skip_backstops:
                 continue
             if not (self._dir / spec.filename).exists():
-                note = _MISSING_NOTES.get(name)
                 logger.warning(
                     "Bundle artefact '%s' (%s) missing from %s (%s, cycle %d)%s",
                     name,
@@ -307,5 +319,5 @@ class BundleWriter:
                     self._dir,
                     self._config_hash,
                     self._cycle,
-                    f" - {note}" if note else "",
+                    f" - {spec.missing_note}" if spec.missing_note else "",
                 )

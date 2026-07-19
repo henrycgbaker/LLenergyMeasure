@@ -63,12 +63,17 @@ class ArtefactSpec:
             that make silent data loss visible (config-sidecar provenance,
             a declared-but-missing timeseries).
         kind: ``"json"`` or ``"parquet"`` - the on-disk encoding.
+        missing_note: Human-readable reason the artefact's absence matters,
+            appended to the ``finalize()`` warning. ``None`` for artefacts whose
+            absence needs no explanation. Lives here so the registry is the sole
+            source: adding an artefact needs one entry, nothing hand-synced.
     """
 
     filename: str
     required: bool
     warn_if_missing: bool
     kind: Literal["json", "parquet"]
+    missing_note: str | None = None
 
 
 # The per-experiment bundle artefact set. BundleWriter/BundleReader iterate this
@@ -78,12 +83,24 @@ class ArtefactSpec:
 ARTEFACTS: dict[str, ArtefactSpec] = {
     "result": ArtefactSpec(RESULT_FILENAME, required=True, warn_if_missing=False, kind="json"),
     "config": ArtefactSpec(
-        CONFIG_SIDECAR_FILENAME, required=False, warn_if_missing=True, kind="json"
+        CONFIG_SIDECAR_FILENAME,
+        required=False,
+        warn_if_missing=True,
+        kind="json",
+        missing_note=(
+            "provenance and authoritative engine/model identity are missing from this result"
+        ),
     ),
     "environment": ArtefactSpec(
         ENVIRONMENT_FILENAME, required=False, warn_if_missing=False, kind="json"
     ),
     "timeseries": ArtefactSpec(
-        TIMESERIES_FILENAME, required=False, warn_if_missing=True, kind="parquet"
+        TIMESERIES_FILENAME,
+        required=False,
+        warn_if_missing=True,
+        kind="parquet",
+        missing_note=(
+            "the result references a timeseries but the parquet did not land in the bundle"
+        ),
     ),
 }

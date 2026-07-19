@@ -344,14 +344,11 @@ def load_result(path: Path) -> ExperimentResult:
     from llenergymeasure.domain.experiment import ExperimentResult
 
     path = Path(path)
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    # Legacy (pre-bundle_version) bundles stamped result.json with a per-artefact
-    # ``schema_version``. That key no longer exists on the model, which forbids
-    # extra fields, so drop it to keep a legacy result.json readable best-effort.
+    content = path.read_text(encoding="utf-8")
+    # A legacy (pre-bundle_version) result.json remains readable best-effort: the
+    # ExperimentResult before-validator drops the retired ``schema_version`` key.
     # (The full legacy-fallback + read path lands with the bundle reader.)
-    if isinstance(raw, dict):
-        raw.pop("schema_version", None)
-    result = ExperimentResult.model_validate(raw)
+    result = ExperimentResult.model_validate_json(content)
 
     sidecar = path.parent / TIMESERIES_FILENAME
     if result.timeseries is not None and not sidecar.exists():

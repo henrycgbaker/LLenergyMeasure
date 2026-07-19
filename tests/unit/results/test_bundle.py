@@ -27,30 +27,13 @@ from llenergymeasure.domain.environment import (
     GPUEnvironment,
     RunnerEnvironment,
 )
-from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
+from llenergymeasure.domain.experiment import RunnerProvenance
 from llenergymeasure.results.bundle import BundleWriter
+from tests.conftest import make_result, write_container_environment_sidecar
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_result(*, with_timeseries: bool = False) -> ExperimentResult:
-    return ExperimentResult(
-        experiment_id="bundle-test-001",
-        measurement_config_hash="aabb1122ccdd3344",
-        input_tokens=192,
-        output_tokens=64,
-        total_tokens=256,
-        total_energy_j=10.0,
-        total_inference_time_sec=2.0,
-        avg_tokens_per_second=128.0,
-        avg_energy_per_token_j=0.039,
-        total_flops=5e10,
-        timeseries="timeseries.parquet" if with_timeseries else None,
-        start_time=datetime(2026, 3, 25, 10, 0, 0),
-        end_time=datetime(2026, 3, 25, 10, 0, 2),
-    )
 
 
 def _make_snapshot() -> EnvironmentSnapshot:
@@ -67,24 +50,6 @@ def _make_snapshot() -> EnvironmentSnapshot:
         cuda_version=None,
         cuda_version_source=None,
     )
-
-
-def _write_container_env(path: Path) -> None:
-    """A rescued in-container environment.json with distinct CONTAINER values."""
-    payload = {
-        "experiment_id": "bundle-test-001",
-        "hardware": {
-            "gpu": {"name": "NVIDIA A100-SXM4-80GB", "vram_total_mb": 81920.0},
-            "cuda": {"version": "12.4", "driver_version": "535.104"},
-            "cpu": {"platform": "Linux"},
-            "collected_at": "2026-01-02T00:00:00",
-        },
-        "python_version": "3.10.14",
-        "tool_version": "0.6.0",
-        "cuda_version": "12.4",
-        "cuda_version_source": "torch",
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _writer(study_dir: Path, *, ts_source_dir: Path | None = None) -> BundleWriter:
@@ -108,7 +73,7 @@ def test_write_result_stamps_bundle_version(tmp_path: Path) -> None:
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir)
-    result_path = writer.write_result(_make_result())
+    result_path = writer.write_result(make_result())
     payload = json.loads(result_path.read_text())
     assert payload["bundle_version"] == BUNDLE_VERSION == "1.0"
 
@@ -119,7 +84,7 @@ def test_write_result_attaches_runner_provenance(tmp_path: Path) -> None:
     study_dir.mkdir()
     writer = _writer(study_dir)
     result_path = writer.write_result(
-        _make_result(),
+        make_result(),
         runner_provenance=RunnerProvenance(mode="docker", image="img:2.0", source="env"),
     )
     payload = json.loads(result_path.read_text())
@@ -147,7 +112,7 @@ def test_write_environment_local_stamps_bundle_version(tmp_path: Path) -> None:
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir, ts_source_dir=tmp_path)
-    writer.write_result(_make_result())
+    writer.write_result(make_result())
     writer.write_environment(
         host_snapshot=_make_snapshot(),
         runner_environment=RunnerEnvironment(mode="local", source="default"),
@@ -170,10 +135,10 @@ def test_write_environment_prefers_rescued_over_host(tmp_path: Path) -> None:
     study_dir.mkdir()
     staging = tmp_path / "staging"
     staging.mkdir()
-    _write_container_env(staging / "environment.json")
+    write_container_environment_sidecar(staging / "environment.json")
 
     writer = _writer(study_dir, ts_source_dir=staging)
-    writer.write_result(_make_result())
+    writer.write_result(make_result())
     writer.write_environment(
         host_snapshot=_make_snapshot(),
         runner_environment=RunnerEnvironment(
@@ -200,7 +165,7 @@ def test_write_environment_docker_without_rescue_warns(tmp_path: Path, caplog) -
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir, ts_source_dir=tmp_path)
-    writer.write_result(_make_result())
+    writer.write_result(make_result())
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.write_environment(
             host_snapshot=_make_snapshot(),
@@ -243,7 +208,7 @@ def test_move_config_sidecar_patches_and_stamps(tmp_path: Path) -> None:
     )
 
     writer = _writer(study_dir, ts_source_dir=staging)
-    writer.write_result(_make_result())
+    writer.write_result(make_result())
     resolution_log = {"task.model": {"effective": "gpt2", "source": "yaml"}}
     writer.move_config_sidecar(resolved_config_hash="resolved_h1", resolution_log=resolution_log)
 
@@ -265,7 +230,7 @@ def test_finalize_warns_missing_config(tmp_path: Path, caplog) -> None:
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir)  # no ts_source_dir -> no config.json to move
-    writer.write_result(_make_result())
+    writer.write_result(make_result())
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.finalize()
     assert any("config.json" in rec.message and "config" in rec.message for rec in caplog.records)
@@ -277,7 +242,7 @@ def test_finalize_warns_declared_but_missing_timeseries(tmp_path: Path, caplog) 
     study_dir.mkdir()
     # Result declares a timeseries but the staged parquet never existed.
     writer = _writer(study_dir, ts_source_dir=tmp_path)
-    writer.write_result(_make_result(with_timeseries=True))
+    writer.write_result(make_result(timeseries="timeseries.parquet"))
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.finalize()
     assert any("timeseries.parquet" in rec.message for rec in caplog.records)
@@ -288,7 +253,7 @@ def test_finalize_no_timeseries_warning_when_none_declared(tmp_path: Path, caplo
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir, ts_source_dir=tmp_path)
-    writer.write_result(_make_result(with_timeseries=False))
+    writer.write_result(make_result())
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.finalize()
     assert not any("timeseries.parquet" in rec.message for rec in caplog.records)
@@ -316,7 +281,7 @@ def test_finalize_sweeps_newly_registered_artefact(tmp_path: Path, caplog, monke
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir)
-    writer.write_result(_make_result())
+    writer.write_result(make_result())
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.finalize()
     assert any(

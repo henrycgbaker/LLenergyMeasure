@@ -21,6 +21,7 @@ from llenergymeasure.study.runner import (
     _runner_environment,
     _save_and_record,
 )
+from tests.conftest import write_container_environment_sidecar
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -359,28 +360,6 @@ def _make_host_snapshot():
     )
 
 
-def _write_container_environment_sidecar(path: Path) -> dict:
-    """Write a rescued in-container environment.json (distinct CONTAINER values)."""
-    import json
-
-    payload = {
-        "experiment_id": "test-save-record-001",
-        "measurement_config_hash": "aabb1122ccdd3344",
-        "hardware": {
-            "gpu": {"name": "NVIDIA A100-SXM4-80GB", "vram_total_mb": 81920.0},
-            "cuda": {"version": "12.4", "driver_version": "535.104"},
-            "cpu": {"platform": "Linux"},
-            "collected_at": "2026-01-02T00:00:00",
-        },
-        "python_version": "3.10.14",
-        "tool_version": "0.11.0",
-        "cuda_version": "12.4",
-        "cuda_version_source": "torch",
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    return payload
-
-
 def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
     """Under docker dispatch, the rescued in-container environment.json is
     preferred over the host snapshot for the persisted environment.json."""
@@ -390,7 +369,7 @@ def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
     study_dir.mkdir()
 
     # Container rescued environment.json lives in the artefact (ts_source) dir.
-    _write_container_environment_sidecar(tmp_path / "environment.json")
+    write_container_environment_sidecar(tmp_path / "environment.json")
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
@@ -743,7 +722,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    _write_container_environment_sidecar(tmp_path / "environment.json")
+    write_container_environment_sidecar(tmp_path / "environment.json")
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
