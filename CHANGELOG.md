@@ -19,6 +19,22 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   (`scripts/ci/check_absorbed_bump.py`) wired into `engine-rules-check.yml`.
   ([#849])
 
+### Changed
+
+- The Renovate config now documents its one-engine-per-bump-PR policy: each
+  engine's regex-managed pin (`engine_versions/<engine>/current.yaml`) keeps its
+  own package rule with no shared `groupName`, so a version bump opens a separate
+  reviewable PR per engine rather than batching several engines into one diff.
+  ([#850])
+
+### Removed
+
+- Deleted the orphaned `scripts/_drift.py` landmark-drift probe (493 LoC) and
+  its test. It had no CI, Makefile, or `absorb.py` consumer; the per-producer
+  `LANDMARKS` tuples it read remain in the version-pinned schema introspectors
+  and are still resolved host-side by the transformers producer unit test.
+  ([#850])
+
 ### Fixed
 
 - Docker-runner rescue tests (`TestConfigSidecarRescue`, `TestTimeseriesParquetRescue`)
@@ -1194,4 +1210,8 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#843]: https://github.com/henrycgbaker/llenergymeasure/pull/843
 [#844]: https://github.com/henrycgbaker/llenergymeasure/pull/844
 [#845]: https://github.com/henrycgbaker/llenergymeasure/pull/845
+<<<<<<< HEAD
+[#850]: https://github.com/henrycgbaker/llenergymeasure/pull/850
+=======
 [#849]: https://github.com/henrycgbaker/llenergymeasure/pull/849
+>>>>>>> origin/main

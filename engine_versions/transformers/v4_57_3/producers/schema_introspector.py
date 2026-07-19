@@ -29,10 +29,10 @@ from scripts.engine_producers._common import (
 #
 # The introspector runs inside ``llenergymeasure:transformers-<tag>`` and
 # lifts engine parameter specs via ``inspect.signature(from_pretrained)``
-# and sampling parameter specs via ``GenerationConfig().to_dict()``. The
-# drift tool (``scripts/_drift.py``) reads this tuple via the dispatcher
-# and resolves each dotted path under the installed library before
-# discovery runs; a missing landmark flips the probe verdict to ``fail``.
+# and sampling parameter specs via ``GenerationConfig().to_dict()``.
+# ``LANDMARKS`` names the dotted paths this introspector must resolve under
+# the installed library before discovery runs; a missing landmark means an
+# upstream refactor the maintainer re-points during the bump.
 LANDMARKS: tuple[str, ...] = (
     "transformers.AutoModelForCausalLM",
     "transformers.AutoModelForCausalLM.from_pretrained",

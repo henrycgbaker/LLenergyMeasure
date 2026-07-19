@@ -28,13 +28,15 @@ it. A stderr log line names the fallback so the cell's run log surfaces
 which producer was used.
 
 This makes patch-version bumps zero-touch when LANDMARKS still resolve
-under the new library: Renovate bumps ``current_version`` to ``0.7.4``, the
-dispatcher falls back to ``v0_7_3/producers/``, and the probe (run by
-``scripts._drift``) verifies the LANDMARKS still resolve under the live
-``vllm==0.7.4``. The probe is the runtime gate; if a fallback producer's
-landmarks no longer resolve at the new library version, the probe fails
-red and the maintainer either patches LANDMARKS in the fallback producer
-or vendors a fresh ``vN/producers/`` directory.
+under the new library: Renovate bumps ``current_version`` to ``0.7.4`` and
+the dispatcher falls back to ``v0_7_3/producers/``. Whether that fallback
+producer's LANDMARKS still resolve under the live ``vllm==0.7.4`` is
+confirmed when the maintainer re-runs discovery during the bump (and, for
+the current transformers pin, host-side by the producer LANDMARKS unit
+test in ``tests/unit/scripts/test_engine_producers_common.py``). If a
+landmark no longer resolves, discovery surfaces it and the maintainer
+either patches LANDMARKS in the fallback producer or vendors a fresh
+``vN/producers/`` directory.
 
 When no vendored archive exists at or below the target, the dispatcher
 raises ``ModuleNotFoundError`` with the path the maintainer needs to create.

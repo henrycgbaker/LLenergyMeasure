@@ -14,9 +14,10 @@ Surface contract:
   - SamplingParams is a dataclass with public fields
   - tensorrt_llm.__commit__ is not exposed (null)
 
-The ``LANDMARKS`` tuple is the probe contract (``scripts/_drift.py`` resolves
-each dotted path under the installed library before discovery runs); a missing
-entry flips the probe verdict to ``fail``.
+The ``LANDMARKS`` tuple names the dotted attribute paths this introspector must
+resolve under the installed library before discovery runs. A missing entry means
+an upstream refactor moved a symbol the introspector depends on; the maintainer
+re-points LANDMARKS (or vendors a fresh producer) during the bump.
 """
 
 from __future__ import annotations

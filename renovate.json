@@ -1,6 +1,14 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "description": [
+    "Policy: engine version pins (engine_versions/<engine>/current.yaml) bump ONE engine per PR.",
+    "Each engine's regex-managed dep has its own packageRule with no shared groupName, so Renovate",
+    "opens a separate branch/PR per engine (its default for distinct packages: transformers, vllm,",
+    "tensorrt-llm). Do not add a shared groupName across engines. One engine per bump PR keeps the",
+    "PR reviewable and its absorb diff self-contained (evidence: #792's 23-file single-engine bump",
+    "vs #738's 82-file multi-engine diff)."
+  ],
   "enabledManagers": ["dockerfile", "custom.regex", "pep621", "github-actions"],
   "gitIgnoredAuthors": ["llem-ci-bot[bot]"],
   "dockerfile": {
@@ -36,6 +44,7 @@
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["transformers"],
+      "description": "Engine pin: transformers. Own PR, one engine per bump (see top-level policy).",
       "labels": ["renovate", "engine-transformers"],
       "automerge": false,
       "minimumReleaseAge": "14 days"
@@ -43,6 +52,7 @@
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["vllm"],
+      "description": "Engine pin: vllm. Own PR, one engine per bump (see top-level policy).",
       "labels": ["renovate", "engine-vllm"],
       "automerge": false,
       "minimumReleaseAge": "14 days"
@@ -50,6 +60,7 @@
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["tensorrt-llm"],
+      "description": "Engine pin: tensorrt. Own PR, one engine per bump (see top-level policy).",
       "labels": ["renovate", "engine-tensorrt"],
       "automerge": false,
       "minimumReleaseAge": "14 days"
