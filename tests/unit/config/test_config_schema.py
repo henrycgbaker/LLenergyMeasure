@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from llenergymeasure.config.models import ExperimentConfig, OutputConfig
-from llenergymeasure.config.ssot import DTYPE_SUPPORT
+from llenergymeasure.config.ssot import ENGINES
 from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
@@ -253,9 +253,9 @@ def test_valid_dtype_bfloat16():
     assert config.transformers.engine_params.dtype == "bfloat16"
 
 
-@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])  # type: ignore[index]  # Engine is str-enum
+@pytest.mark.parametrize("dt", ENGINES["transformers"].dtypes)  # type: ignore[index]  # Engine is str-enum
 def test_all_pytorch_dtypes_valid(dt):
-    """Schema-driven: all SSOT DTYPE_SUPPORT['transformers'] values are valid."""
+    """Schema-driven: all SSOT ENGINES['transformers'].dtypes values are valid."""
     config = make_config(dtype=dt)
     assert config.transformers.engine_params.dtype == dt
 

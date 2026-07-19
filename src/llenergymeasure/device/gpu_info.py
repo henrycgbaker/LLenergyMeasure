@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
-from llenergymeasure.config.ssot import Engine
+from llenergymeasure.config.ssot import ENGINES, Engine
 
 logger = logging.getLogger(__name__)
 
@@ -121,39 +121,41 @@ def get_gpu_architecture(device_index: int = 0) -> str:
 def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     """Determine GPU indices to monitor for an experiment.
 
-    Rules per engine:
-    - **vLLM**: tensor_parallel_size * pipeline_parallel_size GPUs. Both are known
-      from config before the harness runs, so gpu_indices = list(range(total)).
-    - **Transformers**: device_map="auto" (or any non-None device_map) monitors all
-      NVML-visible GPUs. Model sharding is determined at load time inside
-      harness.run(), but gpu_indices must be passed *before* load. Using all
-      visible GPUs is correct and safe.
-    - **TensorRT-LLM**: tensor_parallel_size GPUs. Known from config before harness runs.
-    - **Otherwise**: [0] (single-GPU default, backward compatible).
+    Generic over each engine's ``ParallelismModel`` (from ``ssot.ENGINES``):
+
+    - **multiply_fields** (vLLM ``tensor_parallel_size * pipeline_parallel_size``,
+      TensorRT-LLM ``tensor_parallel_size``): the product of the named config
+      fields (each defaulting to 1) is known before the harness runs, so
+      gpu_indices = list(range(total)).
+    - **all_visible_field** (transformers ``device_map``): a non-None value means
+      the model shards across all NVML-visible GPUs. Sharding is decided at load
+      time inside harness.run(), but gpu_indices must be passed *before* load, so
+      measuring all visible GPUs is correct and safe.
+    - **Neither / no engine section**: [0] (single-GPU default, backward compatible).
 
     Note: num_processes > 1 (data parallelism via Accelerate) is not handled here.
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    if config.engine == Engine.VLLM and config.vllm is not None:
-        tp = 1
-        pp = 1
-        engine_params = config.active_engine_params()
-        if engine_params is not None:
-            tp = engine_params.tensor_parallel_size or 1
-            pp = engine_params.pipeline_parallel_size or 1
-        total = tp * pp
+    try:
+        engine = Engine(config.engine)
+    except ValueError:
+        return [0]  # Unrecognised engine - single-GPU default (backward compatible).
+    section = getattr(config, engine.value, None)
+    engine_params = getattr(section, "engine_params", None) if section is not None else None
+    if engine_params is None:
+        return [0]
+
+    parallelism = ENGINES[engine].parallelism
+    if parallelism.multiply_fields:
+        total = 1
+        for field in parallelism.multiply_fields:
+            total *= getattr(engine_params, field, None) or 1
         if total > 1:
             return list(range(total))
-    elif config.engine == Engine.TENSORRT and config.tensorrt is not None:
-        engine_params = config.active_engine_params()
-        tp = (engine_params.tensor_parallel_size or 1) if engine_params is not None else 1
-        if tp > 1:
-            return list(range(tp))
     elif (
-        config.engine == Engine.TRANSFORMERS
-        and config.transformers is not None
-        and getattr(config.active_engine_params(), "device_map", None) is not None
+        parallelism.all_visible_field is not None
+        and getattr(engine_params, parallelism.all_visible_field, None) is not None
     ):
         # Model will shard across all visible GPUs - measure all of them.
         # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].
