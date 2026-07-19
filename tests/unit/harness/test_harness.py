@@ -670,14 +670,17 @@ def test_inference_time_sec_used_in_result(minimal_config):
     engine = FakeBackend(inference_output=custom_output)
     harness = MeasurementHarness()
 
-    # load_model bracket: 50 -> 52; inference bracket: 100 -> 105.
+    # load_model bracket (measurement.time): 50 -> 52; inference bracket
+    # (bracket.time): 100 -> 105. Both draw from one shared perf_counter iterator.
     perf_counter_values = iter([50.0, 52.0, 100.0, 105.0])
+    mock_time = MagicMock()
+    mock_time.perf_counter.side_effect = lambda: next(perf_counter_values)
 
     with (
         _apply_patches(),
-        patch("llenergymeasure.harness.measurement.time") as mock_time,
+        patch("llenergymeasure.harness.measurement.time", new=mock_time),
+        patch("llenergymeasure.harness.bracket.time", new=mock_time),
     ):
-        mock_time.perf_counter.side_effect = lambda: next(perf_counter_values)
         result = harness.run(engine, minimal_config)
 
     assert result.total_inference_time_sec == pytest.approx(5.0), (

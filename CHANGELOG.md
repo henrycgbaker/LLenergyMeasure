@@ -50,6 +50,10 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- Internal restructure (no behavior or results change): the measured-window
+  mechanics are extracted into a mode-agnostic `MeasurementBracket`
+  (`llenergymeasure.harness.bracket`) and per-model-load state is split from
+  per-window state, groundwork for a future server measurement mode.
 - **Breaking (results bundle):** the three independent per-artefact
   `schema_version` counters are replaced by a single `bundle_version` ("1.0")
   stamped into `result.json`, `config.json`, and `environment.json`. The bundle
