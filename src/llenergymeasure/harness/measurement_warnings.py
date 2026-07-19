@@ -14,6 +14,7 @@ def collect_measurement_warnings(
     temp_end_c: float | None,
     nvml_sample_count: int,
     energy_measurement_present: bool = True,
+    energy_sampler_reasons: list[str] | None = None,
     # thermal_drift_threshold default 10C - confidence LOW, no peer citation, flagged for validation
     thermal_drift_threshold_c: float = 10.0,
 ) -> list[str]:
@@ -42,6 +43,10 @@ def collect_measurement_warnings(
         energy_measurement_present: Whether the authoritative energy backend produced a
             measurement. False means energy was not measured (sampler unavailable or
             disabled); reported energy is absent, not a measured zero.
+        energy_sampler_reasons: Per-sampler probe why-chain from auto-selection (e.g.
+            "zeus: package not installed"). When energy is absent and this is
+            non-empty, the reasons are appended to the energy_measurement_unavailable
+            warning so the diagnosis is structured, not only in the log.
         thermal_drift_threshold_c: Maximum acceptable temperature change in Celsius.
             Default 10C - confidence LOW (engineering judgement, no peer citation,
             flagged for validation).
@@ -85,10 +90,13 @@ def collect_measurement_warnings(
 
     # 5. Authoritative energy measurement absent
     if not energy_measurement_present:
-        warnings.append(
+        message = (
             "energy_measurement_unavailable: no energy sampler produced a measurement; "
             "reported energy is absent, not a measured zero. Set an explicit energy "
             "backend or install a supported sampler (zeus/nvml/codecarbon)."
         )
+        if energy_sampler_reasons:
+            message = f"{message} Sampler probe results: {'; '.join(energy_sampler_reasons)}."
+        warnings.append(message)
 
     return warnings

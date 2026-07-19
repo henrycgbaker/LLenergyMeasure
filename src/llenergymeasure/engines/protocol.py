@@ -132,12 +132,18 @@ class EnginePlugin(Protocol):
         ...
 
     def check_hardware(self, config: ExperimentConfig) -> list[str]:
-        """Return host-GPU compatibility errors (empty list when compatible).
+        """Return host/engine compatibility errors (empty list when compatible).
+
+        The single preflight compatibility hook: it carries host-GPU hardware
+        gates AND engine-specific config/checkpoint compatibility (e.g. TRT-LLM
+        rejecting HF pre-quantised AWQ/GPTQ checkpoints).
 
         - Never raises; errors propagate via the returned list.
-        - Returns ``[]`` when no GPU is visible (containers without a visible
-          device must not block at config time).
-        - Pure: no weight loading, no GPU allocation, no engine construction.
+        - GPU-dependent gates return ``[]`` when no GPU is visible (containers
+          without a visible device must not block at config time); GPU-independent
+          config/checkpoint checks may still return errors in that case.
+        - No weight loading, no GPU allocation, no engine construction. May read
+          model metadata (e.g. a checkpoint ``config.json``), not weights.
         """
         ...
 

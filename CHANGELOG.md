@@ -84,6 +84,17 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `EnginePlugin.load_model` protocol return type tightens to `tuple[Any, Any]`, and two
   unreachable TensorRT plugin guards (already enforced at config validation) are removed.
   ([#852])
+- The TensorRT HF pre-quantised-checkpoint gate (AWQ/GPTQ rejection unless a
+  prebuilt `engine_path` is supplied) is folded into the tensorrt plugin's
+  `check_hardware` hook and no longer a standalone preflight step. Preflight now
+  routes every engine uniformly through `check_hardware`, so there is one
+  compatibility seam instead of an engine-specific branch. Behaviour is unchanged
+  (same error, same actionable message); the `check_hardware` contract now also
+  carries GPU-independent config/checkpoint-compat errors. ([#855])
+- The vLLM `gpu_memory_utilization` pre-allocation heuristic (deciding whether a
+  torch peak reading is really vLLM's up-front reservation) is extracted from
+  `run_inference` to a named, unit-tested `_peak_matches_vllm_prealloc` helper.
+  Internal refactor, no behavior change. ([#855])
 
 ### Removed
 
@@ -99,6 +110,14 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   no longer flake under randomized test ordering: the `tempfile.mkdtemp` mock now routes
   by prefix instead of assuming a fixed call count, so the process-cached dispatch-asset
   materialisation can no longer steal the rescue tempdir slot.
+- `TransformersEngine.load_model` now wraps model/tokenizer construction failures
+  in `EngineError` (naming the model and engine), at parity with the vllm and
+  tensorrt plugins. A missing/gated model, OOM, or bad dtype at load time surfaces
+  as one actionable error rather than a bare transformers traceback. ([#855])
+- When energy auto-selection finds no available sampler, the per-sampler probe
+  reasons ("zeus: package not installed", ...) are now folded into the structured
+  `energy_measurement_unavailable` measurement warning, not only logged. Containers
+  and CI surface why energy was unavailable without log spelunking. ([#855])
 
 ## [v0.6.0] - 2026-07-18
 
@@ -1274,3 +1293,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#852]: https://github.com/henrycgbaker/llenergymeasure/pull/852
 [#853]: https://github.com/henrycgbaker/llenergymeasure/pull/853
 [#854]: https://github.com/henrycgbaker/llenergymeasure/pull/854
+[#855]: https://github.com/henrycgbaker/llenergymeasure/pull/855

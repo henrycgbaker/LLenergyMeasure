@@ -15,7 +15,6 @@ from pathlib import Path
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine
 from llenergymeasure.utils.exceptions import PreFlightError
-from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
 
@@ -81,89 +80,6 @@ def _check_model_accessible(model_id: str) -> str | None:
         # Network error, timeout, etc. - don't block
         logger.debug("Model accessibility check skipped (network error): %s", exc)
         return None
-
-
-# TRT-LLM's LLM API cannot load AutoAWQ / AutoGPTQ community-format HF
-# checkpoints directly on EITHER backend at 1.2.1 (live-verified against
-# Qwen2.5-0.5B-Instruct-AWQ): the trt backend raises NotImplementedError on the
-# config.json quant_method (llm_utils.py only handles fp8/mxfp4 there), and the
-# pytorch backend asserts on the weight layout (linear.py expects the ModelOpt
-# packing, not AutoAWQ's qweight). TRT-LLM's supported pre-quantised path is its
-# own ModelOpt export (hf_quant_config.json) or a pre-built engine via
-# engine_path. Detection keys on the HF-declared quant_method rather than a
-# regex over model ids, so user-renamed forks are still caught - extend by
-# adding the canonical quant_method string, not a pattern.
-_TRT_UNSUPPORTED_HF_QUANT_METHODS: tuple[str, ...] = ("awq", "gptq")
-
-
-def _read_model_quant_method(model_id: str) -> str | None:
-    """Return the HF ``quantization_config.quant_method`` for *model_id*, or None.
-
-    ``quantization_config.quant_method`` is HF's authoritative quantisation
-    declaration - every quantisation library (AutoAWQ, AutoGPTQ, bitsandbytes,
-    compressed-tensors) writes it, so it's the stable signal for "is this
-    checkpoint pre-quantised, and how?".
-
-    Returns None for both "no quantisation declared" AND "couldn't determine"
-    (network error, missing config, malformed JSON, no huggingface_hub
-    installed). Callers must treat None as "not detected, proceed" rather
-    than "definitely unquantised" - failing closed on transient errors would
-    block legitimate runs on every network hiccup.
-    """
-    import json
-
-    config_data: dict[str, object] | None = None
-
-    if model_id.startswith(("/", "./", "~")):
-        config_path = Path(model_id).expanduser() / "config.json"
-        try:
-            config_data = load_json(config_path)
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.debug("Could not read local config.json for %s: %s", model_id, exc)
-            return None
-    else:
-        if importlib.util.find_spec("huggingface_hub") is None:
-            return None
-        try:
-            from huggingface_hub import hf_hub_download
-
-            local = hf_hub_download(repo_id=model_id, filename="config.json")
-            config_data = load_json(local)
-        except Exception as exc:
-            logger.debug("Could not fetch HF config.json for %s: %s", model_id, exc)
-            return None
-
-    quant_block = config_data.get("quantization_config") if isinstance(config_data, dict) else None
-    if not isinstance(quant_block, dict):
-        return None
-    method = quant_block.get("quant_method")
-    return method.lower() if isinstance(method, str) else None
-
-
-def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
-    """Reject HF pre-quantised checkpoints on TRT-LLM unless ``engine_path`` is set."""
-    if config.engine != Engine.TENSORRT:
-        return None
-
-    # engine_path is an extra="allow" passthrough inside engine_params (matches
-    # the tensorrt plugin's read in _build_llm_kwargs).
-    engine_params = config.active_engine_params()
-    if engine_params is not None and getattr(engine_params, "engine_path", None):
-        return None
-
-    method = _read_model_quant_method(config.task.model)
-    if method is None or method not in _TRT_UNSUPPORTED_HF_QUANT_METHODS:
-        return None
-
-    return (
-        f"{config.task.model} is an HF {method.upper()} checkpoint; TRT-LLM's LLM API "
-        f"cannot load it on either backend at 1.2.1 (the trt backend rejects the "
-        f"quant_method, the pytorch backend rejects the weight layout). Use a "
-        f"ModelOpt-quantised checkpoint (with hf_quant_config.json) instead, or "
-        f"pre-build a TRT-LLM engine (`trtllm-build --checkpoint_dir <converted> ...`) "
-        f"and set `tensorrt.engine_params.engine_path` to the build output. See "
-        f"docs/how-to/run-with-tensorrt-llm.md#hf-pre-quantised-checkpoints."
-    )
 
 
 def _warn_if_persistence_mode_off(gpu_indices: list[int] | None = None) -> None:
@@ -233,8 +149,11 @@ def run_preflight(config: ExperimentConfig) -> None:
     if model_error is not None:
         failures.append(model_error)
 
-    # Check 4: Hardware compatibility (invariants validator runs at
-    # config-load; this catches host-GPU-dependent issues via check_hardware).
+    # Check 4: Hardware + checkpoint compatibility via the engine's check_hardware
+    # hook (invariants validator runs at config-load; this catches host-GPU-dependent
+    # issues plus engine-specific config/checkpoint compatibility, e.g. TRT-LLM
+    # rejecting HF pre-quantised AWQ/GPTQ checkpoints). Every engine routes through
+    # the same hook - no engine-specific branches here.
     try:
         from llenergymeasure.engines.probe_adapter import build_config_probe
 
@@ -242,11 +161,6 @@ def run_preflight(config: ExperimentConfig) -> None:
         failures.extend(engine_errors)
     except Exception:
         pass  # get_engine may fail if engine not installed - already caught by Check 2
-
-    # Check 5: TRT-LLM cannot consume HF pre-quantised checkpoints natively.
-    checkpoint_error = _check_tensorrt_checkpoint_compat(config)
-    if checkpoint_error is not None:
-        failures.append(checkpoint_error)
 
     if failures:
         n = len(failures)

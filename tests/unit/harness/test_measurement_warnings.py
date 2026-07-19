@@ -157,3 +157,48 @@ def test_returns_list_of_strings():
     result = collect_measurement_warnings(30.0, True, 40.0, 40.0, 0)
     assert isinstance(result, list)
     assert all(isinstance(w, str) for w in result)
+
+
+# ---------------------------------------------------------------------------
+# energy_sampler_reasons: the per-sampler probe why-chain enriches the
+# energy_measurement_unavailable warning (structured backup for the log-only
+# diagnostic).
+# ---------------------------------------------------------------------------
+
+
+def test_energy_reasons_appended_when_absent():
+    """Probe reasons are folded into the unavailable warning when energy is absent."""
+    reasons = ["zeus: package not installed", "nvml: is_available() returned False"]
+    warnings = collect_measurement_warnings(
+        30.0, True, 40.0, 40.0, 50, energy_measurement_present=False, energy_sampler_reasons=reasons
+    )
+    unavailable = [w for w in warnings if "energy_measurement_unavailable" in w]
+    assert len(unavailable) == 1
+    assert "Sampler probe results:" in unavailable[0]
+    assert "zeus: package not installed" in unavailable[0]
+    assert "nvml: is_available() returned False" in unavailable[0]
+
+
+def test_energy_reasons_ignored_when_present():
+    """Reasons never surface when energy WAS measured (no unavailable warning)."""
+    warnings = collect_measurement_warnings(
+        30.0,
+        True,
+        40.0,
+        40.0,
+        50,
+        energy_measurement_present=True,
+        energy_sampler_reasons=["zeus: package not installed"],
+    )
+    assert not any("energy_measurement_unavailable" in w for w in warnings)
+    assert not any("Sampler probe results" in w for w in warnings)
+
+
+def test_energy_absent_without_reasons_stays_generic():
+    """Empty/omitted reasons keep the generic unavailable message (no dangling text)."""
+    warnings = collect_measurement_warnings(
+        30.0, True, 40.0, 40.0, 50, energy_measurement_present=False, energy_sampler_reasons=[]
+    )
+    unavailable = [w for w in warnings if "energy_measurement_unavailable" in w]
+    assert len(unavailable) == 1
+    assert "Sampler probe results" not in unavailable[0]

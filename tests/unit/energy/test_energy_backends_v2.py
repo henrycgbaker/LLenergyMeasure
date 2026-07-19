@@ -537,3 +537,64 @@ def test_codecarbon_stop_tracking_none_tracker_is_empty() -> None:
     assert isinstance(result, EnergyMeasurement)
     assert result.total_j == 0.0
     assert result.per_gpu_j is None
+
+
+# ---------------------------------------------------------------------------
+# select_energy_sampler_with_diagnostics - reasons handoff for the harness
+# ---------------------------------------------------------------------------
+
+
+def test_select_with_diagnostics_none_returns_no_reasons() -> None:
+    """Intentional disable (None) returns (None, []) - no diagnostics wanted."""
+    from llenergymeasure.energy import select_energy_sampler_with_diagnostics
+
+    sampler, reasons = select_energy_sampler_with_diagnostics(None)
+    assert sampler is None
+    assert reasons == []
+
+
+def test_select_with_diagnostics_auto_none_carries_reasons() -> None:
+    """When auto-selection finds nothing, the per-sampler why-chain is returned.
+
+    This is the structured backup that lets the harness surface the reason
+    energy came up empty in measurement_warnings, not only the log.
+    """
+    from llenergymeasure.energy import select_energy_sampler_with_diagnostics
+
+    with (
+        patch("importlib.util.find_spec", return_value=None),
+        patch("llenergymeasure.energy.NVMLSampler.is_available", return_value=False),
+    ):
+        sampler, reasons = select_energy_sampler_with_diagnostics("auto")
+
+    assert sampler is None
+    assert any("zeus" in r for r in reasons)
+    assert any("nvml" in r for r in reasons)
+    assert any("codecarbon" in r for r in reasons)
+
+
+def test_select_with_diagnostics_auto_success_has_empty_reasons() -> None:
+    """A successful auto-selection returns the sampler and no reasons."""
+    from llenergymeasure.energy import select_energy_sampler_with_diagnostics
+
+    def fake_find_spec(name: str):
+        return None if name == "zeus" else MagicMock()
+
+    with (
+        patch("importlib.util.find_spec", side_effect=fake_find_spec),
+        patch("llenergymeasure.energy.NVMLSampler.is_available", return_value=True),
+    ):
+        sampler, reasons = select_energy_sampler_with_diagnostics("auto")
+
+    assert sampler is not None
+    assert reasons == []
+
+
+def test_select_energy_sampler_wrapper_still_returns_bare_sampler() -> None:
+    """The bare select_energy_sampler wrapper is unchanged (single return value)."""
+    with (
+        patch("importlib.util.find_spec", return_value=None),
+        patch("llenergymeasure.energy.NVMLSampler.is_available", return_value=False),
+    ):
+        result = select_energy_sampler("auto")
+    assert result is None

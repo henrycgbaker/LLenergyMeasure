@@ -17,6 +17,7 @@ engine is ready.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import time
@@ -27,8 +28,91 @@ from typing import Any
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.utils.exceptions import ConfigError, EngineError
+from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
+
+# TRT-LLM's LLM API cannot load AutoAWQ / AutoGPTQ community-format HF
+# checkpoints directly on EITHER backend at 1.2.1 (live-verified against
+# Qwen2.5-0.5B-Instruct-AWQ): the trt backend raises NotImplementedError on the
+# config.json quant_method (llm_utils.py only handles fp8/mxfp4 there), and the
+# pytorch backend asserts on the weight layout (linear.py expects the ModelOpt
+# packing, not AutoAWQ's qweight). TRT-LLM's supported pre-quantised path is its
+# own ModelOpt export (hf_quant_config.json) or a pre-built engine via
+# engine_path. Detection keys on the HF-declared quant_method rather than a
+# regex over model ids, so user-renamed forks are still caught - extend by
+# adding the canonical quant_method string, not a pattern.
+_TRT_UNSUPPORTED_HF_QUANT_METHODS: tuple[str, ...] = ("awq", "gptq")
+
+
+def _read_model_quant_method(model_id: str) -> str | None:
+    """Return the HF ``quantization_config.quant_method`` for *model_id*, or None.
+
+    ``quantization_config.quant_method`` is HF's authoritative quantisation
+    declaration - every quantisation library (AutoAWQ, AutoGPTQ, bitsandbytes,
+    compressed-tensors) writes it, so it's the stable signal for "is this
+    checkpoint pre-quantised, and how?".
+
+    Returns None for both "no quantisation declared" AND "couldn't determine"
+    (network error, missing config, malformed JSON, no huggingface_hub
+    installed). Callers must treat None as "not detected, proceed" rather
+    than "definitely unquantised" - failing closed on transient errors would
+    block legitimate runs on every network hiccup.
+    """
+    config_data: dict[str, object] | None = None
+
+    if model_id.startswith(("/", "./", "~")):
+        config_path = Path(model_id).expanduser() / "config.json"
+        try:
+            config_data = load_json(config_path)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.debug("Could not read local config.json for %s: %s", model_id, exc)
+            return None
+    else:
+        if importlib.util.find_spec("huggingface_hub") is None:
+            return None
+        try:
+            from huggingface_hub import hf_hub_download
+
+            local = hf_hub_download(repo_id=model_id, filename="config.json")
+            config_data = load_json(local)
+        except Exception as exc:
+            logger.debug("Could not fetch HF config.json for %s: %s", model_id, exc)
+            return None
+
+    quant_block = config_data.get("quantization_config") if isinstance(config_data, dict) else None
+    if not isinstance(quant_block, dict):
+        return None
+    method = quant_block.get("quant_method")
+    return method.lower() if isinstance(method, str) else None
+
+
+def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
+    """Reject HF pre-quantised checkpoints on TRT-LLM unless ``engine_path`` is set.
+
+    A checkpoint-compatibility check (GPU-independent): reads the HF-declared
+    quant_method and rejects AWQ/GPTQ community checkpoints, which TRT-LLM's LLM
+    API cannot load unless the user supplied a prebuilt engine via ``engine_path``.
+    """
+    # engine_path is an extra="allow" passthrough inside engine_params (matches
+    # this plugin's read in _build_llm_kwargs).
+    engine_params = config.active_engine_params()
+    if engine_params is not None and getattr(engine_params, "engine_path", None):
+        return None
+
+    method = _read_model_quant_method(config.task.model)
+    if method is None or method not in _TRT_UNSUPPORTED_HF_QUANT_METHODS:
+        return None
+
+    return (
+        f"{config.task.model} is an HF {method.upper()} checkpoint; TRT-LLM's LLM API "
+        f"cannot load it on either backend at 1.2.1 (the trt backend rejects the "
+        f"quant_method, the pytorch backend rejects the weight layout). Use a "
+        f"ModelOpt-quantised checkpoint (with hf_quant_config.json) instead, or "
+        f"pre-build a TRT-LLM engine (`trtllm-build --checkpoint_dir <converted> ...`) "
+        f"and set `tensorrt.engine_params.engine_path` to the build output. See "
+        f"docs/how-to/run-with-tensorrt-llm.md#hf-pre-quantised-checkpoints."
+    )
 
 
 def _validate_engine_directory(engine_path: Path, tp_size: int) -> list[str]:
@@ -490,24 +574,32 @@ class TensorRTEngine:
 
     @staticmethod
     def check_hardware(config: ExperimentConfig) -> list[str]:
-        """Check SM capability + FP8 requirements against the visible GPU.
+        """Return checkpoint-compat + SM/FP8 compatibility errors for TRT-LLM.
 
-        Gates:
-          - SM >= 7.5 (Turing minimum for TRT-LLM)
-          - FP8 weight quant requires SM >= 8.9 (Ada Lovelace / Hopper)
-          - FP8 KV-cache quant requires SM >= 8.9
+        Two classes of check, both surfaced through this one hook so the harness
+        preflight routes every engine uniformly through ``check_hardware``:
 
-        Returns ``[]`` when no GPU is visible.
+        - Checkpoint compatibility (GPU-independent): reject HF pre-quantised
+          AWQ/GPTQ checkpoints, which TRT-LLM's LLM API cannot load unless a
+          prebuilt ``engine_path`` is supplied. Runs regardless of GPU visibility.
+        - Hardware gates (need a visible GPU): SM >= 7.5 (Turing minimum); FP8
+          weight quant and FP8 KV-cache quant each require SM >= 8.9 (Ada
+          Lovelace / Hopper). Skipped when no GPU is visible.
         """
+        errors: list[str] = []
+
+        checkpoint_error = _check_tensorrt_checkpoint_compat(config)
+        if checkpoint_error is not None:
+            errors.append(checkpoint_error)
+
         from llenergymeasure.device.gpu_info import get_compute_capability
 
         sm = get_compute_capability()
         if sm is None:
-            return []
+            return errors
 
         major, minor = sm
         sm_float = major + minor / 10
-        errors: list[str] = []
 
         if sm_float < 7.5:
             errors.append(

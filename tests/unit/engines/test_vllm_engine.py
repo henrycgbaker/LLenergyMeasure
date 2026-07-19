@@ -903,3 +903,45 @@ class TestFlashAttnFieldsWired:
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_version"] == 2
         assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 16
+
+
+# ---------------------------------------------------------------------------
+# _peak_matches_vllm_prealloc: the extracted gpu_memory_utilization heuristic.
+# A torch peak within 5% of gpu_memory_utilization * total_vram is vLLM's
+# up-front reservation, not the inference working set.
+# ---------------------------------------------------------------------------
+
+
+class TestPeakMatchesVllmPrealloc:
+    def test_exact_match_is_prealloc(self):
+        from llenergymeasure.engines.vllm.plugin import _peak_matches_vllm_prealloc
+
+        # expected = 40000 * 0.9 = 36000; peak == expected -> pre-allocation.
+        assert _peak_matches_vllm_prealloc(36000.0, 40000.0, 0.9) is True
+
+    def test_just_inside_5pct_is_prealloc(self):
+        from llenergymeasure.engines.vllm.plugin import _peak_matches_vllm_prealloc
+
+        expected = 40000.0 * 0.9  # 36000
+        # 4.9% below expected -> still counted as pre-allocation.
+        assert _peak_matches_vllm_prealloc(expected * 0.951, 40000.0, 0.9) is True
+
+    def test_at_5pct_boundary_is_not_prealloc(self):
+        from llenergymeasure.engines.vllm.plugin import _peak_matches_vllm_prealloc
+
+        expected = 40000.0 * 0.9
+        # Exactly 5% off: strict `< 0.05` means this is NOT pre-allocation.
+        assert _peak_matches_vllm_prealloc(expected * 0.95, 40000.0, 0.9) is False
+
+    def test_far_below_is_real_usage(self):
+        from llenergymeasure.engines.vllm.plugin import _peak_matches_vllm_prealloc
+
+        # Real inference working set well under the reservation -> not prealloc.
+        assert _peak_matches_vllm_prealloc(12000.0, 40000.0, 0.9) is False
+
+    def test_non_positive_expected_returns_false(self):
+        from llenergymeasure.engines.vllm.plugin import _peak_matches_vllm_prealloc
+
+        # No VRAM reading or zero utilisation -> keep the torch value (no div-by-zero).
+        assert _peak_matches_vllm_prealloc(36000.0, 0.0, 0.9) is False
+        assert _peak_matches_vllm_prealloc(36000.0, 40000.0, 0.0) is False
