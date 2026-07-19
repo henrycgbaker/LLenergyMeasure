@@ -38,6 +38,12 @@ def test_check_hardware_is_static(engine_cls, monkeypatch):
         "llenergymeasure.device.gpu_info.get_compute_capability",
         lambda gpu_index=0: (8, 0),
     )
+    # Keep hermetic: the tensorrt hook reads the HF quant_method; stub it so no
+    # HF Hub call is attempted for the hub-style "test-model" id.
+    monkeypatch.setattr(
+        "llenergymeasure.engines.tensorrt.plugin._read_model_quant_method",
+        lambda _: None,
+    )
     engine_name = {
         TransformersEngine: "transformers",
         VLLMEngine: "vllm",
@@ -99,6 +105,19 @@ def _patch_sm(monkeypatch, sm: tuple[int, int] | None) -> None:
 
 
 class TestTensorRTCheckHardware:
+    @pytest.fixture(autouse=True)
+    def _hermetic_quant_reader(self, monkeypatch):
+        """Stub the HF quant_method reader so the SM/FP8 tests never hit the Hub.
+
+        check_hardware now routes the checkpoint-compat check too; these tests
+        exercise the hardware gates only, so a None quant_method (not detected)
+        keeps them focused and offline.
+        """
+        monkeypatch.setattr(
+            "llenergymeasure.engines.tensorrt.plugin._read_model_quant_method",
+            lambda _: None,
+        )
+
     def test_sm_none_returns_empty(self, monkeypatch):
         """SM detection returns None (no GPU visible) -> no errors."""
         _patch_sm(monkeypatch, None)
@@ -211,3 +230,154 @@ class TestShortCircuitRegression:
         assert any("SM >= 7.5" in e for e in errors), (
             f"expected SM-floor error from check_hardware; got {errors!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TensorRT: HF pre-quantised checkpoint gate, now routed THROUGH check_hardware
+# (was the standalone preflight Check 5; folded into the plugin so the harness
+# preflight calls one uniform hook for every engine).
+# ---------------------------------------------------------------------------
+
+
+def _stub_quant_method(monkeypatch, value: str | None) -> None:
+    monkeypatch.setattr(
+        "llenergymeasure.engines.tensorrt.plugin._read_model_quant_method",
+        lambda _: value,
+    )
+
+
+class TestTensorRTCheckpointCompat:
+    """The AWQ/GPTQ checkpoint gate is reachable via TensorRTEngine.check_hardware.
+
+    SM is pinned to None (no visible GPU) so only the GPU-independent
+    checkpoint-compat error can appear - proving the checkpoint check runs even
+    when the hardware gates short-circuit on a missing device.
+    """
+
+    def test_rejects_awq(self, monkeypatch):
+        _patch_sm(monkeypatch, None)
+        _stub_quant_method(monkeypatch, "awq")
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt={"engine_params": {"tensor_parallel_size": 1}},
+        )
+        errors = TensorRTEngine.check_hardware(config)
+        assert len(errors) == 1
+        err = errors[0]
+        assert "AWQ" in err
+        assert "engine_path" in err
+        assert "trtllm-build" in err
+        # Names what was tried at 1.2.1: both backends fail, ModelOpt is the path.
+        assert "1.2.1" in err
+        assert "either backend" in err
+        assert "ModelOpt" in err
+
+    def test_rejects_gptq(self, monkeypatch):
+        _patch_sm(monkeypatch, None)
+        _stub_quant_method(monkeypatch, "gptq")
+        config = make_config(
+            engine="tensorrt",
+            tensorrt={"engine_params": {"tensor_parallel_size": 1}},
+            model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+        )
+        errors = TensorRTEngine.check_hardware(config)
+        assert len(errors) == 1
+        assert "GPTQ" in errors[0]
+
+    def test_passes_non_quantised(self, monkeypatch):
+        _patch_sm(monkeypatch, None)
+        _stub_quant_method(monkeypatch, None)
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt={"engine_params": {"tensor_parallel_size": 1}},
+        )
+        assert TensorRTEngine.check_hardware(config) == []
+
+    def test_skips_when_engine_path_set(self, monkeypatch):
+        """A prebuilt engine_path means the user pre-built the engine; do not block."""
+        _patch_sm(monkeypatch, None)
+        _stub_quant_method(monkeypatch, "awq")
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt={
+                "engine_params": {
+                    "tensor_parallel_size": 1,
+                    "engine_path": "/some/built/engine",
+                    "backend": "trt",
+                }
+            },
+        )
+        assert TensorRTEngine.check_hardware(config) == []
+
+    def test_network_failure_does_not_block(self, monkeypatch):
+        """Transient HF Hub failures (reader returns None) must not block."""
+        _patch_sm(monkeypatch, None)
+        _stub_quant_method(monkeypatch, None)
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt={"engine_params": {"tensor_parallel_size": 1}},
+        )
+        assert TensorRTEngine.check_hardware(config) == []
+
+    def test_checkpoint_and_sm_errors_collected_together(self, monkeypatch):
+        """AWQ checkpoint AND a too-low SM both surface from the one hook."""
+        _patch_sm(monkeypatch, (7, 0))  # below the 7.5 floor
+        _stub_quant_method(monkeypatch, "awq")
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt={"engine_params": {"tensor_parallel_size": 1}},
+        )
+        errors = TensorRTEngine.check_hardware(config)
+        assert any("AWQ" in e for e in errors)
+        assert any("SM >= 7.5" in e for e in errors)
+
+
+class TestOtherEnginesNoCheckpointGate:
+    """transformers / vLLM do not carry the TRT checkpoint gate (structural)."""
+
+    @pytest.mark.parametrize(
+        "engine_cls,engine_name",
+        [(TransformersEngine, "transformers"), (VLLMEngine, "vllm")],
+        ids=["transformers", "vllm"],
+    )
+    def test_awq_model_not_flagged(self, monkeypatch, engine_cls, engine_name):
+        _patch_sm(monkeypatch, (8, 0))
+        # Even if the tensorrt reader would say "awq", non-TRT hooks never call it.
+        _stub_quant_method(monkeypatch, "awq")
+        config = make_config(model="Qwen/Qwen2.5-7B-Instruct-AWQ", engine=engine_name)
+        assert engine_cls.check_hardware(config) == []
+
+
+# ---------------------------------------------------------------------------
+# _read_model_quant_method: local-path parsing (moved from preflight to the
+# tensorrt plugin). No stubbing here - these exercise the real reader.
+# ---------------------------------------------------------------------------
+
+
+def test_read_quant_method_local_path(tmp_path):
+    """Local model directories with an AWQ config.json are detected."""
+    import json
+
+    from llenergymeasure.engines.tensorrt.plugin import _read_model_quant_method
+
+    (tmp_path / "config.json").write_text(
+        json.dumps({"quantization_config": {"quant_method": "AWQ"}})
+    )
+    assert _read_model_quant_method(str(tmp_path)) == "awq"
+
+
+def test_read_quant_method_local_path_no_config(tmp_path):
+    """Local directories without config.json return None (skip)."""
+    from llenergymeasure.engines.tensorrt.plugin import _read_model_quant_method
+
+    assert _read_model_quant_method(str(tmp_path)) is None
+
+
+def test_read_quant_method_local_path_no_quant_block(tmp_path):
+    """Local config.json without quantization_config returns None."""
+    import json
+
+    from llenergymeasure.engines.tensorrt.plugin import _read_model_quant_method
+
+    (tmp_path / "config.json").write_text(json.dumps({"model_type": "qwen2"}))
+    assert _read_model_quant_method(str(tmp_path)) is None

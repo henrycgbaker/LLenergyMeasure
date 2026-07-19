@@ -74,9 +74,37 @@ def select_energy_sampler(
     Raises:
         ConfigError: When an explicitly requested sampler is not available.
     """
+    sampler, _reasons = select_energy_sampler_with_diagnostics(explicit, gpu_indices=gpu_indices)
+    return sampler
+
+
+def select_energy_sampler_with_diagnostics(
+    explicit: str | None,
+    gpu_indices: list[int] | None = None,
+) -> tuple[EnergySampler | None, list[str]]:
+    """Select a sampler AND return the per-sampler probe reasons.
+
+    Same selection rules as :func:`select_energy_sampler`, but the second tuple
+    element carries the diagnostic why-chain so a caller (the harness) can put the
+    reason a measurement backend failed to come up into structured
+    ``measurement_warnings`` - not only the log. The reasons list is non-empty
+    only on the ``"auto"`` path when NO sampler was available; a disabled sampler
+    (``None``) and a successful selection both return ``[]``.
+
+    Args:
+        explicit: Sampler name, ``"auto"``, or ``None`` to disable energy measurement.
+        gpu_indices: GPU device indices to monitor. Defaults to [0] when None.
+            Forwarded to NVMLSampler and ZeusSampler constructors.
+
+    Returns:
+        ``(sampler_or_none, reasons)``.
+
+    Raises:
+        ConfigError: When an explicitly requested sampler is not available.
+    """
     # Intentional disable - null in YAML maps to Python None
     if explicit is None:
-        return None
+        return None, []
 
     if explicit == "auto":
         return _auto_select(gpu_indices=gpu_indices)
@@ -89,15 +117,16 @@ def select_energy_sampler(
             f"Energy sampler '{explicit}' is not available on this system.\n"
             f"Install with: {guidance}"
         )
-    return sampler
+    return sampler, []
 
 
-def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
+def _auto_select(gpu_indices: list[int] | None = None) -> tuple[EnergySampler | None, list[str]]:
     """Auto-select best available sampler: Zeus > NVML > CodeCarbon > None.
 
-    On total failure (no sampler available) this logs a warning naming the reason
-    each probe was skipped or rejected, so a silent energy=0.0 result is never the
-    only trace of a measurement backend that failed to come up.
+    Returns ``(sampler, [])`` on success. On total failure (no sampler available)
+    logs a warning naming the reason each probe was skipped or rejected, and also
+    returns those reasons as the second tuple element so a silent energy=0.0
+    result is never the only trace of a measurement backend that failed to come up.
     """
     # Record why each candidate was skipped or rejected, for the failure warning.
     reasons: list[str] = []
@@ -106,7 +135,7 @@ def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
     if importlib.util.find_spec("zeus") is not None:
         sampler = ZeusSampler(gpu_indices=gpu_indices)
         if sampler.is_available():
-            return sampler
+            return sampler, []
         reasons.append("zeus: installed but is_available() returned False")
     else:
         reasons.append("zeus: package not installed")
@@ -114,14 +143,14 @@ def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
     # NVML - always available on GPU machines (nvidia-ml-py is a base dep)
     nvml_sampler = NVMLSampler(gpu_indices=gpu_indices)
     if nvml_sampler.is_available():
-        return nvml_sampler
+        return nvml_sampler, []
     reasons.append("nvml: is_available() returned False (no NVIDIA GPU or NVML init failed)")
 
     # CodeCarbon - software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
     if importlib.util.find_spec("codecarbon") is not None:
         cc_sampler = CodeCarbonSampler()
         if cc_sampler.is_available():
-            return cc_sampler
+            return cc_sampler, []
         reasons.append("codecarbon: installed but is_available() returned False")
     else:
         reasons.append("codecarbon: package not installed")
@@ -133,7 +162,7 @@ def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
         "not a measured zero. Probe results: %s",
         "; ".join(reasons),
     )
-    return None
+    return None, reasons
 
 
 def _instantiate(name: str, gpu_indices: list[int] | None = None) -> EnergySampler:
@@ -169,4 +198,5 @@ __all__ = [
     "NVMLSampler",
     "ZeusSampler",
     "select_energy_sampler",
+    "select_energy_sampler_with_diagnostics",
 ]

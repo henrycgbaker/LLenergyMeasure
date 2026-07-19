@@ -18,6 +18,7 @@ from typing import Any
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.metrics import LatencyMeasurementMode
 from llenergymeasure.engines.protocol import InferenceOutput
+from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
 
@@ -96,20 +97,29 @@ class TransformersEngine:
         kwargs = self._model_load_kwargs(config)
         logger.info("Loading model %r with kwargs: %s", config.task.model, list(kwargs.keys()))
 
-        t0 = time.perf_counter()
-        tokenizer = AutoTokenizer.from_pretrained(
-            config.task.model, trust_remote_code=kwargs.get("trust_remote_code", False)
-        )
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-        if on_substep is not None:
-            on_substep("tokenizer loaded", time.perf_counter() - t0)
+        # Wrap construction in EngineError for parity with the vllm/tensorrt
+        # plugins: a load failure (missing/gated model, OOM, bad dtype) surfaces
+        # as a single actionable EngineError naming the model and engine, not a
+        # bare transformers traceback.
+        try:
+            t0 = time.perf_counter()
+            tokenizer = AutoTokenizer.from_pretrained(
+                config.task.model, trust_remote_code=kwargs.get("trust_remote_code", False)
+            )
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            if on_substep is not None:
+                on_substep("tokenizer loaded", time.perf_counter() - t0)
 
-        t0 = time.perf_counter()
-        model = AutoModelForCausalLM.from_pretrained(config.task.model, **kwargs)
-        model.eval()
-        if on_substep is not None:
-            on_substep("model weights loaded", time.perf_counter() - t0)
+            t0 = time.perf_counter()
+            model = AutoModelForCausalLM.from_pretrained(config.task.model, **kwargs)
+            model.eval()
+            if on_substep is not None:
+                on_substep("model weights loaded", time.perf_counter() - t0)
+        except Exception as e:
+            raise EngineError(
+                f"Transformers model loading failed for {config.task.model!r}: {e}"
+            ) from e
 
         # allow_tf32 + torch.compile are llem-orchestration knobs (HarnessConfig),
         # not engine-native config.

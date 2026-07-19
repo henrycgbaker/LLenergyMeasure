@@ -91,6 +91,27 @@ def _capture_kv_cache_stats(llm: Any) -> dict[str, Any] | None:
     return stats or None
 
 
+def _peak_matches_vllm_prealloc(
+    peak_mb: float, total_vram_mb: float, gpu_memory_utilization: float
+) -> bool:
+    """Return True when a torch peak reading is really vLLM's up-front reservation.
+
+    vLLM reserves ``gpu_memory_utilization * total_vram`` when the engine is
+    constructed. A torch peak that lands within 5% of that reservation is the
+    pre-allocation, not the inference-window working set, so the caller should
+    prefer the NVML device-used proxy over this value.
+
+    Returns False for a non-positive expected reservation (no VRAM reading or a
+    zero utilisation), which keeps the caller on the torch value - matching the
+    prior inline behaviour where a zero divisor was swallowed and the torch value
+    retained.
+    """
+    expected_prealloc_mb = total_vram_mb * gpu_memory_utilization
+    if expected_prealloc_mb <= 0:
+        return False
+    return abs(peak_mb - expected_prealloc_mb) / expected_prealloc_mb < 0.05
+
+
 def _extract_request_stats(outputs: Any) -> tuple[list[float], list[float], list[float]]:
     """Per-request (e2e_ms, ttft_ms, decode_itl_ms) from vLLM V1 ``RequestStateStats``.
 
@@ -361,9 +382,9 @@ class VLLMEngine:
                 peak_mb = nvml_peak
         elif peak_mb > 0:
             # torch saw an in-process allocation (V0-era), but it may just be
-            # vLLM's pre-allocation. Heuristic: if peak matches
-            # gpu_memory_utilization * total_vram within 5%, it's pre-allocation,
-            # not actual usage - NVML device-used is the closer proxy.
+            # vLLM's pre-allocation. If the peak matches gpu_memory_utilization *
+            # total_vram within 5% it is pre-allocation, not actual usage - NVML
+            # device-used is the closer proxy (see _peak_matches_vllm_prealloc).
             try:
                 import torch
 
@@ -374,12 +395,11 @@ class VLLMEngine:
                 gpu_util = 0.9  # vLLM default
                 if engine_params is not None and engine_params.gpu_memory_utilization is not None:
                     gpu_util = engine_params.gpu_memory_utilization
-                expected_prealloc = total_vram * gpu_util
-                if abs(peak_mb - expected_prealloc) / expected_prealloc < 0.05:
+                if _peak_matches_vllm_prealloc(peak_mb, total_vram, gpu_util):
                     logger.debug(
                         "torch peak (%.1fMB) matches pre-allocation (%.1fMB), trying NVML",
                         peak_mb,
-                        expected_prealloc,
+                        total_vram * gpu_util,
                     )
                     nvml_peak = get_nvml_device_memory_mb()
                     if nvml_peak is not None:

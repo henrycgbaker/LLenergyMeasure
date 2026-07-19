@@ -30,7 +30,7 @@ from llenergymeasure.domain.experiment import (
     mj_per_token,
 )
 from llenergymeasure.domain.progress import STEP_BASELINE
-from llenergymeasure.energy import select_energy_sampler
+from llenergymeasure.energy import select_energy_sampler, select_energy_sampler_with_diagnostics
 from llenergymeasure.engines.protocol import EnginePlugin, InferenceOutput
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
 from llenergymeasure.results.persistence import save_config_sidecar
@@ -201,6 +201,7 @@ def collect_measurement_warnings(
     temp_end_c: float | None,
     nvml_sample_count: int,
     energy_measurement_present: bool = True,
+    energy_sampler_reasons: list[str] | None = None,
 ) -> list[str]:  # pragma: no cover
     from llenergymeasure.harness.measurement_warnings import (
         collect_measurement_warnings as _cmw,
@@ -213,6 +214,7 @@ def collect_measurement_warnings(
         temp_end_c=temp_end_c,
         nvml_sample_count=nvml_sample_count,
         energy_measurement_present=energy_measurement_present,
+        energy_sampler_reasons=energy_sampler_reasons,
     )
 
 
@@ -245,6 +247,10 @@ class _MeasuredWindow:
     thermal_info: Any
     timeseries_samples: list[PowerThermalSample]
     energy_measurement: Any
+    # Per-sampler probe reasons captured at energy-sampler selection time; only
+    # populated when auto-selection found no available sampler. Carried here so
+    # _persist_and_assemble can fold them into structured measurement_warnings.
+    energy_sampler_reasons: list[str]
     flops_result: Any
     start_time: datetime
     end_time: datetime
@@ -601,6 +607,15 @@ class MeasurementHarness:
         energy_sampler = select_energy_sampler(
             config.measurement.energy_sampler, gpu_indices=gpu_indices
         )
+        # When auto-selection came up empty, capture the per-sampler probe reasons
+        # so they reach structured measurement_warnings, not only the log. Kept off
+        # the patchable select_energy_sampler seam (harness tests patch it); the
+        # diagnostics re-probe only runs on the no-sampler path, which is rare.
+        energy_sampler_reasons: list[str] = []
+        if energy_sampler is None and config.measurement.energy_sampler is not None:
+            _, energy_sampler_reasons = select_energy_sampler_with_diagnostics(
+                config.measurement.energy_sampler, gpu_indices=gpu_indices
+            )
         sampler_name = type(energy_sampler).__name__ if energy_sampler else "none"
         _emit_substep(_p, "energy_select", f"selected: {sampler_name}")
         if _p:
@@ -674,6 +689,7 @@ class MeasurementHarness:
             thermal_info=thermal_info,
             timeseries_samples=timeseries_samples,
             energy_measurement=energy_measurement,
+            energy_sampler_reasons=energy_sampler_reasons,
             flops_result=flops_result,
             start_time=start_time,
             end_time=end_time,
@@ -720,7 +736,11 @@ class MeasurementHarness:
         # 15. Collect measurement quality warnings
         duration_sec = (window.end_time - window.start_time).total_seconds()
         measurement_warnings = self._collect_warnings(
-            duration_sec, window.timeseries_samples, gpu_indices, window.energy_measurement
+            duration_sec,
+            window.timeseries_samples,
+            gpu_indices,
+            window.energy_measurement,
+            energy_sampler_reasons=window.energy_sampler_reasons,
         )
 
         # 16. Assemble ExperimentResult
@@ -942,6 +962,7 @@ class MeasurementHarness:
         timeseries_samples: list[PowerThermalSample],
         gpu_indices: list[int] | None = None,
         energy_measurement: Any = None,
+        energy_sampler_reasons: list[str] | None = None,
     ) -> list[str]:
         """Collect measurement quality warnings from timeseries samples.
 
@@ -949,6 +970,10 @@ class MeasurementHarness:
         Its presence is a separate signal from ``timeseries_samples`` (which come from
         the thermal-telemetry sampler) - an absent energy measurement must be flagged
         even when thermal telemetry sampled fine.
+
+        ``energy_sampler_reasons`` is the per-sampler probe why-chain captured at
+        selection time; it enriches the energy_measurement_unavailable warning so
+        the reason each backend was skipped/rejected is structured, not log-only.
         """
         temp_start: float | None = None
         temp_end: float | None = None
@@ -968,6 +993,7 @@ class MeasurementHarness:
             temp_end_c=temp_end,
             nvml_sample_count=nvml_count,
             energy_measurement_present=energy_measurement is not None,
+            energy_sampler_reasons=energy_sampler_reasons,
         )
 
     @staticmethod

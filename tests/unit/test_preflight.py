@@ -598,145 +598,71 @@ def test_get_compute_capability_returns_tuple_or_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test: TRT-LLM HF pre-quantised checkpoint gate
+# Test: TRT-LLM checkpoint-compat now routes through the check_hardware hook
+# (the standalone Check 5 was folded into the tensorrt plugin; the detailed
+# checkpoint-gate unit tests live in tests/unit/engines/test_check_hardware.py).
 # ---------------------------------------------------------------------------
 
 
-def test_trt_checkpoint_compat_skips_non_tensorrt_engine(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Non-tensorrt engines do not trigger the quant-checkpoint gate."""
-    from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
+def test_run_preflight_routes_checkpoint_compat_through_hook(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """run_preflight surfaces the TRT checkpoint-compat error via check_hardware.
 
+    Proves the routing: the AWQ/GPTQ gate is no longer a standalone preflight
+    check - it flows through the real tensorrt plugin's check_hardware (Check 4,
+    build_config_probe), the same uniform hook every engine uses. Stubbing the
+    plugin-owned quant reader keeps the test hermetic (no HF Hub call).
+    """
+    import llenergymeasure.engines.tensorrt.plugin as trt_plugin
+
+    monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight,
-        "_read_model_quant_method",
-        lambda _: "awq",
+        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
     )
-    config = make_config(engine="transformers")
-    assert _check_tensorrt_checkpoint_compat(config) is None
-
-
-def test_trt_checkpoint_compat_passes_non_quantised(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Non-quantised models on TRT-LLM pass the gate."""
-    from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
-
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight,
-        "_read_model_quant_method",
-        lambda _: None,
+        llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
     )
-    config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
-    assert _check_tensorrt_checkpoint_compat(config) is None
+    # Plugin-owned quant reader (moved out of preflight into the tensorrt plugin).
+    monkeypatch.setattr(trt_plugin, "_read_model_quant_method", lambda _: "awq")
 
-
-def test_trt_checkpoint_compat_rejects_awq(monkeypatch: pytest.MonkeyPatch) -> None:
-    """HF AWQ checkpoint on TRT-LLM yields an actionable error."""
-    from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
-
-    monkeypatch.setattr(
-        llenergymeasure.harness.preflight,
-        "_read_model_quant_method",
-        lambda _: "awq",
-    )
     config = make_config(
         engine="tensorrt",
         tensorrt={"engine_params": {"tensor_parallel_size": 1}},
         model="Qwen/Qwen2.5-7B-Instruct-AWQ",
     )
-    err = _check_tensorrt_checkpoint_compat(config)
-    assert err is not None
-    assert "AWQ" in err
-    assert "engine_path" in err
-    assert "trtllm-build" in err
-    # Names what was tried at 1.2.1: both backends fail, ModelOpt is the path.
-    assert "1.2.1" in err
-    assert "either backend" in err
-    assert "ModelOpt" in err
+    with pytest.raises(PreFlightError) as exc_info:
+        run_preflight(config)
+
+    msg = str(exc_info.value)
+    assert "AWQ" in msg
+    assert "engine_path" in msg
 
 
-def test_trt_checkpoint_compat_rejects_gptq(monkeypatch: pytest.MonkeyPatch) -> None:
-    """HF GPTQ checkpoint on TRT-LLM yields an actionable error."""
-    from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
+def test_run_preflight_checkpoint_compat_mock_plugin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A checkpoint-compat error returned by a plugin's check_hardware surfaces.
 
+    Uses a mock plugin to assert the harness collects whatever check_hardware
+    returns - checkpoint-compat is no longer special-cased in preflight.
+    """
+    monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight,
-        "_read_model_quant_method",
-        lambda _: "gptq",
+        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
     )
-    config = make_config(
-        engine="tensorrt",
-        tensorrt={"engine_params": {"tensor_parallel_size": 1}},
-        model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
-    )
-    err = _check_tensorrt_checkpoint_compat(config)
-    assert err is not None
-    assert "GPTQ" in err
-
-
-def test_trt_checkpoint_compat_skips_when_engine_path_set(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Explicit engine_path means the user pre-built the engine; do not block."""
-    from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
-
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight,
-        "_read_model_quant_method",
-        lambda _: "awq",
+        llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
     )
-    # engine_path is an extra="allow" passthrough inside engine_params (same
-    # location the tensorrt plugin reads it from).
-    config = make_config(
-        engine="tensorrt",
-        tensorrt={
-            "engine_params": {
-                "tensor_parallel_size": 1,
-                "engine_path": "/some/built/engine",
-                "backend": "trt",
-            }
-        },
-    )
-    assert _check_tensorrt_checkpoint_compat(config) is None
 
+    class _FakePlugin:
+        name = "tensorrt"
 
-def test_trt_checkpoint_compat_network_failure_does_not_block(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Transient HF Hub failures must not block dispatch."""
-    from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
+        def check_hardware(self, config):
+            return ["some-model is an HF AWQ checkpoint; set tensorrt.engine_params.engine_path"]
 
-    monkeypatch.setattr(
-        llenergymeasure.harness.preflight,
-        "_read_model_quant_method",
-        lambda _: None,  # Simulates "couldn't determine"
-    )
-    config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
-    assert _check_tensorrt_checkpoint_compat(config) is None
+    monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakePlugin())
 
+    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
+    with pytest.raises(PreFlightError) as exc_info:
+        run_preflight(config)
 
-def test_read_quant_method_local_path(tmp_path: Path) -> None:
-    """Local model directories with an AWQ config.json are detected."""
-    import json
-
-    from llenergymeasure.harness.preflight import _read_model_quant_method
-
-    (tmp_path / "config.json").write_text(
-        json.dumps({"quantization_config": {"quant_method": "AWQ"}})
-    )
-    assert _read_model_quant_method(str(tmp_path)) == "awq"
-
-
-def test_read_quant_method_local_path_no_config(tmp_path: Path) -> None:
-    """Local directories without config.json return None (skip)."""
-    from llenergymeasure.harness.preflight import _read_model_quant_method
-
-    assert _read_model_quant_method(str(tmp_path)) is None
-
-
-def test_read_quant_method_local_path_no_quant_block(tmp_path: Path) -> None:
-    """Local config.json without quantization_config returns None."""
-    import json
-
-    from llenergymeasure.harness.preflight import _read_model_quant_method
-
-    (tmp_path / "config.json").write_text(json.dumps({"model_type": "qwen2"}))
-    assert _read_model_quant_method(str(tmp_path)) is None
+    assert "AWQ checkpoint" in str(exc_info.value)
