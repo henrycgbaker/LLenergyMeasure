@@ -7,6 +7,20 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Changed
+
+- The Renovate config now documents its one-engine-per-bump-PR policy: each
+  engine's regex-managed pin (`engine_versions/<engine>/current.yaml`) keeps its
+  own package rule with no shared `groupName`, so a version bump opens a separate
+  reviewable PR per engine rather than batching several engines into one diff.
+
+### Removed
+
+- Deleted the orphaned `scripts/_drift.py` landmark-drift probe (493 LoC) and
+  its test. It had no CI, Makefile, or `absorb.py` consumer; the per-producer
+  `LANDMARKS` tuples it read remain in the version-pinned schema introspectors
+  and are still resolved host-side by the transformers producer unit test.
+
 ## [v0.6.0] - 2026-07-18
 
 ### Added

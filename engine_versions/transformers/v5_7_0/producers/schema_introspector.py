@@ -8,9 +8,11 @@ Vendored, version-pinned: the global
 ``scripts/engine_producers/transformers_schema_introspector.py`` is a dispatcher
 stub that delegates here via the SSOT's ``library.current_version``.
 
-The ``LANDMARKS`` tuple is the probe contract (``scripts/_drift.py`` resolves
-each dotted path under the installed library before discovery runs).
-``PreTrainedModel`` is declared at its canonical home
+The ``LANDMARKS`` tuple names the dotted attribute paths this introspector must
+resolve under the installed library before discovery runs;
+``tests/unit/scripts/test_engine_producers_common.py`` resolves them host-side
+(via the dispatcher stub at the current pin) so an upstream landmark rename
+surfaces at test time. ``PreTrainedModel`` is declared at its canonical home
 ``transformers.modeling_utils`` rather than the top-level ``transformers``
 namespace: the top-level name is a lazy re-export whose materialisation depends
 on backend (torch) import state at access time, while the canonical module path

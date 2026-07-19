@@ -199,13 +199,11 @@ def test_schema_version_is_semver_with_major_one() -> None:
 # Per-engine LANDMARKS contracts
 # ---------------------------------------------------------------------------
 #
-# The drift tool (``scripts._drift``) reads ``LANDMARKS`` from each
-# producer module and resolves every dotted path against the installed
-# library; a single missing landmark flips the probe verdict to ``fail``
-# and skips downstream discovery. These tests exercise the same
-# resolution logic for the transformers introspector so a landmark-name
-# drift in upstream transformers is caught at unit-test time rather than
-# only on the next drift-tool run.
+# ``LANDMARKS`` names the dotted attribute paths each producer module must
+# resolve against the installed library before discovery runs. These tests
+# resolve the transformers introspector's landmarks host-side so a
+# landmark-name drift in an upstream transformers bump is caught at
+# unit-test time.
 
 
 def test_transformers_introspector_landmarks_resolve() -> None:
