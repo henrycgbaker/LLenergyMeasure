@@ -137,7 +137,10 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    engine = Engine(config.engine)
+    try:
+        engine = Engine(config.engine)
+    except ValueError:
+        return [0]  # Unrecognised engine - single-GPU default (backward compatible).
     section = getattr(config, engine.value, None)
     engine_params = getattr(section, "engine_params", None) if section is not None else None
     if engine_params is None:
