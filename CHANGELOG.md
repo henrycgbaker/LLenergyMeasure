@@ -53,7 +53,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 - Internal restructure (no behavior or results change): the measured-window
   mechanics are extracted into a mode-agnostic `MeasurementBracket`
   (`llenergymeasure.harness.bracket`) and per-model-load state is split from
-  per-window state, groundwork for a future server measurement mode.
+  per-window state, groundwork for a future server measurement mode. ([#856])
 - **Breaking (results bundle):** the three independent per-artefact
   `schema_version` counters are replaced by a single `bundle_version` ("1.0")
   stamped into `result.json`, `config.json`, and `environment.json`. The bundle
@@ -1298,3 +1298,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#853]: https://github.com/henrycgbaker/llenergymeasure/pull/853
 [#854]: https://github.com/henrycgbaker/llenergymeasure/pull/854
 [#855]: https://github.com/henrycgbaker/llenergymeasure/pull/855
+[#856]: https://github.com/henrycgbaker/llenergymeasure/pull/856
