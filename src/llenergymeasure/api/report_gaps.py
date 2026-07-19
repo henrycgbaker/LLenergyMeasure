@@ -42,7 +42,7 @@ from typing import Any, Literal
 import yaml
 
 from llenergymeasure.config.ssot import Engine
-from llenergymeasure.domain.bundle_artefacts import CONFIG_SIDECAR_FILENAME, MANIFEST_FILENAME
+from llenergymeasure.domain.bundle_artefacts import MANIFEST_FILENAME
 from llenergymeasure.study.runtime_observations import RUNTIME_OBSERVATIONS_FILENAME
 from llenergymeasure.utils.io import load_json
 
@@ -402,10 +402,8 @@ def _load_kwargs_via_manifest(
         if config_hash in by_hash:
             # Same config can repeat across cycles; one flat dict suffices.
             continue
-        config_path = study_dir / Path(result_file).parent / CONFIG_SIDECAR_FILENAME
-        if not config_path.exists():
-            continue
-        flat, failed = _read_provenance_sidecar(config_path)
+        bundle_dir = study_dir / Path(result_file).parent
+        flat, failed = _read_provenance_sidecar(bundle_dir)
         if failed:
             failures += 1
             continue
@@ -432,10 +430,7 @@ def _load_kwargs_via_prefix_scan(
             c in "0123456789abcdef" for c in hash_prefix
         ):
             continue
-        config_path = entry / CONFIG_SIDECAR_FILENAME
-        if not config_path.exists():
-            continue
-        flat, failed = _read_provenance_sidecar(config_path)
+        flat, failed = _read_provenance_sidecar(entry)
         if failed:
             failures += 1
             continue
@@ -445,18 +440,30 @@ def _load_kwargs_via_prefix_scan(
 
 
 def _read_provenance_sidecar(
-    path: Path,
+    bundle_dir: Path,
 ) -> tuple[dict[str, Any] | None, bool]:
-    """Parse ``config.json`` at ``path``; return (flat_kwargs or None, failed).
+    """Read the config.json provenance from ``bundle_dir``; return (flat_kwargs, failed).
 
-    Reads the ``provenance`` section (per-field ``{source, effective, default}``
-    entries) and flattens it to ``{dotted_path: effective_value}``.
+    Routes the per-experiment config.json read through the bundle owner
+    (:meth:`llenergymeasure.results.bundle.BundleReader.read_sidecar`, the
+    registry-driven single-artefact accessor) so the sidecar's on-disk location
+    and encoding stay owned in one place rather than re-derived here. Reads the
+    ``provenance`` section (per-field ``{source, effective, default}`` entries)
+    and flattens it to ``{dotted_path: effective_value}``.
+
+    Returns ``(None, False)`` when the sidecar is absent or carries no
+    ``provenance`` section, and ``(None, True)`` when it is present but
+    unparseable (so the caller can count it as a malformed-sidecar failure).
     """
+    from llenergymeasure.results.bundle import BundleReader
+
     try:
-        payload = load_json(path)
+        payload = BundleReader.read_sidecar(bundle_dir, "config")
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Failed to parse config.json at %s: %s", path, exc)
+        logger.warning("Failed to parse config.json in %s: %s", bundle_dir, exc)
         return None, True
+    if payload is None:
+        return None, False
     provenance = payload.get("provenance") or {}
     if not isinstance(provenance, dict):
         return None, False

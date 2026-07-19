@@ -1239,7 +1239,9 @@ class DockerRunner:
         Raises:
             DockerContainerError: If the result file does not exist.
         """
-        from llenergymeasure.domain.experiment import ExperimentResult
+        # Lazy import to avoid pulling the heavy domain result models at module
+        # load time (the parser imports ExperimentResult transitively).
+        from llenergymeasure.domain.result_payload import parse_experiment_result_payload
 
         result_path = exchange_dir / f"{config_hash}_result.json"
         if not result_path.exists():
@@ -1251,30 +1253,17 @@ class DockerRunner:
         raw = load_json(result_path)
 
         # Container may write an error payload even on exit 0 (defensive check).
-        # Error payloads have "type" and "traceback" keys (mirror StudyRunner worker format).
+        # Error payloads have "type" and "traceback" keys (mirror StudyRunner worker
+        # format). This detection stays here: it is exchange-specific IPC, not a
+        # property of a persisted result.
         if isinstance(raw, dict) and "type" in raw and "traceback" in raw:
             return raw
 
-        # Strip fields unknown to the host schema (container may run an older/newer
-        # version that produces fields the host model doesn't expect).
-        known_fields = set(ExperimentResult.model_fields)
-        extra_keys = set(raw.keys()) - known_fields
-        if extra_keys:
-            for key in extra_keys:
-                raw.pop(key)
-            logger.debug("Stripped unknown fields from container result: %s", extra_keys)
-
-        result = ExperimentResult.model_validate(raw)
-
-        container_version = result.llenergymeasure_version
-        if container_version is None or container_version != __version__:
-            logger.warning(
-                "Container result version %s differs from host %s - rebuild Docker images",
-                container_version,
-                __version__,
-            )
-
-        return result
+        # Cross-version IPC: strip fields unknown to the host schema (container may
+        # run an older/newer version) and warn on a host/container version skew.
+        # Both behaviours live in the shared parser now, keyed by tolerant=True and
+        # the host version as expected_version.
+        return parse_experiment_result_payload(raw, tolerant=True, expected_version=__version__)
 
     def _cleanup_exchange_dir(self, exchange_dir: Path) -> None:
         """Remove the temporary exchange directory.

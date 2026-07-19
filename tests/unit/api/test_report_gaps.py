@@ -466,3 +466,35 @@ def test_multiple_study_dirs_aggregate(tmp_path: Path) -> None:
     assert len(gaps) == 1
     assert gaps[0].collision_count == 2
     assert gaps[0].contrast_count == 1
+
+
+def test_corrupt_config_sidecar_counted_as_failure(tmp_path: Path, caplog) -> None:
+    """A present-but-unparseable config.json is a malformed-sidecar failure.
+
+    Guards the routing of the config-sidecar read through the bundle owner
+    (BundleReader.read_sidecar): a corrupt sidecar must still be flagged and
+    logged, and valid sibling sidecars must still produce their gaps.
+    """
+    import logging
+
+    study = tmp_path / "study"
+    study.mkdir()
+
+    h_fire = _fake_hash("fire")
+    h_bad = _fake_hash("bad")
+
+    _write_resolution(study, 1, 1, "transformers", h_fire, {"do_sample": False})
+    bad_dir = _write_resolution(study, 2, 1, "transformers", h_bad, {"do_sample": True})
+    # Corrupt the second experiment's config.json (present but unparseable).
+    (bad_dir / "config.json").write_text("{ not valid json", encoding="utf-8")
+
+    _write_jsonl_record(study, config_hash=h_fire, warnings_emitted=["gap warn"])
+    _write_jsonl_record(study, config_hash=h_bad)
+
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.api.report_gaps"):
+        gaps = find_runtime_gaps([study])
+
+    # The valid sidecar still yields its gap; the corrupt one is skipped + logged.
+    assert len(gaps) == 1
+    assert gaps[0].collision_count == 1
+    assert any("malformed config.json sidecar" in r.message for r in caplog.records)

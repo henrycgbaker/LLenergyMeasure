@@ -225,7 +225,7 @@ def test_config_sidecar_materialises_without_timeseries(monkeypatch, tmp_path):
         captured_output_dirs.append(output_dir)
         if output_dir is not None:
             (Path(output_dir) / "config.json").write_text(
-                _json.dumps({"schema_version": "2.0", "engine": "transformers"}),
+                _json.dumps({"bundle_version": "1.0", "engine": "transformers"}),
                 encoding="utf-8",
             )
         return mock_result

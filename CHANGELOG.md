@@ -32,6 +32,21 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   whether it is JSON or Parquet. This is the extension point for future bundle
   artefacts - one registry entry plus one writer method, swept automatically by
   `finalize()`. ([#853])
+- A `BundleReader` (`llenergymeasure.results.bundle`) is the read-side owner
+  counterpart to `BundleWriter`. `BundleReader.read(bundle_dir)` discovers the
+  artefacts via the same `ARTEFACTS` registry and returns a `LoadedBundle`
+  (result + environment + config payload + the discovered paths); a
+  newly-registered artefact surfaces in `LoadedBundle.paths` automatically. It
+  reads a pre-`bundle_version` bundle best-effort with a single warning (the one
+  documented pre-1.0 break). `read_sidecar(bundle_dir, key)` is the
+  registry-driven single-artefact accessor for consumers that need one JSON
+  sidecar without materialising the whole bundle. ([#854])
+- A shared `parse_experiment_result_payload` parser
+  (`llenergymeasure.domain.result_payload`) now backs both result read paths -
+  the docker exchange-read (`infra.docker_runner._read_result`, tolerant of
+  cross-version fields, with the host/container version-skew warning) and the
+  bundle-read (strict, via `BundleReader`). One parser, two tolerance settings,
+  no duplicated stripping/validation logic across the layer boundary. ([#854])
 
 ### Changed
 
@@ -47,6 +62,14 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   break: results written by earlier versions remain readable best-effort (the
   retired `schema_version` key is dropped on load rather than rejected), and no
   converter tooling is provided. ([#853])
+- `results.persistence.load_result` is now a thin wrapper over
+  `BundleReader.read` (public API and behaviour unchanged: it still returns an
+  `ExperimentResult` with the environment snapshot attached). The read policy
+  moved to the bundle owner. `report-gaps` now reads each per-experiment
+  `config.json` provenance sidecar through `BundleReader.read_sidecar` rather
+  than a bare file read, so the on-disk sidecar location and encoding are owned
+  in one place; behaviour (malformed-sidecar failure counting, manifest and
+  prefix-scan resolution paths) is unchanged. ([#854])
 - The Renovate config now documents its one-engine-per-bump-PR policy: each
   engine's regex-managed pin (`engine_versions/<engine>/current.yaml`) keeps its
   own package rule with no shared `groupName`, so a version bump opens a separate
@@ -1250,3 +1273,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#851]: https://github.com/henrycgbaker/llenergymeasure/pull/851
 [#852]: https://github.com/henrycgbaker/llenergymeasure/pull/852
 [#853]: https://github.com/henrycgbaker/llenergymeasure/pull/853
+[#854]: https://github.com/henrycgbaker/llenergymeasure/pull/854

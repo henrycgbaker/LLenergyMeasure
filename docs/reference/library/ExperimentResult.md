@@ -30,7 +30,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | `str` | Result schema version (current: `"5.0"`). |
+| `bundle_version` | `str` | Results-bundle version (current: `"1.0"`), shared across `result.json`, `config.json`, and `environment.json` as one contract. |
 | `experiment_id` | `str` | Unique identifier for this experiment run. |
 | `measurement_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
 | `llenergymeasure_version` | `str \| None` | Package version that produced this result. |
