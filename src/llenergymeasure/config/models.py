@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 from pydantic import BaseModel, Field, model_validator
 
 from llenergymeasure.config.harness import HarnessConfig
-from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine, engine_str
+from llenergymeasure.config.ssot import ALL_ENGINES, SAMPLING_PRESETS, Engine, engine_str
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
 logger = logging.getLogger(__name__)
@@ -597,21 +597,12 @@ class ExperimentConfig(BaseModel):
         the researcher copied the wrong config block. Fail explicitly rather than
         silently ignoring the mismatched section.
         """
-        if self.transformers is not None and self.engine != "transformers":
-            raise ValueError(
-                f"transformers: config section provided but engine={self.engine!r}. "
-                "Remove the transformers: section or set engine: transformers."
-            )
-        if self.vllm is not None and self.engine != "vllm":
-            raise ValueError(
-                f"vllm: config section provided but engine={self.engine!r}. "
-                "Remove the vllm: section or set engine: vllm."
-            )
-        if self.tensorrt is not None and self.engine != "tensorrt":
-            raise ValueError(
-                f"tensorrt: config section provided but engine={self.engine!r}. "
-                "Remove the tensorrt: section or set engine: tensorrt."
-            )
+        for engine in ALL_ENGINES:
+            if getattr(self, engine) is not None and self.engine != engine:
+                raise ValueError(
+                    f"{engine}: config section provided but engine={self.engine!r}. "
+                    f"Remove the {engine}: section or set engine: {engine}."
+                )
         return self
 
     @model_validator(mode="after")

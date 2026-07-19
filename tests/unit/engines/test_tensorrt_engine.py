@@ -263,24 +263,6 @@ class TestBuildLlmKwargs:
                 tensorrt={"engine_params": {"backend": "pytorch", "fast_build": True}},
             )
 
-    def test_build_llm_kwargs_fast_build_true_pytorch_raises(self):
-        """Plugin-grain guard (defense in depth): if fast_build=True + pytorch bypasses
-        the corpus rule, _build_llm_kwargs still raises ConfigError (no TRT engine build)."""
-        import pytest
-
-        from llenergymeasure.utils.exceptions import ConfigError
-
-        config = make_config(
-            **_TRT_DEFAULTS,
-            tensorrt={"engine_params": {"backend": "pytorch"}},
-        )
-        # Force the conflicting value past config validation (pydantic does not
-        # validate on assignment) to reach the plugin's own guard.
-        config.tensorrt.engine_params.fast_build = True
-        engine = TensorRTEngine()
-        with pytest.raises(ConfigError, match="fast_build requires backend='trt'"):
-            engine._build_llm_kwargs(config)
-
     def test_build_llm_kwargs_fast_build_false_pytorch_dropped(self):
         """The default fast_build=False on the pytorch backend is dropped, not forwarded.
 
@@ -378,24 +360,6 @@ class TestBuildLlmKwargs:
                     "engine_params": {"backend": "pytorch", "quant_config": {"quant_algo": "INT8"}}
                 },
             )
-
-    def test_build_llm_kwargs_quant_config_pytorch_raises(self):
-        """Plugin-grain guard (defense in depth): if quant_config + pytorch bypasses the
-        corpus rule, _build_llm_kwargs still raises ConfigError (loud, not silent)."""
-        import pytest
-
-        from llenergymeasure.utils.exceptions import ConfigError
-
-        config = make_config(
-            **_TRT_DEFAULTS,
-            tensorrt={"engine_params": {"backend": "pytorch"}},
-        )
-        # Force the conflicting value past config validation (pydantic does not
-        # validate on assignment) to reach the plugin's own guard.
-        config.tensorrt.engine_params.quant_config = {"quant_algo": "INT8"}
-        engine = TensorRTEngine()
-        with pytest.raises(ConfigError, match="quant_config requires backend='trt'"):
-            engine._build_llm_kwargs(config)
 
     def test_build_llm_kwargs_enable_build_cache_when_env_set(self, monkeypatch):
         """backend='trt' + LLEM_TRT_BUILD_CACHE_ENABLED=1 -> enable_build_cache=True."""

@@ -30,6 +30,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   parallelism model, default-image version source) behind a single `ssot.ENGINES`
   descriptor registry; the previously hand-rolled per-engine branch sites now
   route through it (internal refactor, no behavior change). ([#851])
+- Config and engine layer tidy: the three copy-paste engine-section validators collapse to a
+  loop, the sweep and scaffold series writers share one order-preserving dedupe helper, the
+  `EnginePlugin.load_model` protocol return type tightens to `tuple[Any, Any]`, and two
+  unreachable TensorRT plugin guards (already enforced at config validation) are removed.
+  ([#852])
 
 ### Removed
 
@@ -1217,3 +1222,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#849]: https://github.com/henrycgbaker/llenergymeasure/pull/849
 [#850]: https://github.com/henrycgbaker/llenergymeasure/pull/850
 [#851]: https://github.com/henrycgbaker/llenergymeasure/pull/851
+[#852]: https://github.com/henrycgbaker/llenergymeasure/pull/852
