@@ -17,6 +17,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   schema.discovered.json) - so a pin bump can never merge with a config typed
   against the old engine surface. The guard is a pure path check
   (`scripts/ci/check_absorbed_bump.py`) wired into `engine-rules-check.yml`.
+  ([#849])
 
 ## [v0.6.0] - 2026-07-18
 
@@ -1186,3 +1187,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#843]: https://github.com/henrycgbaker/llenergymeasure/pull/843
 [#844]: https://github.com/henrycgbaker/llenergymeasure/pull/844
 [#845]: https://github.com/henrycgbaker/llenergymeasure/pull/845
+[#849]: https://github.com/henrycgbaker/llenergymeasure/pull/849
