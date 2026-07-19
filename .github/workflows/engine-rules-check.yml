@@ -77,6 +77,7 @@ jobs:
               - 'engine_versions/*/*/outputs/schema.discovered.json'
               - 'scripts/engine_producers/**'
               - 'scripts/rules_coverage.py'
+              - 'scripts/ci/check_absorbed_bump.py'
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/engine-rules-check.yml'
@@ -264,6 +265,43 @@ jobs:
             exit 1
           fi
 
+  absorbed-bump-check:
+    # Gating: a PR that advances an engine pin
+    # (engine_versions/<engine>/current.yaml) must also ship the regenerated
+    # knowledge `make absorb` produces - the versioned snapshot outputs AND the
+    # packaged src copies (config.py / rules.yaml / schema.discovered.json). A
+    # bare pin bump (the Renovate regex-manager shape: it edits current_version
+    # and nothing else) would otherwise merge a config typed against the old
+    # engine surface. Runs only when engine-filter saw an engine-knowledge
+    # change; on non-engine PRs it skips and the fan-in counts it satisfied.
+    needs: engine-filter
+    if: >-
+      always()
+      && (
+        github.event_name == 'workflow_dispatch'
+        || needs.engine-filter.outputs.engine == 'true'
+      )
+    runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          # Full history so the merge-base against the PR base resolves: the
+          # check diffs BASE_SHA...HEAD to read exactly this PR's changed files.
+          fetch-depth: 0
+      - name: Verify version bumps ship absorbed knowledge
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA}" ]; then
+            echo "No pull_request base (workflow_dispatch run); no diff to check."
+            exit 0
+          fi
+          git fetch --no-tags origin "${BASE_SHA}"
+          git diff --name-only "${BASE_SHA}...HEAD" \
+            | python3 scripts/ci/check_absorbed_bump.py
+
   engine-rules-gate:
     # Branch protection requires this single context instead of the per-engine
     # matrix names. When a matrix job is skipped at job level, GitHub reports
@@ -272,7 +310,7 @@ jobs:
     # the merge waits forever on "Expected". This job is matrix-free and runs
     # on every PR, so it always reports; it fails iff a gating job failed
     # (skipped gating jobs on non-engine PRs pass).
-    needs: [config-codegen, seed-image-check]
+    needs: [config-codegen, seed-image-check, absorbed-bump-check]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -280,10 +318,12 @@ jobs:
         env:
           CODEGEN: ${{ needs.config-codegen.result }}
           SEED: ${{ needs.seed-image-check.result }}
+          ABSORB: ${{ needs.absorbed-bump-check.result }}
         run: |
           echo "config-codegen: ${CODEGEN}"
           echo "seed-image-check: ${SEED}"
-          for result in "${CODEGEN}" "${SEED}"; do
+          echo "absorbed-bump-check: ${ABSORB}"
+          for result in "${CODEGEN}" "${SEED}" "${ABSORB}"; do
             case "${result}" in
               success|skipped) ;;
               *) exit 1 ;;

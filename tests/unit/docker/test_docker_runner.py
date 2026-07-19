@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +19,8 @@ from llenergymeasure.config.ssot import (
     ENV_HF_TOKEN,
     ENV_OUTPUT_DIR,
     ENV_SAVE_TIMESERIES,
+    TEMP_PREFIX_EXCHANGE,
+    TEMP_PREFIX_TIMESERIES,
     Engine,
 )
 from llenergymeasure.infra.docker_errors import (
@@ -62,6 +65,36 @@ def _subprocess_run_with_image_cached(*run_results: MagicMock):
         [make_subprocess_result(0), *run_results]
     )  # image inspect → 0, then user results
     return lambda *a, **k: next(results)
+
+
+# The real mkdtemp, captured before any test patches it, so the router can
+# materialise the dispatch-asset dir on a real filesystem path.
+_REAL_MKDTEMP = tempfile.mkdtemp
+
+
+def _mkdtemp_router(exchange_dir: Path, rescue_dir: Path):
+    """Return a prefix-aware ``tempfile.mkdtemp`` side_effect for the rescue tests.
+
+    ``DockerRunner.run`` calls ``tempfile.mkdtemp`` with distinct prefixes: the
+    exchange dir (``TEMP_PREFIX_EXCHANGE``), the artefact rescue dir
+    (``TEMP_PREFIX_TIMESERIES``), and - only when the process-lifetime
+    dispatch-asset cache (``_materialise_dispatch_assets``) is cold - the
+    dispatch-asset dir. Routing by prefix rather than call order makes these
+    tests independent of whether an earlier test already warmed that cache; a
+    positional ``iter([exchange, rescue])`` flaked whenever the cold-cache path
+    stole the rescue slot and the rescue call then raised ``StopIteration``.
+    """
+
+    def _route(*, prefix: str = "", **_kw) -> str:
+        if prefix == TEMP_PREFIX_TIMESERIES:
+            return str(rescue_dir)
+        if prefix == TEMP_PREFIX_EXCHANGE:
+            return str(exchange_dir)
+        # Dispatch-asset dir (cold cache): a real tempdir so the entrypoint
+        # script and requirements file can actually be written to it.
+        return _REAL_MKDTEMP(prefix=prefix)
+
+    return _route
 
 
 # ---------------------------------------------------------------------------
@@ -1111,13 +1144,10 @@ class TestTimeseriesParquetRescue:
         rescue_dir = tmp_path / "llem-ts-rescued"
         rescue_dir.mkdir()
 
-        # tempfile.mkdtemp is called twice: once for exchange dir, once for rescue dir
-        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
-
         with (
             patch(
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
-                side_effect=lambda **kw: next(mkdtemp_returns),
+                side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",
@@ -1807,14 +1837,10 @@ class TestConfigSidecarRescue:
         rescue_dir = tmp_path / "llem-cfg-rescued"
         rescue_dir.mkdir()
 
-        # mkdtemp: 1st = exchange dir, 2nd = artefact rescue dir (created lazily
-        # when the first artefact - config.json - is found).
-        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
-
         with (
             patch(
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
-                side_effect=lambda **kw: next(mkdtemp_returns),
+                side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",
@@ -1852,12 +1878,10 @@ class TestConfigSidecarRescue:
         rescue_dir = tmp_path / "llem-both-rescued"
         rescue_dir.mkdir()
 
-        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
-
         with (
             patch(
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
-                side_effect=lambda **kw: next(mkdtemp_returns),
+                side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",
@@ -1896,12 +1920,10 @@ class TestConfigSidecarRescue:
         rescue_dir = tmp_path / "llem-env-rescued"
         rescue_dir.mkdir()
 
-        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
-
         with (
             patch(
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
-                side_effect=lambda **kw: next(mkdtemp_returns),
+                side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",
@@ -1954,12 +1976,10 @@ class TestConfigSidecarRescue:
         study_dir = tmp_path / "study"
         study_dir.mkdir()
 
-        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
-
         with (
             patch(
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
-                side_effect=lambda **kw: next(mkdtemp_returns),
+                side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",

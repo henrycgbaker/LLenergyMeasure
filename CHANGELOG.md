@@ -7,6 +7,18 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Added
+
+- CI now fails a bare engine version-pin bump. A PR that advances
+  `engine_versions/<engine>/current.yaml` must also ship the regenerated
+  knowledge `make absorb` produces - the versioned snapshot outputs under
+  `engine_versions/<engine>/<version>/outputs/` and the packaged
+  `src/llenergymeasure/engines/<engine>/` copies (config.py / rules.yaml /
+  schema.discovered.json) - so a pin bump can never merge with a config typed
+  against the old engine surface. The guard is a pure path check
+  (`scripts/ci/check_absorbed_bump.py`) wired into `engine-rules-check.yml`.
+  ([#849])
+
 ### Changed
 
 - The Renovate config now documents its one-engine-per-bump-PR policy: each
@@ -22,6 +34,13 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `LANDMARKS` tuples it read remain in the version-pinned schema introspectors
   and are still resolved host-side by the transformers producer unit test.
   ([#850])
+
+### Fixed
+
+- Docker-runner rescue tests (`TestConfigSidecarRescue`, `TestTimeseriesParquetRescue`)
+  no longer flake under randomized test ordering: the `tempfile.mkdtemp` mock now routes
+  by prefix instead of assuming a fixed call count, so the process-cached dispatch-asset
+  materialisation can no longer steal the rescue tempdir slot.
 
 ## [v0.6.0] - 2026-07-18
 
@@ -1191,4 +1210,8 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#843]: https://github.com/henrycgbaker/llenergymeasure/pull/843
 [#844]: https://github.com/henrycgbaker/llenergymeasure/pull/844
 [#845]: https://github.com/henrycgbaker/llenergymeasure/pull/845
+<<<<<<< HEAD
 [#850]: https://github.com/henrycgbaker/llenergymeasure/pull/850
+=======
+[#849]: https://github.com/henrycgbaker/llenergymeasure/pull/849
+>>>>>>> origin/main
