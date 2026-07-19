@@ -29,7 +29,7 @@ TEST_POWER_MW = 200_000  # 200 W in milliwatts (pynvml convention)
 TEST_POWER_W = 200.0
 
 # Derived from model defaults - single source of truth for schema assertions
-EXPERIMENT_SCHEMA_VERSION = ExperimentResult.model_fields["schema_version"].default
+EXPERIMENT_BUNDLE_VERSION = ExperimentResult.model_fields["bundle_version"].default
 
 _EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from llenergymeasure.domain.bundle_artefacts import (
+    BUNDLE_VERSION,
     CONFIG_SIDECAR_FILENAME,
     ENVIRONMENT_FILENAME,
     RESULT_FILENAME,
@@ -28,18 +29,6 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.experiment import ExperimentResult
 
 logger = logging.getLogger(__name__)
-
-# Schema version for the config.json sidecar. Independent of result.json's own
-# schema_version; "2.0" succeeds the retired _resolution.json sidecar ("1.0"),
-# whose per-field provenance now lives in this file's ``provenance`` section.
-CONFIG_SIDECAR_SCHEMA_VERSION = "2.0"
-
-# Schema version for the environment.json sidecar. Independent of result.json's
-# and config.json's schema versions. "1.0" is the first explicit version:
-# environment.json previously carried no schema_version. It records the runner
-# block (docker vs local, image + registry digest, precedence source) alongside
-# the hardware/runtime snapshot.
-ENVIRONMENT_SCHEMA_VERSION = "1.0"
 
 
 def _experiment_dir_name(
@@ -197,7 +186,7 @@ def save_config_sidecar(
     written.
     """
     payload: dict[str, object] = {
-        "schema_version": CONFIG_SIDECAR_SCHEMA_VERSION,
+        "bundle_version": BUNDLE_VERSION,
         "experiment_id": experiment_id,
         "measurement_config_hash": config_hash,
         "engine": engine,
@@ -250,7 +239,7 @@ def save_environment(
         Path to the written environment.json file.
     """
     env_data: dict[str, object] = {
-        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
+        "bundle_version": BUNDLE_VERSION,
         "experiment_id": experiment_id,
         "measurement_config_hash": measurement_config_hash,
     }
@@ -355,8 +344,14 @@ def load_result(path: Path) -> ExperimentResult:
     from llenergymeasure.domain.experiment import ExperimentResult
 
     path = Path(path)
-    content = path.read_text(encoding="utf-8")
-    result = ExperimentResult.model_validate_json(content)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    # Legacy (pre-bundle_version) bundles stamped result.json with a per-artefact
+    # ``schema_version``. That key no longer exists on the model, which forbids
+    # extra fields, so drop it to keep a legacy result.json readable best-effort.
+    # (The full legacy-fallback + read path lands with the bundle reader.)
+    if isinstance(raw, dict):
+        raw.pop("schema_version", None)
+    result = ExperimentResult.model_validate(raw)
 
     sidecar = path.parent / TIMESERIES_FILENAME
     if result.timeseries is not None and not sidecar.exists():

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from llenergymeasure.domain.bundle_artefacts import BUNDLE_VERSION
 from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.metrics import (
     EnergyBreakdown,
@@ -110,7 +111,11 @@ class ExperimentResult(BaseModel):
     """
 
     # Identity
-    schema_version: str = Field(default="5.0", description="Result schema version")
+    bundle_version: str = Field(
+        default=BUNDLE_VERSION,
+        description="Results-bundle version (layout + artefact set + per-artefact schema, "
+        "as one contract). Replaces the retired per-artefact result schema_version.",
+    )
     experiment_id: str = Field(..., description="Unique experiment identifier")
     measurement_config_hash: str = Field(
         ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"

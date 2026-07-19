@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from llenergymeasure.domain.bundle_artefacts import BUNDLE_VERSION
 from llenergymeasure.domain.environment import (
     CPUEnvironment,
     CUDAEnvironment,
@@ -29,7 +30,6 @@ from llenergymeasure.domain.environment import (
 )
 from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.results.persistence import (
-    ENVIRONMENT_SCHEMA_VERSION,
     load_result,
     save_environment,
 )
@@ -170,9 +170,9 @@ def test_save_atomic_write(tmp_path: Path, minimal_result: ExperimentResult) -> 
     content = result_path.read_text(encoding="utf-8")
     parsed = json.loads(content)
     assert parsed["experiment_id"] == "persist-test-001"
-    from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+    from tests.conftest import EXPERIMENT_BUNDLE_VERSION
 
-    assert parsed["schema_version"] == EXPERIMENT_SCHEMA_VERSION
+    assert parsed["bundle_version"] == EXPERIMENT_BUNDLE_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -216,9 +216,9 @@ def test_from_json_loads_correctly(tmp_path: Path, minimal_result: ExperimentRes
 
     assert loaded.experiment_id == minimal_result.experiment_id
     assert loaded.measurement_config_hash == minimal_result.measurement_config_hash
-    from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+    from tests.conftest import EXPERIMENT_BUNDLE_VERSION
 
-    assert loaded.schema_version == EXPERIMENT_SCHEMA_VERSION
+    assert loaded.bundle_version == EXPERIMENT_BUNDLE_VERSION
     assert loaded.input_tokens == minimal_result.input_tokens
     assert loaded.output_tokens == minimal_result.output_tokens
     assert loaded.total_tokens == minimal_result.total_tokens
@@ -235,6 +235,27 @@ def test_from_json_round_trip(tmp_path: Path, minimal_result: ExperimentResult) 
     original_json = minimal_result.model_dump_json(indent=2)
     loaded_json = loaded.model_dump_json(indent=2)
     assert original_json == loaded_json
+
+
+def test_load_result_tolerates_legacy_schema_version(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """A pre-bundle_version result.json (carrying the retired ``schema_version``
+    key instead of ``bundle_version``) still loads best-effort - the extra key is
+    dropped rather than rejected by the forbid-extra model."""
+    import json
+
+    result_path = save_result(minimal_result, tmp_path)
+    raw = json.loads(result_path.read_text(encoding="utf-8"))
+    # Simulate a legacy bundle: retired per-artefact key, no bundle_version.
+    raw.pop("bundle_version", None)
+    raw["schema_version"] = "5.0"
+    result_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    loaded = load_result(result_path)
+    assert loaded.experiment_id == minimal_result.experiment_id
+    # Falls back to the current default bundle_version (best-effort read).
+    assert loaded.bundle_version == BUNDLE_VERSION
 
 
 def test_convenience_identity_copies_round_trip(tmp_path: Path) -> None:
@@ -443,12 +464,12 @@ def test_load_result_attaches_environment_sidecar(
     assert loaded.environment.hardware.gpu.name == "NVIDIA A100-SXM4-80GB"
 
 
-def test_save_environment_includes_schema_version(
+def test_save_environment_includes_bundle_version(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """environment.json carries its own schema_version (independent of result.json)."""
+    """environment.json carries the single bundle_version stamp."""
     import json
 
     result_path = save_result(minimal_result, tmp_path)
@@ -459,7 +480,7 @@ def test_save_environment_includes_schema_version(
         result_path.parent,
     )
     payload = json.loads((result_path.parent / "environment.json").read_text())
-    assert payload["schema_version"] == ENVIRONMENT_SCHEMA_VERSION == "1.0"
+    assert payload["bundle_version"] == BUNDLE_VERSION == "1.0"
 
 
 def test_save_environment_writes_docker_runner_block_roundtrip(
@@ -652,14 +673,11 @@ def test_save_config_sidecar_omits_declared_config_when_absent(tmp_path: Path) -
     assert "measurement_window_discard_fraction" not in payload
 
 
-def test_save_config_sidecar_includes_schema_version(tmp_path: Path) -> None:
-    """The config.json sidecar carries its own schema_version (independent of result.json)."""
+def test_save_config_sidecar_includes_bundle_version(tmp_path: Path) -> None:
+    """The config.json sidecar carries the single bundle_version stamp."""
     import json
 
-    from llenergymeasure.results.persistence import (
-        CONFIG_SIDECAR_SCHEMA_VERSION,
-        save_config_sidecar,
-    )
+    from llenergymeasure.results.persistence import save_config_sidecar
 
     path = save_config_sidecar(
         tmp_path,
@@ -672,7 +690,7 @@ def test_save_config_sidecar_includes_schema_version(tmp_path: Path) -> None:
     )
 
     payload = json.loads(path.read_text())
-    assert payload["schema_version"] == CONFIG_SIDECAR_SCHEMA_VERSION == "2.0"
+    assert payload["bundle_version"] == BUNDLE_VERSION == "1.0"
 
 
 def test_save_config_sidecar_carries_methodology_window(tmp_path: Path) -> None:

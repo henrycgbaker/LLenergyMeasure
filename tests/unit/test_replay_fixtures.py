@@ -23,13 +23,13 @@ class TestReplayFixtures:
         for result in replay_results:
             assert isinstance(result, ExperimentResult)
 
-    def test_schema_version(self, replay_results):
-        """All replay fixtures match the current ExperimentResult schema_version."""
+    def test_bundle_version(self, replay_results):
+        """All replay fixtures match the current ExperimentResult bundle_version."""
         self._require_fixtures(replay_results)
         for result in replay_results:
-            from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+            from tests.conftest import EXPERIMENT_BUNDLE_VERSION
 
-            assert result.schema_version == EXPERIMENT_SCHEMA_VERSION
+            assert result.bundle_version == EXPERIMENT_BUNDLE_VERSION
 
     def test_energy_values_positive(self, replay_results):
         """Real GPU experiments produce positive energy measurements."""
