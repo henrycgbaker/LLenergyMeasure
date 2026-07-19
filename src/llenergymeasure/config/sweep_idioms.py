@@ -22,7 +22,10 @@ Any mapping that is not one of the three idiom shapes raises ``ValueError``.
 from __future__ import annotations
 
 import math
-from typing import Any
+from collections.abc import Iterable
+from typing import Any, TypeVar
+
+_T = TypeVar("_T")
 
 _SIGNIFICANT_DIGITS = 10
 
@@ -155,6 +158,13 @@ def _round_sig(value: float) -> float:
     return float(f"{value:.{_SIGNIFICANT_DIGITS}g}")
 
 
-def _dedupe(values: list[Any]) -> list[Any]:
-    """Collapse duplicates (e.g. after rounding) to unique values, order preserved."""
+def _dedupe(values: Iterable[_T]) -> list[_T]:
+    """Collapse duplicates (e.g. after rounding) to unique values, order preserved.
+
+    The single order-preserving dedupe shared by the runtime grid expander here
+    and the scaffold series writer (:mod:`llenergymeasure.config.series`). Each
+    caller keeps its own rounding policy explicit at its call site (significant
+    digits for the machine-facing runtime grid vs fixed decimals for the
+    human-facing scaffold YAML); only this collapse is common to both.
+    """
     return list(dict.fromkeys(values))

@@ -81,8 +81,13 @@ class EnginePlugin(Protocol):
         self,
         config: ExperimentConfig,
         on_substep: Callable[[str, float], None] | None = None,
-    ) -> Any:
-        """Load model into memory. Returns opaque model object passed to warmup/run_inference/cleanup.
+    ) -> tuple[Any, Any]:
+        """Load model into memory.
+
+        Returns an opaque ``(model, aux)`` tuple passed verbatim as the ``model``
+        argument to warmup/run_inference/cleanup; the second element is
+        engine-specific (tokenizer for transformers, sampling params for
+        vLLM/TRT-LLM).
 
         Args:
             config: Experiment configuration.

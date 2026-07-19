@@ -61,6 +61,7 @@ from llenergymeasure.config.engine_rules.loader import (
     evaluate_predicate,
     spec_has_field_ref,
 )
+from llenergymeasure.config.sweep_idioms import _dedupe
 
 __all__ = [
     "SERIES_SHAPES",
@@ -340,22 +341,12 @@ def _finish(
     # shipped field is this narrow, so the round-trip tests stay green; widen
     # here if one ever appears.
     if as_int:
-        ints: list[int] = []
-        for p in points:
-            r = round(p)
-            if r not in ints:
-                ints.append(r)
-        return ints
+        return _dedupe(round(p) for p in points)
     # Round to decimal places, not significant digits: these land in a
     # human-facing YAML file as sweep starting points, so clean numbers like
     # 0.25 read better than the significant-digit form used by the run-time
     # grid expander (config.sweep_idioms).
-    floats: list[float] = []
-    for p in points:
-        f = round(p, 6)
-        if f not in floats:
-            floats.append(f)
-    return floats
+    return _dedupe(round(p, 6) for p in points)
 
 
 _POLICIES: dict[str, Callable[..., list[int] | list[float]]] = {

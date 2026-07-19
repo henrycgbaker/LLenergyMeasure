@@ -625,33 +625,18 @@ class TensorRTEngine:
         kv_cache_config = dumped.pop("kv_cache_config", None)
         scheduler_config = dumped.pop("scheduler_config", None)
         dumped.pop("backend", None)  # backend selects the class, never a kwarg
-        fast_build = dumped.pop("fast_build", None)  # TRT-build-only; see below
+        fast_build = dumped.pop("fast_build", None)  # TRT-build-only; re-added on trt path
 
         # fast_build, quant_config and the on-disk build cache are TRT-engine-build
-        # concepts absent from the pytorch backend's TorchLlmArgs (extra='forbid'),
-        # so forwarding them there crashes construction. On the pytorch backend we
-        # refuse the ones carrying declared measurement intent LOUDLY rather than
-        # silently measure a different configuration, and skip the build cache (a
-        # build-speed knob with no effect on what is measured).
-        if not is_trt:
-            if isinstance(quant_config, dict) and quant_config:
-                raise ConfigError(
-                    "quant_config requires backend='trt'. The pytorch backend does "
-                    "not apply a TRT-LLM quantization config (it loads a "
-                    "pre-quantised checkpoint instead); refusing to silently "
-                    "measure an unquantised model. Set backend='trt' or remove "
-                    "quant_config."
-                )
-            if fast_build:
-                raise ConfigError(
-                    "fast_build requires backend='trt'. There is no TRT engine "
-                    "build on the pytorch backend. Set backend='trt' or remove "
-                    "fast_build."
-                )
+        # concepts absent from the pytorch backend's TorchLlmArgs (extra='forbid').
+        # They are popped above so they never forward blindly and are re-added only
+        # on the trt path below. Declaring them with a non-trt backend is already
+        # rejected at config validation (engine rules + the backend Literal), so no
+        # pytorch-path guard is needed here.
 
         kwargs.update(dumped)  # scalars valid on both backends (tp/pp/max_*/dtype)
 
-        # TRT-build-only surface (guarded above for the pytorch backend).
+        # TRT-build-only surface (re-added here only on the trt path).
         if is_trt:
             if fast_build is not None:
                 kwargs["fast_build"] = fast_build
