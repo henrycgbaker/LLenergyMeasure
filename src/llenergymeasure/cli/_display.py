@@ -215,7 +215,7 @@ def format_validation_error(e: ValidationError) -> str:
     Includes did-you-mean suggestions for literal_error types.
     Does NOT catch or re-wrap the error - only formats it.
     """
-    from llenergymeasure.config.ssot import DTYPE_SUPPORT
+    from llenergymeasure.config.ssot import ENGINES
 
     errors = e.errors()
     n = len(errors)
@@ -223,8 +223,8 @@ def format_validation_error(e: ValidationError) -> str:
     lines = [header]
 
     # Build a set of valid values for did-you-mean suggestions
-    valid_engines: list[str] = [str(e) for e in DTYPE_SUPPORT]
-    valid_dtypes = list({d for dtypes in DTYPE_SUPPORT.values() for d in dtypes})
+    valid_engines: list[str] = [str(e) for e in ENGINES]
+    valid_dtypes = list({d for descriptor in ENGINES.values() for d in descriptor.dtypes})
 
     for err in errors:
         loc_parts = [str(part) for part in err.get("loc", [])]

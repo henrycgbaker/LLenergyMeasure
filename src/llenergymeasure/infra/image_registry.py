@@ -50,6 +50,7 @@ from functools import cache, lru_cache
 
 from llenergymeasure.config.ssot import (
     ALL_ENGINES,
+    ENGINES,
     ENV_IMAGE_PREFIX,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
@@ -66,6 +67,7 @@ __all__ = [
     "DEFAULT_IMAGE_TEMPLATES",
     "get_default_image",
     "image_present_locally",
+    "local_image_for",
     "parse_runner_value",
     "resolve_image",
     "resolve_image_digest",
@@ -91,6 +93,16 @@ DEFAULT_IMAGE_TEMPLATES: dict[str, str] = {
 
 # Local image tag produced by `docker compose build` (no registry prefix).
 LOCAL_IMAGE_TEMPLATE = "llenergymeasure:{engine}"
+
+
+def local_image_for(engine: str) -> str:
+    """Return the local image tag (``llenergymeasure:{engine}``) for *engine*.
+
+    Produced by ``docker compose build`` / ``make docker-build-all``; the single
+    accessor for the tag every resolution path checks (and compares against) when
+    a locally-built image is preferred.
+    """
+    return LOCAL_IMAGE_TEMPLATE.format(engine=engine_str(engine))
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +147,7 @@ def get_default_image(engine: str) -> str:
     # 1. Prefer a locally-built image (fast local iteration). This precedence is
     #    intentional, but a months-stale dev tag can hijack resolution
     #    invisibly, so warn (once) and name the pinned default it bypasses.
-    local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
+    local_image = local_image_for(engine)
     if _image_exists_locally(local_image):
         _warn_local_shadow(engine)
         return local_image
@@ -159,7 +171,7 @@ def _default_image_version(engine: str) -> str:
     Raises:
         ConfigError: The pinned engine version is unavailable at runtime.
     """
-    if engine == Engine.TRANSFORMERS.value:
+    if ENGINES[Engine(engine)].image_version_source == "package":
         from llenergymeasure._version import __version__
 
         return __version__ if __version__ else "latest"
@@ -229,7 +241,7 @@ def _warn_local_shadow(engine: str) -> None:
     deduplicated with ``functools.cache`` keyed on the engine: the same shadow is
     logged only once. ``cache_clear()`` resets the dedup (used by tests).
     """
-    local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
+    local_image = local_image_for(engine)
     pinned_default = _pinned_default_or_none(engine)
     shadowed = (
         f"the version-pinned default {pinned_default}"
@@ -256,7 +268,7 @@ def shadowed_default_image(engine: str, resolved_image: str) -> str | None:
     shadowing fact the resolution warning logs. Best-effort: returns None when
     the pinned default cannot be resolved.
     """
-    if resolved_image != LOCAL_IMAGE_TEMPLATE.format(engine=engine):
+    if resolved_image != local_image_for(engine):
         return None
     return _pinned_default_or_none(engine)
 
@@ -416,7 +428,7 @@ def resolve_image(
 
     # 5. Smart default: delegate to get_default_image() (local build → registry)
     image = get_default_image(engine)
-    local_image = LOCAL_IMAGE_TEMPLATE.format(engine=engine)
+    local_image = local_image_for(engine)
     if image == local_image:
         source = "local_build"
     elif _image_exists_locally(image):
