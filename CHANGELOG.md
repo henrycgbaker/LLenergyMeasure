@@ -7,6 +7,13 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+### Fixed
+
+- Docker-runner rescue tests (`TestConfigSidecarRescue`, `TestTimeseriesParquetRescue`)
+  no longer flake under randomized test ordering: the `tempfile.mkdtemp` mock now routes
+  by prefix instead of assuming a fixed call count, so the process-cached dispatch-asset
+  materialisation can no longer steal the rescue tempdir slot.
+
 ## [v0.6.0] - 2026-07-18
 
 ### Added
