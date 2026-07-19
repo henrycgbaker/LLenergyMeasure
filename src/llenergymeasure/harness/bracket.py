@@ -14,29 +14,59 @@ offline caller interleaves its observed-params capture between context exit and
 timeseries - the energy reading is deliberately slightly wider than the thermal
 window. See ``tests/unit/harness/test_window_ordering.py``.
 
-The window primitives (``select_energy_sampler``,
-``select_energy_sampler_with_diagnostics``, ``_cuda_sync``,
-``PowerThermalSampler``) are resolved through ``llenergymeasure.harness.
-measurement`` - the harness's canonical monkeypatch surface - rather than
-imported directly, so that module stays the single place tests patch them and the
-durable ordering test reads identically across this extraction. The perf clock
-(``time``) is a plain module import here, patchable at ``bracket.time``.
+This module owns its window primitives directly (``select_energy_sampler``,
+``select_energy_sampler_with_diagnostics``, ``_cuda_sync``, and a thin
+``PowerThermalSampler`` patch-seam wrapper). They are the bracket's monkeypatch
+surface: harness tests patch them at the use site,
+``llenergymeasure.harness.bracket.<name>``.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
+from llenergymeasure.domain.progress import STEP_ENERGY_SELECT, STEP_MEASURE, emit_substep
+from llenergymeasure.energy import (
+    select_energy_sampler,
+    select_energy_sampler_with_diagnostics,
+)
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import MeasurementConfig
     from llenergymeasure.device.power_thermal import PowerThermalSample
     from llenergymeasure.domain.progress import ProgressCallback
 
-STEP_ENERGY_SELECT = "energy_select"
-STEP_MEASURE = "measure"
+
+def _cuda_sync() -> None:
+    """Synchronise CUDA at a measurement boundary.
+
+    Best-effort - failures are non-fatal and silently ignored.
+    """
+    if importlib.util.find_spec("torch") is not None:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+        except Exception:
+            pass  # Non-fatal - best effort sync
+
+
+class PowerThermalSampler:  # pragma: no cover
+    """Thin re-export so tests can patch llenergymeasure.harness.bracket.PowerThermalSampler."""
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
+        from llenergymeasure.device.power_thermal import PowerThermalSampler as _PTS
+
+        return _PTS(*args, **kwargs)
+
+    def __enter__(self) -> Any: ...  # type: ignore[empty-body]
+
+    def __exit__(self, *args: Any) -> None: ...  # type: ignore[empty-body]
 
 
 @dataclass
@@ -73,8 +103,9 @@ class MeasurementBracket:
 
     ``__enter__`` selects the energy sampler, starts the tracker, runs the pre
     CUDA sync, and starts the thermal sampler. ``__exit__`` stops the thermal
-    sampler and runs the post CUDA sync. ``finish()`` stops the energy tracker
-    and returns the :class:`MeasuredWindowCore`.
+    sampler and runs the post CUDA sync. ``finish()`` fires the measure-step
+    done event, stops the energy tracker, and returns the
+    :class:`MeasuredWindowCore`.
     """
 
     def __init__(
@@ -100,34 +131,26 @@ class MeasurementBracket:
         self._t_inference_end: float = 0.0
         self._start_time: datetime | None = None
 
-    def _substep(self, step: str, text: str) -> None:
-        """Emit a substep event when a progress callback is registered."""
-        if self._progress is not None:
-            self._progress.on_substep(step, text)
-
     def __enter__(self) -> MeasurementBracket:
-        from llenergymeasure.harness import measurement as _m
-
         _p = self._progress
 
         # 7. Select energy sampler.
         if _p:
             _p.on_step_start(STEP_ENERGY_SELECT, "Selecting", "energy sampler")
             t0_energy = time.perf_counter()
-        self._energy_sampler = _m.select_energy_sampler(
+        self._energy_sampler = select_energy_sampler(
             self._measurement_config.energy_sampler, gpu_indices=self._gpu_indices
         )
         # Capture the per-sampler probe reasons when auto-selection came up empty,
-        # so they reach structured measurement_warnings (not only the log). Kept
-        # off the patchable select_energy_sampler seam (harness tests patch it);
-        # the diagnostics re-probe only runs on the rare no-sampler path.
+        # so they reach structured measurement_warnings (not only the log). The
+        # diagnostics re-probe only runs on the rare no-sampler path.
         self._energy_sampler_reasons = []
         if self._energy_sampler is None and self._measurement_config.energy_sampler is not None:
-            _, self._energy_sampler_reasons = _m.select_energy_sampler_with_diagnostics(
+            _, self._energy_sampler_reasons = select_energy_sampler_with_diagnostics(
                 self._measurement_config.energy_sampler, gpu_indices=self._gpu_indices
             )
         sampler_name = type(self._energy_sampler).__name__ if self._energy_sampler else "none"
-        self._substep(STEP_ENERGY_SELECT, f"selected: {sampler_name}")
+        emit_substep(_p, STEP_ENERGY_SELECT, f"selected: {sampler_name}")
         if _p:
             _p.on_step_update(STEP_ENERGY_SELECT, f"energy sampler ({sampler_name})")
             _p.on_step_done(STEP_ENERGY_SELECT, time.perf_counter() - t0_energy)
@@ -138,39 +161,37 @@ class MeasurementBracket:
             self._energy_tracker = self._energy_sampler.start_tracking()
 
         # 9. CUDA sync before inference (Zeus best practice).
-        _m._cuda_sync()
-        self._substep(STEP_MEASURE, "CUDA sync (pre)")
+        _cuda_sync()
+        emit_substep(_p, STEP_MEASURE, "CUDA sync (pre)")
 
         if _p:
             _p.on_step_start(STEP_MEASURE, "Measuring", self._measure_detail)
-        self._substep(STEP_MEASURE, "energy tracker started")
+        emit_substep(_p, STEP_MEASURE, "energy tracker started")
 
         self._t_inference_start = time.perf_counter()
         self._start_time = datetime.now()
 
         # Start the thermal sampler around inference (timeseries + throttle).
-        self._thermal_sampler = _m.PowerThermalSampler(gpu_indices=self._gpu_indices)
+        self._thermal_sampler = PowerThermalSampler(gpu_indices=self._gpu_indices)
         self._thermal_sampler.start()
         return self
 
     def __exit__(self, *exc: Any) -> None:
         # Returns None (falsy) so an exception raised inside the window is never
         # suppressed - the caller's cleanup still runs.
-        from llenergymeasure.harness import measurement as _m
 
         # Stop the thermal sampler; the energy tracker stays open until finish().
         self._thermal_sampler.stop()
         self._t_inference_end = time.perf_counter()
 
         # 11. CUDA sync after inference, before stopping energy.
-        _m._cuda_sync()
-        self._substep(STEP_MEASURE, "CUDA sync (post)")
-
-        if self._progress:
-            self._progress.on_step_done(STEP_MEASURE, self.inference_duration_sec)
+        _cuda_sync()
+        emit_substep(self._progress, STEP_MEASURE, "CUDA sync (post)")
 
         self._thermal_info = self._thermal_sampler.get_thermal_throttle_info()
         self._timeseries_samples = self._thermal_sampler.get_samples()
+        # The measure-step done event fires in finish(), AFTER the caller's
+        # post-window observed-params capture, matching the pre-refactor order.
 
     @property
     def inference_duration_sec(self) -> float:
@@ -178,16 +199,23 @@ class MeasurementBracket:
         return self._t_inference_end - self._t_inference_start
 
     def finish(self) -> MeasuredWindowCore:
-        """Stop the energy tracker and return the finalised window core.
+        """Fire the measure-step done event, stop the energy tracker, return the core.
 
         Called after the caller's post-window work (e.g. observed-params capture)
-        so that work lands inside the energy window but after the thermal window.
+        so that work lands inside the energy window but after the thermal window,
+        and so the measure-step done event fires after the capture (unchanged from
+        before the bracket extraction).
         """
+        if self._progress:
+            self._progress.on_step_done(STEP_MEASURE, self.inference_duration_sec)
+
         energy_measurement = None
         if self._energy_sampler is not None and self._energy_tracker is not None:
             energy_measurement = self._energy_sampler.stop_tracking(self._energy_tracker)
             tracker_duration = energy_measurement.duration_sec if energy_measurement else 0.0
-            self._substep(STEP_MEASURE, f"energy tracker stopped  {tracker_duration:.1f}s")
+            emit_substep(
+                self._progress, STEP_MEASURE, f"energy tracker stopped  {tracker_duration:.1f}s"
+            )
         end_time = datetime.now()
 
         assert self._start_time is not None  # set in __enter__

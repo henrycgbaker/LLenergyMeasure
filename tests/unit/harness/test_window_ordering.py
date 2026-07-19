@@ -2,104 +2,67 @@
 
 This locks the FULL boundary order of the measured inference window - the missing
 guard the S8 brief calls out. It threads one shared recorder through a fake
-engine, a fake energy sampler, and a fake thermal sampler, then asserts the
-recorded call sequence rather than any private method name, so it survives the
-later measurement.py decomposition.
+engine (``FakeBackendWithCapture``), a fake energy sampler (a ``FakeEnergySampler``
+subclass), and a fake thermal sampler, then asserts the recorded call sequence
+rather than any private method name, so it survives the later measurement.py
+decomposition.
 
-The harness's window primitives (``select_energy_sampler``, ``_cuda_sync``,
-``PowerThermalSampler``) are patched on ``llenergymeasure.harness.measurement`` -
-the harness's canonical monkeypatch surface. The MeasurementBracket extraction
-keeps resolving those primitives through that module, so this test reads
-identically before and after the extraction.
+The window primitives live on ``llenergymeasure.harness.bracket`` and are patched
+there (patch at the use site). The load-bearing assertion is the window-width
+subtlety: observed-params capture runs INSIDE the energy-tracker window (before
+the tracker stops) but OUTSIDE the thermal sampler (after it stops), so the energy
+reading is deliberately slightly wider than the thermal timeseries. Any reorder
+that moves capture past the tracker stop shifts energy readings at the margin and
+must fail here.
 
-The load-bearing assertion is the window-width subtlety: observed-params capture
-runs INSIDE the energy-tracker window (before the tracker stops) but OUTSIDE the
-thermal sampler (after the thermal sampler stops). The energy reading is
-therefore deliberately slightly wider than the thermal timeseries. Any reorder
-that moves capture past the tracker stop shifts energy readings at the margin
-and must fail here.
+A companion progress-order test locks that the "measure" step-done event fires
+AFTER the observed-params capture (unchanged from before the bracket extraction).
 """
 
 from __future__ import annotations
 
 from concurrent.futures import Future
-from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import patch
 
 from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 from llenergymeasure.domain.metrics import ThermalThrottleInfo
-from llenergymeasure.energy.nvml import EnergyMeasurement
-from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.harness import MeasurementHarness
+from tests.fakes import FakeEnergySampler
+from tests.unit.harness.conftest import FakeBackendWithCapture
 
 
-@dataclass
-class _RecordingEngine:
-    """Fake EnginePlugin that records every lifecycle call into a shared log."""
+class _RecordingSampler(FakeEnergySampler):
+    """FakeEnergySampler that records tracker start/stop into a shared log."""
 
-    events: list[str]
-    name: str = "transformers"
-
-    def load_model(self, config: Any, **kwargs: Any) -> dict:
-        self.events.append("model_load")
-        return {"model": "fake"}
-
-    def run_warmup_prompt(self, config: Any, model: Any, prompt: str) -> float:
-        self.events.append("warmup")
-        return 0.0  # kernel-warmup branch: one discarded probe, no CV loop
-
-    def run_inference(self, config: Any, model: Any, prompts: list[str]) -> InferenceOutput:
-        self.events.append("run_inference")
-        return InferenceOutput(
-            elapsed_time_sec=1.0,
-            input_tokens=8,
-            output_tokens=8,
-            peak_memory_mb=0.0,
-            model_memory_mb=0.0,
-        )
-
-    def capture_observed_params(self, config: Any, model: Any, output: Any) -> dict:
-        self.events.append("observed_capture")
-        return {"engine": {}, "sampling": {}, "library_version": "test"}
-
-    def cleanup(self, model: Any) -> None:
-        pass
-
-
-@dataclass
-class _RecordingSampler:
-    """Fake energy sampler recording tracker start/stop into the shared log."""
-
-    events: list[str]
+    def __init__(self, events: list[str]) -> None:
+        super().__init__()
+        self._events = events
 
     def start_tracking(self) -> str:
-        self.events.append("tracker_start")
-        return "tracker-handle"
+        self._events.append("tracker_start")
+        return super().start_tracking()
 
-    def stop_tracking(self, tracker: Any) -> EnergyMeasurement:
-        self.events.append("tracker_stop")
-        return EnergyMeasurement(total_j=10.0, duration_sec=1.0, per_gpu_j={0: 10.0})
+    def stop_tracking(self, tracker: Any) -> Any:
+        self._events.append("tracker_stop")
+        return super().stop_tracking(tracker)
 
 
-@dataclass
 class _RecordingThermal:
-    """Fake PowerThermalSampler recording start/stop into the shared log.
+    """Fake PowerThermalSampler recording start/stop into a shared log.
 
-    Records on both the context-manager protocol (current code wraps the run in a
-    ``with``) and direct start/stop calls (the bracket splits the thermal lifetime
-    across its own enter and exit), so the same fake locks the order on either
-    shape.
+    Records on both the context-manager protocol and direct start/stop calls, so
+    the same fake locks the order however the bracket drives the thermal sampler.
     """
 
-    events: list[str]
-    kwargs: dict[str, Any] = field(default_factory=dict)
+    def __init__(self, events: list[str], **kwargs: Any) -> None:
+        self._events = events
 
     def start(self) -> None:
-        self.events.append("thermal_start")
+        self._events.append("thermal_start")
 
     def stop(self) -> None:
-        self.events.append("thermal_stop")
+        self._events.append("thermal_stop")
 
     def __enter__(self) -> _RecordingThermal:
         self.start()
@@ -115,6 +78,24 @@ class _RecordingThermal:
         return []
 
 
+class _StepDoneRecorder:
+    """Progress callback that records only the 'measure' step-done event."""
+
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    def on_step_done(self, step: str, elapsed_sec: float) -> None:
+        if step == "measure":
+            self._events.append("step_done:measure")
+
+    def on_step_start(self, *args: Any, **kwargs: Any) -> None: ...
+    def on_step_update(self, *args: Any, **kwargs: Any) -> None: ...
+    def on_step_skip(self, *args: Any, **kwargs: Any) -> None: ...
+    def on_substep(self, *args: Any, **kwargs: Any) -> None: ...
+    def on_substep_start(self, *args: Any, **kwargs: Any) -> None: ...
+    def on_substep_done(self, *args: Any, **kwargs: Any) -> None: ...
+
+
 def _resolved_future(value: Any) -> Future:
     future: Future = Future()
     future.set_result(value)
@@ -126,10 +107,14 @@ def _idx_lt(events: list[str], first: str, second: str) -> bool:
     return events.index(first) < events.index(second)
 
 
-def _run_recorded() -> list[str]:
-    """Run one measurement with recording fakes; return the ordered event log."""
+def _run_recorded(*, record_progress: bool = False) -> list[str]:
+    """Run one measurement with recording fakes; return the ordered event log.
+
+    With ``record_progress`` a :class:`_StepDoneRecorder` is threaded in so the
+    'measure' step-done event lands in the same timeline as the mechanical events.
+    """
     events: list[str] = []
-    engine = _RecordingEngine(events)
+    engine = FakeBackendWithCapture(engine_name="transformers", call_log=events)
     config = ExperimentConfig(
         task={
             "model": "fake/model",
@@ -161,7 +146,9 @@ def _run_recorded() -> list[str]:
         events.append("cuda_sync")
 
     def _thermal(**kwargs: Any) -> _RecordingThermal:
-        return _RecordingThermal(events, kwargs)
+        return _RecordingThermal(events, **kwargs)
+
+    progress = _StepDoneRecorder(events) if record_progress else None
 
     with (
         patch(
@@ -177,12 +164,9 @@ def _run_recorded() -> list[str]:
             "llenergymeasure.harness.measurement.thermal_floor_wait",
             side_effect=_thermal_floor,
         ),
-        patch(
-            "llenergymeasure.harness.measurement.select_energy_sampler",
-            side_effect=_select,
-        ),
-        patch("llenergymeasure.harness.measurement._cuda_sync", side_effect=_cuda_sync),
-        patch("llenergymeasure.harness.measurement.PowerThermalSampler", side_effect=_thermal),
+        patch("llenergymeasure.harness.bracket.select_energy_sampler", side_effect=_select),
+        patch("llenergymeasure.harness.bracket._cuda_sync", side_effect=_cuda_sync),
+        patch("llenergymeasure.harness.bracket.PowerThermalSampler", side_effect=_thermal),
         patch(
             "llenergymeasure.harness.measurement.estimate_flops_palm_from_config",
             return_value=None,
@@ -192,7 +176,7 @@ def _run_recorded() -> list[str]:
             return_value=[],
         ),
     ):
-        harness.run(engine, config, gpu_indices=[0])
+        harness.run(engine, config, gpu_indices=[0], progress=progress)
 
     return events
 
@@ -212,8 +196,8 @@ def test_measured_window_full_order_contract() -> None:
 
     order = [
         idx("baseline"),
-        idx("model_load"),
-        idx("warmup"),
+        idx("load_model"),
+        idx("run_warmup_prompt"),
         idx("thermal_floor"),
         idx("energy_select"),
         idx("tracker_start"),
@@ -222,7 +206,7 @@ def test_measured_window_full_order_contract() -> None:
         idx("run_inference"),
         idx("thermal_stop"),
         post_sync,
-        idx("observed_capture"),
+        idx("capture_observed_params"),
         idx("tracker_stop"),
     ]
     assert order == sorted(order), f"measured-window ordering violated: {events}"
@@ -236,15 +220,15 @@ def test_capture_inside_energy_window_outside_thermal_window() -> None:
     energy reading and shift results at the margin.
     """
     events = _run_recorded()
-    assert _idx_lt(events, "thermal_stop", "observed_capture"), events
-    assert _idx_lt(events, "observed_capture", "tracker_stop"), events
+    assert _idx_lt(events, "thermal_stop", "capture_observed_params"), events
+    assert _idx_lt(events, "capture_observed_params", "tracker_stop"), events
 
 
 def test_engine_work_strictly_outside_tracker_window() -> None:
     """Model load and warmup finish before the energy tracker ever starts."""
     events = _run_recorded()
-    assert _idx_lt(events, "model_load", "tracker_start"), events
-    assert _idx_lt(events, "warmup", "tracker_start"), events
+    assert _idx_lt(events, "load_model", "tracker_start"), events
+    assert _idx_lt(events, "run_warmup_prompt", "tracker_start"), events
 
 
 def test_run_inference_strictly_inside_both_windows() -> None:
@@ -254,3 +238,13 @@ def test_run_inference_strictly_inside_both_windows() -> None:
     assert _idx_lt(events, "run_inference", "thermal_stop"), events
     assert _idx_lt(events, "tracker_start", "run_inference"), events
     assert _idx_lt(events, "run_inference", "tracker_stop"), events
+
+
+def test_measure_step_done_fires_after_capture() -> None:
+    """The 'measure' step-done progress event fires AFTER observed-params capture.
+
+    Pre-refactor the harness fired on_step_done('measure') after the capture; the
+    bracket must preserve that (it fires in finish(), after the caller's capture).
+    """
+    events = _run_recorded(record_progress=True)
+    assert _idx_lt(events, "capture_observed_params", "step_done:measure"), events

@@ -29,17 +29,9 @@ from llenergymeasure.domain.experiment import (
     compute_declared_config_hash,
     mj_per_token,
 )
-from llenergymeasure.domain.progress import STEP_BASELINE
-
-# Re-exported (redundant aliases) so they stay module attributes of measurement.py:
-# MeasurementBracket resolves them here at call time and tests patch them here.
-# This module is the harness's canonical monkeypatch surface.
-from llenergymeasure.energy import select_energy_sampler as select_energy_sampler
-from llenergymeasure.energy import (
-    select_energy_sampler_with_diagnostics as select_energy_sampler_with_diagnostics,
-)
+from llenergymeasure.domain.progress import STEP_BASELINE, emit_substep
 from llenergymeasure.engines.protocol import EnginePlugin, InferenceOutput
-from llenergymeasure.harness.bracket import MeasurementBracket
+from llenergymeasure.harness.bracket import MeasuredWindowCore, MeasurementBracket
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
 from llenergymeasure.results.persistence import save_config_sidecar
 from llenergymeasure.utils.formatting import bytes_to_mb
@@ -58,21 +50,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Module-level helpers (extracted from both engines - byte-identical copies)
 # ---------------------------------------------------------------------------
-
-
-def _cuda_sync() -> None:
-    """Synchronise CUDA at measurement boundary.
-
-    Best-effort - failures are non-fatal and silently ignored.
-    """
-    if importlib.util.find_spec("torch") is not None:
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-        except Exception:
-            pass  # Non-fatal - best effort sync
 
 
 def _capture_observed_params_into_output(
@@ -226,27 +203,6 @@ def collect_measurement_warnings(
     )
 
 
-class PowerThermalSampler:  # pragma: no cover
-    """Thin re-export so tests can patch llenergymeasure.harness.PowerThermalSampler."""
-
-    def __new__(cls, *args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
-        from llenergymeasure.device.power_thermal import PowerThermalSampler as _PTS
-
-        return _PTS(*args, **kwargs)
-
-    def __enter__(self) -> Any: ...  # type: ignore[empty-body]
-
-    def __exit__(self, *args: Any) -> None: ...  # type: ignore[empty-body]
-
-
-def _emit_substep(
-    progress: ProgressCallback | None, step: str, text: str, elapsed: float = 0.0
-) -> None:
-    """Emit a substep event to the progress callback when one is registered."""
-    if progress:
-        progress.on_substep(step, text, elapsed)
-
-
 @dataclass
 class _EngineLifetime:
     """Per-model-load state, built once by the load/warmup phases.
@@ -270,22 +226,15 @@ class _EngineLifetime:
 class _MeasuredWindow:
     """Product of one measured inference window.
 
-    Composes the bracket's mode-agnostic :class:`~llenergymeasure.harness.bracket.
-    MeasuredWindowCore` (energy, thermal, timeseries, timestamps) with the
-    offline-specific extras (the InferenceOutput and the FLOPs estimate).
+    Composes the bracket's mode-agnostic
+    :class:`~llenergymeasure.harness.bracket.MeasuredWindowCore` (energy, thermal,
+    timeseries, timestamps, sampler-probe reasons) with the offline-specific
+    extras (the InferenceOutput and the FLOPs estimate).
     """
 
+    core: MeasuredWindowCore
     output: InferenceOutput
-    thermal_info: Any
-    timeseries_samples: list[PowerThermalSample]
-    energy_measurement: Any
-    # Per-sampler probe reasons captured at energy-sampler selection time; only
-    # populated when auto-selection found no available sampler. Carried here so
-    # _persist_and_assemble can fold them into structured measurement_warnings.
-    energy_sampler_reasons: list[str]
     flops_result: Any
-    start_time: datetime
-    end_time: datetime
 
 
 @dataclass(frozen=True)
@@ -474,7 +423,7 @@ class MeasurementHarness:
             baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
             if baseline is not None:
                 cache_label = " (cached)" if baseline.from_cache else ""
-                _emit_substep(
+                emit_substep(
                     _p,
                     STEP_BASELINE,
                     f"baseline: {baseline.power_w:.1f}W"
@@ -516,7 +465,7 @@ class MeasurementHarness:
 
         # Build model substep callback
         def _on_model_substep(text: str, elapsed: float) -> None:
-            _emit_substep(_p, "model", text, elapsed)
+            emit_substep(_p, "model", text, elapsed)
 
         model = engine.load_model(config, on_substep=_on_model_substep)
 
@@ -532,7 +481,7 @@ class MeasurementHarness:
         # Must happen BEFORE warmup, which allocates KV cache.
         model_memory_mb = self._capture_model_memory_mb(gpu_indices=gpu_indices)
         if model_memory_mb > 0:
-            _emit_substep(_p, "model", f"model memory: {model_memory_mb:.0f}MB")
+            emit_substep(_p, "model", f"model memory: {model_memory_mb:.0f}MB")
 
         return model, snapshot, model_memory_mb, load_time_sec
 
@@ -553,7 +502,7 @@ class MeasurementHarness:
             t0_prompts = time.perf_counter()
         prompts = load_prompts(config)
         logger.debug("Loaded %d prompts via dataset loader", len(prompts))
-        _emit_substep(_p, "prompts", f"tokenised {len(prompts)} prompts")
+        emit_substep(_p, "prompts", f"tokenised {len(prompts)} prompts")
         if _p:
             _p.on_step_done("prompts", time.perf_counter() - t0_prompts)
         return prompts
@@ -622,7 +571,7 @@ class MeasurementHarness:
                 _p.on_step_update("warmup", f"{iters_label} ({converged}{cv_info})")
             _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
         iters = warmup_result.iterations_completed
-        _emit_substep(
+        emit_substep(
             _p,
             "warmup",
             f"{iters} iteration{'s' if iters != 1 else ''}"
@@ -701,18 +650,9 @@ class MeasurementHarness:
                 _p.on_step_update("flops", f"FLOPs: {flops_result.value:.2e}")
             _p.on_step_done("flops", time.perf_counter() - t0_flops)
         if flops_result is not None:
-            _emit_substep(_p, "flops", f"FLOPs: {flops_result.value:.2e}")
+            emit_substep(_p, "flops", f"FLOPs: {flops_result.value:.2e}")
 
-        return _MeasuredWindow(
-            output=output,
-            thermal_info=core.thermal_info,
-            timeseries_samples=core.timeseries_samples,
-            energy_measurement=core.energy_measurement,
-            energy_sampler_reasons=core.energy_sampler_reasons,
-            flops_result=flops_result,
-            start_time=core.start_time,
-            end_time=core.end_time,
-        )
+        return _MeasuredWindow(core=core, output=output, flops_result=flops_result)
 
     def _persist_and_assemble(
         self,
@@ -746,20 +686,21 @@ class MeasurementHarness:
             )
             t0_save = time.perf_counter()
 
+        core = window.core
         write_timeseries = bool(
-            save_timeseries and resolved_output_dir is not None and window.timeseries_samples
+            save_timeseries and resolved_output_dir is not None and core.timeseries_samples
         )
         # Relative name recorded in result JSON; the file lands at this basename.
         timeseries_path: str | None = TIMESERIES_FILENAME if write_timeseries else None
 
         # 15. Collect measurement quality warnings
-        duration_sec = (window.end_time - window.start_time).total_seconds()
+        duration_sec = (core.end_time - core.start_time).total_seconds()
         measurement_warnings = self._collect_warnings(
             duration_sec,
-            window.timeseries_samples,
+            core.timeseries_samples,
             gpu_indices,
-            window.energy_measurement,
-            energy_sampler_reasons=window.energy_sampler_reasons,
+            core.energy_measurement,
+            energy_sampler_reasons=core.energy_sampler_reasons,
         )
 
         # 16. Assemble ExperimentResult
@@ -769,31 +710,31 @@ class MeasurementHarness:
             output=window.output,
             model_memory_mb=lifetime.model_memory_mb,
             snapshot=lifetime.snapshot,
-            start_time=window.start_time,
-            end_time=window.end_time,
+            start_time=core.start_time,
+            end_time=core.end_time,
             duration_sec=duration_sec,
-            thermal_info=window.thermal_info,
-            energy_measurement=window.energy_measurement,
+            thermal_info=core.thermal_info,
+            energy_measurement=core.energy_measurement,
             baseline=lifetime.baseline,
             flops_result=window.flops_result,
             timeseries_path=timeseries_path,
-            timeseries_samples=window.timeseries_samples,
+            timeseries_samples=core.timeseries_samples,
             measurement_warnings=measurement_warnings,
             warmup_result=lifetime.warmup_result,
             prompt_count=len(lifetime.prompts),
             model_load_time_sec=lifetime.model_load_time_sec,
         )
-        _emit_substep(_p, "save", "result assembled")
+        emit_substep(_p, "save", "result assembled")
 
         # 17. Write timeseries Parquet sidecar, tagged with the assembled identity.
         if write_timeseries and resolved_output_dir is not None:
             write_timeseries_parquet(
-                window.timeseries_samples,
+                core.timeseries_samples,
                 resolved_output_dir / TIMESERIES_FILENAME,
                 experiment_id=result.experiment_id,
                 measurement_config_hash=result.measurement_config_hash,
             )
-            _emit_substep(_p, "save", "timeseries parquet written")
+            emit_substep(_p, "save", "timeseries parquet written")
 
         # 18. Write config.json sidecar (observed-params + observed_config_hash)
         # Written to output_dir (temp dir, same as timeseries.parquet) so the
@@ -807,7 +748,7 @@ class MeasurementHarness:
                 methodology=methodology,
                 output_dir=resolved_output_dir,
             )
-            _emit_substep(_p, "save", "config sidecar written")
+            emit_substep(_p, "save", "config sidecar written")
 
         if _p:
             _p.on_step_done("save", time.perf_counter() - t0_save)
