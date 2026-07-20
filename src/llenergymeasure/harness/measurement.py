@@ -11,8 +11,8 @@ modules, each a coherent single concern -
   model + snapshot load, prompts, warmup), producing the ``_EngineLifetime``;
 - :mod:`llenergymeasure.harness.window` - the measured-window orchestration over
   :mod:`llenergymeasure.harness.bracket`, producing the ``_MeasuredWindow``;
-- :mod:`llenergymeasure.harness.persistence` + :mod:`llenergymeasure.harness.result_assembly`
-  - warnings, the source-branched result assembly, and sidecar writes.
+- :mod:`llenergymeasure.harness.staging` + :mod:`llenergymeasure.harness.result_assembly`
+  - the source-branched result assembly and the temp-dir sidecar staging.
 
 ``llenergymeasure.harness`` re-exports the public surface plus the module-level
 helpers tests patch; those helpers now live in the phase modules and are patched
@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from llenergymeasure.harness.lifecycle import _EngineLifetime, build_lifetime
-from llenergymeasure.harness.persistence import persist_and_assemble
 from llenergymeasure.harness.result_assembly import SourceMetrics, _ConfigMethodology
+from llenergymeasure.harness.staging import persist_and_assemble
 from llenergymeasure.harness.window import _MeasuredWindow, run_measured_inference
 
 if TYPE_CHECKING:

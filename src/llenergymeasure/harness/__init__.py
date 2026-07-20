@@ -7,9 +7,10 @@ become thin plugins implementing the 4-method EnginePlugin protocol.
 The facade lives in ``llenergymeasure.harness.measurement``; the lifecycle is
 split across phase modules - ``lifecycle`` (per-model-load phases), ``window``
 (the measured window over ``bracket``), ``result_assembly`` (source-branched
-result assembly), and ``persistence`` (warnings + sidecar writes). This package
-init re-exports the public surface plus the module-level helpers that tests
-patch. Note: patching a name on this package does NOT affect the phase modules'
+result assembly), ``measurement_warnings`` (warnings generation +
+orchestration), and ``staging`` (temp-dir sidecar writes). This package init
+re-exports the public surface plus the module-level helpers that tests patch.
+Note: patching a name on this package does NOT affect the phase modules'
 globals - tests that patch module globals must target the module that owns the
 name (see each phase module's docstring for its use site).
 """
@@ -22,7 +23,8 @@ from llenergymeasure.harness.bracket import PowerThermalSampler
 # ``from llenergymeasure.harness import _cuda_sync`` keeps working. They are
 # intentionally absent from ``__all__`` (private surface). Tests that PATCH these
 # as module globals must target the OWNING module (``bracket`` for _cuda_sync,
-# ``window`` for the capture helper, ``result_assembly`` for _check_persistence_mode).
+# ``window`` for the capture helper, ``measurement_warnings`` for
+# _check_persistence_mode).
 from llenergymeasure.harness.bracket import (
     _cuda_sync as _cuda_sync,
 )
@@ -32,13 +34,13 @@ from llenergymeasure.harness.lifecycle import (
     measure_baseline_power,
 )
 from llenergymeasure.harness.measurement import MeasurementHarness
-from llenergymeasure.harness.persistence import write_timeseries_parquet
-from llenergymeasure.harness.result_assembly import (
+from llenergymeasure.harness.measurement_warnings import (
     _check_persistence_mode as _check_persistence_mode,
 )
-from llenergymeasure.harness.result_assembly import (
+from llenergymeasure.harness.measurement_warnings import (
     collect_measurement_warnings,
 )
+from llenergymeasure.harness.staging import write_timeseries_parquet
 from llenergymeasure.harness.window import (
     _capture_observed_params_into_output as _capture_observed_params_into_output,
 )

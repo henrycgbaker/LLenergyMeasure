@@ -535,6 +535,18 @@ class ExperimentConfig(BaseModel):
         """
         return getattr(self.harness, self.engine.value, None) if self.harness is not None else None
 
+    def _harness_sourced_batch_size(self) -> int:
+        """The harness ``batch_size`` knob (default 1) shared by both batch semantics.
+
+        For harness-sourced engines (transformers) the declared capacity bound and
+        the static configured batch are the same fact - the orchestration knob on
+        ``harness.<engine>.batch_size`` - so both accessors defer here.
+        """
+        harness = self.active_harness()
+        if harness is not None and harness.batch_size is not None:
+            return int(harness.batch_size)
+        return 1
+
     def capacity_batch_size(self) -> int:
         """Declared worst-case batch/concurrency bound for the active engine.
 
@@ -546,10 +558,7 @@ class ExperimentConfig(BaseModel):
         """
         model = ENGINES[self.engine].batch
         if model.harness_sourced:
-            harness = self.active_harness()
-            if harness is not None and harness.batch_size is not None:
-                return int(harness.batch_size)
-            return 1
+            return self._harness_sourced_batch_size()
         if model.capacity_field is not None:
             params = self.active_engine_params()
             if params is not None:
@@ -568,10 +577,7 @@ class ExperimentConfig(BaseModel):
         """
         model = ENGINES[self.engine].batch
         if model.harness_sourced:
-            harness = self.active_harness()
-            if harness is not None and harness.batch_size is not None:
-                return int(harness.batch_size)
-            return 1
+            return self._harness_sourced_batch_size()
         if model.static_field is not None:
             params = self.active_engine_params()
             if params is not None:

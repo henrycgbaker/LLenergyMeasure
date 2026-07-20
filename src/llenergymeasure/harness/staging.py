@@ -1,13 +1,15 @@
-"""Persist the measured window: collect warnings, assemble the result, write sidecars.
+"""Stage the measured window into a temp dir: warnings, result assembly, sidecars.
 
 :func:`persist_and_assemble` is the post-window orchestration: it decides the
 timeseries sidecar path, collects the mode-agnostic measurement warnings, calls
 the result-assembly seam, then writes the timeseries Parquet and config.json
-sidecars. It reads per-model-load state off the ``_EngineLifetime`` and the
-per-window products off the ``_MeasuredWindow``.
+sidecars into the staging directory. It reads per-model-load state off the
+``_EngineLifetime`` and the per-window products off the ``_MeasuredWindow``. The
+files land in a temp staging area; the S4 ``BundleWriter`` finalises them into
+the per-experiment bundle - this module stages, it does not own bundle layout.
 
 The lazy ``write_timeseries_parquet`` wrapper here is a monkeypatch surface:
-tests patch it at ``llenergymeasure.harness.persistence.write_timeseries_parquet``.
+tests patch it at ``llenergymeasure.harness.staging.write_timeseries_parquet``.
 """
 
 from __future__ import annotations
@@ -21,11 +23,8 @@ from llenergymeasure.domain.bundle_artefacts import TIMESERIES_FILENAME
 from llenergymeasure.domain.progress import emit_substep
 from llenergymeasure.engines.protocol import EnginePlugin
 from llenergymeasure.harness.lifecycle import _EngineLifetime
-from llenergymeasure.harness.result_assembly import (
-    _ConfigMethodology,
-    build_result,
-    collect_warnings,
-)
+from llenergymeasure.harness.measurement_warnings import collect_warnings
+from llenergymeasure.harness.result_assembly import _ConfigMethodology, build_result
 from llenergymeasure.harness.window import _MeasuredWindow
 from llenergymeasure.results.persistence import save_config_sidecar
 

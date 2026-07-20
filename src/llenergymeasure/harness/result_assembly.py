@@ -16,10 +16,11 @@ The assembly is deliberately split into two producers around one seam:
   assembler unchanged.
 
 :func:`build_result` composes the two for the offline path (and is the offline
-entry point used by :mod:`llenergymeasure.harness.persistence`).
+entry point used by :mod:`llenergymeasure.harness.staging`).
 
-The lazy ``collect_measurement_warnings`` wrapper here is a monkeypatch surface:
-tests patch it at ``llenergymeasure.harness.result_assembly.collect_measurement_warnings``.
+Warnings generation and its orchestration live in
+:mod:`llenergymeasure.harness.measurement_warnings` (a separable concern that
+runs before assembly); this module only consumes the base warning list.
 """
 
 from __future__ import annotations
@@ -43,65 +44,6 @@ if TYPE_CHECKING:
     from llenergymeasure.engines.protocol import InferenceOutput
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Lazy-import wrapper (top-level so tests can patch it at the use site).
-# ---------------------------------------------------------------------------
-
-
-def collect_measurement_warnings(
-    duration_sec: float,
-    gpu_persistence_mode: bool,
-    temp_start_c: float | None,
-    temp_end_c: float | None,
-    nvml_sample_count: int,
-    energy_measurement_present: bool = True,
-    energy_sampler_reasons: list[str] | None = None,
-) -> list[str]:  # pragma: no cover
-    from llenergymeasure.harness.measurement_warnings import (
-        collect_measurement_warnings as _cmw,
-    )
-
-    return _cmw(
-        duration_sec=duration_sec,
-        gpu_persistence_mode=gpu_persistence_mode,
-        temp_start_c=temp_start_c,
-        temp_end_c=temp_end_c,
-        nvml_sample_count=nvml_sample_count,
-        energy_measurement_present=energy_measurement_present,
-        energy_sampler_reasons=energy_sampler_reasons,
-    )
-
-
-def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
-    """Check whether GPU persistence mode is enabled on all specified GPUs.
-
-    Checks every GPU in gpu_indices (defaults to [0] when None). Returns False
-    only if persistence mode is definitively off on at least one GPU.
-
-    Args:
-        gpu_indices: GPU device indices to check. Defaults to [0] when None.
-
-    Returns:
-        True if persistence mode is on (or unknown) for all GPUs,
-        False if definitively off on any GPU.
-    """
-    indices = gpu_indices if gpu_indices is not None else [0]
-    try:
-        import pynvml
-
-        from llenergymeasure.device.gpu_info import nvml_context
-
-        with nvml_context():
-            for idx in indices:
-                handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
-                mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
-                if mode == pynvml.NVML_FEATURE_DISABLED:
-                    return False
-        return True
-    except Exception:
-        return True  # Unknown - don't generate spurious warning
 
 
 @dataclass(frozen=True)
@@ -152,6 +94,10 @@ class SourceMetrics:
     latency_stats: Any
     # Provenance derived from the source.
     warmup_excluded_samples: int | None
+    # The warmup result placed verbatim on ExperimentResult.warmup_result. The
+    # offline producer packs its WarmupResult here; a measurement source with no
+    # warmup phase (e.g. a future server producer) leaves it None.
+    warmup_result: Any | None
     engine_build_cache_hit: bool | None
     methodology: _ConfigMethodology
     # Warnings the source appended (latency mode, latency profiling, window), in
@@ -162,46 +108,6 @@ class SourceMetrics:
 def experiment_identity(config: ExperimentConfig, start_time: datetime) -> str:
     """Compose the experiment identity string (model + measurement start timestamp)."""
     return f"{config.task.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
-
-
-def collect_warnings(
-    duration_sec: float,
-    timeseries_samples: list[PowerThermalSample],
-    gpu_indices: list[int] | None = None,
-    energy_measurement: Any = None,
-    energy_sampler_reasons: list[str] | None = None,
-) -> list[str]:
-    """Collect measurement quality warnings from timeseries samples.
-
-    ``energy_measurement`` is the authoritative energy backend result (or None).
-    Its presence is a separate signal from ``timeseries_samples`` (which come from
-    the thermal-telemetry sampler) - an absent energy measurement must be flagged
-    even when thermal telemetry sampled fine.
-
-    ``energy_sampler_reasons`` is the per-sampler probe why-chain captured at
-    selection time; it enriches the energy_measurement_unavailable warning so the
-    reason each backend was skipped/rejected is structured, not log-only.
-    """
-    temp_start: float | None = None
-    temp_end: float | None = None
-    if timeseries_samples:
-        temps = [s.temperature_c for s in timeseries_samples if s.temperature_c is not None]
-        if temps:
-            temp_start = temps[0]
-            temp_end = temps[-1]
-
-    persistence_on = _check_persistence_mode(gpu_indices)
-    nvml_count = len(timeseries_samples)
-
-    return collect_measurement_warnings(
-        duration_sec=duration_sec,
-        gpu_persistence_mode=persistence_on,
-        temp_start_c=temp_start,
-        temp_end_c=temp_end,
-        nvml_sample_count=nvml_count,
-        energy_measurement_present=energy_measurement is not None,
-        energy_sampler_reasons=energy_sampler_reasons,
-    )
 
 
 def resolve_measurement_mode(
@@ -546,6 +452,7 @@ def build_offline_metrics(
         extended_metrics=extended_metrics,
         latency_stats=latency_stats,
         warmup_excluded_samples=warmup_excluded_samples,
+        warmup_result=warmup_result,
         engine_build_cache_hit=output.extras.get("engine_build_cache_hit"),
         methodology=_ConfigMethodology(
             measurement_methodology=measurement_methodology,
@@ -569,7 +476,6 @@ def assemble_experiment_result(
     thermal_info: Any,
     timeseries_path: str | None,
     base_warnings: list[str],
-    warmup_result: Any,
     model_load_time_sec: float | None,
 ) -> tuple[ExperimentResult, _ConfigMethodology]:
     """MODE-AGNOSTIC assembler: build the ExperimentResult from source metrics.
@@ -658,7 +564,7 @@ def assemble_experiment_result(
         energy_adjusted_j=energy_adjusted_j,
         energy_per_device_j=energy_per_device_j,
         multi_gpu=multi_gpu,
-        warmup_result=warmup_result,
+        warmup_result=metrics.warmup_result,
         measurement_warnings=measurement_warnings,
         extended_metrics=metrics.extended_metrics,
         latency_stats=metrics.latency_stats,
@@ -720,6 +626,5 @@ def build_result(
         thermal_info=thermal_info,
         timeseries_path=timeseries_path,
         base_warnings=measurement_warnings,
-        warmup_result=warmup_result,
         model_load_time_sec=model_load_time_sec,
     )

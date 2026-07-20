@@ -49,11 +49,12 @@ def _apply_patches():
         patch("llenergymeasure.harness.bracket._cuda_sync"),
         patch("llenergymeasure.harness.bracket.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.persistence.write_timeseries_parquet",
+            "llenergymeasure.harness.staging.write_timeseries_parquet",
             return_value=MagicMock(name="timeseries.parquet"),
         ),
         patch(
-            "llenergymeasure.harness.result_assembly.collect_measurement_warnings", return_value=[]
+            "llenergymeasure.harness.measurement_warnings.collect_measurement_warnings",
+            return_value=[],
         ),
     ]
     for p in patches:

@@ -172,7 +172,7 @@ def _run_recorded(*, record_progress: bool = False) -> list[str]:
             return_value=None,
         ),
         patch(
-            "llenergymeasure.harness.result_assembly.collect_measurement_warnings",
+            "llenergymeasure.harness.measurement_warnings.collect_measurement_warnings",
             return_value=[],
         ),
     ):

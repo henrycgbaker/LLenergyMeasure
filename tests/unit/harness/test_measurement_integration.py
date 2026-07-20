@@ -13,10 +13,12 @@ import pytest
 
 from llenergymeasure.device.power_thermal import PowerThermalSample
 from llenergymeasure.harness.lifecycle import run_warmup
-from llenergymeasure.harness.measurement_warnings import collect_measurement_warnings
+from llenergymeasure.harness.measurement_warnings import (
+    collect_measurement_warnings,
+    collect_warnings,
+)
 from llenergymeasure.harness.result_assembly import (
     build_result,
-    collect_warnings,
     resolve_measurement_mode,
 )
 from llenergymeasure.harness.timeseries import write_timeseries_parquet
