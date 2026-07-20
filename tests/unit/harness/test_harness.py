@@ -118,8 +118,22 @@ def test_harness_cleanup_called_on_inference_error(minimal_config):
     with _apply_patches(), pytest.raises(RuntimeError, match="Fake inference failure"):
         harness.run(engine, minimal_config)
 
-    assert "cleanup" in engine.call_log
+    assert engine.call_log.count("cleanup") == 1
     assert "run_inference" in engine.call_log
+
+
+def test_harness_cleanup_called_exactly_once_on_warmup_error(minimal_config):
+    """cleanup() runs exactly once when warmup raises: the model is released by
+    _build_lifetime's own guard, and the window-phase finally must not fire a
+    second release (no double-free)."""
+    engine = FakeBackend(fail_on_run_warmup=True)
+    harness = MeasurementHarness()
+
+    with _apply_patches(), pytest.raises(RuntimeError, match="Fake warmup failure"):
+        harness.run(engine, minimal_config)
+
+    assert engine.call_log.count("cleanup") == 1
+    assert "run_inference" not in engine.call_log
 
 
 def test_harness_returns_experiment_result(minimal_config):

@@ -23,6 +23,7 @@ class FakeBackend:
     call_log: list[str] = field(default_factory=list)
     inference_output: InferenceOutput | None = None
     fail_on_run_inference: bool = False
+    fail_on_run_warmup: bool = False
 
     @property
     def name(self) -> str:
@@ -44,6 +45,8 @@ class FakeBackend:
 
     def run_warmup_prompt(self, config: Any, model: Any, prompt: str) -> float:
         self.call_log.append("run_warmup_prompt")
+        if self.fail_on_run_warmup:
+            raise RuntimeError("Fake warmup failure")
         # Return 0.0 = simple kernel warmup (no CV convergence loop needed in tests)
         return 0.0
 
