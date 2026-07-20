@@ -152,27 +152,27 @@ def _run_recorded(*, record_progress: bool = False) -> list[str]:
 
     with (
         patch(
-            "llenergymeasure.harness.measurement.collect_environment_snapshot_async",
+            "llenergymeasure.harness.lifecycle.collect_environment_snapshot_async",
             return_value=_resolved_future(None),
         ),
-        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["prompt"]),
+        patch("llenergymeasure.harness.lifecycle.load_prompts", return_value=["prompt"]),
         patch(
-            "llenergymeasure.harness.measurement.measure_baseline_power",
+            "llenergymeasure.harness.lifecycle.measure_baseline_power",
             side_effect=_baseline,
         ),
         patch(
-            "llenergymeasure.harness.measurement.thermal_floor_wait",
+            "llenergymeasure.harness.lifecycle.thermal_floor_wait",
             side_effect=_thermal_floor,
         ),
         patch("llenergymeasure.harness.bracket.select_energy_sampler", side_effect=_select),
         patch("llenergymeasure.harness.bracket._cuda_sync", side_effect=_cuda_sync),
         patch("llenergymeasure.harness.bracket.PowerThermalSampler", side_effect=_thermal),
         patch(
-            "llenergymeasure.harness.measurement.estimate_flops_palm_from_config",
+            "llenergymeasure.harness.window.estimate_flops_palm_from_config",
             return_value=None,
         ),
         patch(
-            "llenergymeasure.harness.measurement.collect_measurement_warnings",
+            "llenergymeasure.harness.result_assembly.collect_measurement_warnings",
             return_value=[],
         ),
     ):

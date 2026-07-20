@@ -18,31 +18,6 @@ DTYPE_BYTES: dict[str, float] = {
     "int4": 0.5,
 }
 
-# Per-engine engine_params field that carries the effective inference batch
-# size for vLLM/tensorrt (their max concurrency knob, which bounds the KV
-# cache the same way for a worst-case estimate). transformers prompt-batching
-# is an llem-orchestration knob and lives on harness.transformers.batch_size.
-_BATCH_FIELDS: dict[str, str] = {
-    "vllm": "max_num_seqs",
-    "tensorrt": "max_batch_size",
-}
-
-
-def _effective_batch_size(config: ExperimentConfig) -> int:
-    """Return the configured batch size for the active engine (defaults to 1)."""
-    if str(config.engine) == "transformers":
-        harness = config.active_harness()
-        if harness is not None and harness.batch_size is not None:
-            return int(harness.batch_size)
-        return 1
-    engine_params = config.active_engine_params()
-    field = _BATCH_FIELDS.get(str(config.engine))
-    if engine_params is not None and field is not None:
-        value = getattr(engine_params, field, None)
-        if value is not None:
-            return int(value)
-    return 1
-
 
 def _fetch_model_info(model: str) -> tuple[int | None, ModelArchInfo | None]:
     """Fetch (param_count, arch) from HuggingFace Hub. Non-blocking.
@@ -108,7 +83,8 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
     kv_gb = 0.0
     if arch is not None:
         seq_len = config.task.max_input_tokens or 512  # fallback for VRAM estimate
-        batch_size = _effective_batch_size(config)
+        # Worst-case concurrency bound (declared-intent) drives the KV-cache term.
+        batch_size = config.capacity_batch_size()
         kv_bytes = (
             2
             * arch.num_layers

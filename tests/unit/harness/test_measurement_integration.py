@@ -12,8 +12,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from llenergymeasure.device.power_thermal import PowerThermalSample
+from llenergymeasure.harness.lifecycle import run_warmup
 from llenergymeasure.harness.measurement_warnings import collect_measurement_warnings
+from llenergymeasure.harness.result_assembly import (
+    build_result,
+    collect_warnings,
+    resolve_measurement_mode,
+)
 from llenergymeasure.harness.timeseries import write_timeseries_parquet
+from llenergymeasure.harness.window import estimate_flops
 
 # =============================================================================
 # Timeseries writer tests
@@ -332,9 +339,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     config = ExperimentConfig(task={"model": "test/model"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
@@ -348,12 +353,11 @@ def test_harness_build_result_uses_real_energy_values() -> None:
         value=1e12, method="palm_formula", confidence="medium", precision="n/a"
     )
     now = datetime.now()
-    result, _ = harness._build_result(
+    result, _ = build_result(
         engine_name="transformers",
         config=config,
         output=output,
         model_memory_mb=0.0,
-        snapshot=None,
         start_time=now,
         end_time=now,
         duration_sec=10.0,
@@ -388,9 +392,7 @@ def test_harness_build_result_absent_energy_placeholder_and_warns(
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     config = ExperimentConfig(task={"model": "test/model"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
@@ -403,13 +405,12 @@ def test_harness_build_result_absent_energy_placeholder_and_warns(
         value=1e12, method="palm_formula", confidence="medium", precision="n/a"
     )
     now = datetime.now()
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.harness.measurement"):
-        result, _ = harness._build_result(
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.harness.result_assembly"):
+        result, _ = build_result(
             engine_name="transformers",
             config=config,
             output=output,
             model_memory_mb=0.0,
-            snapshot=None,
             start_time=now,
             end_time=now,
             duration_sec=10.0,
@@ -431,10 +432,8 @@ def test_harness_collect_warnings_flags_absent_energy() -> None:
     Thermal telemetry sampled fine (30 samples), so this proves the absent-energy flag is
     keyed off the authoritative backend, not the thermal sampler's sample count.
     """
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
-    warnings = harness._collect_warnings(
+    warnings = collect_warnings(
         duration_sec=30.0,
         timeseries_samples=_make_samples(n_seconds=3),
         gpu_indices=None,
@@ -447,10 +446,8 @@ def test_harness_collect_warnings_flags_absent_energy() -> None:
 def test_harness_collect_warnings_present_energy_no_flag() -> None:
     """_collect_warnings() does not flag energy absence when a measurement is present."""
     from llenergymeasure.energy.nvml import EnergyMeasurement
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
-    warnings = harness._collect_warnings(
+    warnings = collect_warnings(
         duration_sec=30.0,
         timeseries_samples=_make_samples(n_seconds=3),
         gpu_indices=None,
@@ -467,9 +464,7 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     from llenergymeasure.domain.metrics import ThermalThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     config = ExperimentConfig(task={"model": "test/model"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
@@ -483,12 +478,11 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     # Baseline adjustment should use 8.0s, not 10.0s.
     energy_measurement = EnergyMeasurement(total_j=100.0, duration_sec=8.0)
     now = datetime.now()
-    result, _ = harness._build_result(
+    result, _ = build_result(
         engine_name="transformers",
         config=config,
         output=output,
         model_memory_mb=0.0,
-        snapshot=None,
         start_time=now,
         end_time=now + timedelta(seconds=10),
         duration_sec=10.0,
@@ -514,9 +508,7 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     config = ExperimentConfig(task={"model": "test/model"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
@@ -528,12 +520,11 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     flops_result = FlopsResult(value=0.0, method="palm_formula", confidence="low", precision="n/a")
     now = datetime.now()
 
-    result, _ = harness._build_result(
+    result, _ = build_result(
         engine_name="transformers",
         config=config,
         output=output,
         model_memory_mb=0.0,
-        snapshot=None,
         start_time=now,
         end_time=now,
         duration_sec=10.0,
@@ -563,9 +554,7 @@ def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
     from llenergymeasure.domain.metrics import ThermalThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     config = ExperimentConfig(task={"model": "test/model"}, measurement=measurement)
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -579,12 +568,11 @@ def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
     # the timeseries and overrides this; total mode keeps it.
     energy_measurement = EnergyMeasurement(total_j=100.0, duration_sec=1.0)
     now = datetime.now()
-    return harness._build_result(
+    return build_result(
         engine_name="transformers",
         config=config,
         output=output,
         model_memory_mb=0.0,
-        snapshot=None,
         start_time=now,
         end_time=now,
         duration_sec=1.0,
@@ -735,7 +723,6 @@ def _make_build_result_args():
         config=config,
         output=output,
         model_memory_mb=0.0,
-        snapshot=None,
         start_time=now,
         end_time=now,
         duration_sec=10.0,
@@ -750,13 +737,11 @@ def _make_build_result_args():
 
 def test_harness_build_result_populates_timeseries_field() -> None:
     """_build_result() with timeseries_path='timeseries.parquet' sets result.timeseries (CM-16)."""
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     kwargs = _make_build_result_args()
     kwargs["timeseries_path"] = "timeseries.parquet"
 
-    result, _ = harness._build_result(**kwargs)
+    result, _ = build_result(**kwargs)
 
     assert result.timeseries == "timeseries.parquet", (
         "timeseries field should be populated from timeseries_path argument"
@@ -765,10 +750,8 @@ def test_harness_build_result_populates_timeseries_field() -> None:
 
 def test_harness_build_result_propagates_baseline_fields() -> None:
     """_build_result() with a baseline populates baseline_power_w and energy_adjusted_j (RES-06)."""
-    from llenergymeasure.harness import MeasurementHarness
     from llenergymeasure.harness.baseline import BaselineCache
 
-    harness = MeasurementHarness()
     kwargs = _make_build_result_args()
     kwargs["baseline"] = BaselineCache(
         power_w=30.0,
@@ -778,7 +761,7 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
         duration_sec=30.0,
     )
 
-    result, _ = harness._build_result(**kwargs)
+    result, _ = build_result(**kwargs)
 
     assert result.baseline_power_w == pytest.approx(30.0), (
         "baseline_power_w should be populated from EnergyBreakdown.baseline_power_w"
@@ -796,9 +779,7 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
 def test_mj_per_tok_uses_output_tokens_only() -> None:
     """mj_per_tok_total divides energy by OUTPUT tokens, not input+output (D1)."""
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     kwargs = _make_build_result_args()
     # Asymmetric: 900 input, 100 output. total=1000. energy=100 J.
     kwargs["output"] = InferenceOutput(
@@ -809,7 +790,7 @@ def test_mj_per_tok_uses_output_tokens_only() -> None:
         model_memory_mb=0.0,
     )
 
-    result, _ = harness._build_result(**kwargs)
+    result, _ = build_result(**kwargs)
 
     # 100 J / 100 output tokens * 1000 = 1000.0 mJ/output-token.
     # Old (buggy) denominator total_tokens=1000 would give 100.0.
@@ -827,7 +808,6 @@ def test_estimate_flops_prefers_hf_model_over_autoconfig() -> None:
     """_estimate_flops uses the actual-param hf_model path before AutoConfig (H1)."""
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
     class _StubParam:
         def __init__(self, n: int) -> None:
@@ -842,7 +822,6 @@ def test_estimate_flops_prefers_hf_model_over_autoconfig() -> None:
             # coincide with the AutoConfig estimate for the same model.
             return iter([("decoder.layer.weight", _StubParam(777))])
 
-    harness = MeasurementHarness()
     config = ExperimentConfig(task={"model": "gpt2"})
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -853,7 +832,7 @@ def test_estimate_flops_prefers_hf_model_over_autoconfig() -> None:
         extras={"hf_model": _StubModel()},
     )
 
-    result = harness._estimate_flops(harness_engine := MagicMock(), config, output)
+    result = estimate_flops(harness_engine := MagicMock(), config, output)
     del harness_engine
 
     # PaLM: 2 * 777 * (10 + 5) = 23310. High confidence proves the hf_model
@@ -867,9 +846,7 @@ def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
     """_estimate_flops falls back to AutoConfig when no hf_model is present (H1)."""
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.protocol import InferenceOutput
-    from llenergymeasure.harness import MeasurementHarness
 
-    harness = MeasurementHarness()
     config = ExperimentConfig(task={"model": "gpt2"})
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -881,10 +858,10 @@ def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
 
     fake = MagicMock(value=5e11, confidence="medium")
     with patch(
-        "llenergymeasure.harness.measurement.estimate_flops_palm_from_config",
+        "llenergymeasure.harness.window.estimate_flops_palm_from_config",
         return_value=fake,
     ) as mock_cfg:
-        result = harness._estimate_flops(MagicMock(), config, output)
+        result = estimate_flops(MagicMock(), config, output)
 
     mock_cfg.assert_called_once()
     assert result is fake
@@ -898,10 +875,9 @@ def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
 def test_resolve_measurement_mode_guards_bad_string() -> None:
     """An unrecognised mode string falls back to TRUE_STREAMING with a warning (H6)."""
     from llenergymeasure.domain.metrics import LatencyMeasurementMode
-    from llenergymeasure.harness import MeasurementHarness
 
     warnings: list[str] = []
-    mode = MeasurementHarness._resolve_measurement_mode("not_a_real_mode", warnings)
+    mode = resolve_measurement_mode("not_a_real_mode", warnings)
 
     assert mode is LatencyMeasurementMode.TRUE_STREAMING
     assert any("not_a_real_mode" in w for w in warnings)
@@ -910,10 +886,9 @@ def test_resolve_measurement_mode_guards_bad_string() -> None:
 def test_resolve_measurement_mode_accepts_valid_string() -> None:
     """A valid mode string maps to its enum member (H6 regression guard)."""
     from llenergymeasure.domain.metrics import LatencyMeasurementMode
-    from llenergymeasure.harness import MeasurementHarness
 
     warnings: list[str] = []
-    mode = MeasurementHarness._resolve_measurement_mode("proportional", warnings)
+    mode = resolve_measurement_mode("proportional", warnings)
 
     assert mode is LatencyMeasurementMode.PROPORTIONAL_ESTIMATE
     assert warnings == []
@@ -932,7 +907,6 @@ def test_warmup_excluded_samples_includes_probe() -> None:
     must still be counted, so iterations_completed == n_prompts + 1.
     """
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.harness import MeasurementHarness
 
     n_prompts = 3
     config = ExperimentConfig(
@@ -951,9 +925,8 @@ def test_warmup_excluded_samples_includes_probe() -> None:
     # Positive latency -> CV/fixed branch (the one with the extra probe).
     engine.run_warmup_prompt.return_value = 12.5
 
-    harness = MeasurementHarness()
-    with patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0):
-        warmup_result = harness._run_warmup(engine, config, MagicMock(), ["p"], None)
+    with patch("llenergymeasure.harness.lifecycle.thermal_floor_wait", return_value=0.0):
+        warmup_result = run_warmup(engine, config, MagicMock(), ["p"], None)
 
     # 1 probe + n_prompts loop inferences all ran and were discarded.
     assert engine.run_warmup_prompt.call_count == n_prompts + 1

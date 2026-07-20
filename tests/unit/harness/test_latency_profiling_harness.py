@@ -37,24 +37,24 @@ def _apply_patches():
 
     stack = contextlib.ExitStack()
     patches = [
-        patch(
-            "llenergymeasure.harness.measurement.collect_environment_snapshot", return_value=None
-        ),
-        patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
-        patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.lifecycle.collect_environment_snapshot", return_value=None),
+        patch("llenergymeasure.harness.lifecycle.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.lifecycle.load_prompts", return_value=["test prompt"]),
         patch("llenergymeasure.harness.bracket.select_energy_sampler", return_value=None),
-        patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.harness.lifecycle.thermal_floor_wait", return_value=0.0),
         patch(
-            "llenergymeasure.harness.measurement.estimate_flops_palm",
+            "llenergymeasure.harness.window.estimate_flops_palm",
             return_value=MagicMock(value=1e9),
         ),
         patch("llenergymeasure.harness.bracket._cuda_sync"),
         patch("llenergymeasure.harness.bracket.PowerThermalSampler", new=_make_mock_pts()),
         patch(
-            "llenergymeasure.harness.measurement.write_timeseries_parquet",
+            "llenergymeasure.harness.persistence.write_timeseries_parquet",
             return_value=MagicMock(name="timeseries.parquet"),
         ),
-        patch("llenergymeasure.harness.measurement.collect_measurement_warnings", return_value=[]),
+        patch(
+            "llenergymeasure.harness.result_assembly.collect_measurement_warnings", return_value=[]
+        ),
     ]
     for p in patches:
         stack.enter_context(p)
