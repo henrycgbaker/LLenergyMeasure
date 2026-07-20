@@ -54,6 +54,23 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   mechanics are extracted into a mode-agnostic `MeasurementBracket`
   (`llenergymeasure.harness.bracket`) and per-model-load state is split from
   per-window state, groundwork for a future server measurement mode. ([#856])
+- Internal restructure (no behavior or results change): the measurement core is
+  decomposed. Result assembly is split by measurement source - an offline
+  producer (`build_offline_metrics`) reads the `InferenceOutput` into a
+  `SourceMetrics`, and a mode-agnostic assembler (`assemble_experiment_result`,
+  whose signature carries no `InferenceOutput`) turns that plus baseline /
+  identity / thermal into the `ExperimentResult`, so a future server mode adds a
+  sibling producer without touching assembly. The 1431-line `harness/measurement.py`
+  god-module is split along its phase seams into `lifecycle` (baseline / model
+  load / prompts / warmup), `window` (bracket orchestration + FLOPs),
+  `result_assembly`, and `persistence` (sidecar writes); `MeasurementHarness`
+  stays the facade and the `harness` package re-exports are unchanged. The
+  contradictory per-engine batch-size knowledge is resolved to one SSOT: a
+  `BatchSizeModel` on each `ssot.ENGINES` descriptor encodes both the declared
+  capacity bound (worst-case VRAM sizing) and the static configured batch (the
+  result field) - which differ only for vLLM's continuous batching - and both
+  consumers read it through `ExperimentConfig.capacity_batch_size()` /
+  `static_batch_size()`. ([#857])
 - **Breaking (results bundle):** the three independent per-artefact
   `schema_version` counters are replaced by a single `bundle_version` ("1.0")
   stamped into `result.json`, `config.json`, and `environment.json`. The bundle
@@ -1299,3 +1316,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#854]: https://github.com/henrycgbaker/llenergymeasure/pull/854
 [#855]: https://github.com/henrycgbaker/llenergymeasure/pull/855
 [#856]: https://github.com/henrycgbaker/llenergymeasure/pull/856
+[#857]: https://github.com/henrycgbaker/llenergymeasure/pull/857
