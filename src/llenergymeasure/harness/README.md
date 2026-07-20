@@ -11,6 +11,7 @@ Measurement lifecycle orchestration for any inference engine. Layer 3 in the six
 | Module | Description |
 |--------|-------------|
 | `measurement.py` | `MeasurementHarness` class, measurement lifecycle implementation |
+| `bracket.py` | `MeasurementBracket` - mode-agnostic measured-window boundary (energy tracker, CUDA syncs, thermal sampler, timestamps); split exit keeps the energy window deliberately wider than the thermal one |
 | `__init__.py` | Re-exports the public surface from `measurement.py` |
 | `warmup.py` | `warmup_until_converged()` - CV-based adaptive warmup; `thermal_floor_wait()` |
 | `baseline.py` | `measure_baseline_power()` - idle GPU power baseline with session cache |

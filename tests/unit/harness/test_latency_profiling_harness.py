@@ -15,7 +15,8 @@ from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 from llenergymeasure.domain.metrics import LatencyMeasurementMode
 from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.harness import MeasurementHarness
-from tests.unit.harness.test_harness import FakeBackend, _make_mock_pts
+from tests.unit.harness.conftest import FakeBackend
+from tests.unit.harness.test_harness import _make_mock_pts
 
 
 def _config(latency_profiling: bool) -> ExperimentConfig:
@@ -41,14 +42,14 @@ def _apply_patches():
         ),
         patch("llenergymeasure.harness.measurement.measure_baseline_power", return_value=None),
         patch("llenergymeasure.harness.measurement.load_prompts", return_value=["test prompt"]),
-        patch("llenergymeasure.harness.measurement.select_energy_sampler", return_value=None),
+        patch("llenergymeasure.harness.bracket.select_energy_sampler", return_value=None),
         patch("llenergymeasure.harness.measurement.thermal_floor_wait", return_value=0.0),
         patch(
             "llenergymeasure.harness.measurement.estimate_flops_palm",
             return_value=MagicMock(value=1e9),
         ),
-        patch("llenergymeasure.harness.measurement._cuda_sync"),
-        patch("llenergymeasure.harness.measurement.PowerThermalSampler", new=_make_mock_pts()),
+        patch("llenergymeasure.harness.bracket._cuda_sync"),
+        patch("llenergymeasure.harness.bracket.PowerThermalSampler", new=_make_mock_pts()),
         patch(
             "llenergymeasure.harness.measurement.write_timeseries_parquet",
             return_value=MagicMock(name="timeseries.parquet"),

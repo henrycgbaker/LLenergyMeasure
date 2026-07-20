@@ -123,6 +123,18 @@ class ProgressCallback(Protocol):
         ...
 
 
+def emit_substep(
+    progress: ProgressCallback | None, step: str, text: str, elapsed_sec: float = 0.0
+) -> None:
+    """Emit a substep event to the progress callback when one is registered.
+
+    Shared by the harness and the measurement bracket so the "no callback -> no-op"
+    guard lives in exactly one place.
+    """
+    if progress is not None:
+        progress.on_substep(step, text, elapsed_sec)
+
+
 @runtime_checkable
 class StudyProgressCallback(ProgressCallback, Protocol):
     """Extended callback for study-level experiment tracking + per-step progress.
