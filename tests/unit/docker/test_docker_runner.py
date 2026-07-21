@@ -2096,6 +2096,7 @@ class TestDispatchAssetMaterialisation:
         )
         assert entry_script.read_bytes() == packaged
 
+    @pytest.mark.needs_dist_metadata
     def test_runtime_requirements_include_core_exclude_extras(self):
         """Core runtime deps are present; optional-extra deps (zeus/codecarbon) are not."""
         from llenergymeasure.infra.docker.command import _runtime_requirements
@@ -2113,6 +2114,7 @@ class TestDispatchAssetMaterialisation:
         # No environment markers leak into the materialised specs.
         assert all(";" not in s for s in specs)
 
+    @pytest.mark.needs_dist_metadata
     def test_requirements_file_content_matches_metadata(self):
         """The materialised requirements.txt lines equal _runtime_requirements()."""
         from llenergymeasure.infra.docker.command import (
