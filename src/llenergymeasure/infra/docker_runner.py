@@ -5,139 +5,49 @@ The DockerRunner manages the full container lifecycle:
 1. Create a temporary exchange directory (``tempfile.mkdtemp(prefix='llem-')``)
 2. Serialise ExperimentConfig to JSON in the exchange dir
 3. Start ``docker run --rm --gpus all`` with the exchange dir mounted as /run/llem
-4. Block until the container exits (subprocess.run)
+4. Block until the container exits
 5. Read the result JSON written by the container entrypoint
 6. Clean up the exchange dir on success; preserve it on failure for debugging
 
-This module is consumed by StudyRunner as the dispatch mechanism when
-``runner=docker`` is resolved by runner_resolution.resolve_runner().
+This module is the facade: the concerns are decomposed into the
+``llenergymeasure.infra.docker`` package (``command`` builds the argv,
+``lifecycle`` runs the container process and owns the watchdog, ``exchange``
+owns the exchange-dir lifecycle + result read + rescue, ``diagnostics``
+classifies failures). ``DockerRunner`` composes them; its constructor and public
+method signatures are unchanged.
+
+It is consumed by StudyRunner as the dispatch mechanism when ``runner=docker``
+is resolved by runner_resolution.resolve_runner().
 """
 
 from __future__ import annotations
 
-import atexit
-import functools
-import importlib.metadata
-import importlib.resources
-import json
 import logging
 import os
-import queue
-import shutil
-import subprocess
-import sys
 import tempfile
-import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
-
-import platformdirs
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from llenergymeasure.domain.progress import ProgressCallback
 
-from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
-    DOCKER_PULL_TIMEOUT,
-    ENV_BASELINE_SPEC_PATH,
-    ENV_CONFIG_PATH,
-    ENV_DEPS_CACHE_DIR,
-    ENV_ENGINE,
-    ENV_ENTRY_MODULE,
     ENV_HF_TOKEN,
-    ENV_HOST_GID,
-    ENV_HOST_UID,
     ENV_OUTPUT_DIR,
     ENV_SAVE_TIMESERIES,
     TEMP_PREFIX_ENV_FILE,
-    TEMP_PREFIX_EXCHANGE,
-    TEMP_PREFIX_TIMESERIES,
-    TIMEOUT_DOCKER_INSPECT,
-    TIMEOUT_THREAD_JOIN,
-    Engine,
 )
-from llenergymeasure.domain.bundle_artefacts import (
-    CONFIG_SIDECAR_FILENAME,
-    ENVIRONMENT_FILENAME,
-    TIMESERIES_FILENAME,
-)
-from llenergymeasure.domain.progress import resolve_container_step
-from llenergymeasure.infra.docker_errors import (
-    DockerContainerError,
-    DockerStdoutSilenceError,
-    DockerTimeoutError,
-    capture_stderr_snippet,
-    translate_docker_error,
-)
-from llenergymeasure.utils.env_config import (
-    ENV_TRT_BUILD_CACHE_PATH,
-    docker_gpus_arg,
-    docker_shm_size,
-    trt_build_cache_host_dir,
-)
-from llenergymeasure.utils.exceptions import DockerError, DockerPreFlightError
-from llenergymeasure.utils.io import load_json
+from llenergymeasure.infra.docker import command, diagnostics, exchange, lifecycle
+from llenergymeasure.infra.docker.command import append_nccl_env, append_package_dispatch
+from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = ["DockerRunner", "append_nccl_env", "append_package_dispatch"]
 
 logger = logging.getLogger(__name__)
-
-# Reserved exchange env keys the docker command builders set deliberately
-# (via -e or --env-file). The blanket "forward every host LLEM_* var" loop
-# must skip these: docker applies -e last-wins over --env-file, so a stray
-# host LLEM_CONFIG_PATH / LLEM_OUTPUT_DIR / ... would silently clobber the
-# intended dispatch value. Built from the actual ENV_* constants so it can't
-# drift from what the builders set.
-_RESERVED_EXCHANGE_ENV: frozenset[str] = frozenset(
-    {
-        ENV_CONFIG_PATH,
-        ENV_OUTPUT_DIR,
-        ENV_SAVE_TIMESERIES,
-        ENV_ENGINE,
-        ENV_ENTRY_MODULE,
-        ENV_HOST_UID,
-        ENV_HOST_GID,
-        ENV_BASELINE_SPEC_PATH,
-    }
-)
-
-# Container-side mount target for the TRT-LLM engine build cache. The host
-# ~/.cache/trt-llm is bind-mounted here; TRT-LLM's own default cache root
-# (/tmp/.cache/tensorrt_llm/llmapi/) is NOT this path and lives on the
-# ephemeral container filesystem, so without pinning the cache to the mount
-# it would silently die with each container. We default
-# LLEM_TRT_BUILD_CACHE_PATH to this mount so the cache works out of the box;
-# a host-set value still wins (forwarded later, docker -e is last-wins).
-_TRT_BUILD_CACHE_CONTAINER_PATH: Final = "/root/.cache/trt-llm"
-
-# Watchdog poll cadence: small enough to surface timeouts promptly, large
-# enough to keep idle CPU near zero. 0.5s gives users at most a half-second
-# tail beyond their configured ceiling and matches the progress-display
-# heartbeat sampling cadence.
-_WATCHDOG_POLL_INTERVAL = 0.5
-
-# Sentinel for "budget disabled" in the deadline comparison.
-_NO_DEADLINE = float("inf")
-
-# The in-container entrypoint script is shipped as package data (rather than
-# resolved from a repo-root scripts/ dir) so container dispatch works from an
-# installed wheel, not only a source checkout. It is read via
-# importlib.resources and materialised to a host tempdir before bind-mounting
-# (see _materialise_dispatch_assets); docker bind-mounts need a real host path.
-_ENTRY_SCRIPT_PACKAGE: Final = "llenergymeasure.infra"
-_ENTRY_SCRIPT_RESOURCE: Final = "_container/container_entrypoint.sh"
-# Distribution name whose metadata declares the runtime deps the container
-# primes. Read from importlib.metadata so it resolves identically from a
-# checkout and a site-packages install (the old path read the repo-root
-# pyproject.toml, which does not exist for a pip-installed user).
-_DISPATCH_DIST_NAME: Final = "llenergymeasure"
-# Temp-dir prefix for the materialised dispatch assets (entrypoint script +
-# requirements list). One dir per process, cleaned up at interpreter exit.
-_TEMP_PREFIX_DISPATCH: Final = "llem-dispatch-"
 
 
 @contextmanager
@@ -176,264 +86,6 @@ def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
         if v and len(v) > 4:
             text = text.replace(v, "***")
     return text
-
-
-@functools.cache
-def _resolve_package_dir() -> Path:
-    """Return the ``llenergymeasure`` package directory itself.
-
-    Used to bind-mount the host package source into upstream engine images
-    that don't ship llenergymeasure (vllm, tensorrt) and into our own
-    transformers image. Resolved from ``__file__`` rather than via
-    ``import llenergymeasure`` to keep the infra layer free of upper-layer
-    imports (import-linter contract).
-
-    Layout::
-
-        <site-packages-or-src>/
-            llenergymeasure/       <-- returned (the package dir)
-                infra/
-                    docker_runner.py   <-- __file__
-
-    Two ``.parent`` hops walk docker_runner.py -> infra/ -> llenergymeasure/.
-    Encapsulation here localises path knowledge so a future relayout only needs
-    to touch this helper. Cached because ``__file__`` is fixed for the life of
-    the process.
-
-    INVARIANT - why the package dir and not its parent: the mount this feeds
-    (``/llem-src/llenergymeasure``) must expose the ``llenergymeasure`` package
-    and NOTHING else - never the package's on-disk siblings. For a pip/wheel
-    install the parent IS the venv's ``site-packages``. Mounting the parent (the
-    historical ``parent.parent.parent`` walk) put every host third-party package
-    at ``/llem-src``, and ``container_entrypoint.sh`` prepends ``/llem-src`` to
-    ``PYTHONPATH``, so ``PYTHONPATH`` entries always precede the container's own
-    site-packages on ``sys.path`` - every host copy then shadowed the image's
-    native one. Observed: a py3.12 host ``pydantic_core`` C extension shadowing
-    the image's py3.11 build (transformers), and a fresh ``huggingface-hub``
-    shadowing the pinned engine stack (tensorrt). Mounting the package dir alone
-    makes ``/llem-src`` contain only ``llenergymeasure``, so nothing can shadow a
-    container-native dependency. A source checkout is safe either way (its parent
-    is ``src/``, holding only the package); resolving the package dir makes the
-    two install shapes one uniform, always-safe path.
-    """
-    return Path(__file__).resolve().parent.parent
-
-
-@functools.cache
-def _runtime_requirements() -> tuple[str, ...]:
-    """Return llenergymeasure's always-on runtime dependency specs.
-
-    Read from the installed distribution metadata (``importlib.metadata``)
-    rather than a repo-root ``pyproject.toml``, so it resolves identically from
-    a source checkout and a site-packages install. Optional-extra requirements
-    (those carrying an ``extra == ...`` environment marker) are excluded: the
-    container primes only the always-on runtime deps, exactly as the old
-    ``[project.dependencies]`` diff did. Sorted so the materialised file is
-    deterministic (the container hashes it for the deps-probe fast-path stamp).
-    Non-extra environment markers (none exist on current core deps) are
-    discarded rather than forwarded to pip; revisit if a marker-carrying core
-    dependency is ever added.
-    """
-    core: list[str] = []
-    for spec in importlib.metadata.requires(_DISPATCH_DIST_NAME) or []:
-        requirement, _, marker = spec.partition(";")
-        if "extra" in marker:
-            continue
-        requirement = requirement.strip()
-        if requirement:
-            core.append(requirement)
-    return tuple(sorted(core))
-
-
-@functools.cache
-def _materialise_dispatch_assets() -> tuple[Path, Path]:
-    """Materialise the dispatch assets to a host tempdir; return their paths.
-
-    Returns ``(entry_script, requirements_file)`` as real on-disk paths suitable
-    for a docker bind-mount. Both are sourced from the installed package (the
-    script via ``importlib.resources``, the requirements via
-    ``importlib.metadata``) so they resolve from an installed wheel, not only a
-    source checkout - the defect this fixes was resolving them relative to
-    ``__file__``, which landed outside the package for a site-packages install
-    and let docker auto-create empty bind-mount dirs that broke the entrypoint
-    exec.
-
-    Materialised once per process (cached): the content is process-invariant and
-    the mounts are read-only, so a sweep dispatching the same assets hundreds of
-    times pays the extraction cost once. The tempdir is removed at interpreter
-    exit. Raises :class:`DockerPreFlightError` (before any ``docker run``) if an
-    asset cannot be produced, rather than letting docker silently mount an empty
-    directory.
-    """
-    try:
-        script_bytes = (
-            importlib.resources.files(_ENTRY_SCRIPT_PACKAGE)
-            .joinpath(_ENTRY_SCRIPT_RESOURCE)
-            .read_bytes()
-        )
-    except (FileNotFoundError, ModuleNotFoundError, OSError) as exc:
-        raise DockerPreFlightError(
-            "Cannot read the container entrypoint script from the installed "
-            "llenergymeasure package "
-            f"({_ENTRY_SCRIPT_RESOURCE}). The package data is "
-            "incomplete: reinstall llenergymeasure (e.g. "
-            "'pip install --force-reinstall llenergymeasure'), or in a source "
-            "checkout confirm the file exists under src/llenergymeasure/infra/."
-        ) from exc
-
-    requirements = _runtime_requirements()
-    if not requirements:
-        raise DockerPreFlightError(
-            "Cannot derive llenergymeasure's runtime dependencies from the "
-            "installed distribution metadata. Reinstall llenergymeasure so its "
-            "metadata is present (e.g. 'pip install llenergymeasure')."
-        )
-
-    asset_dir = Path(tempfile.mkdtemp(prefix=_TEMP_PREFIX_DISPATCH))
-    atexit.register(shutil.rmtree, asset_dir, ignore_errors=True)
-
-    entry_script = asset_dir / "container_entrypoint.sh"
-    entry_script.write_bytes(script_bytes)
-    entry_script.chmod(0o755)
-
-    requirements_file = asset_dir / "requirements.txt"
-    requirements_file.write_text("\n".join(requirements) + "\n", encoding="utf-8")
-
-    return entry_script, requirements_file
-
-
-@functools.cache
-def _ensure_deps_cache_dir() -> Path:
-    """Resolve the host-side runtime-deps cache directory, creating it if absent.
-
-    The in-container entrypoint script primes any missing runtime deps here on
-    first dispatch and short-circuits subsequent dispatches via a
-    requirements-hash stamp. The cache is keyed by container
-    Python minor (script writes to ``$DEPS_CACHE_ROOT/py{N}.{M}/``), so a
-    single host directory serves multiple engine images even when their
-    Python minors differ.
-
-    Uses ``platformdirs`` for XDG-conformant path resolution; users can
-    override via ``ENV_DEPS_CACHE_DIR`` if they want to share the cache
-    across machines (e.g. on shared cluster storage). Cached because the
-    result is invariant within a process and the mkdir is the only
-    side-effect.
-    """
-    override = os.environ.get(ENV_DEPS_CACHE_DIR)
-    if override:
-        cache_dir = Path(override).expanduser().resolve()
-    else:
-        cache_dir = Path(platformdirs.user_cache_dir("llem")) / "deps"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir
-
-
-def append_package_dispatch(
-    cmd: list[str],
-    *,
-    engine: str,
-    entry_module: str | None = None,
-) -> None:
-    """Append the bind-mounts + env + entrypoint that make the package importable.
-
-    Upstream engine images (vllm, tensorrt) and even our transformers image do
-    NOT have ``llenergymeasure`` installed; the framework runs from the host
-    package source bind-mounted at ``/llem-src/llenergymeasure``. This appends
-    the four mounts the in-container entrypoint script needs (package dir, the
-    runtime requirements list, the script itself, and the host deps cache), the
-    env it reads, and points ``--entrypoint`` at the script. The script prepends
-    ``/llem-src`` to ``PYTHONPATH`` and primes any missing runtime deps, then
-    exec's the module named by ``LLEM_ENTRY_MODULE``.
-
-    INVARIANT - ``/llem-src`` must expose the ``llenergymeasure`` package and
-    NOTHING else. The package dir is mounted at the nested target
-    ``/llem-src/llenergymeasure`` (not the package's PARENT at ``/llem-src``)
-    precisely so that no on-disk sibling of the package leaks in. For a
-    pip/wheel install the parent is the venv's ``site-packages``; because the
-    script prepends ``/llem-src`` to ``PYTHONPATH`` and ``PYTHONPATH`` precedes
-    the container's own site-packages on ``sys.path``, mounting the parent let
-    every host third-party package shadow the image's native copy (e.g. a host
-    ``pydantic_core`` C extension built for a different Python minor, or a fresh
-    ``huggingface-hub`` over a pinned engine stack). See ``_resolve_package_dir``.
-
-    The entrypoint script and the requirements list are shipped as package data
-    and materialised to a host tempdir (see ``_materialise_dispatch_assets``) so
-    dispatch works from an installed wheel, not only a source checkout. The
-    package dir at ``/llem-src/llenergymeasure`` resolves from ``__file__``
-    (see ``_resolve_package_dir``): one uniform path for editable and wheel
-    installs, no editable-detection, no llem dist-info in-container (the editable
-    flow has always run without it, proving container-side code never needs it).
-
-    Shared by the experiment dispatch (``DockerRunner._build_docker_cmd``) and
-    the baseline dispatch (``study.baseline_container.build_baseline_docker_cmd``)
-    so the two package-import setups cannot drift.
-
-    Args:
-        cmd: Docker command list to mutate in place (mounts/env appended before
-            the image name, which the caller adds afterwards).
-        engine: Engine value; sets ``LLEM_ENGINE`` so the script routes tensorrt
-            through ``nvidia_entrypoint.sh`` for the libnvinfer ``LD_LIBRARY_PATH``.
-        entry_module: Override for the module the script exec's. ``None`` leaves
-            the script default (``llenergymeasure.entrypoints.container``).
-
-    Raises:
-        DockerPreFlightError: A dispatch asset (entrypoint script or requirements
-            list) could not be materialised from the installed package. Raised
-            before ``docker run`` so a missing source never becomes a silent
-            docker-auto-created empty-dir mount.
-    """
-    pkg_dir = _resolve_package_dir()
-    entry_script, requirements_file = _materialise_dispatch_assets()
-    deps_cache = _ensure_deps_cache_dir()
-    cmd.extend(
-        [
-            "-v",
-            f"{pkg_dir}:/llem-src/llenergymeasure:ro",
-            "-v",
-            f"{requirements_file}:/llem-requirements.txt:ro",
-            "-v",
-            f"{entry_script}:/llem-entry.sh:ro",
-            "-v",
-            f"{deps_cache}:/llem-runtime-deps",
-            "-e",
-            "PYTHONDONTWRITEBYTECODE=1",
-            "-e",
-            f"{ENV_ENGINE}={engine}",
-            "-e",
-            f"{ENV_HOST_UID}={os.getuid()}",
-            "-e",
-            f"{ENV_HOST_GID}={os.getgid()}",
-        ]
-    )
-    if entry_module is not None:
-        cmd.extend(["-e", f"{ENV_ENTRY_MODULE}={entry_module}"])
-    cmd.extend(["--entrypoint", "/llem-entry.sh"])
-
-
-def append_nccl_env(cmd: list[str]) -> None:
-    """Forward host ``NCCL_*`` env vars into the container.
-
-    NCCL tuning/workaround settings must reach the engine process, which runs
-    inside the container rather than on the host. The canonical case is
-    ``NCCL_P2P_DISABLE=1`` on PCIe multi-GPU hosts whose topology lacks
-    functional GPU peer-to-peer (P2P): without it, every tensor-parallel run
-    hangs at the first NCCL collective.
-
-    Uses explicit ``-e KEY=VALUE`` (matching the ``LLEM_*`` forwarding idiom in
-    ``DockerRunner._build_docker_cmd``) and iterates keys in sorted order so the
-    built command is deterministic (tests assert on argv). Shared by the
-    experiment dispatch (``DockerRunner._build_docker_cmd``) and the baseline
-    dispatch (``study.baseline_container.build_baseline_docker_cmd``) so the two
-    env-forwarding setups cannot drift.
-
-    Args:
-        cmd: Docker command list to mutate in place (env appended before the
-            image name, which the caller adds afterwards).
-    """
-    for env_key in sorted(k for k in os.environ if k.startswith("NCCL_")):
-        env_val = os.environ[env_key]
-        if env_val:
-            cmd.extend(["-e", f"{env_key}={env_val}"])
 
 
 class DockerRunner:
@@ -550,7 +202,7 @@ class DockerRunner:
         # Lazy import to avoid heavy domain imports at module load time
         from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-        exchange_dir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_EXCHANGE))
+        exchange_dir = exchange.create_exchange_dir()
 
         # Collect secrets for env-file (never pass as CLI args)
         secrets: dict[str, str] = {}
@@ -563,7 +215,7 @@ class DockerRunner:
         try:
             # --- Ensure image is available (pull with visible output if needed) ---
             if not skip_image_check:
-                self._ensure_image(progress=_p)
+                lifecycle.ensure_image(self.image, progress=_p)
 
             # --- Write config JSON ---
             # Compute config_hash from the clean config (no output path mutation).
@@ -596,7 +248,7 @@ class DockerRunner:
                 )
                 logger.debug("Running docker command: %s", _mask_secrets(str(cmd), secrets))
 
-                # Use Popen streaming when progress callback is provided.
+                # Use streaming launch + wait when a progress callback is provided.
                 # Container inner events (baseline, model, warmup, measure, save)
                 # are forwarded as top-level steps for granular progress display.
                 if _p:
@@ -607,89 +259,34 @@ class DockerRunner:
                         container_start_time=t0_container,
                     )
                 else:
-                    # Classic mode: blocking subprocess.run (backward compatible)
-                    try:
-                        proc = subprocess.run(
-                            cmd,
-                            capture_output=True,
-                            text=True,
-                            timeout=self.timeout,
-                        )
-                    except subprocess.TimeoutExpired as exc:
-                        logger.debug(
-                            "Docker container timed out after %ss. Debug artifacts at %s",
-                            self.timeout,
-                            exchange_dir,
-                        )
-                        raise DockerTimeoutError(
-                            message=f"Container timed out after {self.timeout}s.",
-                            fix_suggestion="Increase timeout or reduce experiment size.",
-                        ) from exc
-                    returncode = proc.returncode
-                    stderr_text = proc.stderr
+                    # Classic mode: blocking run until exit (backward compatible)
+                    returncode, stderr_text = lifecycle.run_blocking(cmd, self.timeout)
 
             # --- Handle non-zero exit ---
             if returncode != 0:
-                logger.debug(
-                    "Container failed (exit %d). Debug artifacts at %s",
-                    returncode,
-                    exchange_dir,
+                error: DockerError = diagnostics.classify_container_failure(
+                    returncode=returncode,
+                    stderr_text=stderr_text,
+                    image=self.image,
+                    exchange_dir=exchange_dir,
+                    config_hash=config_hash,
                 )
-                # Persist container stderr to a log file in the exchange dir
-                # so it survives for post-mortem debugging.
-                container_log_path = exchange_dir / "container.log"
-                try:
-                    container_log_path.write_text(
-                        stderr_text or "(no stderr captured)", encoding="utf-8"
-                    )
-                    logger.debug("Container log written to %s", container_log_path)
-                except Exception as write_exc:
-                    logger.warning("Failed to write container.log: %s", write_exc)
-
-                # Prefer structured error JSON written by the container entrypoint
-                # over Docker's stderr, which can contain misleading daemon messages.
-                error_json_path = exchange_dir / f"{config_hash}_error.json"
-                error: DockerError
-                if error_json_path.exists():
-                    payload = load_json(error_json_path)
-                    error = DockerContainerError(
-                        message=f"{payload.get('type', 'UnknownError')}: {payload.get('message', '')}",
-                        fix_suggestion="Check the error traceback in the error JSON for details.",
-                        stderr_snippet=capture_stderr_snippet(stderr_text) if stderr_text else None,
-                    )
-                    error.error_payload = payload
-                else:
-                    error = translate_docker_error(returncode, stderr_text, self.image)
-
-                error.exchange_dir = str(exchange_dir)
                 # Do NOT clean up - preserve for debugging
                 exchange_dir = None  # type: ignore[assignment]
                 raise error
 
             # --- Read result ---
-            result = self._read_result(exchange_dir, config_hash)
+            result = exchange.read_result(exchange_dir, config_hash)
 
             # --- Rescue artefacts before cleanup ---
-            # The harness inside the container wrote its artefacts to /run/llem
-            # (= exchange_dir on host): config.json always (the sole home of
-            # provenance and the authoritative home of identity), environment.json
-            # (the accurate in-container environment snapshot - the host's own
-            # snapshot describes the dispatching host, not this container), and
-            # timeseries.parquet when enabled. Move them to a temp dir so the
-            # caller can copy them into the study directory before the exchange
-            # dir is destroyed below. config.json must survive too - otherwise a
-            # successful docker run lands a result.json with no provenance.
+            # config.json / environment.json / timeseries.parquet must survive the
+            # exchange-dir teardown so the caller can land them in the study dir.
             artefact_tmpdir: Path | None = None
             if not isinstance(result, dict):
-                for _name in (CONFIG_SIDECAR_FILENAME, ENVIRONMENT_FILENAME, TIMESERIES_FILENAME):
-                    _src = exchange_dir / _name
-                    if _src.exists():
-                        if artefact_tmpdir is None:
-                            artefact_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
-                        shutil.move(str(_src), str(artefact_tmpdir / _name))
+                artefact_tmpdir = exchange.rescue_artefacts(exchange_dir)
 
             # --- Success: clean up ---
-            self._cleanup_exchange_dir(exchange_dir)
+            exchange.cleanup_exchange_dir(exchange_dir)
             exchange_dir = None  # type: ignore[assignment]
 
             # Error payload dicts ({type, message, traceback}) are returned as-is.
@@ -705,392 +302,8 @@ class DockerRunner:
                 logger.debug("Preserving exchange dir for debugging: %s", exchange_dir)
 
     # ------------------------------------------------------------------
-    # Private helpers
+    # Private helpers (thin delegation to the docker/ concern modules)
     # ------------------------------------------------------------------
-
-    def _ensure_image(self, progress: ProgressCallback | None = None) -> None:
-        """Check if the Docker image exists locally; pull with visible output if not.
-
-        Always emits an ``image_check`` step so the user sees the cache lookup.
-        If the image is not cached, emits a separate ``pull`` step.
-        Substeps report image metadata (ID, size, age) for provenance visibility.
-        """
-        short_image = self.short_image
-
-        if progress:
-            progress.on_step_start("image_check", "Inspecting", short_image)
-        t0 = time.perf_counter()
-
-        check = subprocess.run(
-            ["docker", "image", "inspect", self.image],
-            capture_output=True,
-            timeout=TIMEOUT_DOCKER_INSPECT,
-        )
-        if check.returncode == 0:
-            if progress:
-                progress.on_step_update("image_check", f"{short_image} (cached)")
-                progress.on_step_done("image_check", time.perf_counter() - t0)
-                progress.on_step_skip("pull", "cached")
-            return
-
-        if progress:
-            progress.on_step_done("image_check", time.perf_counter() - t0)
-
-        # Image not cached - pull it
-        if progress:
-            progress.on_step_start("pull", "Pulling", self.image)
-        t0_pull = time.perf_counter()
-
-        print(f"Pulling image: {self.image}", file=sys.stderr)
-        try:
-            pull = subprocess.run(
-                ["docker", "pull", self.image],
-                stdout=sys.stderr,
-                stderr=sys.stderr,
-                timeout=DOCKER_PULL_TIMEOUT,
-            )
-        except subprocess.TimeoutExpired as exc:
-            if progress:
-                progress.on_step_done("pull", time.perf_counter() - t0_pull)
-            from llenergymeasure.infra.docker_errors import DockerImagePullError
-
-            raise DockerImagePullError(
-                message=f"Image pull timed out after {DOCKER_PULL_TIMEOUT}s: {self.image}",
-                fix_suggestion=f"Pull manually: docker pull {self.image}",
-            ) from exc
-        if pull.returncode != 0:
-            if progress:
-                progress.on_step_done("pull", time.perf_counter() - t0_pull)
-            from llenergymeasure.infra.docker_errors import DockerImagePullError
-
-            raise DockerImagePullError(
-                message=f"Image not found or could not be pulled: {self.image}",
-                fix_suggestion=f"docker pull {self.image}",
-            )
-
-        if progress:
-            progress.on_step_done("pull", time.perf_counter() - t0_pull)
-
-    def _run_container_streaming(
-        self,
-        cmd: list[str],
-        progress: ProgressCallback | None = None,
-        _mask_secrets_fn: Callable[[str], str] | None = None,
-        container_start_time: float | None = None,
-    ) -> tuple[int, str]:
-        """Run container with Popen, streaming stdout for progress events.
-
-        Container inner events (step_start, step_update, step_done) are
-        forwarded as top-level progress steps so the CLI can display each
-        measurement phase individually (Docker BuildKit-style granularity).
-
-        The ``container_start`` step (started by the caller) is ended when
-        the first inner event arrives, capturing the container boot time.
-
-        Args:
-            cmd: Docker command list.
-            progress: Optional ProgressCallback.
-            _mask_secrets_fn: Optional callable to mask secrets in log output.
-            container_start_time: perf_counter timestamp of container_start step.
-
-        Returns:
-            Tuple of (returncode, stderr_text).
-        """
-        stderr_lines: list[str] = []
-        # Keywords in container stderr that indicate meaningful activity.
-        # When no JSON progress events arrive (old images), surface these
-        # as on_step_update to show the container is alive and working.
-        _ACTIVITY_KEYWORDS = (
-            "loading",
-            "downloading",
-            "measuring",
-            "warmup",
-            "warming",
-            "inference",
-            "saving",
-            "running",
-            "model",
-            "tokenizer",
-        )
-
-        def _read_stderr(pipe: Any) -> None:
-            """Read stderr in a background thread to prevent blocking.
-
-            For old images that don't emit JSON progress events, surfaces
-            interesting log lines as step updates on container_start.
-            """
-            for line in pipe:
-                stderr_lines.append(line)
-                stripped = line.strip()
-                logger.debug("container stderr: %s", stripped)
-                # Surface activity from old images as step updates
-                if (
-                    progress is not None
-                    and not container_start_done_event.is_set()
-                    and stripped
-                    and any(kw in stripped.lower() for kw in _ACTIVITY_KEYWORDS)
-                ):
-                    # Truncate long log lines and strip log prefix (e.g. "INFO:root:")
-                    display_text = stripped
-                    if ":" in display_text and display_text.split(":")[0].isupper():
-                        display_text = display_text.split(":", 2)[-1].strip()
-                    progress.on_step_update("container_start", display_text[:50])
-            pipe.close()
-
-        # Thread-safe flag shared with stderr thread to track if JSON events arrived
-        container_start_done_event = threading.Event()
-
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-        except OSError as exc:
-            raise DockerContainerError(
-                message=f"Failed to start docker process: {exc}",
-                fix_suggestion="Is Docker installed and running?",
-            ) from exc
-
-        # Read stderr in background thread to avoid deadlock
-        stderr_thread = threading.Thread(target=_read_stderr, args=(proc.stderr,), daemon=True)
-        stderr_thread.start()
-
-        # Pump stdout into a queue from a daemon thread so the main loop
-        # can wake up periodically to check both timeout budgets even
-        # when the container is producing nothing. The blocking
-        # ``for line in proc.stdout`` shape this replaces would hang
-        # indefinitely on a stuck CUDA / NCCL / compile step - the
-        # wall-clock proc.wait() never gets a chance to fire because we
-        # never exit the for-loop. See issue #366.
-        stdout_q: queue.Queue[str | None] = queue.Queue()
-
-        def _pump_stdout(pipe: Any) -> None:
-            try:
-                for line in pipe:
-                    stdout_q.put(line)
-            finally:
-                stdout_q.put(None)  # sentinel: pipe closed (EOF or process exit)
-
-        assert proc.stdout is not None
-        stdout_thread = threading.Thread(target=_pump_stdout, args=(proc.stdout,), daemon=True)
-        stdout_thread.start()
-
-        container_start_done = False
-        watchdog_start = time.monotonic()
-        last_activity = watchdog_start
-
-        try:
-            while True:
-                wall_remaining, silence_remaining = self._check_watchdog_deadlines(
-                    proc, watchdog_start, last_activity
-                )
-
-                # Cap the queue wait at the poll interval so a Ctrl-C
-                # interrupt is observed within ~0.5s even with both
-                # budgets large.
-                wait_for = min(wall_remaining, silence_remaining, _WATCHDOG_POLL_INTERVAL)
-                try:
-                    line = stdout_q.get(timeout=wait_for)
-                except queue.Empty:
-                    continue
-                if line is None:
-                    break  # stdout pipe closed
-                last_activity = time.monotonic()
-
-                container_start_done = self._handle_stdout_line(
-                    line,
-                    progress,
-                    container_start_done,
-                    container_start_time,
-                    container_start_done_event,
-                    _mask_secrets_fn,
-                )
-        finally:
-            with suppress(Exception):
-                proc.stdout.close()
-            stdout_thread.join(timeout=TIMEOUT_THREAD_JOIN)
-
-        # If no inner events arrived, end container_start now (old images)
-        if not container_start_done and container_start_time is not None and progress is not None:
-            progress.on_step_done("container_start", time.perf_counter() - container_start_time)
-
-        # Wait for process exit. The watchdog above ensures we only get
-        # here when stdout has closed; proc.wait() blocks only until the
-        # process actually reaps, which is bounded.
-        try:
-            proc.wait(timeout=self.timeout)
-        except subprocess.TimeoutExpired as exc:
-            proc.kill()
-            proc.wait()
-            raise DockerTimeoutError(
-                message=f"Container timed out after {self.timeout}s.",
-                fix_suggestion="Increase timeout or reduce experiment size.",
-            ) from exc
-
-        stderr_thread.join(timeout=TIMEOUT_THREAD_JOIN)
-        stderr_text = "".join(stderr_lines)
-
-        return proc.returncode, stderr_text
-
-    def _check_watchdog_deadlines(
-        self,
-        proc: subprocess.Popen[str],
-        watchdog_start: float,
-        last_activity: float,
-    ) -> tuple[float, float]:
-        """Compute the remaining wall-clock and stdout-silence budgets.
-
-        Kills the container and raises the matching watchdog error if either budget
-        is exhausted. Returns ``(wall_remaining, silence_remaining)`` so the caller
-        can cap its queue wait.
-        """
-        now = time.monotonic()
-        wall_remaining = (
-            self.timeout - (now - watchdog_start) if self.timeout is not None else _NO_DEADLINE
-        )
-        silence_remaining = (
-            self.silence_timeout - (now - last_activity)
-            if self.silence_timeout is not None
-            else _NO_DEADLINE
-        )
-
-        if wall_remaining <= 0:
-            self._kill_container_for_watchdog(proc)
-            raise DockerTimeoutError(
-                message=f"Container timed out after {self.timeout}s (wall-clock).",
-                fix_suggestion=(
-                    "Increase study_execution.experiment_timeout_seconds or reduce experiment size."
-                ),
-            )
-        if silence_remaining <= 0:
-            self._kill_container_for_watchdog(proc)
-            raise DockerStdoutSilenceError(
-                message=(
-                    f"Container produced no stdout for "
-                    f"{self.silence_timeout}s (likely stuck process)."
-                ),
-                fix_suggestion=(
-                    "Increase study_execution.stdout_silence_timeout_seconds "
-                    "if your workload legitimately goes silent for longer "
-                    "(e.g. fresh TRT-LLM engine builds), or investigate the "
-                    "stuck step. Check container logs in the exchange dir."
-                ),
-            )
-        return wall_remaining, silence_remaining
-
-    def _handle_stdout_line(
-        self,
-        line: str,
-        progress: ProgressCallback | None,
-        container_start_done: bool,
-        container_start_time: float | None,
-        container_start_done_event: threading.Event,
-        mask_secrets_fn: Callable[[str], str] | None,
-    ) -> bool:
-        """Process one container stdout line.
-
-        JSON progress events are forwarded to ``progress``; plain output is logged
-        (secrets masked). Returns the updated ``container_start_done`` flag - set True
-        on the first inner event so the ``container_start`` step is ended exactly once.
-        """
-        stripped = line.strip()
-        if stripped.startswith('{"event":') and progress is not None:
-            try:
-                event = json.loads(stripped)
-                event_type = event.get("event")
-                step = event.get("step", "")
-
-                # End "container_start" on first inner event
-                if not container_start_done and container_start_time is not None:
-                    container_start_done = True
-                    container_start_done_event.set()
-                    progress.on_step_done(
-                        "container_start",
-                        time.perf_counter() - container_start_time,
-                    )
-
-                # Resolve container-boundary step id (e.g. the container's
-                # "preflight" renders as "container_preflight" host-side). The
-                # mapping lives in the progress registry.
-                step = resolve_container_step(step)
-
-                self._dispatch_progress_event(progress, event_type, step, event)
-            except (json.JSONDecodeError, KeyError):
-                logger.debug("Unparseable progress line: %s", stripped)
-        else:
-            if stripped:
-                masked = mask_secrets_fn(stripped) if mask_secrets_fn else stripped
-                logger.debug("container stdout: %s", masked)
-        return container_start_done
-
-    @staticmethod
-    def _dispatch_progress_event(
-        progress: ProgressCallback, event_type: str, step: str, event: dict[str, Any]
-    ) -> None:
-        """Forward a single decoded container progress event to the host callback."""
-        if event_type == "step_start":
-            progress.on_step_start(
-                step,
-                event.get("description", ""),
-                event.get("detail", ""),
-            )
-        elif event_type == "step_update":
-            progress.on_step_update(step, event.get("detail", ""))
-        elif event_type == "step_done":
-            progress.on_step_done(step, event.get("elapsed_sec", 0.0))
-        elif event_type == "step_skip":
-            progress.on_step_skip(step, event.get("reason", ""))
-        elif event_type == "substep":
-            progress.on_substep(
-                step,
-                event.get("text", ""),
-                event.get("elapsed_sec", 0.0),
-            )
-        elif event_type == "substep_start":
-            progress.on_substep_start(step, event.get("text", ""))
-        elif event_type == "substep_done":
-            progress.on_substep_done(
-                step,
-                event.get("text"),
-                event.get("elapsed_sec"),
-            )
-
-    @staticmethod
-    def _kill_container_for_watchdog(proc: subprocess.Popen[str]) -> None:
-        """Terminate then SIGKILL a hung container; swallow any wait failures.
-
-        Used by the unified watchdog when a timeout fires. Mirrors the
-        existing wall-clock kill path: best-effort terminate, then kill,
-        then a final wait so the process group is fully reaped. Any
-        exception from the cleanup path is logged at debug level - the
-        watchdog's responsibility is to *raise the right error*, not to
-        handle a cooperatively-shutting-down container.
-        """
-        for stage, action in (
-            ("terminate", proc.terminate),
-            ("wait-after-terminate", lambda: proc.wait(timeout=2.0)),
-            ("kill", proc.kill),
-            ("wait-after-kill", lambda: proc.wait(timeout=2.0)),
-        ):
-            try:
-                action()
-            except Exception as exc:
-                logger.debug("Watchdog cleanup %s failed: %s", stage, exc)
-
-    def _mount_if_absent(
-        self, cmd: list[str], host: str | Path, container: str, *, extra_env: str | None = None
-    ) -> None:
-        """Append ``-v host:container`` unless the user already mounts ``container``.
-
-        Optionally appends ``-e <extra_env>`` after the mount (e.g. HF_HOME).
-        """
-        if any(cp == container for _, cp in self.extra_mounts):
-            return
-        cmd.extend(["-v", f"{host}:{container}"])
-        if extra_env is not None:
-            cmd.extend(["-e", extra_env])
 
     def _build_docker_cmd(
         self,
@@ -1099,184 +312,38 @@ class DockerRunner:
         exchange_dir: str,
         env_path: Path | None = None,
     ) -> list[str]:
-        """Build the ``docker run`` command list.
-
-        All three engines (transformers, vllm, tensorrt) follow the same
-        dispatch shape: the image carries only the engine substrate, the host
-        package source is bind-mounted at ``/llem-src/llenergymeasure``, the
-        runtime requirements list is bind-mounted as a single-file mount at
-        ``/llem-requirements.txt``, the in-container entrypoint script is
-        bind-mounted at ``/llem-entry.sh``, and a host-side deps cache is
-        bind-mounted at ``/llem-runtime-deps``. ``--entrypoint`` always points
-        at ``/llem-entry.sh``; that script
-        (a) diffs the requirements list against installed dists and
-        pip-installs any missing ones to the cache (fast-path skips this when a
-        requirements-hash stamp matches), (b) sets
-        ``PYTHONPATH`` to include the cache and ``/llem-src``, and (c) exec's
-        the framework entrypoint module - routing through
-        ``/opt/nvidia/nvidia_entrypoint.sh`` when ``LLEM_ENGINE=tensorrt``
-        (sets up LD_LIBRARY_PATH for libnvinfer).
-
-        Multi-GPU tensorrt runs are NOT wrapped in mpirun: TensorRT-LLM's LLM
-        API self-manages tensor parallelism (setting ``tensor_parallel_size``
-        makes the LLM class spawn its own worker processes via its MPI/RPC
-        orchestrator), so a single python3 process is correct.
-
-        Args:
-            config:       ExperimentConfig for the current experiment. Used to
-                          detect TRT-LLM engine and read ``tensorrt.tensor_parallel_size``.
-            config_hash:  Hash prefix for config/result file names.
-            exchange_dir: Host path of the temporary exchange directory.
-            env_path:     Path to a temp env-file (written by ``_env_file``), or None.
-                          When set, ``--env-file <path>`` is added to the command.
-                          Secrets (e.g. HF_TOKEN) are never passed as ``-e KEY=VALUE``
-                          arguments to avoid exposure in ``/proc/<pid>/cmdline``.
-
-        Returns:
-            List of strings suitable for ``subprocess.run``.
-        """
-        cmd = [
-            "docker",
-            "run",
-            "--rm",
-            "--gpus",
-            docker_gpus_arg(self.gpu_indices),
-            "-v",
-            f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
-            "-e",
-            f"{ENV_CONFIG_PATH}={CONTAINER_EXCHANGE_DIR}/{config_hash}_config.json",
-            "--shm-size",
-            docker_shm_size(),
-        ]
-
-        # Propagate secrets via --env-file (never as -e KEY=VALUE CLI args)
-        if env_path is not None:
-            cmd.extend(["--env-file", str(env_path)])
-
-        # TRT-LLM engine cache: persist compiled engines across ephemeral
-        # containers. Also default LLEM_TRT_BUILD_CACHE_PATH to the mount target
-        # via extra_env so the cache lands on the mount out of the box (TRT-LLM's
-        # own default root is unmounted); a host-set value overrides this because
-        # the blanket LLEM_* forwarding loop below re-emits it last (docker -e is
-        # last-wins).
-        if config.engine == Engine.TENSORRT:
-            self._mount_if_absent(
-                cmd,
-                str(trt_build_cache_host_dir()),
-                _TRT_BUILD_CACHE_CONTAINER_PATH,
-                extra_env=f"{ENV_TRT_BUILD_CACHE_PATH}={_TRT_BUILD_CACHE_CONTAINER_PATH}",
-            )
-
-        # Auto-mount the host HuggingFace cache so model weights persist across
-        # ephemeral containers; otherwise each run re-downloads the full model.
-        hf_cache_container = "/root/.cache/huggingface"
-        self._mount_if_absent(
-            cmd,
-            Path.home() / ".cache" / "huggingface",
-            hf_cache_container,
-            extra_env=f"HF_HOME={hf_cache_container}",
+        """Build the ``docker run`` command list (delegates to ``docker.command``)."""
+        return command.build_docker_cmd(
+            image=self.image,
+            config=config,
+            config_hash=config_hash,
+            exchange_dir=exchange_dir,
+            env_path=env_path,
+            extra_mounts=self.extra_mounts,
+            container_name=self._container_name,
+            labels=self._labels,
+            gpu_indices=self.gpu_indices,
         )
 
-        # Auto-mount the host flashinfer JIT cache so TRT-LLM warm runs reuse
-        # already-compiled per-arch attention kernels (cold compile is minutes).
-        if config.engine == Engine.TENSORRT:
-            self._mount_if_absent(
-                cmd, Path.home() / ".cache" / "flashinfer", "/root/.cache/flashinfer"
-            )
+    def _run_container_streaming(
+        self,
+        cmd: list[str],
+        progress: ProgressCallback | None = None,
+        _mask_secrets_fn: Callable[[str], str] | None = None,
+        container_start_time: float | None = None,
+    ) -> tuple[int, str]:
+        """Launch the container then wait for exit, streaming progress.
 
-        # Forward LLEM_* env vars into the container so framework defaults set
-        # on the host (e.g. LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP) reach the
-        # experiment process, which actually runs inside the container. Reserved
-        # exchange keys are excluded: we set those deliberately above (or via
-        # the package-dispatch helper), and docker's -e is last-wins over the
-        # --env-file, so a stray host copy would silently clobber the intended
-        # value.
-        for env_key, env_val in os.environ.items():
-            if env_key.startswith("LLEM_") and env_val and env_key not in _RESERVED_EXCHANGE_ENV:
-                cmd.extend(["-e", f"{env_key}={env_val}"])
-
-        # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
-        # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P)
-        # reach the engine process, which runs inside the container.
-        append_nccl_env(cmd)
-
-        # Extra volume mounts (engine cache, model cache, etc.)
-        for host_path, container_path in self.extra_mounts:
-            cmd.extend(["-v", f"{host_path}:{container_path}"])
-
-        # All engines: bind-mount the host package source + bootstrap (so the
-        # package is importable in images that don't ship it) and point
-        # --entrypoint at the script. Shared with the baseline dispatch via
-        # append_package_dispatch so the two cannot drift. The experiment path
-        # uses the script's default entry module
-        # (``llenergymeasure.entrypoints.container``), so entry_module stays None.
-        # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to the
-        # raw value via its ``__str__`` override.
-        append_package_dispatch(cmd, engine=f"{config.engine}")
-
-        # Container name and labels for lifecycle management (cleanup, reaper).
-        # These must appear before the image name in the docker run command.
-        if self._container_name:
-            cmd.extend(["--name", self._container_name])
-        for key, value in self._labels.items():
-            cmd.extend(["--label", f"{key}={value}"])
-
-        cmd.append(self.image)
-
-        # No post-image args - the entrypoint script invokes the framework
-        # module itself; config is passed via env vars (LLEM_CONFIG_PATH etc.).
-        return cmd
-
-    def _read_result(self, exchange_dir: Path, config_hash: str) -> Any:
-        """Read and parse the result JSON written by the container.
-
-        Args:
-            exchange_dir: Host path of the temporary exchange directory.
-            config_hash:  Hash prefix for the result file name.
-
-        Returns:
-            ExperimentResult if the file contains a valid result, or a dict
-            error payload if the container wrote an error JSON.
-
-        Raises:
-            DockerContainerError: If the result file does not exist.
+        The launch (:func:`docker.lifecycle.launch`) is separable from the wait
+        (:func:`docker.lifecycle.wait_to_completion`, which owns the watchdog);
+        this method composes them into the block-until-exit mode.
         """
-        # Lazy import to avoid pulling the heavy domain result models at module
-        # load time (the parser imports ExperimentResult transitively).
-        from llenergymeasure.domain.result_payload import parse_experiment_result_payload
-
-        result_path = exchange_dir / f"{config_hash}_result.json"
-        if not result_path.exists():
-            raise DockerContainerError(
-                message=f"Container exited 0 but no result file found at {result_path}",
-                fix_suggestion="Check container logs for errors during experiment execution.",
-            )
-
-        raw = load_json(result_path)
-
-        # Container may write an error payload even on exit 0 (defensive check).
-        # Error payloads have "type" and "traceback" keys (mirror StudyRunner worker
-        # format). This detection stays here: it is exchange-specific IPC, not a
-        # property of a persisted result.
-        if isinstance(raw, dict) and "type" in raw and "traceback" in raw:
-            return raw
-
-        # Cross-version IPC: strip fields unknown to the host schema (container may
-        # run an older/newer version) and warn on a host/container version skew.
-        # Both behaviours live in the shared parser now, keyed by tolerant=True and
-        # the host version as expected_version.
-        return parse_experiment_result_payload(raw, tolerant=True, expected_version=__version__)
-
-    def _cleanup_exchange_dir(self, exchange_dir: Path) -> None:
-        """Remove the temporary exchange directory.
-
-        Logs a warning on failure but never raises - cleanup must not mask
-        real errors from the caller.
-
-        Args:
-            exchange_dir: Path to remove.
-        """
-        try:
-            shutil.rmtree(exchange_dir)
-        except Exception as exc:
-            logger.warning("Could not remove exchange dir %s: %s", exchange_dir, exc)
+        proc = lifecycle.launch(cmd)
+        return lifecycle.wait_to_completion(
+            proc,
+            timeout=self.timeout,
+            silence_timeout=self.silence_timeout,
+            progress=progress,
+            mask_secrets_fn=_mask_secrets_fn,
+            container_start_time=container_start_time,
+        )

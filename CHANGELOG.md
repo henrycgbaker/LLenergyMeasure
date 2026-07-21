@@ -47,6 +47,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   cross-version fields, with the host/container version-skew warning) and the
   bundle-read (strict, via `BundleReader`). One parser, two tolerance settings,
   no duplicated stripping/validation logic across the layer boundary. ([#854])
+- The host HuggingFace cache directory the docker runner bind-mounts into
+  experiment containers is now configurable via the `LLEM_DOCKER_HF_CACHE` env
+  var (default `$HOME/.cache/huggingface`, the historical location), mirroring
+  `LLEM_DOCKER_SHM_SIZE`. Point it at shared storage or a large scratch disk when
+  the default home lives on a small volume; the in-container target and `HF_HOME`
+  are unchanged. ([#861])
 
 ### Changed
 
@@ -76,6 +82,23 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `config.sweep_expansion` (sweep-block expansion) and `config.cycle_ordering`
   (execution-sequence ordering); the public `llenergymeasure.config.grid`
   import surface is unchanged. ([#860])
+- Internal restructure (no behavior or results change): the 1291-line
+  `infra/docker_runner.py` god-module is decomposed into an `infra/docker/`
+  package along its concern seams - `command` (env forwarding, mounts, GPU/shm
+  flags, image ref, and the package-dispatch bootstrap), `lifecycle` (image
+  ensure, container launch, block-until-exit wait, and the stdout-silence +
+  wall-clock watchdog), `exchange` (exchange-dir lifecycle, result read, artefact
+  rescue), and `diagnostics` (container failure classification). `DockerRunner`
+  stays the facade at `infra.docker_runner` with its constructor and public
+  method signatures unchanged. The block-until-exit path is expressed as a
+  separable `launch()` (detach-capable) plus `wait_to_completion()`, with the
+  watchdog isolated inside the wait path only, leaving a clean seam for a future
+  server measurement mode (no server dispatch is built here). The ~90-line Python
+  dependency-import probe previously embedded as a bash heredoc in
+  `container_entrypoint.sh` is extracted to a real package-data module
+  (`infra/_container/probe_imports.py`) that lint/mypy cover and unit tests import
+  directly; the shell script invokes it from the mounted package source and fails
+  loudly with a clear message if it is absent. ([#861])
 - Internal restructure (no behavior or results change): the measured-window
   mechanics are extracted into a mode-agnostic `MeasurementBracket`
   (`llenergymeasure.harness.bracket`) and per-model-load state is split from
@@ -1359,5 +1382,6 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#856]: https://github.com/henrycgbaker/llenergymeasure/pull/856
 [#857]: https://github.com/henrycgbaker/llenergymeasure/pull/857
 [#860]: https://github.com/henrycgbaker/llenergymeasure/pull/860
+[#861]: https://github.com/henrycgbaker/llenergymeasure/pull/861
 [#862]: https://github.com/henrycgbaker/llenergymeasure/pull/862
 [#863]: https://github.com/henrycgbaker/llenergymeasure/pull/863

@@ -258,6 +258,33 @@ def docker_shm_size() -> str:
     return os.environ.get(ENV_DOCKER_SHM_SIZE, "").strip() or _DEFAULT_DOCKER_SHM_SIZE
 
 
+ENV_DOCKER_HF_CACHE: Final = "LLEM_DOCKER_HF_CACHE"
+"""Host HuggingFace cache directory bind-mounted into llem experiment containers.
+
+The runner auto-mounts this host directory at the container's
+``/root/.cache/huggingface`` (and sets ``HF_HOME`` to it) so downloaded model
+weights persist across ephemeral containers instead of being re-downloaded every
+run. Unset / empty means ``$HOME/.cache/huggingface`` - the historical location.
+Point it elsewhere (e.g. shared cluster storage or a large scratch disk) when the
+default home lives on a small volume. The in-container target and ``HF_HOME`` are
+fixed; only the host source is configurable.
+"""
+
+
+def docker_hf_cache_dir() -> Path:
+    """Return the host HuggingFace cache directory the docker runner bind-mounts.
+
+    Pure passthrough with the historical fallback: unset / empty ->
+    ``$HOME/.cache/huggingface``. ``~`` in an explicit value is expanded. Mirrors
+    the :func:`docker_shm_size` pattern; the container target and ``HF_HOME`` stay
+    fixed at ``/root/.cache/huggingface``.
+    """
+    raw = os.environ.get(ENV_DOCKER_HF_CACHE, "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".cache" / "huggingface"
+
+
 ENV_TRT_BUILD_CACHE_ENABLED: Final = "LLEM_TRT_BUILD_CACHE_ENABLED"
 """Toggle for TRT-LLM on-disk engine build cache.
 

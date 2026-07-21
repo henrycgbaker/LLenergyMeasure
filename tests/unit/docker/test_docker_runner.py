@@ -113,14 +113,14 @@ class TestSuccessPath:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree") as mock_rmtree,
         ):
             # Write a valid result JSON before runner reads it
             config_hash = _docker_config_hash(config)
@@ -156,14 +156,14 @@ class TestSuccessPath:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
         ):
             # Write result under the clean hash - both host and container agree
             result_path = exchange_dir / f"{direct_hash}_result.json"
@@ -189,11 +189,11 @@ class TestContainerFailure:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 return_value=make_subprocess_result(
                     1, stderr="Error: No such image: ghcr.io/example:latest"
                 ),
@@ -211,14 +211,14 @@ class TestContainerFailure:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 return_value=make_subprocess_result(1, stderr="Error: No such image"),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree") as mock_rmtree,
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -251,11 +251,11 @@ class TestOOMError:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=lambda *a, **k: next(calls),
             ),
         ):
@@ -292,11 +292,11 @@ class TestTimeout:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=fake_run,
             ),
         ):
@@ -319,11 +319,11 @@ class TestPermissionError:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(
                     make_subprocess_result(
                         1,
@@ -351,11 +351,11 @@ class TestMissingResultFile:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 return_value=make_subprocess_result(0),
             ),
         ):
@@ -384,14 +384,14 @@ class TestErrorPayloadFromContainer:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 return_value=make_subprocess_result(0),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
         ):
             config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
@@ -429,10 +429,10 @@ class TestDockerCommandStructure:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+            patch("llenergymeasure.infra.docker.lifecycle.subprocess.run", side_effect=fake_run),
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -489,10 +489,10 @@ class TestHFTokenPropagation:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+            patch("llenergymeasure.infra.docker.lifecycle.subprocess.run", side_effect=fake_run),
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -523,10 +523,10 @@ class TestHFTokenPropagation:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+            patch("llenergymeasure.infra.docker.lifecycle.subprocess.run", side_effect=fake_run),
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -552,14 +552,14 @@ class TestRunnerMetadata:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
         ):
             config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
@@ -589,18 +589,18 @@ class TestCleanupWarning:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.shutil.rmtree",
+                "llenergymeasure.infra.docker.exchange.shutil.rmtree",
                 side_effect=PermissionError("permission denied"),
             ),
-            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
+            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker.exchange"),
         ):
             config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
@@ -640,10 +640,10 @@ class TestHFTokenSecure:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+            patch("llenergymeasure.infra.docker.lifecycle.subprocess.run", side_effect=fake_run),
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -690,10 +690,10 @@ class TestHFTokenSecure:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+            patch("llenergymeasure.infra.docker.lifecycle.subprocess.run", side_effect=fake_run),
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -773,10 +773,10 @@ class TestEngineDispatchEnvVars:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+            patch("llenergymeasure.infra.docker.lifecycle.subprocess.run", side_effect=fake_run),
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -942,7 +942,7 @@ class TestExtraMounts:
         runner = DockerRunner(image=IMAGE)
 
         with patch(
-            "llenergymeasure.infra.docker_runner.Path.home",
+            "llenergymeasure.infra.docker.command.Path.home",
             return_value=Path("/home/testuser"),
         ):
             cmd = self._build_cmd(config, tmp_path, runner)
@@ -961,7 +961,7 @@ class TestExtraMounts:
         )
 
         with patch(
-            "llenergymeasure.infra.docker_runner.Path.home",
+            "llenergymeasure.infra.docker.command.Path.home",
             return_value=Path("/home/testuser"),
         ):
             cmd = self._build_cmd(config, tmp_path, runner)
@@ -1075,11 +1075,11 @@ class TestContainerLogPersistence:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(
                     make_subprocess_result(137, stderr=stderr_content)
                 ),
@@ -1101,11 +1101,11 @@ class TestContainerLogPersistence:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(
                     make_subprocess_result(1, stderr="some error text")
                 ),
@@ -1146,15 +1146,15 @@ class TestTimeseriesParquetRescue:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.shutil.rmtree",
+                "llenergymeasure.infra.docker.exchange.shutil.rmtree",
             ) as mock_rmtree,
         ):
             config_hash = _docker_config_hash(config)
@@ -1186,14 +1186,14 @@ class TestTimeseriesParquetRescue:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
         ):
             config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
@@ -1215,14 +1215,14 @@ class TestTimeseriesParquetRescue:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
         ):
             config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
@@ -1262,11 +1262,11 @@ class TestErrorJsonOnNonZeroExit:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(
                     make_subprocess_result(1, stderr="some docker stderr noise")
                 ),
@@ -1302,11 +1302,11 @@ class TestErrorJsonOnNonZeroExit:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(
                     make_subprocess_result(1, stderr="Error: container failed with unknown reason")
                 ),
@@ -1335,14 +1335,14 @@ class TestVersionMismatchWarning:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
             caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
         ):
             config_hash = _docker_config_hash(config)
@@ -1366,14 +1366,14 @@ class TestVersionMismatchWarning:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
             caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
         ):
             config_hash = _docker_config_hash(config)
@@ -1399,14 +1399,14 @@ class TestVersionMismatchWarning:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
             caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
         ):
             config_hash = _docker_config_hash(config)
@@ -1522,7 +1522,7 @@ class TestMountPivot:
 
     def test_resolve_package_dir_is_llenergymeasure(self):
         """The helper points at the ``llenergymeasure`` package directory itself."""
-        from llenergymeasure.infra.docker_runner import _resolve_package_dir
+        from llenergymeasure.infra.docker.command import _resolve_package_dir
 
         pkg_dir = _resolve_package_dir()
         assert pkg_dir.name == "llenergymeasure"
@@ -1530,7 +1530,7 @@ class TestMountPivot:
 
     def test_mount_host_path_matches_resolver(self, tmp_path):
         """The host side of the bind-mount equals ``_resolve_package_dir()``."""
-        from llenergymeasure.infra.docker_runner import _resolve_package_dir
+        from llenergymeasure.infra.docker.command import _resolve_package_dir
 
         cmd = self._build("transformers", tmp_path)
         expected_mount = f"{_resolve_package_dir()}:/llem-src/llenergymeasure:ro"
@@ -1553,7 +1553,7 @@ class TestMountPivot:
         the package dir, and assert the docker args mount only the package dir
         and never expose the foreign sibling.
         """
-        from llenergymeasure.infra import docker_runner
+        from llenergymeasure.infra.docker import command
 
         site_packages = tmp_path / "site-packages"
         pkg_dir = site_packages / "llenergymeasure"
@@ -1571,7 +1571,7 @@ class TestMountPivot:
 
         # Point the resolver at the package dir. Replacing the module attribute
         # sidesteps the functools.cache on the real resolver entirely.
-        monkeypatch.setattr(docker_runner, "_resolve_package_dir", lambda: pkg_dir)
+        monkeypatch.setattr(command, "_resolve_package_dir", lambda: pkg_dir)
 
         cmd = DockerRunner(image=IMAGE)._build_docker_cmd(make_config(), "abc123", "/tmp/llem-test")
 
@@ -1675,10 +1675,10 @@ class TestDockerGpusOverride:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+            patch("llenergymeasure.infra.docker.lifecycle.subprocess.run", side_effect=fake_run),
         ):
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerImagePullError):
@@ -1839,14 +1839,14 @@ class TestConfigSidecarRescue:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree") as mock_rmtree,
         ):
             config_hash = _docker_config_hash(config)
             (exchange_dir / f"{config_hash}_result.json").write_text(
@@ -1880,14 +1880,14 @@ class TestConfigSidecarRescue:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
         ):
             config_hash = _docker_config_hash(config)
             (exchange_dir / f"{config_hash}_result.json").write_text(
@@ -1922,14 +1922,14 @@ class TestConfigSidecarRescue:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree") as mock_rmtree,
         ):
             config_hash = _docker_config_hash(config)
             (exchange_dir / f"{config_hash}_result.json").write_text(
@@ -1978,14 +1978,14 @@ class TestConfigSidecarRescue:
 
         with (
             patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                "llenergymeasure.infra.docker.exchange.tempfile.mkdtemp",
                 side_effect=_mkdtemp_router(exchange_dir, rescue_dir),
             ),
             patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
+                "llenergymeasure.infra.docker.lifecycle.subprocess.run",
                 side_effect=_subprocess_run_with_image_cached(make_subprocess_result(0)),
             ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            patch("llenergymeasure.infra.docker.exchange.shutil.rmtree"),
         ):
             config_hash = _docker_config_hash(config)
             (exchange_dir / f"{config_hash}_result.json").write_text(
@@ -2044,7 +2044,7 @@ class TestDispatchAssetMaterialisation:
     @staticmethod
     def _fresh():
         """Clear the process-lifetime caches so each test materialises anew."""
-        from llenergymeasure.infra.docker_runner import (
+        from llenergymeasure.infra.docker.command import (
             _materialise_dispatch_assets,
             _runtime_requirements,
         )
@@ -2054,7 +2054,7 @@ class TestDispatchAssetMaterialisation:
 
     def test_assets_materialised_to_existing_real_files(self):
         """Both dispatch assets resolve to real, non-empty files on disk."""
-        from llenergymeasure.infra.docker_runner import _materialise_dispatch_assets
+        from llenergymeasure.infra.docker.command import _materialise_dispatch_assets
 
         self._fresh()
         entry_script, requirements_file = _materialise_dispatch_assets()
@@ -2071,7 +2071,7 @@ class TestDispatchAssetMaterialisation:
         """The materialised script carries the execute bit (docker execs it)."""
         import os
 
-        from llenergymeasure.infra.docker_runner import _materialise_dispatch_assets
+        from llenergymeasure.infra.docker.command import _materialise_dispatch_assets
 
         self._fresh()
         entry_script, _ = _materialise_dispatch_assets()
@@ -2081,7 +2081,7 @@ class TestDispatchAssetMaterialisation:
         """The materialised script bytes equal the shipped package-data resource."""
         import importlib.resources
 
-        from llenergymeasure.infra.docker_runner import (
+        from llenergymeasure.infra.docker.command import (
             _ENTRY_SCRIPT_PACKAGE,
             _ENTRY_SCRIPT_RESOURCE,
             _materialise_dispatch_assets,
@@ -2098,7 +2098,7 @@ class TestDispatchAssetMaterialisation:
 
     def test_runtime_requirements_include_core_exclude_extras(self):
         """Core runtime deps are present; optional-extra deps (zeus/codecarbon) are not."""
-        from llenergymeasure.infra.docker_runner import _runtime_requirements
+        from llenergymeasure.infra.docker.command import _runtime_requirements
 
         self._fresh()
         specs = _runtime_requirements()
@@ -2115,7 +2115,7 @@ class TestDispatchAssetMaterialisation:
 
     def test_requirements_file_content_matches_metadata(self):
         """The materialised requirements.txt lines equal _runtime_requirements()."""
-        from llenergymeasure.infra.docker_runner import (
+        from llenergymeasure.infra.docker.command import (
             _materialise_dispatch_assets,
             _runtime_requirements,
         )
@@ -2142,12 +2142,12 @@ class TestDispatchAssetMaterialisation:
 
     def test_preflight_error_when_requirements_empty(self):
         """Underivable runtime deps raise DockerPreFlightError before docker run."""
-        from llenergymeasure.infra import docker_runner
+        from llenergymeasure.infra.docker import command
         from llenergymeasure.infra.docker_runner import append_package_dispatch
 
         self._fresh()
         try:
-            with patch.object(docker_runner, "_runtime_requirements", return_value=()):
+            with patch.object(command, "_runtime_requirements", return_value=()):
                 cmd: list[str] = []
                 with pytest.raises(DockerPreFlightError, match="runtime dependencies"):
                     append_package_dispatch(cmd, engine="vllm")
