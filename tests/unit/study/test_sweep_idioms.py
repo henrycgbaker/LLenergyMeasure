@@ -11,11 +11,8 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from llenergymeasure.config.grid import (
-    _expand_group_entry,
-    count_sweep_structure,
-    expand_grid,
-)
+from llenergymeasure.config.grid import count_sweep_structure, expand_grid
+from llenergymeasure.config.sweep_expansion import _expand_group_entry
 from llenergymeasure.config.sweep_idioms import expand_axis_idiom
 from llenergymeasure.utils.exceptions import ConfigError
 
