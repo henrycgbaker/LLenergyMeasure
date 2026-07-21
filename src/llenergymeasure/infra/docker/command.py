@@ -214,7 +214,10 @@ def _materialise_dispatch_assets() -> tuple[Path, Path]:
         )
 
     asset_dir = Path(tempfile.mkdtemp(prefix=_TEMP_PREFIX_DISPATCH))
-    atexit.register(shutil.rmtree, asset_dir, ignore_errors=True)
+    # Late-bind shutil.rmtree so a test patch of it active at registration time
+    # cannot be captured into the process atexit chain; the real function is
+    # resolved at shutdown, after any patch has been reverted.
+    atexit.register(lambda: shutil.rmtree(asset_dir, ignore_errors=True))
 
     entry_script = asset_dir / "container_entrypoint.sh"
     entry_script.write_bytes(script_bytes)

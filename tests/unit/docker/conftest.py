@@ -44,14 +44,14 @@ def stub_runtime_requirements(request):
     real distribution metadata mark themselves ``needs_dist_metadata``; they are
     left unstubbed and skipped when the distribution is not installed.
 
-    The two ``functools.cache``-wrapped resolvers are cleared around every test
-    so the stub (or the real lookup) is what actually runs, regardless of which
-    value an earlier test warmed the cache with.
+    The stub is a ``patch.object`` attribute swap, so it takes effect without
+    touching the ``functools.cache``-wrapped resolvers. The process-lifetime
+    ``_materialise_dispatch_assets`` cache is deliberately left intact (it is
+    warmed once and reused, the behaviour the prefix-aware mkdtemp router is
+    built to tolerate); the ``needs_dist_metadata`` tests clear it themselves via
+    their ``_fresh`` helper when they need a live re-materialisation.
     """
     from llenergymeasure.infra.docker import command
-
-    command._runtime_requirements.cache_clear()
-    command._materialise_dispatch_assets.cache_clear()
 
     if "needs_dist_metadata" in request.keywords:
         try:
@@ -63,11 +63,7 @@ def stub_runtime_requirements(request):
                 "assertions are not applicable"
             )
         yield
-    else:
-        with patch.object(
-            command, "_runtime_requirements", return_value=_STUB_RUNTIME_REQUIREMENTS
-        ):
-            yield
+        return
 
-    command._runtime_requirements.cache_clear()
-    command._materialise_dispatch_assets.cache_clear()
+    with patch.object(command, "_runtime_requirements", return_value=_STUB_RUNTIME_REQUIREMENTS):
+        yield
