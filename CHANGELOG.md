@@ -67,7 +67,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `output_dir` onto the orchestrator's two single-purpose internal parameters
   (`results_dir_override` for a fresh run, resume search base for auto-detect
   resume). The cross-process progress consumer polls with a bounded timeout and a
-  sentinel-aware loop so a silent producer cannot hang the display thread. ([#TBD])
+  sentinel-aware loop so a silent producer cannot hang the display thread. ([#863])
 - Internal restructure (no behavior or results change): the 786-line
   `config/grid.py` is split into a grid-orchestration facade plus
   `config.sweep_expansion` (sweep-block expansion) and `config.cycle_ordering`
@@ -1357,3 +1357,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#857]: https://github.com/henrycgbaker/llenergymeasure/pull/857
 [#860]: https://github.com/henrycgbaker/llenergymeasure/pull/860
 [#862]: https://github.com/henrycgbaker/llenergymeasure/pull/862
+[#863]: https://github.com/henrycgbaker/llenergymeasure/pull/863
