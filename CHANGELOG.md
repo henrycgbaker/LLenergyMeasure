@@ -73,7 +73,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   split along its concerns - shared render/formatting helpers (`_step_render`),
   the single-experiment display (`_experiment_display`), and the study display
   plus its row/image models (`_study_display`) - with `_step_display` kept as a
-  facade so CLI callers are unchanged; display output is byte-identical. ([#861])
+  facade so CLI callers are unchanged; display output is byte-identical. ([#862])
 - Internal restructure (no behavior or results change): the measurement core is
   decomposed. Result assembly is split by measurement source - an offline
   producer (`build_offline_metrics`) reads the `InferenceOutput` into a
@@ -1338,4 +1338,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#856]: https://github.com/henrycgbaker/llenergymeasure/pull/856
 [#857]: https://github.com/henrycgbaker/llenergymeasure/pull/857
 [#860]: https://github.com/henrycgbaker/llenergymeasure/pull/860
-[#861]: https://github.com/henrycgbaker/llenergymeasure/pull/861
+[#862]: https://github.com/henrycgbaker/llenergymeasure/pull/862
