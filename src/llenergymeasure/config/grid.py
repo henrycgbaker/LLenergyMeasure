@@ -1,14 +1,20 @@
-"""Sweep grid expansion and cycle ordering for study configurations."""
+"""Grid expansion for study configurations.
+
+Orchestrates turning a raw study dict into a validated experiment list:
+``base:`` inheritance, the fixed (shared) field set, sweep dispatch, and the
+Pydantic-validation pass that partitions configs into valid and skipped. The
+sweep-block mechanics live in :mod:`llenergymeasure.config.sweep_expansion`
+and the cycle-ordering mechanics in
+:mod:`llenergymeasure.config.cycle_ordering`; their public API is re-exported
+here so ``llenergymeasure.config.grid`` stays the single import surface.
+"""
 
 from __future__ import annotations
 
 import hashlib
-import itertools
 import json
 import logging
-import random
 import re
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,14 +22,27 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config._dict_utils import _unflatten, deep_merge
+from llenergymeasure.config.cycle_ordering import (
+    ExperimentOrder,
+    apply_cycles,
+    cycle_boundary_indices,
+)
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import ALL_ENGINES
-from llenergymeasure.config.sweep_idioms import expand_axis_idiom
-from llenergymeasure.utils.compat import StrEnum
+from llenergymeasure.config.sweep_expansion import _expand_sweep, count_sweep_structure
 from llenergymeasure.utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "ExperimentOrder",
+    "SkippedConfig",
+    "apply_cycles",
+    "compute_study_design_hash",
+    "count_sweep_structure",
+    "cycle_boundary_indices",
+    "expand_grid",
+]
 
 # Keys that belong to the study YAML structure, not to individual experiments.
 # These are stripped from base: files and excluded from the fixed dict.
@@ -42,14 +61,6 @@ _STUDY_ONLY_KEYS = frozenset(
         "output",
     }
 )
-
-
-class ExperimentOrder(StrEnum):
-    SEQUENTIAL = "sequential"
-    INTERLEAVE = "interleave"
-    SHUFFLE = "shuffle"
-    REVERSE = "reverse"
-    LATIN_SQUARE = "latin_square"
 
 
 @dataclass
@@ -295,156 +306,6 @@ def compute_study_design_hash(experiments: list[ExperimentConfig]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
-def apply_cycles(
-    experiments: list[ExperimentConfig],
-    n_cycles: int,
-    experiment_order: ExperimentOrder,
-    study_design_hash: str,
-    shuffle_seed: int | None = None,
-) -> list[ExperimentConfig]:
-    """Return the ordered execution sequence for n_cycles repetitions.
-
-    sequential:    [A, A, A, B, B, B]  - all cycles of each experiment together
-    interleave:    [A, B, A, B, A, B]  - one cycle of each experiment, repeated
-    shuffle:       random per-cycle order, seeded from study_design_hash by default
-    reverse:       alternating forward/backward per cycle - [A, B, B, A, A, B]
-    latin_square:  Williams balanced latin square (counterbalances carryover effects)
-    """
-    if experiment_order == ExperimentOrder.SEQUENTIAL:
-        return [exp for exp in experiments for _ in range(n_cycles)]
-
-    if experiment_order == ExperimentOrder.INTERLEAVE:
-        return experiments * n_cycles
-
-    if experiment_order == ExperimentOrder.REVERSE:
-        result: list[ExperimentConfig] = []
-        for i in range(n_cycles):
-            cycle = list(experiments) if i % 2 == 0 else list(reversed(experiments))
-            result.extend(cycle)
-        return result
-
-    if experiment_order == ExperimentOrder.LATIN_SQUARE:
-        return _williams_latin_square(experiments, n_cycles)
-
-    # shuffle
-    seed = shuffle_seed if shuffle_seed is not None else int(study_design_hash, 16) & 0xFFFFFFFF
-    rng = random.Random(seed)
-    result = []
-    for _ in range(n_cycles):
-        cycle = list(experiments)
-        rng.shuffle(cycle)
-        result.extend(cycle)
-    return result
-
-
-def cycle_boundary_indices(
-    n_unique: int,
-    n_cycles: int,
-    experiment_order: ExperimentOrder,
-) -> frozenset[int]:
-    """Return the sequence indices at which a cycle gap should fire.
-
-    A cycle gap (``cycle_gap_seconds``) is the larger thermal-equalisation pause
-    inserted between the major repeated units of an :func:`apply_cycles`
-    execution sequence, distinct from the small ``experiment_gap_seconds`` that
-    settles the machine between every consecutive pair. Where those boundaries
-    fall depends on how the chosen ``experiment_order`` laid the sequence out,
-    so the semantics live here next to the code that builds the sequence rather
-    than as positional modulo math in the runner.
-
-    Cycle gaps exist only when the sweep is actually repeated (``n_cycles >=
-    2``); with a single cycle there is nothing to gap between, so the result is
-    empty for every order.
-
-    sequential ``[A, A, A, B, B, B]`` (with two or more distinct configs):
-        The sequence is ``n_unique`` contiguous blocks, each block holding all
-        ``n_cycles`` repetitions of one config. Consecutive identical
-        repetitions inside a block are separated only by the small experiment
-        gap; the larger cycle gap fires at the boundary between config blocks,
-        i.e. at indices ``n_cycles, 2*n_cycles, ...``. This is the only coherent
-        contiguous boundary in a sequential layout (the individual cycles are
-        interleaved across the blocks, so a "between full passes" position does
-        not exist), and it matches the thermal intent: a full cooldown when the
-        schedule switches to a genuinely different config so each block starts
-        from a comparable thermal floor.
-
-    interleave / reverse / shuffle / latin_square ``[A, B, A, B, A, B]``:
-        The sequence is ``n_cycles`` contiguous passes over the ``n_unique``
-        configs. The cycle gap fires between full passes, i.e. at indices
-        ``n_unique, 2*n_unique, ...``.
-
-    The single-config case (``n_unique == 1``) has no distinct blocks to
-    separate; there every repetition is itself a full cycle, so sequential
-    falls back to the pass rule and behaves identically to interleave. The
-    final boundary (the end of the sequence) is never included.
-    """
-    if n_unique <= 0 or n_cycles < 2:
-        return frozenset()
-    if experiment_order == ExperimentOrder.SEQUENTIAL and n_unique >= 2:
-        block, n_blocks = n_cycles, n_unique
-    else:
-        block, n_blocks = n_unique, n_cycles
-    return frozenset(block * k for k in range(1, n_blocks))
-
-
-def _williams_latin_square(
-    experiments: list[ExperimentConfig],
-    n_cycles: int,
-) -> list[ExperimentConfig]:
-    """Generate a Williams balanced latin square ordering.
-
-    A Williams design is a latin square where each condition follows every other
-    condition exactly once across rows, balancing first-order carryover effects.
-    When n_cycles > k (number of experiments), cycles repeat the square rows.
-    When n_cycles < k, the first n_cycles rows are used.
-    """
-    k = len(experiments)
-    if k == 0:
-        return []
-
-    # Build Williams square rows (works for both even and odd k)
-    rows: list[list[int]] = []
-    for i in range(k):
-        row: list[int] = [0] * k
-        for j in range(k):
-            if j == 0:
-                row[j] = i
-            elif j % 2 == 1:
-                row[j] = (i + (j + 1) // 2) % k
-            else:
-                row[j] = (i - j // 2) % k
-        rows.append(row)
-
-    result: list[ExperimentConfig] = []
-    for cycle_idx in range(n_cycles):
-        row = rows[cycle_idx % k]
-        result.extend(experiments[idx] for idx in row)
-    return result
-
-
-def count_sweep_structure(raw_sweep: dict[str, Any]) -> tuple[int, int]:
-    """Count independent axes and dependent groups in a raw sweep dict.
-
-    An independent axis is a key mapping to a list of scalars (Cartesian product).
-    A dependent group is a key mapping to a list of dicts (union of variants).
-
-    Returns (n_axes, n_groups).
-    """
-    if not raw_sweep:
-        return 0, 0
-
-    n_axes = 0
-    n_groups = 0
-
-    for _key, values in raw_sweep.items():
-        if _is_group(values):
-            n_groups += 1
-        else:
-            n_axes += 1
-
-    return n_axes, n_groups
-
-
 # =============================================================================
 # Private helpers
 # =============================================================================
@@ -479,308 +340,3 @@ def _load_base(base_path_str: str | None, study_yaml_path: Path | None) -> dict[
 
     # Strip study-only keys - base: accepts experiment config files only
     return {k: v for k, v in raw.items() if k not in _STUDY_ONLY_KEYS}
-
-
-def _strip_other_engine_sections(config_dict: dict[str, Any], engine: str) -> dict[str, Any]:
-    """Remove engine-specific sections that don't match *engine*.
-
-    In a multi-engine study, top-level engine sections (e.g. ``tensorrt:``)
-    are shared defaults for that engine's experiments.  When the grid expander
-    assigns a different engine, those sections must be stripped before Pydantic
-    validation - otherwise ``validate_engine_section_match`` rejects the config.
-    """
-    return {k: v for k, v in config_dict.items() if k not in ALL_ENGINES or k == engine}
-
-
-# =============================================================================
-# Sweep group helpers
-# =============================================================================
-
-
-def _is_group(value: object) -> bool:
-    """True if a sweep entry is a group (list of dicts), not an independent axis.
-
-    Disambiguation: a list of scalars is an independent axis (Cartesian product);
-    a list of dicts (or containing ``{}``) is a dependent group (union of variants).
-
-    Raises ``ConfigError`` for mixed lists (some dicts, some scalars).
-    """
-    if not isinstance(value, list) or len(value) == 0:
-        return False
-    has_dicts = any(isinstance(e, dict) for e in value)
-    if not has_dicts:
-        return False
-    all_dicts = all(isinstance(e, dict) for e in value)
-    if not all_dicts:
-        raise ConfigError(
-            "Sweep entry mixes dicts and scalars. Group entries must all be "
-            "dicts; independent axes must all be scalars."
-        )
-    return True
-
-
-def _group_engine_scope(group_key: str) -> str | None:
-    """Return engine name if a group key is engine-scoped, else None (universal).
-
-    Both engine-native keys (``transformers.engine_params.dtype``) and per-engine
-    harness keys (``harness.transformers.batch_size``) are scoped to that engine;
-    only the latter carries the ``harness.`` prefix.
-    """
-    parts = group_key.split(".")
-    if len(parts) >= 2 and parts[0] in ALL_ENGINES:
-        return parts[0]
-    if len(parts) >= 3 and parts[0] == "harness" and parts[1] in ALL_ENGINES:
-        return parts[1]
-    return None
-
-
-def _expand_group_entry(entry: dict[str, Any]) -> list[dict[str, Any]]:
-    """Expand a single group entry into one or more flat dicts (mini-grid).
-
-    Scalar-valued fields pass through unchanged. List-valued fields (list of
-    scalars) produce a Cartesian product within the entry. Nested lists like
-    ``[[0, 1]]`` are treated as literal list values (not expanded).
-    """
-    scalar_fields: dict[str, Any] = {}
-    grid_keys: list[str] = []
-    grid_values: list[list[Any]] = []
-
-    for key, value in entry.items():
-        if isinstance(value, list) and len(value) > 0 and not isinstance(value[0], (list, dict)):
-            # List of scalars -> mini-grid axis
-            grid_keys.append(key)
-            grid_values.append(value)
-        else:
-            scalar_fields[key] = value
-
-    if not grid_keys:
-        return [entry]
-
-    expanded: list[dict[str, Any]] = []
-    for combo in itertools.product(*grid_values):
-        variant = dict(scalar_fields)
-        for key, value in zip(grid_keys, combo, strict=True):
-            variant[key] = value
-        expanded.append(variant)
-    return expanded
-
-
-def _expand_group(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Expand all entries in a group, flattening mini-grids into a union of variants."""
-    variants: list[dict[str, Any]] = []
-    for entry in entries:
-        variants.extend(_expand_group_entry(entry))
-    return variants
-
-
-def _route_key_value(
-    config_dict: dict[str, Any],
-    key: str,
-    value: Any,
-) -> dict[str, Any]:
-    """Route a single fully-qualified key into *config_dict*.
-
-    Routing rules:
-    - Engine-prefixed dotted key (``transformers.engine_params.dtype``) → merge into engine section.
-    - Other dotted key (``task.dataset.source``) → unflatten at top level.
-    - Simple key → direct assignment.
-
-    Returns the (possibly replaced) config_dict reference.
-    """
-    if "." in key:
-        prefix, param = key.split(".", 1)
-        if prefix in ALL_ENGINES:
-            engine_dict = config_dict.get(prefix, {})
-            nested_update = _unflatten({param: value})
-            config_dict[prefix] = deep_merge(engine_dict, nested_update)
-        else:
-            nested_update = _unflatten({key: value})
-            config_dict = deep_merge(config_dict, nested_update)
-    else:
-        config_dict[key] = value
-    return config_dict
-
-
-def _apply_group_overlay(
-    config_dict: dict[str, Any],
-    overlay: dict[str, Any],
-) -> dict[str, Any]:
-    """Apply a group variant's fully-qualified keys onto a config dict."""
-    for fq_key, value in overlay.items():
-        config_dict = _route_key_value(config_dict, fq_key, value)
-    return config_dict
-
-
-def _validate_sweep_groups(
-    groups: dict[str, list[dict[str, Any]]],
-    axis_keys: set[str],
-) -> None:
-    """Raise ConfigError if a group name collides with an independent axis key."""
-    collisions = set(groups.keys()) & axis_keys
-    if collisions:
-        raise ConfigError(
-            f"Sweep group name(s) collide with independent axis key(s): "
-            f"{', '.join(sorted(collisions))}. "
-            f"Use abstract names for groups (e.g. 'transformers.compilation' not 'transformers.torch_compile')."
-        )
-
-
-# =============================================================================
-# Sweep expansion
-# =============================================================================
-
-
-def _expand_sweep(
-    sweep: dict[str, Any],
-    fixed: dict[str, Any],
-    synthesize_baseline: bool = True,
-) -> list[dict[str, Any]]:
-    """Expand a sweep: block into a flat list of raw experiment config dicts.
-
-    Supports two entry types under ``sweep:``:
-
-    - **Independent axes** (list of scalars): Cartesian product across all axes.
-    - **Dependent groups** (list of dicts): Union of variant dicts. Groups are
-      crossed with each other and with independent axes, but entries *within*
-      a group are alternatives (unioned, not crossed).
-
-    Type-based disambiguation: ``list[scalar]`` = axis, ``list[dict]`` = group.
-
-    An axis value may also be a numeric idiom mapping (see
-    :mod:`llenergymeasure.config.sweep_idioms`); it is expanded to a plain
-    list here, at load time, so downstream consumers only see lists. Any
-    other mapping-valued axis is rejected with ConfigError.
-
-    When ``sweep`` is empty this synthesises a single inline-model baseline from
-    ``fixed`` (the no-sweep, no-experiments study form) using ``fixed``'s engine
-    or a ``transformers`` default. That synthesis fires only when
-    ``synthesize_baseline`` is True; the caller passes False whenever an explicit
-    experiments: list is present, so an empty sweep never adds a phantom
-    default-engine baseline alongside the user's entries.
-    """
-    if not sweep:
-        if not synthesize_baseline:
-            return []
-        task = fixed.get("task")
-        has_model = isinstance(task, dict) and task.get("model")
-        if has_model:
-            engine = fixed.get("engine", "transformers")
-            return [_strip_other_engine_sections(dict(fixed), engine)]
-        return []
-
-    # ── Step 1: Partition sweep into axes and groups ──
-    universal_dims: dict[str, list[Any]] = {}
-    scoped_dims: dict[str, dict[str, list[Any]]] = {}  # {engine: {fq_key: [values]}}
-    groups: dict[str, list[dict[str, Any]]] = {}  # {group_name: [variant_dicts]}
-
-    for key, values in sweep.items():
-        if _is_group(values):
-            groups[key] = _expand_group(values)
-            continue
-
-        if isinstance(values, dict):
-            try:
-                values = expand_axis_idiom(values)
-            except ValueError as exc:
-                raise ConfigError(f"sweep axis '{key}': {exc}") from exc
-        elif not isinstance(values, list):
-            values = [values]
-
-        engine_scope = _group_engine_scope(key)
-        if engine_scope is not None:
-            # Store the full fully-qualified key so routing reconstructs the exact
-            # path (engine-native ``transformers.engine_params.dtype`` and
-            # harness-scoped ``harness.transformers.batch_size`` both round-trip
-            # verbatim).
-            scoped_dims.setdefault(engine_scope, {})[key] = values
-        else:
-            universal_dims[key] = values
-
-    # Derive flat axis key set for collision detection
-    axis_keys = set(universal_dims.keys()) | {
-        fq_key for params in scoped_dims.values() for fq_key in params
-    }
-    _validate_sweep_groups(groups, axis_keys)
-
-    # ── Step 2: Separate groups by engine scope ──
-    universal_groups: dict[str, list[dict[str, Any]]] = {}
-    scoped_groups: dict[str, dict[str, list[dict[str, Any]]]] = {}  # {engine: {name: variants}}
-
-    for group_name, variants in groups.items():
-        engine_scope = _group_engine_scope(group_name)
-        if engine_scope:
-            scoped_groups.setdefault(engine_scope, {})[group_name] = variants
-        else:
-            universal_groups[group_name] = variants
-
-    # ── Step 3: Determine engines ──
-    fixed_engine = fixed.get("engine", "transformers")
-    if isinstance(fixed_engine, list):
-        engines = list(fixed_engine)
-    elif scoped_dims or scoped_groups:
-        # Engines implied by scoped axes or scoped groups. A study may ALSO fix
-        # `engine:` explicitly (e.g. `engine: transformers` while sweeping a
-        # vllm.* axis) - that engine gets its own baseline run, so union it in
-        # rather than letting the scoped axes silently drop it. Only an
-        # explicitly-set engine counts; the "transformers" default does not.
-        scope_engines = set(scoped_dims.keys()) | set(scoped_groups.keys())
-        if "engine" in fixed:
-            scope_engines.add(fixed_engine)
-        engines = sorted(scope_engines)
-    else:
-        engines = [fixed_engine]
-
-    # ── Step 4: Per-engine expansion ──
-    results: list[dict[str, Any]] = []
-
-    for engine in engines:
-        # Collect applicable groups (universal + this engine's scoped)
-        applicable_groups: dict[str, list[dict[str, Any]]] = dict(universal_groups)
-        applicable_groups.update(scoped_groups.get(engine, {}))
-
-        # Collect applicable axes - reconstruct fully-qualified keys for routing
-        engine_scoped = scoped_dims.get(engine, {})
-        # scoped_dims stores fully-qualified keys (engine-native and harness-scoped
-        # alike), so use them verbatim.
-        fq_dim_keys = list(universal_dims.keys()) + list(engine_scoped.keys())
-        all_dim_values = list(universal_dims.values()) + list(engine_scoped.values())
-
-        # Cross all group variant lists with each other (lazy - iterated once)
-        group_combos: Iterable[tuple[Any, ...]]
-        if applicable_groups:
-            group_names = list(applicable_groups.keys())
-            group_variant_lists = [applicable_groups[n] for n in group_names]
-            group_combos = itertools.product(*group_variant_lists)
-        else:
-            group_combos = [()]  # single empty combo → no group overlays
-
-        if not fq_dim_keys and not applicable_groups:
-            # No dimensions or groups for this engine - produce one config
-            config_dict: dict[str, Any] = _strip_other_engine_sections(dict(fixed), engine)
-            config_dict["engine"] = engine
-            results.append(config_dict)
-            continue
-
-        # Pre-compute stripped base config once per engine
-        base_config = _strip_other_engine_sections(dict(fixed), engine)
-        base_config["engine"] = engine
-
-        # axis_combos materialised - reused across group combos
-        axis_combos = list(itertools.product(*all_dim_values)) if fq_dim_keys else [()]
-
-        for group_combo in group_combos:
-            for axis_combo in axis_combos:
-                config_dict = dict(base_config)
-
-                # Apply independent axis values
-                for dim_key, value in zip(fq_dim_keys, axis_combo, strict=True):
-                    config_dict = _route_key_value(config_dict, dim_key, value)
-
-                # Apply group overlays (each group_combo entry is one variant dict)
-                for variant in group_combo:
-                    if variant:  # skip empty dicts ({} = baseline, no overlay)
-                        config_dict = _apply_group_overlay(config_dict, variant)
-
-                results.append(config_dict)
-
-    return results

@@ -12,7 +12,8 @@ import logging
 
 import pytest
 
-from llenergymeasure.config.grid import (
+from llenergymeasure.config.grid import expand_grid
+from llenergymeasure.config.sweep_expansion import (
     _apply_group_overlay,
     _expand_group,
     _expand_group_entry,
@@ -20,7 +21,6 @@ from llenergymeasure.config.grid import (
     _is_group,
     _route_key_value,
     _validate_sweep_groups,
-    expand_grid,
 )
 from llenergymeasure.utils.exceptions import ConfigError
 
