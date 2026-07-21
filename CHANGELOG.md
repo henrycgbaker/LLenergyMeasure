@@ -55,12 +55,15 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   manager whose `__enter__` acquires the dispatch's resources, whose `run()`
   produces the result, and whose `__exit__` releases everything exactly once, on
   the SIGINT / circuit-break / exception paths alike. Two offline implementations
-  wrap the existing paths (`SubprocessSession`, `DockerSession`); the sweep loop
-  consumes them uniformly, so the manifest, circuit breaker, GPU locks, and SIGINT
-  handling key off the `(session, result)` outcome rather than off "the dispatch
-  function returned once" - the seam a future server mode needs to express
-  one-dispatch-many-results. The orchestration cluster that assembled and drove a
-  study (`_run` and friends) moves from `api/_impl.py` to a study-layer
+  wrap the existing paths (`SubprocessSession`, `DockerSession`). The value of the
+  seam is that the session lifetime (acquire -> produce -> release) is separable
+  from result production, which is what will let a future server session express
+  one lifetime with many result windows (constraint C3); today the sweep loop
+  still drives one session per experiment and consumes its single result, the
+  manifest transitions and circuit breaker follow that one result, GPU locks stay
+  study-scoped, and no N-result consumption is added now. The orchestration
+  cluster that assembled and drove a study (`_run` and friends) moves from
+  `api/_impl.py` to a study-layer
   orchestrator (`llenergymeasure.study.orchestration.orchestrate_study`); `api`
   becomes a thin adapter and the public `run_experiment` / `run_study` signatures
   and behaviour are unchanged. The adapter now maps the overloaded public

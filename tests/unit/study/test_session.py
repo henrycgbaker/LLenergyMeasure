@@ -30,6 +30,7 @@ from llenergymeasure.study.session import (
     SubprocessSession,
 )
 from tests.conftest import TEST_CONFIG_HASH
+from tests.unit.study.conftest import _make_mock_context, _make_mock_process
 
 # =============================================================================
 # Fixtures / helpers
@@ -63,27 +64,6 @@ def _make_runner(tmp_path: Path, *, runner_specs: dict | None = None) -> StudyRu
     return runner
 
 
-def _make_process(*, is_alive: bool = False, exitcode: int = 0, pid: int = 4242) -> MagicMock:
-    proc = MagicMock()
-    proc.pid = pid
-    proc.exitcode = exitcode
-    proc.is_alive.return_value = is_alive
-    return proc
-
-
-def _make_ctx(process: MagicMock, *, pipe_data: Any = None) -> MagicMock:
-    ctx = MagicMock()
-    ctx.Process.return_value = process
-    parent_conn = MagicMock()
-    child_conn = MagicMock()
-    parent_conn.poll.return_value = pipe_data is not None
-    if pipe_data is not None:
-        parent_conn.recv.return_value = pipe_data
-    ctx.Pipe.return_value = (parent_conn, child_conn)
-    ctx.Queue.return_value = queue.SimpleQueue()
-    return ctx
-
-
 # =============================================================================
 # Protocol conformance
 # =============================================================================
@@ -93,7 +73,7 @@ def test_sessions_satisfy_experiment_session_protocol(tmp_path: Path) -> None:
     """Both offline sessions structurally satisfy the runtime-checkable protocol."""
     runner = _make_runner(tmp_path)
     config = runner.study.experiments[0]
-    ctx = _make_ctx(_make_process())
+    ctx = _make_mock_context(_make_mock_process())
 
     sub = SubprocessSession(runner, config, ctx, config_hash="h", cycle=1, index=1)
     assert isinstance(sub, ExperimentSession)
@@ -115,8 +95,8 @@ def test_subprocess_session_cleanup_runs_once_normal_path(tmp_path: Path) -> Non
     the staging dir - exactly once, and a redundant __exit__ is a no-op."""
     runner = _make_runner(tmp_path)
     config = runner.study.experiments[0]
-    proc = _make_process(is_alive=False, exitcode=0)
-    ctx = _make_ctx(proc, pipe_data={"status": "ok"})
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data={"status": "ok"})
     parent_conn = ctx.Pipe.return_value[0]
 
     with (
@@ -146,8 +126,8 @@ def test_subprocess_session_cleanup_runs_once_on_exception(tmp_path: Path) -> No
     config = runner.study.experiments[0]
     # is_alive=True: the body raised before run()'s own join/kill sequence, so
     # __exit__ must reap the still-running worker.
-    proc = _make_process(is_alive=True, pid=5150)
-    ctx = _make_ctx(proc)
+    proc = _make_mock_process(is_alive_after_join=True, pid=5150)
+    ctx = _make_mock_context(proc, pipe_has_data=False)
     parent_conn = ctx.Pipe.return_value[0]
 
     with (
@@ -177,8 +157,8 @@ def test_subprocess_session_active_process_set_during_enter(tmp_path: Path) -> N
     """__enter__ registers the worker as the runner's active process (SIGINT target)."""
     runner = _make_runner(tmp_path)
     config = runner.study.experiments[0]
-    proc = _make_process()
-    ctx = _make_ctx(proc, pipe_data={"status": "ok"})
+    proc = _make_mock_process()
+    ctx = _make_mock_context(proc, pipe_data={"status": "ok"})
 
     with patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"):
         session = SubprocessSession(runner, config, ctx, config_hash="h", cycle=1, index=1)

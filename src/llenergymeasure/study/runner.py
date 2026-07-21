@@ -4,6 +4,9 @@
 container lifecycle, circuit breaker, wall-clock timeout, and result handling.
 The separable concerns live in sibling modules and are mixed in or imported:
 
+- ``study.session``: context-managed per-experiment dispatch lifetimes
+  (``ExperimentSession`` + the offline subprocess/docker implementations the
+  run loop drives, one per experiment).
 - ``study.worker``: subprocess-worker surface (child entry point, result
   collection, process-group signalling).
 - ``study._progress``: cross-process progress plumbing.

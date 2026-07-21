@@ -12,17 +12,20 @@ The two offline (batch) implementations here wrap today's dispatch paths:
 - :class:`DockerSession` - one blocking ``DockerRunner.run`` container.
 
 Offline sessions produce EXACTLY ONE result per session (one engine lifetime =
-one measured window). The protocol shape - a lifetime that a work method drives -
-is deliberately open to a future server session (v0.8.0) that produces N results
-(one per request window) over the same lifetime, without any offline-batch
-assumption baked into the seam. That is the one-dispatch:N-results capability the
-sweep loop is re-keyed to admit (constraint C3); this slice adds no window-spec
-vocabulary and no server session.
+one measured window). The point of the seam is that the session LIFETIME
+(acquire -> produce -> release) is separable from result production: that is what
+admits a future server session (v0.8.0) whose single lifetime produces N results,
+one per request window (constraint C3). This slice adds no window-spec
+vocabulary, no N-result consumption, and no server session - the offline call
+sites still consume one result per session, by design.
 
-The sweep loop in :class:`~llenergymeasure.study.runner.StudyRunner` consumes
-sessions uniformly through ``_run_one`` / ``_run_one_docker``: the manifest,
-circuit breaker, GPU locks, and SIGINT handling all key off the ``(session,
-result)`` outcome rather than off "the dispatch function returned once".
+Today the sweep loop in :class:`~llenergymeasure.study.runner.StudyRunner` drives
+one session per experiment through ``_run_one`` / ``_run_one_docker`` and consumes
+the single result it produces; the manifest transitions and the circuit breaker
+follow that one result. GPU locks stay deliberately study-scoped (a lock outlives
+any one session), and the SIGINT handler acts on the session's active process. A
+v0.8.0 server session plugs in by adding a call site that consumes many results
+over one lifetime - not by re-keying today's loop.
 """
 
 from __future__ import annotations
@@ -125,6 +128,40 @@ class _OfflineSession:
 
     def _cleanup(self) -> None:  # pragma: no cover - overridden
         """Release the session's resources. Called exactly once by __exit__."""
+
+    def _report(
+        self,
+        result: Any,
+        *,
+        exp_elapsed: float,
+        ts_source_dir: Path | None,
+        spec: RunnerSpec | None,
+        resolved_image: str | None = None,
+    ) -> None:
+        """Hand the produced result to the runner's result/manifest handler.
+
+        Shared by both offline sessions: the runner-provenance and environment
+        blocks are populated only for a real result (a failure dict carries no
+        provenance), and the runner-side builders are imported lazily here - the
+        single result-reporting call site both sessions funnel through.
+        """
+        from llenergymeasure.study.runner import _provenance_from_spec, _runner_environment
+
+        is_result = not isinstance(result, dict)
+        self._runner._handle_result(
+            result,
+            self.config,
+            self.config_hash,
+            self.cycle,
+            self.index,
+            exp_elapsed,
+            ts_source_dir=ts_source_dir,
+            environment_snapshot=self._runner._get_env_snapshot() if is_result else None,
+            runner_provenance=_provenance_from_spec(spec),
+            runner_environment=(
+                _runner_environment(spec, resolved_image=resolved_image) if is_result else None
+            ),
+        )
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> bool | None:
         if self._torn_down:
@@ -271,9 +308,8 @@ class SubprocessSession(_OfflineSession):
                 _kill_process_group(p.pid, signal.SIGKILL)
                 p.join()
 
-        runner._active_process = None
-
-        # Sentinel stops consumer thread - covers SIGKILL path too
+        # Sentinel stops consumer thread - covers SIGKILL path too.
+        # (The active-process handle is cleared once, in _cleanup on __exit__.)
         self._stop_consumer()
 
         result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
@@ -303,21 +339,11 @@ class SubprocessSession(_OfflineSession):
             )
 
         exp_elapsed = time.monotonic() - self._exp_start
-        runner._handle_result(
+        self._report(
             result,
-            config,
-            self.config_hash,
-            self.cycle,
-            self.index,
-            exp_elapsed,
+            exp_elapsed=exp_elapsed,
             ts_source_dir=self._ts_tmpdir,
-            environment_snapshot=(
-                runner._get_env_snapshot() if not isinstance(result, dict) else None
-            ),
-            runner_provenance=_provenance_from_spec(self._local_spec),
-            runner_environment=(
-                _runner_environment(self._local_spec) if not isinstance(result, dict) else None
-            ),
+            spec=self._local_spec,
         )
         return result
 
@@ -493,23 +519,12 @@ class DockerSession(_OfflineSession):
             persist_failure_artefacts(exc, runner.study_dir, self.config_hash, self.cycle, result)
 
         exp_elapsed = time.monotonic() - self._exp_start
-        runner._handle_result(
+        self._report(
             result,
-            config,
-            self.config_hash,
-            self.cycle,
-            self.index,
-            exp_elapsed,
+            exp_elapsed=exp_elapsed,
             ts_source_dir=self._docker_ts_dir,
-            environment_snapshot=(
-                runner._get_env_snapshot() if not isinstance(result, dict) else None
-            ),
-            runner_provenance=_provenance_from_spec(self.spec),
-            runner_environment=(
-                _runner_environment(self.spec, resolved_image=self._image)
-                if not isinstance(result, dict)
-                else None
-            ),
+            spec=self.spec,
+            resolved_image=self._image,
         )
         return result
 
@@ -517,17 +532,3 @@ class DockerSession(_OfflineSession):
         # Clean up the temp dir after _handle_result has copied the parquet.
         if self._docker_ts_dir is not None:
             shutil.rmtree(self._docker_ts_dir, ignore_errors=True)
-
-
-def _provenance_from_spec(spec: RunnerSpec | None) -> Any:
-    """Delegate to the runner-module builder (single home for provenance mapping)."""
-    from llenergymeasure.study.runner import _provenance_from_spec as _impl
-
-    return _impl(spec)
-
-
-def _runner_environment(spec: RunnerSpec | None, *, resolved_image: str | None = None) -> Any:
-    """Delegate to the runner-module builder (single home for the runner block)."""
-    from llenergymeasure.study.runner import _runner_environment as _impl
-
-    return _impl(spec, resolved_image=resolved_image)
