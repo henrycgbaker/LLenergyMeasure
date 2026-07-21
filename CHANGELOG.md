@@ -50,6 +50,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- Internal restructure (no behavior or results change): the 786-line
+  `config/grid.py` is split into a grid-orchestration facade plus
+  `config.sweep_expansion` (sweep-block expansion) and `config.cycle_ordering`
+  (execution-sequence ordering); the public `llenergymeasure.config.grid`
+  import surface is unchanged. ([#860])
 - Internal restructure (no behavior or results change): the measured-window
   mechanics are extracted into a mode-agnostic `MeasurementBracket`
   (`llenergymeasure.harness.bracket`) and per-model-load state is split from
@@ -1317,3 +1322,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#855]: https://github.com/henrycgbaker/llenergymeasure/pull/855
 [#856]: https://github.com/henrycgbaker/llenergymeasure/pull/856
 [#857]: https://github.com/henrycgbaker/llenergymeasure/pull/857
+[#860]: https://github.com/henrycgbaker/llenergymeasure/pull/860
