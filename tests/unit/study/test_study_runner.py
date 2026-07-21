@@ -1353,7 +1353,7 @@ def test_parent_conn_closed_after_collect_result(study_config: StudyConfig) -> N
 
     with (
         patch("multiprocessing.get_context", return_value=ctx),
-        patch("llenergymeasure.study.runner._collect_result", side_effect=patched_collect),
+        patch("llenergymeasure.study.session._collect_result", side_effect=patched_collect),
     ):
         runner = StudyRunner(study_config, manifest, Path("/tmp/test-fd-leak"))
         runner.run()

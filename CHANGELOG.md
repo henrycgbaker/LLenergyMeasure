@@ -50,6 +50,24 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- Internal restructure (no behavior or results change): one experiment dispatch
+  is now an `ExperimentSession` (`llenergymeasure.study.session`) - a context
+  manager whose `__enter__` acquires the dispatch's resources, whose `run()`
+  produces the result, and whose `__exit__` releases everything exactly once, on
+  the SIGINT / circuit-break / exception paths alike. Two offline implementations
+  wrap the existing paths (`SubprocessSession`, `DockerSession`); the sweep loop
+  consumes them uniformly, so the manifest, circuit breaker, GPU locks, and SIGINT
+  handling key off the `(session, result)` outcome rather than off "the dispatch
+  function returned once" - the seam a future server mode needs to express
+  one-dispatch-many-results. The orchestration cluster that assembled and drove a
+  study (`_run` and friends) moves from `api/_impl.py` to a study-layer
+  orchestrator (`llenergymeasure.study.orchestration.orchestrate_study`); `api`
+  becomes a thin adapter and the public `run_experiment` / `run_study` signatures
+  and behaviour are unchanged. The adapter now maps the overloaded public
+  `output_dir` onto the orchestrator's two single-purpose internal parameters
+  (`results_dir_override` for a fresh run, resume search base for auto-detect
+  resume). The cross-process progress consumer polls with a bounded timeout and a
+  sentinel-aware loop so a silent producer cannot hang the display thread. ([#TBD])
 - Internal restructure (no behavior or results change): the 786-line
   `config/grid.py` is split into a grid-orchestration facade plus
   `config.sweep_expansion` (sweep-block expansion) and `config.cycle_ordering`

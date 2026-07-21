@@ -13,7 +13,10 @@ Pure plumbing: neither half touches ``StudyRunner`` state.
 from __future__ import annotations
 
 import contextlib
+import queue
 from typing import TYPE_CHECKING, Any
+
+from llenergymeasure.config.ssot import TIMEOUT_PROGRESS_QUEUE_POLL
 
 if TYPE_CHECKING:
     from llenergymeasure.domain.progress import StudyProgressCallback
@@ -80,10 +83,21 @@ def _consume_progress_events(
     StudyProgressCallback (typically StudyStepDisplay).
 
     Coarse events (started/completed/failed) are ignored here - study-level
-    begin/end experiment tracking is handled directly by _run_one().
+    begin/end experiment tracking is handled directly by the session dispatch.
+
+    The blocking get is bounded by ``TIMEOUT_PROGRESS_QUEUE_POLL`` and loops on
+    timeout: a dead producer that never flushes its buffer cannot wedge this
+    thread indefinitely on a single ``get``. The parent always enqueues the
+    ``None`` sentinel when the session finishes (even on SIGKILL/timeout), which
+    is what actually ends the loop.
     """
     while True:
-        event = q.get()
+        try:
+            event = q.get(timeout=TIMEOUT_PROGRESS_QUEUE_POLL)
+        except queue.Empty:
+            # No event this tick; re-check for the sentinel rather than blocking
+            # forever on a producer that may have died mid-flush.
+            continue
         if event is None:
             break
 

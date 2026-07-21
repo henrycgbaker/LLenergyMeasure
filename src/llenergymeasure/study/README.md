@@ -10,7 +10,9 @@ Implements the sweep runner that executes a `StudyConfig` (a list of `Experiment
 
 | Module | Description |
 |--------|-------------|
-| `runner.py` | `StudyRunner` - study-level run loop, dispatch, and result handling |
+| `orchestration.py` | `orchestrate_study()` - study-layer dispatcher: preflight, study dir + manifest, single-vs-sweep branch, `StudyResult` assembly (the `api` layer is a thin adapter over it) |
+| `runner.py` | `StudyRunner` - study-level run loop; drives one `ExperimentSession` per experiment and owns SIGINT, GPU locks, circuit breaker, wall-clock timeout |
+| `session.py` | `ExperimentSession` protocol + offline `SubprocessSession` / `DockerSession` - context-managed engine lifetimes (setup on enter, teardown on exit, always) |
 | `worker.py` | `_run_experiment_worker()` (child entry point), `_collect_result()`, process-group signalling |
 | `_progress.py` | `_QueueProgressCallback` + `_consume_progress_events()` - cross-process progress bridge |
 | `baseline_measure.py` | `_BaselineMixin` - baseline measurement, caching, and drift validation |
@@ -80,6 +82,6 @@ Before each experiment dispatch, `check_gpu_memory_residual()` polls for leftove
 
 ## Related
 
-- See `../api/_impl.py` for `_run()` which instantiates `StudyRunner`
+- See `orchestration.py` for `orchestrate_study()` which instantiates `StudyRunner`; `../api/_impl.py` is the thin public adapter
 - See `../harness/` for the measurement lifecycle each subprocess runs
 - See `../infra/docker_runner.py` for Docker dispatch path

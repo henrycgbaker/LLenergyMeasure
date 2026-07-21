@@ -76,9 +76,9 @@ def test_internal_name_raises_attribute_error():
 
 def test_run_experiment_returns_experiment_result(monkeypatch):
     """run_experiment returns exactly ExperimentResult, not a union or None."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
+    monkeypatch.setattr(api_module, "orchestrate_study", lambda study, **kw: make_study_result())
 
     config = ExperimentConfig(task={"model": "gpt2"})
     result = run_experiment(config)
@@ -96,7 +96,7 @@ def test_run_experiment_returns_experiment_result(monkeypatch):
 
 def test_run_experiment_yaml_path_form(tmp_path, monkeypatch):
     """run_experiment resolves correctly from a YAML path."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
 
     captured_study = {}
 
@@ -104,7 +104,7 @@ def test_run_experiment_yaml_path_form(tmp_path, monkeypatch):
         captured_study["value"] = study
         return make_study_result()
 
-    monkeypatch.setattr(api_module, "_run", mock_run)
+    monkeypatch.setattr(api_module, "orchestrate_study", mock_run)
 
     config_path = tmp_path / "test_config.yaml"
     config_path.write_text("task:\n  model: gpt2\n")
@@ -123,7 +123,7 @@ def test_run_experiment_yaml_path_form(tmp_path, monkeypatch):
 
 def test_run_experiment_kwargs_form(monkeypatch):
     """run_experiment kwargs form passes model and dataset to ExperimentConfig."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
 
     captured_study = {}
 
@@ -131,7 +131,7 @@ def test_run_experiment_kwargs_form(monkeypatch):
         captured_study["value"] = study
         return make_study_result()
 
-    monkeypatch.setattr(api_module, "_run", mock_run)
+    monkeypatch.setattr(api_module, "orchestrate_study", mock_run)
 
     result = run_experiment(model="gpt2", n_prompts=50)
 
@@ -160,9 +160,9 @@ def test_run_experiment_no_config_no_model_raises():
 
 def test_run_experiment_no_disk_writes(tmp_path, monkeypatch):
     """run_experiment produces no disk writes when output_dir is not specified."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
+    monkeypatch.setattr(api_module, "orchestrate_study", lambda study, **kw: make_study_result())
 
     # Change working directory to tmp_path to catch any accidental writes
     config = ExperimentConfig(task={"model": "gpt2"})
@@ -215,9 +215,9 @@ def test_version_in_all():
 
 def test_run_experiment_path_object_form(tmp_path, monkeypatch):
     """run_experiment accepts a Path object as well as a str path."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
+    monkeypatch.setattr(api_module, "orchestrate_study", lambda study, **kw: make_study_result())
 
     config_path = tmp_path / "config.yaml"
     config_path.write_text("task:\n  model: gpt2\n")
@@ -233,7 +233,7 @@ def test_run_experiment_path_object_form(tmp_path, monkeypatch):
 
 def test_run_experiment_kwargs_engine(monkeypatch):
     """run_experiment kwargs form passes engine to ExperimentConfig."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
 
     captured_study = {}
 
@@ -241,7 +241,7 @@ def test_run_experiment_kwargs_engine(monkeypatch):
         captured_study["value"] = study
         return make_study_result()
 
-    monkeypatch.setattr(api_module, "_run", mock_run)
+    monkeypatch.setattr(api_module, "orchestrate_study", mock_run)
 
     run_experiment(model="gpt2", engine="transformers")
 
@@ -319,9 +319,9 @@ def _patch_harness(monkeypatch, result: ExperimentResult) -> None:
 
 def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     """_run() calls run_preflight once for the single in-process experiment."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
 
     preflight_calls: list = []
@@ -351,7 +351,7 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     config1 = ExperimentConfig(task={"model": "gpt2"})
     study = StudyConfig(experiments=[config1])
 
-    api_module._run(study)
+    api_module.orchestrate_study(study)
 
     assert len(preflight_calls) == 1, f"Expected 1 preflight call, got {len(preflight_calls)}"
     assert preflight_calls[0].task.model == "gpt2"
@@ -366,7 +366,7 @@ def test_run_preserves_runner_abort_status(monkeypatch, tmp_path, abort_status):
     mark_study_completed() unconditionally, clobbering that status and leaving the
     aborted study looking completed (and therefore non-resumable).
     """
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
 
     captured: dict = {}
@@ -396,16 +396,16 @@ def test_run_preserves_runner_abort_status(monkeypatch, tmp_path, abort_status):
             ExperimentConfig(task={"model": "distilgpt2"}),
         ]
     )
-    api_module._run(study)
+    api_module.orchestrate_study(study)
 
     assert captured["manifest"].status == abort_status
 
 
 def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     """_run() does NOT re-run study preflight when preresolved is provided."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
@@ -441,7 +441,7 @@ def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
         {"transformers": RunnerSpec(mode="local", image=None, source="test")},
         {},
     )
-    api_module._run(study, skip_preflight=True, preresolved=preresolved)
+    api_module.orchestrate_study(study, skip_preflight=True, preresolved=preresolved)
 
     assert study_preflight_calls == [], (
         "run_study_preflight must not be called inside _run when preresolved is supplied"
@@ -516,7 +516,7 @@ def test_run_study_fresh_without_output_dir_uses_yaml_results_dir(monkeypatch, t
 
 def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
     """Resume: output_dir stays the resumable-study search base, not a results override."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.resume as resume_module
 
     search_bases: list = []
@@ -537,7 +537,7 @@ def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
         captured.update(kw)
         return make_study_result()
 
-    monkeypatch.setattr(api_module, "_run", _capture_run)
+    monkeypatch.setattr(api_module, "orchestrate_study", _capture_run)
 
     study = StudyConfig(experiments=[make_config()])
     search_base = tmp_path / "search-here"
@@ -550,7 +550,7 @@ def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
 
 def test_run_preresolved_without_skip_preflight_raises():
     """Passing preresolved with skip_preflight=False is rejected, not silently honoured."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
@@ -562,14 +562,14 @@ def test_run_preresolved_without_skip_preflight_raises():
     )
 
     with pytest.raises(ValueError, match="preresolved requires skip_preflight=True"):
-        api_module._run(study, skip_preflight=False, preresolved=preresolved)
+        api_module.orchestrate_study(study, skip_preflight=False, preresolved=preresolved)
 
 
 def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
     """_run() calls get_engine with the experiment's engine name."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = make_result()
@@ -600,7 +600,7 @@ def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     study = StudyConfig(experiments=[config])
 
-    api_module._run(study)
+    api_module.orchestrate_study(study)
 
     assert len(engine_calls) == 1
     assert engine_calls[0] == "transformers"
@@ -608,9 +608,9 @@ def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
 
 def test_run_returns_study_result(monkeypatch, tmp_path):
     """_run() returns a StudyResult containing the experiment results."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = make_result(experiment_id="wired-001")
@@ -635,7 +635,7 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     config = ExperimentConfig(task={"model": "gpt2"})
     study = StudyConfig(experiments=[config], study_name="my-study")
 
-    study_result = api_module._run(study)
+    study_result = api_module.orchestrate_study(study)
 
     assert isinstance(study_result, StudyResult)
     assert study_result.study_name == "my-study"
@@ -645,9 +645,9 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
 
 def test_run_propagates_preflight_error(monkeypatch, tmp_path):
     """_run() propagates PreFlightError without catching it."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
 
     def failing_preflight(config):
@@ -670,15 +670,15 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
     study = StudyConfig(experiments=[config])
 
     with pytest.raises(PreFlightError):
-        api_module._run(study)
+        api_module.orchestrate_study(study)
 
 
 def test_run_propagates_engine_error(monkeypatch, tmp_path):
     """_run() propagates EngineError without catching it."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness as harness_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
 
     def _failing_harness_run(self, engine, config, **kw):
@@ -700,7 +700,7 @@ def test_run_propagates_engine_error(monkeypatch, tmp_path):
     study = StudyConfig(experiments=[config])
 
     with pytest.raises(EngineError, match="GPU out of memory"):
-        api_module._run(study)
+        api_module.orchestrate_study(study)
 
 
 def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
@@ -810,9 +810,9 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
 
 def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
     """Single experiment + n_cycles=1 bypasses StudyRunner (in-process path)."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.study.runner import StudyRunner
 
@@ -847,7 +847,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
         experiments=[ExperimentConfig(task={"model": "gpt2"})],
         study_execution={"n_cycles": 1, "experiment_order": "sequential"},
     )
-    api_module._run(study)
+    api_module.orchestrate_study(study)
 
     # Single experiment + n_cycles=1 should NOT create StudyRunner
     assert runner_created == [], "StudyRunner was created for single in-process path"
@@ -872,8 +872,8 @@ def test_run_study_returns_study_result_type():
 
 def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     """_run() resolves runners via resolve_study_runners and passes runner_specs to StudyRunner."""
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
@@ -936,7 +936,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
         ]
     )
 
-    api_module._run(study)
+    api_module.orchestrate_study(study)
 
     assert len(captured_runner_specs) == 1, "_run_via_runner not called or called multiple times"
     assert captured_runner_specs[0] == resolved_specs
@@ -946,9 +946,9 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     """_run() logs a warning when runner_specs has mixed local/docker modes."""
     import logging
 
-    import llenergymeasure.api._impl as api_module
     import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
@@ -981,8 +981,8 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
 
     study = StudyConfig(experiments=[ExperimentConfig(task={"model": "gpt2"})])
 
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.api._impl"):
-        api_module._run(study)
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.orchestration"):
+        api_module.orchestrate_study(study)
 
     warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
     assert any("mixed" in m.lower() for m in warning_messages), (
@@ -1003,7 +1003,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     total_experiments must be 6, not 18 (the pre-fix bug: 6 * 3).
     unique_configurations must be 2 (6 / 3).
     """
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
 
     # Build 6 mock results (2 configs x 3 cycles, already cycle-expanded)
@@ -1051,7 +1051,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     # Verify our study fixture has exactly 6 experiments
     assert len(study.experiments) == 6
 
-    study_result = api_module._run(study)
+    study_result = api_module.orchestrate_study(study)
 
     assert study_result.summary.total_experiments == 6, (
         f"Expected 6 (cycle-expanded count), got {study_result.summary.total_experiments} "
@@ -1267,7 +1267,7 @@ class TestResolveGpuIndicesTensorrt:
 
 def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
     """run_experiment raises ExperimentError (not IndexError) when _run returns empty experiments."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
     from llenergymeasure.utils.exceptions import ExperimentError
 
     empty_study_result = StudyResult(
@@ -1283,7 +1283,7 @@ def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
         ),
     )
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
+    monkeypatch.setattr(api_module, "orchestrate_study", lambda study, **kw: empty_study_result)
 
     config = ExperimentConfig(task={"model": "gpt2"})
     with pytest.raises(ExperimentError) as exc_info:
@@ -1294,7 +1294,7 @@ def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
 
 def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
     """run_experiment raises ExperimentError with fallback message when warnings list is empty."""
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
     from llenergymeasure.utils.exceptions import ExperimentError
 
     empty_study_result = StudyResult(
@@ -1309,7 +1309,7 @@ def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
         ),
     )
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
+    monkeypatch.setattr(api_module, "orchestrate_study", lambda study, **kw: empty_study_result)
 
     config = ExperimentConfig(task={"model": "gpt2"})
     with pytest.raises(ExperimentError, match="Experiment produced no results"):
@@ -1323,7 +1323,7 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
     The study should NOT raise - it returns a StudyResult with the successful
     experiments and a summary showing the failure count.
     """
-    import llenergymeasure.api._impl as api_module
+    import llenergymeasure.study.orchestration as api_module
 
     successful_result = make_result(experiment_id="partial-ok")
 
@@ -1340,7 +1340,7 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
         ),
     )
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: partial_study_result)
+    monkeypatch.setattr(api_module, "orchestrate_study", lambda study, **kw: partial_study_result)
 
     study = StudyConfig(
         experiments=[

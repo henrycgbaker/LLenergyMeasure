@@ -185,6 +185,11 @@ TIMEOUT_SIGTERM_GRACE: Final = 2
 TIMEOUT_INTERRUPT_POLL: Final = 1
 """Interrupt event wait loop tick."""
 
+TIMEOUT_PROGRESS_QUEUE_POLL: Final = 1
+"""Progress-consumer ``queue.get`` poll tick: bounds each blocking get so the
+display thread stays responsive and a wedged queue cannot hang it indefinitely -
+it loops back and re-checks for the parent's sentinel."""
+
 # ---------------------------------------------------------------------------
 # Per-engine descriptor registry
 # ---------------------------------------------------------------------------
@@ -360,6 +365,7 @@ __all__ = [
     "TIMEOUT_ENV_SNAPSHOT",
     "TIMEOUT_INTERRUPT_POLL",
     "TIMEOUT_NVIDIA_SMI",
+    "TIMEOUT_PROGRESS_QUEUE_POLL",
     "TIMEOUT_SIGTERM_GRACE",
     "TIMEOUT_THREAD_JOIN",
     "BatchSizeModel",
