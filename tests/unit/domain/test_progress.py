@@ -182,3 +182,58 @@ def test_docker_steps_measurement_tail_is_identical_across_variants():
             tail = steps[steps.index(STEP_MODEL) :]
             tails[(images_prepared, host_baseline)] = tuple(tail)
     assert len(set(tails.values())) == 1, f"Measurement tail drifted across variants: {tails}"
+
+
+# -------------------------------------------------------------------------
+# Step registry extensibility (S14). The vocabulary is a registry, not a
+# closed set: a new step is one register_step() call and it flows through
+# labels, phase mapping, and the ordered step lists with no consumer edits.
+# This is the seam server mode (v0.8.0) uses to add server-start/health/ramp.
+# -------------------------------------------------------------------------
+
+
+def test_register_step_flows_through_labels_phases_and_ordering():
+    """A newly registered step flows through the whole registry with no
+    renderer or list-builder changes."""
+    import llenergymeasure.domain.progress as progress
+
+    saved_specs = list(progress._STEP_SPECS)
+    saved_labels = dict(progress.STEP_LABELS)
+    saved_phases = dict(progress.STEP_PHASES)
+    try:
+        # A hypothetical server-mode step: it joins the existing local surface
+        # (positioned between preflight=10 and container_preflight=60) and its
+        # own brand-new "server" surface - the pattern server mode will use.
+        progress.register_step(
+            progress.StepSpec(
+                id="server_health",
+                label="Polling",
+                phase="Server",
+                order=45,
+                surfaces=frozenset({progress.SURFACE_LOCAL, "server"}),
+            )
+        )
+
+        # Label mapping flows.
+        assert progress.STEP_LABELS["server_health"] == "Polling"
+        # Phase mapping flows - a brand-new phase name is carried verbatim.
+        assert progress.STEP_PHASES["server_health"] == "Server"
+
+        # Ordering flows: the step lands at its declared position in the local
+        # surface, between preflight and container_preflight.
+        local = progress.steps_for_surface(progress.SURFACE_LOCAL)
+        assert "server_health" in local
+        assert local.index(STEP_PREFLIGHT) < local.index("server_health")
+        assert local.index("server_health") < local.index(STEP_CONTAINER_PREFLIGHT)
+
+        # Ordering flows in a brand-new surface too: no builder changes needed.
+        assert progress.steps_for_surface("server") == ["server_health"]
+
+        # A step that opts out of the docker surfaces never appears there.
+        assert "server_health" not in docker_steps(images_prepared=False, host_baseline=True)
+    finally:
+        progress._STEP_SPECS[:] = saved_specs
+        progress.STEP_LABELS.clear()
+        progress.STEP_LABELS.update(saved_labels)
+        progress.STEP_PHASES.clear()
+        progress.STEP_PHASES.update(saved_phases)

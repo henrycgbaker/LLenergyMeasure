@@ -13,6 +13,8 @@ reporting within an active step (e.g. CUDA check, model access check).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 
@@ -20,11 +22,16 @@ from typing import Protocol, runtime_checkable
 class ProgressCallback(Protocol):
     """Callback protocol for reporting measurement step progress.
 
-    Step names use a fixed vocabulary grouped into two phases::
+    Step names come from the step registry (``StepSpec`` / ``register_step``
+    below), grouped into phases. The base vocabulary::
 
         Setup:       preflight, image_check, pull, container_start, container_preflight
         Measurement: baseline, model, prompts, warmup, thermal_floor,
                      energy_select, measure, flops, save
+
+    The registry is extensible - future modes add steps and phases as registry
+    entries, and every consumer (labels, phase mapping, ordered step lists)
+    derives from it.
 
     Steps that don't apply in a given run are reported via on_step_skip()
     and rendered as SKIP in the display. This keeps a fixed [x/y] counter.
@@ -288,65 +295,124 @@ STEP_MEASURE = "measure"
 STEP_FLOPS = "flops"
 STEP_SAVE = "save"
 
-STEP_LABELS: dict[str, str] = {
-    STEP_PREFLIGHT: "Checking",
-    STEP_IMAGE_CHECK: "Inspecting",
-    STEP_PULL: "Pulling",
-    STEP_CONTAINER_START: "Starting",
-    STEP_CONTAINER_PREFLIGHT: "Checking",
-    STEP_BASELINE: "Measuring",
-    STEP_MODEL: "Loading",
-    STEP_PROMPTS: "Loading",
-    STEP_WARMUP: "Warming up",
-    STEP_THERMAL_FLOOR: "Waiting",
-    STEP_ENERGY_SELECT: "Selecting",
-    STEP_MEASURE: "Measuring",
-    STEP_FLOPS: "Estimating",
-    STEP_SAVE: "Saving",
-}
-
-# Step-to-phase mapping -- determines which phase header each step appears under.
-# Unknown steps default to PHASE_MEASUREMENT.
-STEP_PHASES: dict[str, str] = {
-    STEP_PREFLIGHT: PHASE_SETUP,
-    STEP_IMAGE_CHECK: PHASE_SETUP,
-    STEP_PULL: PHASE_SETUP,
-    STEP_CONTAINER_START: PHASE_SETUP,
-    STEP_CONTAINER_PREFLIGHT: PHASE_SETUP,
-    STEP_BASELINE: PHASE_MEASUREMENT,
-    STEP_MODEL: PHASE_MEASUREMENT,
-    STEP_PROMPTS: PHASE_MEASUREMENT,
-    STEP_WARMUP: PHASE_MEASUREMENT,
-    STEP_THERMAL_FLOOR: PHASE_MEASUREMENT,
-    STEP_ENERGY_SELECT: PHASE_MEASUREMENT,
-    STEP_MEASURE: PHASE_MEASUREMENT,
-    STEP_FLOPS: PHASE_MEASUREMENT,
-    STEP_SAVE: PHASE_MEASUREMENT,
-}
-
 # -------------------------------------------------------------------------
-# Ordered step lists for pre-registration (fixed [x/y] counters).
+# Step registry -- the single source of truth for the progress vocabulary.
 #
-# The Docker path is assembled by ``docker_steps()`` from three named pieces
-# (setup head, container start, measurement tail) plus the strategy-dependent
-# placement of ``STEP_BASELINE``. Keeping one constructor instead of four
-# parallel constants avoids drift between variants when the measurement tail
-# changes.
+# Each StepSpec fully describes one step: its identity, display label, phase,
+# ordering, and the run-mode surfaces it appears in. The label map, phase map,
+# and the ordered step lists every consumer renders from are all *derived* from
+# this registry. Adding a step (server mode's server-start / health / ramp
+# phases, for example) is one ``register_step()`` call, or one entry below - no
+# renderer, dispatcher, or list builder needs editing.
 # -------------------------------------------------------------------------
 
-_DOCKER_SETUP_HEAD: list[str] = [STEP_PREFLIGHT]
-_DOCKER_IMAGE_PREP: list[str] = [STEP_IMAGE_CHECK, STEP_PULL]
-_DOCKER_CONTAINER_START: list[str] = [STEP_CONTAINER_START, STEP_CONTAINER_PREFLIGHT]
-_DOCKER_MEASUREMENT_TAIL: list[str] = [
-    STEP_MODEL,
-    STEP_PROMPTS,
-    STEP_WARMUP,
-    STEP_THERMAL_FLOOR,
-    STEP_ENERGY_SELECT,
-    STEP_MEASURE,
-    STEP_FLOPS,
-    STEP_SAVE,
+# Step-list surfaces -- the run-mode variants that select and order the steps a
+# run emits. A step declares which surfaces it belongs to and where it sits in
+# each. Future modes (server mode) add their own surface here without touching
+# any consumer.
+SURFACE_LOCAL = "local"  # direct harness run, no container
+SURFACE_DOCKER = "docker"  # container run, baseline measured in-container (fresh)
+SURFACE_DOCKER_HOST_BASELINE = "docker_host_baseline"  # baseline measured on host first
+
+_ALL_SURFACES = frozenset({SURFACE_LOCAL, SURFACE_DOCKER, SURFACE_DOCKER_HOST_BASELINE})
+_DOCKER_SURFACES = frozenset({SURFACE_DOCKER, SURFACE_DOCKER_HOST_BASELINE})
+
+
+@dataclass(frozen=True)
+class StepSpec:
+    """Full description of one progress step so every consumer renders from it.
+
+    Attributes:
+        id: Stable step identifier (the frozen ``STEP_*`` value emitted on the
+            wire and matched by renderers). Never renamed - display behaviour
+            depends on the exact string.
+        label: Human-readable verb shown in the display (e.g. "Loading").
+        phase: Phase header the step groups under (``PHASE_SETUP`` /
+            ``PHASE_MEASUREMENT``).
+        order: Position key within an ordered step list (lower sorts earlier).
+        surfaces: Run-mode surfaces the step appears in (see ``SURFACE_*``).
+        order_overrides: Per-surface ``order`` overrides for steps whose
+            position depends on the run mode. Defaults to ``order`` everywhere;
+            only ``STEP_BASELINE`` needs one - it is measured earlier when the
+            host runs a standalone baseline before the experiment container.
+    """
+
+    id: str
+    label: str
+    phase: str
+    order: int
+    surfaces: frozenset[str]
+    order_overrides: Mapping[str, int] = field(default_factory=dict)
+
+    def order_in(self, surface: str) -> int:
+        """Ordering key for this step within ``surface``."""
+        return self.order_overrides.get(surface, self.order)
+
+
+# The registry. Insertion order is not significant; ``order`` drives sequencing.
+_STEP_SPECS: list[StepSpec] = [
+    # Setup phase
+    StepSpec(STEP_PREFLIGHT, "Checking", PHASE_SETUP, 10, _ALL_SURFACES),
+    StepSpec(STEP_IMAGE_CHECK, "Inspecting", PHASE_SETUP, 20, _DOCKER_SURFACES),
+    StepSpec(STEP_PULL, "Pulling", PHASE_SETUP, 30, _DOCKER_SURFACES),
+    StepSpec(STEP_CONTAINER_START, "Starting", PHASE_SETUP, 50, _DOCKER_SURFACES),
+    StepSpec(STEP_CONTAINER_PREFLIGHT, "Checking", PHASE_SETUP, 60, _ALL_SURFACES),
+    # Measurement phase
+    StepSpec(
+        STEP_BASELINE,
+        "Measuring",
+        PHASE_MEASUREMENT,
+        65,
+        _ALL_SURFACES,
+        order_overrides={SURFACE_DOCKER_HOST_BASELINE: 40},
+    ),
+    StepSpec(STEP_MODEL, "Loading", PHASE_MEASUREMENT, 70, _ALL_SURFACES),
+    StepSpec(STEP_PROMPTS, "Loading", PHASE_MEASUREMENT, 80, _ALL_SURFACES),
+    StepSpec(STEP_WARMUP, "Warming up", PHASE_MEASUREMENT, 90, _ALL_SURFACES),
+    StepSpec(STEP_THERMAL_FLOOR, "Waiting", PHASE_MEASUREMENT, 100, _ALL_SURFACES),
+    StepSpec(STEP_ENERGY_SELECT, "Selecting", PHASE_MEASUREMENT, 110, _ALL_SURFACES),
+    StepSpec(STEP_MEASURE, "Measuring", PHASE_MEASUREMENT, 120, _ALL_SURFACES),
+    StepSpec(STEP_FLOPS, "Estimating", PHASE_MEASUREMENT, 130, _ALL_SURFACES),
+    StepSpec(STEP_SAVE, "Saving", PHASE_MEASUREMENT, 140, _ALL_SURFACES),
 ]
+
+# Derived vocabulary maps. Mutated in place by ``register_step`` so importers
+# that bound these dicts by name keep seeing later additions. Unknown steps
+# default to PHASE_MEASUREMENT at the consumer lookup, not here.
+STEP_LABELS: dict[str, str] = {spec.id: spec.label for spec in _STEP_SPECS}
+STEP_PHASES: dict[str, str] = {spec.id: spec.phase for spec in _STEP_SPECS}
+
+
+def register_step(spec: StepSpec) -> None:
+    """Register an additional progress step in the vocabulary.
+
+    Future measurement modes (server mode's server-start / health / ramp
+    phases, for example) add their steps by registering specs here. Every
+    consumer - labels, phase mapping, and the ordered step lists produced by
+    ``steps_for_surface`` / ``docker_steps`` - derives from the registry, so no
+    renderer or dispatcher changes are needed.
+    """
+    _STEP_SPECS.append(spec)
+    STEP_LABELS[spec.id] = spec.label
+    STEP_PHASES[spec.id] = spec.phase
+
+
+def steps_for_surface(surface: str, *, exclude: frozenset[str] = frozenset()) -> list[str]:
+    """Ordered step ids for ``surface``, sorted least-to-greatest by ``order``.
+
+    Args:
+        surface: One of the ``SURFACE_*`` values.
+        exclude: Step ids to drop (e.g. image-prep steps already handled at
+            study level).
+    """
+    specs = [s for s in _STEP_SPECS if surface in s.surfaces and s.id not in exclude]
+    specs.sort(key=lambda s: s.order_in(surface))
+    return [s.id for s in specs]
+
+
+# Image-prep steps are omitted per-experiment when the study preflight already
+# verified and pulled the engine images.
+_IMAGE_PREP_STEPS = frozenset({STEP_IMAGE_CHECK, STEP_PULL})
 
 
 def docker_steps(*, images_prepared: bool, host_baseline: bool) -> list[str]:
@@ -363,33 +429,32 @@ def docker_steps(*, images_prepared: bool, host_baseline: bool) -> list[str]:
             for ``fresh``, where the harness measures baseline inside the
             experiment container after ``container_preflight``.
 
-    The two modes differ in exactly one position: where ``STEP_BASELINE``
-    sits relative to ``STEP_CONTAINER_START`` / ``STEP_CONTAINER_PREFLIGHT``.
-    The measurement-phase tail is identical in both.
+    The two modes differ in exactly one position: where ``STEP_BASELINE`` sits
+    relative to ``STEP_CONTAINER_START`` / ``STEP_CONTAINER_PREFLIGHT`` - encoded
+    by the ``docker_host_baseline`` surface's baseline ``order`` override. The
+    measurement-phase tail is identical in both.
     """
-    steps: list[str] = list(_DOCKER_SETUP_HEAD)
-    if not images_prepared:
-        steps.extend(_DOCKER_IMAGE_PREP)
-    if host_baseline:
-        steps.append(STEP_BASELINE)
-    steps.extend(_DOCKER_CONTAINER_START)
-    if not host_baseline:
-        steps.append(STEP_BASELINE)
-    steps.extend(_DOCKER_MEASUREMENT_TAIL)
-    return steps
+    surface = SURFACE_DOCKER_HOST_BASELINE if host_baseline else SURFACE_DOCKER
+    exclude = _IMAGE_PREP_STEPS if images_prepared else frozenset()
+    return steps_for_surface(surface, exclude=exclude)
 
 
 # Local path: no Docker steps, direct harness measurement.
-STEPS_LOCAL: list[str] = [
-    STEP_PREFLIGHT,
-    STEP_CONTAINER_PREFLIGHT,
-    STEP_BASELINE,
-    STEP_MODEL,
-    STEP_PROMPTS,
-    STEP_WARMUP,
-    STEP_THERMAL_FLOOR,
-    STEP_ENERGY_SELECT,
-    STEP_MEASURE,
-    STEP_FLOPS,
-    STEP_SAVE,
-]
+STEPS_LOCAL: list[str] = steps_for_surface(SURFACE_LOCAL)
+
+
+# -------------------------------------------------------------------------
+# Container-boundary step aliases.
+#
+# The in-container harness emits ``STEP_PREFLIGHT`` for its own preflight; the
+# host renders that as ``STEP_CONTAINER_PREFLIGHT`` so it does not collide with
+# the host-side preflight step. docker_runner resolves inbound container step
+# ids through this map, keeping the relationship in the registry rather than
+# hard-coded at the dispatch boundary.
+# -------------------------------------------------------------------------
+CONTAINER_STEP_ALIASES: dict[str, str] = {STEP_PREFLIGHT: STEP_CONTAINER_PREFLIGHT}
+
+
+def resolve_container_step(step: str) -> str:
+    """Map an in-container step id to its host-side registry id."""
+    return CONTAINER_STEP_ALIASES.get(step, step)

@@ -59,6 +59,21 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   mechanics are extracted into a mode-agnostic `MeasurementBracket`
   (`llenergymeasure.harness.bracket`) and per-model-load state is split from
   per-window state, groundwork for a future server measurement mode. ([#856])
+- Internal restructure (no behavior or results change): the progress-step
+  vocabulary is now a single registry in `llenergymeasure.domain.progress`. Each
+  `StepSpec` fully describes one step (id, label, phase, order, applicable
+  surfaces); the label map, phase map, and the ordered step lists
+  (`steps_for_surface`, `docker_steps`, `STEPS_LOCAL`) are all derived from it,
+  and `register_step()` is the extension point future modes (server mode's
+  server-start / health / ramp phases) use - a new step flows through labels,
+  phase mapping, and ordering with no renderer or dispatcher edits. The
+  container-boundary step alias (`preflight` to `container_preflight`) moved into
+  the registry as `resolve_container_step`, so `docker_runner` no longer
+  hard-codes it. Separately, the 1322-line `cli/_step_display.py` god-module is
+  split along its concerns - shared render/formatting helpers (`_step_render`),
+  the single-experiment display (`_experiment_display`), and the study display
+  plus its row/image models (`_study_display`) - with `_step_display` kept as a
+  facade so CLI callers are unchanged; display output is byte-identical. ([#862])
 - Internal restructure (no behavior or results change): the measurement core is
   decomposed. Result assembly is split by measurement source - an offline
   producer (`build_offline_metrics`) reads the `InferenceOutput` into a
@@ -1323,3 +1338,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#856]: https://github.com/henrycgbaker/llenergymeasure/pull/856
 [#857]: https://github.com/henrycgbaker/llenergymeasure/pull/857
 [#860]: https://github.com/henrycgbaker/llenergymeasure/pull/860
+[#862]: https://github.com/henrycgbaker/llenergymeasure/pull/862

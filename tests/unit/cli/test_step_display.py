@@ -133,6 +133,46 @@ def test_step_display_auto_registers_unknown_steps():
     assert "DONE" in output
 
 
+def test_step_display_renders_registry_added_step_without_renderer_change():
+    """A step added to the progress registry renders with its label under its
+    phase header with no change to StepDisplay - the renderer derives labels
+    and phases from the registry (the server-mode extensibility contract)."""
+    import llenergymeasure.domain.progress as progress
+
+    saved_specs = list(progress._STEP_SPECS)
+    saved_labels = dict(progress.STEP_LABELS)
+    saved_phases = dict(progress.STEP_PHASES)
+    try:
+        progress.register_step(
+            progress.StepSpec(
+                id="server_ramp",
+                label="Ramping",
+                phase="Server",
+                order=200,
+                surfaces=frozenset({progress.SURFACE_LOCAL}),
+            )
+        )
+        console, buf = _make_console()
+        display = StepDisplay(console=console)
+        display.register_steps(["server_ramp"])
+        display.start()
+        # description="" forces the label to fall back to the registry, proving
+        # the renderer reads STEP_LABELS rather than a hard-coded set.
+        display.on_step_start("server_ramp", "", "load-gen")
+        display.on_step_done("server_ramp", 2.0)
+        display.finish(total_elapsed=2.0)
+
+        output = buf.getvalue()
+        assert "Server" in output  # phase header from STEP_PHASES
+        assert "Ramping" in output  # label from STEP_LABELS
+    finally:
+        progress._STEP_SPECS[:] = saved_specs
+        progress.STEP_LABELS.clear()
+        progress.STEP_LABELS.update(saved_labels)
+        progress.STEP_PHASES.clear()
+        progress.STEP_PHASES.update(saved_phases)
+
+
 def test_step_display_update_changes_detail():
     """on_step_update changes the detail text for the active step."""
     console, buf = _make_console()

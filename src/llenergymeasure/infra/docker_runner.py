@@ -65,6 +65,7 @@ from llenergymeasure.domain.bundle_artefacts import (
     ENVIRONMENT_FILENAME,
     TIMESERIES_FILENAME,
 )
+from llenergymeasure.domain.progress import resolve_container_step
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerStdoutSilenceError,
@@ -1010,9 +1011,10 @@ class DockerRunner:
                         time.perf_counter() - container_start_time,
                     )
 
-                # Translate container's "preflight" to avoid host collision
-                if step == "preflight":
-                    step = "container_preflight"
+                # Resolve container-boundary step id (e.g. the container's
+                # "preflight" renders as "container_preflight" host-side). The
+                # mapping lives in the progress registry.
+                step = resolve_container_step(step)
 
                 self._dispatch_progress_event(progress, event_type, step, event)
             except (json.JSONDecodeError, KeyError):
