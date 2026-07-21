@@ -32,6 +32,19 @@ def create_exchange_dir() -> Path:
     return Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_EXCHANGE))
 
 
+def write_config(exchange_dir: Path, config: Any, config_hash: str) -> Path:
+    """Serialise the experiment config into the exchange dir; return its path.
+
+    The container reads this at ``/run/llem/{config_hash}_config.json``. Output
+    dir and save_timeseries travel via env vars (not the config), so the written
+    JSON is the clean declared config - the same bytes ``config_hash`` was
+    computed from.
+    """
+    config_path = exchange_dir / f"{config_hash}_config.json"
+    config_path.write_text(config.model_dump_json(), encoding="utf-8")
+    return config_path
+
+
 def read_result(exchange_dir: Path, config_hash: str) -> Any:
     """Read and parse the result JSON written by the container.
 

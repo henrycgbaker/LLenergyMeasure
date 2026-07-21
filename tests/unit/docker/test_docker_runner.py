@@ -2129,7 +2129,7 @@ class TestDispatchAssetMaterialisation:
         """A missing/unreadable script resource raises DockerPreFlightError before docker run."""
         import importlib.resources
 
-        from llenergymeasure.infra.docker_runner import append_package_dispatch
+        from llenergymeasure.infra.docker.command import append_package_dispatch
 
         self._fresh()
         try:
@@ -2143,7 +2143,7 @@ class TestDispatchAssetMaterialisation:
     def test_preflight_error_when_requirements_empty(self):
         """Underivable runtime deps raise DockerPreFlightError before docker run."""
         from llenergymeasure.infra.docker import command
-        from llenergymeasure.infra.docker_runner import append_package_dispatch
+        from llenergymeasure.infra.docker.command import append_package_dispatch
 
         self._fresh()
         try:

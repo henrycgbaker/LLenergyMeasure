@@ -42,10 +42,9 @@ from llenergymeasure.config.ssot import (
     TEMP_PREFIX_ENV_FILE,
 )
 from llenergymeasure.infra.docker import command, diagnostics, exchange, lifecycle
-from llenergymeasure.infra.docker.command import append_nccl_env, append_package_dispatch
 from llenergymeasure.utils.exceptions import DockerError
 
-__all__ = ["DockerRunner", "append_nccl_env", "append_package_dispatch"]
+__all__ = ["DockerRunner"]
 
 logger = logging.getLogger(__name__)
 
@@ -220,12 +219,9 @@ class DockerRunner:
             # --- Write config JSON ---
             # Compute config_hash from the clean config (no output path mutation).
             # Output dir and save_timeseries are passed via env vars, not config.
+            # The exchange dir owns the write (it owns that dir's lifecycle).
             config_hash = compute_declared_config_hash(config)
-            config_path = exchange_dir / f"{config_hash}_config.json"
-            config_path.write_text(
-                config.model_dump_json(),
-                encoding="utf-8",
-            )
+            exchange.write_config(exchange_dir, config, config_hash)
 
             # Pass output params via env vars so the container entrypoint can
             # forward them to the harness as runtime params.
