@@ -81,16 +81,20 @@ All failures are collected and raised together as a single `PreFlightError` so t
 
 ## Dispatch flow
 
+`api/` is a thin adapter; the orchestration itself lives in the study layer
+(`study.orchestration.orchestrate_study`).
+
 ```
 run_experiment(...)
   └─ _to_study_config()       # normalise all input forms to StudyConfig
 run_study(...)
-  └─ _run(study)              # shared dispatcher
-        ├─ run_study_preflight()
-        ├─ resolve_study_runners()
-        ├─ create_study_dir() + ManifestWriter
-        ├─ run_single_experiment()  # single experiment (study layer): harness or DockerRunner directly
-        └─ _run_via_runner()        # multi-experiment: StudyRunner subprocess loop
+  └─ (adapter: map output_dir -> results_dir_override / resume search base)
+     └─ study.orchestration.orchestrate_study(study)   # study-layer dispatcher
+           ├─ run_study_preflight()
+           ├─ resolve_study_runners()
+           ├─ create_study_dir() + ManifestWriter
+           ├─ run_single_experiment()  # single experiment (study layer): harness or DockerRunner directly
+           └─ _run_via_runner()        # multi-experiment: StudyRunner drives one session per experiment
 ```
 
 ## Layer constraints

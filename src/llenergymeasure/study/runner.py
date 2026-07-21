@@ -4,6 +4,9 @@
 container lifecycle, circuit breaker, wall-clock timeout, and result handling.
 The separable concerns live in sibling modules and are mixed in or imported:
 
+- ``study.session``: context-managed per-experiment dispatch lifetimes
+  (``ExperimentSession`` + the offline subprocess/docker implementations the
+  run loop drives, one per experiment).
 - ``study.worker``: subprocess-worker surface (child entry point, result
   collection, process-group signalling).
 - ``study._progress``: cross-process progress plumbing.
@@ -26,10 +29,8 @@ import contextlib
 import logging
 import multiprocessing
 import os  # noqa: F401 - patch target: tests patch study.runner.os.{killpg,setpgrp}
-import shutil
 import signal
 import sys
-import tempfile
 import threading
 import time
 import uuid
@@ -41,36 +42,24 @@ from llenergymeasure.config.grid import ExperimentOrder, cycle_boundary_indices
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     RUNNER_DOCKER,
-    TEMP_PREFIX_TIMESERIES,
     TIMEOUT_ENV_SNAPSHOT,
     TIMEOUT_INTERRUPT_POLL,
-    TIMEOUT_SIGTERM_GRACE,
-    TIMEOUT_THREAD_JOIN,
     engine_str,
 )
 from llenergymeasure.domain.bundle_artefacts import (
     CONFIG_SIDECAR_FILENAME,
     EQUIVALENCE_GROUPS_FILENAME,
 )
-from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
+
+# Re-imported into this module's namespace so existing
+# ``from llenergymeasure.study.runner import X`` sites (tests, study.single)
+# keep resolving here even though the dispatch mechanics now live in
+# study.session / study._progress.
 from llenergymeasure.study._progress import _consume_progress_events
 from llenergymeasure.study.baseline_measure import _BaselineMixin
 from llenergymeasure.study.gaps import run_gap
 from llenergymeasure.study.image_prep import _ImageMixin
-
-# Re-imported into this module's namespace so that (a) existing
-# ``from llenergymeasure.study.runner import X`` sites keep working and
-# (b) ``patch("llenergymeasure.study.runner.<name>")`` intercepts the
-# bare-name call sites inside ``_run_one`` / ``run``.
-from llenergymeasure.study.worker import (
-    _UNSET,
-    COLLECT_RESULT_PROCESS_CRASH,
-    COLLECT_RESULT_TIMEOUT,
-    _collect_result,
-    _derive_exit_reason,
-    _kill_process_group,
-    _run_experiment_worker,
-)
+from llenergymeasure.study.worker import _kill_process_group, _run_experiment_worker
 from llenergymeasure.utils.io import load_json
 
 if TYPE_CHECKING:
@@ -83,6 +72,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "StudyRunner",
+    "_consume_progress_events",
     "_kill_process_group",
     "_run_experiment_worker",
     "_save_and_record",
@@ -759,12 +749,12 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
     def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int) -> Any:
         """Dispatch one experiment via Docker or subprocess, collect result or failure dict.
 
-        Checks runner_specs for this experiment's engine first. If a Docker spec is
-        found, delegates to _run_one_docker(). Otherwise falls through to the existing
-        subprocess dispatch path.
-
-        If interrupt_event is set after join, attempts graceful SIGTERM → 2s grace →
-        SIGKILL before collecting whatever result is available.
+        Assigns this experiment's cycle number, then drives the appropriate
+        ``ExperimentSession`` (``DockerSession`` when the engine's runner spec is
+        Docker, else ``SubprocessSession``). The session's context-manager
+        lifecycle owns setup and teardown; ``run()`` produces the single result
+        (offline = one result per session). The grace SIGTERM -> SIGKILL
+        escalation on interrupt lives in ``SubprocessSession.run()``.
         """
         from llenergymeasure.domain.experiment import compute_declared_config_hash
 
@@ -780,152 +770,16 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 config, spec, config_hash=config_hash, cycle=cycle, index=index
             )
 
-        timeout = self.study.study_execution.experiment_timeout_seconds
+        from llenergymeasure.study.session import SubprocessSession
 
-        # Signal study display: new experiment starting (subprocess = local steps)
-        if self._progress:
-            from llenergymeasure.utils.formatting import format_experiment_header
-
-            local_spec = self._runner_specs.get(config.engine) if self._runner_specs else None
-            self._progress.begin_experiment(
-                index,
-                format_experiment_header(config),
-                list(STEPS_LOCAL),
-                runner_info=local_spec.to_runner_info() if local_spec else None,
-            )
-
-        exp_start = time.monotonic()
-
-        # Create a temp dir for harness artefacts. The harness receives it as
-        # output_dir (a runtime param, not from config) and writes config.json
-        # there always, plus timeseries.parquet when save_timeseries is on. The
-        # staging dir is created regardless of save_timeseries so the config.json
-        # sidecar - sole home of provenance, authoritative home of identity -
-        # always materialises;
-        # it is cleaned up after _handle_result copies the artefacts into the
-        # study directory.
-        save_ts = self.study.output.save_timeseries
-        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
-
-        # Resolve cached snapshot in parent - serialised to subprocess via Pipe
-        snapshot = self._get_env_snapshot()
-
-        # Resolve cached baseline in parent - avoids 30s re-measurement per subprocess
-        baseline = self._get_baseline(config) if config.measurement.baseline.enabled else None
-
-        parent_conn, child_conn = mp_ctx.Pipe(duplex=False)
-        progress_queue = mp_ctx.Queue()
-
-        p = mp_ctx.Process(
-            target=_run_experiment_worker,
-            args=(config, child_conn, progress_queue, snapshot),
-            kwargs={
-                "output_dir": str(ts_tmpdir),
-                "save_timeseries": save_ts,
-                "baseline": baseline,
-                "study_dir": str(self.study_dir),
-                "study_run_id": self.study_run_id,
-                "cycle": cycle,
-                "config_hash": config_hash,
-            },
-            daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
-        )
-
-        consumer = threading.Thread(
-            target=_consume_progress_events,
-            args=(progress_queue, self._progress),
-            daemon=True,
-        )
-        consumer.start()
-
-        self.manifest.mark_running(config_hash, cycle)
-        self._active_process = p
-
-        # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
-        from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
-
-        check_gpu_memory_residual()
-
-        p.start()
-        child_conn.close()
-
-        # Drain pipe BEFORE join to prevent buffer deadlock (H5).
-        # If pickled ExperimentResult > 64 KB, child blocks on conn.send()
-        # while parent blocks in p.join() - classic deadlock.
-        pipe_payload = _UNSET
-        if parent_conn.poll(timeout=timeout):
-            try:
-                pipe_payload = parent_conn.recv()
-            except Exception:
-                pipe_payload = _UNSET
-
-        # Non-blocking join after pipe is drained (grace for teardown)
-        p.join(timeout=TIMEOUT_THREAD_JOIN)
-
-        # SIGINT was received during join: SIGTERM was already sent by handler.
-        # Grace period for clean CUDA teardown, then SIGKILL.
-        if self._interrupt_event.is_set() and p.is_alive():
-            p.join(timeout=TIMEOUT_SIGTERM_GRACE)
-            if p.is_alive():
-                _kill_process_group(p.pid, signal.SIGKILL)
-                p.join()
-
-        self._active_process = None
-
-        # Sentinel stops consumer thread - covers SIGKILL path too
-        progress_queue.put(None)
-        consumer.join()
-
-        result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
-        parent_conn.close()
-
-        # Parent writes the sentinel record for SIGKILL / timeout - the
-        # worker's context manager can't flush when its ``__exit__`` never
-        # ran. ``write_sentinel`` is itself best-effort and swallows OSError.
-        if isinstance(result, dict) and result.get("type") in {
-            COLLECT_RESULT_PROCESS_CRASH,
-            COLLECT_RESULT_TIMEOUT,
-        }:
-            from llenergymeasure.study.runtime_observations import write_sentinel
-
-            exit_reason = (
-                "timeout"
-                if result.get("type") == COLLECT_RESULT_TIMEOUT
-                else _derive_exit_reason(p.exitcode)
-            )
-            write_sentinel(
-                config,
-                study_dir=self.study_dir,
-                study_run_id=self.study_run_id,
-                cycle=cycle,
-                config_hash=config_hash,
-                exit_reason=exit_reason,
-                exit_code=p.exitcode,
-            )
-
-        exp_elapsed = time.monotonic() - exp_start
-        local_spec = self._runner_specs.get(config.engine) if self._runner_specs else None
-        self._handle_result(
-            result,
-            config,
-            config_hash,
-            cycle,
-            index,
-            exp_elapsed,
-            ts_source_dir=ts_tmpdir,
-            environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
-            runner_provenance=_provenance_from_spec(local_spec),
-            runner_environment=(
-                _runner_environment(local_spec) if not isinstance(result, dict) else None
-            ),
-        )
-
-        # Clean up the temp dir created for timeseries parquet output.
-        # _save_and_record already copied the parquet into the study dir.
-        if ts_tmpdir is not None:
-            shutil.rmtree(ts_tmpdir, ignore_errors=True)
-
-        return result
+        # Subprocess dispatch: a SubprocessSession owns the freshly spawned
+        # worker's lifetime - env prep + spawn on __enter__, teardown on __exit__
+        # (always, including the SIGINT/exception paths). The sweep loop keys off
+        # the single result the session produces (offline = one result/session).
+        with SubprocessSession(
+            self, config, mp_ctx, config_hash=config_hash, cycle=cycle, index=index
+        ) as session:
+            return session.run()
 
     def _handle_result(
         self,
@@ -1041,119 +895,13 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         Returns:
             ExperimentResult on success, or a failure dict on error.
         """
-        from llenergymeasure.infra.docker_errors import docker_exc_to_failure
-        from llenergymeasure.infra.docker_runner import DockerRunner
-        from llenergymeasure.infra.image_registry import get_default_image
-        from llenergymeasure.study.container_lifecycle import (
-            generate_container_labels,
-            generate_container_name,
-            persist_failure_artefacts,
-        )
-        from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
-        from llenergymeasure.utils.exceptions import DockerError
+        from llenergymeasure.study.session import DockerSession
 
-        # Image is pre-resolved during preflight (resolve_image precedence chain).
-        # Fall back to get_default_image() only for direct DockerRunner usage
-        # outside the study path.
-        image = spec.image if spec.image is not None else get_default_image(config.engine)
-
-        study_id = self.study.study_design_hash or "unknown"
-        container_name = generate_container_name(study_id, index)
-        labels = generate_container_labels(study_id)
-
-        # begin_experiment MUST run before _get_baseline so baseline step events
-        # fire against a registered experiment index.
-        if self._progress:
-            from llenergymeasure.utils.formatting import format_experiment_header
-
-            host_baseline = (
-                config.measurement.baseline.enabled
-                and config.measurement.baseline.strategy != "fresh"
-            )
-            steps = docker_steps(
-                images_prepared=self._images_prepared,
-                host_baseline=host_baseline,
-            )
-            self._progress.begin_experiment(
-                index,
-                format_experiment_header(config),
-                steps,
-                runner_info=spec.to_runner_info(),
-            )
-            # Host-side preflight doesn't run in Docker path - checked inside container
-            self._progress.on_step_skip("preflight", "checked inside container")
-
-        extra_mounts = list(spec.extra_mounts) if spec.extra_mounts else []
-        cache_key = self._baseline_cache_key(config)
-        baseline = self._get_baseline(config) if config.measurement.baseline.enabled else None
-        if baseline is not None:
-            # Experiment container reads /run/llem/baseline_cache.json; the host
-            # picks the right per-cache-key file at dispatch time. Docker parses
-            # relative bind-mount sources as named volumes, so resolve first.
-            baseline_cache_path = self._get_baseline_cache_path(cache_key)
-            extra_mounts.append(
-                (
-                    str(baseline_cache_path.resolve()),
-                    f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json",
-                )
-            )
-
-        docker_runner = DockerRunner(
-            image=image,
-            timeout=self.study.study_execution.experiment_timeout_seconds,
-            silence_timeout=self.study.study_execution.stdout_silence_timeout_seconds,
-            source=spec.source,
-            extra_mounts=extra_mounts,
-            container_name=container_name,
-            labels=labels,
-            gpu_indices=self.study.study_execution.gpu_indices,
-        )
-
-        # Pre-dispatch GPU memory residual check (same as local path)
-        check_gpu_memory_residual()
-
-        self.manifest.mark_running(config_hash, cycle)
-
-        exp_start = time.monotonic()
-
-        result: Any
-        docker_ts_dir: Path | None = None
-        try:
-            # Pass study progress as step callback - DockerRunner calls on_step_*
-            # skip_image_check=True when images were verified at study level.
-            result, docker_ts_dir = docker_runner.run(
-                config,
-                progress=self._progress,
-                save_timeseries=self.study.output.save_timeseries,
-                skip_image_check=self._images_prepared,
-            )
-        except DockerError as exc:
-            # Translate to a non-fatal failure dict (silence / timeout / structured
-            # payload classification handled in the shared helper) and persist the
-            # container.log + error JSON so the failure is debuggable.
-            result = docker_exc_to_failure(exc, config_hash)
-            persist_failure_artefacts(exc, self.study_dir, config_hash, cycle, result)
-
-        exp_elapsed = time.monotonic() - exp_start
-        self._handle_result(
-            result,
-            config,
-            config_hash,
-            cycle,
-            index,
-            exp_elapsed,
-            ts_source_dir=docker_ts_dir,
-            environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
-            runner_provenance=_provenance_from_spec(spec),
-            runner_environment=(
-                _runner_environment(spec, resolved_image=image)
-                if not isinstance(result, dict)
-                else None
-            ),
-        )
-
-        # Clean up the temp dir after _save_and_record has copied the parquet.
-        if docker_ts_dir is not None:
-            shutil.rmtree(docker_ts_dir, ignore_errors=True)
-
-        return result
+        # Docker dispatch: a DockerSession owns the container lifetime - image +
+        # mount + facade prep on __enter__, teardown on __exit__. The DockerError
+        # -> non-fatal failure-dict translation lives in the session's run(), so
+        # the sweep loop keys off the single result uniformly with the local path.
+        with DockerSession(
+            self, config, spec, config_hash=config_hash, cycle=cycle, index=index
+        ) as session:
+            return session.run()

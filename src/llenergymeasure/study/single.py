@@ -6,9 +6,9 @@ StudyRunner. This module is that path. It lives in the study layer so the
 result-saving helper (``_save_and_record``) is an intra-package call rather than
 an api-layer reach into a study-layer private symbol.
 
-The api layer (``api/_impl._run``) keeps the single-experiment dispatch decision
-and the study-level progress begin/end block; it delegates the actual execution
-body to ``run_single_experiment`` here.
+The study-layer orchestrator (``study.orchestration.orchestrate_study``) keeps the
+single-experiment dispatch decision and the study-level progress begin/end block;
+it delegates the actual execution body to ``run_single_experiment`` here.
 """
 
 from __future__ import annotations

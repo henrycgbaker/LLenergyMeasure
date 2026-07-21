@@ -50,6 +50,27 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- Internal restructure (no behavior or results change): one experiment dispatch
+  is now an `ExperimentSession` (`llenergymeasure.study.session`) - a context
+  manager whose `__enter__` acquires the dispatch's resources, whose `run()`
+  produces the result, and whose `__exit__` releases everything exactly once, on
+  the SIGINT / circuit-break / exception paths alike. Two offline implementations
+  wrap the existing paths (`SubprocessSession`, `DockerSession`). The value of the
+  seam is that the session lifetime (acquire -> produce -> release) is separable
+  from result production, which is what will let a future server session express
+  one lifetime with many result windows (constraint C3); today the sweep loop
+  still drives one session per experiment and consumes its single result, the
+  manifest transitions and circuit breaker follow that one result, GPU locks stay
+  study-scoped, and no N-result consumption is added now. The orchestration
+  cluster that assembled and drove a study (`_run` and friends) moves from
+  `api/_impl.py` to a study-layer
+  orchestrator (`llenergymeasure.study.orchestration.orchestrate_study`); `api`
+  becomes a thin adapter and the public `run_experiment` / `run_study` signatures
+  and behaviour are unchanged. The adapter now maps the overloaded public
+  `output_dir` onto the orchestrator's two single-purpose internal parameters
+  (`results_dir_override` for a fresh run, resume search base for auto-detect
+  resume). The cross-process progress consumer polls with a bounded timeout and a
+  sentinel-aware loop so a silent producer cannot hang the display thread. ([#863])
 - Internal restructure (no behavior or results change): the 786-line
   `config/grid.py` is split into a grid-orchestration facade plus
   `config.sweep_expansion` (sweep-block expansion) and `config.cycle_ordering`
@@ -1339,3 +1360,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#857]: https://github.com/henrycgbaker/llenergymeasure/pull/857
 [#860]: https://github.com/henrycgbaker/llenergymeasure/pull/860
 [#862]: https://github.com/henrycgbaker/llenergymeasure/pull/862
+[#863]: https://github.com/henrycgbaker/llenergymeasure/pull/863
