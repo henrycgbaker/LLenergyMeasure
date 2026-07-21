@@ -2,9 +2,22 @@
 
 Five warning flags, all purely informational (never block experiments).
 Each includes actionable remediation advice per CONTEXT.md.
+
+This module owns warnings generation and its orchestration: the flag catalogue
+(:func:`collect_measurement_warnings`), the GPU-persistence probe
+(:func:`_check_persistence_mode`), and :func:`collect_warnings`, which extracts
+the thermal-drift endpoints and persistence state from a run and calls the
+catalogue. ``collect_warnings`` runs BEFORE result assembly (the base
+mode-agnostic warning list threads into the assembler). Tests that stub the flag
+catalogue patch it here at ``llenergymeasure.harness.measurement_warnings.collect_measurement_warnings``.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from llenergymeasure.device.power_thermal import PowerThermalSample
 
 
 def collect_measurement_warnings(
@@ -100,3 +113,73 @@ def collect_measurement_warnings(
         warnings.append(message)
 
     return warnings
+
+
+def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
+    """Check whether GPU persistence mode is enabled on all specified GPUs.
+
+    Checks every GPU in gpu_indices (defaults to [0] when None). Returns False
+    only if persistence mode is definitively off on at least one GPU.
+
+    Args:
+        gpu_indices: GPU device indices to check. Defaults to [0] when None.
+
+    Returns:
+        True if persistence mode is on (or unknown) for all GPUs,
+        False if definitively off on any GPU.
+    """
+    indices = gpu_indices if gpu_indices is not None else [0]
+    try:
+        import pynvml
+
+        from llenergymeasure.device.gpu_info import nvml_context
+
+        with nvml_context():
+            for idx in indices:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+                mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
+                if mode == pynvml.NVML_FEATURE_DISABLED:
+                    return False
+        return True
+    except Exception:
+        return True  # Unknown - don't generate spurious warning
+
+
+def collect_warnings(
+    duration_sec: float,
+    timeseries_samples: list[PowerThermalSample],
+    gpu_indices: list[int] | None = None,
+    energy_measurement: Any = None,
+    energy_sampler_reasons: list[str] | None = None,
+) -> list[str]:
+    """Extract run signals from the timeseries and call the warning catalogue.
+
+    ``energy_measurement`` is the authoritative energy backend result (or None).
+    Its presence is a separate signal from ``timeseries_samples`` (which come from
+    the thermal-telemetry sampler) - an absent energy measurement must be flagged
+    even when thermal telemetry sampled fine.
+
+    ``energy_sampler_reasons`` is the per-sampler probe why-chain captured at
+    selection time; it enriches the energy_measurement_unavailable warning so the
+    reason each backend was skipped/rejected is structured, not log-only.
+    """
+    temp_start: float | None = None
+    temp_end: float | None = None
+    if timeseries_samples:
+        temps = [s.temperature_c for s in timeseries_samples if s.temperature_c is not None]
+        if temps:
+            temp_start = temps[0]
+            temp_end = temps[-1]
+
+    persistence_on = _check_persistence_mode(gpu_indices)
+    nvml_count = len(timeseries_samples)
+
+    return collect_measurement_warnings(
+        duration_sec=duration_sec,
+        gpu_persistence_mode=persistence_on,
+        temp_start_c=temp_start,
+        temp_end_c=temp_end,
+        nvml_sample_count=nvml_count,
+        energy_measurement_present=energy_measurement is not None,
+        energy_sampler_reasons=energy_sampler_reasons,
+    )

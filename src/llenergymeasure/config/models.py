@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 from pydantic import BaseModel, Field, model_validator
 
 from llenergymeasure.config.harness import HarnessConfig
-from llenergymeasure.config.ssot import ALL_ENGINES, SAMPLING_PRESETS, Engine, engine_str
+from llenergymeasure.config.ssot import ALL_ENGINES, ENGINES, SAMPLING_PRESETS, Engine, engine_str
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
 logger = logging.getLogger(__name__)
@@ -534,6 +534,56 @@ class ExperimentConfig(BaseModel):
         returns None.
         """
         return getattr(self.harness, self.engine.value, None) if self.harness is not None else None
+
+    def _harness_sourced_batch_size(self) -> int:
+        """The harness ``batch_size`` knob (default 1) shared by both batch semantics.
+
+        For harness-sourced engines (transformers) the declared capacity bound and
+        the static configured batch are the same fact - the orchestration knob on
+        ``harness.<engine>.batch_size`` - so both accessors defer here.
+        """
+        harness = self.active_harness()
+        if harness is not None and harness.batch_size is not None:
+            return int(harness.batch_size)
+        return 1
+
+    def capacity_batch_size(self) -> int:
+        """Declared worst-case batch/concurrency bound for the active engine.
+
+        The largest number of sequences the engine may hold at once, used to size a
+        worst-case VRAM estimate. Reads the per-engine
+        :class:`~llenergymeasure.config.ssot.BatchSizeModel` descriptor: the harness
+        ``batch_size`` for transformers, the declared capacity field (``max_num_seqs``
+        for vLLM, ``max_batch_size`` for tensorrt) otherwise. Defaults to 1 when unset.
+        """
+        model = ENGINES[self.engine].batch
+        if model.harness_sourced:
+            return self._harness_sourced_batch_size()
+        if model.capacity_field is not None:
+            params = self.active_engine_params()
+            if params is not None:
+                value = getattr(params, model.capacity_field, None)
+                if value is not None:
+                    return int(value)
+        return 1
+
+    def static_batch_size(self) -> int | None:
+        """Fixed configured batch size for the active engine, or None.
+
+        The single static batch size to report on the measured result. Continuous-
+        batching engines (vLLM) have no static batch and return None - the effective
+        batch there is derived from the realised prompt/batch counts instead. Reads
+        the per-engine :class:`~llenergymeasure.config.ssot.BatchSizeModel` descriptor.
+        """
+        model = ENGINES[self.engine].batch
+        if model.harness_sourced:
+            return self._harness_sourced_batch_size()
+        if model.static_field is not None:
+            params = self.active_engine_params()
+            if params is not None:
+                value = getattr(params, model.static_field, None)
+                return int(value) if value is not None else None
+        return None
 
     def engine_sub_dict(self, name: str) -> dict[str, Any] | None:
         """Return a non-empty ``engine_params`` sub-config dict by name, or None.

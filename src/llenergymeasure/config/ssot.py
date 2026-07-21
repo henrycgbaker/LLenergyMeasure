@@ -212,6 +212,31 @@ class ParallelismModel:
 
 
 @dataclass(frozen=True)
+class BatchSizeModel:
+    """How an engine expresses batch size, for two distinct consumer semantics.
+
+    There are two honest facts, and for continuous-batching engines they differ:
+
+    - ``capacity_field`` names the engine-params attribute giving the declared
+      worst-case concurrency bound - the largest number of sequences the engine
+      may hold at once. VRAM estimation reads it to size the KV cache for the
+      busiest case (declared intent).
+    - ``static_field`` names the engine-params attribute giving the fixed
+      configured batch size that lands on the measured result. It is None for
+      continuous-batching engines (vLLM), which have no single static batch - the
+      effective batch there is derived from the realised prompt/batch counts.
+
+    ``harness_sourced`` marks engines whose batch size is an llem-orchestration
+    knob on ``harness.<engine>.batch_size`` (transformers) rather than an
+    engine-params field; for those, both semantics read that knob (default 1).
+    """
+
+    capacity_field: str | None = None
+    static_field: str | None = None
+    harness_sourced: bool = False
+
+
+@dataclass(frozen=True)
 class EngineDescriptor:
     """Consolidated per-engine facts (see ``ENGINES``)."""
 
@@ -236,6 +261,10 @@ class EngineDescriptor:
     parallelism: ParallelismModel
     """How the engine's config maps to the set of GPUs to monitor."""
 
+    batch: BatchSizeModel
+    """How the engine expresses batch size: the declared capacity bound used for
+    worst-case VRAM sizing vs the static configured batch reported on the result."""
+
     image_version_source: Literal["package", "engine"]
     """Which version tags the engine's default image: the llenergymeasure
     ``package`` version (first-party GHCR image) or the pinned ``engine`` version
@@ -250,6 +279,9 @@ ENGINES: dict[Engine, EngineDescriptor] = {
         plugin_class="TransformersEngine",
         dtypes=("float32", "float16", "bfloat16"),
         parallelism=ParallelismModel(all_visible_field="device_map"),
+        # Prompt batching is an llem-orchestration knob (harness.transformers.batch_size);
+        # both capacity and static semantics read it, default 1.
+        batch=BatchSizeModel(harness_sourced=True),
         image_version_source="package",
     ),
     Engine.VLLM: EngineDescriptor(
@@ -261,6 +293,9 @@ ENGINES: dict[Engine, EngineDescriptor] = {
         parallelism=ParallelismModel(
             multiply_fields=("tensor_parallel_size", "pipeline_parallel_size")
         ),
+        # Continuous batching: max_num_seqs bounds worst-case concurrency (VRAM),
+        # but there is no single static batch to report (static_field=None).
+        batch=BatchSizeModel(capacity_field="max_num_seqs"),
         image_version_source="engine",
     ),
     Engine.TENSORRT: EngineDescriptor(
@@ -270,6 +305,8 @@ ENGINES: dict[Engine, EngineDescriptor] = {
         plugin_class="TensorRTEngine",
         dtypes=("float16", "bfloat16"),  # TRT-LLM does not support fp32 inference
         parallelism=ParallelismModel(multiply_fields=("tensor_parallel_size",)),
+        # Static max_batch_size serves both semantics for TRT-LLM.
+        batch=BatchSizeModel(capacity_field="max_batch_size", static_field="max_batch_size"),
         image_version_source="engine",
     ),
 }
@@ -325,6 +362,7 @@ __all__ = [
     "TIMEOUT_NVIDIA_SMI",
     "TIMEOUT_SIGTERM_GRACE",
     "TIMEOUT_THREAD_JOIN",
+    "BatchSizeModel",
     "Engine",
     "EngineDescriptor",
     "ParallelismModel",

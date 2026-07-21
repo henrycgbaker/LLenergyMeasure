@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llenergymeasure.harness.lifecycle import capture_model_memory_mb
 from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
@@ -104,11 +105,6 @@ class TestNvmlDeviceMemoryHelper:
 
 
 class TestHarnessModelMemoryCapture:
-    def _harness(self):
-        from llenergymeasure.harness.measurement import MeasurementHarness
-
-        return MeasurementHarness()
-
     def test_transformers_shaped_torch_value_preserved_no_fallback(self):
         """In-process engine: torch sees the weights (> 0), so NVML is never consulted."""
         mock_torch = MagicMock()
@@ -123,7 +119,7 @@ class TestHarnessModelMemoryCapture:
                 side_effect=AssertionError("NVML must not be consulted when torch reads > 0"),
             ),
         ):
-            result = self._harness()._capture_model_memory_mb(gpu_indices=[0])
+            result = capture_model_memory_mb(gpu_indices=[0])
 
         assert result == pytest.approx(700.0)
 
@@ -141,7 +137,7 @@ class TestHarnessModelMemoryCapture:
                 return_value=8192.0,
             ),
         ):
-            result = self._harness()._capture_model_memory_mb(gpu_indices=[0])
+            result = capture_model_memory_mb(gpu_indices=[0])
 
         assert result == pytest.approx(8192.0)
 
@@ -159,7 +155,7 @@ class TestHarnessModelMemoryCapture:
                 return_value=None,
             ),
         ):
-            result = self._harness()._capture_model_memory_mb(gpu_indices=[0])
+            result = capture_model_memory_mb(gpu_indices=[0])
 
         assert result == 0.0
 
