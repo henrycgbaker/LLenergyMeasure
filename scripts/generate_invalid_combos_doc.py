@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from llenergymeasure.config.introspection import (
     get_capability_matrix_markdown,
     get_dormant_rules,
-    get_runtime_limitations,
     get_validation_rules,
 )
 from scripts._docgen_common import write_doc
@@ -76,25 +75,6 @@ def generate_markdown() -> str:
         lines.append(
             f"| {dormant['engine']} | `{dormant['combination']}` | "
             f"{dormant['effect']} | {dormant['normalised_fields']} |"
-        )
-
-    lines.extend(
-        [
-            "",
-            "## Runtime Limitations",
-            "",
-            "These combinations pass config validation but may fail at runtime",
-            "due to hardware, model, or package requirements.",
-            "",
-            "| Engine | Parameter | Limitation | Resolution |",
-            "|---------|-----------|------------|------------|",
-        ]
-    )
-
-    for limitation in get_runtime_limitations():
-        lines.append(
-            f"| {limitation['engine']} | `{limitation['parameter']}` | "
-            f"{limitation['limitation']} | {limitation['resolution']} |"
         )
 
     lines.extend(

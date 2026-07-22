@@ -325,11 +325,17 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
 
     This is the SSOT for the capability matrix shown in documentation.
     Capabilities are inferred by checking which fields exist in each
-    engine config and their allowed values.
+    engine config.
+
+    Only capabilities whose values are genuinely derivable from the mined
+    engine schema are reported here. Rows whose truth was hand-authored prose
+    (product-scope decisions, hardware facts, or per-engine literals the schema
+    cannot answer) were retired rather than kept as claims the data cannot back;
+    do not re-add hardcoded rows.
 
     Returns:
         Dict mapping capability names to per-engine support status.
-        Values are True/False for simple support, or str for notes.
+        Values are True/False for support.
     """
     from llenergymeasure.config.harness import TransformersHarness
 
@@ -342,25 +348,12 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
     # engine field.
     transformers_harness_fields = set(TransformersHarness.model_fields.keys())
 
-    # vLLM/TRT quantization are Any-typed in the generated projection (discovery
-    # debt: the mined schema ships no enum), so support is derived from field
-    # presence rather than readable Literal options.
-    vllm_has_quant = "quantization" in vllm_fields
-    trt_has_quant = "quant_config" in tensorrt_fields
-
     return {
         "tensor_parallel": {
             # Transformers exposes HF-native tensor parallelism via tp_plan/tp_size
             "transformers": "tp_plan" in transformers_fields,
             "vllm": "tensor_parallel_size" in vllm_fields,
             "tensorrt": "tensor_parallel_size" in tensorrt_fields,
-        },
-        "data_parallel": {
-            # Transformers data parallelism via Accelerate is not supported in this version
-            "transformers": False,
-            # vLLM/TensorRT manage parallelism internally
-            "vllm": False,
-            "tensorrt": False,
         },
         "bitsandbytes_4bit": {
             "transformers": "load_in_4bit" in transformers_fields,
@@ -372,28 +365,6 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
             "vllm": False,
             "tensorrt": False,
         },
-        "native_quantization": {
-            "transformers": False,  # Transformers relies on bitsandbytes, not native
-            "vllm": "AWQ/GPTQ/FP8" if vllm_has_quant else False,
-            "tensorrt": "INT8/W4A16_AWQ/W4A16_GPTQ/FP8" if trt_has_quant else False,
-        },
-        "float32_precision": {
-            "transformers": True,
-            # vLLM rejects float32: dtype is Literal["float16", "bfloat16", "auto"]
-            "vllm": False,
-            # TensorRT-LLM is optimised for lower precision
-            "tensorrt": False,
-        },
-        "float16_precision": {
-            "transformers": True,
-            "vllm": True,
-            "tensorrt": True,
-        },
-        "bfloat16_precision": {
-            "transformers": True,
-            "vllm": True,
-            "tensorrt": True,
-        },
         "prefix_caching": {
             "transformers": False,
             "vllm": "enable_prefix_caching" in vllm_fields,
@@ -401,21 +372,6 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         },
         "torch_compile": {
             "transformers": "torch_compile" in transformers_harness_fields,
-            "vllm": False,
-            "tensorrt": False,
-        },
-        "beam_search": {
-            "transformers": "num_beams" in transformers_fields,
-            "vllm": True,
-            "tensorrt": False,
-        },
-        "speculative_decoding": {
-            "transformers": "prompt_lookup_num_tokens" in transformers_fields,
-            "vllm": "speculative_config" in vllm_fields,
-            "tensorrt": False,
-        },
-        "static_kv_cache": {
-            "transformers": "cache_implementation" in transformers_fields,
             "vllm": False,
             "tensorrt": False,
         },
@@ -436,18 +392,10 @@ def get_capability_matrix_markdown() -> str:
     # Define display names
     display_names = {
         "tensor_parallel": "Tensor Parallel",
-        "data_parallel": "Data Parallel",
         "bitsandbytes_4bit": "BitsAndBytes (4-bit)",
         "bitsandbytes_8bit": "BitsAndBytes (8-bit)",
-        "native_quantization": "Native Quantization",
-        "float32_precision": "float32 precision",
-        "float16_precision": "float16 precision",
-        "bfloat16_precision": "bfloat16 precision",
         "prefix_caching": "Prefix Caching",
         "torch_compile": "torch.compile",
-        "beam_search": "Beam Search",
-        "speculative_decoding": "Speculative Decoding",
-        "static_kv_cache": "Static KV Cache",
     }
 
     lines = [
@@ -477,7 +425,6 @@ def get_capability_matrix_markdown() -> str:
     lines.append("")
     lines.append("**Notes:**")
     lines.append("- vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes")
-    lines.append("- TensorRT-LLM is optimised for FP16/BF16/INT8, not FP32")
 
     return "\n".join(lines)
 
@@ -692,58 +639,3 @@ def get_dormant_rules() -> list[dict[str, str]]:
             }
         )
     return rows
-
-
-def get_runtime_limitations() -> list[dict[str, str]]:
-    """Get known runtime limitations for documentation.
-
-    These combinations pass config validation but may fail at runtime
-    due to hardware, model, or package requirements.
-
-    Returns:
-        List of dicts with keys: engine, parameter, limitation, resolution.
-    """
-    return [
-        {
-            "engine": "transformers",
-            "parameter": "transformers.engine_params.attn_implementation=flash_attention_2",
-            "limitation": "flash-attn requires Ampere+ GPU (SM80+); fails on older architectures",
-            "resolution": "Use attn_implementation='sdpa' on pre-Ampere GPUs",
-        },
-        {
-            "engine": "transformers",
-            "parameter": "transformers.engine_params.attn_implementation=flash_attention_3",
-            "limitation": "FA3 requires the flash_attn_3 package (built from flash-attn hopper/ directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built",
-            "resolution": "Install flash_attn_3 from source, or use the Docker runner",
-        },
-        {
-            "engine": "vllm",
-            "parameter": "vllm.engine_params.kv_cache_dtype=fp8",
-            "limitation": "FP8 KV cache requires Hopper (H100) or newer GPU",
-            "resolution": "Use kv_cache_dtype='auto' for automatic selection",
-        },
-        {
-            "engine": "vllm",
-            "parameter": "vllm.engine_params.attention.backend=flashinfer",
-            "limitation": "FlashInfer requires JIT compilation on first use",
-            "resolution": "Leave attention.backend unset (auto) or use 'flash_attn'",
-        },
-        {
-            "engine": "vllm",
-            "parameter": "vllm.engine_params.quantization=awq/gptq",
-            "limitation": "Requires a pre-quantized model checkpoint",
-            "resolution": "Use a quantized model (e.g., TheBloke/*-AWQ) or omit",
-        },
-        {
-            "engine": "tensorrt",
-            "parameter": "tensorrt.engine_params.quant_config.quant_algo=FP8",
-            "limitation": "FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback",
-            "resolution": "Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100",
-        },
-        {
-            "engine": "tensorrt",
-            "parameter": "tensorrt.engine_params.quant_config.quant_algo=INT8",
-            "limitation": "INT8 quantisation requires a calibrated checkpoint; uncalibrated weights degrade accuracy",
-            "resolution": "Use a pre-quantised checkpoint or a weight-only algo (W4A16_AWQ, W4A16_GPTQ, W8A16)",
-        },
-    ]

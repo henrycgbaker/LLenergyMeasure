@@ -199,6 +199,16 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `LANDMARKS` tuples it read remain in the version-pinned schema introspectors
   and are still resolved host-side by the transformers producer unit test.
   ([#850])
+- Trimmed the engine capability matrix and dropped the Runtime Limitations table
+  to what the mined engine schema can actually back. Eight capability rows whose
+  cells were hand-authored prose (data parallel, native quantization, float32 /
+  float16 / bfloat16 precision, beam search, speculative decoding, static KV
+  cache) and all seven `get_runtime_limitations()` rows (hardware/package
+  caveats such as "FP8 requires Hopper") are de-claimed; the five
+  field-presence-derivable rows (tensor parallel, bitsandbytes 4-bit / 8-bit,
+  prefix caching, torch.compile) remain, and `docs/reference/engines/invalid-combos.md`
+  is regenerated accordingly. Docs-only: no runtime, CLI, or dispatch path reads
+  these functions, so no validation or measurement behavior changes. ([#866])
 
 ### Fixed
 
@@ -1402,3 +1412,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#862]: https://github.com/henrycgbaker/llenergymeasure/pull/862
 [#863]: https://github.com/henrycgbaker/llenergymeasure/pull/863
 [#864]: https://github.com/henrycgbaker/llenergymeasure/pull/864
+[#866]: https://github.com/henrycgbaker/llenergymeasure/pull/866
