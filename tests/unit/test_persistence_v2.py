@@ -26,9 +26,8 @@ from llenergymeasure.domain.environment import (
     EnvironmentMetadata,
     EnvironmentSnapshot,
     GPUEnvironment,
-    RunnerEnvironment,
 )
-from llenergymeasure.domain.experiment import ExperimentResult
+from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
 from llenergymeasure.results.persistence import (
     load_result,
     save_environment,
@@ -299,8 +298,6 @@ def test_runner_provenance_docker_round_trips(
     """A docker runner_provenance survives save/load and serialises into result.json."""
     import json
 
-    from llenergymeasure.domain.experiment import RunnerProvenance
-
     result = minimal_result.model_copy(
         update={
             "runner_provenance": RunnerProvenance(
@@ -331,8 +328,6 @@ def test_runner_provenance_local_round_trips(
     tmp_path: Path, minimal_result: ExperimentResult
 ) -> None:
     """A local runner_provenance survives save/load with no image."""
-    from llenergymeasure.domain.experiment import RunnerProvenance
-
     result = minimal_result.model_copy(
         update={"runner_provenance": RunnerProvenance(mode="local", image=None, source="local")}
     )
@@ -428,7 +423,7 @@ def env_snapshot() -> EnvironmentSnapshot:
     """Minimal EnvironmentSnapshot for sidecar round-trip tests."""
     hardware = EnvironmentMetadata(
         gpu=GPUEnvironment(name="NVIDIA A100-SXM4-80GB", vram_total_mb=81920),
-        cuda=CUDAEnvironment(version="12.4", driver_version="535.104"),
+        cuda=CUDAEnvironment(driver_supported_version="12.4", driver_version="535.104"),
         cpu=CPUEnvironment(platform="Linux"),
         collected_at=datetime(2026, 1, 1, 12, 0, 0),
     )
@@ -480,7 +475,7 @@ def test_save_environment_includes_bundle_version(
         result_path.parent,
     )
     payload = json.loads((result_path.parent / "environment.json").read_text())
-    assert payload["bundle_version"] == BUNDLE_VERSION == "1.0"
+    assert payload["bundle_version"] == BUNDLE_VERSION == "2.0"
 
 
 def test_save_environment_writes_docker_runner_block_roundtrip(
@@ -493,11 +488,12 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
 
     snapshot = env_snapshot.model_copy(
         update={
-            "runner": RunnerEnvironment(
+            "runner": RunnerProvenance(
                 mode="docker",
                 image="ghcr.io/acme/vllm:1.19.0-cuda12",
-                image_digest="ghcr.io/acme/vllm@sha256:deadbeef",
                 source="auto_detected",
+                image_source="registry",
+                image_digest="ghcr.io/acme/vllm@sha256:deadbeef",
             )
         }
     )
@@ -514,8 +510,9 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     assert payload["runner"] == {
         "mode": "docker",
         "image": "ghcr.io/acme/vllm:1.19.0-cuda12",
-        "image_digest": "ghcr.io/acme/vllm@sha256:deadbeef",
         "source": "auto_detected",
+        "image_source": "registry",
+        "image_digest": "ghcr.io/acme/vllm@sha256:deadbeef",
     }
 
     # ... and load_result reconstructs it onto result.environment.runner.
@@ -535,7 +532,7 @@ def test_save_environment_writes_local_runner_block_roundtrip(
 ) -> None:
     """A local runner block records mode=local with no image or digest."""
     snapshot = env_snapshot.model_copy(
-        update={"runner": RunnerEnvironment(mode="local", source="default")}
+        update={"runner": RunnerProvenance(mode="local", source="default")}
     )
     result_path = save_result(minimal_result, tmp_path)
     save_environment(
@@ -690,7 +687,7 @@ def test_save_config_sidecar_includes_bundle_version(tmp_path: Path) -> None:
     )
 
     payload = json.loads(path.read_text())
-    assert payload["bundle_version"] == BUNDLE_VERSION == "1.0"
+    assert payload["bundle_version"] == BUNDLE_VERSION == "2.0"
 
 
 def test_save_config_sidecar_carries_methodology_window(tmp_path: Path) -> None:

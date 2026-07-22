@@ -21,6 +21,11 @@ from llenergymeasure.domain.metrics import (
     WarmupResult,
 )
 
+# Re-exported for import stability: RunnerProvenance now lives in its own shared
+# domain module (both experiment and environment carry it, and experiment
+# imports environment, so a shared low-level module avoids an import cycle).
+from llenergymeasure.domain.provenance import RunnerProvenance
+
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -55,34 +60,6 @@ def mj_per_token(energy_j: float, total_tokens: float) -> float | None:
     is accepted.
     """
     return (energy_j / total_tokens * 1000.0) if total_tokens > 0 else None
-
-
-class RunnerProvenance(BaseModel):
-    """How an experiment was executed - local process or Docker container.
-
-    Persisted reproducibility metadata mirroring the fields of the config-layer
-    ``RunnerSpec``. Kept in the domain layer (which does not import its config
-    sibling) so it can live on ``ExperimentResult`` and serialise into result.json.
-
-    Sibling of ``environment.RunnerEnvironment`` (which persists into
-    environment.json): both mirror ``RunnerSpec``'s mode/image/source. They stay
-    separate because their extra fields diverge - this one carries
-    ``image_source`` (result.json image-resolution provenance), RunnerEnvironment
-    carries ``image_digest`` (the environment.json reproducibility anchor).
-    """
-
-    mode: str = Field(..., description='Execution mode - "local" or "docker"')
-    image: str | None = Field(default=None, description="Docker image used (None for local mode)")
-    source: str | None = Field(
-        default=None,
-        description='Precedence layer that produced the runner ("env", "yaml", '
-        '"user_config", "auto_detected", "default", "local")',
-    )
-    image_source: str | None = Field(
-        default=None, description="Where the Docker image was resolved from (None for local mode)"
-    )
-
-    model_config = {"frozen": True, "extra": "forbid"}
 
 
 class AggregationMetadata(BaseModel):
@@ -122,6 +99,15 @@ class ExperimentResult(BaseModel):
     )
     llenergymeasure_version: str | None = Field(
         default=None, description="Package version that produced this result"
+    )
+    serving_mode: str = Field(
+        default="offline",
+        description="Serving mode that produced this result: the offline/server "
+        'discriminator, mirroring the config-side ExperimentConfig.serving_mode. "offline" for '
+        'batch measurement (the only mode today); "server" arrives with server mode (v0.8.0). A '
+        "plain string, not a closed vocabulary, so the mode set can grow without a schema break. "
+        "Stamped by the assembler from the measurement source (see "
+        "harness.result_assembly.SourceMetrics).",
     )
 
     # Convenience identity copies. Deliberate small duplication so a result.json
@@ -180,9 +166,6 @@ class ExperimentResult(BaseModel):
     )
 
     # Energy detail
-    baseline_power_w: float | None = Field(
-        default=None, description="Idle GPU power (W) measured before experiment"
-    )
     energy_adjusted_j: float | None = Field(
         default=None, description="Baseline-subtracted energy attributable to inference"
     )
@@ -282,18 +265,22 @@ class ExperimentResult(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _drop_legacy_schema_version(cls, data: Any) -> Any:
-        """Read a legacy (pre-bundle_version) result.json best-effort.
+    def _drop_legacy_keys(cls, data: Any) -> Any:
+        """Read a legacy result.json best-effort by dropping retired top-level keys.
 
-        Older bundles stamped result.json with a per-artefact ``schema_version``
-        that no longer exists on this model, which forbids extra fields. Drop the
-        retired key before validation (both ``model_validate`` and
-        ``model_validate_json`` run before-validators on the parsed structure) so
-        a legacy result.json falls back to the current default ``bundle_version``
-        rather than being rejected.
+        This model forbids extra fields, so keys retired across a bundle break
+        would reject an older result.json outright. Drop them before validation
+        (both ``model_validate`` and ``model_validate_json`` run before-validators
+        on the parsed structure) so a legacy result.json degrades to the current
+        defaults rather than being rejected:
+
+        - ``schema_version`` (pre-``bundle_version`` per-artefact counter).
+        - ``baseline_power_w`` (bundle 1.0 top-level copy; the single home is now
+          ``energy_breakdown.baseline_power_w``).
         """
-        if isinstance(data, dict) and "schema_version" in data:
-            data = {k: v for k, v in data.items() if k != "schema_version"}
+        legacy_keys = {"schema_version", "baseline_power_w"}
+        if isinstance(data, dict) and legacy_keys & data.keys():
+            data = {k: v for k, v in data.items() if k not in legacy_keys}
         return data
 
     @property

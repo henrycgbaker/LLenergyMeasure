@@ -18,7 +18,7 @@ results/
 └── <study-name>_<UTC-timestamp>/
     ├── manifest.json                            # study-level checkpoint + summary
     ├── 001_c0_<model>-<engine>_<hash>/          # one experiment cell
-    │   ├── result.json                          # measurement metrics (bundle_version 1.0)
+    │   ├── result.json                          # measurement metrics (bundle_version 2.0)
     │   ├── config.json                          # engine/model/methodology + resolved config + provenance
     │   ├── environment.json                     # hardware/runtime snapshot + runner provenance
     │   └── timeseries.parquet                   # GPU power/thermal/memory samples
@@ -33,7 +33,7 @@ results/
 
 ## `result.json` - per-experiment record
 
-The scientific record. One JSON file per experiment cell. Stamped with `bundle_version` `"1.0"` (the single version shared across every artefact in the bundle).
+The scientific record. One JSON file per experiment cell. Stamped with `bundle_version` `"2.0"` (the single version shared across every artefact in the bundle).
 
 `result.json` is measurement output. Configuration inputs and methodology - `engine_version`, `measurement_methodology`, `steady_state_window`, `measurement_window_discard_fraction`, `steady_state_not_detected` - live in the `config.json` sidecar, not here. The one deliberate duplication: `result.json` keeps `model_name` and `engine` as convenience copies so a result file is self-describing when separated from its directory; the authoritative home for both is `config.json`.
 
@@ -41,10 +41,11 @@ The scientific record. One JSON file per experiment cell. Stamped with `bundle_v
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bundle_version` | str | Results-bundle version (currently `"1.0"`), shared across `result.json`, `config.json`, and `environment.json` as one contract |
+| `bundle_version` | str | Results-bundle version (currently `"2.0"`), shared across `result.json`, `config.json`, and `environment.json` as one contract |
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
+| `serving_mode` | str | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement (the only mode today); server mode (v0.8.0) will stamp `"server"`. A plain string, not a closed vocabulary |
 | `engine` | str | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar |
 | `model_name` | str | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar |
 
@@ -97,8 +98,8 @@ These are the run totals (post-warmup-exclusion when applicable).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `baseline_power_w` | float &#124; null | Idle GPU power in watts, measured before this experiment |
-| `energy_adjusted_j` | float &#124; null | Total energy minus `baseline_power_w x total_inference_time_sec`. The "net inference work" energy figure. |
+| `energy_breakdown.baseline_power_w` | float &#124; null | Idle GPU power in watts, measured before this experiment. The single home for the baseline power reading (the former top-level `baseline_power_w` copy was retired in bundle 2.0) |
+| `energy_adjusted_j` | float &#124; null | Total energy minus `energy_breakdown.baseline_power_w x total_inference_time_sec`. The "net inference work" energy figure. |
 | `energy_per_device_j` | list[float] &#124; null | Per-GPU energy breakdown (length = `num_processes`) |
 
 For the methodology that motivates baseline subtraction, see [Methodology &gt; Baseline power](/explanation/methodology/methodology#baseline-power).
@@ -191,16 +192,19 @@ batch is attributed `batch_time / batch_size` (the `PER_REQUEST_BATCH` mode in
 
 ### Environment sidecar (sibling file)
 
-`environment.json` lives next to `result.json` and records the hardware/runtime environment the experiment ran in (schema `1.0`, independent of `result.json`): GPU, CUDA, driver, CPU, platform, Python and tool versions. Under Docker dispatch it captures the *in-container* environment, not the dispatching host.
+`environment.json` lives next to `result.json` and records the hardware/runtime environment the experiment ran in (stamped with the shared `bundle_version` `2.0`): GPU, CUDA, driver, CPU, platform, Python and tool versions. Under Docker dispatch it captures the *in-container* environment, not the dispatching host.
 
-It also carries a `runner` block - the reproducibility anchor for cross-run comparability:
+Two distinct CUDA facts are recorded and must not be conflated: `hardware.cuda.driver_supported_version` is the maximum CUDA version the installed NVIDIA driver supports (from NVML, matching the `CUDA Version` in the `nvidia-smi` header), while the top-level `cuda_version` (with `cuda_version_source`) is the runtime CUDA version the software stack was actually built against (torch / version.txt / nvcc).
+
+It also carries a `runner` block - the reproducibility anchor for cross-run comparability. It is the same unified `RunnerProvenance` model `result.json` carries as `runner_provenance`, serialised into both artefacts:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `mode` | str | `"docker"` (containerized) or `"local"` (host process) - a first-order variable for energy/latency comparability. Mirrors `result.json`'s `runner_provenance.mode` |
+| `mode` | str | `"docker"` (containerized) or `"local"` (host process) - a first-order variable for energy/latency comparability |
 | `image` | str &#124; null | Docker image reference that ran (`null` for local) |
-| `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for local runs, and for locally-built images with no registry digest |
 | `source` | str | Which precedence layer selected the runner (`env`, `yaml`, `user_config`, `auto_detected`, `default`, `multi_engine_elevation`, or `local`) |
+| `image_source` | str &#124; null | Where the Docker image was resolved from (`null` for local runs or when unresolved) |
+| `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for local runs, and for locally-built images with no registry digest |
 
 Sidecars written before this block existed load with `runner: null`.
 
@@ -287,9 +291,9 @@ For the Python API equivalent (`StudyResult` object), see [Reference &gt; Librar
 
 ## Bundle versioning
 
-The whole bundle carries one `bundle_version` (currently `"1.0"`), stamped identically into `result.json`, `config.json`, and `environment.json` (`timeseries.parquet` is self-describing columnar data and stays unversioned). It versions the on-disk layout, the artefact set, and each artefact's schema as a single contract, so there is one number to bump and one changelog line per documented break. This replaces the three independent per-artefact `schema_version` counters that earlier releases carried. It follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
+The whole bundle carries one `bundle_version` (currently `"2.0"`), stamped identically into `result.json`, `config.json`, and `environment.json` (`timeseries.parquet` is self-describing columnar data and stays unversioned). It versions the on-disk layout, the artefact set, and each artefact's schema as a single contract, so there is one number to bump and one changelog line per documented break. This replaces the three independent per-artefact `schema_version` counters that earlier releases carried. It follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
 
-Bundles written before `bundle_version` existed remain readable best-effort: the canonical reader (`llenergymeasure.results.bundle.BundleReader`, wrapped by `load_result`) drops the retired `schema_version` key rather than rejecting it and emits a single warning. There is no in-place migration and no converter tooling.
+Older bundles remain readable best-effort: the canonical reader (`llenergymeasure.results.bundle.BundleReader`, wrapped by `load_result`) tolerates a legacy shape rather than rejecting it, emitting a single warning per bundle. A bundle 1.0 (the provenance-unification break) reads with its retired top-level `baseline_power_w` copy and `schema_version` key dropped on load, its pre-rename `hardware.cuda.version` mapped onto `driver_supported_version`, its never-populated hardware fields (`pcie_gen`, `mig_enabled`, `cudnn_version`, `fan_speed_pct`) ignored, and its old separate runner block read into the unified `RunnerProvenance` model. There is no in-place migration and no converter tooling.
 
 ## See also
 

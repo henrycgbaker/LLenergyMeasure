@@ -34,7 +34,7 @@ def _make_hardware() -> env_module.EnvironmentMetadata:
     """Build a minimal EnvironmentMetadata for testing."""
     return env_module.EnvironmentMetadata(
         gpu=env_module.GPUEnvironment(name="NVIDIA A100-SXM4-80GB", vram_total_mb=81920),
-        cuda=env_module.CUDAEnvironment(version="12.4", driver_version="535.104"),
+        cuda=env_module.CUDAEnvironment(driver_supported_version="12.4", driver_version="535.104"),
         thermal=env_module.ThermalEnvironment(),
         cpu=env_module.CPUEnvironment(platform="Linux"),
         container=env_module.ContainerEnvironment(),

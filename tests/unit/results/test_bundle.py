@@ -35,7 +35,6 @@ from llenergymeasure.domain.environment import (
     EnvironmentMetadata,
     EnvironmentSnapshot,
     GPUEnvironment,
-    RunnerEnvironment,
 )
 from llenergymeasure.domain.experiment import RunnerProvenance
 from llenergymeasure.results.bundle import BundleReader, BundleWriter, LoadedBundle
@@ -49,7 +48,7 @@ from tests.conftest import make_result, write_container_environment_sidecar
 def _make_snapshot() -> EnvironmentSnapshot:
     hardware = EnvironmentMetadata(
         gpu=GPUEnvironment(name="HOST-GPU", vram_total_mb=1.0),
-        cuda=CUDAEnvironment(version="unknown", driver_version="unknown"),
+        cuda=CUDAEnvironment(driver_supported_version="unknown", driver_version="unknown"),
         cpu=CPUEnvironment(platform="Linux"),
         collected_at=datetime(2026, 1, 1, 0, 0, 0),
     )
@@ -85,7 +84,7 @@ def test_write_result_stamps_bundle_version(tmp_path: Path) -> None:
     writer = _writer(study_dir)
     result_path = writer.write_result(make_result())
     payload = json.loads(result_path.read_text())
-    assert payload["bundle_version"] == BUNDLE_VERSION == "1.0"
+    assert payload["bundle_version"] == BUNDLE_VERSION == "2.0"
 
 
 def test_write_result_attaches_runner_provenance(tmp_path: Path) -> None:
@@ -125,17 +124,17 @@ def test_write_environment_local_stamps_bundle_version(tmp_path: Path) -> None:
     writer.write_result(make_result())
     writer.write_environment(
         host_snapshot=_make_snapshot(),
-        runner_environment=RunnerEnvironment(mode="local", source="default"),
-        runner_provenance=RunnerProvenance(mode="local", source="local"),
+        runner=RunnerProvenance(mode="local", source="default"),
     )
     payload = json.loads((writer.bundle_dir / "environment.json").read_text())
-    assert payload["bundle_version"] == "1.0"
+    assert payload["bundle_version"] == "2.0"
     assert payload["python_version"] == "3.12.12"
     assert payload["runner"] == {
         "mode": "local",
         "image": None,
-        "image_digest": None,
         "source": "default",
+        "image_source": None,
+        "image_digest": None,
     }
 
 
@@ -151,13 +150,12 @@ def test_write_environment_prefers_rescued_over_host(tmp_path: Path) -> None:
     writer.write_result(make_result())
     writer.write_environment(
         host_snapshot=_make_snapshot(),
-        runner_environment=RunnerEnvironment(
+        runner=RunnerProvenance(
             mode="docker",
             image="ghcr.io/acme/vllm:1.0",
             image_digest="ghcr.io/acme/vllm@sha256:abc123",
             source="yaml",
         ),
-        runner_provenance=RunnerProvenance(mode="docker", image="ghcr.io/acme/vllm:1.0"),
     )
     payload = json.loads((writer.bundle_dir / "environment.json").read_text())
     # Container hardware/runtime values win over the host snapshot.
@@ -165,7 +163,7 @@ def test_write_environment_prefers_rescued_over_host(tmp_path: Path) -> None:
     assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
     # Host-only runner block patched in, and the payload stamped.
     assert payload["runner"]["image_digest"] == "ghcr.io/acme/vllm@sha256:abc123"
-    assert payload["bundle_version"] == "1.0"
+    assert payload["bundle_version"] == "2.0"
     # Rescued staging file consumed.
     assert not (staging / "environment.json").exists()
 
@@ -179,8 +177,7 @@ def test_write_environment_docker_without_rescue_warns(tmp_path: Path, caplog) -
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.write_environment(
             host_snapshot=_make_snapshot(),
-            runner_environment=RunnerEnvironment(mode="docker", image="img:1.0", source="yaml"),
-            runner_provenance=RunnerProvenance(mode="docker", image="img:1.0"),
+            runner=RunnerProvenance(mode="docker", image="img:1.0", source="yaml"),
         )
     assert any("No in-container environment.json rescued" in rec.message for rec in caplog.records)
 
@@ -189,10 +186,10 @@ def test_patch_runner_block_adds_block_and_stamps(tmp_path: Path) -> None:
     """_patch_runner_block injects the runner block and stamps bundle_version."""
     payload = BundleWriter._patch_runner_block(
         {"python_version": "3.10.14"},
-        RunnerEnvironment(mode="docker", image="img:1.0", image_digest=None, source="yaml"),
+        RunnerProvenance(mode="docker", image="img:1.0", image_digest=None, source="yaml"),
     )
     assert payload["runner"]["mode"] == "docker"
-    assert payload["bundle_version"] == "1.0"
+    assert payload["bundle_version"] == "2.0"
 
 
 def test_patch_runner_block_none_is_noop() -> None:
@@ -225,7 +222,7 @@ def test_move_config_sidecar_patches_and_stamps(tmp_path: Path) -> None:
     payload = json.loads((writer.bundle_dir / "config.json").read_text())
     assert payload["resolved_config_hash"] == "resolved_h1"
     assert payload["provenance"] == resolution_log
-    assert payload["bundle_version"] == "1.0"
+    assert payload["bundle_version"] == "2.0"
     # Staged source consumed.
     assert not (staging / "config.json").exists()
 
@@ -326,8 +323,7 @@ def _write_full_bundle(tmp_path: Path) -> Path:
     writer.write_result(make_result())
     writer.write_environment(
         host_snapshot=_make_snapshot(),
-        runner_environment=RunnerEnvironment(mode="local", source="default"),
-        runner_provenance=RunnerProvenance(mode="local", source="local"),
+        runner=RunnerProvenance(mode="local", source="default"),
     )
     writer.move_config_sidecar(resolved_config_hash="resolved_h1", resolution_log=None)
     writer.finalize()
@@ -411,10 +407,113 @@ def test_bundle_reader_legacy_fallback_warns(tmp_path: Path) -> None:
     raw["schema_version"] = "5.0"
     result_path.write_text(json.dumps(raw), encoding="utf-8")
 
-    with pytest.warns(UserWarning, match="pre-bundle_version result; readable best-effort"):
+    with pytest.warns(UserWarning, match="legacy results bundle"):
         loaded = BundleReader.read(writer.bundle_dir)
     assert loaded.result.experiment_id == "test-001"
     assert loaded.result.bundle_version == BUNDLE_VERSION
+
+
+def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
+    """A full bundle 1.0 (pre-unification shape) reads best-effort, ONE warning.
+
+    Exercises every 2.0 break against a synthetic 1.0-shaped bundle written by
+    hand: result.json carries the retired top-level baseline_power_w copy and a
+    schema_version key with a runner_provenance block lacking image_digest;
+    environment.json carries the old separate RunnerEnvironment-shaped runner
+    block (no image_source), the never-populated hardware fields (pcie_gen,
+    mig_enabled, cudnn_version, fan_speed_pct), and the pre-rename cuda.version
+    key. The reader drops/maps the legacy shapes rather than rejecting them, and
+    emits exactly one bundle-level UserWarning.
+    """
+    bundle_dir = tmp_path / "study" / "exp-legacy"
+    bundle_dir.mkdir(parents=True)
+
+    result_payload = {
+        "bundle_version": "1.0",
+        "schema_version": "5.0",  # retired per-artefact counter
+        "experiment_id": "legacy-001",
+        "measurement_config_hash": "deadbeef",
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "total_tokens": 30,
+        "total_energy_j": 5.0,
+        "total_inference_time_sec": 1.0,
+        "avg_tokens_per_second": 30.0,
+        "avg_energy_per_token_j": 0.25,
+        "total_flops": 0.0,
+        "baseline_power_w": 42.0,  # bundle 1.0 top-level copy (dropped in 2.0)
+        "energy_breakdown": {"raw_j": 5.0, "baseline_power_w": 42.0},
+        "start_time": "2026-01-01T00:00:00",
+        "end_time": "2026-01-01T00:00:01",
+        # runner_provenance in its 1.0 shape: no image_digest key.
+        "runner_provenance": {
+            "mode": "docker",
+            "image": "img:1.0",
+            "source": "yaml",
+            "image_source": "registry",
+        },
+    }
+    (bundle_dir / "result.json").write_text(json.dumps(result_payload), encoding="utf-8")
+
+    env_payload = {
+        "bundle_version": "1.0",
+        "hardware": {
+            "gpu": {
+                "name": "NVIDIA A100",
+                "vram_total_mb": 81920.0,
+                "compute_capability": "8.0",
+                "pcie_gen": 4,  # dropped field
+                "mig_enabled": False,  # dropped field
+            },
+            "cuda": {
+                "version": "12.4",  # pre-rename key -> driver_supported_version
+                "driver_version": "550.54",
+                "cudnn_version": "9.1",  # dropped field
+            },
+            "thermal": {"temperature_c": 40.0, "fan_speed_pct": 30.0},  # fan_speed_pct dropped
+            "cpu": {"platform": "Linux"},
+            "container": {"detected": True, "runtime": "docker"},
+            "collected_at": "2026-01-01T00:00:00",
+        },
+        "python_version": "3.10.14",
+        "tool_version": "0.6.0",
+        "cuda_version": "12.1",
+        "cuda_version_source": "torch",
+        # runner in its old RunnerEnvironment shape: no image_source key.
+        "runner": {
+            "mode": "docker",
+            "image": "img:1.0",
+            "image_digest": "img@sha256:abc",
+            "source": "yaml",
+        },
+    }
+    (bundle_dir / "environment.json").write_text(json.dumps(env_payload), encoding="utf-8")
+
+    with pytest.warns(UserWarning, match="legacy results bundle") as record:
+        loaded = BundleReader.read(bundle_dir)
+
+    # Exactly one bundle-level warning (not multiplied across artefacts).
+    assert sum(issubclass(w.category, UserWarning) for w in record) == 1
+
+    # result.json: legacy top-level keys dropped, model reads with 2.0 defaults.
+    assert loaded.result.experiment_id == "legacy-001"
+    assert loaded.result.serving_mode == "offline"  # new field defaults
+    assert not hasattr(loaded.result, "baseline_power_w")  # dropped field
+    # The single baseline home survives on the breakdown.
+    assert loaded.result.energy_breakdown is not None
+    assert loaded.result.energy_breakdown.baseline_power_w == 42.0
+    # Old runner_provenance shape reads into the unified model (digest defaults None).
+    assert loaded.result.runner_provenance is not None
+    assert loaded.result.runner_provenance.image_source == "registry"
+    assert loaded.result.runner_provenance.image_digest is None
+
+    # environment.json: dead fields ignored, cuda version mapped, runner unified.
+    assert loaded.environment is not None
+    assert loaded.environment.hardware.cuda.driver_supported_version == "12.4"
+    assert loaded.environment.cuda_version == "12.1"
+    assert loaded.environment.runner is not None
+    assert loaded.environment.runner.image_digest == "img@sha256:abc"
+    assert loaded.environment.runner.image_source is None
 
 
 def test_bundle_reader_declared_but_missing_timeseries_warns(tmp_path: Path) -> None:

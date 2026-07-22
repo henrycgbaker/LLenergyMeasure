@@ -51,7 +51,6 @@ def run_single_experiment(
     from llenergymeasure.domain.experiment import compute_declared_config_hash
     from llenergymeasure.study.runner import (
         _provenance_from_spec,
-        _runner_environment,
         _save_and_record,
     )
 
@@ -235,8 +234,7 @@ def run_single_experiment(
         environment_snapshot=snapshot,
         resolution_log=(resolution_logs or {}).get(config_hash),
         resolved_config_hash=resolved_config_hash,
-        runner_provenance=_provenance_from_spec(spec),
-        runner_environment=_runner_environment(spec, resolved_image=resolved_docker_image),
+        runner_provenance=_provenance_from_spec(spec, resolved_image=resolved_docker_image),
     )
 
     # Clean up temp dirs

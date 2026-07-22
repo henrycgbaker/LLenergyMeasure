@@ -97,13 +97,13 @@ def test_engine_version_rejected(make_result):
 # ---------------------------------------------------------------------------
 
 
-def test_baseline_power_w_optional(make_result):
-    """baseline_power_w defaults to None, accepts float."""
-    result_none = make_result()
-    assert result_none.baseline_power_w is None
+def test_serving_mode_defaults_offline(make_result):
+    """serving_mode defaults to 'offline' and accepts an arbitrary string."""
+    result_default = make_result()
+    assert result_default.serving_mode == "offline"
 
-    result_set = make_result(baseline_power_w=42.5)
-    assert result_set.baseline_power_w == 42.5
+    result_server = make_result(serving_mode="server")
+    assert result_server.serving_mode == "server"
 
 
 def test_energy_adjusted_j_optional(make_result):
@@ -357,7 +357,6 @@ def test_json_round_trip(make_result):
         energy_per_output_token_j=0.05,
     )
     original = make_result(
-        baseline_power_w=42.5,
         energy_adjusted_j=45.2,
         energy_per_device_j=[25.0, 25.0],
         multi_gpu=mgpu,
@@ -370,7 +369,6 @@ def test_json_round_trip(make_result):
 
     assert restored.bundle_version == original.bundle_version
     assert restored.experiment_id == original.experiment_id
-    assert restored.baseline_power_w == original.baseline_power_w
     assert restored.energy_adjusted_j == original.energy_adjusted_j
     assert restored.energy_per_device_j == original.energy_per_device_j
     assert restored.multi_gpu is not None

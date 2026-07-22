@@ -123,7 +123,7 @@ The full result is saved as a JSON file in the `results/` directory. Key fields:
 |-------|---------------|
 | `total_energy_j` | Total GPU energy in joules (same as "Total" in terminal output) |
 | `energy_adjusted_j` | Baseline-subtracted energy in joules (same as "Adjusted" in terminal output). `null` when no baseline was measured. |
-| `baseline_power_w` | Idle GPU power in watts (same as "Baseline"). `null` when baseline disabled. |
+| `energy_breakdown.baseline_power_w` | Idle GPU power in watts (same as "Baseline"). `null` when baseline disabled. |
 | `mj_per_tok_total` | Millijoules per token from raw (unadjusted) energy. |
 | `mj_per_tok_adjusted` | Millijoules per token from baseline-adjusted energy. **The right field for cross-experiment comparisons.** |
 | `avg_tokens_per_second` | Output throughput in tokens/second (same as "Throughput"). |

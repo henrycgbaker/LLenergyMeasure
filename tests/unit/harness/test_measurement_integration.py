@@ -751,7 +751,7 @@ def test_harness_build_result_populates_timeseries_field() -> None:
 
 
 def test_harness_build_result_propagates_baseline_fields() -> None:
-    """_build_result() with a baseline populates baseline_power_w and energy_adjusted_j (RES-06)."""
+    """build_result() with a baseline populates the energy breakdown baseline (RES-06)."""
     from llenergymeasure.harness.baseline import BaselineCache
 
     kwargs = _make_build_result_args()
@@ -765,8 +765,9 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
 
     result, _ = build_result(**kwargs)
 
-    assert result.baseline_power_w == pytest.approx(30.0), (
-        "baseline_power_w should be populated from EnergyBreakdown.baseline_power_w"
+    assert result.energy_breakdown is not None
+    assert result.energy_breakdown.baseline_power_w == pytest.approx(30.0), (
+        "baseline power should be populated on the single energy_breakdown home"
     )
     assert result.energy_adjusted_j is not None, (
         "energy_adjusted_j should be populated when baseline is provided"

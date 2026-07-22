@@ -42,7 +42,7 @@ def _make_mock_result() -> MagicMock:
     result.avg_tokens_per_second = 42.0
     result.duration_sec = 5.0
     result.measurement_warnings = []
-    result.baseline_power_w = None
+    result.energy_breakdown = None
     result.energy_adjusted_j = None
     result.total_flops = 0.0
     result.latency_stats = None

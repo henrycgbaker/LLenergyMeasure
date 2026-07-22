@@ -247,7 +247,7 @@ After the run completes, the study directory looks roughly like this:
 results/tutorial-multi-engine_2026-05-07T14-32-08/
 ├── manifest.json                       # study-level: timing, config, completion
 ├── 001_c0_qwen-transformers_a1b2c3.../ # one experiment cell
-│   ├── result.json                     # measurement metrics only (bundle_version 1.0)
+│   ├── result.json                     # measurement metrics only (bundle_version 2.0)
 │   ├── config.json                     # engine/model/methodology + resolved config + provenance
 │   └── timeseries.parquet              # GPU power/thermal/memory samples
 ├── 002_c0_qwen-transformers_d4e5f6.../
@@ -259,14 +259,15 @@ experiment list, study timing, completion status per cell, and the
 effective study-level config. This is what you load when you want to
 *reason about the study as a whole* rather than one cell.
 
-A single `result.json` is measurement output (bundle_version 1.0). Configuration
+A single `result.json` is measurement output (bundle_version 2.0). Configuration
 moved to the sidecar; only `engine` and `model_name` remain as convenience
 copies so the file is self-describing when separated from its directory:
 
 ```json
 {
   "experiment_id": "qwen-transformers-bf16-bs16-fa2-2026-05-07T14-32-08",
-  "bundle_version": "1.0",
+  "bundle_version": "2.0",
+  "serving_mode": "offline",
   "engine": "transformers",
   "model_name": "Qwen/Qwen2.5-0.5B",
   "input_tokens": 6144,
@@ -275,12 +276,11 @@ copies so the file is self-describing when separated from its directory:
   "total_inference_time_sec": 9.8,
   "avg_tokens_per_second": 783.7,
   "total_energy_j": 891.4,
-  "baseline_power_w": 12.3,
   "mj_per_tok_total": 116.1,
   "mj_per_tok_adjusted": 100.4,
   "total_flops": 1.18e+12,
   "flops_per_output_token": 1.54e+8,
-  "energy_breakdown": { "...": "..." }
+  "energy_breakdown": { "baseline_power_w": 12.3, "...": "..." }
 }
 ```
 
@@ -291,7 +291,7 @@ provenance:
 
 ```json
 {
-  "bundle_version": "1.0",
+  "bundle_version": "2.0",
   "engine": "transformers",
   "engine_version": "4.57.1",
   "model_name": "Qwen/Qwen2.5-0.5B",

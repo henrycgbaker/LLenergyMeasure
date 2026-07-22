@@ -1,5 +1,6 @@
 {
-  "bundle_version": "1.0",
+  "bundle_version": "2.0",
+  "serving_mode": "offline",
   "experiment_id": "gpt2_20260313_142111",
   "measurement_config_hash": "9944baab4dabe390",
   "engine": "transformers",
@@ -15,7 +16,6 @@
   "flops_per_output_token": 746638848.0,
   "flops_per_input_token": 373319424.0,
   "flops_per_second": 111257895065.56113,
-  "baseline_power_w": 35.94775694444444,
   "energy_adjusted_j": 68.95598090375523,
   "energy_per_device_j": null,
   "energy_breakdown": {

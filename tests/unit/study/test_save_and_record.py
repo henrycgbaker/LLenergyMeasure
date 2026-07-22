@@ -14,11 +14,9 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from llenergymeasure.config.runner_spec import RunnerSpec
-from llenergymeasure.domain.environment import RunnerEnvironment
 from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
 from llenergymeasure.study.runner import (
     _provenance_from_spec,
-    _runner_environment,
     _save_and_record,
 )
 from tests.conftest import write_container_environment_sidecar
@@ -308,7 +306,9 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
     assert payload.get("provenance") == resolution_log, (
         "resolution_log must be folded into config.json as its provenance section"
     )
-    # bundle_version from the harness sidecar survives the fold.
+    # bundle_version the harness sidecar already carried survives the fold: the
+    # move patches with setdefault and never clobbers an existing stamp (here a
+    # deliberately older "1.0" proves non-clobbering).
     assert payload["bundle_version"] == "1.0"
     # The retired standalone sidecar must not appear.
     assert not (result_json_path.parent / "_resolution.json").exists()
@@ -316,11 +316,21 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
 
 
 def test_provenance_from_spec_docker() -> None:
-    """A docker RunnerSpec maps onto a docker RunnerProvenance."""
+    """A docker RunnerSpec maps onto the unified RunnerProvenance, digest resolved."""
+    from unittest.mock import patch
+
     spec = RunnerSpec(mode="docker", image="img:1.0", source="yaml", image_source="registry")
-    provenance = _provenance_from_spec(spec)
+    with patch(
+        "llenergymeasure.infra.image_registry.resolve_image_digest",
+        return_value="img@sha256:abc",
+    ):
+        provenance = _provenance_from_spec(spec)
     assert provenance == RunnerProvenance(
-        mode="docker", image="img:1.0", source="yaml", image_source="registry"
+        mode="docker",
+        image="img:1.0",
+        source="yaml",
+        image_source="registry",
+        image_digest="img@sha256:abc",
     )
 
 
@@ -347,7 +357,7 @@ def _make_host_snapshot():
 
     hardware = EnvironmentMetadata(
         gpu=GPUEnvironment(name="HOST-GPU", vram_total_mb=1.0),
-        cuda=CUDAEnvironment(version="unknown", driver_version="unknown"),
+        cuda=CUDAEnvironment(driver_supported_version="unknown", driver_version="unknown"),
         cpu=CPUEnvironment(platform="Linux"),
         collected_at=datetime(2026, 1, 1, 0, 0, 0),
     )
@@ -696,17 +706,17 @@ def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
         runner_provenance=RunnerProvenance(
             mode="local", image=None, source="default", image_source=None
         ),
-        runner_environment=RunnerEnvironment(mode="local", source="default"),
     )
 
     env_dest = Path(result_files[0]).parent / "environment.json"
     payload = json.loads(env_dest.read_text())
-    assert payload["bundle_version"] == "1.0"
+    assert payload["bundle_version"] == "2.0"
     assert payload["runner"] == {
         "mode": "local",
         "image": None,
-        "image_digest": None,
         "source": "default",
+        "image_source": None,
+        "image_digest": None,
     }
 
 
@@ -740,13 +750,11 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
         ts_source_dir=tmp_path,
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
-            mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
-        ),
-        runner_environment=RunnerEnvironment(
             mode="docker",
             image="ghcr.io/acme/vllm:1.0",
-            image_digest="ghcr.io/acme/vllm@sha256:abc123",
             source="yaml",
+            image_source="registry",
+            image_digest="ghcr.io/acme/vllm@sha256:abc123",
         ),
     )
 
@@ -756,11 +764,12 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
     assert payload["runner"] == {
         "mode": "docker",
         "image": "ghcr.io/acme/vllm:1.0",
-        "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
         "source": "yaml",
+        "image_source": "registry",
+        "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
     }
     # bundle_version stamped in when the (old-style) container payload omitted it.
-    assert payload["bundle_version"] == "1.0"
+    assert payload["bundle_version"] == "2.0"
     # Container hardware/runtime values still win over the host snapshot.
     assert payload["python_version"] == "3.10.14"
     assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
@@ -791,13 +800,11 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
         ts_source_dir=tmp_path,  # no environment.json rescued
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
-            mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
-        ),
-        runner_environment=RunnerEnvironment(
             mode="docker",
             image="ghcr.io/acme/vllm:1.0",
-            image_digest=None,
             source="yaml",
+            image_source="registry",
+            image_digest=None,
         ),
     )
 
@@ -809,32 +816,33 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
     assert payload["runner"]["image_digest"] is None
 
 
-def test_runner_environment_local_and_none_spec() -> None:
-    """_runner_environment maps local specs (and no spec) onto a local runner block."""
-    local = _runner_environment(RunnerSpec(mode="local", image=None, source="user_config"))
+def test_provenance_from_spec_local_and_none_spec() -> None:
+    """_provenance_from_spec maps local specs (and no spec) onto a local provenance."""
+    local = _provenance_from_spec(RunnerSpec(mode="local", image=None, source="user_config"))
     assert local.mode == "local"
     assert local.image is None
+    assert local.image_source is None
     assert local.image_digest is None
     assert local.source == "user_config"
 
-    no_spec = _runner_environment(None)
+    no_spec = _provenance_from_spec(None)
     assert no_spec.mode == "local"
     assert no_spec.source == "local"
 
 
-def test_runner_environment_docker_digest_failure_is_none() -> None:
+def test_provenance_from_spec_docker_digest_failure_is_none() -> None:
     """A docker spec whose digest cannot be resolved records image_digest=None (never raises)."""
     from unittest.mock import patch
 
     with patch("llenergymeasure.infra.image_registry.resolve_image_digest", return_value=None):
-        env = _runner_environment(
+        prov = _provenance_from_spec(
             RunnerSpec(mode="docker", image=None, source="auto_detected"),
             resolved_image="ghcr.io/acme/vllm:1.0",
         )
-    assert env.mode == "docker"
-    assert env.image == "ghcr.io/acme/vllm:1.0"
-    assert env.image_digest is None
-    assert env.source == "auto_detected"
+    assert prov.mode == "docker"
+    assert prov.image == "ghcr.io/acme/vllm:1.0"
+    assert prov.image_digest is None
+    assert prov.source == "auto_detected"
 
 
 def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
@@ -878,13 +886,11 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
             ts_source_dir=tmp_path,
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
-                mode="docker", image="ghcr.io/acme/vllm:1.0", source="yaml", image_source="registry"
-            ),
-            runner_environment=RunnerEnvironment(
                 mode="docker",
                 image="ghcr.io/acme/vllm:1.0",
-                image_digest="ghcr.io/acme/vllm@sha256:abc123",
                 source="yaml",
+                image_source="registry",
+                image_digest="ghcr.io/acme/vllm@sha256:abc123",
             ),
         )
 
@@ -902,7 +908,8 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
     assert payload["runner"] == {
         "mode": "docker",
         "image": "ghcr.io/acme/vllm:1.0",
-        "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
         "source": "yaml",
+        "image_source": "registry",
+        "image_digest": "ghcr.io/acme/vllm@sha256:abc123",
     }
-    assert payload["bundle_version"] == "1.0"
+    assert payload["bundle_version"] == "2.0"
