@@ -10,7 +10,7 @@ Exposes `run_experiment()` and `run_study()` as the primary library interface. A
 
 | Module | Description |
 |--------|-------------|
-| `_impl.py` | `run_experiment()` and `run_study()` implementations; `_run()` dispatcher |
+| `_impl.py` | Thin `run_experiment()` and `run_study()` implementations; normalise input via `_to_study_config()` and delegate to `study.orchestration.orchestrate_study` |
 | `_gpu.py` | `_resolve_gpu_indices()` - per-engine GPU index resolution |
 | `preflight.py` | `run_preflight()` and `run_study_preflight()` - pre-experiment checks |
 | `__init__.py` | Re-exports `run_experiment`, `run_study` |

@@ -715,7 +715,7 @@ Each experiment directory ships sidecars for full reproducibility next to `resul
 ```json
 // config.json (excerpt)
 {
-  "schema_version": "2.0",
+  "bundle_version": "2.0",
   "provenance": {
     "task.model": { "effective": "meta-llama/Llama-2-7b-hf", "source": "yaml" },
     "batching.batch_size": { "effective": 8, "source": "cli_flag", "default": 1 }

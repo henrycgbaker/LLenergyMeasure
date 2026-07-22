@@ -15,7 +15,7 @@ flowchart TD
     discovery[programmatic discovery<br/>scripts/engine_producers/]
     curated[curation decisions<br/>engine_versions/&lt;engine&gt;/v&lt;ver&gt;/outputs/curated.yaml]
     codegen[codegen<br/>scripts/engine_producers/regen_engine_configs.py]
-    pydantic[generated Pydantic models<br/>engines/&lt;engine&gt;/config.py]
+    pydantic[generated Pydantic models<br/>config/generated/&lt;engine&gt;.py]
     drift[drift checker<br/>scripts/check_pydantic_matches_discovered.py]
     allowlist[LLEM_NATIVE_FIELDS<br/>intentional-divergence allowlist]
 
