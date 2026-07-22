@@ -56,6 +56,25 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- **Breaking (results bundle):** `bundle_version` bumps to `"2.0"` for the
+  provenance-unification break. The sibling runner-provenance models
+  (`RunnerProvenance` on `result.json`, `RunnerEnvironment` on
+  `environment.json`) merge into one `RunnerProvenance`
+  (`llenergymeasure.domain.provenance`) carrying the field superset
+  (`mode`, `image`, `source`, `image_source`, `image_digest`); `RunnerEnvironment`
+  is deleted and both artefacts still serialise a runner block. The top-level
+  `ExperimentResult.baseline_power_w` copy is retired - `energy_breakdown.baseline_power_w`
+  is the single home. Four never-populated environment fields (`pcie_gen`,
+  `mig_enabled`, `cudnn_version`, `fan_speed_pct`) are dropped, and the
+  driver-reported CUDA field `CUDAEnvironment.version` is renamed
+  `driver_supported_version` (the NVML driver-supported CUDA version, distinct
+  from `EnvironmentSnapshot.cuda_version`, the runtime version the stack was
+  built against). A new `ExperimentResult.measurement_mode` (`"offline"` today)
+  is the offline/server discriminator. Results written by earlier versions
+  remain readable best-effort with a single warning: the retired top-level keys
+  are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
+  and the old separate runner block reads into the unified model; no converter
+  tooling is provided. ([#869])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their
@@ -1443,4 +1462,5 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#866]: https://github.com/henrycgbaker/llenergymeasure/pull/866
 [#867]: https://github.com/henrycgbaker/llenergymeasure/pull/867
 [#868]: https://github.com/henrycgbaker/llenergymeasure/pull/868
+[#869]: https://github.com/henrycgbaker/llenergymeasure/pull/869
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
