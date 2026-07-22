@@ -66,7 +66,7 @@ engine_versions/<engine>/v<safe>/outputs/schema.discovered.json   <- ONLY discov
 src/llenergymeasure/engines/<engine>/schema.discovered.json        <- packaged copy
         |
         v  regen_engine_configs.py (reads outputs/)
-src/llenergymeasure/engines/<engine>/config.py
+src/llenergymeasure/config/generated/<engine>.py
 ```
 
 The script reads the pin from `engine_versions/<engine>/current.yaml`
@@ -109,7 +109,7 @@ for the full stage.
 
 ## Regenerate the typed config after a schema change
 
-The typed config model at `src/llenergymeasure/engines/<engine>/config.py` is
+The typed config model at `src/llenergymeasure/config/generated/<engine>.py` is
 generated from the committed snapshot, not hand-written (its header says
 `DO NOT EDIT`). After a schema refresh, regenerate it so the two stay in step:
 

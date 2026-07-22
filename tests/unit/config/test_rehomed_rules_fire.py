@@ -353,7 +353,7 @@ def test_early_stopping_never_survives_roundtrip():
 
 def test_early_stopping_generated_annotation_golden():
     """The generated EngineParams field annotation is the widened union."""
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     annotation = EngineParams.model_fields["early_stopping"].annotation
     assert annotation == (bool | Literal["never"] | None)

@@ -247,9 +247,9 @@ def get_engine_config_model(engine: str) -> type[BaseModel]:
 
     Raises ``ValueError`` for an unknown engine name.
     """
-    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
-    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
-    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
+    from llenergymeasure.config.generated.tensorrt import Config as TensorRTConfig
+    from llenergymeasure.config.generated.transformers import Config as TransformersConfig
+    from llenergymeasure.config.generated.vllm import Config as VLLMConfig
 
     engine_models: dict[str, type[BaseModel]] = {
         "transformers": TransformersConfig,

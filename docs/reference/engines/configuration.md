@@ -11,7 +11,7 @@ and configures it through a same-named block (`transformers:`, `vllm:`,
 `tensorrt:`).
 
 Each engine block is a generated model at
-`src/llenergymeasure/engines/<engine>/config.py`, regenerated from the
+`src/llenergymeasure/config/generated/<engine>.py`, regenerated from the
 committed schema snapshot (its header reads `DO NOT EDIT`). The block has
 exactly two sub-sections, `engine_params:` and `sampling_params:`, and both
 sub-models set `extra="allow"`, so a parameter the current snapshot does not
@@ -206,7 +206,7 @@ Loads a model via `AutoModelForCausalLM.from_pretrained()` and generates with
 | `tp_plan` | any \| null | null | Native HF tensor parallelism plan |
 | `tp_size` | any \| null | null | Tensor parallel ranks (used with `tp_plan`) |
 
-Source: `src/llenergymeasure/engines/transformers/config.py`.
+Source: `src/llenergymeasure/config/generated/transformers.py`.
 
 ### `transformers.sampling_params:`
 
@@ -224,7 +224,7 @@ forwarded via `extra="allow"`.
 | `min_p` | float \| null | null | Minimum probability filter |
 | `min_new_tokens` | int \| null | null | Minimum output tokens |
 
-Source: `src/llenergymeasure/engines/transformers/config.py`.
+Source: `src/llenergymeasure/config/generated/transformers.py`.
 
 ## vLLM engine (`vllm:`)
 
@@ -268,7 +268,7 @@ carry defaults and bounds from the generated model.
 | `attention` | any (dict) \| null | null | Attention backend selection; freeform dict (e.g. `{backend: flash_attn}`) |
 | `beam_search` | any (dict) \| null | null | Beam-search parameters; freeform dict (e.g. `{beam_width: 4, early_stopping: true}`) |
 
-Source: `src/llenergymeasure/engines/vllm/config.py`. `speculative_config` and
+Source: `src/llenergymeasure/config/generated/vllm.py`. `speculative_config` and
 `compilation_config` are typed sub-models with many fields; see
 [schema-vllm.md](schema-vllm.md) for the full inventory.
 
@@ -291,7 +291,7 @@ vLLM's `0`-for-default convention.
 | `ignore_eos` | bool \| null | `false` | Continue generating past EOS |
 | `n` | int \| null | `1` | Number of output sequences per prompt |
 
-Source: `src/llenergymeasure/engines/vllm/config.py`.
+Source: `src/llenergymeasure/config/generated/vllm.py`.
 
 ## TensorRT-LLM engine (`tensorrt:`)
 
@@ -326,7 +326,7 @@ under `engine_params:` on the current pin, so they are written as whole dicts
 | `kv_cache_config` | any (dict) \| null | null | KV cache config; freeform dict (e.g. `{enable_block_reuse: true, free_gpu_memory_fraction: 0.9}`) |
 | `scheduler_config` | any (dict) \| null | null | Scheduler config; freeform dict (e.g. `{capacity_scheduling_policy: MAX_UTILIZATION}`) |
 
-Source: `src/llenergymeasure/engines/tensorrt/config.py`.
+Source: `src/llenergymeasure/config/generated/tensorrt.py`.
 
 ### `tensorrt.sampling_params:`
 
@@ -344,7 +344,7 @@ Maps to `tensorrt_llm.SamplingParams`. `top_k` uses TRT-LLM's convention
 | `n` | int \| null | `1` | Number of output sequences per prompt |
 | `ignore_eos` | bool \| null | `false` | Continue generating past EOS |
 
-Source: `src/llenergymeasure/engines/tensorrt/config.py`.
+Source: `src/llenergymeasure/config/generated/tensorrt.py`.
 
 ## Validation rules
 

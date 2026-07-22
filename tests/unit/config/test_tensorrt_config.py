@@ -1,7 +1,7 @@
 """Unit tests for the generated TensorRT-LLM config (nested engine_params shape).
 
 The tensorrt section is the generated
-``llenergymeasure.engines.tensorrt.config.Config`` (engine_params /
+``llenergymeasure.config.generated.tensorrt.Config`` (engine_params /
 sampling_params). Engine fields live on engine_params; quant_config /
 kv_cache_config / scheduler_config round-trip as Any-typed dicts (not pydantic
 sub-models). The fields are permissive (Any-typed or plain str, no Literal /

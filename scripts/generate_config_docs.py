@@ -80,21 +80,23 @@ _SECTION_ORDER = [
 
 # Map from JSON schema $defs key to our section key. The per-engine Config
 # models are code-generated, so Pydantic emits module-qualified $def names
-# (``llenergymeasure__engines__<engine>__config__<Model>``).
+# (``llenergymeasure__config__generated__<engine>__<Model>``).
 _DEF_TO_SECTION: dict[str, str] = {
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
-    "llenergymeasure__engines__transformers__config__Config": "transformers",
-    "llenergymeasure__engines__transformers__config__EngineParams": "transformers_engine_params",
-    "llenergymeasure__engines__transformers__config__SamplingParams": (
+    "llenergymeasure__config__generated__transformers__Config": "transformers",
+    "llenergymeasure__config__generated__transformers__EngineParams": (
+        "transformers_engine_params"
+    ),
+    "llenergymeasure__config__generated__transformers__SamplingParams": (
         "transformers_sampling_params"
     ),
-    "llenergymeasure__engines__vllm__config__Config": "vllm",
-    "llenergymeasure__engines__vllm__config__EngineParams": "vllm_engine_params",
-    "llenergymeasure__engines__vllm__config__SamplingParams": "vllm_sampling_params",
-    "llenergymeasure__engines__tensorrt__config__Config": "tensorrt",
-    "llenergymeasure__engines__tensorrt__config__EngineParams": "tensorrt_engine_params",
-    "llenergymeasure__engines__tensorrt__config__SamplingParams": "tensorrt_sampling_params",
+    "llenergymeasure__config__generated__vllm__Config": "vllm",
+    "llenergymeasure__config__generated__vllm__EngineParams": "vllm_engine_params",
+    "llenergymeasure__config__generated__vllm__SamplingParams": "vllm_sampling_params",
+    "llenergymeasure__config__generated__tensorrt__Config": "tensorrt",
+    "llenergymeasure__config__generated__tensorrt__EngineParams": "tensorrt_engine_params",
+    "llenergymeasure__config__generated__tensorrt__SamplingParams": "tensorrt_sampling_params",
     "HarnessConfig": "harness",
     "TransformersHarness": "harness_transformers",
 }
@@ -104,7 +106,7 @@ def _ref_display_name(ref: str) -> str:
     """Human-readable name for a ``$ref`` target.
 
     Code-generated engine models carry module-qualified ``$def`` names
-    (``llenergymeasure__engines__vllm__config__EngineParams``); show only the
+    (``llenergymeasure__config__generated__vllm__EngineParams``); show only the
     final class segment in the rendered type column.
     """
     return ref.split("/")[-1].split("__")[-1]

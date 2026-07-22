@@ -7,7 +7,7 @@ name: Engine rules check
 # still hangs together:
 #
 #   1. config-codegen (gating): the generated config models under
-#      src/llenergymeasure/engines/<engine>/config.py are byte-identical to
+#      src/llenergymeasure/config/generated/<engine>.py are byte-identical to
 #      what the committed schema snapshot regenerates. A stale config fails.
 #
 #   2. rules-coverage (advisory): scans the pinned engine source for
@@ -69,7 +69,7 @@ jobs:
           # dead (ci.yml needs it only because ci.yml also runs on push).
           filters: |
             engine:
-              - 'src/llenergymeasure/engines/*/config.py'
+              - 'src/llenergymeasure/config/generated/*.py'
               - 'src/llenergymeasure/engines/*/rules.yaml'
               - 'src/llenergymeasure/config/engine_rules/**'
               - 'engine_versions/*/current.yaml'
@@ -268,8 +268,9 @@ jobs:
   absorbed-bump-check:
     # Gating: a PR that advances an engine pin
     # (engine_versions/<engine>/current.yaml) must also ship the regenerated
-    # knowledge `make absorb` produces - the versioned snapshot outputs AND the
-    # packaged src copies (config.py / rules.yaml / schema.discovered.json). A
+    # knowledge `make absorb` produces - the versioned snapshot outputs, the
+    # generated config (config/generated/<engine>.py), AND the packaged engine
+    # copies (rules.yaml / schema.discovered.json). A
     # bare pin bump (the Renovate regex-manager shape: it edits current_version
     # and nothing else) would otherwise merge a config typed against the old
     # engine surface. Runs only when engine-filter saw an engine-knowledge

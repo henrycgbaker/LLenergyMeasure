@@ -2,7 +2,7 @@
 
 Projects one engine-version snapshot from the workspace SSOT
 (``engine_versions/<engine>/v<safe>/outputs/``) into a vendored, committed,
-typed ``src/llenergymeasure/engines/<engine>/config.py``:
+typed ``src/llenergymeasure/config/generated/<engine>.py``:
 
 - ``schema.discovered.json`` - the mined configuration surface (types,
   defaults, enums, bounds);
@@ -22,7 +22,7 @@ policy).
 The snapshot is selected explicitly by ``--engine`` and ``--version``, so the
 tool works against any vendored pin - the active one, or a higher pin being
 prepared for a bump - and never assumes the active pin. ``--output`` picks the
-target file (default: the ``src/`` shadow for that engine).
+target file (default: the generated config module for that engine).
 
 Two modes: ``--check`` (default) regenerates in memory and byte-compares
 against the target file (exit 1 with a diff on drift); ``--write`` regenerates
@@ -87,9 +87,9 @@ _DMCG_FLAGS: tuple[str, ...] = (
 )
 
 
-def _shadow_config_path(engine: str) -> Path:
-    """Return ``src/llenergymeasure/engines/<engine>/config.py``."""
-    return _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine / "config.py"
+def _generated_config_path(engine: str) -> Path:
+    """Return ``src/llenergymeasure/config/generated/<engine>.py``."""
+    return _PROJECT_ROOT / "src" / "llenergymeasure" / "config" / "generated" / f"{engine}.py"
 
 
 # ---------------------------------------------------------------------------
@@ -557,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
         "--output",
         type=Path,
         default=None,
-        help="Target config.py (default: the src/ shadow for the engine).",
+        help="Target config module (default: the generated config module for the engine).",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -572,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    output = args.output if args.output is not None else _shadow_config_path(args.engine)
+    output = args.output if args.output is not None else _generated_config_path(args.engine)
     try:
         drift = sync(args.engine, args.version, output, write=args.write)
     except FileNotFoundError:

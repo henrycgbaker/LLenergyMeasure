@@ -6,10 +6,11 @@ first line of a bump. The pipeline (``make absorb ENGINE=<engine> SRC=...``)
 also regenerates the knowledge products the new pin implies:
 
 - the versioned snapshot under ``engine_versions/<engine>/<version>/outputs/``
-  (the mined ``schema.discovered.json`` + ``curated.yaml``), and
+  (the mined ``schema.discovered.json`` + ``curated.yaml``),
+- the generated config model at
+  ``src/llenergymeasure/config/generated/<engine>.py``, and
 - the packaged engine copies under ``src/llenergymeasure/engines/<engine>/``
-  (the generated ``config.py``, the ``rules.yaml`` corpus, and the promoted
-  ``schema.discovered.json``).
+  (the ``rules.yaml`` corpus and the promoted ``schema.discovered.json``).
 
 A PR that moves only the pin has skipped ``make absorb``: it would ship a typed
 config validated against the OLD engine surface while claiming the new version.
@@ -31,10 +32,12 @@ from pathlib import Path, PurePosixPath
 
 ENGINES: tuple[str, ...] = ("transformers", "vllm", "tensorrt")
 
-# Packaged engine files a real absorb regenerates under
-# src/llenergymeasure/engines/<engine>/. plugin.py and __init__.py are
-# hand-written glue, not absorb outputs, so they do not count as evidence.
-_SRC_ABSORB_FILES: frozenset[str] = frozenset({"config.py", "rules.yaml", "schema.discovered.json"})
+# Packaged knowledge a real absorb regenerates beside the engine, under
+# src/llenergymeasure/engines/<engine>/. The generated config model lives in the
+# config layer instead (config/generated/<engine>.py) and is checked separately.
+# plugin.py and __init__.py are hand-written glue, not absorb outputs, so they do
+# not count as evidence.
+_ENGINE_KNOWLEDGE_FILES: frozenset[str] = frozenset({"rules.yaml", "schema.discovered.json"})
 
 
 def _bumped_engines(changed: set[str]) -> list[str]:
@@ -49,9 +52,17 @@ def _has_snapshot_outputs(engine: str, changed: set[str]) -> bool:
 
 
 def _has_src_copies(engine: str, changed: set[str]) -> bool:
-    """True when a packaged src knowledge file for ``engine`` changed."""
+    """True when a packaged src knowledge file for ``engine`` changed.
+
+    Absorb writes across two homes: the generated config model in the config
+    layer, and the rules corpus / promoted schema beside the engine.
+    """
+    if f"src/llenergymeasure/config/generated/{engine}.py" in changed:
+        return True
     prefix = f"src/llenergymeasure/engines/{engine}/"
-    return any(f.startswith(prefix) and PurePosixPath(f).name in _SRC_ABSORB_FILES for f in changed)
+    return any(
+        f.startswith(prefix) and PurePosixPath(f).name in _ENGINE_KNOWLEDGE_FILES for f in changed
+    )
 
 
 def check_absorbed_bump(changed_files: list[str]) -> list[str]:
@@ -71,8 +82,9 @@ def check_absorbed_bump(changed_files: list[str]) -> list[str]:
             )
         if not _has_src_copies(engine, changed):
             missing.append(
-                f"src/llenergymeasure/engines/{engine}/ "
-                "(generated config.py / rules.yaml / schema.discovered.json)"
+                f"the generated config (src/llenergymeasure/config/generated/{engine}.py) "
+                f"plus the engine knowledge under src/llenergymeasure/engines/{engine}/ "
+                "(rules.yaml / schema.discovered.json)"
             )
         if not missing:
             continue

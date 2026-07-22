@@ -23,7 +23,7 @@ def _full_absorb(engine: str) -> list[str]:
         f"engine_versions/{engine}/current.yaml",
         f"engine_versions/{engine}/v9_9_9/outputs/schema.discovered.json",
         f"engine_versions/{engine}/v9_9_9/outputs/curated.yaml",
-        f"src/llenergymeasure/engines/{engine}/config.py",
+        f"src/llenergymeasure/config/generated/{engine}.py",
         f"src/llenergymeasure/engines/{engine}/rules.yaml",
         f"src/llenergymeasure/engines/{engine}/schema.discovered.json",
     ]
@@ -70,7 +70,7 @@ def test_missing_snapshot_outputs_fails() -> None:
     """src copies changed but no versioned snapshot output was committed."""
     changed = [
         "engine_versions/tensorrt/current.yaml",
-        "src/llenergymeasure/engines/tensorrt/config.py",
+        "src/llenergymeasure/config/generated/tensorrt.py",
     ]
     errors = cab.check_absorbed_bump(changed)
     assert len(errors) == 1
