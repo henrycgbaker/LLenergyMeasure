@@ -223,6 +223,17 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- Test and docstring tidy with one new orchestration regression. Stale harness
+  test docstrings/comments now name the current `build_result` seam (was the
+  pre-split `_build_result`), and the `PowerThermalSampler` test mock drops its
+  dead context-manager wiring since `MeasurementBracket` drives the sampler via
+  `start()`/`stop()`. The GPU-selector conflict warning choke point
+  (`_resolve_runner_specs`) gains coverage: it fires once per dispatch when a
+  Docker runner is present and never for an all-local study. The
+  `WarmupConfig.thermal_floor_seconds=60` docstring no longer misattributes the
+  default to an MLPerf Power thermal mandate; it is a conservative idle-settling
+  default, and MLPerf Power's 60s measurement-window rule is cited where it
+  applies (`harness/windowing.py`). Value and validation unchanged. ([#871])
 - The dispatch-metadata hermeticity stub now covers the whole unit suite rather
   than only `tests/unit/docker/`: the baseline-container and engine docker-path
   tests no longer fail with `PackageNotFoundError` when the suite runs
@@ -1432,3 +1443,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#866]: https://github.com/henrycgbaker/llenergymeasure/pull/866
 [#867]: https://github.com/henrycgbaker/llenergymeasure/pull/867
 [#868]: https://github.com/henrycgbaker/llenergymeasure/pull/868
+[#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
