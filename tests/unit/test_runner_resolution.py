@@ -13,10 +13,10 @@ from unittest.mock import patch
 
 import pytest
 
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import ENV_RUNNER_PREFIX
 from llenergymeasure.config.user_config import UserRunnersConfig
 from llenergymeasure.infra.runner_resolution import (
-    RunnerSpec,
     is_docker_available,
     parse_runner_value,
     resolve_runner,

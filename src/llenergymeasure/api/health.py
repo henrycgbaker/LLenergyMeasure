@@ -23,6 +23,7 @@ from typing import Any, Literal
 
 from llenergymeasure.api import probe_energy_sampler
 from llenergymeasure.api.doctor import DoctorReport, run_doctor_checks
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
     ENV_HF_TOKEN,
@@ -46,7 +47,7 @@ from llenergymeasure.infra.docker_preflight import (
     docker_daemon_reachable,
 )
 from llenergymeasure.infra.image_registry import get_default_image, image_present_locally
-from llenergymeasure.infra.runner_resolution import RunnerSpec, is_docker_available, resolve_runner
+from llenergymeasure.infra.runner_resolution import is_docker_available, resolve_runner
 from llenergymeasure.infra.version_handshake import SchemaStatus
 from llenergymeasure.utils.exceptions import ConfigError
 

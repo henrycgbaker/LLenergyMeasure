@@ -20,8 +20,8 @@ from llenergymeasure.config.ssot import (
 from llenergymeasure.utils.exceptions import PreFlightError
 
 if TYPE_CHECKING:
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.config.user_config import UserRunnersConfig
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,8 @@ def run_study_preflight(
             elevation but Docker is unavailable.
         DockerPreFlightError: Docker pre-flight check failed (inherits PreFlightError).
     """
-    from llenergymeasure.infra.runner_resolution import RunnerSpec, resolve_study_runners
+    from llenergymeasure.config.runner_spec import RunnerSpec
+    from llenergymeasure.infra.runner_resolution import resolve_study_runners
 
     engines = {exp.engine for exp in study.experiments}
     is_multi_engine = len(engines) > 1
@@ -153,7 +154,8 @@ def _apply_multi_engine_precedence(
             in the host environment, or Docker is required to elevate an
             auto-resolved engine but is unavailable.
     """
-    from llenergymeasure.infra.runner_resolution import RunnerSpec, is_docker_available
+    from llenergymeasure.config.runner_spec import RunnerSpec
+    from llenergymeasure.infra.runner_resolution import is_docker_available
 
     explicit_local: list[str] = []
     kept_explicit: list[str] = []
@@ -171,13 +173,13 @@ def _apply_multi_engine_precedence(
 
     # Import pre-flight: every engine pinned to local must be importable here.
     # Reuse the single-engine local-preflight availability check (find_spec on
-    # the engine package) rather than duplicating it. Cross-module private
-    # import, following the documented pattern used elsewhere across the package.
+    # the engine package) rather than duplicating it - it is a public helper on
+    # harness/preflight, which owns the fact.
     import_failures: list[str] = []
     if explicit_local:
-        from llenergymeasure.harness.preflight import _check_engine_installed
+        from llenergymeasure.harness.preflight import check_engine_installed
     for engine_name in sorted(explicit_local):
-        if not _check_engine_installed(engine_name):
+        if not check_engine_installed(engine_name):
             package = ENGINE_PACKAGES.get(Engine(engine_name), engine_name)
             import_failures.append(
                 f"{engine_name}: package '{package}' is not importable in the host "

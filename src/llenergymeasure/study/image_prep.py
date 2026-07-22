@@ -50,8 +50,8 @@ from llenergymeasure.infra.version_handshake import (
 )
 
 if TYPE_CHECKING:
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.domain.progress import StudyProgressCallback
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 logger = logging.getLogger(__name__)
 

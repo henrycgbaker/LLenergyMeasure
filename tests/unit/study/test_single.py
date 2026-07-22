@@ -317,7 +317,7 @@ def test_docker_single_failure_marks_log_file(monkeypatch, tmp_path):
     """
     from unittest.mock import MagicMock
 
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
     from llenergymeasure.utils.exceptions import DockerError
 

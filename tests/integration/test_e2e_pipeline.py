@@ -38,7 +38,7 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     """
     import llenergymeasure.harness.preflight
     import llenergymeasure.study.preflight
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
     monkeypatch.setattr(

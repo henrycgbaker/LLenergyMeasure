@@ -26,7 +26,7 @@ from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.progress import ProgressCallback
 
 if TYPE_CHECKING:
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
 
@@ -89,15 +89,14 @@ def run_single_experiment(
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.study.container_lifecycle import persist_failure_artefacts
-        from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
         from llenergymeasure.utils.exceptions import DockerError
 
         image = spec.image if spec.image is not None else get_default_image(config.engine)
         resolved_docker_image = image
 
-        # Physical GPU scoping precedence (env>config); warn once if both set.
+        # Physical GPU scoping precedence (env>config). The env-vs-config conflict
+        # warning fires once upstream in orchestrate_study (single choke point).
         gpu_indices = study.study_execution.gpu_indices
-        warn_on_gpu_selector_conflict(gpu_indices)
 
         docker_runner = DockerRunner(
             image=image,

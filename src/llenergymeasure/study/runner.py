@@ -64,10 +64,10 @@ from llenergymeasure.utils.io import load_json
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.domain.environment import EnvironmentSnapshot, RunnerEnvironment
     from llenergymeasure.domain.experiment import RunnerProvenance
     from llenergymeasure.domain.progress import StudyProgressCallback
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
 __all__ = [
@@ -89,9 +89,10 @@ logger = logging.getLogger(__name__)
 def _provenance_from_spec(spec: RunnerSpec | None) -> RunnerProvenance:
     """Build a RunnerProvenance from a resolved RunnerSpec.
 
-    The infra-layer ``RunnerSpec`` cannot live on the domain result (layer
-    violation), so its execution-mode fields are mirrored onto the domain-layer
-    ``RunnerProvenance``. When no spec is available (pure in-process local run),
+    The config-layer ``RunnerSpec`` cannot live on the domain result (config and
+    domain are independent sibling layers), so its execution-mode fields are
+    mirrored onto the domain-layer ``RunnerProvenance``. When no spec is available
+    (pure in-process local run),
     records ``mode="local"`` with ``source="local"`` and no image.
     """
     from llenergymeasure.domain.experiment import RunnerProvenance
@@ -453,14 +454,9 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         )
 
         # Physical GPU selector precedence (env>config): LLEM_DOCKER_GPUS wins
-        # over study_execution.gpu_indices. GPU scoping only affects Docker
-        # containers, so warn about the conflict only when a container will
-        # actually launch (mirrors single.py, which gates this in its Docker
-        # branch) - no container means no warning.
-        if uses_docker:
-            from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
-
-            warn_on_gpu_selector_conflict(config_gpu_indices)
+        # over study_execution.gpu_indices. The env-vs-config conflict warning
+        # fires once upstream in orchestrate_study (single choke point), so it is
+        # not repeated here.
 
         # Acquire per-GPU advisory locks before image preparation.
         # Lock names use the PHYSICAL device the study occupies, resolved from

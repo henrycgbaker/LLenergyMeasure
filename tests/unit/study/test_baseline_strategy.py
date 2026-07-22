@@ -23,9 +23,9 @@ from llenergymeasure.config.models import (
     ExperimentConfig,
     StudyConfig,
 )
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import CONTAINER_EXCHANGE_DIR
 from llenergymeasure.harness.baseline import BaselineCache
-from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study.image_prep import _sanitize_image_for_filename
 from llenergymeasure.study.runner import StudyRunner
 from llenergymeasure.utils.exceptions import DockerError

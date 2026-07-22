@@ -24,9 +24,9 @@ from llenergymeasure.config.models import (
     StudyConfig,
     TaskConfig,
 )
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.domain.progress import ProgressCallback
-from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.utils.exceptions import ConfigError
 
 # Single source of truth for n_prompts default - derived from DatasetConfig field default

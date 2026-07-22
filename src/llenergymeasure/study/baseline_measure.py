@@ -29,8 +29,8 @@ from llenergymeasure.utils.env_config import docker_gpus_cache_token
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.domain.progress import StudyProgressCallback
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 logger = logging.getLogger(__name__)
 

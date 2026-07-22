@@ -36,7 +36,7 @@ def patch_env(monkeypatch, *, docker: bool, importable: bool = True) -> MagicMoc
     Args:
         docker: value returned by ``is_docker_available``.
         importable: value returned by the reused host-availability check
-            (``harness.preflight._check_engine_installed``).
+            (``harness.preflight.check_engine_installed``).
 
     Returns:
         The ``run_docker_preflight`` MagicMock, so a caller can assert whether it
@@ -50,7 +50,7 @@ def patch_env(monkeypatch, *, docker: bool, importable: bool = True) -> MagicMoc
         "llenergymeasure.infra.docker_preflight.run_docker_preflight", docker_preflight
     )
     monkeypatch.setattr(
-        "llenergymeasure.harness.preflight._check_engine_installed", lambda engine: importable
+        "llenergymeasure.harness.preflight.check_engine_installed", lambda engine: importable
     )
     return docker_preflight
 
@@ -213,7 +213,7 @@ def test_preflight_forwards_runner_context(monkeypatch):
     def mock_resolve_study_runners(engines, yaml_runners=None, user_config=None):
         captured_calls.append({"yaml_runners": yaml_runners, "user_config": user_config})
         # Return local specs so no Docker preflight is triggered
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
 
         return {b: RunnerSpec(mode="local", image=None, source="default") for b in engines}
 
@@ -241,7 +241,7 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
 
     def mock_resolve_study_runners(engines, yaml_runners=None, user_config=None):
         captured_calls.append({"yaml_runners": yaml_runners, "user_config": user_config})
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
 
         return {b: RunnerSpec(mode="local", image=None, source="default") for b in engines}
 

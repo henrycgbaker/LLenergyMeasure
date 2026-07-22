@@ -13,9 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.domain.environment import RunnerEnvironment
 from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
-from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study.runner import (
     _provenance_from_spec,
     _runner_environment,

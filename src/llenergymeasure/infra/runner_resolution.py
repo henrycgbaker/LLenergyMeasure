@@ -22,15 +22,14 @@ import functools
 import logging
 import os
 import shutil
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserRunnersConfig
 
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import (
     ENV_RUNNER_PREFIX,
-    EXPLICIT_RUNNER_SOURCES,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
     SOURCE_AUTO_DETECTED,
@@ -38,7 +37,6 @@ from llenergymeasure.config.ssot import (
     SOURCE_ENV,
     SOURCE_USER_CONFIG,
     SOURCE_YAML,
-    RunnerMode,
 )
 
 # The NVIDIA Container Toolkit binary list lives in docker_preflight (its canonical
@@ -50,7 +48,6 @@ from llenergymeasure.infra.docker_preflight import NVIDIA_TOOLKIT_BINS
 from llenergymeasure.infra.image_registry import parse_runner_value
 
 __all__ = [
-    "RunnerSpec",
     "is_docker_available",
     "parse_runner_value",
     "resolve_runner",
@@ -101,52 +98,6 @@ def is_docker_available() -> bool:
         return False
 
     return any(shutil.which(tool) is not None for tool in NVIDIA_TOOLKIT_BINS)
-
-
-# ---------------------------------------------------------------------------
-# RunnerSpec dataclass
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class RunnerSpec:
-    """Resolved runner specification for a single experiment execution.
-
-    Attributes:
-        mode:         Execution mode - "local" or "docker".
-        image:        Docker image to use. None for local mode or when the
-                      default should be resolved at dispatch time.
-        source:       Which layer of the precedence chain produced this spec:
-                      "env", "yaml", "user_config", "auto_detected", "default".
-        image_source: Where the Docker image was resolved from:
-                      "env", "yaml", "runner_override", "user_config",
-                      "local_build", "registry", or None (local mode / unresolved).
-    """
-
-    mode: RunnerMode
-    image: str | None
-    source: str
-    image_source: str | None = None
-    extra_mounts: list[tuple[str, str]] = field(default_factory=list)
-
-    @property
-    def is_explicit(self) -> bool:
-        """True if this runner was an explicit user pin (env var / YAML / user config).
-
-        Explicit pins win over multi-engine Docker elevation; auto-resolved
-        runners (``auto_detected`` / ``default``) do not. Classification lives
-        here, next to the ``source`` taxonomy it describes.
-        """
-        return self.source in EXPLICIT_RUNNER_SOURCES
-
-    def to_runner_info(self) -> dict[str, str | None]:
-        """Build runner info dict for progress display callbacks."""
-        return {
-            "mode": self.mode,
-            "source": self.source,
-            "image": self.image,
-            "image_source": self.image_source,
-        }
 
 
 # ---------------------------------------------------------------------------

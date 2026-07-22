@@ -114,8 +114,8 @@ class TestDockerRunnerIntegration:
 
     def test_runner_provenance_recorded(self, tmp_path):
         """Docker runner provenance is recorded on the saved result."""
+        from llenergymeasure.config.runner_spec import RunnerSpec
         from llenergymeasure.domain.experiment import RunnerProvenance
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
         from llenergymeasure.study.runner import _provenance_from_spec
 
         provenance = _provenance_from_spec(
@@ -188,7 +188,7 @@ class TestDockerRunnerIntegration:
         )
 
         # Patch resolve_study_runners to force Docker dispatch
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
 
         docker_spec = RunnerSpec(mode="docker", image=IMAGE, source="test")
 
