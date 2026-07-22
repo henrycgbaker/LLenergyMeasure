@@ -43,7 +43,7 @@ def write_resolution(
     subdir = study_dir / dir_name
     subdir.mkdir(parents=True, exist_ok=True)
     payload = {
-        "bundle_version": "1.0",
+        "bundle_version": "2.0",
         "experiment_id": f"exp-{full_hash[:8]}",
         "measurement_config_hash": full_hash,
         "engine": engine,

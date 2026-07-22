@@ -100,7 +100,7 @@ class TestRunContainerExperiment:
         snap = EnvironmentSnapshot(
             hardware=EnvironmentMetadata(
                 gpu=GPUEnvironment(name="NVIDIA A100-SXM4-80GB", vram_total_mb=81920.0),
-                cuda=CUDAEnvironment(version="12.4", driver_version="535.104"),
+                cuda=CUDAEnvironment(driver_supported_version="12.4", driver_version="535.104"),
                 cpu=CPUEnvironment(platform="Linux"),
                 collected_at=datetime(2026, 1, 2, 0, 0, 0),
             ),

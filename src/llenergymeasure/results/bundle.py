@@ -53,8 +53,9 @@ from llenergymeasure.results import persistence
 from llenergymeasure.utils.io import load_json
 
 if TYPE_CHECKING:
-    from llenergymeasure.domain.environment import EnvironmentSnapshot, RunnerEnvironment
-    from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
+    from llenergymeasure.domain.environment import EnvironmentSnapshot
+    from llenergymeasure.domain.experiment import ExperimentResult
+    from llenergymeasure.domain.provenance import RunnerProvenance
 
 logger = logging.getLogger(__name__)
 
@@ -153,8 +154,7 @@ class BundleWriter:
         self,
         *,
         host_snapshot: EnvironmentSnapshot | None,
-        runner_environment: RunnerEnvironment | None = None,
-        runner_provenance: RunnerProvenance | None = None,
+        runner: RunnerProvenance | None = None,
     ) -> None:
         """Write environment.json with the rescue-preference policy.
 
@@ -165,14 +165,18 @@ class BundleWriter:
         A docker run that lands without a rescued snapshot warns loudly: the
         persisted environment.json would then describe the dispatching host, not
         the container the experiment actually ran in.
+
+        ``runner`` is the unified runner provenance: it is both the
+        environment.json ``runner`` block (image + digest + source) and the
+        mode discriminator for the missing-rescue docker warning.
         """
         if self._dir is None:
             raise RuntimeError("write_result() must be called before write_environment()")
 
         # Attach the host-only runner block to the host snapshot so the host
         # write carries it (local path, and the docker no-rescue fallback).
-        if runner_environment is not None and host_snapshot is not None:
-            host_snapshot = host_snapshot.model_copy(update={"runner": runner_environment})
+        if runner is not None and host_snapshot is not None:
+            host_snapshot = host_snapshot.model_copy(update={"runner": runner})
 
         if host_snapshot is not None:
             persistence.save_environment(
@@ -186,8 +190,8 @@ class BundleWriter:
             self._ts_source_dir / ENVIRONMENT_FILENAME if self._ts_source_dir is not None else None
         )
         if rescued is not None and rescued.exists():
-            self._rescue_environment(rescued, runner_environment)
-        elif runner_provenance is not None and runner_provenance.mode == RUNNER_DOCKER:
+            self._rescue_environment(rescued, runner)
+        elif runner is not None and runner.mode == RUNNER_DOCKER:
             logger.warning(
                 "No in-container environment.json rescued for %s (cycle %d) at %s - "
                 "environment.json records the dispatching host, not the container "
@@ -197,9 +201,7 @@ class BundleWriter:
                 self._dir,
             )
 
-    def _rescue_environment(
-        self, rescued: Path, runner_environment: RunnerEnvironment | None
-    ) -> None:
+    def _rescue_environment(self, rescued: Path, runner: RunnerProvenance | None) -> None:
         """Prefer the rescued in-container environment.json over the host write.
 
         Loads the rescued snapshot, patches the host-only runner block into it,
@@ -211,7 +213,7 @@ class BundleWriter:
         self._stage_json_artefact(
             rescued,
             ENVIRONMENT_FILENAME,
-            lambda payload: self._patch_runner_block(payload, runner_environment),
+            lambda payload: self._patch_runner_block(payload, runner),
             failure_note=(
                 "Failed to rescue in-container environment.json - environment.json will "
                 "record the dispatching host, not the container the experiment ran in"
@@ -256,7 +258,7 @@ class BundleWriter:
 
     @staticmethod
     def _patch_runner_block(
-        payload: dict[str, Any], runner_environment: RunnerEnvironment | None
+        payload: dict[str, Any], runner: RunnerProvenance | None
     ) -> dict[str, Any]:
         """Patch the host-only runner block into a rescued environment payload.
 
@@ -265,8 +267,8 @@ class BundleWriter:
         in and stamps ``bundle_version`` if the (older-image) payload omitted it.
         A no-op when no runner block is available.
         """
-        if runner_environment is not None:
-            payload["runner"] = runner_environment.model_dump()
+        if runner is not None:
+            payload["runner"] = runner.model_dump()
             payload.setdefault("bundle_version", BUNDLE_VERSION)
         return payload
 
@@ -475,19 +477,25 @@ class BundleReader:
     def _read_result_artefact(path: Path) -> ExperimentResult:
         """Parse result.json strictly, with the legacy best-effort fallback.
 
-        A pre-bundle_version result.json (no ``bundle_version`` key) is still
-        read best-effort with a single ``UserWarning`` - the one documented
-        pre-1.0 bundle break. The shared parser (tolerant=False) validates the
-        payload; the ExperimentResult before-validator drops the retired
-        ``schema_version`` key so the legacy file falls back to the default
-        ``bundle_version`` rather than being rejected.
+        A legacy result.json - one with no ``bundle_version`` key, or a
+        ``bundle_version`` older than the current ``BUNDLE_VERSION`` - is read
+        best-effort with a single ``UserWarning`` covering the whole bundle (the
+        one documented pre-1.0 break policy). The shared parser (tolerant=False)
+        validates the payload; the ExperimentResult before-validator drops keys
+        retired across a bundle break (``schema_version``, the top-level
+        ``baseline_power_w`` copy) so the legacy file falls back to the current
+        defaults rather than being rejected. Legacy environment.json shapes (the
+        old separate runner block, the renamed CUDA field, the dropped hardware
+        fields) are tolerated on the environment read path, silently, so this one
+        warning is not multiplied per artefact.
         """
         from llenergymeasure.domain.result_payload import parse_experiment_result_payload
 
         raw = load_json(path)
-        if isinstance(raw, dict) and "bundle_version" not in raw:
+        if isinstance(raw, dict) and raw.get("bundle_version") != BUNDLE_VERSION:
             warnings.warn(
-                "pre-bundle_version result; readable best-effort",
+                f"legacy results bundle (bundle_version={raw.get('bundle_version')!r}); "
+                "readable best-effort",
                 UserWarning,
                 stacklevel=2,
             )

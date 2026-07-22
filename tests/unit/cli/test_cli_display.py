@@ -17,6 +17,7 @@ from llenergymeasure.cli._display import (
     print_result_summary,
 )
 from llenergymeasure.cli._vram import DTYPE_BYTES
+from llenergymeasure.domain.metrics import EnergyBreakdown
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
@@ -306,7 +307,7 @@ def test_print_result_summary_minimal(capsys):
 
     result = make_result(
         total_flops=0.0,
-        baseline_power_w=None,
+        energy_breakdown=None,
         energy_adjusted_j=None,
         measurement_warnings=[],
         latency_stats=None,
@@ -323,11 +324,11 @@ def test_print_result_summary_minimal(capsys):
 
 
 def test_print_result_summary_with_baseline(capsys):
-    """Result with baseline_power_w shows 'Baseline' line."""
+    """A result whose energy_breakdown carries baseline power shows the 'Baseline' line."""
     from tests.conftest import make_result
 
     result = make_result(
-        baseline_power_w=50.0,
+        energy_breakdown=EnergyBreakdown(raw_j=100.0, adjusted_j=92.0, baseline_power_w=50.0),
         energy_adjusted_j=8.0,
     )
     print_result_summary(result)

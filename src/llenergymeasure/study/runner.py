@@ -65,9 +65,9 @@ from llenergymeasure.utils.io import load_json
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
     from llenergymeasure.config.runner_spec import RunnerSpec
-    from llenergymeasure.domain.environment import EnvironmentSnapshot, RunnerEnvironment
-    from llenergymeasure.domain.experiment import RunnerProvenance
+    from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.progress import StudyProgressCallback
+    from llenergymeasure.domain.provenance import RunnerProvenance
     from llenergymeasure.study.manifest import ManifestWriter
 
 __all__ = [
@@ -86,48 +86,35 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def _provenance_from_spec(spec: RunnerSpec | None) -> RunnerProvenance:
-    """Build a RunnerProvenance from a resolved RunnerSpec.
-
-    The config-layer ``RunnerSpec`` cannot live on the domain result (config and
-    domain are independent sibling layers), so its execution-mode fields are
-    mirrored onto the domain-layer ``RunnerProvenance``. When no spec is available
-    (pure in-process local run), records ``mode="local"`` with ``source="local"``
-    and no image.
-    """
-    from llenergymeasure.domain.experiment import RunnerProvenance
-
-    if spec is None:
-        return RunnerProvenance(mode="local", image=None, source="local", image_source=None)
-    return RunnerProvenance(
-        mode=spec.mode,
-        image=spec.image,
-        source=spec.source,
-        image_source=spec.image_source,
-    )
-
-
-def _runner_environment(
+def _provenance_from_spec(
     spec: RunnerSpec | None, *, resolved_image: str | None = None
-) -> RunnerEnvironment:
-    """Build the environment.json ``runner`` block from a resolved RunnerSpec.
+) -> RunnerProvenance:
+    """Build the unified RunnerProvenance from a resolved RunnerSpec.
 
-    Records docker-vs-local, the exact image and its resolved registry digest
-    (the reproducibility anchor), and the precedence source. For docker specs
-    the digest is resolved host-side via ``docker image inspect`` on the image
-    that actually ran (``resolved_image`` when the spec left the image implicit).
-    Digest resolution is best-effort: an unresolved digest records None and is
-    debug-logged, never raising - so environment.json provenance never fails a run.
+    The config-layer ``RunnerSpec`` cannot live on a domain result (config and
+    domain are independent sibling layers), so its execution-mode fields are
+    mirrored onto the domain-layer ``RunnerProvenance``. The one model is
+    serialised into both result.json (self-contained provenance) and the
+    environment.json ``runner`` block, so this single builder populates the full
+    superset - including the registry digest the environment block anchors on.
 
-    Local specs (and no spec at all) record ``mode="local"`` with no image or
-    digest and the spec's source (``"local"`` when no spec was resolved).
+    For docker specs the digest is resolved host-side via ``docker image inspect``
+    on the image that actually ran (``resolved_image`` when the spec left the
+    image implicit). Digest resolution is best-effort: an unresolved digest
+    records None and is debug-logged, never raising - so provenance never fails a
+    run. Local specs (and no spec at all) record ``mode="local"`` with no image,
+    digest, or image_source and the spec's source (``"local"`` when no spec was
+    resolved).
     """
-    from llenergymeasure.domain.environment import RunnerEnvironment
+    from llenergymeasure.domain.provenance import RunnerProvenance
 
     if spec is None or spec.mode != RUNNER_DOCKER:
-        return RunnerEnvironment(
+        return RunnerProvenance(
             mode="local",
+            image=None,
             source=spec.source if spec is not None else "local",
+            image_source=None,
+            image_digest=None,
         )
 
     from llenergymeasure.infra.image_registry import resolve_image_digest
@@ -137,10 +124,16 @@ def _runner_environment(
     if image is not None and digest is None:
         logger.debug(
             "Could not resolve registry digest for runner image %s; "
-            "environment.json runner.image_digest will be null.",
+            "runner provenance image_digest will be null.",
             image,
         )
-    return RunnerEnvironment(mode="docker", image=image, image_digest=digest, source=spec.source)
+    return RunnerProvenance(
+        mode=spec.mode,
+        image=image,
+        source=spec.source,
+        image_source=spec.image_source,
+        image_digest=digest,
+    )
 
 
 def _save_and_record(
@@ -159,7 +152,6 @@ def _save_and_record(
     resolution_log: dict[str, Any] | None = None,
     resolved_config_hash: str | None = None,
     runner_provenance: RunnerProvenance | None = None,
-    runner_environment: RunnerEnvironment | None = None,
 ) -> None:
     """Assemble the results bundle and update the manifest.
 
@@ -178,9 +170,9 @@ def _save_and_record(
         environment_snapshot: Host EnvironmentSnapshot for environment.json (a
             rescued in-container snapshot is preferred over it when present).
         resolution_log / resolved_config_hash: Patched into the config.json sidecar.
-        runner_provenance: Execution mode; folded into result.json.
-        runner_environment: The environment.json ``runner`` block (image + digest,
-            precedence source).
+        runner_provenance: The unified runner provenance (mode, image, source,
+            image_source, image_digest); folded into result.json and written as
+            the environment.json ``runner`` block.
 
     On any save failure, marks the experiment failed on the manifest.
     """
@@ -199,8 +191,7 @@ def _save_and_record(
         result_path = writer.write_result(result, runner_provenance=runner_provenance)
         writer.write_environment(
             host_snapshot=environment_snapshot,
-            runner_environment=runner_environment,
-            runner_provenance=runner_provenance,
+            runner=runner_provenance,
         )
         writer.move_config_sidecar(
             resolved_config_hash=resolved_config_hash,
@@ -783,7 +774,6 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         ts_source_dir: Path | None = None,
         environment_snapshot: Any | None = None,
         runner_provenance: RunnerProvenance | None = None,
-        runner_environment: RunnerEnvironment | None = None,
     ) -> None:
         """Update manifest and signal study display based on experiment outcome."""
         model_name = config.task.model
@@ -825,7 +815,6 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 resolution_log=self._resolution_logs.get(config_hash),
                 resolved_config_hash=self._resolved_hashes.get(config_hash),
                 runner_provenance=runner_provenance,
-                runner_environment=runner_environment,
             )
             if self._progress:
                 host_path = self.result_files[-1] if self.result_files else None

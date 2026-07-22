@@ -30,10 +30,11 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bundle_version` | `str` | Results-bundle version (current: `"1.0"`), shared across `result.json`, `config.json`, and `environment.json` as one contract. |
+| `bundle_version` | `str` | Results-bundle version (current: `"2.0"`), shared across `result.json`, `config.json`, and `environment.json` as one contract. |
 | `experiment_id` | `str` | Unique identifier for this experiment run. |
 | `measurement_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
 | `llenergymeasure_version` | `str \| None` | Package version that produced this result. |
+| `measurement_mode` | `str` | The measurement mode that produced this result: the offline/server discriminator. `"offline"` for batch measurement (the only mode today); `"server"` arrives with server mode (v0.8.0). A plain string, not a closed vocabulary. |
 | `engine` | `str` | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar. |
 | `model_name` | `str` | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar. |
 
@@ -69,9 +70,8 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `baseline_power_w` | `float \| None` | Idle GPU power in watts measured before the experiment. `None` when baseline measurement is disabled. |
 | `energy_per_device_j` | `list[float] \| None` | Per-GPU energy breakdown. Currently populated by the Zeus sampler only. `None` for NVML and CodeCarbon. |
-| `energy_breakdown` | `EnergyBreakdown \| None` | Detailed breakdown with baseline adjustment intervals. |
+| `energy_breakdown` | `EnergyBreakdown \| None` | Detailed breakdown with baseline adjustment intervals. Carries `baseline_power_w` (idle GPU power in watts), the single home for the baseline reading since bundle 2.0 retired the former top-level `baseline_power_w` copy. |
 
 ### Multi-GPU
 

@@ -114,8 +114,8 @@ def _collect_gpu(pynvml: Any, handle: Any) -> GPUEnvironment:
 
 
 def _collect_cuda(pynvml: Any) -> CUDAEnvironment:
-    """Collect CUDA and driver version information."""
-    cuda_version = "unknown"
+    """Collect CUDA driver information reported by NVML."""
+    driver_supported_version = "unknown"
     driver_version = "unknown"
 
     try:
@@ -131,13 +131,13 @@ def _collect_cuda(pynvml: Any) -> CUDAEnvironment:
         cuda_driver_version = pynvml.nvmlSystemGetCudaDriverVersion()
         major = cuda_driver_version // 1000
         minor = (cuda_driver_version % 1000) // 10
-        cuda_version = f"{major}.{minor}"
-        logger.debug("Environment: CUDA version = %s", cuda_version)
+        driver_supported_version = f"{major}.{minor}"
+        logger.debug("Environment: driver-supported CUDA version = %s", driver_supported_version)
     except (pynvml.NVMLError, AttributeError) as e:
-        logger.debug("Environment: failed to get CUDA version: %s", e)
+        logger.debug("Environment: failed to get driver-supported CUDA version: %s", e)
 
     return CUDAEnvironment(
-        version=cuda_version,
+        driver_supported_version=driver_supported_version,
         driver_version=driver_version,
     )
 
@@ -239,7 +239,7 @@ def _unavailable_metadata() -> EnvironmentMetadata:
     """Create metadata with reasonable defaults when NVML unavailable."""
     return EnvironmentMetadata(
         gpu=GPUEnvironment(name="unavailable", vram_total_mb=0.0),
-        cuda=CUDAEnvironment(version="unknown", driver_version="unknown"),
+        cuda=CUDAEnvironment(driver_supported_version="unknown", driver_version="unknown"),
         thermal=ThermalEnvironment(),
         cpu=_collect_cpu(),
         container=_collect_container(),

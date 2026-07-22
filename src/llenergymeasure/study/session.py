@@ -145,7 +145,7 @@ class _OfflineSession:
         provenance), and the runner-side builders are imported lazily here - the
         single result-reporting call site both sessions funnel through.
         """
-        from llenergymeasure.study.runner import _provenance_from_spec, _runner_environment
+        from llenergymeasure.study.runner import _provenance_from_spec
 
         is_result = not isinstance(result, dict)
         self._runner._handle_result(
@@ -157,9 +157,8 @@ class _OfflineSession:
             exp_elapsed,
             ts_source_dir=ts_source_dir,
             environment_snapshot=self._runner._get_env_snapshot() if is_result else None,
-            runner_provenance=_provenance_from_spec(spec),
-            runner_environment=(
-                _runner_environment(spec, resolved_image=resolved_image) if is_result else None
+            runner_provenance=(
+                _provenance_from_spec(spec, resolved_image=resolved_image) if is_result else None
             ),
         )
 

@@ -37,8 +37,11 @@ def print_result_summary(result: ExperimentResult) -> None:
     # --- Energy ---
     print("Energy")
     print(f"  Total          {_sig3(result.total_energy_j)} J")
-    if result.baseline_power_w is not None:
-        print(f"  Baseline       {_sig3(result.baseline_power_w)} W")
+    baseline_power_w = (
+        result.energy_breakdown.baseline_power_w if result.energy_breakdown is not None else None
+    )
+    if baseline_power_w is not None:
+        print(f"  Baseline       {_sig3(baseline_power_w)} W")
     if result.energy_adjusted_j is not None:
         print(f"  Adjusted       {_sig3(result.energy_adjusted_j)} J")
     # Per-token energy (mJ/tok) - prefer adjusted, fall back to total, no recomputation

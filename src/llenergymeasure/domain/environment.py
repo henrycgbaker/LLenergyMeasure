@@ -5,9 +5,11 @@ enabling post-hoc analysis of environmental factors affecting measurements.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from llenergymeasure.domain.provenance import RunnerProvenance
 
 
 class GPUEnvironment(BaseModel):
@@ -19,25 +21,33 @@ class GPUEnvironment(BaseModel):
         default=None,
         description="CUDA compute capability (e.g., '8.0')",
     )
-    pcie_gen: int | None = Field(
-        default=None,
-        description="PCIe generation",
-    )
-    mig_enabled: bool = Field(
-        default=False,
-        description="Whether MIG (Multi-Instance GPU) is enabled",
-    )
 
 
 class CUDAEnvironment(BaseModel):
-    """CUDA runtime information."""
+    """CUDA driver information reported by NVML."""
 
-    version: str = Field(..., description="CUDA version (e.g., '12.4')")
-    driver_version: str = Field(..., description="NVIDIA driver version string")
-    cudnn_version: str | None = Field(
-        default=None,
-        description="cuDNN version string",
+    driver_supported_version: str = Field(
+        ...,
+        description="Maximum CUDA version the installed NVIDIA driver supports, from NVML "
+        "(nvmlSystemGetCudaDriverVersion; this is the 'CUDA Version' nvidia-smi prints in its "
+        "header). A driver-side capability, distinct from the runtime CUDA version the software "
+        "stack was actually built against - that is EnvironmentSnapshot.cuda_version.",
     )
+    driver_version: str = Field(..., description="NVIDIA driver package version string")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _map_legacy_cuda_version(cls, data: Any) -> Any:
+        """Read a legacy (bundle 1.0) CUDA block best-effort.
+
+        Bundle 1.0 stored this driver-supported CUDA version under the ambiguous
+        key ``version``. Map it onto ``driver_supported_version`` so an older
+        environment.json loads rather than failing the now-renamed required field.
+        """
+        if isinstance(data, dict) and "version" in data and "driver_supported_version" not in data:
+            data = dict(data)
+            data["driver_supported_version"] = data.pop("version")
+        return data
 
 
 class ThermalEnvironment(BaseModel):
@@ -54,10 +64,6 @@ class ThermalEnvironment(BaseModel):
     default_power_limit_w: float | None = Field(
         default=None,
         description="Factory default GPU power limit in Watts",
-    )
-    fan_speed_pct: float | None = Field(
-        default=None,
-        description="Fan speed as percentage (0-100)",
     )
 
 
@@ -88,43 +94,6 @@ class ContainerEnvironment(BaseModel):
     )
 
 
-class RunnerEnvironment(BaseModel):
-    """How an experiment was executed - containerized (docker) or on the host (local).
-
-    Records the runner mode (docker vs local), the exact Docker image and its
-    resolved registry digest (the reproducibility anchor pinning the full
-    software stack: base image, CUDA, torch, patches), and the precedence
-    source that selected the runner. The digest is None for local runs, and
-    also None when it cannot be resolved (image built locally with no registry
-    digest, docker unavailable, inspect error) - resolution is best-effort and
-    never fails a run.
-
-    Sibling of ``experiment.RunnerProvenance`` (which persists into result.json):
-    both mirror the config-layer ``RunnerSpec``'s mode/image/source. They stay separate
-    because their extra fields diverge - this one carries ``image_digest`` (the
-    environment.json reproducibility anchor), RunnerProvenance carries
-    ``image_source`` (result.json image-resolution provenance).
-    """
-
-    mode: Literal["docker", "local"] = Field(
-        ..., description="Execution mode - 'docker' (containerized) or 'local' (host process)"
-    )
-    image: str | None = Field(
-        default=None,
-        description="Docker image reference used (None for local runs)",
-    )
-    image_digest: str | None = Field(
-        default=None,
-        description="Resolved image registry digest ('repo@sha256:...'). None for local "
-        "runs or when the digest could not be resolved (e.g. locally-built image).",
-    )
-    source: str = Field(
-        ...,
-        description="RunnerSpec precedence source that selected the runner (e.g. 'env', "
-        "'yaml', 'user_config', 'auto_detected', 'default', 'multi_engine_elevation', 'local')",
-    )
-
-
 class EnvironmentMetadata(BaseModel):
     """Complete environment metadata for an experiment.
 
@@ -133,7 +102,7 @@ class EnvironmentMetadata(BaseModel):
     """
 
     gpu: GPUEnvironment = Field(..., description="GPU hardware information")
-    cuda: CUDAEnvironment = Field(..., description="CUDA runtime information")
+    cuda: CUDAEnvironment = Field(..., description="CUDA driver information")
     thermal: ThermalEnvironment = Field(
         default_factory=ThermalEnvironment,
         description="GPU thermal state at experiment start",
@@ -162,11 +131,16 @@ class EnvironmentSnapshot(BaseModel):
     hardware: EnvironmentMetadata
     python_version: str
     tool_version: str
-    cuda_version: str | None = None
-    cuda_version_source: str | None = None  # "torch" | "version_txt" | "nvcc" | None
-    runner: RunnerEnvironment | None = Field(
+    cuda_version: str | None = Field(
         default=None,
-        description="How the experiment was executed (docker vs local, image + digest, "
-        "precedence source). None for older sidecars written before runner provenance "
-        "was recorded.",
+        description="Runtime CUDA version the software stack was built against, detected via "
+        "the torch/version.txt/nvcc fallback chain (cuda_version_source records which). Distinct "
+        "from the driver-supported CUDA version in hardware.cuda.driver_supported_version.",
+    )
+    cuda_version_source: str | None = None  # "torch" | "version_txt" | "nvcc" | None
+    runner: RunnerProvenance | None = Field(
+        default=None,
+        description="How the experiment was executed (docker vs local, image + digest + source, "
+        "the unified runner-provenance model). None for older sidecars written before runner "
+        "provenance was recorded.",
     )
