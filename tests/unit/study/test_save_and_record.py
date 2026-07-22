@@ -852,7 +852,7 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
     the runner block via the host snapshot) survives and a loud warning fires.
 
     Covers the combination the earlier permission-error test omitted: rescue fails
-    *and* a runner_environment is present. The runner block must not be lost - it was
+    *and* a runner provenance block is present. The runner block must not be lost - it was
     attached to the host snapshot and written by save_environment before the rescue.
     """
     import json

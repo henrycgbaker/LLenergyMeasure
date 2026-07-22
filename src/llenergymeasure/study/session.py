@@ -3,8 +3,10 @@
 An :class:`ExperimentSession` is one measurement session: a context manager
 whose ``__enter__`` acquires the session's resources (spawn a worker subprocess,
 prepare a container), whose ``run()`` produces the session's result payload, and
-whose ``__exit__`` releases everything - ALWAYS, including on the SIGINT,
-circuit-break, and exception paths.
+whose ``__exit__`` releases everything the session acquired - on the normal,
+SIGINT, circuit-break, and exception paths alike. A failure DURING ``__enter__``
+acquisition (before the ``with`` body is ever entered) releases whatever was
+acquired so far and re-raises, so a partially acquired session never leaks.
 
 The two offline (batch) implementations here wrap today's dispatch paths:
 
@@ -224,59 +226,69 @@ class SubprocessSession(_OfflineSession):
                 runner_info=self._local_spec.to_runner_info() if self._local_spec else None,
             )
 
-        self._exp_start = time.monotonic()
+        # Acquire the session's resources. If any step here raises (e.g. the
+        # pre-dispatch GPU-residual check, which fires before the worker starts),
+        # the `with` statement never calls __exit__, so release whatever was
+        # acquired and re-raise. _cleanup tolerates partial init: every handle
+        # starts None and is None-checked there.
+        try:
+            self._exp_start = time.monotonic()
 
-        # Create a temp dir for harness artefacts. The harness receives it as
-        # output_dir (a runtime param, not from config) and writes config.json
-        # there always, plus timeseries.parquet when save_timeseries is on. The
-        # staging dir is created regardless of save_timeseries so the config.json
-        # sidecar - sole home of provenance, authoritative home of identity -
-        # always materialises; __exit__ removes it after _handle_result copies
-        # the artefacts into the study directory.
-        save_ts = runner.study.output.save_timeseries
-        self._ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
+            # Create a temp dir for harness artefacts. The harness receives it as
+            # output_dir (a runtime param, not from config) and writes config.json
+            # there always, plus timeseries.parquet when save_timeseries is on. The
+            # staging dir is created regardless of save_timeseries so the config.json
+            # sidecar - sole home of provenance, authoritative home of identity -
+            # always materialises; __exit__ removes it after _handle_result copies
+            # the artefacts into the study directory.
+            save_ts = runner.study.output.save_timeseries
+            self._ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
 
-        # Resolve cached snapshot in parent - serialised to subprocess via Pipe
-        snapshot = runner._get_env_snapshot()
+            # Resolve cached snapshot in parent - serialised to subprocess via Pipe
+            snapshot = runner._get_env_snapshot()
 
-        # Resolve cached baseline in parent - avoids 30s re-measurement per subprocess
-        baseline = runner._get_baseline(config) if config.measurement.baseline.enabled else None
+            # Resolve cached baseline in parent - avoids 30s re-measurement per subprocess
+            baseline = runner._get_baseline(config) if config.measurement.baseline.enabled else None
 
-        self._parent_conn, child_conn = self._mp_ctx.Pipe(duplex=False)
-        self._progress_queue = self._mp_ctx.Queue()
+            self._parent_conn, child_conn = self._mp_ctx.Pipe(duplex=False)
+            self._progress_queue = self._mp_ctx.Queue()
 
-        self._process = self._mp_ctx.Process(
-            target=_run_experiment_worker,
-            args=(config, child_conn, self._progress_queue, snapshot),
-            kwargs={
-                "output_dir": str(self._ts_tmpdir),
-                "save_timeseries": save_ts,
-                "baseline": baseline,
-                "study_dir": str(runner.study_dir),
-                "study_run_id": runner.study_run_id,
-                "cycle": self.cycle,
-                "config_hash": self.config_hash,
-            },
-            daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
-        )
+            self._process = self._mp_ctx.Process(
+                target=_run_experiment_worker,
+                args=(config, child_conn, self._progress_queue, snapshot),
+                kwargs={
+                    "output_dir": str(self._ts_tmpdir),
+                    "save_timeseries": save_ts,
+                    "baseline": baseline,
+                    "study_dir": str(runner.study_dir),
+                    "study_run_id": runner.study_run_id,
+                    "cycle": self.cycle,
+                    "config_hash": self.config_hash,
+                },
+                daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
+            )
 
-        self._consumer = threading.Thread(
-            target=_consume_progress_events,
-            args=(self._progress_queue, runner._progress),
-            daemon=True,
-        )
-        self._consumer.start()
+            self._consumer = threading.Thread(
+                target=_consume_progress_events,
+                args=(self._progress_queue, runner._progress),
+                daemon=True,
+            )
+            self._consumer.start()
 
-        runner.manifest.mark_running(self.config_hash, self.cycle)
-        runner._active_process = self._process
+            runner.manifest.mark_running(self.config_hash, self.cycle)
+            runner._active_process = self._process
 
-        # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
-        from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
+            # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
+            from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
 
-        check_gpu_memory_residual()
+            check_gpu_memory_residual()
 
-        self._process.start()
-        child_conn.close()
+            self._process.start()
+            child_conn.close()
+        except BaseException:
+            self._torn_down = True
+            self._cleanup()
+            raise
         return self
 
     def run(self) -> Any:
@@ -369,7 +381,8 @@ class SubprocessSession(_OfflineSession):
                     _kill_process_group(self._process.pid, signal.SIGKILL)
                     self._process.join()
         # Stop the progress consumer (no-op if run() already did).
-        self._stop_consumer()
+        with contextlib.suppress(Exception):
+            self._stop_consumer()
         # Close the read end of the Pipe (C4 FD-leak fix): exactly once, here.
         if self._parent_conn is not None:
             with contextlib.suppress(Exception):
@@ -459,7 +472,7 @@ class DockerSession(_OfflineSession):
             # Host-side preflight doesn't run in Docker path - checked inside container
             runner._progress.on_step_skip("preflight", "checked inside container")
 
-        extra_mounts = list(spec.extra_mounts) if spec.extra_mounts else []
+        extra_mounts: list[tuple[str, str]] = []
         cache_key = runner._baseline_cache_key(config)
         baseline = runner._get_baseline(config) if config.measurement.baseline.enabled else None
         if baseline is not None:

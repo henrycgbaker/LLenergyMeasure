@@ -17,7 +17,7 @@ from unittest.mock import patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Formula tests - MeasurementHarness._build_result inference_memory_mb
+# Formula tests - build_offline_metrics (harness/result_assembly.py) inference_memory_mb
 # ---------------------------------------------------------------------------
 
 
@@ -32,7 +32,7 @@ def test_inference_memory_is_peak_minus_model():
         peak_memory_mb=1024.0,
         model_memory_mb=512.0,
     )
-    # Compute using the same formula as MeasurementHarness._build_result
+    # Compute using the same formula as build_offline_metrics (harness/result_assembly.py)
     inference_memory_mb = max(0.0, output.peak_memory_mb - output.model_memory_mb)
     assert inference_memory_mb == 512.0
 
