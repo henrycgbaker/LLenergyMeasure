@@ -56,6 +56,17 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Changed
 
+- Internal restructure (no behavior or results change): the resolved `RunnerSpec`
+  value object moved from `infra.runner_resolution` to the config layer
+  (`llenergymeasure.config.runner_spec`), so the study layer no longer imports
+  infra for a config-derived fact; its `is_explicit` classification now sits next
+  to the precedence taxonomy it reads in `config.ssot`. The resolution machinery
+  (`resolve_runner`, `resolve_study_runners`, `is_docker_available`) stays in
+  infra. The engine-installed host check is now a public
+  `harness.preflight.check_engine_installed` (was a cross-package private import),
+  and the `LLEM_DOCKER_GPUS` vs `study_execution.gpu_indices` conflict warning is
+  emitted from a single choke point in `orchestrate_study` rather than duplicated
+  across the single-experiment and `StudyRunner` dispatch paths.
 - Internal restructure (no behavior or results change): one experiment dispatch
   is now an `ExperimentSession` (`llenergymeasure.study.session`) - a context
   manager whose `__enter__` acquires the dispatch's resources, whose `run()`

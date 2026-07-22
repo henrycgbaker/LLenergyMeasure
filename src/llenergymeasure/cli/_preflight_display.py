@@ -29,7 +29,7 @@ from llenergymeasure.config.ssot import SOURCE_MULTI_ENGINE_ELEVATION
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
 
 
 def build_preflight_panel(

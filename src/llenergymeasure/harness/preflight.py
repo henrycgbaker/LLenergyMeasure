@@ -36,8 +36,13 @@ def _check_cuda_available() -> bool:
     return bool(torch.cuda.is_available())
 
 
-def _check_engine_installed(engine: str) -> bool:
-    """Return True if the package that provides *engine* is importable."""
+def check_engine_installed(engine: str) -> bool:
+    """Return True if the package that provides *engine* is importable.
+
+    Public because the study-layer multi-engine pre-flight reuses this host
+    importability check (find_spec on the engine package); harness/preflight owns
+    the fact, so callers import the name rather than reaching for a private symbol.
+    """
     try:
         engine_key = Engine(engine)
     except ValueError:
@@ -134,7 +139,7 @@ def run_preflight(config: ExperimentConfig) -> None:
         failures.append("CUDA not available - is a GPU present and CUDA installed?")
 
     # Check 2: Engine installed
-    if not _check_engine_installed(config.engine):
+    if not check_engine_installed(config.engine):
         package = ENGINE_PACKAGES.get(config.engine, config.engine)
         failures.append(
             f"{config.engine} not available on host (missing: {package}). "

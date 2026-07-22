@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from llenergymeasure.config.models import StudyConfig
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.domain.bundle_artefacts import (
     ENVIRONMENT_FILENAME,
@@ -31,7 +32,6 @@ from llenergymeasure.domain.bundle_artefacts import (
 )
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
-from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study.single import run_single_experiment
 
 logger = logging.getLogger(__name__)
@@ -217,7 +217,9 @@ def _resolve_runner_specs(
     runner pins win; auto-resolved engines elevate to Docker, raising
     PreFlightError when a local-pinned engine is not importable on the host or an
     auto-resolved engine needs Docker but it is unavailable), emits preflight
-    progress, and warns when the study mixes local and Docker runners.
+    progress, and warns on two resolved-plan conflicts: mixed local/Docker
+    runners, and a GPU selector set both via LLEM_DOCKER_GPUS and
+    study_execution.gpu_indices when a Docker container will launch.
     """
     from llenergymeasure.study.preflight import run_study_preflight
 
@@ -250,6 +252,17 @@ def _resolve_runner_specs(
             "Mixed runners detected. For consistent measurements, "
             "consider running all engines in Docker."
         )
+
+    # Physical GPU selector precedence (env>config): warn once per study dispatch
+    # when both LLEM_DOCKER_GPUS and study_execution.gpu_indices are set and a
+    # Docker container will actually launch. GPU scoping only affects containers,
+    # so a study with no Docker runner never triggers the warning. Single choke
+    # point for both dispatch paths (single-experiment and StudyRunner).
+    if RUNNER_DOCKER in modes:
+        from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
+
+        warn_on_gpu_selector_conflict(study.study_execution.gpu_indices)
+
     return runner_specs, system_overrides
 
 

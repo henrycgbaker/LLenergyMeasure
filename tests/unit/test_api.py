@@ -297,7 +297,7 @@ class _MockBackend:
 
 def _mock_preflight_return(study, **kw):
     """Mock preflight that returns (runner_specs, system_overrides) tuple."""
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
 
     engines = {exp.engine for exp in study.experiments}
     specs = {b: RunnerSpec(mode="local", image=None, source="test") for b in engines}
@@ -407,7 +407,7 @@ def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
 
     study_preflight_calls: list = []
 
@@ -551,7 +551,7 @@ def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
 def test_run_preresolved_without_skip_preflight_raises():
     """Passing preresolved with skip_preflight=False is rejected, not silently honoured."""
     import llenergymeasure.study.orchestration as api_module
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
 
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     study = StudyConfig(experiments=[config])
@@ -875,7 +875,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
 
     mock_result = make_result(experiment_id="runner-wired")
 
@@ -950,7 +950,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.orchestration as api_module
     import llenergymeasure.study.preflight as study_pf_module
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
 
     mixed_specs = {
         "transformers": RunnerSpec(mode="local", image=None, source="default"),

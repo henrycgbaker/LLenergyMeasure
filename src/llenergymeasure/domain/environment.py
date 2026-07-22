@@ -100,7 +100,7 @@ class RunnerEnvironment(BaseModel):
     never fails a run.
 
     Sibling of ``experiment.RunnerProvenance`` (which persists into result.json):
-    both mirror ``infra.RunnerSpec``'s mode/image/source. They stay separate
+    both mirror the config-layer ``RunnerSpec``'s mode/image/source. They stay separate
     because their extra fields diverge - this one carries ``image_digest`` (the
     environment.json reproducibility anchor), RunnerProvenance carries
     ``image_source`` (result.json image-resolution provenance).

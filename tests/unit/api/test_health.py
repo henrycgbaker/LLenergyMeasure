@@ -19,8 +19,8 @@ from llenergymeasure.api.health import (
     HealthSection,
     build_health_report,
 )
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.user_config import UserConfig
-from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.infra.version_handshake import SchemaStatus
 
 

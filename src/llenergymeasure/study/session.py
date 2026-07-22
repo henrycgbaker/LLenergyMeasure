@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     import threading
 
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.study.runner import StudyRunner
 
 logger = logging.getLogger(__name__)

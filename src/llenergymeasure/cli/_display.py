@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 if TYPE_CHECKING:
-    from llenergymeasure.infra.runner_resolution import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult

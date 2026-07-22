@@ -23,6 +23,7 @@ from typing import Any, Literal
 
 from llenergymeasure.api import probe_energy_sampler
 from llenergymeasure.api.doctor import DoctorReport, run_doctor_checks
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
     ENV_HF_TOKEN,
@@ -36,6 +37,7 @@ from llenergymeasure.config.user_config import (
     load_user_config,
 )
 from llenergymeasure.device.gpu_info import gpu_inventory
+from llenergymeasure.harness.preflight import check_engine_installed
 
 # Reuse the canonical host probes rather than re-implementing them (their home is
 # docker_preflight; runner_resolution reuses the toolkit list too).
@@ -46,7 +48,7 @@ from llenergymeasure.infra.docker_preflight import (
     docker_daemon_reachable,
 )
 from llenergymeasure.infra.image_registry import get_default_image, image_present_locally
-from llenergymeasure.infra.runner_resolution import RunnerSpec, is_docker_available, resolve_runner
+from llenergymeasure.infra.runner_resolution import is_docker_available, resolve_runner
 from llenergymeasure.infra.version_handshake import SchemaStatus
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -209,7 +211,7 @@ def _resolve_image(engine: str) -> tuple[str | None, bool, str | None]:
 
 
 def _engine_line(engine: str, spec: RunnerSpec) -> CheckLine:
-    importable = importlib.util.find_spec(ENGINE_PACKAGES[Engine(engine)]) is not None
+    importable = check_engine_installed(engine)
     if importable:
         version = _probe_engine_version(engine)
         installed = f"importable locally ({version})" if version else "importable locally"

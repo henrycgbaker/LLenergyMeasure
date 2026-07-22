@@ -788,7 +788,7 @@ class TestWiring:
 
     def test_docker_preflight_called_when_docker_runner_resolved(self) -> None:
         """run_study_preflight calls run_docker_preflight when any runner is Docker."""
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = make_study(["transformers"])
@@ -821,7 +821,7 @@ class TestWiring:
 
     def test_docker_preflight_not_called_when_all_local_runners(self) -> None:
         """run_study_preflight does NOT call run_docker_preflight when all runners are local."""
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = make_study(["transformers"])
@@ -846,7 +846,7 @@ class TestWiring:
 
     def test_skip_preflight_param_passed_through(self) -> None:
         """Passing skip_preflight=True results in run_docker_preflight(skip=True)."""
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = make_study(["transformers"])
@@ -876,7 +876,7 @@ class TestWiring:
     def test_yaml_skip_preflight_respected(self) -> None:
         """execution.skip_preflight: true in YAML causes skip=True to be passed."""
         from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
@@ -910,7 +910,7 @@ class TestWiring:
     def test_cli_flag_overrides_yaml_false(self) -> None:
         """CLI skip_preflight=True overrides YAML execution.skip_preflight=False."""
         from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.config.runner_spec import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(

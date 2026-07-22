@@ -20,8 +20,8 @@ import pytest
 from rich.console import Console
 
 from llenergymeasure.cli._step_display import StudyStepDisplay
+from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.infra.docker_errors import DockerImagePullError
-from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study import image_prep
 from llenergymeasure.study.image_prep import (
     _aggregate_image_errors,

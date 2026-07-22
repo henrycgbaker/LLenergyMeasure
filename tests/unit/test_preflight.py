@@ -31,7 +31,7 @@ def _patch_all_checks_pass(monkeypatch: pytest.MonkeyPatch) -> None:
     """Monkeypatch all three checks to succeed."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -61,7 +61,7 @@ def test_preflight_passes_when_all_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_preflight_collects_all_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: False)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: False
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: False
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight,
@@ -89,7 +89,7 @@ def test_preflight_collects_all_failures(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_preflight_cuda_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: False)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -110,7 +110,7 @@ def test_preflight_cuda_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_preflight_engine_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: False
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: False
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -131,7 +131,7 @@ def test_preflight_engine_not_installed(monkeypatch: pytest.MonkeyPatch) -> None
 def test_preflight_gated_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight,
@@ -156,7 +156,7 @@ def test_preflight_gated_model(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_preflight_model_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight,
@@ -195,7 +195,7 @@ def test_preflight_local_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 def test_preflight_local_model_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
 
     # Do NOT monkeypatch _check_model_accessible - use real implementation
@@ -219,7 +219,7 @@ def test_preflight_persistence_mode_warning_not_blocking(
     # Patch all three checks to pass
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -255,7 +255,7 @@ def test_preflight_error_format(monkeypatch: pytest.MonkeyPatch) -> None:
     """Trigger 2 failures and check the formatted error string."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: False)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: False
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: False
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -289,21 +289,21 @@ def test_check_cuda_available_no_torch(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_check_engine_installed_transformers(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_check_engine_installed() delegates to find_spec for transformers."""
+    """check_engine_installed() delegates to find_spec for transformers."""
     mock_spec = MagicMock()  # truthy
     monkeypatch.setattr(
         llenergymeasure.harness.preflight.importlib.util,
         "find_spec",
         lambda name: mock_spec if name == "transformers" else None,
     )
-    assert llenergymeasure.harness.preflight._check_engine_installed("transformers") is True
+    assert llenergymeasure.harness.preflight.check_engine_installed("transformers") is True
 
 
 def test_check_engine_installed_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         llenergymeasure.harness.preflight.importlib.util, "find_spec", lambda name: None
     )
-    assert llenergymeasure.harness.preflight._check_engine_installed("vllm") is False
+    assert llenergymeasure.harness.preflight.check_engine_installed("vllm") is False
 
 
 def test_check_model_accessible_local_exists(tmp_path: Path) -> None:
@@ -485,7 +485,7 @@ def test_run_preflight_collects_hardware_errors(monkeypatch: pytest.MonkeyPatch)
     """run_preflight collects check_hardware errors into PreFlightError."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -512,7 +512,7 @@ def test_run_preflight_passes_when_hardware_check_empty(monkeypatch: pytest.Monk
     """run_preflight succeeds when check_hardware returns no errors."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -537,7 +537,7 @@ def test_run_preflight_handles_engine_import_error(monkeypatch: pytest.MonkeyPat
     """run_preflight does not crash if get_engine raises during check_hardware."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -562,7 +562,7 @@ def test_run_preflight_hardware_errors_counted_correctly(
     """check_hardware errors contribute to the total issue count in PreFlightError."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -618,7 +618,7 @@ def test_run_preflight_routes_checkpoint_compat_through_hook(
 
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
@@ -647,7 +647,7 @@ def test_run_preflight_checkpoint_compat_mock_plugin(monkeypatch: pytest.MonkeyP
     """
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
+        llenergymeasure.harness.preflight, "check_engine_installed", lambda engine: True
     )
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None

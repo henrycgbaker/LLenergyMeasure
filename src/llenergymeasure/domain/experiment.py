@@ -60,9 +60,9 @@ def mj_per_token(energy_j: float, total_tokens: float) -> float | None:
 class RunnerProvenance(BaseModel):
     """How an experiment was executed - local process or Docker container.
 
-    Persisted reproducibility metadata mirroring the fields of the infra-layer
-    ``RunnerSpec``. Kept in the domain layer (no infra import) so it can live on
-    ``ExperimentResult`` and serialise into result.json.
+    Persisted reproducibility metadata mirroring the fields of the config-layer
+    ``RunnerSpec``. Kept in the domain layer (which does not import its config
+    sibling) so it can live on ``ExperimentResult`` and serialise into result.json.
 
     Sibling of ``environment.RunnerEnvironment`` (which persists into
     environment.json): both mirror ``RunnerSpec``'s mode/image/source. They stay
