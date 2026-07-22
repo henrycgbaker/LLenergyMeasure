@@ -255,9 +255,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   but before the worker starts) now releases what was acquired and re-raises;
   previously the `with` statement skipped `__exit__` on an `__enter__` failure,
   stranding the consumer thread and leaking the staging tmpdir and pipe FDs.
-  Teardown is hardened to match: the consumer-stop call in `_cleanup` is now
-  exception-guarded like its process-reap and pipe-close siblings, so a raise
-  there can no longer skip the pipe close and staging-dir removal. ([#872])
+  Both pipe ends are now tracked on the session, so a failure between opening the
+  pipe and the worker start releases the parent AND child fds deterministically
+  rather than leaving the child end to refcount reclamation. Teardown is hardened
+  to match: the consumer-stop call in `_cleanup` is now exception-guarded like its
+  process-reap and pipe-close siblings, so a raise there can no longer skip the
+  pipe close and staging-dir removal. ([#872])
 - Doc/comment tidy: the `BundleWriter.write_environment` usage example and two
   peak-memory test comments now name the current API and formula owner
   (`write_environment(*, host_snapshot, runner=...)` and `build_offline_metrics`),

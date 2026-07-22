@@ -203,6 +203,7 @@ class SubprocessSession(_OfflineSession):
         # Populated in __enter__.
         self._ts_tmpdir: Path | None = None
         self._parent_conn: Any = None
+        self._child_conn: Any = None
         self._progress_queue: Any = None
         self._consumer: threading.Thread | None = None
         self._process: Any = None
@@ -250,12 +251,12 @@ class SubprocessSession(_OfflineSession):
             # Resolve cached baseline in parent - avoids 30s re-measurement per subprocess
             baseline = runner._get_baseline(config) if config.measurement.baseline.enabled else None
 
-            self._parent_conn, child_conn = self._mp_ctx.Pipe(duplex=False)
+            self._parent_conn, self._child_conn = self._mp_ctx.Pipe(duplex=False)
             self._progress_queue = self._mp_ctx.Queue()
 
             self._process = self._mp_ctx.Process(
                 target=_run_experiment_worker,
-                args=(config, child_conn, self._progress_queue, snapshot),
+                args=(config, self._child_conn, self._progress_queue, snapshot),
                 kwargs={
                     "output_dir": str(self._ts_tmpdir),
                     "save_timeseries": save_ts,
@@ -284,7 +285,11 @@ class SubprocessSession(_OfflineSession):
             check_gpu_memory_residual()
 
             self._process.start()
-            child_conn.close()
+            # Normal path: drop the parent's copy of the child end immediately so
+            # the pipe delivers EOF when the worker exits. Null it so a later
+            # _cleanup does not double-close.
+            self._child_conn.close()
+            self._child_conn = None
         except BaseException:
             self._torn_down = True
             self._cleanup()
@@ -387,6 +392,12 @@ class SubprocessSession(_OfflineSession):
         if self._parent_conn is not None:
             with contextlib.suppress(Exception):
                 self._parent_conn.close()
+        # Close the child (write) end too: on the __enter__-failure path the
+        # normal-path close never ran, so the parent's copy of the fd would only
+        # be reclaimed by refcounting. The normal path nulls it after closing.
+        if self._child_conn is not None:
+            with contextlib.suppress(Exception):
+                self._child_conn.close()
         # Remove the timeseries staging dir after _handle_result copied the parquet.
         if self._ts_tmpdir is not None:
             shutil.rmtree(self._ts_tmpdir, ignore_errors=True)

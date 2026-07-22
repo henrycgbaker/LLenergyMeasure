@@ -180,7 +180,7 @@ def test_subprocess_session_enter_failure_releases_resources(tmp_path: Path) -> 
     config = runner.study.experiments[0]
     proc = _make_mock_process(is_alive_after_join=False)
     ctx = _make_mock_context(proc, pipe_has_data=False)
-    parent_conn = ctx.Pipe.return_value[0]
+    parent_conn, child_conn = ctx.Pipe.return_value
 
     with patch(
         "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
@@ -192,7 +192,8 @@ def test_subprocess_session_enter_failure_releases_resources(tmp_path: Path) -> 
             pass
 
     # The staging dir was created then removed; the consumer thread was started
-    # then stopped; the pipe read end was closed; the active handle was cleared.
+    # then stopped; both pipe ends were closed (the residual check raised before
+    # the normal-path child close ran); the active handle was cleared.
     ts_dir = session._ts_tmpdir
     assert ts_dir is not None and not ts_dir.exists(), "staging dir leaked on __enter__ failure"
     assert session._consumer is not None and not session._consumer.is_alive(), (
@@ -200,6 +201,7 @@ def test_subprocess_session_enter_failure_releases_resources(tmp_path: Path) -> 
     )
     assert session._consumer_stopped is True
     parent_conn.close.assert_called_once()
+    child_conn.close.assert_called_once()
     assert runner._active_process is None
 
 
