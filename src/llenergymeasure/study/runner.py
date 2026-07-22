@@ -92,8 +92,8 @@ def _provenance_from_spec(spec: RunnerSpec | None) -> RunnerProvenance:
     The config-layer ``RunnerSpec`` cannot live on the domain result (config and
     domain are independent sibling layers), so its execution-mode fields are
     mirrored onto the domain-layer ``RunnerProvenance``. When no spec is available
-    (pure in-process local run),
-    records ``mode="local"`` with ``source="local"`` and no image.
+    (pure in-process local run), records ``mode="local"`` with ``source="local"``
+    and no image.
     """
     from llenergymeasure.domain.experiment import RunnerProvenance
 
@@ -452,11 +452,6 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         uses_docker = bool(
             self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values())
         )
-
-        # Physical GPU selector precedence (env>config): LLEM_DOCKER_GPUS wins
-        # over study_execution.gpu_indices. The env-vs-config conflict warning
-        # fires once upstream in orchestrate_study (single choke point), so it is
-        # not repeated here.
 
         # Acquire per-GPU advisory locks before image preparation.
         # Lock names use the PHYSICAL device the study occupies, resolved from

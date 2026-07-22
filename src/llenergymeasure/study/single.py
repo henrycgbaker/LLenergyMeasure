@@ -94,8 +94,7 @@ def run_single_experiment(
         image = spec.image if spec.image is not None else get_default_image(config.engine)
         resolved_docker_image = image
 
-        # Physical GPU scoping precedence (env>config). The env-vs-config conflict
-        # warning fires once upstream in orchestrate_study (single choke point).
+        # Physical GPU scoping precedence (env>config).
         gpu_indices = study.study_execution.gpu_indices
 
         docker_runner = DockerRunner(

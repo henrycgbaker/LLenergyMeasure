@@ -37,6 +37,7 @@ from llenergymeasure.config.user_config import (
     load_user_config,
 )
 from llenergymeasure.device.gpu_info import gpu_inventory
+from llenergymeasure.harness.preflight import check_engine_installed
 
 # Reuse the canonical host probes rather than re-implementing them (their home is
 # docker_preflight; runner_resolution reuses the toolkit list too).
@@ -210,7 +211,7 @@ def _resolve_image(engine: str) -> tuple[str | None, bool, str | None]:
 
 
 def _engine_line(engine: str, spec: RunnerSpec) -> CheckLine:
-    importable = importlib.util.find_spec(ENGINE_PACKAGES[Engine(engine)]) is not None
+    importable = check_engine_installed(engine)
     if importable:
         version = _probe_engine_version(engine)
         installed = f"importable locally ({version})" if version else "importable locally"

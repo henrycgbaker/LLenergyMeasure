@@ -38,6 +38,8 @@ class RunnerSpec:
         image_source: Where the Docker image was resolved from:
                       "env", "yaml", "runner_override", "user_config",
                       "local_build", "registry", or None (local mode / unresolved).
+        extra_mounts: Additional host:container bind-mount pairs. Populated at
+                      dispatch time, not by the resolution chain.
     """
 
     mode: RunnerMode
