@@ -143,42 +143,18 @@ names the paths the engine drives back to their default.
 | vllm | `distributed_executor_backend=external_launcher and data_parallel_rank is set` | Enforced by rule vllm_parallelconfig_dormant_data_parallel_rank_set_true. | data_parallel_rank |
 | vllm | `seed=-1` | Enforced by rule vllm_samplingparams_dormant_seed_eq_neg1. | seed |
 
-## Runtime Limitations
-
-These combinations pass config validation but may fail at runtime
-due to hardware, model, or package requirements.
-
-| Engine | Parameter | Limitation | Resolution |
-|---------|-----------|------------|------------|
-| transformers | `transformers.engine_params.attn_implementation=flash_attention_2` | flash-attn requires Ampere+ GPU (SM80+); fails on older architectures | Use attn_implementation='sdpa' on pre-Ampere GPUs |
-| transformers | `transformers.engine_params.attn_implementation=flash_attention_3` | FA3 requires the flash_attn_3 package (built from flash-attn hopper/ directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built | Install flash_attn_3 from source, or use the Docker runner |
-| vllm | `vllm.engine_params.kv_cache_dtype=fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use kv_cache_dtype='auto' for automatic selection |
-| vllm | `vllm.engine_params.attention.backend=flashinfer` | FlashInfer requires JIT compilation on first use | Leave attention.backend unset (auto) or use 'flash_attn' |
-| vllm | `vllm.engine_params.quantization=awq/gptq` | Requires a pre-quantized model checkpoint | Use a quantized model (e.g., TheBloke/*-AWQ) or omit |
-| tensorrt | `tensorrt.engine_params.quant_config.quant_algo=FP8` | FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback | Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100 |
-| tensorrt | `tensorrt.engine_params.quant_config.quant_algo=INT8` | INT8 quantisation requires a calibrated checkpoint; uncalibrated weights degrade accuracy | Use a pre-quantised checkpoint or a weight-only algo (W4A16_AWQ, W4A16_GPTQ, W8A16) |
-
 ## Engine Capability Matrix
 
 | Feature | Transformers | vLLM | TensorRT |
 |---------|---------|------|----------|
 | Tensor Parallel | Yes | Yes | Yes |
-| Data Parallel | No | No | No |
 | BitsAndBytes (4-bit) | Yes | No | No |
 | BitsAndBytes (8-bit) | Yes | No | No |
-| Native Quantization | No | AWQ/GPTQ/FP8 | INT8/W4A16_AWQ/W4A16_GPTQ/FP8 |
-| float32 precision | Yes | No | No |
-| float16 precision | Yes | Yes | Yes |
-| bfloat16 precision | Yes | Yes | Yes |
 | Prefix Caching | No | Yes | No |
 | torch.compile | Yes | No | No |
-| Beam Search | Yes | Yes | No |
-| Speculative Decoding | Yes | Yes | No |
-| Static KV Cache | Yes | No | No |
 
 **Notes:**
 - vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes
-- TensorRT-LLM is optimised for FP16/BF16/INT8, not FP32
 
 ## Recommended Configurations by Use Case
 

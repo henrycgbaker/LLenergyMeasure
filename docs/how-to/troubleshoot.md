@@ -251,8 +251,8 @@ no error, process does not return.
 
 ## Invalid Parameter Combinations
 
-Rejected config combinations, runtime limitations, and the engine capability
-matrix are catalogued in the generated
+Rejected config combinations and the engine capability matrix are catalogued in
+the generated
 [Invalid Parameter Combinations](/reference/engines/invalid-combos) reference,
 which is regenerated from the config schema on every engine update.
 
