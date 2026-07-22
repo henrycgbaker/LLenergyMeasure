@@ -101,7 +101,6 @@ def run_single_experiment(
             timeout=study.study_execution.experiment_timeout_seconds,
             silence_timeout=study.study_execution.stdout_silence_timeout_seconds,
             source=spec.source,
-            extra_mounts=spec.extra_mounts,
             gpu_indices=gpu_indices,
         )
         docker_ts_dir: Path | None = None

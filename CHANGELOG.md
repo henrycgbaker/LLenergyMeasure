@@ -240,9 +240,32 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   prefix caching, torch.compile) remain, and `docs/reference/engines/invalid-combos.md`
   is regenerated accordingly. Docs-only: no runtime, CLI, or dispatch path reads
   these functions, so no validation or measurement behavior changes. ([#866])
+- Dropped the unused `extra_mounts` field from `RunnerSpec`. It was never
+  populated by the runner-resolution chain (its own docstring admitted it was
+  populated at dispatch time, not by resolution), so it was wrong-altitude state
+  on a resolved value object. The facade-level `DockerRunner(extra_mounts=...)`
+  parameter - the legitimate mount injection point, used for the baseline-cache
+  bind mount - is unchanged. ([#872])
 
 ### Fixed
 
+- The subprocess measurement session no longer leaks resources when its
+  `__enter__` fails mid-acquisition. A raise from the pre-dispatch GPU-residual
+  check (after the staging dir, pipe, and progress-consumer thread are acquired
+  but before the worker starts) now releases what was acquired and re-raises;
+  previously the `with` statement skipped `__exit__` on an `__enter__` failure,
+  stranding the consumer thread and leaking the staging tmpdir and pipe FDs.
+  Both pipe ends are now tracked on the session, so a failure between opening the
+  pipe and the worker start releases the parent AND child fds deterministically
+  rather than leaving the child end to refcount reclamation. Teardown is hardened
+  to match: the consumer-stop call in `_cleanup` is now exception-guarded like its
+  process-reap and pipe-close siblings, so a raise there can no longer skip the
+  pipe close and staging-dir removal. ([#872])
+- Doc/comment tidy: the `BundleWriter.write_environment` usage example and two
+  peak-memory test comments now name the current API and formula owner
+  (`write_environment(*, host_snapshot, runner=...)` and `build_offline_metrics`),
+  and a save-and-record test docstring drops the deleted `runner_environment`
+  term for the unified runner provenance block. No behavior change. ([#872])
 - Test and docstring tidy with one new orchestration regression. Stale harness
   test docstrings/comments now name the current `build_result` seam (was the
   pre-split `_build_result`), and the `PowerThermalSampler` test mock drops its
@@ -1465,3 +1488,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#868]: https://github.com/henrycgbaker/llenergymeasure/pull/868
 [#869]: https://github.com/henrycgbaker/llenergymeasure/pull/869
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
+[#872]: https://github.com/henrycgbaker/llenergymeasure/pull/872

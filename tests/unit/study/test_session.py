@@ -170,6 +170,74 @@ def test_subprocess_session_active_process_set_during_enter(tmp_path: Path) -> N
     assert runner._active_process is None
 
 
+def test_subprocess_session_enter_failure_releases_resources(tmp_path: Path) -> None:
+    """__enter__ raising at the pre-dispatch GPU-residual check must not strand
+    resources. The check fires after the staging dir, pipe, and consumer thread are
+    acquired but before the worker starts; since a failing __enter__ means the ``with``
+    statement never calls __exit__, __enter__'s own failure path releases what it
+    acquired and re-raises."""
+    runner = _make_runner(tmp_path)
+    config = runner.study.experiments[0]
+    proc = _make_mock_process(is_alive_after_join=False)
+    ctx = _make_mock_context(proc, pipe_has_data=False)
+    parent_conn, child_conn = ctx.Pipe.return_value
+
+    with patch(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
+        side_effect=RuntimeError("residual GPU memory"),
+    ):
+        session = SubprocessSession(runner, config, ctx, config_hash="h", cycle=1, index=1)
+        # The exception propagates out of __enter__ (the `with` body never runs).
+        with pytest.raises(RuntimeError, match="residual GPU memory"), session:
+            pass
+
+    # The staging dir was created then removed; the consumer thread was started
+    # then stopped; both pipe ends were closed (the residual check raised before
+    # the normal-path child close ran); the active handle was cleared.
+    ts_dir = session._ts_tmpdir
+    assert ts_dir is not None and not ts_dir.exists(), "staging dir leaked on __enter__ failure"
+    assert session._consumer is not None and not session._consumer.is_alive(), (
+        "progress consumer thread stranded on __enter__ failure"
+    )
+    assert session._consumer_stopped is True
+    parent_conn.close.assert_called_once()
+    child_conn.close.assert_called_once()
+    assert runner._active_process is None
+
+
+def test_subprocess_session_cleanup_finishes_when_stop_consumer_raises(tmp_path: Path) -> None:
+    """_cleanup completes its remaining steps when _stop_consumer raises: the pipe is
+    still closed and the staging dir still removed. The consumer-stop call is guarded
+    like its process-reap and pipe-close siblings, so a raise there cannot skip them."""
+    runner = _make_runner(tmp_path)
+    config = runner.study.experiments[0]
+    proc = _make_mock_process(is_alive_after_join=False)
+    ctx = _make_mock_context(proc, pipe_has_data=False)
+    parent_conn = ctx.Pipe.return_value[0]
+
+    with patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"):
+        session = SubprocessSession(runner, config, ctx, config_hash="h", cycle=1, index=1)
+        session.__enter__()
+
+    ts_dir = session._ts_tmpdir
+    assert ts_dir is not None and ts_dir.exists()
+    consumer = session._consumer
+
+    # _stop_consumer raises during teardown; the remaining steps must still run.
+    with patch.object(session, "_stop_consumer", side_effect=RuntimeError("consumer boom")):
+        session.__exit__(None, None, None)
+
+    assert not ts_dir.exists(), "staging dir must be removed even when _stop_consumer raises"
+    parent_conn.close.assert_called_once()
+    assert runner._active_process is None
+
+    # _stop_consumer was stubbed out, so its sentinel never reached the real
+    # consumer thread; reap it here so the test leaves no live daemon behind.
+    if consumer is not None:
+        session._progress_queue.put(None)
+        consumer.join(timeout=2.0)
+
+
 # =============================================================================
 # DockerSession: cleanup exactly once
 # =============================================================================

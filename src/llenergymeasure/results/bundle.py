@@ -67,7 +67,7 @@ class BundleWriter:
 
         writer = BundleWriter(study_dir, model_name=..., engine=..., config_hash=...)
         result_path = writer.write_result(result, runner_provenance=...)
-        writer.write_environment(host_snapshot=..., runner_environment=..., runner_provenance=...)
+        writer.write_environment(host_snapshot=..., runner=...)
         writer.move_config_sidecar(resolved_config_hash=..., resolution_log=...)
         writer.finalize()
 

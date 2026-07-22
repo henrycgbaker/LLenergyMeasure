@@ -120,7 +120,6 @@ def run_study_preflight(
                 image=image,
                 source=spec.source,
                 image_source=image_source,
-                extra_mounts=spec.extra_mounts,
             )
 
     # Docker pre-flight: run once if any engine resolves to a Docker runner.

@@ -15,7 +15,7 @@ next to the taxonomy it describes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from llenergymeasure.config.ssot import EXPLICIT_RUNNER_SOURCES, RunnerMode
 
@@ -38,15 +38,12 @@ class RunnerSpec:
         image_source: Where the Docker image was resolved from:
                       "env", "yaml", "runner_override", "user_config",
                       "local_build", "registry", or None (local mode / unresolved).
-        extra_mounts: Additional host:container bind-mount pairs. Populated at
-                      dispatch time, not by the resolution chain.
     """
 
     mode: RunnerMode
     image: str | None
     source: str
     image_source: str | None = None
-    extra_mounts: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def is_explicit(self) -> bool:
