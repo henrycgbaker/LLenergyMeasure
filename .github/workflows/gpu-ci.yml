@@ -144,14 +144,16 @@ jobs:
           # Derive the CI image: test deps + an `llem` shim. The project
           # source is NOT baked in (image contract, see header of
           # docker/Dockerfile.transformers) - the test steps bind-mount it.
-          # datamodel-code-generator backs the regen_engine_configs tests
-          # (invoked as a subprocess CLI, no importorskip guard); its pin
-          # must match pyproject [dependency-groups] dev - the generator's
-          # output formatting is version-sensitive. msgspec backs the
-          # importorskip'd type-recovery tests (parity with hosted CI).
+          # msgspec backs the importorskip'd type-recovery tests (parity
+          # with hosted CI). datamodel-code-generator is deliberately NOT
+          # installed: the only test that invokes it
+          # (test_regen_engine_configs.py) is excluded from the container
+          # run below, and a hardcoded pin here would shadow the
+          # Renovate-owned pin in pyproject. If that exclusion is ever
+          # lifted, install the generator by deriving the version from
+          # pyproject - never hardcode it.
           docker run --name llem-ci-setup llenergymeasure-ci:transformers \
-            pip install --no-cache-dir pytest pytest-xdist \
-              "datamodel-code-generator==0.68.1" msgspec
+            pip install --no-cache-dir pytest pytest-xdist msgspec
           # `llem` console-script shim for sigint_verify.sh (which invokes
           # `llem` from PATH): replicate pyproject [project.scripts]
           # llem = "llenergymeasure.cli:app". `exec` keeps the llem PID =
