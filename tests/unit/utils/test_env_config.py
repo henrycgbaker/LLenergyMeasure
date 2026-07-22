@@ -9,15 +9,18 @@ pinning). See study/gpu_locks.py.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
 from llenergymeasure.utils.env_config import (
     ENV_DOCKER_GPUS,
+    ENV_DOCKER_HF_CACHE,
     ENV_DOCKER_SHM_SIZE,
     docker_gpus,
     docker_gpus_arg,
     docker_gpus_cache_token,
+    docker_hf_cache_dir,
     docker_shm_size,
     pinned_gpu_lock_ids,
     warn_on_gpu_selector_conflict,
@@ -278,3 +281,25 @@ class TestDockerShmSize:
         """A set value is forwarded verbatim."""
         monkeypatch.setenv(ENV_DOCKER_SHM_SIZE, "16g")
         assert docker_shm_size() == "16g"
+
+
+class TestDockerHfCacheDir:
+    def test_default_is_home_hf_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unset LLEM_DOCKER_HF_CACHE -> the historical $HOME/.cache/huggingface."""
+        monkeypatch.delenv(ENV_DOCKER_HF_CACHE, raising=False)
+        assert docker_hf_cache_dir() == Path.home() / ".cache" / "huggingface"
+
+    def test_empty_is_home_hf_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty value falls back to the default."""
+        monkeypatch.setenv(ENV_DOCKER_HF_CACHE, "")
+        assert docker_hf_cache_dir() == Path.home() / ".cache" / "huggingface"
+
+    def test_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A set value is used verbatim as the host mount source."""
+        monkeypatch.setenv(ENV_DOCKER_HF_CACHE, "/mnt/scratch/hf")
+        assert docker_hf_cache_dir() == Path("/mnt/scratch/hf")
+
+    def test_override_expands_user(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A leading ~ in an explicit value is expanded."""
+        monkeypatch.setenv(ENV_DOCKER_HF_CACHE, "~/hf-cache")
+        assert docker_hf_cache_dir() == Path.home() / "hf-cache"

@@ -10,7 +10,12 @@ Manages the full container lifecycle for Docker-isolated experiment execution. A
 
 | Module | Description |
 |--------|-------------|
-| `docker_runner.py` | `DockerRunner` - dispatches a single experiment to an ephemeral container |
+| `docker_runner.py` | `DockerRunner` facade - dispatches a single experiment to an ephemeral container; composes the `docker/` package |
+| `docker/command.py` | Pure `docker run` command builders (env, mounts, GPU/shm flags, image ref, package-dispatch bootstrap) |
+| `docker/lifecycle.py` | Container process execution: image ensure, `launch()`, block-until-exit `wait_to_completion()`, and the stdout-silence watchdog |
+| `docker/exchange.py` | Exchange-dir lifecycle, result read, and the artefact rescue sweep |
+| `docker/diagnostics.py` | Container failure classification (log tail, error payload, error mapping) |
+| `_container/` | Container-side dispatch assets: `container_entrypoint.sh` + the `probe_imports.py` dependency probe it invokes |
 | `container_entrypoint.py` | Container-side entry point (invoked inside Docker) |
 | `runner_resolution.py` | `resolve_runner()`, `resolve_study_runners()` - local vs Docker selection |
 | `docker_preflight.py` | `run_docker_preflight()` - GPU visibility, CUDA/driver compat checks |

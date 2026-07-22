@@ -34,7 +34,7 @@ from llenergymeasure.config.ssot import (
     TEMP_PREFIX_EXCHANGE,
 )
 from llenergymeasure.harness.baseline import BaselineCache
-from llenergymeasure.infra.docker_runner import append_nccl_env, append_package_dispatch
+from llenergymeasure.infra.docker.command import append_nccl_env, append_package_dispatch
 from llenergymeasure.utils.env_config import docker_gpus_arg
 from llenergymeasure.utils.io import load_json
 
@@ -72,7 +72,7 @@ def build_baseline_docker_cmd(
 ) -> list[str]:
     """Build the ``docker run`` command list for a baseline-only container.
 
-    Reuses ``infra.docker_runner.append_package_dispatch`` (the same mechanism
+    Reuses ``infra.docker.command.append_package_dispatch`` (the same mechanism
     the experiment path uses) to bind-mount the host package source and route
     through ``/llem-entry.sh``. Upstream engine images do not ship the
     ``llenergymeasure`` package, so without this the baseline entry module would

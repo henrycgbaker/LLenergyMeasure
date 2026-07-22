@@ -602,6 +602,14 @@ running the vLLM container manually, add `--shm-size 8g` to your `docker run` co
 
 ---
 
+### Model cache location
+
+`llem` bind-mounts the host HuggingFace cache into each engine container so model weights persist
+across runs instead of re-downloading. Override the host directory with the `LLEM_DOCKER_HF_CACHE`
+env var (default `$HOME/.cache/huggingface`) to point at shared storage or a larger disk.
+
+---
+
 ### Pre-flight check failures
 
 `llem` runs pre-flight checks before launching any Docker container. The checks and their

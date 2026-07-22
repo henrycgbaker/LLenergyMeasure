@@ -484,30 +484,8 @@ class TestMainGuard:
 
 
 # ---------------------------------------------------------------------------
-# Dependency-priming probe (bash entrypoint heredoc)
+# Dependency-priming probe (infra/_container/probe_imports.py)
 # ---------------------------------------------------------------------------
-
-
-def _extract_probe_source() -> str:
-    """Return the Python probe embedded in the container entrypoint heredoc.
-
-    The bash entrypoint runs the dep-priming probe as an inline
-    ``python3 - <<'PYEOF' ... PYEOF`` heredoc. Nothing else shells the script,
-    so the probe is exercised here by extracting that block verbatim and
-    running it the way the container does (``python3 <file> [reqs_path]``).
-    Resolved from the repo tree this test lives in (not the installed package)
-    so it validates the script under test.
-    """
-    repo_root = Path(__file__).resolve().parents[3]
-    script_path = (
-        repo_root / "src" / "llenergymeasure" / "infra" / "_container" / "container_entrypoint.sh"
-    )
-    script = script_path.read_text(encoding="utf-8")
-    _, open_marker, rest = script.partition("<<'PYEOF'\n")
-    assert open_marker, "probe heredoc opening marker not found in entrypoint script"
-    probe_src, close_marker, _ = rest.partition("\nPYEOF")
-    assert close_marker, "probe heredoc closing marker not found in entrypoint script"
-    return probe_src
 
 
 def _make_dist(
@@ -535,22 +513,58 @@ def _make_dist(
 
 
 def _run_probe(tmp_path: Path, site: Path, requirements: str) -> list[str]:
-    """Run the extracted probe against a fake site-packages; return missing specs."""
-    probe_py = tmp_path / "probe.py"
-    probe_py.write_text(_extract_probe_source(), encoding="utf-8")
+    """Run the real probe module against a fake site-packages; return missing specs.
+
+    Runs the shipped ``infra/_container/probe_imports.py`` as a plain script file
+    (exactly as the container entrypoint does) with a synthetic site-packages on
+    ``PYTHONPATH``. A fresh subprocess per case avoids in-process
+    ``importlib.metadata`` / ``sys.modules`` contamination from the real
+    environment (some fake dist names, e.g. pyyaml, collide with installed ones).
+    """
+    from llenergymeasure.infra._container import probe_imports
+
     reqs = tmp_path / "requirements.txt"
     reqs.write_text(requirements, encoding="utf-8")
 
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(site), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
     proc = subprocess.run(
-        [sys.executable, str(probe_py), str(reqs)],
+        [sys.executable, probe_imports.__file__, str(reqs)],
         env=env,
         capture_output=True,
         text=True,
     )
     assert proc.returncode == 0, f"probe crashed: {proc.stderr}"
     return proc.stdout.split()
+
+
+class TestProbeImportsUnit:
+    """Direct-import unit coverage of the pure probe helpers.
+
+    The probe is a real module (not an inline heredoc), so its stateless helpers
+    are imported and exercised in-process.
+    """
+
+    def test_bare_name_strips_bounds_and_extras(self):
+        from llenergymeasure.infra._container import probe_imports
+
+        assert probe_imports.bare_name("pyarrow>=14.0") == "pyarrow"
+        assert probe_imports.bare_name("pydantic==2.5.0") == "pydantic"
+        assert probe_imports.bare_name("uvicorn[standard]>=0.30") == "uvicorn"
+        assert probe_imports.bare_name("numpy") == "numpy"
+
+    def test_canonical_normalises_case_and_separators(self):
+        from llenergymeasure.infra._container import probe_imports
+
+        assert probe_imports.canonical("PyYAML") == "pyyaml"
+        assert probe_imports.canonical("nvidia_ml_py") == "nvidia-ml-py"
+
+    def test_known_override_table(self):
+        from llenergymeasure.infra._container import probe_imports
+
+        assert probe_imports.IMPORT_NAME_OVERRIDES["pyyaml"] == "yaml"
+        assert probe_imports.IMPORT_NAME_OVERRIDES["nvidia-ml-py"] == "pynvml"
+        assert probe_imports.IMPORT_NAME_OVERRIDES["python-dotenv"] == "dotenv"
 
 
 class TestDepProbeImportCheck:

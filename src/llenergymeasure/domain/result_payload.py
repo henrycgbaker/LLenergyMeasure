@@ -2,7 +2,7 @@
 
 Lives in the domain layer (Layer 0) so BOTH read paths can share one parser
 without a layering violation: the infra exchange-read path
-(``infra.docker_runner._read_result``) is below ``results`` and could not import
+(``infra.docker.exchange.read_result``) is below ``results`` and could not import
 a parser that lived there, and the bundle-read path
 (``results.bundle.BundleReader`` / ``results.persistence.load_result``) is above
 infra. Domain is below both, so it is the only home a shared parser can have.

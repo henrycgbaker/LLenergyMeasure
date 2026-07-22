@@ -155,6 +155,7 @@ markers = [
     "gpu: marks tests as requiring GPU hardware (deselect with '-m \"not gpu\"')",
     "docker: marks tests as requiring Docker with NVIDIA runtime",
     "slow: marks tests as slow (>30s); excluded from Tier 1 fast runs",
+    "needs_dist_metadata: test asserts on installed distribution metadata; skipped when the package is run from a source tree with no install",
 ]
 filterwarnings = [
     "ignore:.*rm_rf.*:pytest.PytestWarning",
