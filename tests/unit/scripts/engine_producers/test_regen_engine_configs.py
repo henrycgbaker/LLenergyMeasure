@@ -392,9 +392,9 @@ def test_unrelated_file_not_found_with_present_snapshot_reraises(
         )
 
 
-def test_default_output_is_the_src_shadow() -> None:
-    assert rec._shadow_config_path("vllm") == (
-        REPO_ROOT / "src" / "llenergymeasure" / "engines" / "vllm" / "config.py"
+def test_default_output_is_the_generated_config() -> None:
+    assert rec._generated_config_path("vllm") == (
+        REPO_ROOT / "src" / "llenergymeasure" / "config" / "generated" / "vllm.py"
     )
 
 

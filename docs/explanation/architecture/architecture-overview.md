@@ -17,7 +17,7 @@ This document is the entry point to the LLenergyMeasure architecture documentati
 
 For each engine, llem ships two committed artifacts that together let it validate a user's config before spending GPU time:
 
-1. **A typed config schema.** `schema.discovered.json` records the engine's full parameter surface (fields, types, bounds, enums), discovered by introspecting the engine at a pinned version. A code generator turns it into the typed Pydantic model `src/llenergymeasure/engines/<engine>/config.py` that users configure against.
+1. **A typed config schema.** `schema.discovered.json` records the engine's full parameter surface (fields, types, bounds, enums), discovered by introspecting the engine at a pinned version. A code generator turns it into the typed Pydantic model `src/llenergymeasure/config/generated/<engine>.py` that users configure against.
 2. **Validation rules.** `rules.yaml` is a list of validation rules - cross-field constraints, silent-normalisation cases - extracted from the engine's own source and verified against it. The runtime loader evaluates these against each submitted config.
 
 Both artifacts are produced locally by a maintainer when an engine version bumps, committed to the repo, and shipped inside the wheel. CI never produces them; it only verifies that the committed bytes stay internally consistent (see [CI architecture](/explanation/architecture/ci-architecture)).

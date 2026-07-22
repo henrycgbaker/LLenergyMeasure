@@ -80,7 +80,7 @@ requires; `rules-coverage` feeds nothing downstream because it is advisory.
 - **`config-codegen`** (gating, matrix over `transformers` / `vllm` /
   `tensorrt`): regenerates the typed config model from the engine's committed
   schema snapshot and asserts it is byte-identical to the committed
-  `src/llenergymeasure/engines/<engine>/config.py`. A drifted config fails the
+  `src/llenergymeasure/config/generated/<engine>.py`. A drifted config fails the
   job. This needs no upstream source: the snapshot under
   `engine_versions/<engine>/<version>/outputs/` is the only input.
 
@@ -305,7 +305,7 @@ its `engine-filter`, `engine-rules-gate`, and - on `transformers` engines -
 |---|---|---|
 | **Workflow-only edit** (`engine-rules-check.yml` changed) | `true` (self-test) | Both matrices, seed check, absorbed-bump-check, gate |
 | **Pin bump** (`engine_versions/<engine>/current.yaml`) | `true` | Both matrices, seed check, absorbed-bump-check, gate |
-| **Config or snapshot change** (`engines/<engine>/config.py`, or an `outputs/` snapshot) | `true` | Both matrices, seed check, absorbed-bump-check, gate |
+| **Config or snapshot change** (`config/generated/<engine>.py`, or an `outputs/` snapshot) | `true` | Both matrices, seed check, absorbed-bump-check, gate |
 | **Rules edit** (`engines/<engine>/rules.yaml`) or loader change | `true` | Both matrices, seed check, absorbed-bump-check, gate |
 | **Pure ci.yml / docs change** | `false` | Work jobs **skip**; `engine-filter` and `engine-rules-gate` still report (green) |
 

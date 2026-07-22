@@ -107,7 +107,7 @@ and sometimes a GPU):
   `src/llenergymeasure/engines/<engine>/schema.discovered.json`.
 - **Typed config model.** A code generator turns the discovered schema plus
   the curation choices into
-  `src/llenergymeasure/engines/<engine>/config.py`. This is the model users
+  `src/llenergymeasure/config/generated/<engine>.py`. This is the model users
   configure against under the `engine_config:` key in their study YAML.
 - **Validation rules.** `make absorb ENGINE=<engine> SRC=<engine-source>`
   reads the engine source into candidate rules, verifies them against the

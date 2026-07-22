@@ -29,7 +29,7 @@ flowchart TD
 
 - **Programmatic discovery** introspects engine APIs and writes `engines/*/schema.discovered.json` (the ground truth for "what parameters does this engine accept").
 - **Curation decisions** are recorded per pinned engine version in `curated.yaml` - which fields the typed surface names explicitly, type narrowing, and user-facing descriptions.
-- **Codegen** projects the discovered schema plus the curation decisions into the committed Pydantic models at `src/llenergymeasure/engines/<engine>/config.py`. The generated files must not be hand-edited (each header says so).
+- **Codegen** projects the discovered schema plus the curation decisions into the committed Pydantic models at `src/llenergymeasure/config/generated/<engine>.py`. The generated files must not be hand-edited (each header says so).
 - **Drift checker** flags Pydantic fields with no corresponding discovered entry.
 - **`LLEM_NATIVE_FIELDS`** is the "yes, this divergence is intentional" allowlist - it suppresses known-good exceptions so the drift checker only reports unexpected divergence.
 
@@ -45,7 +45,7 @@ These JSON files are the ground truth for "what parameters does this engine vers
 
 ## Curation and the generated models
 
-`src/llenergymeasure/engines/<engine>/config.py` holds the Pydantic models llem exposes to users (`engine_params:` and `sampling_params:` per engine). These files are generated: `scripts/engine_producers/regen_engine_configs.py` produces them from the pinned version's `schema.discovered.json` plus `curated.yaml` under `engine_versions/<engine>/v<version>/outputs/`. To change the exposed surface, edit `curated.yaml` and regenerate - never the generated `config.py`.
+`src/llenergymeasure/config/generated/<engine>.py` holds the Pydantic models llem exposes to users (`engine_params:` and `sampling_params:` per engine). These files are generated: `scripts/engine_producers/regen_engine_configs.py` produces them from the pinned version's `schema.discovered.json` plus `curated.yaml` under `engine_versions/<engine>/v<version>/outputs/`. To change the exposed surface, edit `curated.yaml` and regenerate - never the generated module.
 
 The curation principles the generated surface encodes:
 

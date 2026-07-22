@@ -42,9 +42,9 @@ SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 
 if TYPE_CHECKING:
     from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
-    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
-    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
-    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
+    from llenergymeasure.config.generated.tensorrt import Config as TensorRTConfig
+    from llenergymeasure.config.generated.transformers import Config as TransformersConfig
+    from llenergymeasure.config.generated.vllm import Config as VLLMConfig
 
 
 @lru_cache(maxsize=1)
@@ -848,9 +848,9 @@ def _rebuild_experiment_config() -> None:
     All three engines resolve to their generated nested ``Config``
     (engine_params / sampling_params shape, projected from the mined schema).
     """
-    from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
-    from llenergymeasure.engines.transformers.config import Config as TransformersConfig
-    from llenergymeasure.engines.vllm.config import Config as VLLMConfig
+    from llenergymeasure.config.generated.tensorrt import Config as TensorRTConfig
+    from llenergymeasure.config.generated.transformers import Config as TransformersConfig
+    from llenergymeasure.config.generated.vllm import Config as VLLMConfig
 
     ExperimentConfig.model_rebuild(
         _types_namespace={

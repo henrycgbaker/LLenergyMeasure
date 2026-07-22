@@ -152,7 +152,7 @@ def test_pytorch_config_section_composition():
 
 def test_pytorch_config_has_no_num_processes_field():
     """The generated transformers EngineParams has no num_processes field."""
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     assert "num_processes" not in EngineParams.model_fields
 
@@ -163,7 +163,7 @@ def test_pytorch_config_num_processes_not_a_declared_field():
     The generated Config uses extra='allow' for HuggingFace passthrough, so an
     unknown kwarg is accepted into model_extra but is NOT a typed model field.
     """
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     # Verify it is absent from the declared model fields
     assert "num_processes" not in EngineParams.model_fields
@@ -370,7 +370,7 @@ def test_save_timeseries_false_accepted() -> None:
 
 def test_pytorch_config_tp_plan_accepts_auto():
     """tp_plan='auto' is accepted on the generated engine_params."""
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     ep = EngineParams(tp_plan="auto")
     assert ep.tp_plan == "auto"
@@ -383,7 +383,7 @@ def test_pytorch_config_tp_plan_accepts_any_string():
     rejected other values; the generated engine_params.tp_plan is Any (discovery
     debt), so any value passes and the engine validates at load.
     """
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     ep = EngineParams(tp_plan="custom")  # type: ignore[arg-type]
     assert ep.tp_plan == "custom"
@@ -391,7 +391,7 @@ def test_pytorch_config_tp_plan_accepts_any_string():
 
 def test_pytorch_config_tp_size_accepts_positive():
     """tp_plan='auto', tp_size=4 is accepted on the generated engine_params."""
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     ep = EngineParams(tp_plan="auto", tp_size=4)
     assert ep.tp_plan == "auto"
@@ -405,7 +405,7 @@ def test_pytorch_config_tp_size_accepts_zero():
     engine_params.tp_size is Any (discovery debt), so 0 passes at parse and the
     engine validates at load.
     """
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     ep = EngineParams(tp_size=0)
     assert ep.tp_size == 0
@@ -418,7 +418,7 @@ def test_pytorch_config_tp_plan_and_device_map_can_coexist():
     validator was from_pretrained-side enforcement (execution grain), not a
     config-parse invariant. Both values now parse; the engine raises at model load.
     """
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     ep = EngineParams(tp_plan="auto", device_map="auto")
     assert ep.tp_plan == "auto"
@@ -427,7 +427,7 @@ def test_pytorch_config_tp_plan_and_device_map_can_coexist():
 
 def test_pytorch_config_tp_plan_without_device_map_ok():
     """tp_plan='auto' without device_map succeeds."""
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     ep = EngineParams(tp_plan="auto")
     assert ep.tp_plan == "auto"
@@ -436,7 +436,7 @@ def test_pytorch_config_tp_plan_without_device_map_ok():
 
 def test_pytorch_config_device_map_without_tp_plan_ok():
     """device_map='auto' without tp_plan succeeds."""
-    from llenergymeasure.engines.transformers.config import EngineParams
+    from llenergymeasure.config.generated.transformers import EngineParams
 
     ep = EngineParams(device_map="auto")
     assert ep.device_map == "auto"
