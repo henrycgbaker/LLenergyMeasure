@@ -69,8 +69,9 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   driver-reported CUDA field `CUDAEnvironment.version` is renamed
   `driver_supported_version` (the NVML driver-supported CUDA version, distinct
   from `EnvironmentSnapshot.cuda_version`, the runtime version the stack was
-  built against). A new `ExperimentResult.measurement_mode` (`"offline"` today)
-  is the offline/server discriminator. Results written by earlier versions
+  built against). A new `ExperimentResult.serving_mode` (`"offline"` today)
+  is the offline/server discriminator, mirroring the config-side
+  `ExperimentConfig.serving_mode`. Results written by earlier versions
   remain readable best-effort with a single warning: the retired top-level keys
   are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
   and the old separate runner block reads into the unified model; no converter

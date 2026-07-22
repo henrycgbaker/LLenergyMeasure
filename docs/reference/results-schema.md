@@ -45,7 +45,7 @@ The scientific record. One JSON file per experiment cell. Stamped with `bundle_v
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
-| `measurement_mode` | str | The measurement mode that produced this result: the offline/server discriminator. `"offline"` for batch measurement (the only mode today); server mode (v0.8.0) will stamp `"server"`. A plain string, not a closed vocabulary |
+| `serving_mode` | str | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement (the only mode today); server mode (v0.8.0) will stamp `"server"`. A plain string, not a closed vocabulary |
 | `engine` | str | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar |
 | `model_name` | str | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar |
 

@@ -267,7 +267,7 @@ copies so the file is self-describing when separated from its directory:
 {
   "experiment_id": "qwen-transformers-bf16-bs16-fa2-2026-05-07T14-32-08",
   "bundle_version": "2.0",
-  "measurement_mode": "offline",
+  "serving_mode": "offline",
   "engine": "transformers",
   "model_name": "Qwen/Qwen2.5-0.5B",
   "input_tokens": 6144,

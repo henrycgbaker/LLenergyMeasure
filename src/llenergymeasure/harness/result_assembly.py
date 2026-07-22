@@ -71,10 +71,10 @@ class SourceMetrics:
     producer that returns one of these - the assembler never changes.
     """
 
-    # Measurement mode discriminator ("offline" today; "server" for the future
+    # Serving mode discriminator ("offline" today; "server" for the future
     # LoadGen producer). The assembler stamps it onto ExperimentResult verbatim,
     # so the mode a result was produced in travels through this one seam.
-    measurement_mode: str
+    serving_mode: str
     # Token counts (raw workload).
     input_tokens: int
     output_tokens: int
@@ -439,7 +439,7 @@ def build_offline_metrics(
     )
 
     return SourceMetrics(
-        measurement_mode="offline",
+        serving_mode="offline",
         input_tokens=output.input_tokens,
         output_tokens=output.output_tokens,
         total_tokens=output.total_tokens,
@@ -540,7 +540,7 @@ def assemble_experiment_result(
         experiment_id=experiment_id,
         measurement_config_hash=compute_declared_config_hash(config),
         llenergymeasure_version=__version__,
-        measurement_mode=metrics.measurement_mode,
+        serving_mode=metrics.serving_mode,
         # Convenience identity copies; authoritative home is config.json.
         engine=engine_name,
         model_name=config.task.model,

@@ -52,7 +52,7 @@ SYSTEM_OVERRIDES_FILENAME = "system_overrides.json"
 # image_source); the top-level result.json baseline_power_w copy dropped (single
 # home: energy_breakdown.baseline_power_w); never-populated environment fields
 # dropped (pcie_gen, mig_enabled, cudnn_version, fan_speed_pct); the CUDA hardware
-# field version renamed to driver_supported_version; measurement_mode added.
+# field version renamed to driver_supported_version; serving_mode added.
 BUNDLE_VERSION = "2.0"
 
 

@@ -497,7 +497,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
 
     # result.json: legacy top-level keys dropped, model reads with 2.0 defaults.
     assert loaded.result.experiment_id == "legacy-001"
-    assert loaded.result.measurement_mode == "offline"  # new field defaults
+    assert loaded.result.serving_mode == "offline"  # new field defaults
     assert not hasattr(loaded.result, "baseline_power_w")  # dropped field
     # The single baseline home survives on the breakdown.
     assert loaded.result.energy_breakdown is not None

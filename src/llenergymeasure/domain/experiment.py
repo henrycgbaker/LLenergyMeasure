@@ -100,13 +100,14 @@ class ExperimentResult(BaseModel):
     llenergymeasure_version: str | None = Field(
         default=None, description="Package version that produced this result"
     )
-    measurement_mode: str = Field(
+    serving_mode: str = Field(
         default="offline",
-        description="Measurement mode that produced this result: the offline/server "
-        'discriminator. "offline" for batch measurement (the only mode today); "server" '
-        "arrives with server mode (v0.8.0). A plain string, not a closed vocabulary, so the "
-        "mode set can grow without a schema break. Stamped by the assembler from the "
-        "measurement source (see harness.result_assembly.SourceMetrics).",
+        description="Serving mode that produced this result: the offline/server "
+        'discriminator, mirroring the config-side ExperimentConfig.serving_mode. "offline" for '
+        'batch measurement (the only mode today); "server" arrives with server mode (v0.8.0). A '
+        "plain string, not a closed vocabulary, so the mode set can grow without a schema break. "
+        "Stamped by the assembler from the measurement source (see "
+        "harness.result_assembly.SourceMetrics).",
     )
 
     # Convenience identity copies. Deliberate small duplication so a result.json

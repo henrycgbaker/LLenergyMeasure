@@ -97,13 +97,13 @@ def test_engine_version_rejected(make_result):
 # ---------------------------------------------------------------------------
 
 
-def test_measurement_mode_defaults_offline(make_result):
-    """measurement_mode defaults to 'offline' and accepts an arbitrary string."""
+def test_serving_mode_defaults_offline(make_result):
+    """serving_mode defaults to 'offline' and accepts an arbitrary string."""
     result_default = make_result()
-    assert result_default.measurement_mode == "offline"
+    assert result_default.serving_mode == "offline"
 
-    result_server = make_result(measurement_mode="server")
-    assert result_server.measurement_mode == "server"
+    result_server = make_result(serving_mode="server")
+    assert result_server.serving_mode == "server"
 
 
 def test_energy_adjusted_j_optional(make_result):
