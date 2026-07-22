@@ -223,6 +223,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- The dispatch-metadata hermeticity stub now covers the whole unit suite rather
+  than only `tests/unit/docker/`: the baseline-container and engine docker-path
+  tests no longer fail with `PackageNotFoundError` when the suite runs
+  in-container from a source tree on `PYTHONPATH` with no install. The autouse
+  `stub_runtime_requirements` fixture moved up to `tests/unit/conftest.py`; the
+  real-metadata assertions keep their skip-when-absent behaviour. ([#867])
 - The GPU CI in-container suite job no longer livelocks under co-tenant host
   load: OpenMP/MKL thread pools are capped and set to passive wait, the suite
   container gets a CPU quota, a hung test now dumps all thread stacks after 30
@@ -1424,4 +1430,5 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#863]: https://github.com/henrycgbaker/llenergymeasure/pull/863
 [#864]: https://github.com/henrycgbaker/llenergymeasure/pull/864
 [#866]: https://github.com/henrycgbaker/llenergymeasure/pull/866
+[#867]: https://github.com/henrycgbaker/llenergymeasure/pull/867
 [#868]: https://github.com/henrycgbaker/llenergymeasure/pull/868
