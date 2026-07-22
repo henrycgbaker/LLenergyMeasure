@@ -202,6 +202,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ### Fixed
 
+- The GPU CI in-container suite job no longer livelocks under co-tenant host
+  load: OpenMP/MKL thread pools are capped and set to passive wait, the suite
+  container gets a CPU quota, a hung test now dumps all thread stacks after 30
+  minutes instead of dying silently at the job timeout, and containers orphaned
+  by a job cancellation are killed by an always-run cleanup step. ([#864])
 - Docker-runner rescue tests (`TestConfigSidecarRescue`, `TestTimeseriesParquetRescue`)
   no longer flake under randomized test ordering: the `tempfile.mkdtemp` mock now routes
   by prefix instead of assuming a fixed call count, so the process-cached dispatch-asset
@@ -1396,3 +1401,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#861]: https://github.com/henrycgbaker/llenergymeasure/pull/861
 [#862]: https://github.com/henrycgbaker/llenergymeasure/pull/862
 [#863]: https://github.com/henrycgbaker/llenergymeasure/pull/863
+[#864]: https://github.com/henrycgbaker/llenergymeasure/pull/864
