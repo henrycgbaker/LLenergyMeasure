@@ -1208,7 +1208,7 @@ class TestResolveGpuIndices:
 # ---------------------------------------------------------------------------
 # The per_gpu_j data flow is already wired:
 #   NVMLSampler.stop_tracking() -> EnergyMeasurement.per_gpu_j
-#   MeasurementHarness._build_result() -> ExperimentResult.energy_per_device_j + multi_gpu
+#   build_result() (harness.result_assembly) -> ExperimentResult.energy_per_device_j + multi_gpu
 # With _resolve_gpu_indices returning correct indices for TRT-LLM,
 # multi-GPU energy is automatically summed across all TP ranks.
 # No methodology_notes string needed - data is self-documenting:
