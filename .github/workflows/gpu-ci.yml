@@ -192,8 +192,8 @@ jobs:
             llenergymeasure-ci:transformers \
             python3 -m pytest tests/ \
               --ignore=tests/unit/scripts/engine_producers/test_regen_engine_configs.py \
-              -p faulthandler --faulthandler-timeout=1800 \
-              -v --tb=short -o "addopts=" -p no:cacheprovider
+              -v --tb=short -o "addopts=" -o faulthandler_timeout=1800 \
+              -p no:cacheprovider
 
       - name: SIGINT verification
         run: |
