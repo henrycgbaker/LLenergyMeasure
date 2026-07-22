@@ -259,9 +259,8 @@ def _make_mock_pts(*, samples: list | None = None):
     mock_pts_instance = MagicMock()
     mock_pts_instance.get_thermal_throttle_info.return_value = ThermalThrottleInfo()
     mock_pts_instance.get_samples.return_value = samples if samples is not None else []
-    # Context manager protocol
-    mock_pts_instance.__enter__ = MagicMock(return_value=mock_pts_instance)
-    mock_pts_instance.__exit__ = MagicMock(return_value=False)
+    # MeasurementBracket drives the sampler via start()/stop() (auto-mocked), not
+    # the context-manager protocol, so no __enter__/__exit__ wiring is needed.
     mock_pts_cls.return_value = mock_pts_instance
     return mock_pts_cls
 
@@ -450,7 +449,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
     We verify ordering by recording call order via side_effect on both
     thermal_floor_wait and select_energy_sampler (which is called just before
     start_tracking). select_energy_sampler returns None so no actual energy
-    measurement object is needed (avoids MagicMock comparison issues in _build_result).
+    measurement object is needed (avoids MagicMock comparison issues in build_result).
     """
     call_order: list[str] = []
 
@@ -460,7 +459,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
 
     def fake_select_energy_sampler(engine_name, *, gpu_indices=None):  # type: ignore[no-untyped-def]
         call_order.append("select_energy_sampler")
-        return None  # No tracker; avoids MagicMock total_j > 0 comparison in _build_result
+        return None  # No tracker; avoids MagicMock total_j > 0 comparison in build_result
 
     engine = FakeBackend()
     harness = MeasurementHarness()
@@ -1053,7 +1052,7 @@ def test_harness_energy_none_still_produces_valid_result(minimal_config):
 
 
 def test_build_result_populates_mj_per_tok(minimal_config):
-    """_build_result() sets mj_per_tok_total when total_tokens > 0."""
+    """build_result() sets mj_per_tok_total when total_tokens > 0."""
     engine = FakeBackend()
     harness = MeasurementHarness()
 

@@ -126,7 +126,10 @@ class WarmupConfig(BaseModel):
     window_size. Either mode is followed by a thermal floor wait.
 
     # Confidence: n_prompts=5 HIGH (DeepSpeed 5-10, Zeus 10, AIEnergyScore 10)
-    # Confidence: thermal_floor_seconds=60 HIGH (MLPerf Power mandates 60s minimum)
+    # thermal_floor_seconds=60: a conservative idle-settling default (chosen, not
+    # externally mandated). MLPerf Power's 60s figure is a measurement-window
+    # minimum for sampling adequacy, not a thermal-settling mandate; that
+    # measurement-window floor is referenced in harness/windowing.py.
     """
 
     model_config = {"extra": "forbid"}
