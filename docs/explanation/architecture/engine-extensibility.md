@@ -123,9 +123,9 @@ CI never produces these artifacts; it checks the committed bytes are
 consistent, read-only on hosted CPU runners (see
 [CI architecture](/explanation/architecture/ci-architecture)):
 
-- **`config-codegen`** (gating) regenerates `config.py` from the committed
-  schema snapshot and curation file and asserts it is byte-identical to the
-  committed file. A drifted config fails the check.
+- **`config-codegen`** (gating) regenerates `config/generated/<engine>.py` from
+  the committed schema snapshot and curation file and asserts it is
+  byte-identical to the committed file. A drifted config fails the check.
 - **`rules-coverage`** (advisory) reports validator sites in the engine source
   that no shipped rule covers, without blocking the merge.
 
@@ -153,7 +153,7 @@ checklist is:
 **Produced locally, then committed:**
 
 5. `schema.discovered.json` via `make discover-schema`.
-6. `config.py` via the config generator.
+6. `config/generated/sglang.py` via the config generator.
 7. `rules.yaml` via `make absorb`.
 
 **Verified by CI:**

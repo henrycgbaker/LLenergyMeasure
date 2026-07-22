@@ -7,6 +7,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
+> **Format break (unreleased):** results-bundle format 2.0 as of commit `09ec455e`
+> ([#869]) - unified runner provenance block, single `bundle_version` stamp. 1.0
+> bundles remain readable (best-effort). Ships with the v0.7.0 release; v0.6.0 is
+> the rollback anchor.
+
 ### Added
 
 - CI now fails a bare engine version-pin bump. A PR that advances

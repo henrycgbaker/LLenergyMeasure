@@ -174,4 +174,4 @@ Gracefully degrades when NVML is unavailable.
 ## Related
 
 - See `../study/runner.py` for StudyRunner which uses DockerRunner for Docker dispatch
-- See `../api/_impl.py` for direct DockerRunner usage in single-experiment path
+- See `../study/single.py` and `../study/session.py` (`DockerSession`) for direct DockerRunner usage in the single-experiment path

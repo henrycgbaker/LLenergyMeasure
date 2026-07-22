@@ -246,9 +246,8 @@ timestamps, so a window covering 60% of the cleaned inference span is credited w
 the output tokens. A measurement warning records this approximation, and a second warning
 fires when the realised window is too short to be meaningful.
 
-The survey behind this design (MLPerf Power, SPECpower, the VM-warmup steady-state study,
-and the Cao-Rhinehart detector choice) is recorded in the repository at
-`.product/research/steady-state-measurement-methodology.md`.
+This design is grounded in a survey of prior measurement methodology: MLPerf Power,
+SPECpower, the VM-warmup steady-state study, and the Cao-Rhinehart detector choice.
 
 ---
 

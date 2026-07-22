@@ -100,11 +100,14 @@ requires; `rules-coverage` feeds nothing downstream because it is advisory.
 - **`absorbed-bump-check`** (gating): fails a PR that advances an engine pin
   (`engine_versions/<engine>/current.yaml`) without shipping the regenerated
   knowledge `make absorb` produces - the versioned snapshot outputs
-  (`engine_versions/<engine>/<version>/outputs/`) AND the packaged src copies
-  (`src/llenergymeasure/engines/<engine>/` config.py / rules.yaml /
-  schema.discovered.json). A bare pin bump (the Renovate regex-manager shape,
-  which edits `current_version` and nothing else) would otherwise merge a
-  config typed against the old engine surface. The check
+  (`engine_versions/<engine>/<version>/outputs/`) AND the packaged src copies:
+  the generated config model at
+  `src/llenergymeasure/config/generated/<engine>.py`, plus the `rules.yaml` and
+  `schema.discovered.json` beside the engine under
+  `src/llenergymeasure/engines/<engine>/`. The config model is checked
+  separately from the engine-local data files. A bare pin bump (the Renovate
+  regex-manager shape, which edits `current_version` and nothing else) would
+  otherwise merge a config typed against the old engine surface. The check
   (`scripts/ci/check_absorbed_bump.py`) is a pure path comparison over the PR's
   changed files and needs no engine source or install.
 

@@ -133,7 +133,7 @@ CPU runners. The check that guards this page's own output is:
 
 | Check | Workflow / job | What it asserts |
 |---|---|---|
-| `regen_engine_configs.py --check` | `engine-rules-check.yml` / `config-codegen` (matrix over all three engines) | `config.py` is byte-identical to what the committed snapshot regenerates. |
+| `regen_engine_configs.py --check` | `engine-rules-check.yml` / `config-codegen` (matrix over all three engines) | `src/llenergymeasure/config/generated/<engine>.py` is byte-identical to what the committed snapshot regenerates. |
 | `check_discovered_schema_versions.py` | `ci.yml` (matrix over all three engines) | The pin matches the schema version, and the promoted src copy exposes the same parameter surface as the versioned snapshot it was promoted from. This is the drift tripwire for the promotion invariant; with `promote-schemas` in place it should never fire. |
 
 A further byte-identity check in `ci.yml` verifies Pydantic alignment - see
@@ -156,7 +156,7 @@ pin bump under `engine_versions/` triggers them even though nothing under
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `config-codegen` fails on a snapshot PR | `config.py` was not regenerated after the schema changed | Run `regen_engine_configs.py --engine <e> --version <v> --write` and commit `config.py` |
+| `config-codegen` fails on a snapshot PR | `src/llenergymeasure/config/generated/<engine>.py` was not regenerated after the schema changed | Run `regen_engine_configs.py --engine <e> --version <v> --write` and commit `src/llenergymeasure/config/generated/<engine>.py` |
 | `schema-version-check` fails | `schema.discovered.json` version does not match the `current.yaml` pin | Re-run `./scripts/refresh_discovered_schemas.sh <engine>` after the bump and commit the refreshed schema |
 | `docs-freshness` Pydantic-alignment step fails | A config field has no discovered counterpart, or a type narrowed/widened | Add the field to the whitelist in `check_pydantic_matches_discovered.py` if intentional, else fix the snapshot or the curation |
 | Schema discovery fails to import engine | Container missing `--gpus all` | Verify the machine has NVIDIA drivers plus the Container Toolkit |

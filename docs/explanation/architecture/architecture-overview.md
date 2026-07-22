@@ -29,7 +29,7 @@ flowchart TB
         src[Engine source<br/>at the pinned version]
         schema[(schema.discovered.json)]
         rules[(rules.yaml)]
-        config[config.py<br/>typed Pydantic model]
+        config[config/generated/&lt;engine&gt;.py<br/>typed Pydantic model]
         src -->|make discover-schema| schema
         src -->|make absorb| rules
         schema -->|code generation| config
@@ -37,7 +37,7 @@ flowchart TB
 
     subgraph verify["VERIFY - CI, read-only on hosted CPU"]
         direction TB
-        codegen[config-codegen:<br/>regenerated config.py is<br/>byte-identical to committed]
+        codegen[config-codegen:<br/>regenerated config model is<br/>byte-identical to committed]
         coverage[rules-coverage:<br/>report uncovered validator sites<br/>advisory]
     end
 
@@ -76,7 +76,7 @@ Upstream engines ship frequently. A self-hosted Renovate cron (`renovate.yml`) w
 
 1. Re-discover the schema: `make discover-schema ENGINE=<engine>`.
 2. Re-absorb the rules against the new source: `make absorb ENGINE=<engine> SRC=<engine-source>`.
-3. Commit the regenerated `schema.discovered.json`, `config.py`, and `rules.yaml`.
+3. Commit the regenerated `schema.discovered.json`, `config/generated/<engine>.py`, and `rules.yaml`.
 4. CI verifies the committed bytes are consistent before merge.
 
 This is a deliberate split: production needs the engine source (and sometimes a GPU), so it runs on a maintainer's machine; verification is a fast read-only check that runs on hosted CPU runners. See [CI architecture](/explanation/architecture/ci-architecture) for the verification surface and [schema refresh](/contributing/schema-refresh) for the schema-side operations guide.
@@ -130,7 +130,7 @@ The trade-off is staleness risk: the artifacts must be refreshed when the engine
 | Term | Meaning |
 |------|---------|
 | **Schema discovery** | Introspecting an engine at its pinned version to record its full parameter surface as `schema.discovered.json` |
-| **Config codegen** | Generating the typed Pydantic `config.py` from the discovered schema; CI asserts the regenerated file is byte-identical to the committed one |
+| **Config codegen** | Generating the typed Pydantic `config/generated/<engine>.py` from the discovered schema; CI asserts the regenerated file is byte-identical to the committed one |
 | **Rule** | A single validation constraint in `rules.yaml`: an `id`, a `severity`, a `match` predicate over config fields, a message template, and provenance |
 | **Severity** | Closed enum: `error` (reject the config) or `dormant` (the engine silently normalises a field; used for deduplication) |
 | **Absorb** | The local workflow that reads an engine's source into candidate rules, verifies them against the engine, and promotes the confirmed ones into `rules.yaml` |
@@ -144,11 +144,13 @@ The trade-off is staleness risk: the artifacts must be refreshed when the engine
 ```
   src/llenergymeasure/engines/
   └── <engine>/                      Per-engine sub-package, ships with the wheel
+      ├── plugin.py                  EnginePlugin implementation (inference code)
       ├── schema.discovered.json     Discovered parameter surface (pinned version)
-      ├── config.py                  Typed Pydantic model, generated from the schema
       └── rules.yaml                 Shipped validation rules (single runtime source)
 
   src/llenergymeasure/config/
+  ├── generated/
+  │   └── <engine>.py                Typed Pydantic model, generated from the schema
   └── engine_rules/
       ├── loader.py                  Runtime rule loader + predicate engine
       └── __init__.py
