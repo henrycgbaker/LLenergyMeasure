@@ -46,7 +46,7 @@ dev = [
     # Backs scripts/engine_producers/regen_engine_configs.py. Pinned exactly:
     # the generated config.py is byte-compared in CI, and the generator's
     # output formatting is version-sensitive.
-    "datamodel-code-generator==0.68.1",
+    "datamodel-code-generator==0.70.0",
 ]
 
 [project.scripts]
