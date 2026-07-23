@@ -601,3 +601,28 @@ def test_read_sidecar_rejects_non_json_artefact(tmp_path: Path) -> None:
     """read_sidecar is JSON-only: a parquet artefact key is a programming error."""
     with pytest.raises(ValueError, match="not a JSON sidecar"):
         BundleReader.read_sidecar(tmp_path, "timeseries")
+
+
+def test_read_sidecar_falls_back_to_legacy_filename(tmp_path: Path) -> None:
+    """read_sidecar applies the registry legacy-filename fallback, like read().
+
+    A bundle carrying the system snapshot only under its pre-rename name
+    environment.json still resolves via read_sidecar(dir, "system"); when both
+    files are present the canonical system.json wins.
+    """
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+
+    # Only the legacy-named sidecar present -> fallback returns its payload.
+    legacy_payload = write_container_system_sidecar(bundle / "environment.json")
+    fetched = BundleReader.read_sidecar(bundle, "system")
+    assert fetched is not None
+    assert fetched["python_version"] == legacy_payload["python_version"]
+
+    # Canonical system.json present too -> it is preferred over the legacy name.
+    (bundle / "system.json").write_text(
+        json.dumps({"python_version": "9.9.9-canonical"}), encoding="utf-8"
+    )
+    preferred = BundleReader.read_sidecar(bundle, "system")
+    assert preferred is not None
+    assert preferred["python_version"] == "9.9.9-canonical"
