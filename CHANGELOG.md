@@ -10,10 +10,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 > **Format break (unreleased):** results-bundle format 2.0 as of commit `09ec455e`
 > ([#869]) - unified runner provenance block, single `bundle_version` stamp. The
 > runner-provenance `mode` values are renamed `local`/`docker` -> `process`/`container`
-> within this same untagged 2.0 stamp ([#880]); 09ec455e-era 2.0 bundles carrying the
-> legacy values are still read best-effort (read-path alias tolerance, not a version
-> bump). 1.0 bundles remain readable (best-effort). Ships with the v0.7.0 release;
-> v0.6.0 is the rollback anchor.
+> and the no-spec `source` sentinel `local` -> `implicit` within this same untagged
+> 2.0 stamp ([#880]). This is a clean break: there is no read-path alias translation,
+> so an 09ec455e-era 2.0 bundle carrying the old runner values is not rewritten on
+> read (accepted - unreleased-era bundles only). 1.0 bundles remain readable
+> (best-effort). Ships with the v0.7.0 release; v0.6.0 is the rollback anchor.
 
 ### Added
 
@@ -94,18 +95,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
   and the old separate runner block reads into the unified model; no converter
   tooling is provided. ([#869])
-- **Runner mode vocabulary renamed** `local`/`docker` -> `process`/`container`. The
-  new pair names the PACKAGING axis (host process vs container) symmetrically, freeing
-  a future PLACEMENT axis (here vs remote) to arrive additively. The canonical values
-  appear in `ssot.RunnerMode`, `RunnerSpec.mode`, and the `RunnerProvenance.mode`
+- **Breaking (runner vocabulary):** the runner mode is renamed `local`/`docker` ->
+  `process`/`container` (image shorthand `docker:<image>` -> `container:<image>`), and
+  the no-spec runner-provenance `source` sentinel `local` -> `implicit`. The new mode
+  pair names the PACKAGING axis (host process vs container) symmetrically, freeing a
+  future PLACEMENT axis (here vs remote) to arrive additively. The canonical values
+  appear in `ssot.RunnerMode`, `RunnerSpec.mode`, and the `RunnerProvenance.mode`/`source`
   serialised into results-bundle 2.0 (values change under the SAME untagged 2.0 stamp -
-  no version bump). Every entry point that parses a user-supplied runner value (study
-  YAML `runners:`, the `LLEM_RUNNER_<ENGINE>` env var, user config) still accepts the
-  legacy `local`/`docker`/`docker:<image>` values, normalising them at parse time to
-  `process`/`container`/`container:<image>` with a one-shot `DeprecationWarning`, so
-  every v0.6.0 config keeps working. Reading a 2.0 bundle written before the rename maps
-  its legacy `mode` value onto the canonical one best-effort (read-path alias tolerance).
-  ([#880])
+  no version bump). This is a **clean break, not an alias**: every entry point that
+  parses a user-supplied runner value (study YAML `runners:`, the `LLEM_RUNNER_<ENGINE>`
+  env var, user config) rejects the old `local`/`docker`/`docker:<image>` values with a
+  migration error naming the replacement (e.g. "runner value 'docker' was renamed in v0.7
+  - use 'container'"), and there is no read-path alias translation for old bundles. Update
+  any pinned `runners:` values to the new vocabulary. ([#880])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their

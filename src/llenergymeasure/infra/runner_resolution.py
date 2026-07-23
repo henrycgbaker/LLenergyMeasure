@@ -132,7 +132,8 @@ def resolve_runner(
                       None = no user config present (enables auto-detection).
                       When provided, "auto" values fall through to auto-detection;
                       explicit values ("process", "container", "container:<img>") are
-                      honoured (legacy "local"/"docker"/"docker:<img>" also accepted).
+                      honoured (the legacy "local"/"docker" vocabulary was renamed in
+                      v0.7 and is now rejected with a migration error).
 
     Returns:
         RunnerSpec with mode, image, and source fields populated.

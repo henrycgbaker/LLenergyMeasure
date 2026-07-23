@@ -193,3 +193,33 @@ def test_user_runners_config_validator_accepts_auto():
 
     config = UserRunnersConfig(transformers="auto")
     assert config.transformers == "auto"
+
+
+def test_user_runners_config_validator_accepts_canonical_values():
+    """The canonical process/container/container:<image> values validate."""
+    from llenergymeasure.config.user_config import UserRunnersConfig
+
+    config = UserRunnersConfig(
+        transformers="process", vllm="container", tensorrt="container:img:v1"
+    )
+    assert config.transformers == "process"
+    assert config.vllm == "container"
+    assert config.tensorrt == "container:img:v1"
+
+
+@pytest.mark.parametrize(
+    ("value", "hint"),
+    [
+        ("local", "use 'process'"),
+        ("docker", "use 'container'"),
+        ("docker:my/img:v1", "use 'container:my/img:v1'"),
+    ],
+)
+def test_user_runners_config_validator_rejects_legacy_vocabulary(value, hint):
+    """The renamed-in-v0.7 legacy values are rejected with a migration hint."""
+    import pydantic
+
+    from llenergymeasure.config.user_config import UserRunnersConfig
+
+    with pytest.raises(pydantic.ValidationError, match=rf"was renamed in v0.7.*{hint}"):
+        UserRunnersConfig(transformers=value)

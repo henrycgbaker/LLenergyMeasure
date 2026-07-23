@@ -37,9 +37,10 @@ The ``runners:`` section in the study YAML accepts explicit image references::
       tensorrt: "container:my/custom:tag"  # explicit image override
 
 ``parse_runner_value()`` converts these into a ``(runner_type, image_override)``
-tuple consumed by the runner resolution chain. The legacy values
-``local``/``docker``/``docker:<image>`` are still accepted as deprecated aliases
-(normalised to ``process``/``container`` with a deprecation warning).
+tuple consumed by the runner resolution chain. The runner vocabulary was renamed
+in v0.7 (``local``/``docker``/``docker:<image>`` -> ``process``/``container``/
+``container:<image>``); the old values are a clean break and are rejected with a
+migration error naming the replacement.
 """
 
 from __future__ import annotations
@@ -48,7 +49,6 @@ import json
 import logging
 import os
 import subprocess
-import warnings
 from functools import cache, lru_cache
 
 from llenergymeasure.config.ssot import (
@@ -453,19 +453,6 @@ def show_image_resolution() -> None:
         print(f"  {engine:10s} -> {image}  ({source})")
 
 
-def _warn_legacy_runner_value(legacy: str, canonical: str) -> None:
-    """Emit a one-shot deprecation warning for a legacy runner value.
-
-    Uses the ``warnings`` module so its default per-message dedup fires the
-    warning once for each distinct legacy value seen in a process.
-    """
-    warnings.warn(
-        f"runner value {legacy!r} is deprecated; use {canonical!r}",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-
 def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
     """Parse a runner config value into ``(runner_type, image_override)``.
 
@@ -475,10 +462,10 @@ def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
         "container"                → ("container", None)
         "container:image/name:tag" → ("container", "image/name:tag")
 
-    The legacy values ``"local"`` / ``"docker"`` / ``"docker:<image>"`` are still
-    accepted as deprecated aliases: they are normalised to ``process`` /
-    ``container`` here at parse time (emitting a ``DeprecationWarning``) so every
-    downstream consumer sees only the canonical vocabulary.
+    The runner vocabulary was renamed in v0.7 (``local`` -> ``process``,
+    ``docker`` -> ``container``, ``docker:<image>`` -> ``container:<image>``); the
+    old values are a clean break, not aliases - they are rejected with a migration
+    error naming the replacement.
 
     Args:
         value: Raw string from ``runners.{engine}`` in YAML config, the
@@ -489,8 +476,9 @@ def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
         ``None`` when the built-in default image should be used.
 
     Raises:
-        ValueError: If ``"container:"`` / ``"docker:"`` is given with an empty
-            image name, or if the value is not one of the recognised runner types.
+        ValueError: If a legacy ``local`` / ``docker`` / ``docker:<image>`` value
+            is given (with a migration hint), if ``"container:"`` is given with an
+            empty image name, or if the value is not a recognised runner type.
     """
     # Canonical bare values.
     if value == RUNNER_PROCESS:
@@ -498,30 +486,28 @@ def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
     if value == RUNNER_CONTAINER:
         return (RUNNER_CONTAINER, None)
 
-    # Legacy bare aliases -> normalise + warn.
+    # Legacy vocabulary renamed in v0.7 - reject with a migration hint.
     if value == "local":
-        _warn_legacy_runner_value("local", RUNNER_PROCESS)
-        return (RUNNER_PROCESS, None)
+        raise ValueError("runner value 'local' was renamed in v0.7 - use 'process'")
     if value == "docker":
-        _warn_legacy_runner_value("docker", RUNNER_CONTAINER)
-        return (RUNNER_CONTAINER, None)
+        raise ValueError("runner value 'docker' was renamed in v0.7 - use 'container'")
+    if value.startswith("docker:"):
+        image = value[len("docker:") :]
+        replacement = f"container:{image}" if image else "container:<image>"
+        raise ValueError(f"runner value 'docker:<image>' was renamed in v0.7 - use '{replacement}'")
 
-    # Image-override forms: canonical "container:<image>" or legacy "docker:<image>".
-    for prefix in ("container:", "docker:"):
-        if value.startswith(prefix):
-            image = value[len(prefix) :]
-            if not image:
-                raise ValueError(
-                    f"empty image name in runner value {prefix!r} - "
-                    "use 'container' (bare) to select the built-in default image, "
-                    "or 'container:full/image:tag' for an explicit image."
-                )
-            if prefix == "docker:":
-                _warn_legacy_runner_value(value, f"container:{image}")
-            return (RUNNER_CONTAINER, image)
+    # Canonical image-override form.
+    if value.startswith("container:"):
+        image = value[len("container:") :]
+        if not image:
+            raise ValueError(
+                "empty image name in runner value 'container:' - "
+                "use 'container' (bare) to select the built-in default image, "
+                "or 'container:full/image:tag' for an explicit image."
+            )
+        return (RUNNER_CONTAINER, image)
 
     raise ValueError(
         f"Unrecognised runner value {value!r}. "
-        "Accepted values: 'process', 'container', or 'container:<image-tag>' "
-        "(legacy 'local' / 'docker' / 'docker:<image>' accepted with a deprecation warning)."
+        "Accepted values: 'process', 'container', or 'container:<image-tag>'."
     )

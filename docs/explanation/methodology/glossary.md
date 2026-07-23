@@ -287,8 +287,8 @@ Two senses in this codebase: (1) llem execution mode (`process` or `container`);
   vLLM and TensorRT-LLM (container-only by design). Default for all engines in
   production use.
 
-The legacy values `local` and `docker` are still accepted as inputs and normalised
-to `process`/`container` with a deprecation warning.
+The runner vocabulary was renamed in v0.7 (`local` -> `process`, `docker` -> `container`);
+the old values are a clean break and are rejected with a migration error naming the replacement.
 
 Set via `runners:` in the study YAML. In a multi-engine study, container elevation is
 precedence-based: an explicit runner pin (env var, `runners:`, or user config) wins,

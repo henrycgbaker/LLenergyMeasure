@@ -48,23 +48,23 @@ class TestParseRunnerValue:
         with pytest.raises(ValueError, match="Unrecognised runner value"):
             parse_runner_value("kubernetes")
 
-    def test_legacy_docker_alias_normalises_and_warns(self):
+    def test_legacy_docker_rejected_with_migration_hint(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        with pytest.warns(DeprecationWarning, match="'docker' is deprecated; use 'container'"):
-            assert parse_runner_value("docker") == ("container", None)
+        with pytest.raises(ValueError, match=r"'docker' was renamed in v0.7 - use 'container'"):
+            parse_runner_value("docker")
 
-    def test_legacy_local_alias_normalises_and_warns(self):
+    def test_legacy_local_rejected_with_migration_hint(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        with pytest.warns(DeprecationWarning, match="'local' is deprecated; use 'process'"):
-            assert parse_runner_value("local") == ("process", None)
+        with pytest.raises(ValueError, match=r"'local' was renamed in v0.7 - use 'process'"):
+            parse_runner_value("local")
 
-    def test_legacy_docker_colon_image_normalises_and_warns(self):
+    def test_legacy_docker_colon_image_rejected_with_migration_hint(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        with pytest.warns(DeprecationWarning, match="use 'container:custom/img:v1'"):
-            assert parse_runner_value("docker:custom/img:v1") == ("container", "custom/img:v1")
+        with pytest.raises(ValueError, match=r"use 'container:custom/img:v1'"):
+            parse_runner_value("docker:custom/img:v1")
 
 
 # ---------------------------------------------------------------------------

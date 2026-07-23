@@ -47,41 +47,47 @@ class UserRunnersConfig(BaseModel):
     transformers: str = Field(
         default="auto",
         description="Transformers runner: 'auto', 'process', 'container' (built-in image), or "
-        "'container:<image>' (legacy 'local'/'docker' accepted with a deprecation warning)",
+        "'container:<image>'",
     )
     vllm: str = Field(
         default="auto",
         description="vLLM runner: 'auto', 'process', 'container' (built-in image), or "
-        "'container:<image>' (legacy 'local'/'docker' accepted with a deprecation warning)",
+        "'container:<image>'",
     )
     tensorrt: str = Field(
         default="auto",
         description="TensorRT runner: 'auto', 'process', 'container' (built-in image), or "
-        "'container:<image>' (legacy 'local'/'docker' accepted with a deprecation warning)",
+        "'container:<image>'",
     )
 
     @model_validator(mode="after")
     def validate_runner_format(self) -> UserRunnersConfig:
-        # Legacy 'local'/'docker'/'docker:<image>' are accepted here as format-valid;
-        # normalisation to the canonical vocabulary (with the deprecation warning) happens
-        # downstream in parse_runner_value when the resolution chain reads the value.
-        bare_ok = {"auto", "process", "container", "local", "docker"}
+        # The runner vocabulary was renamed in v0.7 (local->process, docker->container,
+        # docker:<image>->container:<image>). The old values are a clean break: reject
+        # them here with a migration hint rather than silently accepting.
         for field_name in ALL_ENGINES:
             value = getattr(self, field_name)
+            if value == "local" or value == "docker" or value.startswith("docker:"):
+                if value == "local":
+                    replacement = "process"
+                elif value == "docker":
+                    replacement = "container"
+                else:
+                    image = value[len("docker:") :]
+                    replacement = f"container:{image}" if image else "container:<image>"
+                raise ValueError(
+                    f"runner value '{value}' was renamed in v0.7 (runners.{field_name}) - "
+                    f"use '{replacement}'"
+                )
             if value.startswith("singularity:"):
                 raise ValueError(
                     f"Singularity runner not yet supported (runners.{field_name}='{value}'). "
                     "Use 'auto', 'process', 'container', or 'container:<image>'."
                 )
-            if (
-                value not in bare_ok
-                and not value.startswith("container:")
-                and not value.startswith("docker:")
-            ):
+            if value not in {"auto", "process", "container"} and not value.startswith("container:"):
                 raise ValueError(
                     f"runners.{field_name}: expected 'auto', 'process', 'container', or "
-                    f"'container:<image>' (legacy 'local'/'docker'/'docker:<image>' also accepted), "
-                    f"got '{value}'"
+                    f"'container:<image>', got '{value}'"
                 )
         return self
 

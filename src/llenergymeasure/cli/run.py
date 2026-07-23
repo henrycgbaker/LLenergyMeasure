@@ -302,17 +302,12 @@ def _resolve_progress_mode(quiet: bool, verbose: bool) -> str:
 def _resolve_runner_tag(config: Any) -> str:
     """Determine the runner tag string for display from config.runner.
 
-    Returns "process" or "container" based on the runner field. Legacy
-    "local"/"docker"/"docker:<image>" values are treated as their canonical
-    equivalents for display.
+    Returns "process" or "container" based on the runner field.
     """
     runner = getattr(config, "runner", "auto")
-    if runner in (RUNNER_PROCESS, "local"):
+    if runner == RUNNER_PROCESS:
         return RUNNER_PROCESS
-    if runner in (RUNNER_CONTAINER, "docker") or (
-        isinstance(runner, str)
-        and (runner.startswith("container:") or runner.startswith("docker:"))
-    ):
+    if runner == RUNNER_CONTAINER or (isinstance(runner, str) and runner.startswith("container:")):
         return RUNNER_CONTAINER
     # auto: transformers defaults to process, vllm/tensorrt default to container
     engine = getattr(config, "engine", Engine.TRANSFORMERS)

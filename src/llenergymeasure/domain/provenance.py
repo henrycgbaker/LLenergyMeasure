@@ -20,23 +20,7 @@ provenance) and ``image_digest`` (the environment.json reproducibility anchor).
 
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import BaseModel, Field, model_validator
-
-# Legacy runner-mode vocabulary -> canonical, for read-path alias tolerance.
-# The runner mode was renamed local->process / docker->container within the SAME
-# untagged bundle_version "2.0" stamp, so a reader keying on bundle_version alone
-# cannot distinguish 09ec455e-era 2.0 blocks (local/docker) from post-rename 2.0
-# blocks (process/container); this map lets the older blocks still parse.
-_LEGACY_MODE_ALIASES: dict[str, str] = {"local": "process", "docker": "container"}
-
-# The no-spec source sentinel was renamed "local" -> "implicit" alongside the mode
-# rename: with "local" vacated from the mode vocabulary, a block reading
-# {mode: "process", source: "local"} would invite exactly the stale-mode misreading
-# the rename removes. The sentinel predates bundle 2.0 (#837), so 09ec455e-era 2.0
-# blocks can carry source="local"; this map rewrites it on read.
-_LEGACY_SOURCE_ALIASES: dict[str, str] = {"local": "implicit"}
+from pydantic import BaseModel, Field
 
 
 class RunnerProvenance(BaseModel):
@@ -70,26 +54,3 @@ class RunnerProvenance(BaseModel):
     )
 
     model_config = {"frozen": True, "extra": "forbid"}
-
-    @model_validator(mode="before")
-    @classmethod
-    def _map_legacy_vocabulary(cls, data: Any) -> Any:
-        """Read a legacy (09ec455e-era bundle 2.0) runner block best-effort.
-
-        The runner-mode vocabulary was renamed ``local`` -> ``process`` and
-        ``docker`` -> ``container``, and the no-spec source sentinel ``local`` ->
-        ``implicit``, within the same untagged bundle 2.0 break. Map an older
-        block's ``mode`` and ``source`` onto the canonical values so those bundles
-        still parse rather than failing (mode) or leaking a stale-mode string
-        (source). Mirrors the ``CUDAEnvironment._map_legacy_cuda_version`` read-path
-        precedent.
-        """
-        if not isinstance(data, dict):
-            return data
-        if data.get("mode") in _LEGACY_MODE_ALIASES or data.get("source") in _LEGACY_SOURCE_ALIASES:
-            data = dict(data)
-            if data.get("mode") in _LEGACY_MODE_ALIASES:
-                data["mode"] = _LEGACY_MODE_ALIASES[data["mode"]]
-            if data.get("source") in _LEGACY_SOURCE_ALIASES:
-                data["source"] = _LEGACY_SOURCE_ALIASES[data["source"]]
-        return data

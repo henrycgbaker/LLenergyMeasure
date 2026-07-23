@@ -6,7 +6,7 @@ from scratch on a Linux host.
 
 > **Docker is the supported path.** All published measurements run in containers - that is
 > what gives you reproducibility, dependency isolation between engines, and access to vLLM
-> and TensorRT-LLM. The Transformers engine still has a `local` runner mode, but it is a
+> and TensorRT-LLM. The Transformers engine still has a `process` runner mode, but it is a
 > developer convenience for smoke-testing on a host with a working CUDA toolchain, not a
 > recommended way to produce results.
 
@@ -242,7 +242,7 @@ task:
     source: aienergyscore
     n_prompts: 50
 runners:
-  vllm: docker
+  vllm: container
 ```
 
 Then run it:
@@ -266,7 +266,7 @@ task:
     source: aienergyscore
     n_prompts: 50
 runners:
-  tensorrt: docker
+  tensorrt: container
 ```
 
 Then run it:
@@ -302,7 +302,7 @@ follows a precedence chain (highest wins):
 
 1. **Environment variable** `LLEM_IMAGE_{ENGINE}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
 2. **Study YAML** `images:` section
-3. **Runner spec** shorthand (`docker:my/custom:tag` in `runners:`)
+3. **Runner spec** shorthand (`container:my/custom:tag` in `runners:`)
 4. **User config** `images:` section (`~/.config/llenergymeasure/config.yaml`)
 5. **Smart default**: local build image if present, otherwise registry image
 
@@ -411,16 +411,16 @@ for the full mechanism).
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, engines, or the container entrypoint, rebuild for changes to take
-> effect inside containers. Local-runner experiments (Transformers without Docker) use the
-> installed source directly and do not need a rebuild.
+> effect inside containers. Process-runner experiments (Transformers without a container) use
+> the installed source directly and do not need a rebuild.
 
 ### Override images in YAML
 
 ```yaml
 runners:
-  transformers: local                       # host execution, no Docker
-  vllm: docker                         # default resolution (local → registry)
-  tensorrt: "docker:my/custom:tag"     # explicit image override
+  transformers: process                    # host execution, no container
+  vllm: container                          # default resolution (local → registry)
+  tensorrt: "container:my/custom:tag"      # explicit image override
 ```
 
 ### Future engines

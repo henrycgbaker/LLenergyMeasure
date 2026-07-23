@@ -2,7 +2,7 @@
 
 Tests cover:
   - parse_runner_value: "process", "container", "container:image" forms, plus the
-    deprecated "local"/"docker"/"docker:image" aliases (normalised + warned)
+    clean-break rejection of the legacy "local"/"docker"/"docker:image" vocabulary
   - is_docker_available: PATH inspection for docker + NVIDIA CT tools
   - resolve_runner: full precedence chain (env > yaml > user_config > auto > default)
   - resolve_study_runners: multi-engine resolution
@@ -79,40 +79,27 @@ class TestParseRunnerValue:
         assert mode == "container"
         assert image == "ghcr.io/llem/vllm:1.19.0-cuda12"
 
-    def test_canonical_values_do_not_warn(self, recwarn):
-        """Canonical process/container values emit no DeprecationWarning."""
-        parse_runner_value("process")
-        parse_runner_value("container")
-        parse_runner_value("container:ghcr.io/x:1")
-        assert [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)] == []
-
 
 # ---------------------------------------------------------------------------
-# parse_runner_value - legacy alias tolerance (deprecated local/docker)
+# parse_runner_value - legacy vocabulary is a clean break (rejected with a hint)
 # ---------------------------------------------------------------------------
 
 
-class TestParseRunnerValueLegacyAliases:
-    def test_legacy_local_normalises_to_process_and_warns(self):
-        with pytest.warns(DeprecationWarning, match="'local' is deprecated; use 'process'"):
-            mode, image = parse_runner_value("local")
-        assert mode == "process"
-        assert image is None
+class TestParseRunnerValueLegacyRejected:
+    def test_legacy_local_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match=r"'local' was renamed in v0.7 - use 'process'"):
+            parse_runner_value("local")
 
-    def test_legacy_docker_normalises_to_container_and_warns(self):
-        with pytest.warns(DeprecationWarning, match="'docker' is deprecated; use 'container'"):
-            mode, image = parse_runner_value("docker")
-        assert mode == "container"
-        assert image is None
+    def test_legacy_docker_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match=r"'docker' was renamed in v0.7 - use 'container'"):
+            parse_runner_value("docker")
 
-    def test_legacy_docker_image_normalises_to_container_and_warns(self):
-        with pytest.warns(DeprecationWarning, match="use 'container:ghcr.io/custom/img:v1'"):
-            mode, image = parse_runner_value("docker:ghcr.io/custom/img:v1")
-        assert mode == "container"
-        assert image == "ghcr.io/custom/img:v1"
+    def test_legacy_docker_image_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match=r"use 'container:ghcr.io/custom/img:v1'"):
+            parse_runner_value("docker:ghcr.io/custom/img:v1")
 
-    def test_legacy_docker_colon_empty_raises(self):
-        with pytest.raises(ValueError, match="empty image name"):
+    def test_legacy_docker_colon_empty_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match=r"use 'container:<image>'"):
             parse_runner_value("docker:")
 
 
@@ -218,13 +205,10 @@ class TestResolveRunner:
         assert spec.mode == "container"
         assert spec.image == "ghcr.io/myorg/vllm:latest"
 
-    def test_yaml_runners_legacy_docker_normalises_and_warns(self):
-        """A legacy YAML 'docker' value resolves to container mode and warns once."""
-        with pytest.warns(DeprecationWarning, match="'docker' is deprecated; use 'container'"):
-            spec = resolve_runner("vllm", yaml_runners={"vllm": "docker"})
-        assert spec.source == "yaml"
-        assert spec.mode == "container"
-        assert spec.image is None
+    def test_yaml_runners_legacy_docker_rejected_with_migration_hint(self):
+        """A legacy YAML 'docker' value is rejected with a migration error (clean break)."""
+        with pytest.raises(ValueError, match=r"'docker' was renamed in v0.7 - use 'container'"):
+            resolve_runner("vllm", yaml_runners={"vllm": "docker"})
 
     def test_yaml_runners_missing_engine_falls_through(self):
         """If engine not in yaml_runners, falls through to lower layers."""
