@@ -300,7 +300,7 @@ def _mock_preflight_return(study, **kw):
     from llenergymeasure.config.runner_spec import RunnerSpec
 
     engines = {exp.engine for exp in study.experiments}
-    specs = {b: RunnerSpec(mode="local", image=None, source="test") for b in engines}
+    specs = {b: RunnerSpec(mode="process", image=None, source="test") for b in engines}
     return specs, {}
 
 
@@ -438,7 +438,7 @@ def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     study = StudyConfig(experiments=[config])
 
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] = (
-        {"transformers": RunnerSpec(mode="local", image=None, source="test")},
+        {"transformers": RunnerSpec(mode="process", image=None, source="test")},
         {},
     )
     api_module.orchestrate_study(study, skip_preflight=True, preresolved=preresolved)
@@ -557,7 +557,7 @@ def test_run_preresolved_without_skip_preflight_raises():
     study = StudyConfig(experiments=[config])
 
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] = (
-        {"transformers": RunnerSpec(mode="local", image=None, source="test")},
+        {"transformers": RunnerSpec(mode="process", image=None, source="test")},
         {},
     )
 
@@ -880,7 +880,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     mock_result = make_result(experiment_id="runner-wired")
 
     resolved_specs = {
-        "transformers": RunnerSpec(mode="local", image=None, source="default"),
+        "transformers": RunnerSpec(mode="process", image=None, source="default"),
     }
 
     # Capture what runner_specs was passed to _run_via_runner
@@ -953,8 +953,8 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     from llenergymeasure.config.runner_spec import RunnerSpec
 
     mixed_specs = {
-        "transformers": RunnerSpec(mode="local", image=None, source="default"),
-        "vllm": RunnerSpec(mode="docker", image=None, source="yaml"),
+        "transformers": RunnerSpec(mode="process", image=None, source="default"),
+        "vllm": RunnerSpec(mode="container", image=None, source="yaml"),
     }
 
     mock_result = make_result()

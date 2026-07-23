@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.models import StudyConfig
-from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES, engine_str
+from llenergymeasure.config.ssot import RUNNER_CONTAINER, TEMP_PREFIX_TIMESERIES, engine_str
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.progress import ProgressCallback
@@ -82,7 +82,7 @@ def run_single_experiment(
     # runner block's digest resolution); None on the local path.
     resolved_docker_image: str | None = None
 
-    if spec is not None and spec.mode == RUNNER_DOCKER:
+    if spec is not None and spec.mode == RUNNER_CONTAINER:
         # Docker path: dispatch to container directly (no subprocess)
         from llenergymeasure.infra.docker_errors import docker_exc_to_failure
         from llenergymeasure.infra.docker_runner import DockerRunner

@@ -119,10 +119,10 @@ class TestDockerRunnerIntegration:
         from llenergymeasure.study.runner import _provenance_from_spec
 
         provenance = _provenance_from_spec(
-            RunnerSpec(mode="docker", image=IMAGE, source="test", image_source="registry")
+            RunnerSpec(mode="container", image=IMAGE, source="test", image_source="registry")
         )
         assert isinstance(provenance, RunnerProvenance)
-        assert provenance.mode == "docker"
+        assert provenance.mode == "container"
         assert provenance.image == IMAGE
         assert provenance.source == "test"
 
@@ -156,7 +156,7 @@ class TestDockerRunnerIntegration:
             runner.run(config)
 
     def test_study_runner_dispatches_to_docker(self, tmp_path):
-        """StudyRunner routes to Docker path when runner spec has mode='docker'."""
+        """StudyRunner routes to Docker path when runner spec has mode='container'."""
         from unittest.mock import patch
 
         from llenergymeasure.config.models import (
@@ -190,7 +190,7 @@ class TestDockerRunnerIntegration:
         # Patch resolve_study_runners to force Docker dispatch
         from llenergymeasure.config.runner_spec import RunnerSpec
 
-        docker_spec = RunnerSpec(mode="docker", image=IMAGE, source="test")
+        docker_spec = RunnerSpec(mode="container", image=IMAGE, source="test")
 
         with patch(
             "llenergymeasure.study.runner.resolve_study_runners",

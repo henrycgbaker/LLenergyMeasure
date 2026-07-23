@@ -161,7 +161,7 @@ task:
     source: aienergyscore
     n_prompts: 50
 runners:
-  vllm: docker
+  vllm: container
 ```
 
 Then run it:

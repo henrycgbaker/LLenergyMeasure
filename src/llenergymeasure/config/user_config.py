@@ -46,29 +46,41 @@ class UserRunnersConfig(BaseModel):
 
     transformers: str = Field(
         default="auto",
-        description="Transformers runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
+        description="Transformers runner: 'auto', 'process', 'container' (built-in image), or "
+        "'container:<image>' (legacy 'local'/'docker' accepted with a deprecation warning)",
     )
     vllm: str = Field(
         default="auto",
-        description="vLLM runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
+        description="vLLM runner: 'auto', 'process', 'container' (built-in image), or "
+        "'container:<image>' (legacy 'local'/'docker' accepted with a deprecation warning)",
     )
     tensorrt: str = Field(
         default="auto",
-        description="TensorRT runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
+        description="TensorRT runner: 'auto', 'process', 'container' (built-in image), or "
+        "'container:<image>' (legacy 'local'/'docker' accepted with a deprecation warning)",
     )
 
     @model_validator(mode="after")
     def validate_runner_format(self) -> UserRunnersConfig:
+        # Legacy 'local'/'docker'/'docker:<image>' are accepted here as format-valid;
+        # normalisation to the canonical vocabulary (with the deprecation warning) happens
+        # downstream in parse_runner_value when the resolution chain reads the value.
+        bare_ok = {"auto", "process", "container", "local", "docker"}
         for field_name in ALL_ENGINES:
             value = getattr(self, field_name)
             if value.startswith("singularity:"):
                 raise ValueError(
                     f"Singularity runner not yet supported (runners.{field_name}='{value}'). "
-                    "Use 'auto', 'local', 'docker', or 'docker:<image>'."
+                    "Use 'auto', 'process', 'container', or 'container:<image>'."
                 )
-            if value not in {"auto", "local", "docker"} and not value.startswith("docker:"):
+            if (
+                value not in bare_ok
+                and not value.startswith("container:")
+                and not value.startswith("docker:")
+            ):
                 raise ValueError(
-                    f"runners.{field_name}: expected 'auto', 'local', 'docker', or 'docker:<image>', "
+                    f"runners.{field_name}: expected 'auto', 'process', 'container', or "
+                    f"'container:<image>' (legacy 'local'/'docker'/'docker:<image>' also accepted), "
                     f"got '{value}'"
                 )
         return self

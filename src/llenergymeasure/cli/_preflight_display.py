@@ -25,7 +25,11 @@ from llenergymeasure.config.models import (
     MeasurementConfig,
     TaskConfig,
 )
-from llenergymeasure.config.ssot import SOURCE_MULTI_ENGINE_ELEVATION
+from llenergymeasure.config.ssot import (
+    RUNNER_CONTAINER,
+    RUNNER_PROCESS,
+    SOURCE_MULTI_ENGINE_ELEVATION,
+)
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
@@ -106,7 +110,7 @@ def build_preflight_panel(
         }
     )
     all_docker = runner_specs is not None and all(
-        spec.mode == "docker" for spec in runner_specs.values()
+        spec.mode == RUNNER_CONTAINER for spec in runner_specs.values()
     )
     energy_display = _resolve_energy_display(
         unique_energy, probed_sampler=probed_energy_sampler, skip_probe=all_docker
@@ -150,12 +154,12 @@ def build_preflight_panel(
             if getattr(spec, "source", None) == SOURCE_MULTI_ENGINE_ELEVATION:
                 body.append(" (auto-elevated)", style="yellow")
             body.append("\n")
-            # Show image resolution for Docker engines
-            if spec.mode == "docker" and spec.image:
+            # Show image resolution for container engines
+            if spec.mode == RUNNER_CONTAINER and spec.image:
                 body.append("    ", style="dim")
                 body.append(f"\u21b3 {spec.image}\n", style="dim")
         else:
-            mode_str = str(yaml_runners.get(b, "local"))
+            mode_str = str(yaml_runners.get(b, RUNNER_PROCESS))
             _line(body, b, mode_str)
 
     # -- Workload section --

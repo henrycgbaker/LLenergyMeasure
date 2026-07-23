@@ -94,10 +94,10 @@ def test_write_result_attaches_runner_provenance(tmp_path: Path) -> None:
     writer = _writer(study_dir)
     result_path = writer.write_result(
         make_result(),
-        runner_provenance=RunnerProvenance(mode="docker", image="img:2.0", source="env"),
+        runner_provenance=RunnerProvenance(mode="container", image="img:2.0", source="env"),
     )
     payload = json.loads(result_path.read_text())
-    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["mode"] == "container"
     assert payload["runner_provenance"]["image"] == "img:2.0"
     assert payload["runner_provenance"]["source"] == "env"
 
@@ -124,13 +124,13 @@ def test_write_environment_local_stamps_bundle_version(tmp_path: Path) -> None:
     writer.write_result(make_result())
     writer.write_environment(
         host_snapshot=_make_snapshot(),
-        runner=RunnerProvenance(mode="local", source="default"),
+        runner=RunnerProvenance(mode="process", source="default"),
     )
     payload = json.loads((writer.bundle_dir / "environment.json").read_text())
     assert payload["bundle_version"] == "2.0"
     assert payload["python_version"] == "3.12.12"
     assert payload["runner"] == {
-        "mode": "local",
+        "mode": "process",
         "image": None,
         "source": "default",
         "image_source": None,
@@ -151,7 +151,7 @@ def test_write_environment_prefers_rescued_over_host(tmp_path: Path) -> None:
     writer.write_environment(
         host_snapshot=_make_snapshot(),
         runner=RunnerProvenance(
-            mode="docker",
+            mode="container",
             image="ghcr.io/acme/vllm:1.0",
             image_digest="ghcr.io/acme/vllm@sha256:abc123",
             source="yaml",
@@ -177,7 +177,7 @@ def test_write_environment_docker_without_rescue_warns(tmp_path: Path, caplog) -
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.write_environment(
             host_snapshot=_make_snapshot(),
-            runner=RunnerProvenance(mode="docker", image="img:1.0", source="yaml"),
+            runner=RunnerProvenance(mode="container", image="img:1.0", source="yaml"),
         )
     assert any("No in-container environment.json rescued" in rec.message for rec in caplog.records)
 
@@ -186,9 +186,9 @@ def test_patch_runner_block_adds_block_and_stamps(tmp_path: Path) -> None:
     """_patch_runner_block injects the runner block and stamps bundle_version."""
     payload = BundleWriter._patch_runner_block(
         {"python_version": "3.10.14"},
-        RunnerProvenance(mode="docker", image="img:1.0", image_digest=None, source="yaml"),
+        RunnerProvenance(mode="container", image="img:1.0", image_digest=None, source="yaml"),
     )
-    assert payload["runner"]["mode"] == "docker"
+    assert payload["runner"]["mode"] == "container"
     assert payload["bundle_version"] == "2.0"
 
 
@@ -323,7 +323,7 @@ def _write_full_bundle(tmp_path: Path) -> Path:
     writer.write_result(make_result())
     writer.write_environment(
         host_snapshot=_make_snapshot(),
-        runner=RunnerProvenance(mode="local", source="default"),
+        runner=RunnerProvenance(mode="process", source="default"),
     )
     writer.move_config_sidecar(resolved_config_hash="resolved_h1", resolution_log=None)
     writer.finalize()
@@ -447,7 +447,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
         "end_time": "2026-01-01T00:00:01",
         # runner_provenance in its 1.0 shape: no image_digest key.
         "runner_provenance": {
-            "mode": "docker",
+            "mode": "container",
             "image": "img:1.0",
             "source": "yaml",
             "image_source": "registry",
@@ -481,7 +481,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
         "cuda_version_source": "torch",
         # runner in its old RunnerEnvironment shape: no image_source key.
         "runner": {
-            "mode": "docker",
+            "mode": "container",
             "image": "img:1.0",
             "image_digest": "img@sha256:abc",
             "source": "yaml",

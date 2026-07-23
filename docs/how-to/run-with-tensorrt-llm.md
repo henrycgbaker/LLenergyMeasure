@@ -45,7 +45,7 @@ task:
     source: aienergyscore
     n_prompts: 50
 runners:
-  tensorrt: docker
+  tensorrt: container
 ```
 
 With the compiled `trt` backend, explicit quantisation, and a larger batch:
@@ -58,7 +58,7 @@ task:
     source: aienergyscore
     n_prompts: 50
 runners:
-  tensorrt: docker
+  tensorrt: container
 tensorrt:
   engine_params:
     backend: trt

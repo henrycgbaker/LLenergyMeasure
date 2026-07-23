@@ -121,10 +121,10 @@ def test_build_header_strips_hf_org_prefix():
     config.vllm = None  # no engine section → dtype is None (engine default)
     config.task.dataset.n_prompts = 100  # default - should not appear
 
-    header = _build_header(config, runner_tag="docker")
+    header = _build_header(config, runner_tag="container")
     assert "Llama-3.2-1B-Instruct" in header
     assert "meta-llama" not in header
-    assert "[docker]" in header
+    assert "[container]" in header
 
 
 def test_build_header_default_dtype_omitted():
@@ -137,9 +137,9 @@ def test_build_header_default_dtype_omitted():
     config.transformers = None  # engine default - should not appear
     config.task.dataset.n_prompts = 100  # default - should not appear
 
-    header = _build_header(config, runner_tag="local")
+    header = _build_header(config, runner_tag="process")
     assert "bfloat16" not in header
-    assert header == "gpt2 | transformers [local]"
+    assert header == "gpt2 | transformers [process]"
 
 
 def test_build_header_nondefault_fields_shown():
@@ -154,7 +154,7 @@ def test_build_header_nondefault_fields_shown():
     config.active_engine_params.return_value = engine_params
     config.task.dataset.n_prompts = 50  # non-default - should appear
 
-    header = _build_header(config, runner_tag="local")
+    header = _build_header(config, runner_tag="process")
     assert "float16" in header
     assert "n_prompts=50" in header
 

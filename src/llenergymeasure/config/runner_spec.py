@@ -1,7 +1,7 @@
 """RunnerSpec - the resolved runner value object.
 
 A ``RunnerSpec`` is a plain resolved fact about *how* an engine should be
-dispatched (local vs Docker, which image, and the precedence source that
+dispatched (process vs container, which image, and the precedence source that
 selected it). It lives in the config/domain foundation layer, not in ``infra``,
 because it is config-derived data consumed by the study layer - the resolution
 *machinery* (Docker detection, env-var reading) stays in
@@ -30,14 +30,14 @@ class RunnerSpec:
     be reused across many.
 
     Attributes:
-        mode:         Execution mode - "local" or "docker".
-        image:        Docker image to use. None for local mode or when the
+        mode:         Execution mode - "process" or "container".
+        image:        Container image to use. None for process mode or when the
                       default should be resolved at dispatch time.
         source:       Which layer of the precedence chain produced this spec:
                       "env", "yaml", "user_config", "auto_detected", "default".
-        image_source: Where the Docker image was resolved from:
+        image_source: Where the container image was resolved from:
                       "env", "yaml", "runner_override", "user_config",
-                      "local_build", "registry", or None (local mode / unresolved).
+                      "local_build", "registry", or None (process mode / unresolved).
     """
 
     mode: RunnerMode

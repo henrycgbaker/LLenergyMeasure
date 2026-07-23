@@ -793,7 +793,7 @@ class TestWiring:
 
         study = make_study(["transformers"])
 
-        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        docker_spec = RunnerSpec(mode="container", image=None, source="yaml")
         runner_specs = {"transformers": docker_spec}
 
         # run_docker_preflight is imported inside the function body via a local
@@ -826,7 +826,7 @@ class TestWiring:
 
         study = make_study(["transformers"])
 
-        local_spec = RunnerSpec(mode="local", image=None, source="default")
+        local_spec = RunnerSpec(mode="process", image=None, source="default")
         runner_specs = {"transformers": local_spec}
 
         call_count = 0
@@ -851,7 +851,7 @@ class TestWiring:
 
         study = make_study(["transformers"])
 
-        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        docker_spec = RunnerSpec(mode="container", image=None, source="yaml")
         runner_specs = {"transformers": docker_spec}
 
         received_skip: list[bool] = []
@@ -884,7 +884,7 @@ class TestWiring:
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
         )
 
-        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        docker_spec = RunnerSpec(mode="container", image=None, source="yaml")
         runner_specs = {"transformers": docker_spec}
 
         received_skip: list[bool] = []
@@ -918,7 +918,7 @@ class TestWiring:
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
         )
 
-        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        docker_spec = RunnerSpec(mode="container", image=None, source="yaml")
         runner_specs = {"transformers": docker_spec}
 
         received_skip: list[bool] = []

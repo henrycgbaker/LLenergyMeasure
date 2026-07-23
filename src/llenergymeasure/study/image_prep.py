@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 from llenergymeasure._version import __version__ as _HOST_PKG_VERSION
 from llenergymeasure.config.ssot import (
     DOCKER_PULL_TIMEOUT,
-    RUNNER_DOCKER,
+    RUNNER_CONTAINER,
     TIMEOUT_DOCKER_INSPECT,
 )
 from llenergymeasure.infra.docker_errors import DockerImagePullError
@@ -223,7 +223,7 @@ class _ImageMixin:
         docker_engines = [
             (engine_name, spec)
             for engine_name, spec in self._runner_specs.items()
-            if spec.mode == RUNNER_DOCKER and spec.image
+            if spec.mode == RUNNER_CONTAINER and spec.image
         ]
         if not docker_engines:
             return

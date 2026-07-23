@@ -319,14 +319,14 @@ def test_provenance_from_spec_docker() -> None:
     """A docker RunnerSpec maps onto the unified RunnerProvenance, digest resolved."""
     from unittest.mock import patch
 
-    spec = RunnerSpec(mode="docker", image="img:1.0", source="yaml", image_source="registry")
+    spec = RunnerSpec(mode="container", image="img:1.0", source="yaml", image_source="registry")
     with patch(
         "llenergymeasure.infra.image_registry.resolve_image_digest",
         return_value="img@sha256:abc",
     ):
         provenance = _provenance_from_spec(spec)
     assert provenance == RunnerProvenance(
-        mode="docker",
+        mode="container",
         image="img:1.0",
         source="yaml",
         image_source="registry",
@@ -397,7 +397,7 @@ def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
         ts_source_dir=tmp_path,
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
-            mode="docker", image="img:1.0", source="yaml", image_source="registry"
+            mode="container", image="img:1.0", source="yaml", image_source="registry"
         ),
     )
 
@@ -438,7 +438,7 @@ def test_docker_without_rescued_environment_warns(tmp_path: Path, caplog) -> Non
             ts_source_dir=tmp_path,  # no environment.json inside
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
-                mode="docker", image="img:1.0", source="yaml", image_source="registry"
+                mode="container", image="img:1.0", source="yaml", image_source="registry"
             ),
         )
 
@@ -472,7 +472,7 @@ def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) ->
             ts_source_dir=tmp_path,  # local temp dir never holds environment.json
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
-                mode="local", image=None, source="local", image_source=None
+                mode="process", image=None, source="local", image_source=None
             ),
         )
 
@@ -580,7 +580,7 @@ def test_environment_sidecar_rescue_permission_error_warns(
             ts_source_dir=tmp_path,
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
-                mode="docker", image="img:1.0", source="yaml", image_source="registry"
+                mode="container", image="img:1.0", source="yaml", image_source="registry"
             ),
         )
 
@@ -597,7 +597,7 @@ def test_environment_sidecar_rescue_permission_error_warns(
 def test_provenance_from_spec_none_defaults_to_local() -> None:
     """No spec (pure in-process local) records mode=local, source=local, no image."""
     provenance = _provenance_from_spec(None)
-    assert provenance.mode == "local"
+    assert provenance.mode == "process"
     assert provenance.image is None
     assert provenance.source == "local"
     assert provenance.image_source is None
@@ -623,12 +623,12 @@ def test_save_and_record_attaches_runner_provenance(tmp_path: Path) -> None:
         result_files,
         model_name="gpt2",
         engine="transformers",
-        runner_provenance=RunnerProvenance(mode="docker", image="img:2.0", source="env"),
+        runner_provenance=RunnerProvenance(mode="container", image="img:2.0", source="env"),
     )
 
     assert len(result_files) == 1
     payload = json.loads(Path(result_files[0]).read_text())
-    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["mode"] == "container"
     assert payload["runner_provenance"]["image"] == "img:2.0"
     assert payload["runner_provenance"]["source"] == "env"
 
@@ -704,7 +704,7 @@ def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
         ts_source_dir=tmp_path,  # local temp dir never holds environment.json
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
-            mode="local", image=None, source="default", image_source=None
+            mode="process", image=None, source="default", image_source=None
         ),
     )
 
@@ -712,7 +712,7 @@ def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
     payload = json.loads(env_dest.read_text())
     assert payload["bundle_version"] == "2.0"
     assert payload["runner"] == {
-        "mode": "local",
+        "mode": "process",
         "image": None,
         "source": "default",
         "image_source": None,
@@ -750,7 +750,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
         ts_source_dir=tmp_path,
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
-            mode="docker",
+            mode="container",
             image="ghcr.io/acme/vllm:1.0",
             source="yaml",
             image_source="registry",
@@ -762,7 +762,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
     payload = json.loads(env_dest.read_text())
     # Runner block (host-only facts) patched into the rescued snapshot.
     assert payload["runner"] == {
-        "mode": "docker",
+        "mode": "container",
         "image": "ghcr.io/acme/vllm:1.0",
         "source": "yaml",
         "image_source": "registry",
@@ -800,7 +800,7 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
         ts_source_dir=tmp_path,  # no environment.json rescued
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
-            mode="docker",
+            mode="container",
             image="ghcr.io/acme/vllm:1.0",
             source="yaml",
             image_source="registry",
@@ -811,22 +811,22 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
     env_dest = Path(result_files[0]).parent / "environment.json"
     payload = json.loads(env_dest.read_text())
     # Runner block present even in the degraded no-rescue case (host snapshot carries it).
-    assert payload["runner"]["mode"] == "docker"
+    assert payload["runner"]["mode"] == "container"
     assert payload["runner"]["image"] == "ghcr.io/acme/vllm:1.0"
     assert payload["runner"]["image_digest"] is None
 
 
 def test_provenance_from_spec_local_and_none_spec() -> None:
     """_provenance_from_spec maps local specs (and no spec) onto a local provenance."""
-    local = _provenance_from_spec(RunnerSpec(mode="local", image=None, source="user_config"))
-    assert local.mode == "local"
+    local = _provenance_from_spec(RunnerSpec(mode="process", image=None, source="user_config"))
+    assert local.mode == "process"
     assert local.image is None
     assert local.image_source is None
     assert local.image_digest is None
     assert local.source == "user_config"
 
     no_spec = _provenance_from_spec(None)
-    assert no_spec.mode == "local"
+    assert no_spec.mode == "process"
     assert no_spec.source == "local"
 
 
@@ -836,10 +836,10 @@ def test_provenance_from_spec_docker_digest_failure_is_none() -> None:
 
     with patch("llenergymeasure.infra.image_registry.resolve_image_digest", return_value=None):
         prov = _provenance_from_spec(
-            RunnerSpec(mode="docker", image=None, source="auto_detected"),
+            RunnerSpec(mode="container", image=None, source="auto_detected"),
             resolved_image="ghcr.io/acme/vllm:1.0",
         )
-    assert prov.mode == "docker"
+    assert prov.mode == "container"
     assert prov.image == "ghcr.io/acme/vllm:1.0"
     assert prov.image_digest is None
     assert prov.source == "auto_detected"
@@ -886,7 +886,7 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
             ts_source_dir=tmp_path,
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
-                mode="docker",
+                mode="container",
                 image="ghcr.io/acme/vllm:1.0",
                 source="yaml",
                 image_source="registry",
@@ -906,7 +906,7 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
     env_dest = Path(result_files[0]).parent / "environment.json"
     payload = json.loads(env_dest.read_text())
     assert payload["runner"] == {
-        "mode": "docker",
+        "mode": "container",
         "image": "ghcr.io/acme/vllm:1.0",
         "source": "yaml",
         "image_source": "registry",

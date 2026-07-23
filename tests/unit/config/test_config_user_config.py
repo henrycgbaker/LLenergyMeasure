@@ -125,9 +125,11 @@ def test_env_var_llem_no_prompt(tmp_path, monkeypatch):
 
 def test_env_var_runner_transformers(tmp_path, monkeypatch):
     """LLEM_RUNNER_TRANSFORMERS env var overrides transformers runner."""
-    monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "docker:nvcr.io/nvidia/pytorch:latest")
+    monkeypatch.setenv(
+        f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "container:nvcr.io/nvidia/pytorch:latest"
+    )
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    assert config.runners.transformers == "docker:nvcr.io/nvidia/pytorch:latest"
+    assert config.runners.transformers == "container:nvcr.io/nvidia/pytorch:latest"
 
 
 def test_env_var_overrides_take_precedence_over_file(tmp_path, monkeypatch):

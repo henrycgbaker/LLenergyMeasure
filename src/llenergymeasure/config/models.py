@@ -1079,7 +1079,8 @@ class StudyConfig(BaseModel):
         description=(
             "Per-engine runner configuration. Keys are engine names "
             "('transformers', 'vllm', 'tensorrt'), values are runner strings "
-            "('local', 'docker', or 'docker:<image>'). "
+            "('process', 'container', or 'container:<image>'; legacy 'local'/'docker'/"
+            "'docker:<image>' accepted with a deprecation warning). "
             "None = use user config / auto-detection. "
             "Runner is metadata - not part of the experiment config hash."
         ),

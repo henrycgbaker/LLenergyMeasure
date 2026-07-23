@@ -15,6 +15,7 @@ from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.table import Table
 from rich.text import Text
 
+from llenergymeasure.config.ssot import RUNNER_CONTAINER, RUNNER_PROCESS
 from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_PHASES
 from llenergymeasure.utils.compat import StrEnum
 from llenergymeasure.utils.formatting import format_elapsed as _format_elapsed
@@ -133,7 +134,7 @@ _IMAGE_SOURCE_LABELS: dict[ImageSource, str] = {
     ImageSource.REGISTRY_CACHED: "REGISTRY - cached locally from prior pull",
     ImageSource.ENV: "OVERRIDE - image set via environment variable",
     ImageSource.YAML: "OVERRIDE - image set in study YAML images: section",
-    ImageSource.RUNNER_OVERRIDE: "OVERRIDE - image set via docker:<image> in runners:",
+    ImageSource.RUNNER_OVERRIDE: "OVERRIDE - image set via container:<image> in runners:",
     ImageSource.USER_CONFIG: "OVERRIDE - image set in user config (~/.config/llenergymeasure/config.yaml)",
 }
 
@@ -156,13 +157,13 @@ def _render_runner_info(lines: Text, info: dict[str, str | None]) -> None:
 
     source_label = _RUNNER_SOURCE_LABELS.get(source or "", source or "")
 
-    if mode == "local":
-        lines.append(f"       mode:    local ({source_label})\n", style="dim")
+    if mode == RUNNER_PROCESS:
+        lines.append(f"       mode:    process ({source_label})\n", style="dim")
         lines.append(
             "               no container isolation - running directly on host\n", style="dim"
         )
-    elif mode == "docker" and image:
-        lines.append(f"       mode:    docker ({source_label})\n", style="dim")
+    elif mode == RUNNER_CONTAINER and image:
+        lines.append(f"       mode:    container ({source_label})\n", style="dim")
         lines.append(f"       image:   {image}\n", style="dim")
         if image_source:
             try:

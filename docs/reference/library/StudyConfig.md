@@ -117,7 +117,7 @@ Controls sequencing, cycles, and failure handling:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `runners` | `dict[str, str] \| None` | `None` | Per-engine runner: `{"transformers": "local", "vllm": "docker"}`. `None` = use user config or auto-detection. |
+| `runners` | `dict[str, str] \| None` | `None` | Per-engine runner: `{"transformers": "process", "vllm": "container"}` (legacy `local`/`docker` accepted with a deprecation warning). `None` = use user config or auto-detection. |
 | `images` | `dict[str, str] \| None` | `None` | Per-engine Docker image overrides: `{"vllm": "ghcr.io/org/img:tag"}`. `None` = smart default (local build then registry fallback). |
 
 ### Finalisation-populated metadata fields

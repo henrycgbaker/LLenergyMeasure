@@ -194,7 +194,7 @@ def load_study_config(
 
     # Extract study-level metadata
     name = raw.get("study_name")
-    # runners: per-engine runner config (e.g. {"transformers": "local", "vllm": "docker"})
+    # runners: per-engine runner config (e.g. {"transformers": "process", "vllm": "container"})
     # None if not specified in YAML - caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
     # images: per-engine Docker image overrides (orthogonal to runners)

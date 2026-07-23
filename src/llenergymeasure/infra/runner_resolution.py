@@ -1,11 +1,11 @@
-"""Runner resolution - determine local vs Docker execution mode for each engine.
+"""Runner resolution - determine process vs container execution mode for each engine.
 
 Precedence chain (highest wins):
   env var > study/experiment YAML > user config > auto-detection > default
 
 Auto-detection: if Docker + NVIDIA Container Toolkit are available on the host,
-default to Docker for best measurement isolation. Otherwise fall back to local
-with a nudge message.
+default to container mode for best measurement isolation. Otherwise fall back to
+process mode with a nudge message.
 
 User config: non-"auto" values in UserRunnersConfig are treated as explicit.
 "auto" (the default) falls through to auto-detection, allowing Docker to be
@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import (
     ENV_RUNNER_PREFIX,
-    RUNNER_DOCKER,
-    RUNNER_LOCAL,
+    RUNNER_CONTAINER,
+    RUNNER_PROCESS,
     SOURCE_AUTO_DETECTED,
     SOURCE_DEFAULT,
     SOURCE_ENV,
@@ -119,9 +119,9 @@ def resolve_runner(
            Only non-"auto" values are treated as explicit. "auto" falls through
            to step 4. Pass ``user_config=None`` to allow auto-detection.
         4. Auto-detection: Docker + NVIDIA CT    - source="auto_detected"
-        5. Built-in default: local              - source="default"
+        5. Built-in default: process            - source="default"
 
-    When mode is "docker" and image is None, the caller (DockerRunner) should
+    When mode is "container" and image is None, the caller (DockerRunner) should
     resolve the image via ``get_default_image(engine)`` from image_registry.
 
     Args:
@@ -131,7 +131,8 @@ def resolve_runner(
         user_config:  UserRunnersConfig from loaded user preferences.
                       None = no user config present (enables auto-detection).
                       When provided, "auto" values fall through to auto-detection;
-                      explicit values ("local", "docker", "docker:<img>") are honoured.
+                      explicit values ("process", "container", "container:<img>") are
+                      honoured (legacy "local"/"docker"/"docker:<img>" also accepted).
 
     Returns:
         RunnerSpec with mode, image, and source fields populated.
@@ -163,14 +164,14 @@ def resolve_runner(
     # 4. Auto-detection: Docker + NVIDIA Container Toolkit available?
     if is_docker_available():
         logger.info("Docker detected. Using containerised execution for reproducible measurements.")
-        return RunnerSpec(mode=RUNNER_DOCKER, image=None, source=SOURCE_AUTO_DETECTED)
+        return RunnerSpec(mode=RUNNER_CONTAINER, image=None, source=SOURCE_AUTO_DETECTED)
 
-    # 5. Default: local with nudge message
+    # 5. Default: process mode with nudge message
     logger.info(
         "Docker not detected. Install Docker + NVIDIA Container Toolkit "
         "for reproducible isolated measurements."
     )
-    return RunnerSpec(mode=RUNNER_LOCAL, image=None, source=SOURCE_DEFAULT)
+    return RunnerSpec(mode=RUNNER_PROCESS, image=None, source=SOURCE_DEFAULT)
 
 
 # ---------------------------------------------------------------------------

@@ -200,11 +200,11 @@ It also carries a `runner` block - the reproducibility anchor for cross-run comp
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `mode` | str | `"docker"` (containerized) or `"local"` (host process) - a first-order variable for energy/latency comparability |
-| `image` | str &#124; null | Docker image reference that ran (`null` for local) |
+| `mode` | str | `"container"` (containerized) or `"process"` (host process) - a first-order variable for energy/latency comparability. Legacy bundles' `"docker"`/`"local"` are read as `"container"`/`"process"` |
+| `image` | str &#124; null | Docker image reference that ran (`null` for process mode) |
 | `source` | str | Which precedence layer selected the runner (`env`, `yaml`, `user_config`, `auto_detected`, `default`, `multi_engine_elevation`, or `local`) |
-| `image_source` | str &#124; null | Where the Docker image was resolved from (`null` for local runs or when unresolved) |
-| `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for local runs, and for locally-built images with no registry digest |
+| `image_source` | str &#124; null | Where the Docker image was resolved from (`null` for process runs or when unresolved) |
+| `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for process runs, and for locally-built images with no registry digest |
 
 Sidecars written before this block existed load with `runner: null`.
 

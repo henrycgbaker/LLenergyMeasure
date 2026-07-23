@@ -69,8 +69,8 @@ def engine_str(engine: Any) -> str:
 # Runner mode constants
 # ---------------------------------------------------------------------------
 
-RUNNER_LOCAL: Final = "local"
-RUNNER_DOCKER: Final = "docker"
+RUNNER_PROCESS: Final = "process"
+RUNNER_CONTAINER: Final = "container"
 CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
 """Mount point inside Docker containers for config/result exchange."""
 
@@ -81,16 +81,16 @@ SOURCE_USER_CONFIG: Final = "user_config"
 SOURCE_AUTO_DETECTED: Final = "auto_detected"
 SOURCE_DEFAULT: Final = "default"
 SOURCE_MULTI_ENGINE_ELEVATION: Final = "multi_engine_elevation"
-"""RunnerSpec source tag when an engine is auto-elevated to Docker for multi-engine isolation."""
+"""RunnerSpec source tag when an engine is auto-elevated to container mode for multi-engine isolation."""
 
 EXPLICIT_RUNNER_SOURCES: Final[frozenset[str]] = frozenset(
     {SOURCE_ENV, SOURCE_YAML, SOURCE_USER_CONFIG}
 )
 """Runner source tags that represent an explicit user pin (env var, study YAML, or user
-config). In a multi-engine study these win over Docker elevation; only auto-resolved
-runners (``auto_detected`` / ``default``) are elevated to Docker for isolation."""
+config). In a multi-engine study these win over container elevation; only auto-resolved
+runners (``auto_detected`` / ``default``) are elevated to container mode for isolation."""
 
-RunnerMode = Literal["local", "docker"]
+RunnerMode = Literal["process", "container"]
 
 DOCKER_PULL_TIMEOUT: Final = 1800
 """Maximum seconds to wait for ``docker pull`` (30 min - generous for large images like TensorRT ~10 GB)."""
@@ -100,7 +100,7 @@ DOCKER_PULL_TIMEOUT: Final = 1800
 # ---------------------------------------------------------------------------
 
 ENV_RUNNER_PREFIX: Final = "LLEM_RUNNER_"
-"""Prefix for per-engine runner override env vars (e.g. ``LLEM_RUNNER_TRANSFORMERS=docker``)."""
+"""Prefix for per-engine runner override env vars (e.g. ``LLEM_RUNNER_TRANSFORMERS=container``)."""
 
 ENV_IMAGE_PREFIX: Final = "LLEM_IMAGE_"
 """Prefix for per-engine image override env vars (e.g. ``LLEM_IMAGE_VLLM=custom:tag``)."""
@@ -346,8 +346,8 @@ __all__ = [
     "ENV_SAVE_TIMESERIES",
     "ENV_TABLE_ROWS",
     "EXPLICIT_RUNNER_SOURCES",
-    "RUNNER_DOCKER",
-    "RUNNER_LOCAL",
+    "RUNNER_CONTAINER",
+    "RUNNER_PROCESS",
     "SAMPLING_PRESETS",
     "SOURCE_AUTO_DETECTED",
     "SOURCE_DEFAULT",

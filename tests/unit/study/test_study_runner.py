@@ -1005,17 +1005,17 @@ def test_gpu_memory_check_called_before_dispatch(study_config: StudyConfig) -> N
 
 
 def _make_docker_runner_spec(image: str = "test/image:latest", source: str = "yaml"):
-    """Build a RunnerSpec with mode='docker'."""
+    """Build a RunnerSpec with mode='container'."""
     from llenergymeasure.config.runner_spec import RunnerSpec
 
-    return RunnerSpec(mode="docker", image=image, source=source)
+    return RunnerSpec(mode="container", image=image, source=source)
 
 
 def _make_local_runner_spec(source: str = "default"):
-    """Build a RunnerSpec with mode='local'."""
+    """Build a RunnerSpec with mode='process'."""
     from llenergymeasure.config.runner_spec import RunnerSpec
 
-    return RunnerSpec(mode="local", image=None, source=source)
+    return RunnerSpec(mode="process", image=None, source=source)
 
 
 def test_docker_runner_spec_dispatches_to_docker(

@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.config.runner_spec import RunnerSpec
-from llenergymeasure.config.ssot import RUNNER_DOCKER, RUNNER_LOCAL
+from llenergymeasure.config.ssot import RUNNER_CONTAINER, RUNNER_PROCESS
 from llenergymeasure.study.orchestration import _resolve_runner_specs
 
 _WARN_TARGET = "llenergymeasure.utils.env_config.warn_on_gpu_selector_conflict"
@@ -42,7 +42,7 @@ def test_gpu_selector_warn_fires_once_when_docker_present(monkeypatch):
     """One Docker runner + both selectors set -> warn called exactly once, with the config indices."""
     monkeypatch.setenv("LLEM_DOCKER_GPUS", "0")
     study = _study([0])
-    specs = {"vllm": RunnerSpec(mode=RUNNER_DOCKER, image="img", source="yaml")}
+    specs = {"vllm": RunnerSpec(mode=RUNNER_CONTAINER, image="img", source="yaml")}
 
     with patch(_WARN_TARGET) as mock_warn:
         _resolve(study, specs)
@@ -55,8 +55,8 @@ def test_gpu_selector_warn_never_when_all_local(monkeypatch):
     monkeypatch.setenv("LLEM_DOCKER_GPUS", "0")
     study = _study([0])
     specs = {
-        "vllm": RunnerSpec(mode=RUNNER_LOCAL, image=None, source="default"),
-        "transformers": RunnerSpec(mode=RUNNER_LOCAL, image=None, source="default"),
+        "vllm": RunnerSpec(mode=RUNNER_PROCESS, image=None, source="default"),
+        "transformers": RunnerSpec(mode=RUNNER_PROCESS, image=None, source="default"),
     }
 
     with patch(_WARN_TARGET) as mock_warn:
@@ -70,8 +70,8 @@ def test_gpu_selector_warn_not_duplicated_across_docker_runners(monkeypatch):
     monkeypatch.setenv("LLEM_DOCKER_GPUS", "0")
     study = _study([0])
     specs = {
-        "vllm": RunnerSpec(mode=RUNNER_DOCKER, image="img-a", source="yaml"),
-        "transformers": RunnerSpec(mode=RUNNER_DOCKER, image="img-b", source="yaml"),
+        "vllm": RunnerSpec(mode=RUNNER_CONTAINER, image="img-a", source="yaml"),
+        "transformers": RunnerSpec(mode=RUNNER_CONTAINER, image="img-b", source="yaml"),
     }
 
     with patch(_WARN_TARGET) as mock_warn:

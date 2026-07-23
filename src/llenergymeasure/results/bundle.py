@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.config.ssot import RUNNER_CONTAINER
 from llenergymeasure.domain.bundle_artefacts import (
     ARTEFACTS,
     BUNDLE_VERSION,
@@ -191,7 +191,7 @@ class BundleWriter:
         )
         if rescued is not None and rescued.exists():
             self._rescue_environment(rescued, runner)
-        elif runner is not None and runner.mode == RUNNER_DOCKER:
+        elif runner is not None and runner.mode == RUNNER_CONTAINER:
             logger.warning(
                 "No in-container environment.json rescued for %s (cycle %d) at %s - "
                 "environment.json records the dispatching host, not the container "

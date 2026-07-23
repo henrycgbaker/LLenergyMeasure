@@ -80,7 +80,7 @@ def test_sessions_satisfy_experiment_session_protocol(tmp_path: Path) -> None:
 
     from llenergymeasure.config.runner_spec import RunnerSpec
 
-    spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+    spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
     doc = DockerSession(runner, config, spec, config_hash="h", cycle=1, index=1)
     assert isinstance(doc, ExperimentSession)
 
@@ -247,7 +247,7 @@ def test_docker_session_cleanup_removes_staging_dir_once(tmp_path: Path) -> None
     """DockerSession.__exit__ removes the container staging dir exactly once."""
     from llenergymeasure.config.runner_spec import RunnerSpec
 
-    spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+    spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
     runner = _make_runner(tmp_path, runner_specs={"transformers": spec})
     runner._images_prepared = True
     config = runner.study.experiments[0]

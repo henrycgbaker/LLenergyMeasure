@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
-    RUNNER_DOCKER,
-    RUNNER_LOCAL,
+    RUNNER_CONTAINER,
+    RUNNER_PROCESS,
     SOURCE_MULTI_ENGINE_ELEVATION,
     Engine,
 )
@@ -108,7 +108,7 @@ def run_study_preflight(
     from llenergymeasure.infra.image_registry import resolve_image
 
     for engine_name, spec in runner_specs.items():
-        if spec.mode == RUNNER_DOCKER:
+        if spec.mode == RUNNER_CONTAINER:
             image, image_source = resolve_image(
                 engine_name,
                 spec_image=spec.image,
@@ -125,7 +125,7 @@ def run_study_preflight(
     # Docker pre-flight: run once if any engine resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
     effective_skip = skip_preflight or study.study_execution.skip_preflight
-    if any(spec.mode == RUNNER_DOCKER for spec in runner_specs.values()):
+    if any(spec.mode == RUNNER_CONTAINER for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 
         run_docker_preflight(skip=effective_skip)
@@ -164,7 +164,7 @@ def _apply_multi_engine_precedence(
             # User pinned this engine - honour it (whether local or docker).
             kept_explicit.append(engine_name)
             # A local pin still needs a host importability check before dispatch.
-            if spec.mode == RUNNER_LOCAL:
+            if spec.mode == RUNNER_PROCESS:
                 explicit_local.append(engine_name)
         else:
             # auto_detected / default -> elevate to Docker for isolation.
@@ -210,11 +210,11 @@ def _apply_multi_engine_precedence(
         spec = runner_specs[engine_name]
         system_overrides[f"runner.{engine_name}"] = {
             "declared": spec.mode,
-            "effective": RUNNER_DOCKER,
+            "effective": RUNNER_CONTAINER,
             "reason": "auto-elevated (multi-engine study)",
         }
         runner_specs[engine_name] = RunnerSpec(
-            mode=RUNNER_DOCKER, image=spec.image, source=SOURCE_MULTI_ENGINE_ELEVATION
+            mode=RUNNER_CONTAINER, image=spec.image, source=SOURCE_MULTI_ENGINE_ELEVATION
         )
 
     logger.info(
@@ -228,7 +228,7 @@ def _apply_multi_engine_precedence(
     # Docker path would give is now the user's responsibility. Warn once (the
     # "mixed runners" warning downstream only fires when modes actually differ,
     # so it never covers this all-local multi-engine state).
-    if all(spec.mode == RUNNER_LOCAL for spec in runner_specs.values()):
+    if all(spec.mode == RUNNER_PROCESS for spec in runner_specs.values()):
         logger.warning(
             "Multi-engine study running all engines locally: ensure the host "
             "environment genuinely satisfies every engine; Docker per engine "
