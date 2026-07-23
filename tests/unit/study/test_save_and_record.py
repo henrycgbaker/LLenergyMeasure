@@ -472,7 +472,7 @@ def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) ->
             ts_source_dir=tmp_path,  # local temp dir never holds environment.json
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
-                mode="process", image=None, source="local", image_source=None
+                mode="process", image=None, source="implicit", image_source=None
             ),
         )
 
@@ -594,12 +594,12 @@ def test_environment_sidecar_rescue_permission_error_warns(
     assert not (tmp_path / "environment.json").exists()
 
 
-def test_provenance_from_spec_none_defaults_to_local() -> None:
-    """No spec (pure in-process local) records mode=local, source=local, no image."""
+def test_provenance_from_spec_none_defaults_to_implicit() -> None:
+    """No spec (pure in-process run) records mode=process, source=implicit, no image."""
     provenance = _provenance_from_spec(None)
     assert provenance.mode == "process"
     assert provenance.image is None
-    assert provenance.source == "local"
+    assert provenance.source == "implicit"
     assert provenance.image_source is None
 
 
@@ -816,18 +816,18 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
     assert payload["runner"]["image_digest"] is None
 
 
-def test_provenance_from_spec_local_and_none_spec() -> None:
-    """_provenance_from_spec maps local specs (and no spec) onto a local provenance."""
-    local = _provenance_from_spec(RunnerSpec(mode="process", image=None, source="user_config"))
-    assert local.mode == "process"
-    assert local.image is None
-    assert local.image_source is None
-    assert local.image_digest is None
-    assert local.source == "user_config"
+def test_provenance_from_spec_process_and_none_spec() -> None:
+    """_provenance_from_spec maps process specs (and no spec) onto a process provenance."""
+    process = _provenance_from_spec(RunnerSpec(mode="process", image=None, source="user_config"))
+    assert process.mode == "process"
+    assert process.image is None
+    assert process.image_source is None
+    assert process.image_digest is None
+    assert process.source == "user_config"
 
     no_spec = _provenance_from_spec(None)
     assert no_spec.mode == "process"
-    assert no_spec.source == "local"
+    assert no_spec.source == "implicit"
 
 
 def test_provenance_from_spec_docker_digest_failure_is_none() -> None:

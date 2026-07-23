@@ -31,6 +31,13 @@ from pydantic import BaseModel, Field, model_validator
 # blocks (process/container); this map lets the older blocks still parse.
 _LEGACY_MODE_ALIASES: dict[str, str] = {"local": "process", "docker": "container"}
 
+# The no-spec source sentinel was renamed "local" -> "implicit" alongside the mode
+# rename: with "local" vacated from the mode vocabulary, a block reading
+# {mode: "process", source: "local"} would invite exactly the stale-mode misreading
+# the rename removes. The sentinel predates bundle 2.0 (#837), so 09ec455e-era 2.0
+# blocks can carry source="local"; this map rewrites it on read.
+_LEGACY_SOURCE_ALIASES: dict[str, str] = {"local": "implicit"}
+
 
 class RunnerProvenance(BaseModel):
     """How an experiment was executed - host process or container.
@@ -46,7 +53,8 @@ class RunnerProvenance(BaseModel):
     source: str | None = Field(
         default=None,
         description='Precedence layer that produced the runner ("env", "yaml", '
-        '"user_config", "auto_detected", "default", "multi_engine_elevation", "local")',
+        '"user_config", "auto_detected", "default", "multi_engine_elevation", "implicit" '
+        "when no spec was resolved)",
     )
     image_source: str | None = Field(
         default=None,
@@ -65,16 +73,23 @@ class RunnerProvenance(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _map_legacy_mode(cls, data: Any) -> Any:
-        """Read a legacy (09ec455e-era bundle 2.0) runner mode best-effort.
+    def _map_legacy_vocabulary(cls, data: Any) -> Any:
+        """Read a legacy (09ec455e-era bundle 2.0) runner block best-effort.
 
         The runner-mode vocabulary was renamed ``local`` -> ``process`` and
-        ``docker`` -> ``container`` within the same untagged bundle 2.0 break.
-        Map an older block's ``mode`` onto the canonical value so those bundles
-        still parse rather than failing on the renamed value. Mirrors the
-        ``CUDAEnvironment._map_legacy_cuda_version`` read-path precedent.
+        ``docker`` -> ``container``, and the no-spec source sentinel ``local`` ->
+        ``implicit``, within the same untagged bundle 2.0 break. Map an older
+        block's ``mode`` and ``source`` onto the canonical values so those bundles
+        still parse rather than failing (mode) or leaking a stale-mode string
+        (source). Mirrors the ``CUDAEnvironment._map_legacy_cuda_version`` read-path
+        precedent.
         """
-        if isinstance(data, dict) and data.get("mode") in _LEGACY_MODE_ALIASES:
+        if not isinstance(data, dict):
+            return data
+        if data.get("mode") in _LEGACY_MODE_ALIASES or data.get("source") in _LEGACY_SOURCE_ALIASES:
             data = dict(data)
-            data["mode"] = _LEGACY_MODE_ALIASES[data["mode"]]
+            if data.get("mode") in _LEGACY_MODE_ALIASES:
+                data["mode"] = _LEGACY_MODE_ALIASES[data["mode"]]
+            if data.get("source") in _LEGACY_SOURCE_ALIASES:
+                data["source"] = _LEGACY_SOURCE_ALIASES[data["source"]]
         return data

@@ -104,8 +104,9 @@ def _provenance_from_spec(
     image implicit). Digest resolution is best-effort: an unresolved digest
     records None and is debug-logged, never raising - so provenance never fails a
     run. Process specs (and no spec at all) record ``mode="process"`` with no image,
-    digest, or image_source and the spec's source (``"local"`` when no spec was
-    resolved).
+    digest, or image_source and the spec's source (``"implicit"`` when no spec was
+    resolved - the resolution chain never ran, distinct from the ``"default"``
+    precedence layer, which is a real fall-through).
     """
     from llenergymeasure.domain.provenance import RunnerProvenance
 
@@ -113,7 +114,7 @@ def _provenance_from_spec(
         return RunnerProvenance(
             mode=RUNNER_PROCESS,
             image=None,
-            source=spec.source if spec is not None else "local",
+            source=spec.source if spec is not None else "implicit",
             image_source=None,
             image_digest=None,
         )

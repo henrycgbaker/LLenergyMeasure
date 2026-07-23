@@ -324,12 +324,14 @@ def test_runner_provenance_docker_round_trips(
     assert loaded.runner_provenance.image_source == "registry"
 
 
-def test_runner_provenance_local_round_trips(
+def test_runner_provenance_process_round_trips(
     tmp_path: Path, minimal_result: ExperimentResult
 ) -> None:
-    """A local runner_provenance survives save/load with no image."""
+    """A process runner_provenance survives save/load with no image."""
     result = minimal_result.model_copy(
-        update={"runner_provenance": RunnerProvenance(mode="process", image=None, source="local")}
+        update={
+            "runner_provenance": RunnerProvenance(mode="process", image=None, source="implicit")
+        }
     )
     result_path = save_result(result, tmp_path)
     loaded = load_result(result_path)
@@ -337,7 +339,7 @@ def test_runner_provenance_local_round_trips(
     assert loaded.runner_provenance is not None
     assert loaded.runner_provenance.mode == "process"
     assert loaded.runner_provenance.image is None
-    assert loaded.runner_provenance.source == "local"
+    assert loaded.runner_provenance.source == "implicit"
 
 
 # ---------------------------------------------------------------------------
@@ -551,18 +553,19 @@ def test_save_environment_writes_local_runner_block_roundtrip(
     assert loaded.environment.runner.source == "default"
 
 
-def test_load_result_maps_legacy_runner_mode_values(
+def test_load_result_maps_legacy_runner_vocabulary(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """A legacy 09ec455e-era 2.0 bundle (mode='docker'/'local') still reads.
+    """A legacy 09ec455e-era 2.0 bundle (mode='docker', source='local') still reads.
 
-    The runner-mode vocabulary was renamed local->process / docker->container
-    within the SAME untagged bundle_version 2.0 stamp, so a reader keying on
-    bundle_version alone cannot tell an old block apart. The RunnerProvenance
-    read-path alias validator maps the legacy values onto the canonical ones so
-    those bundles parse without a version bump.
+    The runner-mode vocabulary was renamed local->process / docker->container, and
+    the no-spec source sentinel local->implicit, within the SAME untagged
+    bundle_version 2.0 stamp, so a reader keying on bundle_version alone cannot tell
+    an old block apart. The RunnerProvenance read-path alias validator maps the
+    legacy values onto the canonical ones so those bundles parse without a version
+    bump.
     """
     import json
 
@@ -581,28 +584,44 @@ def test_load_result_maps_legacy_runner_mode_values(
         result_path.parent,
     )
 
-    # Rewrite the on-disk runner block to the LEGACY vocabulary (mode="docker"),
-    # simulating a bundle written before the SM2 rename.
+    # Rewrite the on-disk runner block to the LEGACY vocabulary (mode="docker",
+    # source="local"), simulating a bundle written before the SM2 rename.
     env_path = result_path.parent / "environment.json"
     payload = json.loads(env_path.read_text())
     payload["runner"]["mode"] = "docker"
+    payload["runner"]["source"] = "local"
     env_path.write_text(json.dumps(payload))
 
     loaded = load_result(result_path)
     assert loaded.environment is not None
     assert loaded.environment.runner is not None
-    # Legacy "docker" maps onto the canonical "container" on read.
+    # Legacy "docker" maps onto the canonical "container", and the legacy source
+    # sentinel "local" maps onto "implicit", on read.
     assert loaded.environment.runner.mode == "container"
+    assert loaded.environment.runner.source == "implicit"
     assert loaded.environment.runner.image == "img:1.0"
 
 
-def test_runner_provenance_model_maps_legacy_mode_on_read() -> None:
-    """RunnerProvenance.model_validate maps legacy mode values to the canon."""
+def test_runner_provenance_model_maps_legacy_vocabulary_on_read() -> None:
+    """RunnerProvenance.model_validate maps legacy mode + source values to the canon."""
     assert RunnerProvenance.model_validate({"mode": "docker"}).mode == "container"
     assert RunnerProvenance.model_validate({"mode": "local"}).mode == "process"
+    # The no-spec source sentinel "local" maps to "implicit".
+    assert (
+        RunnerProvenance.model_validate({"mode": "process", "source": "local"}).source == "implicit"
+    )
     # Canonical values pass through unchanged (idempotent).
     assert RunnerProvenance.model_validate({"mode": "container"}).mode == "container"
     assert RunnerProvenance.model_validate({"mode": "process"}).mode == "process"
+    assert (
+        RunnerProvenance.model_validate({"mode": "process", "source": "implicit"}).source
+        == "implicit"
+    )
+    # A real precedence source is never rewritten.
+    assert (
+        RunnerProvenance.model_validate({"mode": "process", "source": "default"}).source
+        == "default"
+    )
 
 
 def test_save_environment_runner_absent_when_snapshot_has_none(
