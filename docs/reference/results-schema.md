@@ -200,7 +200,7 @@ It also carries a `runner` block - the reproducibility anchor for cross-run comp
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `mode` | str | `"container"` (containerized) or `"process"` (host process) - a first-order variable for energy/latency comparability. Renamed from `"docker"`/`"local"` in v0.7 (clean break - there is no read-time alias translation) |
+| `mode` | str | `"container"` (containerized) or `"process"` (host process) - a first-order variable for energy/latency comparability. A closed vocabulary renamed from `"docker"`/`"local"` in v0.7 (clean break - a pre-v0.7 value fails validation loudly on read) |
 | `image` | str &#124; null | Docker image reference that ran (`null` for process mode) |
 | `source` | str | Which precedence layer selected the runner (`env`, `yaml`, `user_config`, `auto_detected`, `default`, `multi_engine_elevation`, or `implicit` when no spec was resolved). The no-spec sentinel was renamed from `local` in v0.7 (clean break - no read-time translation) |
 | `image_source` | str &#124; null | Where the Docker image was resolved from (`null` for process runs or when unresolved) |

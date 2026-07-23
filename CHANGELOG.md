@@ -11,9 +11,10 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 > ([#869]) - unified runner provenance block, single `bundle_version` stamp. The
 > runner-provenance `mode` values are renamed `local`/`docker` -> `process`/`container`
 > and the no-spec `source` sentinel `local` -> `implicit` within this same untagged
-> 2.0 stamp ([#880]). This is a clean break: there is no read-path alias translation,
-> so an 09ec455e-era 2.0 bundle carrying the old runner values is not rewritten on
-> read (accepted - unreleased-era bundles only). 1.0 bundles remain readable
+> 2.0 stamp ([#880]). This is a clean break with no alias translation: `mode` is now a
+> closed `Literal`, so an 09ec455e-era 2.0 bundle carrying the old `docker`/`local`
+> mode fails validation loudly on read (accepted - unreleased-era bundles only; the
+> open `source` field tolerates a stale `local` inertly). 1.0 bundles remain readable
 > (best-effort). Ships with the v0.7.0 release; v0.6.0 is the rollback anchor.
 
 ### Added
@@ -106,8 +107,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   parses a user-supplied runner value (study YAML `runners:`, the `LLEM_RUNNER_<ENGINE>`
   env var, user config) rejects the old `local`/`docker`/`docker:<image>` values with a
   migration error naming the replacement (e.g. "runner value 'docker' was renamed in v0.7
-  - use 'container'"), and there is no read-path alias translation for old bundles. Update
-  any pinned `runners:` values to the new vocabulary. ([#880])
+  - use 'container'"). On the read side `RunnerProvenance.mode` is a closed
+  `Literal["process", "container"]`, so a pre-v0.7 bundle carrying the old mode fails
+  validation loudly rather than loading a stale string (the open `source` field tolerates a
+  stale `local` sentinel inertly). Update any pinned `runners:` values to the new
+  vocabulary. ([#880])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their

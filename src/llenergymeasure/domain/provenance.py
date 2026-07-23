@@ -20,6 +20,8 @@ provenance) and ``image_digest`` (the environment.json reproducibility anchor).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -30,7 +32,12 @@ class RunnerProvenance(BaseModel):
     ``RunnerSpec``. Serialised into both result.json and environment.json.
     """
 
-    mode: str = Field(..., description='Execution mode - "process" or "container"')
+    mode: Literal["process", "container"] = Field(
+        ...,
+        description='Execution mode - "process" or "container". A closed vocabulary: a '
+        "pre-v0.7 bundle carrying the renamed values fails validation loudly on read "
+        "(clean break, no alias translation).",
+    )
     image: str | None = Field(
         default=None, description="Container image used (None for process mode)"
     )

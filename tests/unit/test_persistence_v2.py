@@ -342,6 +342,27 @@ def test_runner_provenance_process_round_trips(
     assert loaded.runner_provenance.source == "implicit"
 
 
+@pytest.mark.parametrize("stale_mode", ["docker", "local"])
+def test_runner_provenance_rejects_stale_mode_on_read(stale_mode):
+    """A pre-v0.7 bundle carrying the renamed mode fails validation loudly.
+
+    The runner mode is a closed ``Literal["process", "container"]`` - a clean break
+    with no alias translation - so reading an 09ec455e-era 2.0 block with the old
+    value raises a pydantic ValidationError naming the allowed values, rather than
+    silently loading a stale string.
+    """
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match=r"'process'.*'container'"):
+        RunnerProvenance.model_validate({"mode": stale_mode})
+
+    # The forward vocabulary still validates.
+    assert RunnerProvenance.model_validate({"mode": "process"}).mode == "process"
+    assert RunnerProvenance.model_validate({"mode": "container"}).mode == "container"
+    # source stays an open str: a stale sentinel there is inert, not rejected.
+    assert RunnerProvenance.model_validate({"mode": "process", "source": "local"}).source == "local"
+
+
 # ---------------------------------------------------------------------------
 # Timeseries sidecar
 # ---------------------------------------------------------------------------
