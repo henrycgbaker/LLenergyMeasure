@@ -281,24 +281,14 @@ class ExperimentResult(BaseModel):
         - ``schema_version`` (pre-``bundle_version`` per-artefact counter).
         - ``baseline_power_w`` (bundle 1.0 top-level copy; the single home is now
           ``energy_breakdown.baseline_power_w``).
-        - ``thermal_throttle`` (renamed to ``throttle`` and restructured in the
-          2.0 window; a legacy value degrades to ``throttle=None``).
-        - ``mj_per_tok_total`` / ``mj_per_tok_adjusted`` (renamed to
-          ``energy_per_token_mj_total`` / ``energy_per_token_mj_adjusted`` in the
-          2.0 window; a legacy value degrades to the ``None`` default).
 
-        The 2.0-window rename of the required ``measurement_config_hash`` field to
-        ``declared_config_hash`` is deliberately NOT tolerated here: it has no
-        default to degrade to, and the ruling forbids a read-path alias, so a
-        pre-rename bundle fails loudly on the missing required field.
+        The 2.0-window field renames (``measurement_config_hash`` ->
+        ``declared_config_hash``, ``thermal_throttle`` -> ``throttle``,
+        ``mj_per_tok_*`` -> ``energy_per_token_mj_*``) are a CLEAN BREAK: their
+        old keys are not tolerated, so a pre-rename bundle fails loudly under
+        ``extra="forbid"``.
         """
-        legacy_keys = {
-            "schema_version",
-            "baseline_power_w",
-            "thermal_throttle",
-            "mj_per_tok_total",
-            "mj_per_tok_adjusted",
-        }
+        legacy_keys = {"schema_version", "baseline_power_w"}
         if isinstance(data, dict) and legacy_keys & data.keys():
             data = {k: v for k, v in data.items() if k not in legacy_keys}
         return data
