@@ -262,18 +262,13 @@ class PowerThermalSampler:
                 "nvmlClocksEventReasonHwPowerBrakeSlowdown",
                 "nvmlClocksThrottleReasonHwPowerBrakeSlowdown",
             )
-            # Combined per-axis "any" bits: True if either hw or sw slowdown occurred.
-            thermal_bit = hw_thermal_bit | sw_thermal_bit
-            power_bit = hw_power_bit | sw_power_bit
-
+            # Per axis, set the hw/sw causes; ThrottleAxis.any derives (hw or sw).
             return ThrottleInfo(
                 thermal=ThrottleAxis(
-                    any=bool(combined_reasons & thermal_bit),
                     hw=bool(combined_reasons & hw_thermal_bit),
                     sw=bool(combined_reasons & sw_thermal_bit),
                 ),
                 power=ThrottleAxis(
-                    any=bool(combined_reasons & power_bit),
                     hw=bool(combined_reasons & hw_power_bit),
                     sw=bool(combined_reasons & sw_power_bit),
                 ),

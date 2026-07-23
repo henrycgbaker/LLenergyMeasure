@@ -87,15 +87,12 @@ class EnergyBreakdown(BaseModel):
 class ThrottleAxis(BaseModel):
     """One throttling axis (thermal or power): the combined flag plus its hw/sw split.
 
-    ``any`` is the axis-level "did this kind of throttling happen at all"
-    indicator; ``hw`` / ``sw`` name the hardware- and software-driven slowdown
-    causes NVML reports for that axis. ``any`` is the OR of the two causes.
+    ``hw`` / ``sw`` name the hardware- and software-driven slowdown causes NVML
+    reports for that axis; ``any`` is the axis-level "did this kind of throttling
+    happen at all" indicator, derived as the OR of the two causes (a computed
+    field, mirroring ``ThrottleInfo.detected``).
     """
 
-    any: bool = Field(
-        default=False,
-        description="Either hardware or software slowdown on this axis was seen.",
-    )
     hw: bool = Field(
         default=False,
         description="Hardware slowdown on this axis was seen.",
@@ -104,6 +101,12 @@ class ThrottleAxis(BaseModel):
         default=False,
         description="Software slowdown on this axis was seen.",
     )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def any(self) -> bool:
+        """Either hardware or software slowdown on this axis was seen."""
+        return self.hw or self.sw
 
 
 class ThrottleInfo(BaseModel):
