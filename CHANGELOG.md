@@ -11,8 +11,9 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 > ([#869]) - unified runner provenance block, single `bundle_version` stamp, and
 > the per-experiment environment sidecar renamed `environment.json` -> `system.json`
 > ([#879]). All v0.7.0 format additions ride this one untagged 2.0 break (no `2.1`).
-> 1.0 bundles remain readable (best-effort), as are 2.0 bundles that still carry the
-> sidecar under its old `environment.json` name. Ships with the v0.7.0 release;
+> 1.0 bundles remain readable (best-effort); the sidecar rename is a clean break -
+> a pre-rename `environment.json` is not read, so on such a bundle the system
+> sidecar is simply absent to the reader. Ships with the v0.7.0 release;
 > v0.6.0 is the rollback anchor.
 
 ### Added
@@ -101,11 +102,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   adopt the new name; the artefact-registry constant becomes `SYSTEM_FILENAME` and
   the internal writer/reader/rescue methods follow (`BundleWriter.write_system`,
   `BundleReader._read_system_artefact`, `persistence.save_system`). This rides the
-  same untagged `bundle_version` `"2.0"` break - there is no version bump.
-  `BundleReader` / `load_result` still read bundles that carry the sidecar under the
-  old `environment.json` name best-effort, falling back when `system.json` is
-  absent, so existing 2.0 bundles keep loading. The `EnvironmentSnapshot` model and
-  `ExperimentResult.environment` field are unchanged. ([#879])
+  same untagged `bundle_version` `"2.0"` break - there is no version bump. It is a
+  clean break: a pre-rename `environment.json` is not read - the reader looks only
+  for `system.json`, so on an older bundle the system sidecar is simply absent (the
+  existing optional-sidecar path); there is no fallback and no converter. The
+  `EnvironmentSnapshot` model and `ExperimentResult.environment` field are
+  unchanged. ([#879])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their

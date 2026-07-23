@@ -327,11 +327,10 @@ def load_result(path: Path) -> ExperimentResult:
     Thin wrapper over :meth:`llenergymeasure.results.bundle.BundleReader.read`,
     kept as public API for stability. The reader owns the read policy: it
     auto-discovers the timeseries.parquet and system.json sidecars in the
-    same directory (falling back to a legacy environment.json when system.json is
-    absent), parses result.json (dropping the retired ``schema_version`` key on
-    legacy bundles), attaches the environment snapshot to ``result.environment``
-    when present, and emits a UserWarning when the result references a timeseries
-    whose parquet is missing (graceful degradation).
+    same directory, parses result.json (dropping the retired ``schema_version``
+    key on legacy bundles), attaches the environment snapshot to
+    ``result.environment`` when present, and emits a UserWarning when the result
+    references a timeseries whose parquet is missing (graceful degradation).
 
     Args:
         path: Path to result.json (as returned by save_result()).

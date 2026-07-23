@@ -416,15 +416,15 @@ def test_bundle_reader_legacy_fallback_warns(tmp_path: Path) -> None:
 def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     """A full bundle 1.0 (pre-unification shape) reads best-effort, ONE warning.
 
-    Exercises every 2.0 break against a synthetic 1.0-shaped bundle written by
-    hand: result.json carries the retired top-level baseline_power_w copy and a
-    schema_version key with a runner_provenance block lacking image_digest;
-    the system sidecar lands under its pre-rename filename environment.json and
-    carries the old separate RunnerEnvironment-shaped runner block (no
-    image_source), the never-populated hardware fields (pcie_gen, mig_enabled,
-    cudnn_version, fan_speed_pct), and the pre-rename cuda.version key. The reader
-    falls back to the legacy filename, drops/maps the legacy shapes rather than
-    rejecting them, and emits exactly one bundle-level UserWarning.
+    Exercises every 2.0 shape break against a synthetic 1.0-shaped bundle written
+    by hand: result.json carries the retired top-level baseline_power_w copy and a
+    schema_version key with a runner_provenance block lacking image_digest; the
+    system sidecar (system.json) carries the old separate RunnerEnvironment-shaped
+    runner block (no image_source), the never-populated hardware fields (pcie_gen,
+    mig_enabled, cudnn_version, fan_speed_pct), and the pre-rename cuda.version key.
+    The reader drops/maps the legacy shapes rather than rejecting them, and emits
+    exactly one bundle-level UserWarning. (The sidecar rename is a clean break, so
+    the 1.0 content is placed under the current filename, not the old one.)
     """
     bundle_dir = tmp_path / "study" / "exp-legacy"
     bundle_dir.mkdir(parents=True)
@@ -488,7 +488,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
             "source": "yaml",
         },
     }
-    (bundle_dir / "environment.json").write_text(json.dumps(env_payload), encoding="utf-8")
+    (bundle_dir / "system.json").write_text(json.dumps(env_payload), encoding="utf-8")
 
     with pytest.warns(UserWarning, match="legacy results bundle") as record:
         loaded = BundleReader.read(bundle_dir)
@@ -508,8 +508,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     assert loaded.result.runner_provenance.image_source == "registry"
     assert loaded.result.runner_provenance.image_digest is None
 
-    # system sidecar (legacy environment.json): dead fields ignored, cuda version
-    # mapped, runner unified.
+    # system.json: dead fields ignored, cuda version mapped, runner unified.
     assert loaded.environment is not None
     assert loaded.environment.hardware.cuda.driver_supported_version == "12.4"
     assert loaded.environment.cuda_version == "12.1"
@@ -542,30 +541,27 @@ def test_bundle_reader_corrupt_system_is_best_effort(tmp_path: Path) -> None:
     assert loaded.result.experiment_id == "test-001"
 
 
-def test_bundle_reader_falls_back_to_legacy_environment_filename(tmp_path: Path) -> None:
-    """A current-shape system snapshot under the pre-rename name still loads.
+def test_bundle_reader_ignores_pre_rename_environment_filename(tmp_path: Path) -> None:
+    """Clean break: a sidecar under the pre-rename environment.json is NOT read.
 
-    Read tolerance for the environment.json -> system.json rename (same
-    bundle_version "2.0", no bump): a bundle that carries the sidecar under the
-    old filename and no system.json must still populate result.environment via
-    the registry's legacy-filename fallback.
+    After the environment.json -> system.json rename the reader looks only for
+    system.json. A bundle carrying the snapshot under the old name (and no
+    system.json) loads with the system sidecar absent - no legacy fallback.
     """
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir)
     writer.write_result(make_result())
-    # Write the current-shape snapshot under the LEGACY name only; no system.json.
+    # Snapshot present ONLY under the pre-rename name; no system.json.
     write_container_system_sidecar(writer.bundle_dir / "environment.json")
     assert not (writer.bundle_dir / "system.json").exists()
 
     loaded = BundleReader.read(writer.bundle_dir)
 
-    # The legacy-named sidecar is discovered under the "system" registry key and
-    # parsed onto result.environment.
-    assert loaded.environment is not None
-    assert loaded.environment.python_version == "3.10.14"
-    assert loaded.result.environment is loaded.environment
-    assert loaded.paths["system"].name == "environment.json"
+    # The old-named file is invisible to the reader: no system artefact discovered.
+    assert loaded.environment is None
+    assert loaded.result.environment is None
+    assert "system" not in loaded.paths
 
 
 # ---------------------------------------------------------------------------
@@ -601,28 +597,3 @@ def test_read_sidecar_rejects_non_json_artefact(tmp_path: Path) -> None:
     """read_sidecar is JSON-only: a parquet artefact key is a programming error."""
     with pytest.raises(ValueError, match="not a JSON sidecar"):
         BundleReader.read_sidecar(tmp_path, "timeseries")
-
-
-def test_read_sidecar_falls_back_to_legacy_filename(tmp_path: Path) -> None:
-    """read_sidecar applies the registry legacy-filename fallback, like read().
-
-    A bundle carrying the system snapshot only under its pre-rename name
-    environment.json still resolves via read_sidecar(dir, "system"); when both
-    files are present the canonical system.json wins.
-    """
-    bundle = tmp_path / "bundle"
-    bundle.mkdir()
-
-    # Only the legacy-named sidecar present -> fallback returns its payload.
-    legacy_payload = write_container_system_sidecar(bundle / "environment.json")
-    fetched = BundleReader.read_sidecar(bundle, "system")
-    assert fetched is not None
-    assert fetched["python_version"] == legacy_payload["python_version"]
-
-    # Canonical system.json present too -> it is preferred over the legacy name.
-    (bundle / "system.json").write_text(
-        json.dumps({"python_version": "9.9.9-canonical"}), encoding="utf-8"
-    )
-    preferred = BundleReader.read_sidecar(bundle, "system")
-    assert preferred is not None
-    assert preferred["python_version"] == "9.9.9-canonical"

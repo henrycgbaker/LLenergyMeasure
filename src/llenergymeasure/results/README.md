@@ -50,8 +50,7 @@ collision-free before writing.
 ```
 
 `load_result` reads `result.json` and best-effort re-attaches the
-`timeseries.parquet` and `system.json` sidecars (falling back to a legacy
-`environment.json` when `system.json` is absent); a missing or corrupt
+`timeseries.parquet` and `system.json` sidecars; a missing or corrupt
 sidecar degrades gracefully (warning, not error) rather than failing the load.
 
 Study-level artefacts (the `_study-artefacts/` directory, `manifest.json`,

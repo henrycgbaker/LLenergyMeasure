@@ -48,7 +48,6 @@ from llenergymeasure.domain.bundle_artefacts import (
     CONFIG_SIDECAR_FILENAME,
     SYSTEM_FILENAME,
     TIMESERIES_FILENAME,
-    ArtefactSpec,
 )
 from llenergymeasure.results import persistence
 from llenergymeasure.utils.io import load_json
@@ -399,9 +398,9 @@ class BundleReader:
 
         paths: dict[str, Path] = {}
         for name, spec in ARTEFACTS.items():
-            resolved = BundleReader._resolve_artefact_path(bundle_dir, spec)
-            if resolved is not None:
-                paths[name] = resolved
+            candidate = bundle_dir / spec.filename
+            if candidate.exists():
+                paths[name] = candidate
             elif spec.required:
                 raise FileNotFoundError(
                     f"Required bundle artefact '{name}' ({spec.filename}) missing from {bundle_dir}"
@@ -466,31 +465,11 @@ class BundleReader:
         spec = ARTEFACTS[key]
         if spec.kind != "json":
             raise ValueError(f"Artefact '{key}' is {spec.kind}, not a JSON sidecar")
-        path = BundleReader._resolve_artefact_path(Path(bundle_dir), spec)
-        if path is None:
+        path = Path(bundle_dir) / spec.filename
+        if not path.exists():
             return None
         payload: dict[str, Any] = load_json(path)
         return payload
-
-    @staticmethod
-    def _resolve_artefact_path(bundle_dir: Path, spec: ArtefactSpec) -> Path | None:
-        """Resolve an artefact's on-disk path, preferring the canonical filename.
-
-        Read tolerance: a bundle written before a within-version rename carries the
-        sidecar under its old name (e.g. environment.json -> system.json). Prefer
-        ``spec.filename``; fall back to ``spec.legacy_filename`` when the canonical
-        name is absent. Returns None when neither is present. Shared by ``read``'s
-        discovery loop and ``read_sidecar`` so the fallback is applied identically
-        across the registry-driven read surface.
-        """
-        candidate = bundle_dir / spec.filename
-        if candidate.exists():
-            return candidate
-        if spec.legacy_filename is not None:
-            legacy = bundle_dir / spec.legacy_filename
-            if legacy.exists():
-                return legacy
-        return None
 
     @staticmethod
     def _read_result_artefact(path: Path) -> ExperimentResult:
@@ -505,9 +484,8 @@ class BundleReader:
         ``baseline_power_w`` copy) so the legacy file falls back to the current
         defaults rather than being rejected. Legacy system.json shapes (the
         old separate runner block, the renamed CUDA field, the dropped hardware
-        fields, and the pre-rename environment.json filename) are tolerated on
-        the system read path, silently, so this one warning is not multiplied
-        per artefact.
+        fields) are tolerated on the system read path, silently, so this one
+        warning is not multiplied per artefact.
         """
         from llenergymeasure.domain.result_payload import parse_experiment_result_payload
 
