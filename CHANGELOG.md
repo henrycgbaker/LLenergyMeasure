@@ -91,6 +91,23 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
   and the old separate runner block reads into the unified model; no converter
   tooling is provided. ([#869])
+- **Breaking (results bundle, rides 2.0 - no version bump):** result-field
+  nomenclature alignment. `ExperimentResult.measurement_config_hash` is renamed
+  `declared_config_hash` (it hashes the whole declared config, matching the
+  `declared_config` term the `config.json` sidecar already uses; the
+  Parquet timeseries KV-metadata key of the same name follows).
+  `ExperimentResult.thermal_throttle` becomes `throttle`, restructured from a
+  flat bag into a symmetric object: `throttle.thermal` and `throttle.power` are
+  each a `ThrottleAxis` with `{any, hw, sw}` (`ThermalThrottleInfo` is replaced
+  by `ThrottleInfo` + `ThrottleAxis`). This adds the previously-missing combined
+  power indicator (`power.any`) and fixes the old flat `.power` field that only
+  reflected the software power cap. `mj_per_tok_total` / `mj_per_tok_adjusted`
+  are renamed `energy_per_token_mj_total` / `energy_per_token_mj_adjusted`, and
+  the study manifest's `mj_per_tok` becomes `energy_per_token_mj`. The retired
+  optional keys (`thermal_throttle`, `mj_per_tok_total`, `mj_per_tok_adjusted`)
+  are dropped on read, so a legacy 2.0 bundle loads with the new fields
+  defaulted; the required-field hash rename has no read alias, so a pre-rename
+  bundle fails loudly on the missing `declared_config_hash`. ([#881])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their
@@ -1505,3 +1522,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
 [#872]: https://github.com/henrycgbaker/llenergymeasure/pull/872
 [#875]: https://github.com/henrycgbaker/llenergymeasure/pull/875
+[#881]: https://github.com/henrycgbaker/llenergymeasure/pull/881
