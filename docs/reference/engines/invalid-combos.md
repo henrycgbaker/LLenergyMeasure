@@ -152,6 +152,8 @@ names the paths the engine drives back to their default.
 | BitsAndBytes (8-bit) | Yes | No | No |
 | Prefix Caching | No | Yes | No |
 | torch.compile | Yes | No | No |
+| Speculative Decoding | Yes | Yes | No |
+| Static KV Cache | Yes | No | No |
 
 **Notes:**
 - vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes

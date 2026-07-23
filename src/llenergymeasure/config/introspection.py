@@ -375,6 +375,23 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
             "vllm": False,
             "tensorrt": False,
         },
+        "speculative_decoding": {
+            # Transformers exposes prompt-lookup (n-gram) speculative decoding via
+            # prompt_lookup_num_tokens; vLLM via its speculative_config sub-model.
+            # tensorrt's curated surface exposes no speculative field, so the same
+            # probe derives to False (and self-updates if a bump curates one in).
+            "transformers": "prompt_lookup_num_tokens" in transformers_fields,
+            "vllm": "speculative_config" in vllm_fields,
+            "tensorrt": "speculative_config" in tensorrt_fields,
+        },
+        "static_kv_cache": {
+            # Static KV cache is selected through the transformers cache_implementation
+            # field (cache_implementation="static"); vLLM (paged) and tensorrt expose
+            # no such selector, so the same probe derives to False for both.
+            "transformers": "cache_implementation" in transformers_fields,
+            "vllm": "cache_implementation" in vllm_fields,
+            "tensorrt": "cache_implementation" in tensorrt_fields,
+        },
     }
 
 
@@ -396,6 +413,8 @@ def get_capability_matrix_markdown() -> str:
         "bitsandbytes_8bit": "BitsAndBytes (8-bit)",
         "prefix_caching": "Prefix Caching",
         "torch_compile": "torch.compile",
+        "speculative_decoding": "Speculative Decoding",
+        "static_kv_cache": "Static KV Cache",
     }
 
     lines = [

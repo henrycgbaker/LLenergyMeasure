@@ -261,7 +261,7 @@ def test_capability_matrix_transformers_supports_tensor_parallel():
 
 
 def test_capability_matrix_reports_only_derivable_rows():
-    """Retired hand-authored rows (precision, data_parallel, ...) are no longer claimed."""
+    """Every row is field-presence-derivable; hand-authored prose rows stay retired."""
     caps = get_engine_capabilities()
     assert set(caps) == {
         "tensor_parallel",
@@ -269,7 +269,45 @@ def test_capability_matrix_reports_only_derivable_rows():
         "bitsandbytes_8bit",
         "prefix_caching",
         "torch_compile",
+        "speculative_decoding",
+        "static_kv_cache",
     }
+
+
+def test_speculative_decoding_cells_track_engine_field_presence():
+    """Each speculative_decoding cell is backed by the field it probes, not a claim."""
+    from llenergymeasure.config.introspection import _engine_params_field_names
+
+    caps = get_engine_capabilities()
+    spec = caps["speculative_decoding"]
+
+    # True cells must be backed by a concrete field in that engine's surface.
+    assert "prompt_lookup_num_tokens" in _engine_params_field_names("transformers")
+    assert spec["transformers"] is True
+    assert "speculative_config" in _engine_params_field_names("vllm")
+    assert spec["vllm"] is True
+
+    # tensorrt's curated surface exposes no speculative field, so the cell is False.
+    assert "speculative_config" not in _engine_params_field_names("tensorrt")
+    assert spec["tensorrt"] is False
+
+
+def test_static_kv_cache_cells_track_engine_field_presence():
+    """static_kv_cache is True only where cache_implementation exists in the surface."""
+    from llenergymeasure.config.introspection import _engine_params_field_names
+
+    caps = get_engine_capabilities()
+    kv = caps["static_kv_cache"]
+
+    # transformers exposes cache_implementation (cache_implementation="static").
+    assert "cache_implementation" in _engine_params_field_names("transformers")
+    assert kv["transformers"] is True
+
+    # vLLM (paged) and tensorrt expose no cache_implementation field, so both False.
+    assert "cache_implementation" not in _engine_params_field_names("vllm")
+    assert kv["vllm"] is False
+    assert "cache_implementation" not in _engine_params_field_names("tensorrt")
+    assert kv["tensorrt"] is False
 
 
 def test_streaming_constraints_removed():

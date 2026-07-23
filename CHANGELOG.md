@@ -58,6 +58,16 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `LLEM_DOCKER_SHM_SIZE`. Point it at shared storage or a large scratch disk when
   the default home lives on a small volume; the in-container target and `HF_HOME`
   are unchanged. ([#861])
+- Re-added the Speculative Decoding and Static KV Cache rows to the engine
+  capability matrix, this time derived from the mined engine surface instead of
+  hand-authored prose (both were among the rows retired in [#866]). Each cell is
+  a field-presence probe over the generated engine config: Speculative Decoding
+  is True where an engine exposes a speculative field (`prompt_lookup_num_tokens`
+  on transformers, `speculative_config` on vLLM) and False otherwise (tensorrt);
+  Static KV Cache is True where `cache_implementation` exists (transformers) and
+  False otherwise (vLLM, tensorrt). The cells now self-update on every engine bump
+  absorb and carry no hand-maintained booleans. Docs-only: no runtime, CLI, or
+  dispatch path reads these functions. ([#875])
 
 ### Changed
 
@@ -1494,3 +1504,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#869]: https://github.com/henrycgbaker/llenergymeasure/pull/869
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
 [#872]: https://github.com/henrycgbaker/llenergymeasure/pull/872
+[#875]: https://github.com/henrycgbaker/llenergymeasure/pull/875
