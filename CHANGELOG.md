@@ -12,10 +12,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 > runner-provenance `mode` values are renamed `local`/`docker` -> `process`/`container`
 > and the no-spec `source` sentinel `local` -> `implicit` within this same untagged
 > 2.0 stamp ([#880]). This is a clean break with no alias translation: `mode` is now a
-> closed `Literal`, so an 09ec455e-era 2.0 bundle carrying the old `docker`/`local`
-> mode fails validation loudly on read (accepted - unreleased-era bundles only; the
-> open `source` field tolerates a stale `local` inertly). 1.0 bundles remain readable
-> (best-effort). Ships with the v0.7.0 release; v0.6.0 is the rollback anchor.
+> closed `Literal`, so ANY bundle (1.0 or 2.0-era) whose runner block carries the old
+> `docker`/`local` mode fails validation loudly on read (accepted - unreleased-era
+> bundles only; the open `source` field tolerates a stale `local` inertly). 1.0 bundles
+> otherwise remain readable best-effort (the retired `schema_version`/`baseline_power_w`
+> keys are dropped and the pre-rename CUDA field is mapped - only the renamed runner
+> mode is rejected). Ships with the v0.7.0 release; v0.6.0 is the rollback anchor.
 
 ### Added
 
@@ -95,7 +97,9 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   remain readable best-effort with a single warning: the retired top-level keys
   are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
   and the old separate runner block reads into the unified model; no converter
-  tooling is provided. ([#869])
+  tooling is provided. (NARROWED by [#880]: this structural runner-block tolerance
+  no longer extends to the runner VALUES - a block carrying the pre-v0.7
+  `docker`/`local` mode is rejected by the closed `mode` Literal on read.) ([#869])
 - **Breaking (runner vocabulary):** the runner mode is renamed `local`/`docker` ->
   `process`/`container` (image shorthand `docker:<image>` -> `container:<image>`), and
   the no-spec runner-provenance `source` sentinel `local` -> `implicit`. The new mode

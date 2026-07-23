@@ -416,14 +416,20 @@ def test_bundle_reader_legacy_fallback_warns(tmp_path: Path) -> None:
 def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     """A full bundle 1.0 (pre-unification shape) reads best-effort, ONE warning.
 
-    Exercises every 2.0 break against a synthetic 1.0-shaped bundle written by
-    hand: result.json carries the retired top-level baseline_power_w copy and a
-    schema_version key with a runner_provenance block lacking image_digest;
-    environment.json carries the old separate RunnerEnvironment-shaped runner
-    block (no image_source), the never-populated hardware fields (pcie_gen,
-    mig_enabled, cudnn_version, fan_speed_pct), and the pre-rename cuda.version
-    key. The reader drops/maps the legacy shapes rather than rejecting them, and
-    emits exactly one bundle-level UserWarning.
+    Exercises the 2.0-break tolerances that REMAIN against a synthetic 1.0-shaped
+    bundle written by hand: result.json carries the retired top-level
+    baseline_power_w copy and a schema_version key with a runner_provenance block
+    lacking image_digest; environment.json carries the old separate
+    RunnerEnvironment-shaped runner block (no image_source), the never-populated
+    hardware fields (pcie_gen, mig_enabled, cudnn_version, fan_speed_pct), and the
+    pre-rename cuda.version key. The reader drops/maps those legacy shapes rather
+    than rejecting them, and emits exactly one bundle-level UserWarning.
+
+    NOTE the runner blocks here use the CURRENT vocabulary (``mode: "container"``)
+    deliberately: the v0.7 runner-mode rename is a clean break, NOT a tolerated
+    legacy shape - a 1.0 (or 2.0-era) bundle whose runner block carries the
+    pre-v0.7 ``docker``/``local`` mode fails validation on read. That exclusion is
+    pinned by ``test_bundle_reader_1_0_bundle_with_legacy_runner_mode_raises``.
     """
     bundle_dir = tmp_path / "study" / "exp-legacy"
     bundle_dir.mkdir(parents=True)
@@ -514,6 +520,45 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     assert loaded.environment.runner is not None
     assert loaded.environment.runner.image_digest == "img@sha256:abc"
     assert loaded.environment.runner.image_source is None
+
+
+def test_bundle_reader_1_0_bundle_with_legacy_runner_mode_raises(tmp_path: Path) -> None:
+    """A bundle whose runner block carries the pre-v0.7 mode fails validation on read.
+
+    The runner-mode rename (``docker``/``local`` -> ``container``/``process``) is a
+    clean break, NOT a tolerated legacy shape: ``RunnerProvenance.mode`` is a closed
+    ``Literal``, so ``ExperimentResult.model_validate`` (via the strict read path)
+    hard-crashes on a stale value rather than silently loading it. This crash is the
+    INTENDED behavior and is pinned here - the companion
+    ``test_bundle_reader_tolerates_1_0_bundle`` covers the tolerances that remain.
+    """
+    import pydantic
+
+    bundle_dir = tmp_path / "study" / "exp-stale-runner"
+    bundle_dir.mkdir(parents=True)
+
+    result_payload = {
+        "bundle_version": "1.0",
+        "experiment_id": "legacy-002",
+        "measurement_config_hash": "deadbeef",
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "total_tokens": 30,
+        "total_energy_j": 5.0,
+        "total_inference_time_sec": 1.0,
+        "avg_tokens_per_second": 30.0,
+        "avg_energy_per_token_j": 0.25,
+        "total_flops": 0.0,
+        "energy_breakdown": {"raw_j": 5.0},
+        "start_time": "2026-01-01T00:00:00",
+        "end_time": "2026-01-01T00:00:01",
+        # Pre-v0.7 runner vocabulary - no longer accepted on read.
+        "runner_provenance": {"mode": "docker", "image": "img:1.0", "source": "yaml"},
+    }
+    (bundle_dir / "result.json").write_text(json.dumps(result_payload), encoding="utf-8")
+
+    with pytest.raises(pydantic.ValidationError, match=r"mode"):
+        BundleReader.read(bundle_dir)
 
 
 def test_bundle_reader_declared_but_missing_timeseries_warns(tmp_path: Path) -> None:

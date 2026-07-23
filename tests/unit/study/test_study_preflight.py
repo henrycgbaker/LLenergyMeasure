@@ -3,7 +3,7 @@
 Multi-engine Docker elevation is precedence-based: engines the user explicitly
 pinned (env / YAML / user config) keep their runner, while engines whose runner
 resolved from auto-detection or the default are elevated to Docker for
-isolation. Engines pinned to local are checked for host importability; Docker is
+isolation. Engines pinned to process are checked for host importability; Docker is
 only required when an auto-resolved engine actually needs elevating.
 """
 
@@ -16,7 +16,7 @@ from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.utils.exceptions import PreFlightError
 
-_ALL_LOCAL_CAUTION = "running all engines locally"
+_ALL_LOCAL_CAUTION = "running every engine as a host process"
 
 
 @pytest.fixture
@@ -70,7 +70,7 @@ def test_single_engine_passes(monkeypatch):
 def test_single_engine_local_pin_not_import_checked(monkeypatch):
     """Single-engine studies are unaffected by the multi-engine import pre-flight.
 
-    A single-engine local pin passes even if the engine is not importable on the
+    A single-engine process pin passes even if the engine is not importable on the
     host - per-experiment pre-flight runs later in the subprocess.
     """
     # importable=False would trip the multi-engine import check; single engine must not run it.
@@ -121,14 +121,14 @@ def test_multi_engine_all_auto_elevates_to_docker(monkeypatch, two_engine_study)
 
 
 def test_multi_engine_explicit_local_kept_auto_elevated(monkeypatch, two_engine_study):
-    """Explicit local pin is kept; auto-resolved engines are elevated to Docker."""
-    # transformers is pinned local and importable on the host.
+    """Explicit process pin is kept; auto-resolved engines are elevated to Docker."""
+    # transformers is pinned process and importable on the host.
     patch_env(monkeypatch, docker=True, importable=True)
     specs, overrides = run_study_preflight(
         two_engine_study, yaml_runners={"transformers": "process"}
     )
 
-    # Explicit local pin kept.
+    # Explicit process pin kept.
     assert specs["transformers"].mode == "process"
     assert specs["transformers"].source == "yaml"
     # Auto-resolved engine elevated.
@@ -139,9 +139,9 @@ def test_multi_engine_explicit_local_kept_auto_elevated(monkeypatch, two_engine_
     assert "runner.transformers" not in overrides
 
 
-def test_multi_engine_explicit_local_missing_package_raises(monkeypatch):
-    """Explicit local pin for an engine missing from the host raises a specific error."""
-    # tensorrt is pinned local but not importable on the host.
+def test_multi_engine_explicit_process_missing_package_raises(monkeypatch):
+    """Explicit process pin for an engine missing from the host raises a specific error."""
+    # tensorrt is pinned process but not importable on the host.
     patch_env(monkeypatch, docker=True, importable=False)
     study = StudyConfig(
         experiments=[
@@ -156,12 +156,14 @@ def test_multi_engine_explicit_local_missing_package_raises(monkeypatch):
     assert "tensorrt" in msg
     assert "tensorrt_llm" in msg  # the missing package, distinct from the engine name
     assert "pip install 'llenergymeasure[tensorrt]'" in msg  # fix 1: install the extra
-    assert "drop the explicit" in msg  # fix 2: drop the local pin
+    # fix 2: the hint names the CANONICAL mode ("process"), never the pre-v0.7 "local".
+    assert "drop the explicit 'tensorrt: process' runner pin" in msg
+    assert "local" not in msg
 
 
 def test_multi_engine_all_explicit_local_without_docker_passes(monkeypatch, two_engine_study):
-    """All-explicit-local multi-engine study passes without Docker."""
-    # Both engines pinned local and importable on the host.
+    """All-explicit-process multi-engine study passes without Docker."""
+    # Both engines pinned process and importable on the host.
     docker_preflight = patch_env(monkeypatch, docker=False, importable=True)
     specs, overrides = run_study_preflight(
         two_engine_study, yaml_runners={"transformers": "process", "vllm": "process"}
@@ -177,7 +179,7 @@ def test_multi_engine_all_explicit_local_without_docker_passes(monkeypatch, two_
 
 
 def test_multi_engine_all_local_caution_fires_once(monkeypatch, two_engine_study, caplog):
-    """An all-explicit-local multi-engine study warns once about lost isolation."""
+    """An all-explicit-process multi-engine study warns once about lost isolation."""
     patch_env(monkeypatch, docker=False, importable=True)
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
         run_study_preflight(
@@ -192,7 +194,7 @@ def test_multi_engine_all_local_caution_fires_once(monkeypatch, two_engine_study
 
 
 def test_single_engine_no_all_local_caution(monkeypatch, caplog):
-    """The all-local caution is a multi-engine concern - single-engine must not fire it."""
+    """The all-process caution is a multi-engine concern - single-engine must not fire it."""
     patch_env(monkeypatch, docker=False, importable=True)
     study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
@@ -201,7 +203,7 @@ def test_single_engine_no_all_local_caution(monkeypatch, caplog):
 
 
 def test_multi_engine_mixed_no_all_local_caution(monkeypatch, two_engine_study, caplog):
-    """A mixed local+elevated study is not all-local, so the caution must not fire."""
+    """A mixed process+elevated study is not all-process, so the caution must not fire."""
     patch_env(monkeypatch, docker=True, importable=True)
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
         run_study_preflight(two_engine_study, yaml_runners={"transformers": "process"})
@@ -214,7 +216,7 @@ def test_preflight_forwards_runner_context(monkeypatch):
 
     def mock_resolve_study_runners(engines, yaml_runners=None, user_config=None):
         captured_calls.append({"yaml_runners": yaml_runners, "user_config": user_config})
-        # Return local specs so no Docker preflight is triggered
+        # Return process specs so no Docker preflight is triggered
         from llenergymeasure.config.runner_spec import RunnerSpec
 
         return {b: RunnerSpec(mode="process", image=None, source="default") for b in engines}

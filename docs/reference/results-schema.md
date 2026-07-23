@@ -295,6 +295,8 @@ The whole bundle carries one `bundle_version` (currently `"2.0"`), stamped ident
 
 Older bundles remain readable best-effort: the canonical reader (`llenergymeasure.results.bundle.BundleReader`, wrapped by `load_result`) tolerates a legacy shape rather than rejecting it, emitting a single warning per bundle. A bundle 1.0 (the provenance-unification break) reads with its retired top-level `baseline_power_w` copy and `schema_version` key dropped on load, its pre-rename `hardware.cuda.version` mapped onto `driver_supported_version`, its never-populated hardware fields (`pcie_gen`, `mig_enabled`, `cudnn_version`, `fan_speed_pct`) ignored, and its old separate runner block read into the unified `RunnerProvenance` model. There is no in-place migration and no converter tooling.
 
+The one exception to best-effort tolerance is the runner-mode vocabulary: `RunnerProvenance.mode` is a closed `Literal["process", "container"]`, so any bundle (1.0 or 2.0-era) whose runner block carries the pre-v0.7 `docker`/`local` mode fails validation on read rather than loading a stale value. This is the deliberate v0.7 clean break; the other 1.0 tolerances above are unaffected.
+
 ## See also
 
 - [Tutorial - Multi-engine study](/tutorials/multi-engine-study) walks through writing analysis code against this schema.
