@@ -145,7 +145,7 @@ identically across engines. Every one is `extra="forbid"`.
 
 Some knobs are features llem implements itself in its own runner loop, because
 the engine exposes no native API for them. They are not engine config, so they
-are hand-written (at `config/execution.py`) rather than mined into the generated
+are hand-written (at `config/llem_execution.py`) rather than mined into the generated
 engine block. They are exposed as a per-engine `llem_execution:` sub-section,
 sibling of `engine_params:` / `sampling_params:` inside the engine section. Only
 transformers has an execution residual today; vllm and tensorrt drive batching
@@ -165,17 +165,17 @@ transformers:
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `batch_size` | int >= 1 | null (-> 1) | Prompt-batching size for llem's runner loop (`model.generate()` has no batch_size kwarg) | `TransformersExecution` |
-| `torch_compile` | bool | null (-> false) | Enable `torch.compile` on the loaded model | `TransformersExecution` |
-| `torch_compile_mode` | str | null (-> `default`) | `default` \| `reduce-overhead` \| `max-autotune`. Requires `torch_compile=true`. | `TransformersExecution` |
-| `torch_compile_backend` | str | null (-> `inductor`) | `torch.compile` backend. Requires `torch_compile=true`. | `TransformersExecution` |
-| `allow_tf32` | bool | null | Allow TF32 matmul on Ampere+ via `torch.backends` | `TransformersExecution` |
-| `autocast_enabled` | bool | null (-> false) | Wrap generation in `torch.autocast` | `TransformersExecution` |
-| `autocast_dtype` | `float16` \| `bfloat16` | null (-> bfloat16 on Ampere) | AMP dtype (used when `autocast_enabled=true`) | `TransformersExecution` |
+| `batch_size` | int >= 1 | null (-> 1) | Prompt-batching size for llem's runner loop (`model.generate()` has no batch_size kwarg) | `TransformersLlemExecution` |
+| `torch_compile` | bool | null (-> false) | Enable `torch.compile` on the loaded model | `TransformersLlemExecution` |
+| `torch_compile_mode` | str | null (-> `default`) | `default` \| `reduce-overhead` \| `max-autotune`. Requires `torch_compile=true`. | `TransformersLlemExecution` |
+| `torch_compile_backend` | str | null (-> `inductor`) | `torch.compile` backend. Requires `torch_compile=true`. | `TransformersLlemExecution` |
+| `allow_tf32` | bool | null | Allow TF32 matmul on Ampere+ via `torch.backends` | `TransformersLlemExecution` |
+| `autocast_enabled` | bool | null (-> false) | Wrap generation in `torch.autocast` | `TransformersLlemExecution` |
+| `autocast_dtype` | `float16` \| `bfloat16` | null (-> bfloat16 on Ampere) | AMP dtype (used when `autocast_enabled=true`) | `TransformersLlemExecution` |
 
 Naming `torch_compile_mode` or `torch_compile_backend` without
 `torch_compile=true` is rejected (`validate_torch_compile_options` in
-`execution.py`).
+`llem_execution.py`).
 
 ## Transformers engine (`transformers:`)
 

@@ -128,7 +128,7 @@ class ConfigHashView:
     - ``llem_execution`` - the active engine's llem-owned execution knobs
       (batch_size, torch_compile, allow_tf32, autocast). These drive execution
       but have no engine-native API, so they must join the config identity or an
-      execution-knob sweep collapses to one run under dedup.
+      llem-execution-knob sweep collapses to one run under dedup.
     - ``measurement`` - measurement methodology (warmup, baseline, energy sampler,
       windowing). Sweeping methodology creates distinct runs, so these join the
       identity too; dedup then collapses only true duplicates.

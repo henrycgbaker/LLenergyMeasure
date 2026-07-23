@@ -113,7 +113,7 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   `transformers.llem_execution.batch_size`). Only transformers has these knobs.
   Clean break with no alias: a config still carrying a top-level `harness:` key
   is rejected with an error naming the new location. Internal renames follow
-  (`TransformersHarness` -> `TransformersExecution`; the `HarnessConfig` wrapper
+  (`TransformersHarness` -> `TransformersLlemExecution`; the `HarnessConfig` wrapper
   is dropped; the transformers section is now a `TransformersSection` that
   subclasses the generated Config to add the typed `llem_execution` field). The
   sweep-axis key is now `transformers.llem_execution.batch_size`. Because the

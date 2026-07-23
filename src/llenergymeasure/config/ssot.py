@@ -231,15 +231,15 @@ class BatchSizeModel:
       continuous-batching engines (vLLM), which have no single static batch - the
       effective batch there is derived from the realised prompt/batch counts.
 
-    ``execution_sourced`` marks engines whose batch size is an llem-owned
-    execution knob on ``<engine>.llem_execution.batch_size`` (transformers)
+    ``llem_execution_sourced`` marks engines whose batch size is an llem-owned
+    llem-execution knob on ``<engine>.llem_execution.batch_size`` (transformers)
     rather than an engine-params field; for those, both semantics read that knob
     (default 1).
     """
 
     capacity_field: str | None = None
     static_field: str | None = None
-    execution_sourced: bool = False
+    llem_execution_sourced: bool = False
 
 
 @dataclass(frozen=True)
@@ -288,7 +288,7 @@ ENGINES: dict[Engine, EngineDescriptor] = {
         # Prompt batching is an llem-owned execution knob
         # (transformers.llem_execution.batch_size); both capacity and static
         # semantics read it, default 1.
-        batch=BatchSizeModel(execution_sourced=True),
+        batch=BatchSizeModel(llem_execution_sourced=True),
         image_version_source="package",
     ),
     Engine.VLLM: EngineDescriptor(

@@ -133,7 +133,7 @@ def test_tensorrt_engine_accepted():
 def test_pytorch_config_section_composition():
     """config with transformers engine_params section is accepted.
 
-    batch_size moved to transformers.llem_execution (TransformersExecution); the
+    batch_size moved to transformers.llem_execution (TransformersLlemExecution); the
     engine section carries engine-native fields under engine_params.
     """
     config = ExperimentConfig(
@@ -149,7 +149,7 @@ def test_transformers_llem_execution_is_a_typed_section_sibling():
     """llem_execution nests inside the transformers section as a typed sibling.
 
     It composes with engine_params (native passthrough) and validates strictly
-    against TransformersExecution; active_llem_execution() reads it back.
+    against TransformersLlemExecution; active_llem_execution() reads it back.
     """
     config = ExperimentConfig(
         task={"model": "gpt2"},
@@ -167,7 +167,7 @@ def test_transformers_llem_execution_is_a_typed_section_sibling():
 
 
 def test_transformers_llem_execution_torch_compile_options_validated():
-    """The strict TransformersExecution validator still fires under the new nesting."""
+    """The strict TransformersLlemExecution validator still fires under the new nesting."""
     with pytest.raises(ValidationError, match="requires torch_compile=True"):
         ExperimentConfig(
             task={"model": "gpt2"},

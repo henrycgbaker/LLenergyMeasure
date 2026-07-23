@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field, model_validator
 from llenergymeasure.config.generated.transformers import Config as _GeneratedTransformersConfig
 
 
-class TransformersExecution(BaseModel):
+class TransformersLlemExecution(BaseModel):
     """llem-owned execution knobs for the transformers engine.
 
     All fields default to None - None means "use llem's own default at
@@ -78,7 +78,7 @@ class TransformersExecution(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_torch_compile_options(self) -> TransformersExecution:
+    def validate_torch_compile_options(self) -> TransformersLlemExecution:
         """torch_compile_mode / torch_compile_backend require torch_compile=True.
 
         llem owns the torch.compile call, so this is llem-side orchestration
@@ -98,12 +98,12 @@ class TransformersSection(_GeneratedTransformersConfig):
     Subclasses the generated (mined, byte-stable, ``extra="allow"``) transformers
     ``Config`` - so ``engine_params`` / ``sampling_params`` and their native
     passthrough are inherited untouched - and adds the hand-written, strictly
-    validated ``llem_execution`` block as a third sibling. This keeps llem-owned
-    execution knobs out of the generated file while still exposing them, typed, at
-    the config edge.
+    validated ``llem_execution`` block as a third sibling. This keeps the
+    llem-owned execution knobs out of the generated file while still exposing
+    them, typed, at the config edge.
     """
 
-    llem_execution: TransformersExecution | None = Field(
+    llem_execution: TransformersLlemExecution | None = Field(
         default=None,
         description="llem-owned execution knobs (prompt-batching, torch.compile, "
         "TF32, autocast) that have no engine-native API.",

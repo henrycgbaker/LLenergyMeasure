@@ -63,7 +63,7 @@ All fields except `model` are optional and have sensible defaults.
 |-------|------|---------|-------------|
 | `engine_params` | EngineParams | None | `null` |  |
 | `sampling_params` | SamplingParams | None | `null` |  |
-| `llem_execution` | TransformersExecution | None | `null` | llem-owned execution knobs (prompt-batching, torch.compile, TF32, autocast) that have no engine-native API. |
+| `llem_execution` | TransformersLlemExecution | None | `null` | llem-owned execution knobs (prompt-batching, torch.compile, TF32, autocast) that have no engine-native API. |
 
 ### Transformers Engine Params (`transformers.engine_params:`)
 

@@ -250,7 +250,7 @@ def _expand_sweep(
         if engine_scope is not None:
             # Store the full fully-qualified key so routing reconstructs the exact
             # path (engine-native ``transformers.engine_params.dtype`` and the
-            # execution knob ``transformers.llem_execution.batch_size`` both
+            # llem-execution knob ``transformers.llem_execution.batch_size`` both
             # round-trip verbatim).
             scoped_dims.setdefault(engine_scope, {})[key] = values
         else:

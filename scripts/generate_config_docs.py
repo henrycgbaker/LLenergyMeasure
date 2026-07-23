@@ -86,7 +86,7 @@ _SECTION_ORDER = [
 _DEF_TO_SECTION: dict[str, str] = {
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
-    # TransformersSection / TransformersExecution are hand-written (unique names),
+    # TransformersSection / TransformersLlemExecution are hand-written (unique names),
     # so pydantic emits them as simple $def keys, not module-qualified ones.
     "TransformersSection": "transformers",
     "llenergymeasure__config__generated__transformers__EngineParams": (
@@ -95,7 +95,7 @@ _DEF_TO_SECTION: dict[str, str] = {
     "llenergymeasure__config__generated__transformers__SamplingParams": (
         "transformers_sampling_params"
     ),
-    "TransformersExecution": "transformers_llem_execution",
+    "TransformersLlemExecution": "transformers_llem_execution",
     "llenergymeasure__config__generated__vllm__Config": "vllm",
     "llenergymeasure__config__generated__vllm__EngineParams": "vllm_engine_params",
     "llenergymeasure__config__generated__vllm__SamplingParams": "vllm_sampling_params",

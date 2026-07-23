@@ -67,7 +67,7 @@ sweep:
   tensorrt.engine_params.dtype: [float16, bfloat16]
 
   # 2. Batching strategy - engine-native parameter names.
-  #    Transformers: explicit batch_size at generation time (llem harness knob).
+  #    Transformers: explicit batch_size at generation time (llem-owned execution knob).
   #    vLLM: max_num_seqs (continuous batching cap).
   #    TensorRT-LLM: max_batch_size (compile-time engine parameter).
   transformers.llem_execution.batch_size: [4, 16]

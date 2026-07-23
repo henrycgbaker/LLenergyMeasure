@@ -52,9 +52,9 @@ SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 
 if TYPE_CHECKING:
     from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
-    from llenergymeasure.config.execution import TransformersSection
     from llenergymeasure.config.generated.tensorrt import Config as TensorRTConfig
     from llenergymeasure.config.generated.vllm import Config as VLLMConfig
+    from llenergymeasure.config.llem_execution import TransformersSection
 
 
 @lru_cache(maxsize=1)
@@ -550,7 +550,7 @@ class ExperimentConfig(BaseModel):
         """Return the active engine's ``llem_execution`` block, or None.
 
         Mirrors ``active_engine_params()`` for the hand-written execution layer.
-        Only transformers has an execution residual today (batch_size,
+        Only transformers has an llem-execution residual today (batch_size,
         torch.compile, TF32, autocast); vllm and tensorrt drive those through
         native engine APIs, so their sections carry no ``llem_execution`` block
         and this returns None.
@@ -558,7 +558,7 @@ class ExperimentConfig(BaseModel):
         section = getattr(self, self.engine.value, None)
         return getattr(section, "llem_execution", None) if section is not None else None
 
-    def _execution_sourced_batch_size(self) -> int:
+    def _llem_execution_sourced_batch_size(self) -> int:
         """The ``llem_execution.batch_size`` knob (default 1), shared by both batch semantics.
 
         For execution-sourced engines (transformers) the declared capacity bound
@@ -581,8 +581,8 @@ class ExperimentConfig(BaseModel):
         Defaults to 1 when unset.
         """
         model = ENGINES[self.engine].batch
-        if model.execution_sourced:
-            return self._execution_sourced_batch_size()
+        if model.llem_execution_sourced:
+            return self._llem_execution_sourced_batch_size()
         if model.capacity_field is not None:
             params = self.active_engine_params()
             if params is not None:
@@ -600,8 +600,8 @@ class ExperimentConfig(BaseModel):
         the per-engine :class:`~llenergymeasure.config.ssot.BatchSizeModel` descriptor.
         """
         model = ENGINES[self.engine].batch
-        if model.execution_sourced:
-            return self._execution_sourced_batch_size()
+        if model.llem_execution_sourced:
+            return self._llem_execution_sourced_batch_size()
         if model.static_field is not None:
             params = self.active_engine_params()
             if params is not None:
@@ -874,9 +874,9 @@ def _rebuild_experiment_config() -> None:
     section is ``TransformersSection`` - that generated Config subclassed with the
     hand-written ``llem_execution`` block.
     """
-    from llenergymeasure.config.execution import TransformersSection
     from llenergymeasure.config.generated.tensorrt import Config as TensorRTConfig
     from llenergymeasure.config.generated.vllm import Config as VLLMConfig
+    from llenergymeasure.config.llem_execution import TransformersSection
 
     ExperimentConfig.model_rebuild(
         _types_namespace={

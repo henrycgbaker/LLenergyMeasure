@@ -278,7 +278,7 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     Paths use the generated nested shape: ``<engine>.engine_params.<field>`` and
     ``<engine>.sampling_params.<field>``. For transformers, the llem-owned
     execution residual (batch_size, torch_compile, ...) is also included under the
-    engine prefix from ``TransformersExecution``.
+    engine prefix from ``TransformersLlemExecution``.
 
     Args:
         engine: One of "transformers", "vllm", "tensorrt".
@@ -291,9 +291,9 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     params = get_params_from_model(model_class, prefix=engine)
 
     if engine == "transformers":
-        from llenergymeasure.config.execution import TransformersExecution
+        from llenergymeasure.config.llem_execution import TransformersLlemExecution
 
-        params.update(get_params_from_model(TransformersExecution, prefix=engine))
+        params.update(get_params_from_model(TransformersLlemExecution, prefix=engine))
 
     for param in params.values():
         param["engine_support"] = [engine]
@@ -337,16 +337,16 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         Dict mapping capability names to per-engine support status.
         Values are True/False for support.
     """
-    from llenergymeasure.config.execution import TransformersExecution
+    from llenergymeasure.config.llem_execution import TransformersLlemExecution
 
     # Engine fields live on each generated Config's ``engine_params`` sub-model.
     transformers_fields = _engine_params_field_names("transformers")
     vllm_fields = _engine_params_field_names("vllm")
     tensorrt_fields = _engine_params_field_names("tensorrt")
 
-    # torch.compile is an llem-owned execution knob on TransformersExecution, not
+    # torch.compile is an llem-owned execution knob on TransformersLlemExecution, not
     # an engine field.
-    transformers_execution_fields = set(TransformersExecution.model_fields.keys())
+    transformers_execution_fields = set(TransformersLlemExecution.model_fields.keys())
 
     return {
         "tensor_parallel": {
