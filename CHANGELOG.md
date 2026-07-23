@@ -8,9 +8,12 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 ## [Unreleased]
 
 > **Format break (unreleased):** results-bundle format 2.0 as of commit `09ec455e`
-> ([#869]) - unified runner provenance block, single `bundle_version` stamp. 1.0
-> bundles remain readable (best-effort). Ships with the v0.7.0 release; v0.6.0 is
-> the rollback anchor.
+> ([#869]) - unified runner provenance block, single `bundle_version` stamp. The
+> runner-provenance `mode` values are renamed `local`/`docker` -> `process`/`container`
+> within this same untagged 2.0 stamp ([#880]); 09ec455e-era 2.0 bundles carrying the
+> legacy values are still read best-effort (read-path alias tolerance, not a version
+> bump). 1.0 bundles remain readable (best-effort). Ships with the v0.7.0 release;
+> v0.6.0 is the rollback anchor.
 
 ### Added
 
@@ -91,6 +94,18 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
   and the old separate runner block reads into the unified model; no converter
   tooling is provided. ([#869])
+- **Runner mode vocabulary renamed** `local`/`docker` -> `process`/`container`. The
+  new pair names the PACKAGING axis (host process vs container) symmetrically, freeing
+  a future PLACEMENT axis (here vs remote) to arrive additively. The canonical values
+  appear in `ssot.RunnerMode`, `RunnerSpec.mode`, and the `RunnerProvenance.mode`
+  serialised into results-bundle 2.0 (values change under the SAME untagged 2.0 stamp -
+  no version bump). Every entry point that parses a user-supplied runner value (study
+  YAML `runners:`, the `LLEM_RUNNER_<ENGINE>` env var, user config) still accepts the
+  legacy `local`/`docker`/`docker:<image>` values, normalising them at parse time to
+  `process`/`container`/`container:<image>` with a one-shot `DeprecationWarning`, so
+  every v0.6.0 config keeps working. Reading a 2.0 bundle written before the rename maps
+  its legacy `mode` value onto the canonical one best-effort (read-path alias tolerance).
+  ([#880])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their
@@ -1505,3 +1520,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
 [#872]: https://github.com/henrycgbaker/llenergymeasure/pull/872
 [#875]: https://github.com/henrycgbaker/llenergymeasure/pull/875
+[#880]: https://github.com/henrycgbaker/llenergymeasure/pull/880
