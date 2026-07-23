@@ -61,6 +61,8 @@ from llenergymeasure.config.ssot import (
     Engine,
     RunnerMode,
     engine_str,
+    legacy_runner_migration_message,
+    legacy_runner_replacement,
 )
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -486,15 +488,10 @@ def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
     if value == RUNNER_CONTAINER:
         return (RUNNER_CONTAINER, None)
 
-    # Legacy vocabulary renamed in v0.7 - reject with a migration hint.
-    if value == "local":
-        raise ValueError("runner value 'local' was renamed in v0.7 - use 'process'")
-    if value == "docker":
-        raise ValueError("runner value 'docker' was renamed in v0.7 - use 'container'")
-    if value.startswith("docker:"):
-        image = value[len("docker:") :]
-        replacement = f"container:{image}" if image else "container:<image>"
-        raise ValueError(f"runner value 'docker:<image>' was renamed in v0.7 - use '{replacement}'")
+    # Legacy vocabulary renamed in v0.7 - reject with the shared migration hint.
+    replacement = legacy_runner_replacement(value)
+    if replacement is not None:
+        raise ValueError(legacy_runner_migration_message(value, replacement))
 
     # Canonical image-override form.
     if value.startswith("container:"):

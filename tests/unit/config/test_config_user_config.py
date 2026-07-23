@@ -216,10 +216,17 @@ def test_user_runners_config_validator_accepts_canonical_values():
     ],
 )
 def test_user_runners_config_validator_rejects_legacy_vocabulary(value, hint):
-    """The renamed-in-v0.7 legacy values are rejected with a migration hint."""
+    """The renamed-in-v0.7 legacy values are rejected with a migration hint.
+
+    The message must name the user's ACTUAL input value, the field context, and the
+    canonical replacement.
+    """
     import pydantic
 
     from llenergymeasure.config.user_config import UserRunnersConfig
 
-    with pytest.raises(pydantic.ValidationError, match=rf"was renamed in v0.7.*{hint}"):
+    with pytest.raises(
+        pydantic.ValidationError,
+        match=rf"'{value}' was renamed in v0.7 \(runners.transformers\).*{hint}",
+    ):
         UserRunnersConfig(transformers=value)

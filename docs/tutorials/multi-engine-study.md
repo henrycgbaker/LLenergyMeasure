@@ -95,7 +95,7 @@ elevated to a container. An engine pinned to `process` is checked for host
 importability at preflight, so `runners:` pinning every engine to `process` runs
 without a container - **but only do this if the host genuinely provides every engine;
 Docker per engine remains the recommended isolation.** `llem` raises a
-`PreFlightError` before any inference starts if a local-pinned engine is not
+`PreFlightError` before any inference starts if a process-pinned engine is not
 importable, or if an auto-resolved engine needs Docker but Docker is
 unavailable. See [Docker setup](/how-to/docker-setup) if your environment is not
 yet configured.

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from llenergymeasure.config.ssot import SOURCE_IMPLICIT
 from llenergymeasure.domain.bundle_artefacts import BUNDLE_VERSION
 from llenergymeasure.domain.environment import (
     CPUEnvironment,
@@ -330,7 +331,9 @@ def test_runner_provenance_process_round_trips(
     """A process runner_provenance survives save/load with no image."""
     result = minimal_result.model_copy(
         update={
-            "runner_provenance": RunnerProvenance(mode="process", image=None, source="implicit")
+            "runner_provenance": RunnerProvenance(
+                mode="process", image=None, source=SOURCE_IMPLICIT
+            )
         }
     )
     result_path = save_result(result, tmp_path)

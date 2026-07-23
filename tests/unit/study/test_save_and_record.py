@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from llenergymeasure.config.runner_spec import RunnerSpec
+from llenergymeasure.config.ssot import SOURCE_IMPLICIT
 from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
 from llenergymeasure.study.runner import (
     _provenance_from_spec,
@@ -472,7 +473,7 @@ def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) ->
             ts_source_dir=tmp_path,  # local temp dir never holds environment.json
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
-                mode="process", image=None, source="implicit", image_source=None
+                mode="process", image=None, source=SOURCE_IMPLICIT, image_source=None
             ),
         )
 

@@ -43,6 +43,7 @@ from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     RUNNER_CONTAINER,
     RUNNER_PROCESS,
+    SOURCE_IMPLICIT,
     TIMEOUT_ENV_SNAPSHOT,
     TIMEOUT_INTERRUPT_POLL,
     engine_str,
@@ -114,7 +115,7 @@ def _provenance_from_spec(
         return RunnerProvenance(
             mode=RUNNER_PROCESS,
             image=None,
-            source=spec.source if spec is not None else "implicit",
+            source=spec.source if spec is not None else SOURCE_IMPLICIT,
             image_source=None,
             image_digest=None,
         )

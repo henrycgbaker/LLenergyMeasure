@@ -95,11 +95,15 @@ class TestParseRunnerValueLegacyRejected:
             parse_runner_value("docker")
 
     def test_legacy_docker_image_rejected_with_migration_hint(self):
-        with pytest.raises(ValueError, match=r"use 'container:ghcr.io/custom/img:v1'"):
+        # The message must name the user's ACTUAL input, not a placeholder.
+        with pytest.raises(
+            ValueError,
+            match=r"'docker:ghcr.io/custom/img:v1' was renamed.*use 'container:ghcr.io/custom/img:v1'",
+        ):
             parse_runner_value("docker:ghcr.io/custom/img:v1")
 
     def test_legacy_docker_colon_empty_rejected_with_migration_hint(self):
-        with pytest.raises(ValueError, match=r"use 'container:<image>'"):
+        with pytest.raises(ValueError, match=r"'docker:' was renamed.*use 'container:<image>'"):
             parse_runner_value("docker:")
 
 

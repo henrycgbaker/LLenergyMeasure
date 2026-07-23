@@ -158,12 +158,12 @@ def _render_runner_info(lines: Text, info: dict[str, str | None]) -> None:
     source_label = _RUNNER_SOURCE_LABELS.get(source or "", source or "")
 
     if mode == RUNNER_PROCESS:
-        lines.append(f"       mode:    process ({source_label})\n", style="dim")
+        lines.append(f"       mode:    {mode} ({source_label})\n", style="dim")
         lines.append(
             "               no container isolation - running directly on host\n", style="dim"
         )
     elif mode == RUNNER_CONTAINER and image:
-        lines.append(f"       mode:    container ({source_label})\n", style="dim")
+        lines.append(f"       mode:    {mode} ({source_label})\n", style="dim")
         lines.append(f"       image:   {image}\n", style="dim")
         if image_source:
             try:

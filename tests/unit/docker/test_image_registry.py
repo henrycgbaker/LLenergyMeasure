@@ -63,7 +63,10 @@ class TestParseRunnerValue:
     def test_legacy_docker_colon_image_rejected_with_migration_hint(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        with pytest.raises(ValueError, match=r"use 'container:custom/img:v1'"):
+        # The message must name the user's ACTUAL input, not a placeholder.
+        with pytest.raises(
+            ValueError, match=r"'docker:custom/img:v1' was renamed.*use 'container:custom/img:v1'"
+        ):
             parse_runner_value("docker:custom/img:v1")
 
 

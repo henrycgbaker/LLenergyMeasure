@@ -25,6 +25,8 @@ from llenergymeasure.config.ssot import (
     ENV_DATACENTER_PUE,
     ENV_NO_PROMPT,
     ENV_RUNNER_PREFIX,
+    legacy_runner_migration_message,
+    legacy_runner_replacement,
 )
 
 
@@ -64,20 +66,15 @@ class UserRunnersConfig(BaseModel):
     def validate_runner_format(self) -> UserRunnersConfig:
         # The runner vocabulary was renamed in v0.7 (local->process, docker->container,
         # docker:<image>->container:<image>). The old values are a clean break: reject
-        # them here with a migration hint rather than silently accepting.
+        # them here with the shared migration hint rather than silently accepting.
         for field_name in ALL_ENGINES:
             value = getattr(self, field_name)
-            if value == "local" or value == "docker" or value.startswith("docker:"):
-                if value == "local":
-                    replacement = "process"
-                elif value == "docker":
-                    replacement = "container"
-                else:
-                    image = value[len("docker:") :]
-                    replacement = f"container:{image}" if image else "container:<image>"
+            replacement = legacy_runner_replacement(value)
+            if replacement is not None:
                 raise ValueError(
-                    f"runner value '{value}' was renamed in v0.7 (runners.{field_name}) - "
-                    f"use '{replacement}'"
+                    legacy_runner_migration_message(
+                        value, replacement, context=f"runners.{field_name}"
+                    )
                 )
             if value.startswith("singularity:"):
                 raise ValueError(
