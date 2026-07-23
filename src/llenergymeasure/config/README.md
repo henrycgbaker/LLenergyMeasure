@@ -710,7 +710,7 @@ Each experiment directory ships sidecars for full reproducibility next to `resul
 - `config.json` - the resolved-config sidecar. Its `provenance` section records which
   fields were overridden and why (CLI flag, sweep, YAML), alongside the observed
   engine/sampling params and config hashes.
-- `environment.json` - the hardware/runtime environment snapshot.
+- `system.json` - the hardware/runtime environment snapshot.
 
 ```json
 // config.json (excerpt)

@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING
 from llenergymeasure.domain.bundle_artefacts import (
     BUNDLE_VERSION,
     CONFIG_SIDECAR_FILENAME,
-    ENVIRONMENT_FILENAME,
     RESULT_FILENAME,
+    SYSTEM_FILENAME,
     TIMESERIES_FILENAME,
 )
 
@@ -217,16 +217,16 @@ def save_config_sidecar(
     return path
 
 
-def save_environment(
+def save_system(
     snapshot: EnvironmentSnapshot,
     experiment_id: str,
     measurement_config_hash: str,
     experiment_dir: Path,
 ) -> Path:
-    """Write per-experiment environment.json sidecar.
+    """Write per-experiment system.json sidecar.
 
     Contains hardware/runtime metadata for the experiment. Software package
-    listings live in the study-level environment.json instead.
+    listings live in the study-level system.json instead.
 
     Args:
         snapshot: EnvironmentSnapshot with hardware/runtime metadata.
@@ -235,7 +235,7 @@ def save_environment(
         experiment_dir: Experiment result directory (must already exist).
 
     Returns:
-        Path to the written environment.json file.
+        Path to the written system.json file.
     """
     env_data: dict[str, object] = {
         "bundle_version": BUNDLE_VERSION,
@@ -253,9 +253,9 @@ def save_environment(
     # the in-container snapshot, whose runner facts the host patches in later).
     env_data["runner"] = snapshot_dict.get("runner")
 
-    path = experiment_dir / ENVIRONMENT_FILENAME
+    path = experiment_dir / SYSTEM_FILENAME
     _atomic_write(json.dumps(env_data, indent=2, default=str), path)
-    logger.debug("Saved environment to %s", path)
+    logger.debug("Saved system snapshot to %s", path)
     return path
 
 
@@ -326,18 +326,19 @@ def load_result(path: Path) -> ExperimentResult:
 
     Thin wrapper over :meth:`llenergymeasure.results.bundle.BundleReader.read`,
     kept as public API for stability. The reader owns the read policy: it
-    auto-discovers the timeseries.parquet and environment.json sidecars in the
-    same directory, parses result.json (dropping the retired ``schema_version``
-    key on legacy bundles), attaches the environment snapshot to
-    ``result.environment`` when present, and emits a UserWarning when the result
-    references a timeseries whose parquet is missing (graceful degradation).
+    auto-discovers the timeseries.parquet and system.json sidecars in the
+    same directory (falling back to a legacy environment.json when system.json is
+    absent), parses result.json (dropping the retired ``schema_version`` key on
+    legacy bundles), attaches the environment snapshot to ``result.environment``
+    when present, and emits a UserWarning when the result references a timeseries
+    whose parquet is missing (graceful degradation).
 
     Args:
         path: Path to result.json (as returned by save_result()).
 
     Returns:
         ExperimentResult loaded from disk, with ``environment`` populated
-        from the environment.json sidecar when one is present.
+        from the system.json sidecar when one is present.
     """
     from llenergymeasure.results.bundle import BundleReader
 

@@ -186,7 +186,7 @@ class DockerRunner:
             - result: ExperimentResult on success, or a dict error payload if the
               container wrote an error JSON.
             - artefact_tmpdir: Path to temp dir containing the rescued artefacts
-              (config.json and environment.json, plus timeseries.parquet when it
+              (config.json and system.json, plus timeseries.parquet when it
               was written), or None when none were present. Caller is responsible
               for cleanup.
 
@@ -275,7 +275,7 @@ class DockerRunner:
             result = exchange.read_result(exchange_dir, config_hash)
 
             # --- Rescue artefacts before cleanup ---
-            # config.json / environment.json / timeseries.parquet must survive the
+            # config.json / system.json / timeseries.parquet must survive the
             # exchange-dir teardown so the caller can land them in the study dir.
             artefact_tmpdir: Path | None = None
             if not isinstance(result, dict):

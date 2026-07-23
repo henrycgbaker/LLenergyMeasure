@@ -95,8 +95,8 @@ def _provenance_from_spec(
     domain are independent sibling layers), so its execution-mode fields are
     mirrored onto the domain-layer ``RunnerProvenance``. The one model is
     serialised into both result.json (self-contained provenance) and the
-    environment.json ``runner`` block, so this single builder populates the full
-    superset - including the registry digest the environment block anchors on.
+    system.json ``runner`` block, so this single builder populates the full
+    superset - including the registry digest the system block anchors on.
 
     For docker specs the digest is resolved host-side via ``docker image inspect``
     on the image that actually ran (``resolved_image`` when the spec left the
@@ -166,13 +166,13 @@ def _save_and_record(
         model_name / engine: Identity for the experiment directory slug
             (authoritative home: config.json; the result keeps a convenience copy).
         ts_source_dir: Staging dir where the harness/container wrote config.json,
-            timeseries.parquet, and (under docker) the rescued environment.json.
-        environment_snapshot: Host EnvironmentSnapshot for environment.json (a
+            timeseries.parquet, and (under docker) the rescued system.json.
+        environment_snapshot: Host EnvironmentSnapshot for system.json (a
             rescued in-container snapshot is preferred over it when present).
         resolution_log / resolved_config_hash: Patched into the config.json sidecar.
         runner_provenance: The unified runner provenance (mode, image, source,
             image_source, image_digest); folded into result.json and written as
-            the environment.json ``runner`` block.
+            the system.json ``runner`` block.
 
     On any save failure, marks the experiment failed on the manifest.
     """
@@ -189,7 +189,7 @@ def _save_and_record(
             ts_source_dir=ts_source_dir,
         )
         result_path = writer.write_result(result, runner_provenance=runner_provenance)
-        writer.write_environment(
+        writer.write_system(
             host_snapshot=environment_snapshot,
             runner=runner_provenance,
         )
