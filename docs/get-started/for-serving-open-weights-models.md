@@ -28,7 +28,7 @@ For your model on your hardware: which configuration choices most reduce energy 
 
 Academic comparisons emphasise relative numbers - is engine A more efficient than engine B for this model. Deployment decisions also need absolute numbers: joules per token converts into watts at your serving load, which converts into electricity cost and capacity planning.
 
-`mj_per_tok_adjusted` is the most portable per-token figure - idle GPU draw is subtracted, so what remains is the energy your inference work itself is responsible for. Multiply by your daily token volume for a deployment-shaped energy figure. The full output-reading guide is [how-to: interpret results](/how-to/interpret-results).
+`energy_per_token_mj_adjusted` is the most portable per-token figure - idle GPU draw is subtracted, so what remains is the energy your inference work itself is responsible for. Multiply by your daily token volume for a deployment-shaped energy figure. The full output-reading guide is [how-to: interpret results](/how-to/interpret-results).
 
 ---
 

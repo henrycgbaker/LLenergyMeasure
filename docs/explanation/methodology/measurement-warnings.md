@@ -82,23 +82,26 @@ transients (e.g. the first few seconds of a vLLM engine init).
 
 ## Thermal throttling detected
 
-**Recorded in result.json:** `thermal_throttle.thermal: true` or `thermal_throttle.hw_thermal: true`
+**Recorded in result.json:** `throttle.thermal.any: true` or `throttle.thermal.hw: true`
 
 **What it means:** NVML detected active thermal throttling during the measurement
 window - the GPU reduced its clock speed to prevent overheating. This is
-recorded in `result.json` under `thermal_throttle` and logged as a summary at
+recorded in `result.json` under `throttle` and logged as a summary at
 run end.
 
-Fields in `ThermalThrottleInfo`:
+`ThrottleInfo` is symmetric across two axes, `thermal` and `power`. Each axis is a
+`ThrottleAxis` with the same three flags:
 
 | Field | Meaning |
 |-------|---------|
-| `thermal` | Any throttle detected (summary flag) |
-| `hw_thermal` | Hardware thermal limit triggered (GPU too hot) |
-| `sw_thermal` | Software power cap triggered |
-| `power` | Power-limit throttle (distinct from thermal) |
-| `throttle_fraction` | Fraction of measurement time spent throttled |
-| `throttle_duration_s` | Seconds of throttled operation |
+| `throttle.thermal.any` | Any thermal throttle detected (hardware or software) |
+| `throttle.thermal.hw` | Hardware thermal limit triggered (GPU too hot) |
+| `throttle.thermal.sw` | Software thermal slowdown triggered |
+| `throttle.power.any` | Any power throttle detected (hardware or software) |
+| `throttle.power.hw` | Hardware power-brake slowdown triggered |
+| `throttle.power.sw` | Software power cap triggered |
+| `throttle.throttle_duration_sec` | Seconds of throttled operation |
+| `throttle.max_temperature_c` | Peak GPU temperature during the run (Celsius) |
 
 **Effect on measurement validity:** Thermal throttling directly reduces GPU
 clock speed, which reduces throughput and also reduces instantaneous power draw.

@@ -2,7 +2,7 @@
   "bundle_version": "2.0",
   "serving_mode": "offline",
   "experiment_id": "gpt2_20260313_142111",
-  "measurement_config_hash": "9944baab4dabe390",
+  "declared_config_hash": "9944baab4dabe390",
   "engine": "transformers",
   "model_name": "gpt2",
   "input_tokens": 1280,
@@ -42,13 +42,18 @@
     "gpu_attribution_verified": false,
     "warnings": []
   },
-  "thermal_throttle": {
+  "throttle": {
     "detected": false,
-    "thermal": false,
-    "power": false,
-    "sw_thermal": false,
-    "hw_thermal": false,
-    "hw_power": false,
+    "thermal": {
+      "any": false,
+      "hw": false,
+      "sw": false
+    },
+    "power": {
+      "any": false,
+      "hw": false,
+      "sw": false
+    },
     "throttle_duration_sec": 0.0,
     "max_temperature_c": 25.0,
     "throttle_timestamps": []

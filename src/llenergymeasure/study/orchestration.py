@@ -426,8 +426,8 @@ def _run_single_experiment_dispatch(
                 throughput_tok_s=tp,
                 inference_time_sec=infer,
                 adj_energy_j=adj_e,
-                mj_per_tok_adjusted=r.mj_per_tok_adjusted,
-                mj_per_tok_total=r.mj_per_tok_total,
+                energy_per_token_mj_adjusted=r.energy_per_token_mj_adjusted,
+                energy_per_token_mj_total=r.energy_per_token_mj_total,
             )
         else:
             study_cb.end_experiment_fail(1, exp_elapsed)

@@ -276,8 +276,8 @@ copies so the file is self-describing when separated from its directory:
   "total_inference_time_sec": 9.8,
   "avg_tokens_per_second": 783.7,
   "total_energy_j": 891.4,
-  "mj_per_tok_total": 116.1,
-  "mj_per_tok_adjusted": 100.4,
+  "energy_per_token_mj_total": 116.1,
+  "energy_per_token_mj_adjusted": 100.4,
   "total_flops": 1.18e+12,
   "flops_per_output_token": 1.54e+8,
   "energy_breakdown": { "baseline_power_w": 12.3, "...": "..." }
@@ -305,8 +305,8 @@ provenance:
 > sample.** The structure is stable.
 
 The two energy-per-token figures are the headline:
-- `mj_per_tok_total` - millijoules per output token, raw GPU energy
-- `mj_per_tok_adjusted` - same, with idle baseline subtracted
+- `energy_per_token_mj_total` - millijoules per output token, raw GPU energy
+- `energy_per_token_mj_adjusted` - same, with idle baseline subtracted
 
 For cross-cell comparison the **adjusted** figure is the right pick -
 it isolates inference work from the cost of having a GPU plugged in.
@@ -337,7 +337,7 @@ for result_path in study_dir.glob("*/result.json"):
 
     engine = config["engine"]
     dtype = config["declared_config"][engine]["engine_params"]["dtype"]
-    groups[(engine, dtype)].append(result["mj_per_tok_adjusted"])
+    groups[(engine, dtype)].append(result["energy_per_token_mj_adjusted"])
 
 print(f"{'engine':<14} {'dtype':<10} {'mJ/tok (adj, mean)':>20} {'n':>4}")
 for (engine, dtype), values in sorted(groups.items()):

@@ -58,7 +58,7 @@ See [Methodology &gt; Baseline power](/explanation/methodology/methodology#basel
 - **Method** - how the estimate was computed. `roofline` uses the model's parameter count and a per-token forward-pass approximation. Future methods may include `cycle_count` (more accurate, requires Nsight integration) or `flop_counter` (PyTorch FlopCounterMode hook).
 - **Confidence** - `low | medium | high`. `medium` reflects published roofline-method accuracy across architectures. `low` is emitted when the estimator hits an architecture it doesn't fully recognise.
 
-Use `mj_per_tok_adjusted` (energy per token) or `total_inference_time_sec` (wall-clock) for cross-engine comparison; `flops_per_*` are reference metadata, useful for normalising across model sizes but not for headline efficiency claims. See [What we measure](/explanation/methodology/what-we-measure#flops).
+Use `energy_per_token_mj_adjusted` (energy per token) or `total_inference_time_sec` (wall-clock) for cross-engine comparison; `flops_per_*` are reference metadata, useful for normalising across model sizes but not for headline efficiency claims. See [What we measure](/explanation/methodology/what-we-measure#flops).
 
 ### Why does my study report `unique_configurations` lower than `total_experiments`?
 

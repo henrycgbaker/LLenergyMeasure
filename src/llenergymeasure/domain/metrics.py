@@ -39,7 +39,7 @@ class FlopsResult(BaseModel):
 
 
 # =============================================================================
-# Schema v3: Energy Breakdown, Thermal Throttle, Warmup Result
+# Schema v3: Energy Breakdown, Throttle, Warmup Result
 # =============================================================================
 
 
@@ -84,32 +84,44 @@ class EnergyBreakdown(BaseModel):
     )
 
 
-class ThermalThrottleInfo(BaseModel):
-    """GPU thermal and power throttling information.
+class ThrottleAxis(BaseModel):
+    """One throttling axis (thermal or power): the combined flag plus its hw/sw split.
 
-    Tracks whether any throttling occurred during an experiment, which
-    can invalidate energy and performance measurements.
+    ``any`` is the axis-level "did this kind of throttling happen at all"
+    indicator; ``hw`` / ``sw`` name the hardware- and software-driven slowdown
+    causes NVML reports for that axis. ``any`` is the OR of the two causes.
     """
 
-    thermal: bool = Field(
+    any: bool = Field(
         default=False,
-        description="GPU thermal throttling detected",
+        description="Either hardware or software slowdown on this axis was seen.",
     )
-    power: bool = Field(
+    hw: bool = Field(
         default=False,
-        description="Power brake throttling detected",
+        description="Hardware slowdown on this axis was seen.",
     )
-    sw_thermal: bool = Field(
+    sw: bool = Field(
         default=False,
-        description="Software thermal slowdown detected",
+        description="Software slowdown on this axis was seen.",
     )
-    hw_thermal: bool = Field(
-        default=False,
-        description="Hardware thermal slowdown detected",
+
+
+class ThrottleInfo(BaseModel):
+    """GPU throttling information, symmetric across the thermal and power axes.
+
+    Each axis (``thermal``, ``power``) carries a combined ``any`` flag plus the
+    ``hw`` / ``sw`` split, so ``throttle.thermal.any`` and ``throttle.power.any``
+    are the two top-level "did this axis throttle" questions. Any throttling can
+    invalidate energy and performance measurements.
+    """
+
+    thermal: ThrottleAxis = Field(
+        default_factory=ThrottleAxis,
+        description="Thermal throttling (hardware/software thermal slowdown).",
     )
-    hw_power: bool = Field(
-        default=False,
-        description="Hardware power brake slowdown detected",
+    power: ThrottleAxis = Field(
+        default_factory=ThrottleAxis,
+        description="Power throttling (hardware power brake / software power cap).",
     )
     throttle_duration_sec: float = Field(
         default=0.0,
@@ -127,8 +139,8 @@ class ThermalThrottleInfo(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def detected(self) -> bool:
-        """Whether any throttling occurred during experiment."""
-        return any((self.thermal, self.power, self.sw_thermal, self.hw_thermal, self.hw_power))
+        """Whether any throttling (thermal or power) occurred during experiment."""
+        return self.thermal.any or self.power.any
 
 
 class WarmupResult(BaseModel):

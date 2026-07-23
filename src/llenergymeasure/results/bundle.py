@@ -507,7 +507,7 @@ class BundleReader:
 
         Returns None when the sidecar is absent or cannot be parsed, so a missing
         or corrupt sidecar never breaks the read. The sidecar's extra
-        ``experiment_id`` / ``measurement_config_hash`` / ``bundle_version`` keys
+        ``experiment_id`` / ``declared_config_hash`` / ``bundle_version`` keys
         are ignored by EnvironmentSnapshot validation.
         """
         if path is None:

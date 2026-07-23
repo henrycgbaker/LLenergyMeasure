@@ -67,6 +67,23 @@ def test_both_paths_tolerate_the_retired_schema_version_key() -> None:
     assert parse_experiment_result_payload(raw_b, tolerant=True).experiment_id == "test-001"
 
 
+def test_strict_path_tolerates_the_2p0_renamed_optional_keys() -> None:
+    """The 2.0-window optional-field renames drop their old keys on the strict path.
+
+    ``thermal_throttle`` -> ``throttle`` and ``mj_per_tok_*`` ->
+    ``energy_per_token_mj_*`` are optional, so a pre-rename bundle degrades to the
+    new-field defaults rather than being rejected by ``extra="forbid"``.
+    """
+    raw = _payload()
+    raw["thermal_throttle"] = {"thermal": True, "power": False}
+    raw["mj_per_tok_total"] = 12.3
+    raw["mj_per_tok_adjusted"] = 4.5
+    result = parse_experiment_result_payload(raw, tolerant=False)
+    assert result.throttle is None
+    assert result.energy_per_token_mj_total is None
+    assert result.energy_per_token_mj_adjusted is None
+
+
 # ---------------------------------------------------------------------------
 # Version-skew handshake (expected_version)
 # ---------------------------------------------------------------------------

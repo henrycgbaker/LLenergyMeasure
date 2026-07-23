@@ -56,8 +56,8 @@ class TestReplayFixtures:
         """Config hash is 16-char hex string."""
         self._require_fixtures(replay_results)
         for result in replay_results:
-            assert len(result.measurement_config_hash) == 16
-            assert all(c in "0123456789abcdef" for c in result.measurement_config_hash)
+            assert len(result.declared_config_hash) == 16
+            assert all(c in "0123456789abcdef" for c in result.declared_config_hash)
 
     def test_json_round_trip(self, replay_results):
         """Replay fixtures survive a JSON round-trip without data loss."""

@@ -47,7 +47,7 @@ for result_file in study_result.result_files:
     cell = Path(result_file).parent
     result = json.loads((cell / "result.json").read_text())
     config = json.loads((cell / "config.json").read_text())
-    print(f"{config['model_name']} / {config['engine']}: {result['mj_per_tok_total']:.3f} mJ/tok")
+    print(f"{config['model_name']} / {config['engine']}: {result['energy_per_token_mj_total']:.3f} mJ/tok")
 ```
 
 `study.yaml` (minimal multi-experiment form):
@@ -166,7 +166,7 @@ for result_file in study_result.result_files:
     cell = Path(result_file).parent
     result = json.loads((cell / "result.json").read_text())
     config = json.loads((cell / "config.json").read_text())
-    by_model.setdefault(config["model_name"], []).append(result["mj_per_tok_total"] or 0.0)
+    by_model.setdefault(config["model_name"], []).append(result["energy_per_token_mj_total"] or 0.0)
 
 for model, values in by_model.items():
     print(f"{model}: mean {statistics.mean(values):.3f} mJ/tok (n={len(values)})")
@@ -190,7 +190,7 @@ for result_file in study_result.result_files:
             "engine": config["engine"],
             "energy_j": result["total_energy_j"],
             "throughput": result["avg_tokens_per_second"],
-            "mj_per_tok": result["mj_per_tok_total"],
+            "energy_per_token_mj": result["energy_per_token_mj_total"],
         }
     )
 df = pd.DataFrame(rows)

@@ -121,7 +121,7 @@ When Zeus is installed, LLenergyMeasure can use it instead of the default NVML p
 
 **Comparing across studies:** Results are only comparable if the hardware, dataset, number of prompts, and dtype setting are identical. Hardware differences are the largest source of non-comparability - an A100 and a consumer GPU will produce very different energy figures even for the same model.
 
-**Energy per token:** When comparing models of different sizes or with different output lengths, use the derived metric of millijoules per output token. The result file exposes this directly as `mj_per_tok_adjusted` (baseline-subtracted) and `mj_per_tok_total` (raw). Use the adjusted form for cross-experiment comparisons - it isolates inference work from idle GPU draw.
+**Energy per token:** When comparing models of different sizes or with different output lengths, use the derived metric of millijoules per output token. The result file exposes this directly as `energy_per_token_mj_adjusted` (baseline-subtracted) and `energy_per_token_mj_total` (raw). Use the adjusted form for cross-experiment comparisons - it isolates inference work from idle GPU draw.
 
 **Reporting for sustainability:** If you are including AI energy use in an organisation's carbon accounting or sustainability report, pair LLenergyMeasure energy figures with the electricity carbon intensity of the data centre where the model runs, or use the CodeCarbon sampler to get CO2 estimates directly.
 

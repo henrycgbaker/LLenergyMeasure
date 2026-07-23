@@ -76,7 +76,7 @@ class _CompletedRow(NamedTuple):
     energy_j: float | None
     adj_energy_j: float | None
     throughput: float | None
-    mj_per_tok: float | None
+    energy_per_token_mj: float | None
 
 
 class StudyStepDisplay:
@@ -212,17 +212,17 @@ class StudyStepDisplay:
         throughput_tok_s: float | None = None,
         inference_time_sec: float | None = None,
         adj_energy_j: float | None = None,
-        mj_per_tok_adjusted: float | None = None,
-        mj_per_tok_total: float | None = None,
+        energy_per_token_mj_adjusted: float | None = None,
+        energy_per_token_mj_total: float | None = None,
     ) -> None:
         """Mark experiment as successfully completed."""
-        # Prefer mj_per_tok_adjusted (baseline-subtracted) when available,
-        # fall back to mj_per_tok_total. No recomputation - show "-" if both null.
+        # Prefer energy_per_token_mj_adjusted (baseline-subtracted) when available,
+        # fall back to energy_per_token_mj_total. No recomputation - show "-" if both null.
         mj_tok: float | None
-        if mj_per_tok_adjusted is not None:
-            mj_tok = mj_per_tok_adjusted
-        elif mj_per_tok_total is not None:
-            mj_tok = mj_per_tok_total
+        if energy_per_token_mj_adjusted is not None:
+            mj_tok = energy_per_token_mj_adjusted
+        elif energy_per_token_mj_total is not None:
+            mj_tok = energy_per_token_mj_total
         else:
             mj_tok = None
 

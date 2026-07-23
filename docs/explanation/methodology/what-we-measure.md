@@ -32,7 +32,7 @@ from instantaneous power samples. Reported as:
 - **Adjusted energy** (`energy_adjusted_j`) - total minus the
   baseline-power contribution; isolates the energy attributable to
   inference work rather than idle GPU draw.
-- **Per-token energy** (`mj_per_tok_total`, `mj_per_tok_adjusted`) -
+- **Per-token energy** (`energy_per_token_mj_total`, `energy_per_token_mj_adjusted`) -
   millijoules per output token, normalising out absolute compute volume
   so cross-experiment comparisons read at a comparable scale.
 

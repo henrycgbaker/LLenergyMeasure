@@ -4,7 +4,7 @@ Provides background sampling of GPU power, memory, temperature, and thermal
 throttle state using NVML via the nvidia-ml-py package (imports as pynvml).
 
 Gracefully handles unavailability - returns empty samples and default
-ThermalThrottleInfo if NVML is not available (e.g., no GPU, CUDA context
+ThrottleInfo if NVML is not available (e.g., no GPU, CUDA context
 conflicts with vLLM).
 """
 
@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 
 from llenergymeasure.device.gpu_info import nvml_context
-from llenergymeasure.domain.metrics import ThermalThrottleInfo
+from llenergymeasure.domain.metrics import ThrottleAxis, ThrottleInfo
 from llenergymeasure.utils.formatting import bytes_to_mb
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class PowerThermalSampler:
             # ... run inference ...
             pass
         samples = sampler.get_samples()
-        throttle_info = sampler.get_thermal_throttle_info()
+        throttle_info = sampler.get_throttle_info()
     """
 
     def __init__(
@@ -218,14 +218,14 @@ class PowerThermalSampler:
         """Get all collected samples."""
         return list(self._samples)
 
-    def get_thermal_throttle_info(self) -> ThermalThrottleInfo:
+    def get_throttle_info(self) -> ThrottleInfo:
         """Summarise thermal throttle state from collected samples (all GPUs).
 
         Returns:
-            ThermalThrottleInfo with aggregated throttle data across all GPUs.
+            ThrottleInfo with aggregated throttle data across all GPUs.
         """
         if not self._samples:
-            return ThermalThrottleInfo()
+            return ThrottleInfo()
 
         throttled_timestamps = [s.timestamp for s in self._samples if s.thermal_throttle]
         throttle_duration = len(throttled_timestamps) * (self._sample_interval_ms / 1000.0)
@@ -252,7 +252,7 @@ class PowerThermalSampler:
                 "nvmlClocksEventReasonSwThermalSlowdown",
                 "nvmlClocksThrottleReasonSwThermalSlowdown",
             )
-            power_bit = _throttle_bit(
+            sw_power_bit = _throttle_bit(
                 pynvml,
                 "nvmlClocksEventReasonSwPowerCap",
                 "nvmlClocksThrottleReasonSwPowerCap",
@@ -262,22 +262,28 @@ class PowerThermalSampler:
                 "nvmlClocksEventReasonHwPowerBrakeSlowdown",
                 "nvmlClocksThrottleReasonHwPowerBrakeSlowdown",
             )
-            # Combined "any thermal" bit: True if either hw or sw thermal throttling occurred
+            # Combined per-axis "any" bits: True if either hw or sw slowdown occurred.
             thermal_bit = hw_thermal_bit | sw_thermal_bit
+            power_bit = hw_power_bit | sw_power_bit
 
-            return ThermalThrottleInfo(
-                thermal=bool(combined_reasons & thermal_bit),
-                power=bool(combined_reasons & power_bit),
-                sw_thermal=bool(combined_reasons & sw_thermal_bit),
-                hw_thermal=bool(combined_reasons & hw_thermal_bit),
-                hw_power=bool(combined_reasons & hw_power_bit),
+            return ThrottleInfo(
+                thermal=ThrottleAxis(
+                    any=bool(combined_reasons & thermal_bit),
+                    hw=bool(combined_reasons & hw_thermal_bit),
+                    sw=bool(combined_reasons & sw_thermal_bit),
+                ),
+                power=ThrottleAxis(
+                    any=bool(combined_reasons & power_bit),
+                    hw=bool(combined_reasons & hw_power_bit),
+                    sw=bool(combined_reasons & sw_power_bit),
+                ),
                 throttle_duration_sec=throttle_duration,
                 max_temperature_c=max_temp,
                 throttle_timestamps=throttled_timestamps,
             )
         except ImportError:
             # pynvml not available - return basic info from sample flags
-            return ThermalThrottleInfo(
+            return ThrottleInfo(
                 throttle_duration_sec=throttle_duration,
                 max_temperature_c=max_temp,
                 throttle_timestamps=throttled_timestamps,

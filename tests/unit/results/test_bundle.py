@@ -432,7 +432,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
         "bundle_version": "1.0",
         "schema_version": "5.0",  # retired per-artefact counter
         "experiment_id": "legacy-001",
-        "measurement_config_hash": "deadbeef",
+        "declared_config_hash": "deadbeef",
         "input_tokens": 10,
         "output_tokens": 20,
         "total_tokens": 30,

@@ -45,7 +45,7 @@ def write_resolution(
     payload = {
         "bundle_version": "2.0",
         "experiment_id": f"exp-{full_hash[:8]}",
-        "measurement_config_hash": full_hash,
+        "declared_config_hash": full_hash,
         "engine": engine,
         "provenance": {k: {"effective": v, "source": "sweep"} for k, v in overrides.items()},
     }

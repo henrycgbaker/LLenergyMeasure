@@ -45,10 +45,10 @@ def print_result_summary(result: ExperimentResult) -> None:
     if result.energy_adjusted_j is not None:
         print(f"  Adjusted       {_sig3(result.energy_adjusted_j)} J")
     # Per-token energy (mJ/tok) - prefer adjusted, fall back to total, no recomputation
-    if result.mj_per_tok_adjusted is not None:
-        print(f"  Per token      {_sig3(result.mj_per_tok_adjusted)} mJ/tok (adjusted)")
-    elif result.mj_per_tok_total is not None:
-        print(f"  Per token      {_sig3(result.mj_per_tok_total)} mJ/tok")
+    if result.energy_per_token_mj_adjusted is not None:
+        print(f"  Per token      {_sig3(result.energy_per_token_mj_adjusted)} mJ/tok (adjusted)")
+    elif result.energy_per_token_mj_total is not None:
+        print(f"  Per token      {_sig3(result.energy_per_token_mj_total)} mJ/tok")
     print()
 
     # --- Performance ---

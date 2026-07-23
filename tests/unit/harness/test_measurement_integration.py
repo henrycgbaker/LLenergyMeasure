@@ -338,7 +338,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     from datetime import datetime
 
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.domain.metrics import FlopsResult, ThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
@@ -363,7 +363,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
         start_time=now,
         end_time=now,
         duration_sec=10.0,
-        thermal_info=ThermalThrottleInfo(),
+        throttle_info=ThrottleInfo(),
         energy_measurement=energy_measurement,
         baseline=None,
         flops_result=flops_result,
@@ -392,7 +392,7 @@ def test_harness_build_result_absent_energy_placeholder_and_warns(
     from datetime import datetime
 
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.domain.metrics import FlopsResult, ThrottleInfo
     from llenergymeasure.engines.protocol import InferenceOutput
 
     config = ExperimentConfig(task={"model": "test/model"})
@@ -416,7 +416,7 @@ def test_harness_build_result_absent_energy_placeholder_and_warns(
             start_time=now,
             end_time=now,
             duration_sec=10.0,
-            thermal_info=ThermalThrottleInfo(),
+            throttle_info=ThrottleInfo(),
             energy_measurement=None,
             baseline=None,
             flops_result=flops_result,
@@ -463,7 +463,7 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     from datetime import datetime, timedelta
 
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.metrics import ThermalThrottleInfo
+    from llenergymeasure.domain.metrics import ThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
@@ -488,7 +488,7 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
         start_time=now,
         end_time=now + timedelta(seconds=10),
         duration_sec=10.0,
-        thermal_info=ThermalThrottleInfo(),
+        throttle_info=ThrottleInfo(),
         energy_measurement=energy_measurement,
         baseline=None,
         flops_result=None,
@@ -508,7 +508,7 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     from datetime import datetime
 
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.domain.metrics import FlopsResult, ThrottleInfo
     from llenergymeasure.engines.protocol import InferenceOutput
 
     config = ExperimentConfig(task={"model": "test/model"})
@@ -530,7 +530,7 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
         start_time=now,
         end_time=now,
         duration_sec=10.0,
-        thermal_info=ThermalThrottleInfo(),
+        throttle_info=ThrottleInfo(),
         energy_measurement=None,
         baseline=None,
         flops_result=flops_result,
@@ -553,7 +553,7 @@ def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
     from datetime import datetime
 
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.metrics import ThermalThrottleInfo
+    from llenergymeasure.domain.metrics import ThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
@@ -578,7 +578,7 @@ def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
         start_time=now,
         end_time=now,
         duration_sec=1.0,
-        thermal_info=ThermalThrottleInfo(),
+        throttle_info=ThrottleInfo(),
         energy_measurement=energy_measurement,
         baseline=None,
         flops_result=None,
@@ -703,7 +703,7 @@ def _make_build_result_args():
     from datetime import datetime
 
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.domain.metrics import FlopsResult, ThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
@@ -728,7 +728,7 @@ def _make_build_result_args():
         start_time=now,
         end_time=now,
         duration_sec=10.0,
-        thermal_info=ThermalThrottleInfo(),
+        throttle_info=ThrottleInfo(),
         energy_measurement=energy_measurement,
         baseline=None,
         flops_result=flops_result,
@@ -779,8 +779,8 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
 # =============================================================================
 
 
-def test_mj_per_tok_uses_output_tokens_only() -> None:
-    """mj_per_tok_total divides energy by OUTPUT tokens, not input+output (D1)."""
+def test_energy_per_token_mj_uses_output_tokens_only() -> None:
+    """energy_per_token_mj_total divides energy by OUTPUT tokens, not input+output (D1)."""
     from llenergymeasure.engines.protocol import InferenceOutput
 
     kwargs = _make_build_result_args()
@@ -797,7 +797,7 @@ def test_mj_per_tok_uses_output_tokens_only() -> None:
 
     # 100 J / 100 output tokens * 1000 = 1000.0 mJ/output-token.
     # Old (buggy) denominator total_tokens=1000 would give 100.0.
-    assert result.mj_per_tok_total == pytest.approx(1000.0)
+    assert result.energy_per_token_mj_total == pytest.approx(1000.0)
     # Consistent with the existing output-token-only headline.
     assert result.avg_energy_per_token_j == pytest.approx(100.0 / 100)
 

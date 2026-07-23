@@ -51,7 +51,7 @@ with PowerThermalSampler(gpu_indices=[0, 1]) as sampler:
     # ... run inference ...
 
 samples = sampler.get_samples()          # list[PowerThermalSample]
-throttle_info = sampler.get_thermal_throttle_info()  # ThermalThrottleInfo
+throttle_info = sampler.get_throttle_info()  # ThrottleInfo
 ```
 
 ### PowerThermalSample

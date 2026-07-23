@@ -253,11 +253,11 @@ def _real_sample(**overrides):
 
 def _make_mock_pts(*, samples: list | None = None):
     """Build a PowerThermalSampler mock that satisfies the harness's usage."""
-    from llenergymeasure.domain.metrics import ThermalThrottleInfo
+    from llenergymeasure.domain.metrics import ThrottleInfo
 
     mock_pts_cls = MagicMock()
     mock_pts_instance = MagicMock()
-    mock_pts_instance.get_thermal_throttle_info.return_value = ThermalThrottleInfo()
+    mock_pts_instance.get_throttle_info.return_value = ThrottleInfo()
     mock_pts_instance.get_samples.return_value = samples if samples is not None else []
     # MeasurementBracket drives the sampler via start()/stop() (auto-mocked), not
     # the context-manager protocol, so no __enter__/__exit__ wiring is needed.
@@ -731,7 +731,7 @@ def test_write_config_sidecar_creates_config_json(minimal_config, tmp_path: Path
 
     result = ExperimentResult(
         experiment_id="test-sidecar-001",
-        measurement_config_hash="aabb1122ccdd3344",
+        declared_config_hash="aabb1122ccdd3344",
         input_tokens=8,
         output_tokens=2,
         total_tokens=10,
@@ -1051,8 +1051,8 @@ def test_harness_energy_none_still_produces_valid_result(minimal_config):
     assert result.energy_breakdown is None or result.energy_breakdown.raw_j == 0.0
 
 
-def test_build_result_populates_mj_per_tok(minimal_config):
-    """build_result() sets mj_per_tok_total when total_tokens > 0."""
+def test_build_result_populates_energy_per_token_mj(minimal_config):
+    """build_result() sets energy_per_token_mj_total when total_tokens > 0."""
     engine = FakeBackend()
     harness = MeasurementHarness()
 
@@ -1061,11 +1061,11 @@ def test_build_result_populates_mj_per_tok(minimal_config):
 
     # FakeBackend returns total_tokens = input(10) + output(20) = 30
     assert result.total_tokens > 0
-    assert result.mj_per_tok_total is not None
+    assert result.energy_per_token_mj_total is not None
     # With no energy sampler (returns None), total_energy_j = 0.0 → 0.0 mJ/tok
-    assert result.mj_per_tok_total == pytest.approx(0.0)
-    # No baseline → mj_per_tok_adjusted must be None
-    assert result.mj_per_tok_adjusted is None
+    assert result.energy_per_token_mj_total == pytest.approx(0.0)
+    # No baseline → energy_per_token_mj_adjusted must be None
+    assert result.energy_per_token_mj_adjusted is None
 
 
 def test_build_result_batch_utilisation_defaults_for_transformers(minimal_config):
@@ -1346,4 +1346,4 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
     # config.json sidecar), so the parquet stays attributable if orphaned.
     _, kwargs = mock_write_ts.call_args
     assert kwargs["experiment_id"] == result.experiment_id
-    assert kwargs["measurement_config_hash"] == result.measurement_config_hash
+    assert kwargs["declared_config_hash"] == result.declared_config_hash

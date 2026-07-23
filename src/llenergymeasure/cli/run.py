@@ -467,7 +467,7 @@ def _build_historical_rows(resume_manifest: Any) -> list[_CompletedRow]:
                 energy_j=entry.energy_joules,
                 adj_energy_j=entry.adj_energy_joules,
                 throughput=entry.throughput_tok_s,
-                mj_per_tok=entry.mj_per_tok,
+                energy_per_token_mj=entry.energy_per_token_mj,
             )
         )
     return historical

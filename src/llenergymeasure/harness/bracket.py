@@ -78,7 +78,7 @@ class MeasuredWindowCore:
     are composed on top by the caller.
     """
 
-    thermal_info: Any
+    throttle_info: Any
     timeseries_samples: list[PowerThermalSample]
     energy_measurement: Any
     # Per-sampler probe reasons, populated only when auto-selection found no
@@ -125,7 +125,7 @@ class MeasurementBracket:
         self._energy_tracker: Any = None
         self._energy_sampler_reasons: list[str] = []
         self._thermal_sampler: Any = None
-        self._thermal_info: Any = None
+        self._throttle_info: Any = None
         self._timeseries_samples: list[Any] = []
         self._t_inference_start: float = 0.0
         self._t_inference_end: float = 0.0
@@ -188,7 +188,7 @@ class MeasurementBracket:
         _cuda_sync()
         emit_substep(self._progress, STEP_MEASURE, "CUDA sync (post)")
 
-        self._thermal_info = self._thermal_sampler.get_thermal_throttle_info()
+        self._throttle_info = self._thermal_sampler.get_throttle_info()
         self._timeseries_samples = self._thermal_sampler.get_samples()
         # The measure-step done event fires in finish(), AFTER the caller's
         # post-window observed-params capture, matching the pre-refactor order.
@@ -220,7 +220,7 @@ class MeasurementBracket:
 
         assert self._start_time is not None  # set in __enter__
         return MeasuredWindowCore(
-            thermal_info=self._thermal_info,
+            throttle_info=self._throttle_info,
             timeseries_samples=self._timeseries_samples,
             energy_measurement=energy_measurement,
             energy_sampler_reasons=self._energy_sampler_reasons,

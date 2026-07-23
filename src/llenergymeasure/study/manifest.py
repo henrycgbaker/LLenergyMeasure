@@ -46,7 +46,7 @@ class ExperimentManifestEntry(BaseModel):
     energy_joules: float | None = None
     adj_energy_joules: float | None = None
     throughput_tok_s: float | None = None
-    mj_per_tok: float | None = None
+    energy_per_token_mj: float | None = None
 
 
 class StudyManifest(BaseModel):
@@ -193,7 +193,7 @@ class ManifestWriter:
         energy_joules: float | None = None,
         adj_energy_joules: float | None = None,
         throughput_tok_s: float | None = None,
-        mj_per_tok: float | None = None,
+        energy_per_token_mj: float | None = None,
     ) -> None:
         """Mark a running experiment as completed with optional summary metrics."""
         entry = self._find(config_hash, cycle)
@@ -205,7 +205,7 @@ class ManifestWriter:
         entry.energy_joules = energy_joules
         entry.adj_energy_joules = adj_energy_joules
         entry.throughput_tok_s = throughput_tok_s
-        entry.mj_per_tok = mj_per_tok
+        entry.energy_per_token_mj = energy_per_token_mj
         self._recount()
         self._write()
 

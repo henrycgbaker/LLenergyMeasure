@@ -64,7 +64,7 @@ The following are stable across pre-1.0 minor versions and will not change
 without a deprecation notice:
 
 - **`ExperimentResult` schema** - the flat result shape and the headline
-  fields (`total_energy_j`, `energy_adjusted_j`, `mj_per_tok_adjusted`,
+  fields (`total_energy_j`, `energy_adjusted_j`, `energy_per_token_mj_adjusted`,
   `avg_tokens_per_second`, `total_inference_time_sec`, `total_flops`).
   New fields may be added; existing fields will not be renamed or removed.
 - **Study config top-level keys** - `task`, `sweep`, `experiments`,

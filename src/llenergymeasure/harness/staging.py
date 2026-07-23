@@ -42,7 +42,7 @@ def write_timeseries_parquet(
     path: Path,
     *,
     experiment_id: str | None = None,
-    measurement_config_hash: str | None = None,
+    declared_config_hash: str | None = None,
 ) -> Path:  # pragma: no cover
     from llenergymeasure.harness.timeseries import write_timeseries_parquet as _wts
 
@@ -50,7 +50,7 @@ def write_timeseries_parquet(
         samples,
         path,
         experiment_id=experiment_id,
-        measurement_config_hash=measurement_config_hash,
+        declared_config_hash=declared_config_hash,
     )
 
 
@@ -111,7 +111,7 @@ def persist_and_assemble(
         start_time=core.start_time,
         end_time=core.end_time,
         duration_sec=duration_sec,
-        thermal_info=core.thermal_info,
+        throttle_info=core.throttle_info,
         energy_measurement=core.energy_measurement,
         baseline=lifetime.baseline,
         flops_result=window.flops_result,
@@ -130,7 +130,7 @@ def persist_and_assemble(
             core.timeseries_samples,
             resolved_output_dir / TIMESERIES_FILENAME,
             experiment_id=result.experiment_id,
-            measurement_config_hash=result.measurement_config_hash,
+            declared_config_hash=result.declared_config_hash,
         )
         emit_substep(_p, "save", "timeseries parquet written")
 
@@ -214,7 +214,7 @@ def write_config_sidecar(
         save_config_sidecar(
             output_dir,
             experiment_id=result.experiment_id,
-            config_hash=result.measurement_config_hash,
+            config_hash=result.declared_config_hash,
             engine=engine_name,
             engine_version=lib_ver,
             model_name=config.task.model,

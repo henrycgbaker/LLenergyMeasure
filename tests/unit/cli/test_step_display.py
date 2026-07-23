@@ -894,12 +894,12 @@ def test_image_prep_panel_renders_every_concurrent_failure():
 
 
 # ---------------------------------------------------------------------------
-# mj_per_tok fallback removal - null mj_per_tok shows "-", no recomputation
+# energy_per_token_mj fallback removal - null energy_per_token_mj shows "-", no recomputation
 # ---------------------------------------------------------------------------
 
 
-def test_end_experiment_ok_null_mj_per_tok_shows_dash():
-    """When both mj_per_tok_adjusted and mj_per_tok_total are None, mj_tok stored as None."""
+def test_end_experiment_ok_null_energy_per_token_mj_shows_dash():
+    """When both energy_per_token_mj_adjusted and energy_per_token_mj_total are None, mj_tok stored as None."""
     console, _buf = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
     display.begin_experiment(1, "gpt2 / pytorch / bf16", [])
@@ -908,8 +908,8 @@ def test_end_experiment_ok_null_mj_per_tok_shows_dash():
         elapsed=10.0,
         energy_j=100.0,
         throughput_tok_s=50.0,
-        mj_per_tok_adjusted=None,
-        mj_per_tok_total=None,
+        energy_per_token_mj_adjusted=None,
+        energy_per_token_mj_total=None,
     )
 
     # The stored row should have mj_tok=None (last element in the tuple)
@@ -920,15 +920,15 @@ def test_end_experiment_ok_null_mj_per_tok_shows_dash():
 
 
 def test_end_experiment_ok_prefers_adjusted_over_total():
-    """mj_per_tok_adjusted is preferred over mj_per_tok_total when both present."""
+    """energy_per_token_mj_adjusted is preferred over energy_per_token_mj_total when both present."""
     console, _buf = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
     display.begin_experiment(1, "gpt2 / pytorch / bf16", [])
     display.end_experiment_ok(
         1,
         elapsed=10.0,
-        mj_per_tok_adjusted=5.0,
-        mj_per_tok_total=10.0,
+        energy_per_token_mj_adjusted=5.0,
+        energy_per_token_mj_total=10.0,
     )
 
     with display._lock:
@@ -937,15 +937,15 @@ def test_end_experiment_ok_prefers_adjusted_over_total():
 
 
 def test_end_experiment_ok_falls_back_to_total():
-    """mj_per_tok_total is used when mj_per_tok_adjusted is None."""
+    """energy_per_token_mj_total is used when energy_per_token_mj_adjusted is None."""
     console, _buf = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
     display.begin_experiment(1, "gpt2 / pytorch / bf16", [])
     display.end_experiment_ok(
         1,
         elapsed=10.0,
-        mj_per_tok_adjusted=None,
-        mj_per_tok_total=8.0,
+        energy_per_token_mj_adjusted=None,
+        energy_per_token_mj_total=8.0,
     )
 
     with display._lock:
