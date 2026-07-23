@@ -118,8 +118,10 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   subclasses the generated Config to add the typed `llem_execution` field). The
   sweep-axis key is now `transformers.llem_execution.batch_size`. Because the
   knobs move inside the engine section, the declared-config-hash of any config
-  that sets them shifts (dedup is within-study, so this is benign pre-1.0); the
-  resolved/observed config hashes are unchanged. ([#881])
+  that sets them shifts (dedup is within-study, so this is benign pre-1.0). The
+  resolved/observed config-hash identity slot is likewise renamed `harness` ->
+  `llem_execution`, so those hash values shift too (same within-study rationale).
+  ([#881])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their

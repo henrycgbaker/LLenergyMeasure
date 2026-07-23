@@ -125,10 +125,10 @@ class ConfigHashView:
       resolved-config-hash, live library observation for observed-config-hash)
     - ``observed_sampling_params`` - sampling state (same sources as above)
     - ``passthrough_kwargs`` - user-attached overrides
-    - ``harness`` - the active engine's llem-orchestration knobs (batch_size,
-      torch_compile, allow_tf32, autocast). These drive execution but have no
-      engine-native API, so they must join the config identity or a harness
-      sweep collapses to one run under dedup.
+    - ``llem_execution`` - the active engine's llem-owned execution knobs
+      (batch_size, torch_compile, allow_tf32, autocast). These drive execution
+      but have no engine-native API, so they must join the config identity or an
+      execution-knob sweep collapses to one run under dedup.
     - ``measurement`` - measurement methodology (warmup, baseline, energy sampler,
       windowing). Sweeping methodology creates distinct runs, so these join the
       identity too; dedup then collapses only true duplicates.
@@ -141,7 +141,7 @@ class ConfigHashView:
     observed_engine_params: dict[str, Any] = field(default_factory=dict)
     observed_sampling_params: dict[str, Any] = field(default_factory=dict)
     passthrough_kwargs: dict[str, Any] = field(default_factory=dict)
-    harness: dict[str, Any] = field(default_factory=dict)
+    llem_execution: dict[str, Any] = field(default_factory=dict)
     measurement: dict[str, Any] = field(default_factory=dict)
 
 
@@ -167,18 +167,18 @@ def build_observed_view(
     observed_engine_params: dict[str, Any],
     observed_sampling_params: dict[str, Any],
     passthrough_kwargs: dict[str, Any] | None = None,
-    harness: dict[str, Any] | None = None,
+    llem_execution: dict[str, Any] | None = None,
     measurement: dict[str, Any] | None = None,
 ) -> ConfigHashView:
     """Assemble an observed-config view from per-engine ``extract_observed_params`` output.
 
     Callers live in the harness/sidecar path - they read ``task`` from the
     same config that ran and pair it with the native-object dumps the engine
-    returned. ``harness`` and ``measurement`` come from the same config (they
-    are orchestration/methodology dials, not library-observable) so that the
+    returned. ``llem_execution`` and ``measurement`` come from the same config
+    (they are execution/methodology dials, not library-observable) so that the
     observed hash covers the same identity dimensions as the resolved hash;
     keeping them aligned stops the observed-collision analysis from flagging a
-    pure harness/measurement sweep as a false library-resolution gap.
+    pure execution/measurement sweep as a false library-resolution gap.
     """
     return ConfigHashView(
         engine=engine,
@@ -186,6 +186,6 @@ def build_observed_view(
         observed_engine_params=dict(observed_engine_params),
         observed_sampling_params=dict(observed_sampling_params),
         passthrough_kwargs=dict(passthrough_kwargs or {}),
-        harness=dict(harness or {}),
+        llem_execution=dict(llem_execution or {}),
         measurement=dict(measurement or {}),
     )

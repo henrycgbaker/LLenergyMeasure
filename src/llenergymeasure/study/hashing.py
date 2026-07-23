@@ -45,9 +45,7 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     engine has no native API for - batch_size, torch_compile, allow_tf32,
     autocast) and the ``measurement`` block (methodology dials) also join the
     view: both drive execution or define distinct runs, so a sweep over either
-    must produce distinct resolved hashes rather than collapsing under dedup. The
-    ``ConfigHashView.harness`` field name is retained as the hash-identity anchor
-    for these knobs (renaming it would churn every resolved/observed hash).
+    must produce distinct resolved hashes rather than collapsing under dedup.
     """
     engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)
@@ -55,8 +53,8 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     engine_params = dump.pop("engine_params", None) or {}
     sampling = dump.pop("sampling_params", None) or {}
     # llem_execution is projected separately (below) into the hash-identity
-    # ``harness`` slot; drop it here so it does not also leak into the engine
-    # params view (the transformers section now carries it as a real field).
+    # ``llem_execution`` slot; drop it here so it does not also leak into the
+    # engine params view (the transformers section now carries it as a real field).
     dump.pop("llem_execution", None)
 
     execution = config.active_llem_execution()
@@ -68,6 +66,6 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
         observed_engine_params={**engine_params, **dump},
         observed_sampling_params=sampling,
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
-        harness=execution_dump,
+        llem_execution=execution_dump,
         measurement=config.measurement.model_dump(mode="python"),
     )
