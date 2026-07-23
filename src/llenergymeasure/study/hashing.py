@@ -52,13 +52,11 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
     engine_params = dump.pop("engine_params", None) or {}
     sampling = dump.pop("sampling_params", None) or {}
-    # llem_execution is projected separately (below) into the hash-identity
-    # ``llem_execution`` slot; drop it here so it does not also leak into the
-    # engine params view (the transformers section now carries it as a real field).
-    dump.pop("llem_execution", None)
-
-    execution = config.active_llem_execution()
-    execution_dump = execution.model_dump(mode="python") if execution is not None else {}
+    # llem_execution goes into its own hash-identity slot, not the engine-params
+    # view. The section dump already carries it (the transformers subclass has it
+    # as a real field), so capture the pop directly rather than re-fetching and
+    # re-dumping the same submodel via active_llem_execution().
+    execution_dump = dump.pop("llem_execution", None) or {}
 
     return ConfigHashView(
         engine=engine_name,
