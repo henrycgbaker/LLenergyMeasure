@@ -121,22 +121,22 @@ class TransformersEngine:
                 f"Transformers model loading failed for {config.task.model!r}: {e}"
             ) from e
 
-        # allow_tf32 + torch.compile are llem-orchestration knobs (HarnessConfig),
-        # not engine-native config.
-        harness = config.active_harness()
+        # allow_tf32 + torch.compile are llem-owned execution knobs
+        # (llem_execution), not engine-native config.
+        execution = config.active_llem_execution()
 
         # Apply allow_tf32 (Ampere+ TF32 toggle)
-        if harness is not None and harness.allow_tf32 is not None:
+        if execution is not None and execution.allow_tf32 is not None:
             import torch as _torch
 
-            _torch.backends.cuda.matmul.allow_tf32 = harness.allow_tf32
+            _torch.backends.cuda.matmul.allow_tf32 = execution.allow_tf32
 
         # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
-        if harness is not None and harness.torch_compile:
+        if execution is not None and execution.torch_compile:
             import torch as _torch
 
-            mode = harness.torch_compile_mode or "default"
-            backend = harness.torch_compile_backend or "inductor"
+            mode = execution.torch_compile_mode or "default"
+            backend = execution.torch_compile_backend or "inductor"
             try:
                 t0 = time.perf_counter()
                 model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
@@ -197,10 +197,10 @@ class TransformersEngine:
         """
         hf_model, tokenizer = model
 
-        harness = config.active_harness()
+        execution = config.active_llem_execution()
         batch_size = 1
-        if harness is not None and harness.batch_size is not None:
-            batch_size = harness.batch_size
+        if execution is not None and execution.batch_size is not None:
+            batch_size = execution.batch_size
         else:
             logger.debug("Transformers batch_size not set, defaulting to 1")
 
@@ -684,14 +684,14 @@ class TransformersEngine:
         # Padding tokens: total tensor positions minus real (attended) tokens.
         padding_tokens = int(inputs["input_ids"].numel()) - input_token_count
 
-        # Determine autocast settings (autocast is an llem-orchestration knob).
+        # Determine autocast settings (autocast is an llem-owned execution knob).
         from contextlib import nullcontext
 
-        _hn = config.active_harness()
-        if _hn is not None and _hn.autocast_enabled is True and torch.cuda.is_available():
+        _exec = config.active_llem_execution()
+        if _exec is not None and _exec.autocast_enabled is True and torch.cuda.is_available():
             _amp_ctx = torch.autocast(
                 device_type="cuda",
-                dtype=self._resolve_torch_dtype(_hn.autocast_dtype or "bfloat16"),
+                dtype=self._resolve_torch_dtype(_exec.autocast_dtype or "bfloat16"),
             )
         else:
             _amp_ctx = nullcontext()  # type: ignore[assignment]

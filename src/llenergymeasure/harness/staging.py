@@ -185,19 +185,19 @@ def write_config_sidecar(
         lib_ver = output.extras.get("library_version", "unknown") or "unknown"
 
         # Compute observed_config_hash from extracted native-type state.
-        # harness + measurement come from the ran config so the observed hash
-        # covers the same identity dimensions as the resolved hash.
+        # llem_execution + measurement come from the ran config so the observed
+        # hash covers the same identity dimensions as the resolved hash. The
+        # build_observed_view ``harness`` param keeps its name as the hash-
+        # identity anchor for these knobs.
         task_dict = config.task.model_dump(mode="python")
-        active_harness = config.active_harness()
-        harness_dump = (
-            active_harness.model_dump(mode="python") if active_harness is not None else {}
-        )
+        execution = config.active_llem_execution()
+        execution_dump = execution.model_dump(mode="python") if execution is not None else {}
         observed_view = build_observed_view(
             engine=engine_name,
             task=task_dict,
             observed_engine_params=obs_engine,
             observed_sampling_params=obs_sampling,
-            harness=harness_dump,
+            harness=execution_dump,
             measurement=config.measurement.model_dump(mode="python"),
         )
         obs_hash = hash_config(observed_view)

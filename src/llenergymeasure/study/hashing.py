@@ -41,20 +41,26 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     constructs" from "what it generates with". Any section-level extras merge
     into the engine-params view.
 
-    The active engine's ``harness`` block (llem-orchestration knobs the engine
-    has no native API for - batch_size, torch_compile, allow_tf32, autocast) and
-    the ``measurement`` block (methodology dials) also join the view: both drive
-    execution or define distinct runs, so a sweep over either must produce
-    distinct resolved hashes rather than collapsing under dedup.
+    The active engine's ``llem_execution`` block (llem-owned execution knobs the
+    engine has no native API for - batch_size, torch_compile, allow_tf32,
+    autocast) and the ``measurement`` block (methodology dials) also join the
+    view: both drive execution or define distinct runs, so a sweep over either
+    must produce distinct resolved hashes rather than collapsing under dedup. The
+    ``ConfigHashView.harness`` field name is retained as the hash-identity anchor
+    for these knobs (renaming it would churn every resolved/observed hash).
     """
     engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)
     dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
     engine_params = dump.pop("engine_params", None) or {}
     sampling = dump.pop("sampling_params", None) or {}
+    # llem_execution is projected separately (below) into the hash-identity
+    # ``harness`` slot; drop it here so it does not also leak into the engine
+    # params view (the transformers section now carries it as a real field).
+    dump.pop("llem_execution", None)
 
-    active_harness = config.active_harness()
-    harness_dump = active_harness.model_dump(mode="python") if active_harness is not None else {}
+    execution = config.active_llem_execution()
+    execution_dump = execution.model_dump(mode="python") if execution is not None else {}
 
     return ConfigHashView(
         engine=engine_name,
@@ -62,6 +68,6 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
         observed_engine_params={**engine_params, **dump},
         observed_sampling_params=sampling,
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
-        harness=harness_dump,
+        harness=execution_dump,
         measurement=config.measurement.model_dump(mode="python"),
     )

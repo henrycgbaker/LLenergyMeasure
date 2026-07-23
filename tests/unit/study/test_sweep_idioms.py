@@ -215,7 +215,7 @@ class TestIdiomsThroughExpandGrid:
             sweep:
               task.dataset.n_prompts: {min: 10, max: 30, num: 3}
               transformers.sampling_params.temperature: {log: {min: 0.1, max: 1.0, num: 2}}
-              harness.transformers.batch_size: {pow2: {min: 4, max: 16}}
+              transformers.llem_execution.batch_size: {pow2: {min: 4, max: 16}}
             """
         )
         valid, skipped = expand_grid(raw)
@@ -224,7 +224,7 @@ class TestIdiomsThroughExpandGrid:
         assert len(valid) == 18
         assert {c.task.dataset.n_prompts for c in valid} == {10, 20, 30}
         assert {c.transformers.sampling_params.temperature for c in valid} == {0.1, 1.0}
-        assert {c.harness.transformers.batch_size for c in valid} == {4, 8, 16}
+        assert {c.transformers.llem_execution.batch_size for c in valid} == {4, 8, 16}
 
     def test_idiom_expands_identically_to_explicit_list(self):
         base = {"task": {"model": "gpt2"}, "engine": "transformers"}

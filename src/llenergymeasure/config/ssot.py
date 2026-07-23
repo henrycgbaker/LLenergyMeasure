@@ -231,14 +231,15 @@ class BatchSizeModel:
       continuous-batching engines (vLLM), which have no single static batch - the
       effective batch there is derived from the realised prompt/batch counts.
 
-    ``harness_sourced`` marks engines whose batch size is an llem-orchestration
-    knob on ``harness.<engine>.batch_size`` (transformers) rather than an
-    engine-params field; for those, both semantics read that knob (default 1).
+    ``execution_sourced`` marks engines whose batch size is an llem-owned
+    execution knob on ``<engine>.llem_execution.batch_size`` (transformers)
+    rather than an engine-params field; for those, both semantics read that knob
+    (default 1).
     """
 
     capacity_field: str | None = None
     static_field: str | None = None
-    harness_sourced: bool = False
+    execution_sourced: bool = False
 
 
 @dataclass(frozen=True)
@@ -284,9 +285,10 @@ ENGINES: dict[Engine, EngineDescriptor] = {
         plugin_class="TransformersEngine",
         dtypes=("float32", "float16", "bfloat16"),
         parallelism=ParallelismModel(all_visible_field="device_map"),
-        # Prompt batching is an llem-orchestration knob (harness.transformers.batch_size);
-        # both capacity and static semantics read it, default 1.
-        batch=BatchSizeModel(harness_sourced=True),
+        # Prompt batching is an llem-owned execution knob
+        # (transformers.llem_execution.batch_size); both capacity and static
+        # semantics read it, default 1.
+        batch=BatchSizeModel(execution_sourced=True),
         image_version_source="package",
     ),
     Engine.VLLM: EngineDescriptor(

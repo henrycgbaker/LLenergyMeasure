@@ -1,23 +1,26 @@
-"""Per-engine llem-orchestration knobs (the harness residual).
+"""Per-engine llem-owned execution knobs (the ``llem_execution`` block).
 
 These are the features llem *implements itself* because the engine exposes no
 native API for them: prompt-batching in llem's own runner loop, PyTorch backend
 globals (TF32), and torch.autocast context wrapping. They are NOT engine config,
-so they live here (hand-written, tracked) rather than in the generated
-``llenergymeasure.engines.<e>.Config`` classes.
+so they are hand-written and tracked here rather than mined into the generated
+``llenergymeasure.config.generated.<engine>.Config`` classes.
 
-Only transformers has a residual today: the seven knobs that used to live on the
-hand-written transformers engine config. vllm and tensorrt drive batching and
-precision through native engine APIs, so they have no harness block.
+They are exposed to the user as a per-engine ``llem_execution:`` sub-section,
+sibling of the generated ``engine_params:`` / ``sampling_params:``, inside the
+engine section. :class:`TransformersSection` composes the two: it subclasses the
+generated (mined, byte-stable) transformers ``Config`` and adds the typed,
+strictly-validated ``llem_execution`` field. Only transformers has an execution
+residual today; vllm and tensorrt drive batching and precision through native
+engine APIs, so their sections carry no ``llem_execution`` block.
 
 YAML shape::
 
     engine: transformers
     transformers:
-      engine_params: { dtype: bfloat16 }
-      sampling_params: { temperature: 0.7 }
-    harness:
-      transformers:
+      engine_params: { dtype: bfloat16 }      # native passthrough (mined)
+      sampling_params: { temperature: 0.7 }    # native passthrough (mined)
+      llem_execution:                          # llem-owned execution knobs
         batch_size: 4
         torch_compile: true
         torch_compile_mode: reduce-overhead
@@ -29,9 +32,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from llenergymeasure.config.generated.transformers import Config as _GeneratedTransformersConfig
 
-class TransformersHarness(BaseModel):
-    """llem-orchestration knobs for the transformers engine.
+
+class TransformersExecution(BaseModel):
+    """llem-owned execution knobs for the transformers engine.
 
     All fields default to None - None means "use llem's own default at
     execution". torch.compile, prompt-batching, the TF32 backend toggle, and
@@ -73,7 +78,7 @@ class TransformersHarness(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_torch_compile_options(self) -> TransformersHarness:
+    def validate_torch_compile_options(self) -> TransformersExecution:
         """torch_compile_mode / torch_compile_backend require torch_compile=True.
 
         llem owns the torch.compile call, so this is llem-side orchestration
@@ -87,9 +92,19 @@ class TransformersHarness(BaseModel):
         return self
 
 
-class HarnessConfig(BaseModel):
-    """Per-engine llem-orchestration knobs. Only transformers has a residual today."""
+class TransformersSection(_GeneratedTransformersConfig):
+    """The transformers engine config section: mined engine surface + llem knobs.
 
-    model_config = {"extra": "forbid"}
+    Subclasses the generated (mined, byte-stable, ``extra="allow"``) transformers
+    ``Config`` - so ``engine_params`` / ``sampling_params`` and their native
+    passthrough are inherited untouched - and adds the hand-written, strictly
+    validated ``llem_execution`` block as a third sibling. This keeps llem-owned
+    execution knobs out of the generated file while still exposing them, typed, at
+    the config edge.
+    """
 
-    transformers: TransformersHarness | None = None
+    llem_execution: TransformersExecution | None = Field(
+        default=None,
+        description="llem-owned execution knobs (prompt-batching, torch.compile, "
+        "TF32, autocast) that have no engine-native API.",
+    )

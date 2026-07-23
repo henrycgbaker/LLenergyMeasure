@@ -103,11 +103,23 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   power indicator (`power.any`) and fixes the old flat `.power` field that only
   reflected the software power cap. `mj_per_tok_total` / `mj_per_tok_adjusted`
   are renamed `energy_per_token_mj_total` / `energy_per_token_mj_adjusted`, and
-  the study manifest's `mj_per_tok` becomes `energy_per_token_mj`. The retired
-  optional keys (`thermal_throttle`, `mj_per_tok_total`, `mj_per_tok_adjusted`)
-  are dropped on read, so a legacy 2.0 bundle loads with the new fields
-  defaulted; the required-field hash rename has no read alias, so a pre-rename
-  bundle fails loudly on the missing `declared_config_hash`. ([#881])
+  the study manifest's `mj_per_tok` becomes `energy_per_token_mj`. Clean break:
+  the old field names are not tolerated on read, so a pre-rename bundle fails
+  loudly under `extra="forbid"`; no read alias is provided. ([#881])
+- **Breaking (config):** the top-level `harness:` config key is retired. Its
+  llem-owned execution knobs (`batch_size`, `torch_compile*`, `allow_tf32`,
+  `autocast_*`) move into a per-engine `llem_execution:` sub-section, sibling of
+  `engine_params:` inside the engine section (e.g.
+  `transformers.llem_execution.batch_size`). Only transformers has these knobs.
+  Clean break with no alias: a config still carrying a top-level `harness:` key
+  is rejected with an error naming the new location. Internal renames follow
+  (`TransformersHarness` -> `TransformersExecution`; the `HarnessConfig` wrapper
+  is dropped; the transformers section is now a `TransformersSection` that
+  subclasses the generated Config to add the typed `llem_execution` field). The
+  sweep-axis key is now `transformers.llem_execution.batch_size`. Because the
+  knobs move inside the engine section, the declared-config-hash of any config
+  that sets them shifts (dedup is within-study, so this is benign pre-1.0); the
+  resolved/observed config hashes are unchanged. ([#881])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their

@@ -450,8 +450,7 @@ engine: transformers
 transformers:
   engine_params:
     attn_implementation: flash_attention_2
-harness:
-  transformers:
+  llem_execution:
     torch_compile: true
     torch_compile_mode: reduce-overhead
 ```

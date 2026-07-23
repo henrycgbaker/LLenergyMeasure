@@ -147,11 +147,11 @@ def print_dry_run(
     dtype_display = engine_dtype or "-"
     print(f"  Dtype          {dtype_display}{_annotate('dtype', engine_dtype)}")
 
-    # Batch size - transformers llem-orchestration knob (HarnessConfig), if present
+    # Batch size - transformers llem-owned execution knob (llem_execution), if present
     batch_size: int | None = None
-    harness = config.harness.transformers if config.harness is not None else None
-    if harness is not None:
-        batch_size = harness.batch_size
+    execution = config.active_llem_execution()
+    if execution is not None:
+        batch_size = execution.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")
 

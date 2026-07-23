@@ -469,7 +469,7 @@ API names.
 
 Everything else passes through without translation:
 
-- **Engine-specific configs** (`harness.transformers.batch_size`, `vllm.engine_params.max_num_seqs`,
+- **Engine-specific configs** (`transformers.llem_execution.batch_size`, `vllm.engine_params.max_num_seqs`,
   `tensorrt.engine_params.max_batch_size`, etc.) use native names - no mapping.
 - **Sub-configs** (`warmup`, `baseline`, `energy`) are consumed by the measurement harness,
   not by engines.

@@ -150,7 +150,7 @@ sweep:
   tensorrt.engine_params.dtype: [float16, bfloat16]
 
   # 2. Batching strategy - engine-native parameter names.
-  harness.transformers.batch_size: [4, 16]
+  transformers.llem_execution.batch_size: [4, 16]
   vllm.engine_params.max_num_seqs: [64, 256]
   tensorrt.engine_params.max_batch_size: [4, 16]
 

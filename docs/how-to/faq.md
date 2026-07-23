@@ -83,7 +83,7 @@ See [Reference &gt; Study config](/reference/study-config) for the full YAML sch
 
 ### How do I sweep across implementation parameters without sweeping engines?
 
-Engine-scoped sweep keys: `harness.transformers.batch_size: [1, 4, 16]` only applies to Transformers experiments; the same config running under vLLM ignores it. Use the engine-prefixed form for any engine-specific axis. See the [Multi-engine study tutorial](/tutorials/multi-engine-study) for a worked example.
+Engine-scoped sweep keys: `transformers.llem_execution.batch_size: [1, 4, 16]` only applies to Transformers experiments; the same config running under vLLM ignores it. Use the engine-prefixed form for any engine-specific axis. See the [Multi-engine study tutorial](/tutorials/multi-engine-study) for a worked example.
 
 ### Can I use a custom dataset (not `aienergyscore`)?
 
