@@ -61,6 +61,7 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     return ConfigHashView(
         engine=engine_name,
         task=config.task.model_dump(mode="python"),
+        serving_mode=config.serving_mode,
         observed_engine_params={**engine_params, **dump},
         observed_sampling_params=sampling,
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),

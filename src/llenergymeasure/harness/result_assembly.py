@@ -439,7 +439,7 @@ def build_offline_metrics(
     )
 
     return SourceMetrics(
-        serving_mode="offline",
+        serving_mode=config.serving_mode,
         input_tokens=output.input_tokens,
         output_tokens=output.output_tokens,
         total_tokens=output.total_tokens,

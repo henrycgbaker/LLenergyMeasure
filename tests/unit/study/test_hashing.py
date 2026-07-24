@@ -8,6 +8,7 @@ than a diffuse hash-mismatch.
 from __future__ import annotations
 
 import math
+from dataclasses import asdict
 
 import pytest
 
@@ -195,6 +196,45 @@ class TestBuildObservedView:
             observed_sampling_params=sampling_params,
         )
         assert hash_config(resolved_view) == hash_config(observed_view)
+
+
+class TestServingModeIdentity:
+    """serving_mode is a conditioning identity axis in both hash families."""
+
+    def test_config_hash_view_defaults_serving_mode_offline(self):
+        # The view slot defaults to "offline" so existing direct constructions
+        # keep hashing as before (offline is the only universe today).
+        view = ConfigHashView(engine="transformers", task={"model": "gpt2"})
+        assert view.serving_mode == "offline"
+
+    def test_resolved_view_carries_config_serving_mode(self):
+        assert build_resolved_view(_mk_config()).serving_mode == "offline"
+        assert build_resolved_view(_mk_config(serving_mode="server")).serving_mode == "server"
+
+    def test_resolved_offline_vs_server_hash_differ(self):
+        offline = hash_config(build_resolved_view(_mk_config(serving_mode="offline")))
+        server = hash_config(build_resolved_view(_mk_config(serving_mode="server")))
+        assert offline != server
+
+    def test_observed_offline_vs_server_hash_differ(self):
+        common = {
+            "engine": "vllm",
+            "task": {"model": "gpt2"},
+            "observed_engine_params": {"dtype": "float16"},
+            "observed_sampling_params": {"temperature": 1.0},
+        }
+        offline = hash_config(build_observed_view(serving_mode="offline", **common))
+        server = hash_config(build_observed_view(serving_mode="server", **common))
+        assert offline != server
+
+    def test_resolved_view_differs_only_by_serving_mode_slot(self):
+        # An offline and an otherwise-identical server config project resolved
+        # views that differ in exactly one slot: serving_mode. Nothing else in
+        # the view shifted when the field was added.
+        offline = asdict(build_resolved_view(_mk_config(serving_mode="offline")))
+        server = asdict(build_resolved_view(_mk_config(serving_mode="server")))
+        differing = {k for k in offline if offline[k] != server[k]}
+        assert differing == {"serving_mode"}
 
 
 class TestHashStability:

@@ -378,6 +378,46 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     assert result.energy_breakdown is not None
 
 
+@pytest.mark.parametrize("serving_mode", ["offline", "server"])
+def test_harness_build_result_stamps_config_serving_mode(serving_mode: str) -> None:
+    """The offline producer stamps serving_mode from the config (defaults 'offline')."""
+    from datetime import datetime
+
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.domain.metrics import FlopsResult, ThrottleInfo
+    from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.engines.protocol import InferenceOutput
+
+    config = ExperimentConfig(task={"model": "test/model"}, serving_mode=serving_mode)
+    output = InferenceOutput(
+        elapsed_time_sec=10.0,
+        input_tokens=50,
+        output_tokens=50,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+    )
+    now = datetime.now()
+    result, _ = build_result(
+        engine_name="transformers",
+        config=config,
+        output=output,
+        model_memory_mb=0.0,
+        start_time=now,
+        end_time=now,
+        duration_sec=10.0,
+        throttle_info=ThrottleInfo(),
+        energy_measurement=EnergyMeasurement(total_j=42.5, duration_sec=10.0),
+        baseline=None,
+        flops_result=FlopsResult(
+            value=1e12, method="palm_formula", confidence="medium", precision="n/a"
+        ),
+        timeseries_path=None,
+        measurement_warnings=[],
+    )
+
+    assert result.serving_mode == serving_mode
+
+
 def test_harness_build_result_absent_energy_placeholder_and_warns(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

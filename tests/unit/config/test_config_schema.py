@@ -113,6 +113,42 @@ def test_default_engine_is_pytorch():
     assert config.engine == "transformers"
 
 
+# ---------------------------------------------------------------------------
+# serving_mode
+# ---------------------------------------------------------------------------
+
+
+def test_serving_mode_defaults_offline():
+    """serving_mode defaults to 'offline' when not specified."""
+    config = ExperimentConfig(task={"model": "gpt2"})
+    assert config.serving_mode == "offline"
+
+
+def test_serving_mode_offline_explicit():
+    """serving_mode='offline' is accepted explicitly."""
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
+    assert config.serving_mode == "offline"
+
+
+def test_serving_mode_server_accepted():
+    """serving_mode='server' is a valid config value (data model admits it)."""
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="server")
+    assert config.serving_mode == "server"
+
+
+def test_serving_mode_typo_rejected():
+    """A serving_mode typo is rejected loudly (closed Literal, edge-validated)."""
+    with pytest.raises(ValidationError):
+        ExperimentConfig(task={"model": "gpt2"}, serving_mode="offlien")  # type: ignore[arg-type]
+
+
+def test_omitting_serving_mode_matches_explicit_offline():
+    """An offline config with no serving_mode key dumps identically to explicit offline."""
+    without_key = ExperimentConfig(task={"model": "gpt2"})
+    explicit_offline = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
+    assert without_key.model_dump(mode="json") == explicit_offline.model_dump(mode="json")
+
+
 def test_vllm_engine_accepted():
     """engine='vllm' is accepted."""
     config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")

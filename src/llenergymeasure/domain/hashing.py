@@ -121,6 +121,9 @@ class ConfigHashView:
     The hashed-field set is:
 
     - ``task`` - model, prompt source, batch shape
+    - ``serving_mode`` - offline-batch vs online-serving discriminator. A
+      conditioning identity axis, so an offline and a server run of the same
+      task never collapse under dedup.
     - ``observed_engine_params`` - engine state (library-resolution mechanism output for
       resolved-config-hash, live library observation for observed-config-hash)
     - ``observed_sampling_params`` - sampling state (same sources as above)
@@ -138,6 +141,7 @@ class ConfigHashView:
 
     engine: str
     task: dict[str, Any]
+    serving_mode: str = "offline"
     observed_engine_params: dict[str, Any] = field(default_factory=dict)
     observed_sampling_params: dict[str, Any] = field(default_factory=dict)
     passthrough_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -166,6 +170,7 @@ def build_observed_view(
     task: dict[str, Any],
     observed_engine_params: dict[str, Any],
     observed_sampling_params: dict[str, Any],
+    serving_mode: str = "offline",
     passthrough_kwargs: dict[str, Any] | None = None,
     llem_execution: dict[str, Any] | None = None,
     measurement: dict[str, Any] | None = None,
@@ -174,15 +179,17 @@ def build_observed_view(
 
     Callers live in the harness/sidecar path - they read ``task`` from the
     same config that ran and pair it with the native-object dumps the engine
-    returned. ``llem_execution`` and ``measurement`` come from the same config
-    (they are execution/methodology dials, not library-observable) so that the
-    observed hash covers the same identity dimensions as the resolved hash;
-    keeping them aligned stops the observed-collision analysis from flagging a
-    pure execution/measurement sweep as a false library-resolution gap.
+    returned. ``serving_mode``, ``llem_execution`` and ``measurement`` come from
+    the same config (they are mode/execution/methodology dials, not
+    library-observable) so that the observed hash covers the same identity
+    dimensions as the resolved hash; keeping them aligned stops the
+    observed-collision analysis from flagging a pure execution/measurement sweep
+    as a false library-resolution gap.
     """
     return ConfigHashView(
         engine=engine,
         task=task,
+        serving_mode=serving_mode,
         observed_engine_params=dict(observed_engine_params),
         observed_sampling_params=dict(observed_sampling_params),
         passthrough_kwargs=dict(passthrough_kwargs or {}),
