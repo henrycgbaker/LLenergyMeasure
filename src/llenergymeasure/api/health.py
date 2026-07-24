@@ -27,7 +27,7 @@ from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
     ENV_HF_TOKEN,
-    RUNNER_DOCKER,
+    RUNNER_CONTAINER,
     Engine,
     engine_str,
 )
@@ -220,7 +220,7 @@ def _engine_line(engine: str, spec: RunnerSpec) -> CheckLine:
         return CheckLine("ok", f"{engine}: {installed}; runner={spec.mode}")
 
     docker_avail = is_docker_available()
-    if docker_avail and spec.mode == RUNNER_DOCKER:
+    if docker_avail and spec.mode == RUNNER_CONTAINER:
         image, cached, error = _resolve_image(engine)
         if error is not None:
             return CheckLine("warn", f"{engine}: default image unresolved", error)

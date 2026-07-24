@@ -125,9 +125,11 @@ def test_env_var_llem_no_prompt(tmp_path, monkeypatch):
 
 def test_env_var_runner_transformers(tmp_path, monkeypatch):
     """LLEM_RUNNER_TRANSFORMERS env var overrides transformers runner."""
-    monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "docker:nvcr.io/nvidia/pytorch:latest")
+    monkeypatch.setenv(
+        f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "container:nvcr.io/nvidia/pytorch:latest"
+    )
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    assert config.runners.transformers == "docker:nvcr.io/nvidia/pytorch:latest"
+    assert config.runners.transformers == "container:nvcr.io/nvidia/pytorch:latest"
 
 
 def test_env_var_overrides_take_precedence_over_file(tmp_path, monkeypatch):
@@ -191,3 +193,40 @@ def test_user_runners_config_validator_accepts_auto():
 
     config = UserRunnersConfig(transformers="auto")
     assert config.transformers == "auto"
+
+
+def test_user_runners_config_validator_accepts_canonical_values():
+    """The canonical process/container/container:<image> values validate."""
+    from llenergymeasure.config.user_config import UserRunnersConfig
+
+    config = UserRunnersConfig(
+        transformers="process", vllm="container", tensorrt="container:img:v1"
+    )
+    assert config.transformers == "process"
+    assert config.vllm == "container"
+    assert config.tensorrt == "container:img:v1"
+
+
+@pytest.mark.parametrize(
+    ("value", "hint"),
+    [
+        ("local", "use 'process'"),
+        ("docker", "use 'container'"),
+        ("docker:my/img:v1", "use 'container:my/img:v1'"),
+    ],
+)
+def test_user_runners_config_validator_rejects_legacy_vocabulary(value, hint):
+    """The renamed-in-v0.7 legacy values are rejected with a migration hint.
+
+    The message must name the user's ACTUAL input value, the field context, and the
+    canonical replacement.
+    """
+    import pydantic
+
+    from llenergymeasure.config.user_config import UserRunnersConfig
+
+    with pytest.raises(
+        pydantic.ValidationError,
+        match=rf"'{value}' was renamed in v0.7 \(runners.transformers\).*{hint}",
+    ):
+        UserRunnersConfig(transformers=value)

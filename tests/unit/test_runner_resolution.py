@@ -1,7 +1,8 @@
 """Unit tests for runner resolution precedence chain.
 
 Tests cover:
-  - parse_runner_value: "local", "docker", "docker:image" forms
+  - parse_runner_value: "process", "container", "container:image" forms, plus the
+    clean-break rejection of the legacy "local"/"docker"/"docker:image" vocabulary
   - is_docker_available: PATH inspection for docker + NVIDIA CT tools
   - resolve_runner: full precedence chain (env > yaml > user_config > auto > default)
   - resolve_study_runners: multi-engine resolution
@@ -32,35 +33,35 @@ def _clear_docker_cache():
 
 
 # ---------------------------------------------------------------------------
-# parse_runner_value
+# parse_runner_value - canonical vocabulary
 # ---------------------------------------------------------------------------
 
 
 class TestParseRunnerValue:
-    def test_local_returns_local_mode_no_image(self):
-        mode, image = parse_runner_value("local")
-        assert mode == "local"
+    def test_process_returns_process_mode_no_image(self):
+        mode, image = parse_runner_value("process")
+        assert mode == "process"
         assert image is None
 
-    def test_bare_docker_returns_docker_mode_no_image(self):
-        mode, image = parse_runner_value("docker")
-        assert mode == "docker"
+    def test_bare_container_returns_container_mode_no_image(self):
+        mode, image = parse_runner_value("container")
+        assert mode == "container"
         assert image is None
 
-    def test_docker_with_image_returns_docker_mode_and_image(self):
-        mode, image = parse_runner_value("docker:ghcr.io/custom/img:v1")
-        assert mode == "docker"
+    def test_container_with_image_returns_container_mode_and_image(self):
+        mode, image = parse_runner_value("container:ghcr.io/custom/img:v1")
+        assert mode == "container"
         assert image == "ghcr.io/custom/img:v1"
 
-    def test_docker_with_complex_image_tag(self):
-        mode, image = parse_runner_value("docker:nvcr.io/nvidia/pytorch:23.10-py3")
-        assert mode == "docker"
+    def test_container_with_complex_image_tag(self):
+        mode, image = parse_runner_value("container:nvcr.io/nvidia/pytorch:23.10-py3")
+        assert mode == "container"
         assert image == "nvcr.io/nvidia/pytorch:23.10-py3"
 
-    def test_docker_colon_empty_raises(self):
-        """'docker:' with empty image raises ValueError."""
+    def test_container_colon_empty_raises(self):
+        """'container:' with empty image raises ValueError."""
         with pytest.raises(ValueError, match="empty image name"):
-            parse_runner_value("docker:")
+            parse_runner_value("container:")
 
     def test_unknown_value_raises(self):
         """Unrecognised runner value raises ValueError."""
@@ -72,11 +73,38 @@ class TestParseRunnerValue:
         with pytest.raises(ValueError, match="Unrecognised runner value"):
             parse_runner_value("kubernetes")
 
-    def test_docker_with_image_containing_colon(self):
+    def test_container_with_image_containing_colon(self):
         """Image tag containing colon (e.g. ghcr.io/org/img:1.0) is preserved."""
-        mode, image = parse_runner_value("docker:ghcr.io/llem/vllm:1.19.0-cuda12")
-        assert mode == "docker"
+        mode, image = parse_runner_value("container:ghcr.io/llem/vllm:1.19.0-cuda12")
+        assert mode == "container"
         assert image == "ghcr.io/llem/vllm:1.19.0-cuda12"
+
+
+# ---------------------------------------------------------------------------
+# parse_runner_value - legacy vocabulary is a clean break (rejected with a hint)
+# ---------------------------------------------------------------------------
+
+
+class TestParseRunnerValueLegacyRejected:
+    def test_legacy_local_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match=r"'local' was renamed in v0.7 - use 'process'"):
+            parse_runner_value("local")
+
+    def test_legacy_docker_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match=r"'docker' was renamed in v0.7 - use 'container'"):
+            parse_runner_value("docker")
+
+    def test_legacy_docker_image_rejected_with_migration_hint(self):
+        # The message must name the user's ACTUAL input, not a placeholder.
+        with pytest.raises(
+            ValueError,
+            match=r"'docker:ghcr.io/custom/img:v1' was renamed.*use 'container:ghcr.io/custom/img:v1'",
+        ):
+            parse_runner_value("docker:ghcr.io/custom/img:v1")
+
+    def test_legacy_docker_colon_empty_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match=r"'docker:' was renamed.*use 'container:<image>'"):
+            parse_runner_value("docker:")
 
 
 # ---------------------------------------------------------------------------
@@ -129,57 +157,62 @@ class TestResolveRunner:
     # --- Env var (highest) ---
 
     def test_env_var_wins_over_everything(self, monkeypatch):
-        """LLEM_RUNNER_VLLM=docker:custom/img wins over yaml and user_config."""
-        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}VLLM", "docker:custom/img")
-        yaml_runners = {"vllm": "local"}
-        user_config = UserRunnersConfig(vllm="local")
+        """LLEM_RUNNER_VLLM=container:custom/img wins over yaml and user_config."""
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}VLLM", "container:custom/img")
+        yaml_runners = {"vllm": "process"}
+        user_config = UserRunnersConfig(vllm="process")
 
         spec = resolve_runner("vllm", yaml_runners=yaml_runners, user_config=user_config)
 
         assert spec.source == "env"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image == "custom/img"
 
-    def test_env_var_bare_docker(self, monkeypatch):
-        """LLEM_RUNNER_PYTORCH=docker (bare) sets mode=docker, image=None."""
-        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "docker")
+    def test_env_var_bare_container(self, monkeypatch):
+        """LLEM_RUNNER_TRANSFORMERS=container (bare) sets mode=container, image=None."""
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "container")
 
         spec = resolve_runner("transformers")
 
         assert spec.source == "env"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image is None
 
-    def test_env_var_local_overrides_yaml_docker(self, monkeypatch):
-        """Env var 'local' takes precedence even when yaml says 'docker'."""
-        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "local")
-        spec = resolve_runner("transformers", yaml_runners={"transformers": "docker"})
+    def test_env_var_process_overrides_yaml_container(self, monkeypatch):
+        """Env var 'process' takes precedence even when yaml says 'container'."""
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "process")
+        spec = resolve_runner("transformers", yaml_runners={"transformers": "container"})
         assert spec.source == "env"
-        assert spec.mode == "local"
+        assert spec.mode == "process"
 
     # --- YAML runners ---
 
     def test_yaml_runners_wins_over_user_config(self):
-        """yaml_runners={'transformers': 'docker'} wins over user_config with 'local'."""
-        user_config = UserRunnersConfig(transformers="local")
+        """yaml_runners={'transformers': 'container'} wins over user_config with 'process'."""
+        user_config = UserRunnersConfig(transformers="process")
 
         spec = resolve_runner(
-            "transformers", yaml_runners={"transformers": "docker"}, user_config=user_config
+            "transformers", yaml_runners={"transformers": "container"}, user_config=user_config
         )
 
         assert spec.source == "yaml"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image is None
 
-    def test_yaml_runners_docker_with_image(self):
-        """yaml_runners with docker:image resolves image correctly."""
+    def test_yaml_runners_container_with_image(self):
+        """yaml_runners with container:image resolves image correctly."""
         spec = resolve_runner(
             "vllm",
-            yaml_runners={"vllm": "docker:ghcr.io/myorg/vllm:latest"},
+            yaml_runners={"vllm": "container:ghcr.io/myorg/vllm:latest"},
         )
         assert spec.source == "yaml"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image == "ghcr.io/myorg/vllm:latest"
+
+    def test_yaml_runners_legacy_docker_rejected_with_migration_hint(self):
+        """A legacy YAML 'docker' value is rejected with a migration error (clean break)."""
+        with pytest.raises(ValueError, match=r"'docker' was renamed in v0.7 - use 'container'"):
+            resolve_runner("vllm", yaml_runners={"vllm": "docker"})
 
     def test_yaml_runners_missing_engine_falls_through(self):
         """If engine not in yaml_runners, falls through to lower layers."""
@@ -189,7 +222,7 @@ class TestResolveRunner:
         ):
             spec = resolve_runner(
                 "tensorrt",
-                yaml_runners={"transformers": "docker"},  # tensorrt not listed
+                yaml_runners={"transformers": "container"},  # tensorrt not listed
             )
         assert spec.source == "default"
 
@@ -204,9 +237,9 @@ class TestResolveRunner:
 
     # --- User config ---
 
-    def test_user_config_docker_with_image_wins_over_auto_detection(self):
-        """user_config.transformers='docker:myimg' wins over auto-detection."""
-        user_config = UserRunnersConfig(transformers="docker:myimg")
+    def test_user_config_container_with_image_wins_over_auto_detection(self):
+        """user_config.transformers='container:myimg' wins over auto-detection."""
+        user_config = UserRunnersConfig(transformers="container:myimg")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
@@ -215,12 +248,12 @@ class TestResolveRunner:
             spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "user_config"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image == "myimg"
 
-    def test_explicit_local_in_user_config_respected_not_overridden_by_auto_detect(self):
-        """Explicit 'local' in user_config wins; auto-detection is not applied."""
-        user_config = UserRunnersConfig(transformers="local")
+    def test_explicit_process_in_user_config_respected_not_overridden_by_auto_detect(self):
+        """Explicit 'process' in user_config wins; auto-detection is not applied."""
+        user_config = UserRunnersConfig(transformers="process")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
@@ -229,11 +262,11 @@ class TestResolveRunner:
             spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "user_config"
-        assert spec.mode == "local"
+        assert spec.mode == "process"
 
-    def test_user_config_bare_docker_sets_mode_docker_image_none(self):
-        """user_config.vllm='docker' resolves to mode=docker, image=None."""
-        user_config = UserRunnersConfig(vllm="docker")
+    def test_user_config_bare_container_sets_mode_container_image_none(self):
+        """user_config.vllm='container' resolves to mode=container, image=None."""
+        user_config = UserRunnersConfig(vllm="container")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
@@ -242,7 +275,7 @@ class TestResolveRunner:
             spec = resolve_runner("vllm", user_config=user_config)
 
         assert spec.source == "user_config"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image is None
 
     # --- Auto-detection ---
@@ -256,7 +289,7 @@ class TestResolveRunner:
             spec = resolve_runner("transformers")  # no yaml_runners, no user_config
 
         assert spec.source == "auto_detected"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image is None
 
     def test_auto_user_config_default_falls_through_to_auto_detection(self):
@@ -271,7 +304,7 @@ class TestResolveRunner:
 
         # "auto" falls through - Docker auto-detection applies
         assert spec.source == "auto_detected"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
 
     def test_explicit_auto_in_user_config_falls_through_to_auto_detection(self):
         """Explicit 'auto' in user_config falls through to auto-detection."""
@@ -284,7 +317,7 @@ class TestResolveRunner:
             spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "auto_detected"
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
 
     def test_auto_user_config_no_docker_falls_to_default(self):
         """user_config defaults to 'auto', Docker unavailable → falls to default."""
@@ -297,12 +330,12 @@ class TestResolveRunner:
             spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "default"
-        assert spec.mode == "local"
+        assert spec.mode == "process"
 
-    # --- Default (local fallback) ---
+    # --- Default (process fallback) ---
 
-    def test_default_local_when_docker_unavailable_and_no_config(self):
-        """When Docker not available and no config, source='default', mode='local'."""
+    def test_default_process_when_docker_unavailable_and_no_config(self):
+        """When Docker not available and no config, source='default', mode='process'."""
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
@@ -310,16 +343,16 @@ class TestResolveRunner:
             spec = resolve_runner("transformers")
 
         assert spec.source == "default"
-        assert spec.mode == "local"
+        assert spec.mode == "process"
         assert spec.image is None
 
     # --- Parse integration ---
 
-    def test_parse_runner_value_integration_docker_custom_image(self, monkeypatch):
-        """parse_runner_value integration: 'docker:ghcr.io/custom:v1' resolves image."""
-        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "docker:ghcr.io/custom:v1")
+    def test_parse_runner_value_integration_container_custom_image(self, monkeypatch):
+        """parse_runner_value integration: 'container:ghcr.io/custom:v1' resolves image."""
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "container:ghcr.io/custom:v1")
         spec = resolve_runner("transformers")
-        assert spec.mode == "docker"
+        assert spec.mode == "container"
         assert spec.image == "ghcr.io/custom:v1"
         assert spec.source == "env"
 
@@ -343,7 +376,7 @@ class TestResolveStudyRunners:
 
     def test_yaml_runners_applied_per_engine(self):
         """yaml_runners are applied to each engine correctly."""
-        yaml_runners = {"transformers": "local", "vllm": "docker:myimg"}
+        yaml_runners = {"transformers": "process", "vllm": "container:myimg"}
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
@@ -351,9 +384,9 @@ class TestResolveStudyRunners:
         ):
             result = resolve_study_runners(["transformers", "vllm"], yaml_runners=yaml_runners)
 
-        assert result["transformers"].mode == "local"
+        assert result["transformers"].mode == "process"
         assert result["transformers"].source == "yaml"
-        assert result["vllm"].mode == "docker"
+        assert result["vllm"].mode == "container"
         assert result["vllm"].image == "myimg"
 
     def test_empty_engines_list_returns_empty_dict(self):
@@ -373,10 +406,10 @@ class TestResolveStudyRunners:
     def test_mixed_auto_and_explicit_per_engine(self):
         """Study with one engine explicitly set and another using auto-detection.
 
-        Simulates a researcher who forces transformers=local but lets vllm auto-detect
-        to Docker. Each engine resolves independently through the precedence chain.
+        Simulates a researcher who forces transformers=process but lets vllm auto-detect
+        to a container. Each engine resolves independently through the precedence chain.
         """
-        user_config = UserRunnersConfig(transformers="local", vllm="auto", tensorrt="auto")
+        user_config = UserRunnersConfig(transformers="process", vllm="auto", tensorrt="auto")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
@@ -386,12 +419,12 @@ class TestResolveStudyRunners:
                 ["transformers", "vllm", "tensorrt"], user_config=user_config
             )
 
-        # pytorch: explicit "local" -> user_config source
-        assert result["transformers"].mode == "local"
+        # transformers: explicit "process" -> user_config source
+        assert result["transformers"].mode == "process"
         assert result["transformers"].source == "user_config"
-        # vllm: "auto" falls through -> Docker auto-detected
-        assert result["vllm"].mode == "docker"
+        # vllm: "auto" falls through -> container auto-detected
+        assert result["vllm"].mode == "container"
         assert result["vllm"].source == "auto_detected"
-        # tensorrt: "auto" falls through -> Docker auto-detected
-        assert result["tensorrt"].mode == "docker"
+        # tensorrt: "auto" falls through -> container auto-detected
+        assert result["tensorrt"].mode == "container"
         assert result["tensorrt"].source == "auto_detected"

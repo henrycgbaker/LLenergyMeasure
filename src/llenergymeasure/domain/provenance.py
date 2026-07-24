@@ -1,7 +1,7 @@
 """Unified runner-provenance domain model.
 
-``RunnerProvenance`` records how one experiment was executed - as a local host
-process or inside a Docker container - together with the image, its resolved
+``RunnerProvenance`` records how one experiment was executed - as a host
+process or inside a container - together with the image, its resolved
 registry digest, and the precedence source that selected the runner. It mirrors
 the config-layer ``RunnerSpec`` (config and domain are independent sibling
 layers, so the config value object cannot itself live on a domain result).
@@ -20,31 +20,41 @@ provenance) and ``image_digest`` (the system.json reproducibility anchor).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
 class RunnerProvenance(BaseModel):
-    """How an experiment was executed - local process or Docker container.
+    """How an experiment was executed - host process or container.
 
     Persisted reproducibility metadata mirroring the fields of the config-layer
     ``RunnerSpec``. Serialised into both result.json and system.json.
     """
 
-    mode: str = Field(..., description='Execution mode - "local" or "docker"')
-    image: str | None = Field(default=None, description="Docker image used (None for local mode)")
+    mode: Literal["process", "container"] = Field(
+        ...,
+        description='Execution mode - "process" or "container". A closed vocabulary: a '
+        "pre-v0.7 bundle carrying the renamed values fails validation loudly on read "
+        "(clean break, no alias translation).",
+    )
+    image: str | None = Field(
+        default=None, description="Container image used (None for process mode)"
+    )
     source: str | None = Field(
         default=None,
         description='Precedence layer that produced the runner ("env", "yaml", '
-        '"user_config", "auto_detected", "default", "multi_engine_elevation", "local")',
+        '"user_config", "auto_detected", "default", "multi_engine_elevation", "implicit" '
+        "when no spec was resolved)",
     )
     image_source: str | None = Field(
         default=None,
-        description="Where the Docker image was resolved from (None for local mode or when "
+        description="Where the container image was resolved from (None for process mode or when "
         "unresolved). The result.json image-resolution provenance.",
     )
     image_digest: str | None = Field(
         default=None,
-        description="Resolved image registry digest ('repo@sha256:...'). None for local runs "
+        description="Resolved image registry digest ('repo@sha256:...'). None for process runs "
         "or when the digest could not be resolved (locally-built image, docker unavailable, "
         "inspect error) - resolution is best-effort and never fails a run. The system.json "
         "reproducibility anchor pinning the full software stack.",

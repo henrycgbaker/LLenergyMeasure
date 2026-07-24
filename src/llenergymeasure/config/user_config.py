@@ -25,6 +25,8 @@ from llenergymeasure.config.ssot import (
     ENV_DATACENTER_PUE,
     ENV_NO_PROMPT,
     ENV_RUNNER_PREFIX,
+    legacy_runner_migration_message,
+    legacy_runner_replacement,
 )
 
 
@@ -46,30 +48,43 @@ class UserRunnersConfig(BaseModel):
 
     transformers: str = Field(
         default="auto",
-        description="Transformers runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
+        description="Transformers runner: 'auto', 'process', 'container' (built-in image), or "
+        "'container:<image>'",
     )
     vllm: str = Field(
         default="auto",
-        description="vLLM runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
+        description="vLLM runner: 'auto', 'process', 'container' (built-in image), or "
+        "'container:<image>'",
     )
     tensorrt: str = Field(
         default="auto",
-        description="TensorRT runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
+        description="TensorRT runner: 'auto', 'process', 'container' (built-in image), or "
+        "'container:<image>'",
     )
 
     @model_validator(mode="after")
     def validate_runner_format(self) -> UserRunnersConfig:
+        # The runner vocabulary was renamed in v0.7 (local->process, docker->container,
+        # docker:<image>->container:<image>). The old values are a clean break: reject
+        # them here with the shared migration hint rather than silently accepting.
         for field_name in ALL_ENGINES:
             value = getattr(self, field_name)
+            replacement = legacy_runner_replacement(value)
+            if replacement is not None:
+                raise ValueError(
+                    legacy_runner_migration_message(
+                        value, replacement, context=f"runners.{field_name}"
+                    )
+                )
             if value.startswith("singularity:"):
                 raise ValueError(
                     f"Singularity runner not yet supported (runners.{field_name}='{value}'). "
-                    "Use 'auto', 'local', 'docker', or 'docker:<image>'."
+                    "Use 'auto', 'process', 'container', or 'container:<image>'."
                 )
-            if value not in {"auto", "local", "docker"} and not value.startswith("docker:"):
+            if value not in {"auto", "process", "container"} and not value.startswith("container:"):
                 raise ValueError(
-                    f"runners.{field_name}: expected 'auto', 'local', 'docker', or 'docker:<image>', "
-                    f"got '{value}'"
+                    f"runners.{field_name}: expected 'auto', 'process', 'container', or "
+                    f"'container:<image>', got '{value}'"
                 )
         return self
 

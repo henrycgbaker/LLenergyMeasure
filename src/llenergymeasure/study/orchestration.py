@@ -24,7 +24,7 @@ from typing import Any
 
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.runner_spec import RunnerSpec
-from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.config.ssot import RUNNER_CONTAINER
 from llenergymeasure.domain.bundle_artefacts import (
     STUDY_ARTEFACTS_DIR,
     SYSTEM_FILENAME,
@@ -258,7 +258,7 @@ def _resolve_runner_specs(
     # Docker container will actually launch. GPU scoping only affects containers,
     # so a study with no Docker runner never triggers the warning. Single choke
     # point for both dispatch paths (single-experiment and StudyRunner).
-    if RUNNER_DOCKER in modes:
+    if RUNNER_CONTAINER in modes:
         from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
 
         warn_on_gpu_selector_conflict(study.study_execution.gpu_indices)
@@ -385,7 +385,7 @@ def _run_single_experiment_dispatch(
 
         config = study.experiments[0]
         spec = runner_specs.get(config.engine) if runner_specs else None
-        is_docker = spec and spec.mode == RUNNER_DOCKER
+        is_docker = spec and spec.mode == RUNNER_CONTAINER
         if is_docker:
             host_baseline = (
                 config.measurement.baseline.enabled

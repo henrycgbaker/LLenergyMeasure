@@ -34,8 +34,10 @@ LLenergyMeasure supports `transformers`, `vllm`, and `tensorrt` (with
 (NVIDIA Management Library); alternatives are `zeus` and `codecarbon`.
 Sampler choice is independent of engine choice.
 
-**Runner** - the execution environment. `local` runs the experiment
-directly on the host; `docker` invokes the per-engine container.
+**Runner** - the execution environment. `process` runs the experiment
+directly on the host; `container` invokes the per-engine container. (These were
+renamed from `local`/`docker` in v0.7; the old values are now rejected with a
+migration error.)
 
 **Harness** - the measurement coordinator (`MeasurementHarness`). It owns
 the measurement window, warmup, baseline subtraction, and result

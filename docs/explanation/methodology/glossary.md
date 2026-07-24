@@ -277,21 +277,24 @@ CPU+DRAM contributions.
 
 ### Runner
 
-Two senses in this codebase: (1) llem execution mode (`local` or `docker`); (2) GitHub Actions CI runner (`ubuntu-latest`). Both are correct in their contexts; readers should disambiguate from surrounding prose.
+Two senses in this codebase: (1) llem execution mode (`process` or `container`); (2) GitHub Actions CI runner (`ubuntu-latest`). Both are correct in their contexts; readers should disambiguate from surrounding prose.
 
 **llem runner** - the execution context that wraps the [engine](#engine). LLenergyMeasure has two runner types:
 
-- `local` - runs the engine in the current Python process. Only supported for
-  the Transformers engine. Suitable for development and testing without Docker.
-- `docker` - runs the engine inside a dedicated Docker container. Required for
-  vLLM and TensorRT-LLM (Docker-only by design). Default for all engines in
+- `process` - runs the engine in the current Python process. Only supported for
+  the Transformers engine. Suitable for development and testing without a container.
+- `container` - runs the engine inside a dedicated Docker container. Required for
+  vLLM and TensorRT-LLM (container-only by design). Default for all engines in
   production use.
 
-Set via `runners:` in the study YAML. In a multi-engine study, Docker elevation is
+The runner vocabulary was renamed in v0.7 (`local` -> `process`, `docker` -> `container`);
+the old values are a clean break and are rejected with a migration error naming the replacement.
+
+Set via `runners:` in the study YAML. In a multi-engine study, container elevation is
 precedence-based: an explicit runner pin (env var, `runners:`, or user config) wins,
-and only engines left on auto-detection are elevated to Docker. Engines pinned to
-`local` are checked for host importability at preflight, and Docker is required only
-when an auto-resolved engine actually needs elevating.
+and only engines left on auto-detection are elevated to a container. Engines pinned to
+`process` are checked for host importability at preflight, and a container is required
+only when an auto-resolved engine actually needs elevating.
 
 **CI runner** - the GitHub Actions compute host (`ubuntu-latest`; CI is hosted-CPU only and never runs the engines). Used in contributing and CI documentation only.
 

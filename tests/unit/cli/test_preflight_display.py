@@ -138,21 +138,21 @@ class TestBuildPreflightPanel:
         sc = _make_panel_study_config(
             models=["gpt2", "gpt2"],
             engines=["transformers", "vllm"],
-            runners={"transformers": "local", "vllm": "docker"},
+            runners={"transformers": "process", "vllm": "container"},
         )
         output = _render_panel(sc)
         assert "Engines" in output
         assert "transformers" in output
-        assert "local" in output
+        assert "process" in output
         assert "vllm" in output
-        assert "docker" in output
+        assert "container" in output
 
-    def test_panel_metadata_engines_default_local(self):
-        """Panel shows 'local' for engines when runners is None."""
+    def test_panel_metadata_engines_default_process(self):
+        """Panel shows 'process' for engines when runners is None."""
         sc = _make_panel_study_config(engines=["transformers"])
         output = _render_panel(sc)
         assert "transformers" in output
-        assert "local" in output
+        assert "process" in output
 
     def test_panel_metadata_dataset(self):
         """Panel shows dataset name in Dataset row."""

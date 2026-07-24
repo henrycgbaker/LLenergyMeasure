@@ -200,11 +200,11 @@ It also carries a `runner` block - the reproducibility anchor for cross-run comp
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `mode` | str | `"docker"` (containerized) or `"local"` (host process) - a first-order variable for energy/latency comparability |
-| `image` | str &#124; null | Docker image reference that ran (`null` for local) |
-| `source` | str | Which precedence layer selected the runner (`env`, `yaml`, `user_config`, `auto_detected`, `default`, `multi_engine_elevation`, or `local`) |
-| `image_source` | str &#124; null | Where the Docker image was resolved from (`null` for local runs or when unresolved) |
-| `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for local runs, and for locally-built images with no registry digest |
+| `mode` | str | `"container"` (containerized) or `"process"` (host process) - a first-order variable for energy/latency comparability. A closed vocabulary renamed from `"docker"`/`"local"` in v0.7 (clean break - a pre-v0.7 value fails validation loudly on read) |
+| `image` | str &#124; null | Docker image reference that ran (`null` for process mode) |
+| `source` | str | Which precedence layer selected the runner (`env`, `yaml`, `user_config`, `auto_detected`, `default`, `multi_engine_elevation`, or `implicit` when no spec was resolved). The no-spec sentinel was renamed from `local` in v0.7 (clean break - no read-time translation) |
+| `image_source` | str &#124; null | Where the Docker image was resolved from (`null` for process runs or when unresolved) |
+| `image_digest` | str &#124; null | Resolved registry digest (`repo@sha256:...`) pinning the full stack (base image, CUDA, torch, patches). `null` for process runs, and for locally-built images with no registry digest |
 
 Sidecars written before this block existed load with `runner: null`.
 
@@ -294,6 +294,8 @@ For the Python API equivalent (`StudyResult` object), see [Reference &gt; Librar
 The whole bundle carries one `bundle_version` (currently `"2.0"`), stamped identically into `result.json`, `config.json`, and `system.json` (`timeseries.parquet` is self-describing columnar data and stays unversioned). It versions the on-disk layout, the artefact set, and each artefact's schema as a single contract, so there is one number to bump and one changelog line per documented break. This replaces the three independent per-artefact `schema_version` counters that earlier releases carried. It follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
 
 Older bundles remain readable best-effort: the canonical reader (`llenergymeasure.results.bundle.BundleReader`, wrapped by `load_result`) tolerates a legacy shape rather than rejecting it, emitting a single warning per bundle. A bundle 1.0 (the provenance-unification break) reads with its retired top-level `baseline_power_w` copy and `schema_version` key dropped on load, its pre-rename `hardware.cuda.version` mapped onto `driver_supported_version`, its never-populated hardware fields (`pcie_gen`, `mig_enabled`, `cudnn_version`, `fan_speed_pct`) ignored, and its old separate runner block read into the unified `RunnerProvenance` model. The system sidecar's earlier filename `environment.json` is a clean break, not a tolerance: it is not read, so a pre-rename bundle's system sidecar is treated as absent. There is no in-place migration and no converter tooling.
+
+The one exception to best-effort tolerance is the runner-mode vocabulary: `RunnerProvenance.mode` is a closed `Literal["process", "container"]`, so any bundle (1.0 or 2.0-era) whose runner block carries the pre-v0.7 `docker`/`local` mode fails validation on read rather than loading a stale value. This is the deliberate v0.7 clean break; the other 1.0 tolerances above are unaffected.
 
 ## See also
 

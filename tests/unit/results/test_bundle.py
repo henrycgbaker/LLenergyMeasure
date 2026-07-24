@@ -94,10 +94,10 @@ def test_write_result_attaches_runner_provenance(tmp_path: Path) -> None:
     writer = _writer(study_dir)
     result_path = writer.write_result(
         make_result(),
-        runner_provenance=RunnerProvenance(mode="docker", image="img:2.0", source="env"),
+        runner_provenance=RunnerProvenance(mode="container", image="img:2.0", source="env"),
     )
     payload = json.loads(result_path.read_text())
-    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["mode"] == "container"
     assert payload["runner_provenance"]["image"] == "img:2.0"
     assert payload["runner_provenance"]["source"] == "env"
 
@@ -124,13 +124,13 @@ def test_write_system_local_stamps_bundle_version(tmp_path: Path) -> None:
     writer.write_result(make_result())
     writer.write_system(
         host_snapshot=_make_snapshot(),
-        runner=RunnerProvenance(mode="local", source="default"),
+        runner=RunnerProvenance(mode="process", source="default"),
     )
     payload = json.loads((writer.bundle_dir / "system.json").read_text())
     assert payload["bundle_version"] == "2.0"
     assert payload["python_version"] == "3.12.12"
     assert payload["runner"] == {
-        "mode": "local",
+        "mode": "process",
         "image": None,
         "source": "default",
         "image_source": None,
@@ -151,7 +151,7 @@ def test_write_system_prefers_rescued_over_host(tmp_path: Path) -> None:
     writer.write_system(
         host_snapshot=_make_snapshot(),
         runner=RunnerProvenance(
-            mode="docker",
+            mode="container",
             image="ghcr.io/acme/vllm:1.0",
             image_digest="ghcr.io/acme/vllm@sha256:abc123",
             source="yaml",
@@ -177,7 +177,7 @@ def test_write_system_docker_without_rescue_warns(tmp_path: Path, caplog) -> Non
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
         writer.write_system(
             host_snapshot=_make_snapshot(),
-            runner=RunnerProvenance(mode="docker", image="img:1.0", source="yaml"),
+            runner=RunnerProvenance(mode="container", image="img:1.0", source="yaml"),
         )
     assert any("No in-container system.json rescued" in rec.message for rec in caplog.records)
 
@@ -186,9 +186,9 @@ def test_patch_runner_block_adds_block_and_stamps(tmp_path: Path) -> None:
     """_patch_runner_block injects the runner block and stamps bundle_version."""
     payload = BundleWriter._patch_runner_block(
         {"python_version": "3.10.14"},
-        RunnerProvenance(mode="docker", image="img:1.0", image_digest=None, source="yaml"),
+        RunnerProvenance(mode="container", image="img:1.0", image_digest=None, source="yaml"),
     )
-    assert payload["runner"]["mode"] == "docker"
+    assert payload["runner"]["mode"] == "container"
     assert payload["bundle_version"] == "2.0"
 
 
@@ -323,7 +323,7 @@ def _write_full_bundle(tmp_path: Path) -> Path:
     writer.write_result(make_result())
     writer.write_system(
         host_snapshot=_make_snapshot(),
-        runner=RunnerProvenance(mode="local", source="default"),
+        runner=RunnerProvenance(mode="process", source="default"),
     )
     writer.move_config_sidecar(resolved_config_hash="resolved_h1", resolution_log=None)
     writer.finalize()
@@ -416,15 +416,23 @@ def test_bundle_reader_legacy_fallback_warns(tmp_path: Path) -> None:
 def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     """A full bundle 1.0 (pre-unification shape) reads best-effort, ONE warning.
 
-    Exercises every 2.0 shape break against a synthetic 1.0-shaped bundle written
-    by hand: result.json carries the retired top-level baseline_power_w copy and a
-    schema_version key with a runner_provenance block lacking image_digest; the
-    system sidecar (system.json) carries the old separate RunnerEnvironment-shaped
-    runner block (no image_source), the never-populated hardware fields (pcie_gen,
-    mig_enabled, cudnn_version, fan_speed_pct), and the pre-rename cuda.version key.
-    The reader drops/maps the legacy shapes rather than rejecting them, and emits
-    exactly one bundle-level UserWarning. (The sidecar rename is a clean break, so
-    the 1.0 content is placed under the current filename, not the old one.)
+    Exercises the 2.0-break tolerances that REMAIN against a synthetic 1.0-shaped
+    bundle written by hand: result.json carries the retired top-level
+    baseline_power_w copy and a schema_version key with a runner_provenance block
+    lacking image_digest; the system sidecar (system.json) carries the old separate
+    RunnerEnvironment-shaped runner block (no image_source), the never-populated
+    hardware fields (pcie_gen, mig_enabled, cudnn_version, fan_speed_pct), and the
+    pre-rename cuda.version key. The reader drops/maps those legacy shapes rather
+    than rejecting them, and emits exactly one bundle-level UserWarning.
+
+    NOTE the clean breaks are exercised by their own tests, not tolerated here:
+    the sidecar rename means the 1.0 content is placed under the CURRENT filename
+    (system.json, not environment.json), and the runner blocks use the CURRENT
+    vocabulary (``mode: "container"``) deliberately - the v0.7 runner-mode rename
+    is a clean break, NOT a tolerated legacy shape, so a 1.0 (or 2.0-era) bundle
+    whose runner block carries the pre-v0.7 ``docker``/``local`` mode fails
+    validation on read. That exclusion is pinned by
+    ``test_bundle_reader_1_0_bundle_with_legacy_runner_mode_raises``.
     """
     bundle_dir = tmp_path / "study" / "exp-legacy"
     bundle_dir.mkdir(parents=True)
@@ -448,7 +456,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
         "end_time": "2026-01-01T00:00:01",
         # runner_provenance in its 1.0 shape: no image_digest key.
         "runner_provenance": {
-            "mode": "docker",
+            "mode": "container",
             "image": "img:1.0",
             "source": "yaml",
             "image_source": "registry",
@@ -482,7 +490,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
         "cuda_version_source": "torch",
         # runner in its old RunnerEnvironment shape: no image_source key.
         "runner": {
-            "mode": "docker",
+            "mode": "container",
             "image": "img:1.0",
             "image_digest": "img@sha256:abc",
             "source": "yaml",
@@ -515,6 +523,45 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     assert loaded.environment.runner is not None
     assert loaded.environment.runner.image_digest == "img@sha256:abc"
     assert loaded.environment.runner.image_source is None
+
+
+def test_bundle_reader_1_0_bundle_with_legacy_runner_mode_raises(tmp_path: Path) -> None:
+    """A bundle whose runner block carries the pre-v0.7 mode fails validation on read.
+
+    The runner-mode rename (``docker``/``local`` -> ``container``/``process``) is a
+    clean break, NOT a tolerated legacy shape: ``RunnerProvenance.mode`` is a closed
+    ``Literal``, so ``ExperimentResult.model_validate`` (via the strict read path)
+    hard-crashes on a stale value rather than silently loading it. This crash is the
+    INTENDED behavior and is pinned here - the companion
+    ``test_bundle_reader_tolerates_1_0_bundle`` covers the tolerances that remain.
+    """
+    import pydantic
+
+    bundle_dir = tmp_path / "study" / "exp-stale-runner"
+    bundle_dir.mkdir(parents=True)
+
+    result_payload = {
+        "bundle_version": "1.0",
+        "experiment_id": "legacy-002",
+        "measurement_config_hash": "deadbeef",
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "total_tokens": 30,
+        "total_energy_j": 5.0,
+        "total_inference_time_sec": 1.0,
+        "avg_tokens_per_second": 30.0,
+        "avg_energy_per_token_j": 0.25,
+        "total_flops": 0.0,
+        "energy_breakdown": {"raw_j": 5.0},
+        "start_time": "2026-01-01T00:00:00",
+        "end_time": "2026-01-01T00:00:01",
+        # Pre-v0.7 runner vocabulary - no longer accepted on read.
+        "runner_provenance": {"mode": "docker", "image": "img:1.0", "source": "yaml"},
+    }
+    (bundle_dir / "result.json").write_text(json.dumps(result_payload), encoding="utf-8")
+
+    with pytest.raises(pydantic.ValidationError, match=r"mode"):
+        BundleReader.read(bundle_dir)
 
 
 def test_bundle_reader_declared_but_missing_timeseries_warns(tmp_path: Path) -> None:

@@ -128,7 +128,7 @@ def test_engine_line_status(
     fix_substr: str | None,
 ) -> None:
     spec = RunnerSpec(
-        mode="docker" if docker_avail else "local", image=None, source="auto_detected"
+        mode="container" if docker_avail else "process", image=None, source="auto_detected"
     )
     find_spec = _find_spec_for("vllm") if importable else _find_spec_for()
     with (
@@ -232,14 +232,14 @@ def test_credentials_token_absent_warns(monkeypatch) -> None:
 
 
 def test_configuration_defaults() -> None:
-    specs = {"vllm": RunnerSpec(mode="docker", image=None, source="auto_detected")}
+    specs = {"vllm": RunnerSpec(mode="container", image=None, source="auto_detected")}
     fake_path = MagicMock()
     fake_path.exists.return_value = False
     with patch.object(health, "get_user_config_path", return_value=fake_path):
         section = health._configuration_section(UserConfig(), None, specs)
     text = "\n".join(line.message for line in section.lines)
     assert "using built-in defaults" in text
-    assert "runner.vllm: docker (source=auto_detected)" in text
+    assert "runner.vllm: container (source=auto_detected)" in text
     assert all(line.status == "ok" for line in section.lines)
 
 
@@ -351,7 +351,7 @@ def test_handshake_trt_cache_rendered() -> None:
 
 
 def test_build_health_report_smoke() -> None:
-    spec = RunnerSpec(mode="docker", image=None, source="auto_detected")
+    spec = RunnerSpec(mode="container", image=None, source="auto_detected")
     with (
         patch.object(health, "_load_user_config_safe", return_value=(UserConfig(), None)),
         patch.object(health, "resolve_runner", return_value=spec),
@@ -381,7 +381,7 @@ def test_build_health_report_smoke() -> None:
 
 
 def test_build_health_report_survives_image_check_crash() -> None:
-    spec = RunnerSpec(mode="local", image=None, source="default")
+    spec = RunnerSpec(mode="process", image=None, source="default")
     with (
         patch.object(health, "_load_user_config_safe", return_value=(UserConfig(), None)),
         patch.object(health, "resolve_runner", return_value=spec),

@@ -23,8 +23,8 @@ from llenergymeasure.cli._study_defaults import build_study_cli_overrides
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.ssot import (
-    RUNNER_DOCKER,
-    RUNNER_LOCAL,
+    RUNNER_CONTAINER,
+    RUNNER_PROCESS,
     Engine,
 )
 from llenergymeasure.domain.bundle_artefacts import MANIFEST_FILENAME
@@ -302,24 +302,24 @@ def _resolve_progress_mode(quiet: bool, verbose: bool) -> str:
 def _resolve_runner_tag(config: Any) -> str:
     """Determine the runner tag string for display from config.runner.
 
-    Returns "local" or "docker" based on the runner field.
+    Returns "process" or "container" based on the runner field.
     """
     runner = getattr(config, "runner", "auto")
-    if runner == RUNNER_LOCAL:
-        return RUNNER_LOCAL
-    if runner == RUNNER_DOCKER or (isinstance(runner, str) and runner.startswith("docker:")):
-        return RUNNER_DOCKER
-    # auto: transformers defaults to local, vllm/tensorrt default to docker
+    if runner == RUNNER_PROCESS:
+        return RUNNER_PROCESS
+    if runner == RUNNER_CONTAINER or (isinstance(runner, str) and runner.startswith("container:")):
+        return RUNNER_CONTAINER
+    # auto: transformers defaults to process, vllm/tensorrt default to container
     engine = getattr(config, "engine", Engine.TRANSFORMERS)
-    return RUNNER_LOCAL if engine == Engine.TRANSFORMERS else RUNNER_DOCKER
+    return RUNNER_PROCESS if engine == Engine.TRANSFORMERS else RUNNER_CONTAINER
 
 
-def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
+def _build_header(config: Any, runner_tag: str = RUNNER_PROCESS) -> str:
     """Build compact experiment header: model | engine [runner] + deviation fields.
 
     Args:
         config: ExperimentConfig with model, engine, dtype, dataset fields.
-        runner_tag: Runner tag string ("local" or "docker").
+        runner_tag: Runner tag string ("process" or "container").
     """
     from llenergymeasure.config.models import DatasetConfig
 

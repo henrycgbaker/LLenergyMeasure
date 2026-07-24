@@ -392,7 +392,7 @@ Credentials
 
 Configuration
   [ok]   User config: none - using built-in defaults
-  [ok]   runner.transformers: docker (source=auto_detected)
+  [ok]   runner.transformers: container (source=auto_detected)
   ...
 
 Summary: 18 ok, 3 warning(s), 0 error(s)

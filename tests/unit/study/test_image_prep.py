@@ -48,7 +48,7 @@ class _Harness(_ImageMixin):
 
 
 def _docker_spec(image: str) -> RunnerSpec:
-    return RunnerSpec(mode="docker", image=image, source="yaml")
+    return RunnerSpec(mode="container", image=image, source="yaml")
 
 
 def _cached() -> CompletedProcess[bytes]:
@@ -371,7 +371,7 @@ def test_no_runner_specs_is_noop() -> None:
 
 def test_no_docker_engines_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     """Only local-mode engines -> no image prep runs."""
-    specs = {"transformers": RunnerSpec(mode="local", image=None, source="default")}
+    specs = {"transformers": RunnerSpec(mode="process", image=None, source="default")}
     called = MagicMock()
     monkeypatch.setattr(image_prep, "inspect_image", called)
     harness = _Harness(specs)
