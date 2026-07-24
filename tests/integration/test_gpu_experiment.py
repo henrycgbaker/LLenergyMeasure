@@ -97,7 +97,7 @@ class TestM1ExitCriteria:
         from llenergymeasure.cli import app
 
         exp_yaml = tmp_path / "experiment.yaml"
-        exp_yaml.write_text("task:\n  model: gpt2\nengine: transformers\n")
+        exp_yaml.write_text("task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n")
 
         runner = CliRunner()
         result = runner.invoke(
