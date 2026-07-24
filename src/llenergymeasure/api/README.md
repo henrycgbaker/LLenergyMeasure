@@ -66,7 +66,7 @@ result = run_experiment(model="gpt2", skip_preflight=True)
 
 All failures are collected and raised together as a single `PreFlightError` so the user sees all problems at once.
 
-`run_study_preflight(study)` adds precedence-based multi-engine Docker elevation: an engine with an explicit runner pin (env var / study YAML / user config) keeps its runner, while engines left on auto-detection are elevated to Docker for isolation. Engines pinned to `local` are checked for host importability, and Docker is required only when an auto-resolved engine needs elevating. Single-engine studies pass through.
+`run_study_preflight(study)` adds precedence-based multi-engine Docker elevation: an engine with an explicit runner pin (env var / study YAML / user config) keeps its runner, while engines left on auto-detection are elevated to a container for isolation. Engines pinned to `process` are checked for host importability, and Docker is required only when an auto-resolved engine needs elevating. Single-engine studies pass through.
 
 ## GPU index resolution (_gpu.py)
 
