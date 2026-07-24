@@ -28,7 +28,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.models import ExperimentConfig
 
-_TRT_DEFAULTS = {"task": {"model": "gpt2"}, "engine": "tensorrt"}
+_TRT_DEFAULTS = {"task": {"model": "gpt2"}, "engine": "tensorrt", "serving_mode": "offline"}
 
 
 def _make_trt(**engine_params) -> ExperimentConfig:
@@ -313,6 +313,7 @@ class TestExperimentConfigIntegration:
         config = ExperimentConfig(
             task={"model": "gpt2"},
             engine="tensorrt",
+            serving_mode="offline",
             tensorrt={
                 "engine_params": {
                     "backend": "trt",

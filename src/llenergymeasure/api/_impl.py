@@ -337,6 +337,10 @@ def _to_study_config(
                 ec_kwargs[key] = value
         if measurement_kwargs:
             ec_kwargs["measurement"] = measurement_kwargs
+        # serving_mode is required with no model default; the model= convenience
+        # path is the offline batch one-liner, so declare offline explicitly here
+        # (an explicit serving_mode= kwarg routed above still wins).
+        ec_kwargs.setdefault("serving_mode", "offline")
         experiment = ExperimentConfig(**ec_kwargs)
     else:
         raise ConfigError(

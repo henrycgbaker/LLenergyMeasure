@@ -55,6 +55,7 @@ def _make_panel_study_config(
                     ExperimentConfig(
                         task={"model": model},
                         engine=engine,
+                        serving_mode="offline",
                         **{engine: {"engine_params": {"dtype": dt}}},
                     )
                 )
@@ -182,7 +183,7 @@ class TestBuildPreflightPanel:
 
     def test_panel_unnamed_study(self):
         """Panel with no study name shows 'unnamed' in title."""
-        exps = [ExperimentConfig(task={"model": "gpt2"})]
+        exps = [ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")]
         sc = StudyConfig(
             experiments=exps,
             study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
@@ -193,8 +194,8 @@ class TestBuildPreflightPanel:
     def test_panel_multiple_engines_sorted(self):
         """Multiple engines are sorted alphabetically."""
         exps = [
-            ExperimentConfig(task={"model": "gpt2"}, engine="vllm"),
-            ExperimentConfig(task={"model": "gpt2"}, engine="transformers"),
+            ExperimentConfig(task={"model": "gpt2"}, engine="vllm", serving_mode="offline"),
+            ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline"),
         ]
         sc = StudyConfig(
             experiments=exps,

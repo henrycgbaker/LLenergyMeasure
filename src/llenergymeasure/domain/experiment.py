@@ -36,11 +36,23 @@ def _hash_canonical(canonical: str) -> str:
 
 
 def compute_declared_config_hash(config: ExperimentConfig) -> str:
-    """SHA-256[:16] of ExperimentConfig. Layer 3 fields excluded by design.
+    """SHA-256[:16] of ExperimentConfig, with the sole slo exclusion.
 
     Layer 3 fields (datacenter_pue, grid_carbon_intensity) are not in
     ExperimentConfig (they live in user config only), so model_dump()
-    naturally excludes them. No special exclusion logic needed.
+    naturally excludes them.
+
+    ``server.traffic.slo`` is the one field deliberately excluded from this
+    wholesale dump (``exclude={"server": {"traffic": {"slo"}}}``): SLO bounds are
+    a pure post-hoc overlay (O5.3) - two runs differing only in their slo bounds
+    are the same physical experiment, so they must hash identically and
+    deduplicate together. The exclusion is applied HERE, at the hash call site,
+    NOT via ``Field(exclude=True)`` on the slo field - a field-level exclude would
+    also strip slo from the config.json sidecar and result provenance, where the
+    bounds a run was judged against MUST stay stamped. This is the wholesale-dump
+    half of the dual-family mechanism; the resolved/observed views exclude slo by
+    the complementary means of simply not projecting it (see
+    ``ConfigHashView.mode_section`` / ``ExperimentConfig.mode_section_identity``).
 
     Dumps in ``mode="json"`` so numeric coercions match the serialized form:
     a field typed float but defaulted to an int literal (e.g. vllm
@@ -48,7 +60,8 @@ def compute_declared_config_hash(config: ExperimentConfig) -> str:
     after a JSON round-trip. The host and the container must agree on this hash
     (it names the result file), so both hash the JSON-stable form.
     """
-    canonical = json.dumps(config.model_dump(mode="json"), sort_keys=True)
+    dumped = config.model_dump(mode="json", exclude={"server": {"traffic": {"slo"}}})
+    canonical = json.dumps(dumped, sort_keys=True)
     return _hash_canonical(canonical)
 
 

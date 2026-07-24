@@ -17,6 +17,11 @@
 
 study_name: full-suite-all-engines
 
+# --- Serving mode: the measurement regime (required, no default) ---
+# 'offline' measures batch inference over a fixed prompt set (this study);
+# 'server' measures online serving and needs a server: traffic section.
+serving_mode: offline
+
 # --- Runners: where each engine runs (host process or container) ---
 # Pin an engine to `process` to run it in-process (the package must be importable
 # on the host); leave it on auto-detection and a multi-engine study elevates it

@@ -44,13 +44,23 @@ def type_label(prop: dict[str, Any], defs: dict[str, Any]) -> str:
     return prop_type or "any"
 
 
-def default_label(prop: dict[str, Any]) -> str:
-    """Return a human-readable default value for a JSON schema property."""
-    if "default" not in prop:
-        return "*(required)*"
-    val = prop["default"]
-    if val is None:
-        return "`null`"
-    if isinstance(val, bool):
-        return f"`{str(val).lower()}`"
-    return f"`{val}`"
+def default_label(prop: dict[str, Any], *, required: bool = True) -> str:
+    """Return a human-readable default value for a JSON schema property.
+
+    ``required`` is whether the field appears in its parent object's ``required``
+    list. A field with a ``default_factory`` (e.g. ``dict`` / ``list``) is
+    optional but emits no literal ``default`` into the JSON schema, so it would
+    otherwise be mislabelled ``*(required)*``; fall back to the empty value for
+    its declared type instead.
+    """
+    if "default" in prop:
+        val = prop["default"]
+        if val is None:
+            return "`null`"
+        if isinstance(val, bool):
+            return f"`{str(val).lower()}`"
+        return f"`{val}`"
+    if not required:
+        # default_factory field: no literal default in the schema.
+        return {"object": "`{}`", "array": "`[]`"}.get(prop.get("type", ""), "*(optional)*")
+    return "*(required)*"

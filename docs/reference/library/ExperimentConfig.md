@@ -50,6 +50,7 @@ from llenergymeasure.config.models import TaskConfig
 config = ExperimentConfig(
     task=TaskConfig(model="gpt2"),
     engine="transformers",
+    serving_mode="offline",
 )
 ```
 
@@ -59,7 +60,7 @@ Pydantic's `model_copy(update=...)` creates a new instance with selected fields 
 Useful for building a family of configs from a base:
 
 ```python
-base = ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers")
+base = ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers", serving_mode="offline")
 
 # Derive a variant with a different model
 large = base.model_copy(update={"task": base.task.model_copy(update={"model": "gpt2-large"})})
@@ -75,11 +76,13 @@ large = base.model_copy(update={"task": base.task.model_copy(update={"model": "g
 |-------|------|---------|-------------|
 | `task` | `TaskConfig` | _(required)_ | What to measure: model, dataset, token limits, seed. |
 | `engine` | `str` | `"transformers"` | Inference engine: `"transformers"`, `"vllm"`, or `"tensorrt"`. |
+| `serving_mode` | `"offline" \| "server"` | _(required)_ | Serving mode discriminator, no default. `"offline"` measures batch inference over a fixed prompt set (the only mode with an execution path today). `"server"` selects online serving measurement and requires `server` to be set with a traffic spec - see [Study config reference](/reference/study-config#server-mode-server) for the full field reference. |
 | `measurement` | `MeasurementConfig` | `MeasurementConfig()` | How to measure: warmup, baseline, energy sampler. |
 | `sampling_preset` | `"deterministic" \| "standard" \| "creative" \| "factual" \| None` | `None` | When set, preset values are merged into the active engine's sampling section at parse time. Explicit YAML values take precedence. |
 | `transformers` | `TransformersConfig \| None` | `None` | Transformers-specific settings (only used when `engine="transformers"`). |
 | `vllm` | `VLLMConfig \| None` | `None` | vLLM-specific settings (only used when `engine="vllm"`). |
 | `tensorrt` | `TensorRTConfig \| None` | `None` | TensorRT-LLM settings (only used when `engine="tensorrt"`). |
+| `server` | `ServerSection \| None` | `None` | Online-serving traffic spec (only used when `serving_mode="server"`). |
 | `passthrough_kwargs` | `dict[str, Any] \| None` | `None` | Extra kwargs forwarded to the engine at execution time. Keys must not collide with top-level `ExperimentConfig` fields. |
 
 ### `TaskConfig` fields
@@ -141,6 +144,7 @@ field:
 ExperimentConfig(
     task=TaskConfig(model="gpt2"),
     engine="vllm",
+    serving_mode="offline",
     transformers=TransformersConfig(batch_size=4),  # wrong engine
 )
 ```
@@ -152,6 +156,7 @@ top-level `ExperimentConfig` field names:
 # Raises: passthrough_kwargs keys collide with ExperimentConfig fields: ['engine']
 ExperimentConfig(
     task=TaskConfig(model="gpt2"),
+    serving_mode="offline",
     passthrough_kwargs={"engine": "custom"},  # collides
 )
 ```
@@ -184,6 +189,7 @@ config = ExperimentConfig(
         max_output_tokens=256,
     ),
     engine="transformers",
+    serving_mode="offline",
     measurement=MeasurementConfig(
         warmup=WarmupConfig(n_prompts=10, thermal_floor_seconds=90.0),
         energy_sampler="nvml",
@@ -194,7 +200,7 @@ config = ExperimentConfig(
 ### Override pattern - build a family from a base
 
 ```python
-base = ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers")
+base = ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers", serving_mode="offline")
 
 variants = [
     base.model_copy(update={"task": base.task.model_copy(update={"model": m})})

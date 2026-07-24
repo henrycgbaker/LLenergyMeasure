@@ -5,6 +5,8 @@
 
 study_name: sigint-test
 
+serving_mode: offline
+
 experiments:
   - task:
       model: gpt2

@@ -42,7 +42,7 @@ def _make_experiment(
         if engine in ("transformers", "vllm", "tensorrt")
         else {}
     )
-    return ExperimentConfig(task={"model": model}, engine=engine, **kwargs)
+    return ExperimentConfig(task={"model": model}, engine=engine, serving_mode="offline", **kwargs)
 
 
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
@@ -349,6 +349,7 @@ def test_config_summary_from_experiment() -> None:
         task={"model": "meta-llama/Llama-3.1-8B"},
         engine="transformers",
         transformers={"engine_params": {"dtype": "bfloat16"}},
+        serving_mode="offline",
     )
     summary = build_config_summary(config)
     # Uses format_experiment_header: "Llama-3.1-8B / pytorch"
@@ -405,6 +406,7 @@ def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     exp_b = ExperimentConfig(
         task={
@@ -412,6 +414,7 @@ def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"

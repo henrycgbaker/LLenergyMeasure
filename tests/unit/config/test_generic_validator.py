@@ -100,6 +100,7 @@ def test_error_severity_raises_validation_error(monkeypatch: pytest.MonkeyPatch)
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"engine_params": {"attn_implementation": "sdpa"}},
         )
     assert "test_error_rule" in str(exc_info.value)
@@ -116,6 +117,7 @@ def test_error_severity_no_raise_when_match_misses(monkeypatch: pytest.MonkeyPat
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"attn_implementation": "sdpa"}},
     )
     assert cfg._dormant_observations == {}
@@ -148,6 +150,7 @@ def test_out_of_enum_severity_is_silently_skipped(
         cfg = ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"engine_params": {"attn_implementation": "eager"}},
         )
 
@@ -173,6 +176,7 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"sampling_params": {"temperature": 0.9}},
     )
 
@@ -195,13 +199,13 @@ def test_missing_corpus_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(models_mod, "_get_rules_loader", lambda: _NoCorpusLoader())
 
-    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     assert cfg._dormant_observations == {}
 
 
 def test_empty_rule_set_populates_empty_observations(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_test_rules(monkeypatch, [])
-    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     assert cfg._dormant_observations == {}
 
 
@@ -220,6 +224,7 @@ def test_multiple_dormant_rules_all_recorded(monkeypatch: pytest.MonkeyPatch) ->
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"sampling_params": {"temperature": 0.9, "top_p": 0.95}},
     )
     assert len(cfg._dormant_observations) == 2
@@ -238,6 +243,7 @@ def test_error_rule_shortcircuits_later_rules(monkeypatch: pytest.MonkeyPatch) -
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={
                 "engine_params": {"attn_implementation": "eager"},
                 "sampling_params": {"temperature": 0.9},
@@ -258,5 +264,5 @@ def test_real_corpus_loads_and_default_config_passes() -> None:
     rule's match predicate fires on defaults (e.g. the early-stopping
     false-positive fixed in #375).
     """
-    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     assert cfg._dormant_observations == {}

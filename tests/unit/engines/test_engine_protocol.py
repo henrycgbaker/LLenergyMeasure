@@ -93,7 +93,7 @@ def test_model_load_kwargs_contains_base_keys(monkeypatch):
 
     monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(serving_mode="offline", task={"model": "gpt2"})
     kwargs = engine._model_load_kwargs(config)
 
     assert "torch_dtype" in kwargs
@@ -113,7 +113,7 @@ def test_device_map_absent_when_env_unset(monkeypatch):
 
     monkeypatch.delenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", raising=False)
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(serving_mode="offline", task={"model": "gpt2"})
     kwargs = engine._model_load_kwargs(config)
 
     assert "device_map" not in kwargs
@@ -127,7 +127,7 @@ def test_device_map_env_var_override(monkeypatch):
 
     monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "balanced")
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(serving_mode="offline", task={"model": "gpt2"})
     kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["device_map"] == "balanced"
@@ -141,7 +141,7 @@ def test_device_map_env_var_empty_is_unset(monkeypatch):
 
     monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "")
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(serving_mode="offline", task={"model": "gpt2"})
     kwargs = engine._model_load_kwargs(config)
 
     assert "device_map" not in kwargs
@@ -155,7 +155,7 @@ def test_model_load_kwargs_trust_remote_code_env_var_opt_in(monkeypatch):
 
     monkeypatch.setenv("LLEM_TRUST_REMOTE_CODE", "1")
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(serving_mode="offline", task={"model": "gpt2"})
     kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["trust_remote_code"] is True
@@ -169,7 +169,9 @@ def test_model_load_kwargs_passthrough_kwargs_merged():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
-        task={"model": "gpt2"}, passthrough_kwargs={"custom_key": "custom_value"}
+        serving_mode="offline",
+        task={"model": "gpt2"},
+        passthrough_kwargs={"custom_key": "custom_value"},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -185,7 +187,9 @@ def test_model_load_kwargs_passthrough_can_override_defaults():
 
     engine = TransformersEngine()
     # Override device_map via passthrough
-    config = ExperimentConfig(task={"model": "gpt2"}, passthrough_kwargs={"device_map": "cpu"})
+    config = ExperimentConfig(
+        serving_mode="offline", task={"model": "gpt2"}, passthrough_kwargs={"device_map": "cpu"}
+    )
     kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["device_map"] == "cpu"
@@ -203,7 +207,9 @@ def test_model_load_kwargs_no_passthrough_when_none(monkeypatch):
 
     monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})  # passthrough_kwargs=None by default
+    config = ExperimentConfig(
+        serving_mode="offline", task={"model": "gpt2"}
+    )  # passthrough_kwargs=None by default
     kwargs = engine._model_load_kwargs(config)
 
     expected_keys = {"torch_dtype", "device_map", "trust_remote_code"}
@@ -219,6 +225,7 @@ def test_model_load_kwargs_pytorch_config_attn_implementation():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"attn_implementation": "sdpa"}},
     )
@@ -241,6 +248,7 @@ def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"attn_implementation": "flash_attention_2"}},
     )
@@ -264,6 +272,7 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"attn_implementation": "flash_attention_2"}},
     )
@@ -293,6 +302,7 @@ def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"attn_implementation": "sdpa"}},
     )
@@ -311,6 +321,7 @@ def test_model_load_kwargs_eager_not_affected_by_flash_guard():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"attn_implementation": "eager"}},
     )
@@ -328,6 +339,7 @@ def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"attn_implementation": "flash_attention_3"}},
     )
@@ -349,6 +361,7 @@ def test_model_load_kwargs_pytorch_config_load_in_4bit():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"load_in_4bit": True}},
     )
@@ -370,6 +383,7 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"load_in_8bit": True}},
     )
@@ -390,6 +404,7 @@ def test_model_load_kwargs_pytorch_config_none_values_not_included():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {}},
         # all fields None,
@@ -409,7 +424,9 @@ def test_model_load_kwargs_no_pytorch_section():
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})  # transformers=None by default
+    config = ExperimentConfig(
+        serving_mode="offline", task={"model": "gpt2"}
+    )  # transformers=None by default
     kwargs = engine._model_load_kwargs(config)
 
     assert "attn_implementation" not in kwargs
@@ -475,6 +492,7 @@ def test_model_load_kwargs_explicit_dtype_maps_to_torch(monkeypatch):
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"dtype": "float16"}},
     )
@@ -490,7 +508,7 @@ def test_model_load_kwargs_dtype_unset_is_auto():
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(serving_mode="offline", task={"model": "gpt2"})
     kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["torch_dtype"] == "auto"
@@ -508,7 +526,7 @@ def test_build_generate_kwargs_defaults():
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     kwargs = engine._build_generate_kwargs(config)
 
     # Sampling params now live per-engine; with no section set, kwargs stays empty
@@ -536,6 +554,7 @@ def test_build_generate_kwargs_explicit_sampling_forwarded():
                 "do_sample": True,
             }
         },
+        serving_mode="offline",
     )
     kwargs = engine._build_generate_kwargs(config)
 
@@ -555,6 +574,7 @@ def test_build_generate_kwargs_greedy_decoding():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         transformers={"sampling_params": {"temperature": 0.0, "do_sample": False}},
+        serving_mode="offline",
     )
     kwargs = engine._build_generate_kwargs(config)
 
@@ -630,7 +650,9 @@ def test_model_load_kwargs_tp_plan_forwarded():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
-        task={"model": "gpt2"}, transformers={"engine_params": {"tp_plan": "auto"}}
+        serving_mode="offline",
+        task={"model": "gpt2"},
+        transformers={"engine_params": {"tp_plan": "auto"}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -647,6 +669,7 @@ def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
+        serving_mode="offline",
         task={"model": "gpt2"},
         transformers={"engine_params": {"tp_plan": "auto", "tp_size": 4}},
     )
@@ -671,7 +694,9 @@ def test_model_load_kwargs_tp_size_without_tp_plan_ignored(monkeypatch):
     monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
     config = ExperimentConfig(
-        task={"model": "gpt2"}, transformers={"engine_params": {"tp_size": 4}}
+        serving_mode="offline",
+        task={"model": "gpt2"},
+        transformers={"engine_params": {"tp_size": 4}},
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -689,7 +714,9 @@ def test_model_load_kwargs_device_map_still_works():
 
     engine = TransformersEngine()
     config = ExperimentConfig(
-        task={"model": "gpt2"}, transformers={"engine_params": {"device_map": "cpu"}}
+        serving_mode="offline",
+        task={"model": "gpt2"},
+        transformers={"engine_params": {"device_map": "cpu"}},
     )
     kwargs = engine._model_load_kwargs(config)
 

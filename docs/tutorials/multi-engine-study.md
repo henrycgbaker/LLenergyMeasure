@@ -75,13 +75,17 @@ Walk through it section by section.
 ```yaml
 study_name: tutorial-multi-engine
 
+serving_mode: offline
+
 runners:
   transformers: container
   vllm: container
   tensorrt: container
 ```
 
-All three engines in Docker. `runners` is what pins each engine to its
+`serving_mode` is required (no default) on every config; this tutorial is
+offline batch inference, so it is declared once at study level and shared by
+every experiment cell. All three engines in Docker. `runners` is what pins each engine to its
 isolated image, so the host doesn't need to import any engine. Docker is
 the recommended way to compare engines side-by-side: engine dependency
 closures (e.g. transformers vs vllm pinned versions) are too divergent to

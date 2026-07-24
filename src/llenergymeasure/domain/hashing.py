@@ -124,6 +124,12 @@ class ConfigHashView:
     - ``serving_mode`` - offline-batch vs online-serving discriminator. A
       conditioning identity axis, so an offline and a server run of the same
       task never collapse under dedup.
+    - ``mode_section`` - the ACTIVE mode namespace's identity projection (server:
+      -> all of traffic except slo; offline -> ``{}``). The allowlist half of the
+      dual-family slo exclusion: slo is simply never projected here, so a sweep
+      over rate/arrival/window produces distinct hashes while two runs differing
+      only in slo bounds collapse. The server warmup block joins this projection
+      in a later slice.
     - ``observed_engine_params`` - engine state (library-resolution mechanism output for
       resolved-config-hash, live library observation for observed-config-hash)
     - ``observed_sampling_params`` - sampling state (same sources as above)
@@ -136,12 +142,14 @@ class ConfigHashView:
       windowing). Sweeping methodology creates distinct runs, so these join the
       identity too; dedup then collapses only true duplicates.
 
-    Excluded: ``ExecutionConfig`` (runner/parallelism), ``experiment_id``.
+    Excluded: ``ExecutionConfig`` (runner/parallelism), ``experiment_id``,
+    ``server.traffic.slo`` (post-hoc overlay, non-projected).
     """
 
     engine: str
     task: dict[str, Any]
     serving_mode: str = "offline"
+    mode_section: dict[str, Any] = field(default_factory=dict)
     observed_engine_params: dict[str, Any] = field(default_factory=dict)
     observed_sampling_params: dict[str, Any] = field(default_factory=dict)
     passthrough_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -171,6 +179,7 @@ def build_observed_view(
     observed_engine_params: dict[str, Any],
     observed_sampling_params: dict[str, Any],
     serving_mode: str = "offline",
+    mode_section: dict[str, Any] | None = None,
     passthrough_kwargs: dict[str, Any] | None = None,
     llem_execution: dict[str, Any] | None = None,
     measurement: dict[str, Any] | None = None,
@@ -179,17 +188,20 @@ def build_observed_view(
 
     Callers live in the harness/sidecar path - they read ``task`` from the
     same config that ran and pair it with the native-object dumps the engine
-    returned. ``serving_mode``, ``llem_execution`` and ``measurement`` come from
-    the same config (they are mode/execution/methodology dials, not
-    library-observable) so that the observed hash covers the same identity
-    dimensions as the resolved hash; keeping them aligned stops the
+    returned. ``serving_mode``, ``mode_section``, ``llem_execution`` and
+    ``measurement`` come from the same config (they are mode/execution/methodology
+    dials, not library-observable) so that the observed hash covers the same
+    identity dimensions as the resolved hash; keeping them aligned stops the
     observed-collision analysis from flagging a pure execution/measurement sweep
-    as a false library-resolution gap.
+    as a false library-resolution gap. ``mode_section`` is the active mode
+    namespace's identity projection (server traffic minus slo; ``{}`` for
+    offline), computed by the caller via ``config.mode_section_identity()``.
     """
     return ConfigHashView(
         engine=engine,
         task=task,
         serving_mode=serving_mode,
+        mode_section=dict(mode_section or {}),
         observed_engine_params=dict(observed_engine_params),
         observed_sampling_params=dict(observed_sampling_params),
         passthrough_kwargs=dict(passthrough_kwargs or {}),

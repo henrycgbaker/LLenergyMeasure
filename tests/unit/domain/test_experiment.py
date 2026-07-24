@@ -144,17 +144,19 @@ class TestMeasurementConfigHash:
         h_on = compute_declared_config_hash(make_config(latency_profiling=True))
         assert h_off != h_on
 
-    def test_serving_mode_default_offline(self):
-        assert make_config().serving_mode == "offline"
+    def test_serving_mode_required_no_default(self):
+        """serving_mode is required with no default: omitting it fails loudly."""
+        from llenergymeasure.config.models import ExperimentConfig
+
+        with pytest.raises((ValidationError, ValueError), match="serving_mode is required"):
+            ExperimentConfig(task={"model": "gpt2"}, engine="transformers")  # type: ignore[call-arg]
 
     def test_serving_mode_distinct_hash(self):
         """serving_mode is an identity axis: offline and server hash differently."""
         h_offline = compute_declared_config_hash(make_config(serving_mode="offline"))
-        h_server = compute_declared_config_hash(make_config(serving_mode="server"))
+        h_server = compute_declared_config_hash(
+            make_config(
+                serving_mode="server", server={"traffic": {"rate": 10, "window_seconds": 60}}
+            )
+        )
         assert h_offline != h_server
-
-    def test_serving_mode_default_matches_explicit_offline_hash(self):
-        """Omitting serving_mode declares the same experiment as explicit offline."""
-        h_default = compute_declared_config_hash(make_config())
-        h_explicit = compute_declared_config_hash(make_config(serving_mode="offline"))
-        assert h_default == h_explicit

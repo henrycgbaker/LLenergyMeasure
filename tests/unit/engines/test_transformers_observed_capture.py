@@ -43,7 +43,7 @@ class _FakeHFModel:
 
 
 def _config() -> ExperimentConfig:
-    return ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    return ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
 
 
 class TestEN2MergedGenerationConfig:

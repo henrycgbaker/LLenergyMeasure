@@ -122,6 +122,7 @@ def test_peak_memory_reset_precedes_measurement():
     ):
         engine = TransformersEngine()
         config = ExperimentConfig(
+            serving_mode="offline",
             task={"model": "test-model", "dataset": DatasetConfig(n_prompts=1)},
             engine="transformers",
         )
@@ -157,6 +158,7 @@ def test_transformers_engine_seeds_rng_before_inference():
     ):
         engine = TransformersEngine()
         config = ExperimentConfig(
+            serving_mode="offline",
             task={"model": "test-model", "dataset": DatasetConfig(n_prompts=1), "random_seed": 123},
             engine="transformers",
         )

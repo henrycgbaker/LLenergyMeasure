@@ -62,6 +62,9 @@ _SECTION_ORDER = [
     ("top-level", "Top-Level Fields"),
     ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
+    ("server", "Server Mode (`server:`)"),
+    ("server_traffic", "Server Traffic (`server.traffic:`)"),
+    ("server_traffic_slo", "Server Traffic SLO (`server.traffic.slo:`)"),
     ("transformers", "Transformers Engine (`transformers:`)"),
     ("transformers_engine_params", "Transformers Engine Params (`transformers.engine_params:`)"),
     (
@@ -86,6 +89,12 @@ _SECTION_ORDER = [
 _DEF_TO_SECTION: dict[str, str] = {
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
+    # Server mode namespace (serving_mode=server): the mode-conditioned section,
+    # rendered like the engine sections. ServerSection / TrafficConfig / SloConfig
+    # are hand-written (unique names), so pydantic emits them as simple $def keys.
+    "ServerSection": "server",
+    "TrafficConfig": "server_traffic",
+    "SloConfig": "server_traffic_slo",
     # TransformersSection / TransformersLlemExecution are hand-written (unique names),
     # so pydantic emits them as simple $def keys, not module-qualified ones.
     "TransformersSection": "transformers",
@@ -115,12 +124,15 @@ def _ref_display_name(ref: str) -> str:
     return ref.split("/")[-1].split("__")[-1]
 
 
-def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
+def _render_table(
+    props: dict[str, Any], defs: dict[str, Any], required: set[str] = frozenset()
+) -> list[str]:
     lines = [
         "| Field | Type | Default | Description |",
         "|-------|------|---------|-------------|",
     ]
     for name, prop in props.items():
+        is_required = name in required
         # Resolve $ref to get actual property info
         if "$ref" in prop:
             section_name = _ref_display_name(prop["$ref"])
@@ -138,12 +150,12 @@ def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
             desc = _description(prop)
             has_null = any(p.get("type") == "null" for p in any_of)
             type_str = f"{section_name} | None" if has_null else section_name
-            default = default_label(prop)
+            default = default_label(prop, required=is_required)
             lines.append(f"| `{name}` | {type_str} | {default} | {desc} |")
             continue
 
         type_str = type_label(prop, defs)
-        default = default_label(prop)
+        default = default_label(prop, required=is_required)
         desc = _description(prop)
         lines.append(f"| `{name}` | {type_str} | {default} | {desc} |")
     return lines
@@ -157,7 +169,7 @@ def render_markdown(schema: dict[str, Any]) -> str:
     sections: dict[str, list[str]] = {}
 
     # Top-level fields
-    sections["top-level"] = _render_table(top_props, defs)
+    sections["top-level"] = _render_table(top_props, defs, set(schema.get("required", [])))
 
     # Sub-model sections from $defs
     for def_name, section_key in _DEF_TO_SECTION.items():
@@ -165,7 +177,9 @@ def render_markdown(schema: dict[str, Any]) -> str:
             def_schema = defs[def_name]
             props = def_schema.get("properties", {})
             if props:
-                sections[section_key] = _render_table(props, defs)
+                sections[section_key] = _render_table(
+                    props, defs, set(def_schema.get("required", []))
+                )
 
     # Render output
     lines: list[str] = [

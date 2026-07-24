@@ -18,6 +18,7 @@ class TestEngineSweepAxis:
         """sweep over engine: [pytorch, tensorrt] produces 2 ExperimentConfig objects."""
         raw_study = {
             "task": {"model": "gpt2"},
+            "serving_mode": "offline",
             "sweep": {
                 "engine": ["transformers", "tensorrt"],
             },
@@ -31,6 +32,7 @@ class TestEngineSweepAxis:
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": ["transformers", "tensorrt"],
+            "serving_mode": "offline",
             "sweep": {
                 "tensorrt.engine_params.tensor_parallel_size": [1, 2],
             },
@@ -54,6 +56,7 @@ class TestDottedNestedSweep:
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
+            "serving_mode": "offline",
             # quant_config exists only on the trt backend's TrtLlmArgs, so pin it.
             "tensorrt": {"engine_params": {"backend": "trt"}},
             "sweep": {
@@ -70,6 +73,7 @@ class TestDottedNestedSweep:
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
+            "serving_mode": "offline",
             "sweep": {
                 "tensorrt.engine_params.max_num_tokens": [2048, 4096],
             },
@@ -84,6 +88,7 @@ class TestDottedNestedSweep:
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
+            "serving_mode": "offline",
             "tensorrt": {
                 "engine_params": {
                     "backend": "trt",
@@ -136,6 +141,7 @@ class TestDottedNestedSweep:
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
+            "serving_mode": "offline",
             # quant_config exists only on the trt backend's TrtLlmArgs, so pin it.
             "tensorrt": {"engine_params": {"backend": "trt"}},
             "sweep": {

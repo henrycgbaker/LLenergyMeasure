@@ -880,7 +880,11 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(task={"model": "test-model"}, engine="transformers")],
+            experiments=[
+                ExperimentConfig(
+                    task={"model": "test-model"}, engine="transformers", serving_mode="offline"
+                )
+            ],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
         )
 
@@ -914,7 +918,11 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(task={"model": "test-model"}, engine="transformers")],
+            experiments=[
+                ExperimentConfig(
+                    task={"model": "test-model"}, engine="transformers", serving_mode="offline"
+                )
+            ],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
         )
 

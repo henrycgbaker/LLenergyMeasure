@@ -120,6 +120,7 @@ def test_init_requires_model(tmp_path: Path) -> None:
 
 _PLAN_STUDY = f"""
 study_name: plan-smoke
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm
@@ -160,6 +161,7 @@ def test_plan_previews_run_effective_cycles(tmp_path: Path) -> None:
     study.write_text(
         f"""
 study_name: default-cycles
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm

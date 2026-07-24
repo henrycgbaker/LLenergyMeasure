@@ -342,7 +342,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "test/model"})
+    config = ExperimentConfig(task={"model": "test/model"}, serving_mode="offline")
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -388,7 +388,10 @@ def test_harness_build_result_stamps_config_serving_mode(serving_mode: str) -> N
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "test/model"}, serving_mode=serving_mode)
+    server = {"traffic": {"rate": 10, "window_seconds": 60}} if serving_mode == "server" else None
+    config = ExperimentConfig(
+        task={"model": "test/model"}, serving_mode=serving_mode, server=server
+    )
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -435,7 +438,7 @@ def test_harness_build_result_absent_energy_placeholder_and_warns(
     from llenergymeasure.domain.metrics import FlopsResult, ThrottleInfo
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "test/model"})
+    config = ExperimentConfig(task={"model": "test/model"}, serving_mode="offline")
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -507,7 +510,7 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "test/model"})
+    config = ExperimentConfig(task={"model": "test/model"}, serving_mode="offline")
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -551,7 +554,7 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     from llenergymeasure.domain.metrics import FlopsResult, ThrottleInfo
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "test/model"})
+    config = ExperimentConfig(task={"model": "test/model"}, serving_mode="offline")
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -597,7 +600,9 @@ def _methodology_build_result(measurement: dict, *, samples, output_tokens=100):
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "test/model"}, measurement=measurement)
+    config = ExperimentConfig(
+        task={"model": "test/model"}, measurement=measurement, serving_mode="offline"
+    )
     output = InferenceOutput(
         elapsed_time_sec=1.0,
         input_tokens=0,
@@ -747,7 +752,7 @@ def _make_build_result_args():
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -865,7 +870,7 @@ def test_estimate_flops_prefers_hf_model_over_autoconfig() -> None:
             # coincide with the AutoConfig estimate for the same model.
             return iter([("decoder.layer.weight", _StubParam(777))])
 
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     output = InferenceOutput(
         elapsed_time_sec=1.0,
         input_tokens=10,
@@ -890,7 +895,7 @@ def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     output = InferenceOutput(
         elapsed_time_sec=1.0,
         input_tokens=10,
@@ -962,6 +967,7 @@ def test_warmup_excluded_samples_includes_probe() -> None:
                 "thermal_floor_seconds": 30.0,
             }
         },
+        serving_mode="offline",
     )
 
     engine = MagicMock()

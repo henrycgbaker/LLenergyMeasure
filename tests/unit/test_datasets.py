@@ -64,7 +64,8 @@ def test_load_prompts_builtin() -> None:
     from llenergymeasure.datasets import load_prompts
 
     config = ExperimentConfig(
-        task={"model": "x", "dataset": DatasetConfig(source="aienergyscore", n_prompts=5)}
+        task={"model": "x", "dataset": DatasetConfig(source="aienergyscore", n_prompts=5)},
+        serving_mode="offline",
     )
     prompts = load_prompts(config)
 
@@ -87,7 +88,11 @@ def test_load_prompts_unknown_raises() -> None:
     from llenergymeasure.datasets import load_prompts
 
     config = ExperimentConfig(
-        task={"model": "x", "dataset": DatasetConfig(source="nonexistent_dataset_xyz", n_prompts=5)}
+        task={
+            "model": "x",
+            "dataset": DatasetConfig(source="nonexistent_dataset_xyz", n_prompts=5),
+        },
+        serving_mode="offline",
     )
     with pytest.raises(ValueError, match="Unknown dataset"):
         load_prompts(config)
@@ -102,23 +107,26 @@ def test_dataset_order_config_field() -> None:
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     # Default
-    config = ExperimentConfig(task={"model": "x"})
+    config = ExperimentConfig(task={"model": "x"}, serving_mode="offline")
     assert config.task.dataset.order == "interleaved"
 
     # Accepted values
     config_grouped = ExperimentConfig(
-        task={"model": "x", "dataset": DatasetConfig(order="grouped")}
+        task={"model": "x", "dataset": DatasetConfig(order="grouped")}, serving_mode="offline"
     )
     assert config_grouped.task.dataset.order == "grouped"
 
     config_shuffled = ExperimentConfig(
-        task={"model": "x", "dataset": DatasetConfig(order="shuffled")}
+        task={"model": "x", "dataset": DatasetConfig(order="shuffled")}, serving_mode="offline"
     )
     assert config_shuffled.task.dataset.order == "shuffled"
 
     # Invalid value should raise ValidationError
     with pytest.raises(ValidationError):
-        ExperimentConfig(task={"model": "x", "dataset": DatasetConfig(order="invalid")})
+        ExperimentConfig(
+            task={"model": "x", "dataset": DatasetConfig(order="invalid")},
+            serving_mode="offline",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +150,8 @@ def test_load_prompts_grouped_ordering() -> None:
             task={
                 "model": "x",
                 "dataset": DatasetConfig(source="aienergyscore", n_prompts=100, order="grouped"),
-            }
+            },
+            serving_mode="offline",
         )
         prompts = load_prompts(config)
         assert len(prompts) == 100
@@ -153,7 +162,8 @@ def test_load_prompts_grouped_ordering() -> None:
         task={
             "model": "x",
             "dataset": DatasetConfig(source="aienergyscore", n_prompts=100, order="grouped"),
-        }
+        },
+        serving_mode="offline",
     )
     prompts = load_prompts(config)
     assert len(prompts) == 100
@@ -187,6 +197,7 @@ def test_load_prompts_shuffled_deterministic() -> None:
             "dataset": DatasetConfig(source="aienergyscore", n_prompts=50, order="shuffled"),
             "random_seed": 42,
         },
+        serving_mode="offline",
     )
 
     prompts_1 = load_prompts(config)
@@ -202,6 +213,7 @@ def test_load_prompts_shuffled_deterministic() -> None:
             "dataset": DatasetConfig(source="aienergyscore", n_prompts=50, order="shuffled"),
             "random_seed": 99,
         },
+        serving_mode="offline",
     )
     prompts_diff = load_prompts(config_diff_seed)
     # Seeds 42 and 99 confirmed to produce distinct orderings for n_prompts=50 from aienergyscore

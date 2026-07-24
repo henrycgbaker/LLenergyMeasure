@@ -115,7 +115,7 @@ class TestPipelineSingleExperiment:
         # Write minimal experiment YAML
         yaml_path = tmp_path / "experiment.yaml"
         yaml_path.write_text(
-            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\nserving_mode: offline\n"
         )
 
         mock_result = make_result()
@@ -143,7 +143,9 @@ class TestPipelineSingleExperiment:
         from llenergymeasure.domain.experiment import ExperimentResult
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("task:\n  model: gpt2\n  dataset:\n    n_prompts: 3\n")
+        yaml_path.write_text(
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 3\nserving_mode: offline\n"
+        )
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -170,6 +172,7 @@ class TestPipelineMultiExperimentSweep:
 task:
   model: gpt2
 engine: transformers
+serving_mode: offline
 sweep:
   transformers.engine_params.dtype: [float16, bfloat16]
 study_execution:
@@ -197,6 +200,7 @@ measurement:
         from llenergymeasure.api import load_study
 
         yaml_content = """\
+serving_mode: offline
 sweep:
   task.model: [gpt2, distilgpt2]
   engine: [transformers]
@@ -217,7 +221,7 @@ study_execution:
         """StudyConfig.study_design_hash is populated after loading."""
         from llenergymeasure.api import load_study
 
-        yaml_content = "task:\n  model: gpt2\nstudy_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
+        yaml_content = "task:\n  model: gpt2\nserving_mode: offline\nstudy_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
 
@@ -242,7 +246,7 @@ class TestPipelineErrorPropagation:
         from llenergymeasure.utils.exceptions import EngineError
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("task:\n  model: gpt2\nengine: transformers\n")
+        yaml_path.write_text("task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n")
 
         _patch_infra(monkeypatch, tmp_path, make_result())
 
@@ -262,7 +266,7 @@ class TestPipelineErrorPropagation:
         from llenergymeasure.utils.exceptions import ConfigError
 
         yaml_path = tmp_path / "bad.yaml"
-        yaml_path.write_text("task:\n  model: gpt2\nunknown_field: value\n")
+        yaml_path.write_text("task:\n  model: gpt2\nserving_mode: offline\nunknown_field: value\n")
 
         with pytest.raises(ConfigError, match="Unknown field"):
             load_experiment_config(path=yaml_path)
@@ -288,7 +292,7 @@ class TestPipelineDryRun:
 
         yaml_path = tmp_path / "experiment.yaml"
         yaml_path.write_text(
-            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\nserving_mode: offline\n"
         )
 
         engine_call_count = []
@@ -333,7 +337,7 @@ class TestCLIE2ESingleExperiment:
 
         yaml_path = tmp_path / "experiment.yaml"
         yaml_path.write_text(
-            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\nserving_mode: offline\n"
         )
 
         mock_result = make_result(experiment_id="cli-e2e-001")
@@ -358,7 +362,7 @@ class TestCLIE2EStudy:
 
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(
-            "task:\n  model: gpt2\nengine: transformers\n"
+            "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
             "sweep:\n  transformers.engine_params.dtype: [float16, bfloat16]\n"
             "study_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         )
@@ -413,7 +417,7 @@ class TestCLIE2EErrorExitCodes:
 
         yaml_path = tmp_path / "experiment.yaml"
         yaml_path.write_text(
-            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\nserving_mode: offline\n"
         )
 
         error_cls = getattr(llenergymeasure.utils.exceptions, error_class)

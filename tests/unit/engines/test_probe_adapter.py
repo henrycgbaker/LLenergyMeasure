@@ -43,7 +43,7 @@ def test_build_config_probe_returns_probe_per_engine(engine):
 
 def test_unknown_engine_raises_engine_error():
     """``get_engine`` raises ``EngineError`` on an unknown engine name."""
-    config = ExperimentConfig(task={"model": "test-model"})
+    config = ExperimentConfig(task={"model": "test-model"}, serving_mode="offline")
     # Force-override the engine literal without going through Pydantic
     object.__setattr__(config, "engine", "unknown-engine")
     with pytest.raises(EngineError):

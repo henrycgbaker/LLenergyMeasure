@@ -260,6 +260,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
@@ -287,6 +288,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.quantization": [
                     {},  # baseline: no quantisation
@@ -308,6 +310,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.compilation": [
                     {"transformers.llem_execution.torch_compile": False},
@@ -330,6 +333,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
@@ -349,6 +353,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.decoding": [
                     {},  # baseline: use engine default sampling
@@ -378,6 +383,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
@@ -405,6 +411,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "vllm.engine_params.dtype": ["float16", "bfloat16"],
@@ -430,6 +437,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.quantization": [
                     {},
@@ -456,6 +464,7 @@ class TestExpandGridSweepGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.compilation": [
                     {"transformers.llem_execution.torch_compile": False},
@@ -476,6 +485,7 @@ class TestExpandGridSweepGroupsMultiBackend:
         raw = {
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "vllm.engine_params.dtype": ["float16", "bfloat16"],
@@ -517,6 +527,7 @@ class TestCombinatorialWarnings:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float32", "float16", "bfloat16"],
                 "transformers.llem_execution.batch_size": [1, 4, 8, 16, 32],
@@ -557,6 +568,7 @@ class TestHashStabilityWithGroups:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [

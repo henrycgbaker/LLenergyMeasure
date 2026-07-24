@@ -38,6 +38,7 @@ def test_flat_legacy_engine_param_errors_with_migration_hint() -> None:
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"load_in_4bit": True},  # type: ignore[arg-type]
         )
 
@@ -51,6 +52,7 @@ def test_flat_legacy_sampling_param_errors_with_migration_hint() -> None:
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"temperature": 0.7},  # type: ignore[arg-type]
         )
 
@@ -69,6 +71,7 @@ def test_wrapper_level_typo_errors_with_suggestion() -> None:
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"dtypee": "float16"},  # type: ignore[arg-type]
         )
 
@@ -79,6 +82,7 @@ def test_wrapper_level_unknown_with_no_close_match_still_errors() -> None:
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"zzz_nonsense": 1},  # type: ignore[arg-type]
         )
 
@@ -95,6 +99,7 @@ def test_in_params_typo_warns_with_suggestion_and_parses() -> None:
         cfg = ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"engine_params": {"dtypee": "float16"}},
         )
 
@@ -117,6 +122,7 @@ def test_in_params_typo_in_sampling_warns() -> None:
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"sampling_params": {"temperatur": 0.7}},
         )
     matched = [
@@ -140,6 +146,7 @@ def test_new_engine_field_inside_params_passes() -> None:
         cfg = ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"engine_params": {"brand_new_hf_kwarg_xyz": 1}},
         )
     soft = [
@@ -163,6 +170,7 @@ def test_nested_happy_path_unaffected() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={
             "engine_params": {"dtype": "float16", "load_in_4bit": True},
             "sampling_params": {"top_p": 0.9},
@@ -176,5 +184,5 @@ def test_nested_happy_path_unaffected() -> None:
 
 def test_no_engine_section_is_unaffected() -> None:
     """A config with no engine section parses (nothing to check)."""
-    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     assert cfg.transformers is None

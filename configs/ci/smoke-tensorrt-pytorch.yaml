@@ -19,6 +19,7 @@ task:
   max_input_tokens: 32
   max_output_tokens: 8
 engine: tensorrt
+serving_mode: offline
 tensorrt:
   engine_params:
     backend: pytorch

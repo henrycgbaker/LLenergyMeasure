@@ -35,6 +35,7 @@ def minimal_config():
             "max_output_tokens": 32,
         },
         engine="transformers",
+        serving_mode="offline",
     )
 
 
@@ -354,6 +355,7 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
         },
         measurement={"baseline": {"enabled": True, "duration_seconds": 5.0}},
         engine="transformers",
+        serving_mode="offline",
     )
 
     engine = FakeBackend()
@@ -1153,6 +1155,7 @@ def test_harness_save_timeseries_false_skips_parquet(tmp_path):
             "max_output_tokens": 32,
         },
         engine="transformers",
+        serving_mode="offline",
     )
 
     engine = FakeBackend()
@@ -1310,6 +1313,7 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
             "max_output_tokens": 32,
         },
         engine="transformers",
+        serving_mode="offline",
     )
 
     engine = FakeBackend()

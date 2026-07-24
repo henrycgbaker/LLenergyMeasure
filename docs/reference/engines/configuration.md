@@ -10,6 +10,10 @@ experiment selects exactly one engine via the top-level `engine:` field
 and configures it through a same-named block (`transformers:`, `vllm:`,
 `tensorrt:`).
 
+Every experiment also declares a required top-level `serving_mode:` (`offline`
+or `server`) - see the `serving_mode:` field below. This page covers
+`offline` engine configuration, today's only mode with an execution path.
+
 Each engine block is a generated model at
 `src/llenergymeasure/config/generated/<engine>.py`, regenerated from the
 committed schema snapshot (its header reads `DO NOT EDIT`). The block has
@@ -32,6 +36,8 @@ same-named block. The engine block nests `engine_params:` and
 `sampling_params:` under it:
 
 ```yaml
+serving_mode: offline
+
 task:
   model: Qwen/Qwen2.5-0.5B
   dataset:
@@ -95,6 +101,17 @@ not valid in a single-experiment YAML; they belong on the study document
 
 These fields are declared on `ExperimentConfig` and its sub-models and apply
 identically across engines. Every one is `extra="forbid"`.
+
+### `serving_mode:`
+
+| Field | Type | Default | Description | Source |
+|-------|------|---------|-------------|--------|
+| `serving_mode` | `offline` \| `server` | *(required)* | Serving mode discriminator, no default. `offline` measures batch inference over a fixed prompt set (the only mode with an execution path today). `server` selects online serving measurement and requires a `server:` section with a traffic spec. | `ExperimentConfig` |
+
+`server` mode's `traffic:` namespace (rate, arrival process, window, concurrency
+cap, SLOs) is not engine configuration and is not covered on this page; see
+[study-config.md](../study-config.md#server-mode-server) for the full field
+reference.
 
 ### `task:`
 
@@ -400,6 +417,7 @@ pre-flight map, not a parse-time constraint:
 ### Minimal Transformers experiment
 
 ```yaml
+serving_mode: offline
 task:
   model: gpt2
 engine: transformers
@@ -412,6 +430,7 @@ dtype/attention defaults.
 ### Transformers with quantisation and compilation
 
 ```yaml
+serving_mode: offline
 task:
   model: meta-llama/Llama-2-7b-hf
   dataset:
@@ -435,6 +454,7 @@ transformers:
 ### vLLM with prefix caching and FP8 KV cache
 
 ```yaml
+serving_mode: offline
 task:
   model: meta-llama/Llama-2-7b-hf
   max_input_tokens: 1024
@@ -460,6 +480,7 @@ vllm:
 whole dict.
 
 ```yaml
+serving_mode: offline
 task:
   model: gpt2
 
@@ -481,6 +502,7 @@ vllm:
 The TRT-LLM sub-configs are freeform dicts on the current pin, written whole.
 
 ```yaml
+serving_mode: offline
 task:
   model: meta-llama/Llama-2-7b-hf
 
@@ -506,6 +528,7 @@ tensorrt:
 ### Sampling preset (preset values merged into the engine's sampling section)
 
 ```yaml
+serving_mode: offline
 task:
   model: gpt2
 engine: transformers

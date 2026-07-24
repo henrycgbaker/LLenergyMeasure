@@ -102,7 +102,7 @@ class TestExecutionConfig:
 
 class TestStudyConfig:
     def test_accepts_all_fields(self):
-        exp = ExperimentConfig(task={"model": "gpt2"})
+        exp = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
         sc = StudyConfig(
             experiments=[exp],
             study_name="my-study",
@@ -120,14 +120,14 @@ class TestStudyConfig:
             StudyConfig(experiments=[])
 
     def test_default_execution(self):
-        exp = ExperimentConfig(task={"model": "gpt2"})
+        exp = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
         sc = StudyConfig(experiments=[exp])
         assert sc.study_execution.n_cycles == 1
         assert sc.study_design_hash is None
         assert sc.skipped_configs == []
 
     def test_extra_fields_forbidden(self):
-        exp = ExperimentConfig(task={"model": "gpt2"})
+        exp = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
         with pytest.raises(ValidationError):
             StudyConfig(experiments=[exp], unknown_field="x")  # type: ignore[call-arg]  # asserts extra rejected
 
@@ -143,6 +143,7 @@ class TestExpandGridSweep:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "task.dataset.n_prompts": [50, 100],
@@ -163,6 +164,7 @@ class TestExpandGridSweep:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "measurement.latency_profiling": [False, True],
             },
@@ -180,6 +182,7 @@ class TestExpandGridSweep:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.llem_execution.batch_size": [1, 8],
             },
@@ -195,6 +198,7 @@ class TestExpandGridSweep:
         raw = {
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "vllm.engine_params.dtype": ["float16", "bfloat16"],
@@ -232,6 +236,7 @@ class TestExpandGridSweep:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "vllm.engine_params.max_num_seqs": [64, 256],
             },
@@ -252,6 +257,7 @@ class TestExpandGridSweep:
         """
         raw = {
             "task": {"model": "gpt2"},
+            "serving_mode": "offline",
             "sweep": {
                 "vllm.engine_params.max_num_seqs": [64, 256],
             },
@@ -270,8 +276,8 @@ class TestExpandGridExplicit:
     def test_explicit_experiments_list(self):
         raw = {
             "experiments": [
-                {"task": {"model": "gpt2"}, "engine": "transformers"},
-                {"task": {"model": "gpt2"}, "engine": "vllm"},
+                {"task": {"model": "gpt2"}, "engine": "transformers", "serving_mode": "offline"},
+                {"task": {"model": "gpt2"}, "engine": "vllm", "serving_mode": "offline"},
             ]
         }
         valid, _skipped = expand_grid(raw)
@@ -291,6 +297,7 @@ class TestExpandGridCombined:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
             },
@@ -319,7 +326,7 @@ class TestExpandGridCombined:
 class TestExpandGridInlineBaseline:
     def test_inline_model_form_yields_single_baseline(self):
         """No sweep, no experiments, top-level task.model -> exactly one baseline."""
-        raw = {"study_name": "inline", "task": {"model": "gpt2"}}
+        raw = {"study_name": "inline", "task": {"model": "gpt2"}, "serving_mode": "offline"}
         valid, _skipped = expand_grid(raw)
         assert len(valid) == 1
         assert valid[0].engine == "transformers"
@@ -333,6 +340,7 @@ class TestExpandGridInlineBaseline:
         raw = {
             "study_name": "shared-task",
             "task": {"model": "gpt2"},
+            "serving_mode": "offline",
             "experiments": [
                 {"engine": "transformers"},
                 {"engine": "vllm"},
@@ -362,6 +370,7 @@ class TestExpandGridBase:
 
         raw = {
             "base": "base_experiment.yaml",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
             },
@@ -390,6 +399,7 @@ class TestExpandGridBase:
 
         raw = {
             "base": "base_experiment.yaml",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16"],
             },
@@ -420,6 +430,7 @@ class TestExpandGridBase:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "images": {"transformers": "ghcr.io/org/img:tag"},
             "sweep": {"task.dataset.n_prompts": [10, 20]},
         }
@@ -440,6 +451,7 @@ class TestExpandGridInvalidHandling:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
             },
@@ -508,6 +520,7 @@ class TestExpandGridInvalidHandling:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "experiments": None,
             "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
         }
@@ -527,6 +540,7 @@ class TestExpandGridInvalidHandling:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "transformers": {"engine_params": {"num_beams": 2}},
             "sweep": {"transformers.sampling_params.num_return_sequences": [1, 4]},
         }
@@ -552,6 +566,7 @@ class TestSkippedConfigRuleAttribution:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "transformers": {"engine_params": {"num_beams": 2}},
             "sweep": {"transformers.sampling_params.num_return_sequences": [1, 4]},
         }
@@ -569,6 +584,7 @@ class TestSkippedConfigRuleAttribution:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {"transformers.engine_params.dtype": ["float16"]},
             "experiments": [
                 {"task": {"model": "gpt2"}, "engine": "transformers", "vllm": {"max_num_seqs": 64}},
@@ -606,6 +622,7 @@ class TestMultiBackendSectionStripping:
         raw = {
             "task": {"model": "gpt2"},
             "tensorrt": {"engine_params": {"max_input_len": 1024}},
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.engine_params.dtype": ["bfloat16"],
                 "tensorrt.engine_params.dtype": ["bfloat16"],
@@ -630,6 +647,7 @@ class TestMultiBackendSectionStripping:
         """Inherited engine sections are stripped; explicitly written ones still fail."""
         raw = {
             "tensorrt": {"engine_params": {"max_input_len": 1024}},
+            "serving_mode": "offline",
             "experiments": [
                 # Inherited tensorrt: should be stripped for this pytorch experiment
                 {"task": {"model": "gpt2"}, "engine": "transformers"},
@@ -653,6 +671,7 @@ class TestMultiBackendSectionStripping:
         raw = {
             "task": {"model": "gpt2"},
             "tensorrt": {"engine_params": {"max_input_len": 512}},
+            "serving_mode": "offline",
             "sweep": {
                 "transformers.llem_execution.batch_size": [1],
                 "vllm.engine_params.max_num_seqs": [64],
@@ -672,31 +691,42 @@ class TestMultiBackendSectionStripping:
 
 class TestComputeStudyDesignHash:
     def test_returns_16_char_hex(self):
-        experiments = [ExperimentConfig(task={"model": "gpt2"})]
+        experiments = [ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")]
         h = compute_study_design_hash(experiments)
         assert len(h) == 16
         int(h, 16)  # must be valid hex
 
     def test_same_experiments_same_hash(self):
         exps1 = [
-            ExperimentConfig(task={"model": "gpt2"}),
-            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)}),
+            ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)},
+                serving_mode="offline",
+            ),
         ]
         exps2 = [
-            ExperimentConfig(task={"model": "gpt2"}),
-            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)}),
+            ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)},
+                serving_mode="offline",
+            ),
         ]
         assert compute_study_design_hash(exps1) == compute_study_design_hash(exps2)
 
     def test_different_experiments_different_hash(self):
-        exps1 = [ExperimentConfig(task={"model": "gpt2"})]
-        exps2 = [ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=25)})]
+        exps1 = [ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")]
+        exps2 = [
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=25)},
+                serving_mode="offline",
+            )
+        ]
         assert compute_study_design_hash(exps1) != compute_study_design_hash(exps2)
 
     def test_stable_across_calls(self):
         experiments = [
-            ExperimentConfig(task={"model": "gpt2"}),
-            ExperimentConfig(task={"model": "gpt2-xl"}),
+            ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
+            ExperimentConfig(task={"model": "gpt2-xl"}, serving_mode="offline"),
         ]
         h1 = compute_study_design_hash(experiments)
         h2 = compute_study_design_hash(experiments)
@@ -705,15 +735,19 @@ class TestComputeStudyDesignHash:
     def test_hash_excludes_order_sensitivity(self):
         """Same experiments in same order produce same hash (order matters for reproducibility)."""
         exps_a = [
-            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
             ExperimentConfig(
-                task={"model": "gpt2"}, transformers={"engine_params": {"dtype": "float16"}}
+                task={"model": "gpt2"},
+                transformers={"engine_params": {"dtype": "float16"}},
+                serving_mode="offline",
             ),
         ]
         exps_b = [
-            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
             ExperimentConfig(
-                task={"model": "gpt2"}, transformers={"engine_params": {"dtype": "float16"}}
+                task={"model": "gpt2"},
+                transformers={"engine_params": {"dtype": "float16"}},
+                serving_mode="offline",
             ),
         ]
         assert compute_study_design_hash(exps_a) == compute_study_design_hash(exps_b)
@@ -727,8 +761,10 @@ class TestComputeStudyDesignHash:
 class TestApplyCycles:
     @pytest.fixture
     def two_experiments(self):
-        a = ExperimentConfig(task={"model": "gpt2"})
-        b = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=25)})
+        a = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
+        b = ExperimentConfig(
+            task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=25)}, serving_mode="offline"
+        )
         return [a, b]
 
     @pytest.fixture
@@ -777,7 +813,10 @@ class TestApplyCycles:
     def test_shuffled_different_seeds_different_orders(self, study_hash):
         """Seeds 1 and 999 produce different orderings (verified deterministic)."""
         exps = [
-            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)},
+                serving_mode="offline",
+            )
             for i in range(1, 6)
         ]
         result1 = apply_cycles(exps, 2, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=1)
@@ -831,7 +870,10 @@ class TestApplyCycles:
     def test_latin_square_ordering(self, study_hash):
         """latin_square with 3 experiments x 3 cycles produces balanced rows."""
         exps = [
-            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)},
+                serving_mode="offline",
+            )
             for i in [1, 2, 3]
         ]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
@@ -844,7 +886,10 @@ class TestApplyCycles:
     def test_latin_square_each_position_balanced(self, study_hash):
         """Each experiment appears in each position exactly once across k cycles."""
         exps = [
-            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)},
+                serving_mode="offline",
+            )
             for i in [1, 2, 3]
         ]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
@@ -856,7 +901,10 @@ class TestApplyCycles:
     def test_latin_square_cycles_exceed_k(self, study_hash):
         """When n_cycles > k, rows wrap around the square."""
         exps = [
-            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)},
+                serving_mode="offline",
+            )
             for i in [1, 2]
         ]
         result = apply_cycles(exps, 4, ExperimentOrder.LATIN_SQUARE, study_hash)
@@ -868,7 +916,12 @@ class TestApplyCycles:
 
     def test_latin_square_single_experiment(self, study_hash):
         """latin_square with 1 experiment x 3 cycles = [A, A, A]."""
-        exps = [ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=1)})]
+        exps = [
+            ExperimentConfig(
+                task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=1)},
+                serving_mode="offline",
+            )
+        ]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert len(result) == 3
         assert all(r.task.dataset.n_prompts == 1 for r in result)

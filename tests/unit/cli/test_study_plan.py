@@ -32,6 +32,7 @@ MODEL = "Qwen/Qwen2.5-0.5B"
 #   n_cycles = 3 -> 6 runs; gaps: 5 x 30s experiment + 2 x 120s cycle = 390s
 _CRAFTED = f"""
 study_name: crafted-demo
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm
@@ -108,6 +109,7 @@ def test_render_shows_rule_id_and_counts(tmp_path: Path) -> None:
 def test_non_rule_failures_grouped(tmp_path: Path) -> None:
     """Pydantic field failures (rule_id None) collapse to one 'other' line."""
     text = f"""
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm
@@ -128,6 +130,7 @@ def test_dedup_disabled_skips_stage(tmp_path: Path) -> None:
     covered by ``test_plan_previews_run_cycle_default``.
     """
     text = f"""
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm
@@ -154,6 +157,7 @@ def test_plan_previews_run_cycle_default(tmp_path: Path) -> None:
     experiment count.
     """
     text = f"""
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm
@@ -171,6 +175,7 @@ sweep:
 def test_plan_respects_pinned_cycles(tmp_path: Path) -> None:
     """An explicit n_cycles=1 is honoured - the CLI default does not override it."""
     text = f"""
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm
@@ -193,6 +198,7 @@ def test_dormant_observations_rendered_in_plan(tmp_path: Path) -> None:
     ``llem study plan`` rather than mutating the executed config silently.
     """
     text = f"""
+serving_mode: offline
 task:
   model: {MODEL}
 engine: transformers
@@ -212,6 +218,7 @@ transformers:
 def test_dormant_observations_absent_when_none_fire(tmp_path: Path) -> None:
     """No dormant rule fires -> the section is empty (rendered only when non-empty)."""
     text = f"""
+serving_mode: offline
 task:
   model: {MODEL}
 engine: transformers
@@ -235,6 +242,7 @@ def test_bounds_scaffold_round_trip(tmp_path: Path) -> None:
     # while still asserting declared == the Cartesian product of the sweep lists.
     axes = list(raw["sweep"].items())[:2]
     raw["sweep"] = dict(axes)
+    raw["serving_mode"] = "offline"
     expected = prod(len(values) for _key, values in axes)
 
     funnel = build_funnel(_load(tmp_path, yaml.safe_dump(raw)))  # type: ignore[arg-type]
@@ -255,6 +263,7 @@ def test_vocabulary_no_invariant(tmp_path: Path) -> None:
 def test_wall_clock_single_run(tmp_path: Path) -> None:
     """A one-run study reports no gaps rather than a bogus lower bound."""
     text = f"""
+serving_mode: offline
 task:
   model: {MODEL}
 engine: vllm

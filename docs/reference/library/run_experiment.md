@@ -52,6 +52,8 @@ result = run_experiment("experiment.yaml")
 `experiment.yaml`:
 
 ```yaml
+serving_mode: offline
+
 task:
   model: meta-llama/Llama-3.1-8B
   dataset:
@@ -149,6 +151,7 @@ from llenergymeasure.config.models import TaskConfig, MeasurementConfig
 config = ExperimentConfig(
     task=TaskConfig(model="gpt2"),
     engine="transformers",
+    serving_mode="offline",
 )
 result = run_experiment(config)
 ```

@@ -127,6 +127,7 @@ def _run_recorded(*, record_progress: bool = False) -> list[str]:
             "baseline": {"enabled": True, "duration_seconds": 5.0},
             "warmup": {"enabled": True},
         },
+        serving_mode="offline",
     )
     harness = MeasurementHarness()
 

@@ -19,7 +19,7 @@ from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
 def test_default_config_returns_single_gpu():
     """pytorch engine with no device_map returns [0] (single-GPU default)."""
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     result = _resolve_gpu_indices(config)
     assert result == [0]
 
@@ -27,7 +27,7 @@ def test_default_config_returns_single_gpu():
 def test_unknown_engine_returns_single_gpu():
     """Unrecognised engine string falls through to [0]."""
     # ExperimentConfig validates engine, so we test by patching attribute
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     object.__setattr__(config, "engine", "someother")
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -40,7 +40,7 @@ def test_unknown_engine_returns_single_gpu():
 
 def test_vllm_no_engine_config_returns_single_gpu():
     """vLLM with no engine config falls through to [0]."""
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", serving_mode="offline")
     # config.vllm is None by default
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -52,6 +52,7 @@ def test_vllm_single_gpu_returns_single_gpu():
         task={"model": "gpt2"},
         engine="vllm",
         vllm={"engine_params": {"tensor_parallel_size": 1, "pipeline_parallel_size": 1}},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -63,6 +64,7 @@ def test_vllm_tp2_returns_two_gpus():
         task={"model": "gpt2"},
         engine="vllm",
         vllm={"engine_params": {"tensor_parallel_size": 2}},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0, 1]
@@ -74,6 +76,7 @@ def test_vllm_tp2_pp2_returns_four_gpus():
         task={"model": "gpt2"},
         engine="vllm",
         vllm={"engine_params": {"tensor_parallel_size": 2, "pipeline_parallel_size": 2}},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0, 1, 2, 3]
@@ -85,6 +88,7 @@ def test_vllm_none_engine_vllm_config_returns_single_gpu():
         task={"model": "gpt2"},
         engine="vllm",
         vllm={"engine_params": None},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -97,7 +101,7 @@ def test_vllm_none_engine_vllm_config_returns_single_gpu():
 
 def test_tensorrt_no_config_returns_single_gpu():
     """tensorrt engine with no TensorRTConfig falls through to [0]."""
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="tensorrt")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="tensorrt", serving_mode="offline")
     # config.tensorrt is None by default
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -109,6 +113,7 @@ def test_tensorrt_tp1_returns_single_gpu():
         task={"model": "gpt2"},
         engine="tensorrt",
         tensorrt={"engine_params": {"tensor_parallel_size": 1}},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -120,6 +125,7 @@ def test_tensorrt_tp4_returns_four_gpus():
         task={"model": "gpt2"},
         engine="tensorrt",
         tensorrt={"engine_params": {"tensor_parallel_size": 4}},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0, 1, 2, 3]
@@ -131,6 +137,7 @@ def test_tensorrt_none_tensor_parallel_size_returns_single_gpu():
         task={"model": "gpt2"},
         engine="tensorrt",
         tensorrt={"engine_params": {"tensor_parallel_size": None}},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -147,6 +154,7 @@ def test_pytorch_device_map_auto_single_gpu():
         task={"model": "gpt2"},
         engine="transformers",
         transformers={"engine_params": {"device_map": "auto"}},
+        serving_mode="offline",
     )
 
     mock_pynvml = MagicMock()
@@ -166,6 +174,7 @@ def test_pytorch_device_map_auto_multi_gpu():
         task={"model": "gpt2"},
         engine="transformers",
         transformers={"engine_params": {"device_map": "auto"}},
+        serving_mode="offline",
     )
 
     mock_pynvml = MagicMock()
@@ -185,6 +194,7 @@ def test_pytorch_device_map_none_returns_single_gpu():
         task={"model": "gpt2"},
         engine="transformers",
         transformers={"engine_params": {"device_map": None}},
+        serving_mode="offline",
     )
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -196,6 +206,7 @@ def test_pytorch_device_map_pynvml_error_falls_through():
         task={"model": "gpt2"},
         engine="transformers",
         transformers={"engine_params": {"device_map": "auto"}},
+        serving_mode="offline",
     )
 
     # pynvml raises on init - should fall through silently
@@ -214,6 +225,7 @@ def test_pytorch_device_map_pynvml_import_error_falls_through():
         task={"model": "gpt2"},
         engine="transformers",
         transformers={"engine_params": {"device_map": "auto"}},
+        serving_mode="offline",
     )
 
     # Remove pynvml from sys.modules to simulate it being absent

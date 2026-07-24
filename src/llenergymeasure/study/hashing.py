@@ -46,6 +46,13 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     autocast) and the ``measurement`` block (methodology dials) also join the
     view: both drive execution or define distinct runs, so a sweep over either
     must produce distinct resolved hashes rather than collapsing under dedup.
+
+    The active mode namespace's identity projection (``config.mode_section_identity()``
+    - server traffic minus slo, ``{}`` for offline) joins the view too, so a
+    traffic-rate sweep produces distinct hashes while two runs differing only in
+    slo bounds collapse. traffic is llem-owned (no library-resolution pass, no
+    engine observation), so the resolved and observed views project the SAME
+    declared values at v0.7.
     """
     engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)
@@ -62,6 +69,7 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
         engine=engine_name,
         task=config.task.model_dump(mode="python"),
         serving_mode=config.serving_mode,
+        mode_section=config.mode_section_identity(),
         observed_engine_params={**engine_params, **dump},
         observed_sampling_params=sampling,
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),

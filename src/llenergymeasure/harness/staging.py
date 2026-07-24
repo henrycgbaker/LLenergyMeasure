@@ -194,6 +194,7 @@ def write_config_sidecar(
             engine=engine_name,
             task=task_dict,
             serving_mode=config.serving_mode,
+            mode_section=config.mode_section_identity(),
             observed_engine_params=obs_engine,
             observed_sampling_params=obs_sampling,
             llem_execution=execution_dump,

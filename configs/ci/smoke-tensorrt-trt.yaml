@@ -22,6 +22,7 @@ task:
     n_prompts: 2
   max_output_tokens: 8
 engine: tensorrt
+serving_mode: offline
 tensorrt:
   engine_params:
     backend: trt

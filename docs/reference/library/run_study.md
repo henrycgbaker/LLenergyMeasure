@@ -54,6 +54,7 @@ for result_file in study_result.result_files:
 
 ```yaml
 study_name: gpt2-comparison
+serving_mode: offline
 
 experiments:
   - task:
@@ -74,6 +75,7 @@ at parse time into a flat `experiments` list before any experiment runs.
 
 ```yaml
 study_name: model-sweep
+serving_mode: offline
 
 sweep:
   axes:

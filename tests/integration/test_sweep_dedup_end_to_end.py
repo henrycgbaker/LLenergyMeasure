@@ -22,7 +22,9 @@ from llenergymeasure.study.loading import finalise_study
 
 def _write_study(tmp_path: Path, raw: dict) -> Path:
     path = tmp_path / "study.yaml"
-    path.write_text(yaml.safe_dump(raw))
+    # serving_mode is required (no default); default these offline studies to it
+    # while letting a caller's raw dict override.
+    path.write_text(yaml.safe_dump({"serving_mode": "offline", **raw}))
     return path
 
 
