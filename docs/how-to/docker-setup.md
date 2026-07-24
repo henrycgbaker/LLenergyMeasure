@@ -235,6 +235,7 @@ See [Installation](/how-to/install) for the full `llem doctor` output format.
 
 ```yaml
 # experiment.yaml
+serving_mode: offline
 engine: vllm
 task:
   model: gpt2
@@ -259,6 +260,7 @@ an annotated walkthrough.
 
 ```yaml
 # experiment.yaml
+serving_mode: offline
 engine: tensorrt
 task:
   model: meta-llama/Llama-2-7b-hf

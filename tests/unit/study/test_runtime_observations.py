@@ -28,7 +28,7 @@ from llenergymeasure.study.runtime_observations import (
 
 
 def _mk_config(engine: str = "transformers") -> ExperimentConfig:
-    return ExperimentConfig(task={"model": "gpt2"}, engine=engine)
+    return ExperimentConfig(task={"model": "gpt2"}, engine=engine, serving_mode="offline")
 
 
 def _run_id() -> str:
@@ -426,7 +426,7 @@ def _spawn_target(study_dir: str, study_run_id: str, cycle: int, config_hash: st
         capture_runtime_observations as _cap,
     )
 
-    cfg = _Cfg(task={"model": "gpt2"}, engine="transformers")
+    cfg = _Cfg(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     with _cap(
         cfg,
         study_dir=study_dir,

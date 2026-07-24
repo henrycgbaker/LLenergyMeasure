@@ -212,6 +212,7 @@ class TestIdiomsThroughExpandGrid:
             """
             task: {model: gpt2}
             engine: transformers
+            serving_mode: offline
             sweep:
               task.dataset.n_prompts: {min: 10, max: 30, num: 3}
               transformers.sampling_params.temperature: {log: {min: 0.1, max: 1.0, num: 2}}
@@ -227,7 +228,7 @@ class TestIdiomsThroughExpandGrid:
         assert {c.transformers.llem_execution.batch_size for c in valid} == {4, 8, 16}
 
     def test_idiom_expands_identically_to_explicit_list(self):
-        base = {"task": {"model": "gpt2"}, "engine": "transformers"}
+        base = {"task": {"model": "gpt2"}, "engine": "transformers", "serving_mode": "offline"}
         as_list = {**base, "sweep": {"task.dataset.n_prompts": [10, 20, 30]}}
         as_idiom = {**base, "sweep": {"task.dataset.n_prompts": {"min": 10, "max": 30, "num": 3}}}
         valid_list, _ = expand_grid(as_list)
@@ -267,6 +268,7 @@ class TestExistingMappingSemanticsUnchanged:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {"task.dataset.n_prompts": [50, 100]},
         }
         valid, skipped = expand_grid(raw)
@@ -278,6 +280,7 @@ class TestExistingMappingSemanticsUnchanged:
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
+            "serving_mode": "offline",
             "sweep": {
                 "precision": [
                     {"transformers.engine_params.dtype": "float16"},

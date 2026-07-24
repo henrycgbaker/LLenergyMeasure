@@ -115,7 +115,7 @@ def test_format_validation_error():
     from llenergymeasure.config.models import ExperimentConfig
 
     with pytest.raises(ValidationError) as exc_info:
-        ExperimentConfig(task={"model": "gpt2"}, engine="pytorh")  # type: ignore[arg-type]
+        ExperimentConfig(task={"model": "gpt2"}, engine="pytorh", serving_mode="offline")  # type: ignore[arg-type]
 
     result = format_validation_error(exc_info.value)
     assert "Config validation failed" in result
@@ -127,7 +127,7 @@ def test_format_validation_error_did_you_mean():
     from llenergymeasure.config.models import ExperimentConfig
 
     with pytest.raises(ValidationError) as exc_info:
-        ExperimentConfig(task={"model": "gpt2"}, engine="pytorh")  # type: ignore[arg-type]
+        ExperimentConfig(task={"model": "gpt2"}, engine="pytorh", serving_mode="offline")  # type: ignore[arg-type]
 
     result = format_validation_error(exc_info.value)
     # Should suggest 'transformers' for the typo 'pytorh'
@@ -146,7 +146,7 @@ def test_format_validation_error_singular_plural(bad_kwargs, expected_str):
     from llenergymeasure.config.models import ExperimentConfig
 
     with pytest.raises(ValidationError) as exc_info:
-        ExperimentConfig(task={"model": "gpt2"}, **bad_kwargs)  # type: ignore[arg-type]
+        ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline", **bad_kwargs)  # type: ignore[arg-type]
 
     result = format_validation_error(exc_info.value)
     assert expected_str in result

@@ -192,7 +192,7 @@ def test_get_field_role_none_for_unannotated():
 
 def test_get_swept_field_paths_single_experiment():
     """Single experiment yields an empty swept set."""
-    exp = ExperimentConfig(task={"model": "gpt2"})
+    exp = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     result = get_swept_field_paths([exp])
     assert result == set()
 
@@ -202,11 +202,13 @@ def test_get_swept_field_paths_dtype_swept():
     exp1 = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "float16"}},
     )
     exp2 = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "bfloat16"}},
     )
     result = get_swept_field_paths([exp1, exp2])
@@ -217,8 +219,12 @@ def test_get_swept_field_paths_nested_field():
     """Two experiments with different n_prompts yield task.dataset.n_prompts in swept."""
     from llenergymeasure.config.models import DatasetConfig
 
-    exp1 = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=10)})
-    exp2 = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)})
+    exp1 = ExperimentConfig(
+        task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=10)}, serving_mode="offline"
+    )
+    exp2 = ExperimentConfig(
+        task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)}, serving_mode="offline"
+    )
     result = get_swept_field_paths([exp1, exp2])
     assert "task.dataset.n_prompts" in result
 
@@ -233,11 +239,13 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     exp_pt = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "float16"}},
     )
     exp_vllm = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"dtype": "float16"}},
     )
     # Must not raise AttributeError

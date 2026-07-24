@@ -36,6 +36,7 @@ class TestM1ExitCriteria:
         from llenergymeasure.config.models import DatasetConfig
 
         config = ExperimentConfig(
+            serving_mode="offline",
             task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=5)},  # small for speed
             engine="transformers",
         )
@@ -70,6 +71,7 @@ class TestM1ExitCriteria:
         from llenergymeasure.config.models import DatasetConfig
 
         config = ExperimentConfig(
+            serving_mode="offline",
             task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=5)},
             engine="transformers",
         )

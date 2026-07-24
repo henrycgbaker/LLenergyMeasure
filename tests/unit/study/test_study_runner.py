@@ -41,7 +41,9 @@ from tests.unit.study.conftest import _make_mock_context, _make_mock_process
 @pytest.fixture
 def basic_config() -> ExperimentConfig:
     """A minimal ExperimentConfig with n_prompts=100."""
-    return ExperimentConfig(task={"model": "test/model"}, engine="transformers")
+    return ExperimentConfig(
+        task={"model": "test/model"}, engine="transformers", serving_mode="offline"
+    )
 
 
 @pytest.fixture
@@ -323,6 +325,7 @@ def _make_ordering_study(
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     exp_b = ExperimentConfig(
         task={
@@ -330,6 +333,7 @@ def _make_ordering_study(
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     ordered = apply_cycles(
         [exp_a, exp_b], n_cycles, ExperimentOrder(experiment_order), "aaaa0000bbbb1111"
@@ -450,10 +454,14 @@ def _capture_gap_positions(
     from llenergymeasure.config.models import DatasetConfig
 
     exp_a = ExperimentConfig(
-        task={"model": "model-a", "dataset": DatasetConfig(n_prompts=10)}, engine="transformers"
+        task={"model": "model-a", "dataset": DatasetConfig(n_prompts=10)},
+        engine="transformers",
+        serving_mode="offline",
     )
     exp_b = ExperimentConfig(
-        task={"model": "model-b", "dataset": DatasetConfig(n_prompts=10)}, engine="transformers"
+        task={"model": "model-b", "dataset": DatasetConfig(n_prompts=10)},
+        engine="transformers",
+        serving_mode="offline",
     )
     ordered = apply_cycles(
         [exp_a, exp_b], n_cycles, ExperimentOrder(experiment_order), "aaaa0000bbbb1111"
@@ -550,6 +558,7 @@ def _make_sigint_study() -> StudyConfig:
                     "dataset": DatasetConfig(n_prompts=10),
                 },
                 engine="transformers",
+                serving_mode="offline",
             )
         ],
         study_name="sigint-test",
@@ -607,6 +616,7 @@ def test_sigint_during_gap_exits_immediately() -> None:
                     "dataset": DatasetConfig(n_prompts=10),
                 },
                 engine="transformers",
+                serving_mode="offline",
             ),
             ExperimentConfig(
                 task={
@@ -614,6 +624,7 @@ def test_sigint_during_gap_exits_immediately() -> None:
                     "dataset": DatasetConfig(n_prompts=10),
                 },
                 engine="transformers",
+                serving_mode="offline",
             ),
         ],
         study_name="gap-interrupt-test",
@@ -684,6 +695,7 @@ def test_worker_no_longer_stub(monkeypatch, tmp_path) -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     fake_result = make_result()
 
@@ -728,6 +740,7 @@ def test_worker_calls_get_engine(monkeypatch, tmp_path) -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
 
     engine_calls: list[str] = []
@@ -792,6 +805,7 @@ def test_multi_cycle_correct_experiment_count() -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     exp_b = ExperimentConfig(
         task={
@@ -799,6 +813,7 @@ def test_multi_cycle_correct_experiment_count() -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
@@ -858,6 +873,7 @@ def test_cycle_counter_increments_per_config_hash() -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     exp_b = ExperimentConfig(
         task={
@@ -865,6 +881,7 @@ def test_cycle_counter_increments_per_config_hash() -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     hash_a = compute_declared_config_hash(exp_a)
     hash_b = compute_declared_config_hash(exp_b)
@@ -1336,6 +1353,7 @@ def test_worker_calls_setpgrp(monkeypatch, tmp_path) -> None:
             "dataset": DatasetConfig(n_prompts=10),
         },
         engine="transformers",
+        serving_mode="offline",
     )
     fake_result = make_result()
 
@@ -2226,6 +2244,7 @@ def _make_multi_experiment_study(n: int = 3) -> StudyConfig:
                 "dataset": DatasetConfig(n_prompts=10),
             },
             engine="transformers",
+            serving_mode="offline",
         )
         for i in range(n)
     ]
@@ -2302,6 +2321,7 @@ def test_circuit_breaker_trips_and_marks_remaining_skipped() -> None:
                 "dataset": DatasetConfig(n_prompts=10),
             },
             engine="transformers",
+            serving_mode="offline",
         )
         for i in range(4)
     ]
@@ -2344,6 +2364,7 @@ def test_circuit_breaker_probe_success_resets_state() -> None:
                 "dataset": DatasetConfig(n_prompts=10),
             },
             engine="transformers",
+            serving_mode="offline",
         )
         for i in range(4)
     ]
@@ -2387,6 +2408,7 @@ def test_wall_clock_timeout_marks_remaining_skipped() -> None:
                 "dataset": DatasetConfig(n_prompts=10),
             },
             engine="transformers",
+            serving_mode="offline",
         )
         for i in range(3)
     ]
@@ -2439,6 +2461,7 @@ def test_fail_fast_aborts_after_first_failure() -> None:
                 "dataset": DatasetConfig(n_prompts=10),
             },
             engine="transformers",
+            serving_mode="offline",
         )
         for i in range(3)
     ]

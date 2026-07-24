@@ -175,12 +175,16 @@ class TestFindObservedCollisions:
         # differed (int 0 vs float 0.0) and this was a false-positive gap fed
         # into the rules-corpus mining loop.
         cfg_int = ExperimentConfig(
-            task={"model": "gpt2"}, engine="vllm", vllm={"engine_params": {}}
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {}},
+            serving_mode="offline",
         )
         cfg_float = ExperimentConfig(
             task={"model": "gpt2"},
             engine="vllm",
             vllm={"engine_params": {"cpu_offload_gb": 0.0}},
+            serving_mode="offline",
         )
         resolved_int = hash_config(build_resolved_view(cfg_int))
         resolved_float = hash_config(build_resolved_view(cfg_float))

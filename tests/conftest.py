@@ -50,7 +50,10 @@ def make_config(**overrides) -> ExperimentConfig:
     dtype = overrides.pop("dtype", None)
 
     task_defaults: dict = {"model": TEST_MODEL}
-    ec_defaults: dict = {"engine": TEST_ENGINE}
+    # serving_mode is required (no model default); default the helper to offline so
+    # the ~300 make_config() call sites need not repeat it. Tests exercising server
+    # mode pass serving_mode="server" plus a server= section explicitly.
+    ec_defaults: dict = {"engine": TEST_ENGINE, "serving_mode": "offline"}
 
     task_overrides: dict = {}
     measurement_overrides: dict = {}
@@ -137,7 +140,10 @@ def make_study(engines: list[str]) -> StudyConfig:
     Shared by the pre-flight tests that only care about which engines a
     study spans (single vs multi-engine runner-elevation paths).
     """
-    experiments = [ExperimentConfig(task={"model": f"model-{e}"}, engine=e) for e in engines]
+    experiments = [
+        ExperimentConfig(task={"model": f"model-{e}"}, engine=e, serving_mode="offline")
+        for e in engines
+    ]
     return StudyConfig(
         experiments=experiments,
         study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),

@@ -38,6 +38,7 @@ Lovelace or newer); on A100 (SM 8.0), use INT8 or W4A16_AWQ instead.
 Minimal:
 
 ```yaml
+serving_mode: offline
 engine: tensorrt
 task:
   model: meta-llama/Llama-2-7b-hf
@@ -51,6 +52,7 @@ runners:
 With the compiled `trt` backend, explicit quantisation, and a larger batch:
 
 ```yaml
+serving_mode: offline
 engine: tensorrt
 task:
   model: meta-llama/Llama-2-7b-hf

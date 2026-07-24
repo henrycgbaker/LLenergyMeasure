@@ -29,6 +29,7 @@ def _config(latency_profiling: bool) -> ExperimentConfig:
         },
         engine="transformers",
         measurement={"latency_profiling": latency_profiling},
+        serving_mode="offline",
     )
 
 

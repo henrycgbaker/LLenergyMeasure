@@ -6,6 +6,8 @@
 
 name: killpg-test
 
+serving_mode: offline
+
 experiments:
   - task:
       model: facebook/opt-125m

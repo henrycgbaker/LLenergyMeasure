@@ -47,7 +47,9 @@ def _load_study(path: Path, cli_overrides: dict | None = None) -> StudyConfig:
 
 def test_load_valid_yaml(tmp_path):
     """Minimal valid YAML loads successfully into ExperimentConfig."""
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
+    )
     config = load_experiment_config(path)
     assert isinstance(config, ExperimentConfig)
     assert config.task.model == "gpt2"
@@ -58,7 +60,7 @@ def test_load_yaml_with_dtype(tmp_path):
     """YAML with per-engine dtype loads correctly (dtype nests under engine_params)."""
     path = _write_yaml(
         tmp_path,
-        "task:\n  model: gpt2\nengine: transformers\n"
+        "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
         "transformers:\n  engine_params:\n    dtype: float16\n",
     )
     config = load_experiment_config(path)
@@ -69,7 +71,7 @@ def test_load_yaml_with_dtype(tmp_path):
 def test_load_yaml_with_pytorch_section(tmp_path):
     """YAML with a nested transformers: engine section loads correctly."""
     yaml_content = (
-        "task:\n  model: gpt2\nengine: transformers\n"
+        "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
         "transformers:\n  engine_params:\n    num_beams: 4\n"
     )
     path = _write_yaml(tmp_path, yaml_content)
@@ -80,7 +82,10 @@ def test_load_yaml_with_pytorch_section(tmp_path):
 
 def test_load_yaml_with_version_field_stripped(tmp_path):
     """Optional 'version' field in YAML is stripped before validation (not ExperimentConfig field)."""
-    path = _write_yaml(tmp_path, "version: 2.0\ntask:\n  model: gpt2\nengine: transformers\n")
+    path = _write_yaml(
+        tmp_path,
+        "version: 2.0\ntask:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n",
+    )
     config = load_experiment_config(path)
     assert config.task.model == "gpt2"
 
@@ -92,7 +97,9 @@ def test_load_yaml_with_version_field_stripped(tmp_path):
 
 def test_load_unknown_yaml_key_raises_config_error(tmp_path):
     """YAML with unknown top-level key raises ConfigError (not ValidationError)."""
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nthis_key_does_not_exist: bad\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\nserving_mode: offline\nthis_key_does_not_exist: bad\n"
+    )
     with pytest.raises(ConfigError, match="Unknown field"):
         load_experiment_config(path)
 
@@ -100,7 +107,9 @@ def test_load_unknown_yaml_key_raises_config_error(tmp_path):
 def test_load_unknown_key_includes_did_you_mean(tmp_path):
     """ConfigError for a close typo includes a 'did you mean' suggestion."""
     # 'engin' is close enough to 'engine' to get a suggestion
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengin: transformers\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\nserving_mode: offline\nengin: transformers\n"
+    )
     with pytest.raises(ConfigError, match="did you mean"):
         load_experiment_config(path)
 
@@ -136,14 +145,18 @@ def test_pydantic_validation_error_passes_through(tmp_path):
 
     dataset.n_prompts=-1 is a valid field path but has an invalid value (ge=1 constraint).
     """
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\n  dataset:\n    n_prompts: -1\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\n  dataset:\n    n_prompts: -1\nserving_mode: offline\n"
+    )
     with pytest.raises(ValidationError):
         load_experiment_config(path)
 
 
 def test_pydantic_validation_error_not_wrapped_in_config_error(tmp_path):
     """ValidationError from field value failures is not wrapped in ConfigError."""
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: totally_invalid_backend\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\nengine: totally_invalid_backend\nserving_mode: offline\n"
+    )
     # engine is a valid field name, but the value is invalid → ValidationError
     with pytest.raises(ValidationError):
         load_experiment_config(path)
@@ -156,14 +169,18 @@ def test_pydantic_validation_error_not_wrapped_in_config_error(tmp_path):
 
 def test_cli_overrides_merged(tmp_path):
     """cli_overrides override YAML values at highest priority."""
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
+    )
     config = load_experiment_config(path, cli_overrides={"task.model": "bert-base"})
     assert config.task.model == "bert-base"
 
 
 def test_cli_overrides_none_values_ignored(tmp_path):
     """None values in cli_overrides are ignored (unset CLI flags)."""
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
+    )
     config = load_experiment_config(
         path, cli_overrides={"task.model": None, "transformers.engine_params.dtype": None}
     )
@@ -174,7 +191,7 @@ def test_cli_overrides_without_file():
     """load_experiment_config with cli_overrides and no file works."""
     config = load_experiment_config(
         path=None,
-        cli_overrides={"task.model": "gpt2", "engine": "transformers"},
+        cli_overrides={"task.model": "gpt2", "engine": "transformers", "serving_mode": "offline"},
     )
     assert config.task.model == "gpt2"
     assert config.engine == "transformers"
@@ -182,7 +199,9 @@ def test_cli_overrides_without_file():
 
 def test_cli_override_dotted_key(tmp_path):
     """Dotted CLI override keys are unflattened into nested dicts."""
-    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
+    path = _write_yaml(
+        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
+    )
     config = load_experiment_config(
         path,
         cli_overrides={"transformers.engine_params.num_beams": 8},
@@ -260,6 +279,7 @@ def test_load_study_config_grid_sweep(tmp_path):
             {
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
+                "serving_mode": "offline",
                 "sweep": {
                     "transformers.engine_params.dtype": ["float16", "bfloat16"],
                     "task.dataset.n_prompts": [50, 100],
@@ -287,15 +307,21 @@ def test_load_study_config_explicit_experiments(tmp_path):
         yaml.dump(
             {
                 "experiments": [
-                    {"task": {"model": "gpt2"}, "engine": "transformers"},
                     {
                         "task": {"model": "gpt2"},
                         "engine": "transformers",
+                        "serving_mode": "offline",
+                    },
+                    {
+                        "task": {"model": "gpt2"},
+                        "engine": "transformers",
+                        "serving_mode": "offline",
                         "transformers": {"engine_params": {"dtype": "float16"}},
                     },
                     {
                         "task": {"model": "gpt2"},
                         "engine": "transformers",
+                        "serving_mode": "offline",
                         "transformers": {"engine_params": {"dtype": "bfloat16"}},
                     },
                 ],
@@ -314,6 +340,7 @@ def test_load_study_config_combined_mode(tmp_path):
             {
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
+                "serving_mode": "offline",
                 "sweep": {
                     "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
@@ -336,6 +363,7 @@ def test_load_study_config_with_execution_block(tmp_path):
             {
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
+                "serving_mode": "offline",
                 "sweep": {
                     "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 },
@@ -361,6 +389,7 @@ def test_load_study_config_cli_overrides(tmp_path):
             {
                 "task": {"model": "gpt2"},
                 "engine": "transformers",
+                "serving_mode": "offline",
                 "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
                 "study_execution": {"n_cycles": 1},
             }
@@ -380,6 +409,7 @@ def test_load_study_config_with_base(tmp_path):
             {
                 "task": {"model": "gpt2", "dataset": {"n_prompts": 75}},
                 "engine": "transformers",
+                "serving_mode": "offline",
             }
         )
     )
@@ -458,6 +488,7 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     sweep_content = {
         "task": {"model": "gpt2"},
         "engine": "transformers",
+        "serving_mode": "offline",
         "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
     }
     study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))
@@ -483,6 +514,7 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
             {
                 "study_name": "dedup_test",
                 "engine": "transformers",
+                "serving_mode": "offline",
                 "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
                 "sweep": {
                     "transformers.sampling_params.do_sample": [True, False],
@@ -496,14 +528,15 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
     # when MeasurementConfig gained the measurement-window fields (methodology,
     # window, warmup-discard, auto-detect), again for the nomenclature sweep
     # (top-level harness: retired; transformers section now nests llem_execution,
-    # so the canonical JSON gains that key and drops the harness one), and again
-    # when the top-level serving_mode field was added (a new defaulted key enters
-    # every experiment's model_dump): new/moved defaulted fields shift the
-    # canonical JSON, so the fingerprint moves while the resolve -> dedup -> hash
+    # so the canonical JSON gains that key and drops the harness one), again
+    # when the top-level serving_mode field was added, and again for the server:
+    # mode namespace: serving_mode became required (no default) and the new
+    # server: key plus the resolved-view mode_section slot both enter the hashed
+    # projection, so the fingerprint moves while the resolve -> dedup -> hash
     # pipeline is unchanged (6 declared -> 4 unique below still holds). A value
     # change with those structural assertions intact is a benign schema-surface
     # shift; a change to the dedup counts is not.
-    assert sc.study_design_hash == "80ee4f8218ba69bc"
+    assert sc.study_design_hash == "342e907db2bcc375"
     # 6 declared configs collapse to 4 unique under resolved-config dedup.
     assert len(sc.experiments) == 4
     assert len(sc.declared_resolved_config_hashes) == 6

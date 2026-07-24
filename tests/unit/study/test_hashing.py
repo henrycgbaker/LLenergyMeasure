@@ -23,9 +23,13 @@ from llenergymeasure.study.hashing import build_resolved_view
 
 
 def _mk_config(**overrides):
-    base = {"task": {"model": "gpt2"}, "engine": "transformers"}
+    base = {"task": {"model": "gpt2"}, "engine": "transformers", "serving_mode": "offline"}
     base.update(overrides)
     return ExperimentConfig(**base)
+
+
+#: A minimal valid server: namespace (one traffic spec) for the server-mode configs.
+_SERVER_SECTION = {"traffic": {"rate": 10, "window_seconds": 60}}
 
 
 class TestCanonicalSerialise:
@@ -206,14 +210,18 @@ class TestServingModeIdentity:
         # keep hashing as before (offline is the only universe today).
         view = ConfigHashView(engine="transformers", task={"model": "gpt2"})
         assert view.serving_mode == "offline"
+        assert view.mode_section == {}
 
     def test_resolved_view_carries_config_serving_mode(self):
         assert build_resolved_view(_mk_config()).serving_mode == "offline"
-        assert build_resolved_view(_mk_config(serving_mode="server")).serving_mode == "server"
+        server = build_resolved_view(_mk_config(serving_mode="server", server=_SERVER_SECTION))
+        assert server.serving_mode == "server"
 
     def test_resolved_offline_vs_server_hash_differ(self):
         offline = hash_config(build_resolved_view(_mk_config(serving_mode="offline")))
-        server = hash_config(build_resolved_view(_mk_config(serving_mode="server")))
+        server = hash_config(
+            build_resolved_view(_mk_config(serving_mode="server", server=_SERVER_SECTION))
+        )
         assert offline != server
 
     def test_observed_offline_vs_server_hash_differ(self):
@@ -224,17 +232,24 @@ class TestServingModeIdentity:
             "observed_sampling_params": {"temperature": 1.0},
         }
         offline = hash_config(build_observed_view(serving_mode="offline", **common))
-        server = hash_config(build_observed_view(serving_mode="server", **common))
+        server = hash_config(
+            build_observed_view(
+                serving_mode="server", mode_section={"traffic": {"rate": 10.0}}, **common
+            )
+        )
         assert offline != server
 
-    def test_resolved_view_differs_only_by_serving_mode_slot(self):
+    def test_resolved_view_differs_by_serving_mode_and_mode_section(self):
         # An offline and an otherwise-identical server config project resolved
-        # views that differ in exactly one slot: serving_mode. Nothing else in
-        # the view shifted when the field was added.
+        # views that differ in exactly two slots: serving_mode (the discriminator)
+        # and mode_section (offline projects {}, server projects its traffic
+        # identity). Nothing else shifts.
         offline = asdict(build_resolved_view(_mk_config(serving_mode="offline")))
-        server = asdict(build_resolved_view(_mk_config(serving_mode="server")))
+        server = asdict(
+            build_resolved_view(_mk_config(serving_mode="server", server=_SERVER_SECTION))
+        )
         differing = {k for k in offline if offline[k] != server[k]}
-        assert differing == {"serving_mode"}
+        assert differing == {"serving_mode", "mode_section"}
 
 
 class TestHashStability:
@@ -262,7 +277,12 @@ class TestIntFloatCanonicalisation:
         # vLLM ``cpu_offload_gb`` is ``Annotated[float | None, ...] = 0``: the
         # int literal default survives a python-mode dump as int 0. Populating
         # engine_params (even empty) materialises the field at its default.
-        cfg = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm={"engine_params": {}})
+        cfg = ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {}},
+            serving_mode="offline",
+        )
         resolved_view = build_resolved_view(cfg)
         assert resolved_view.observed_engine_params["cpu_offload_gb"] == 0
         assert isinstance(resolved_view.observed_engine_params["cpu_offload_gb"], int)
@@ -288,12 +308,16 @@ class TestIntFloatCanonicalisation:
         # Dedup must not over-collapse: a genuinely different offload value keeps
         # a distinct resolved hash.
         cfg_zero = ExperimentConfig(
-            task={"model": "gpt2"}, engine="vllm", vllm={"engine_params": {}}
+            task={"model": "gpt2"},
+            engine="vllm",
+            vllm={"engine_params": {}},
+            serving_mode="offline",
         )
         cfg_two = ExperimentConfig(
             task={"model": "gpt2"},
             engine="vllm",
             vllm={"engine_params": {"cpu_offload_gb": 2.0}},
+            serving_mode="offline",
         )
         assert hash_config(build_resolved_view(cfg_zero)) != hash_config(
             build_resolved_view(cfg_two)

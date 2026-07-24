@@ -87,6 +87,7 @@ def config_cached() -> ExperimentConfig:
         task={"model": "test/model"},
         engine="transformers",
         measurement={"baseline": BaselineConfig(strategy="cached", duration_seconds=30.0)},
+        serving_mode="offline",
     )
 
 
@@ -96,6 +97,7 @@ def config_fresh() -> ExperimentConfig:
         task={"model": "test/model"},
         engine="transformers",
         measurement={"baseline": BaselineConfig(strategy="fresh")},
+        serving_mode="offline",
     )
 
 
@@ -111,6 +113,7 @@ def config_validated() -> ExperimentConfig:
             )
         },
         engine="transformers",
+        serving_mode="offline",
     )
 
 
@@ -260,6 +263,7 @@ class TestStrategyCached:
             task={"model": "test/model"},
             measurement={"baseline": BaselineConfig(strategy="cached", cache_ttl_seconds=3600.0)},
             engine="transformers",
+            serving_mode="offline",
         )
         runner = _make_runner(tmp_path, config)
 
@@ -1015,8 +1019,10 @@ class TestBaselineCacheKey:
             "vllm": RunnerSpec(mode="process", image=None, source="yaml"),
         }
         runner, _ = _make_runner_with_progress(tmp_path, config_cached, runner_specs=specs)
-        tfm_cfg = ExperimentConfig(task={"model": "m"}, engine="transformers")
-        vllm_cfg = ExperimentConfig(task={"model": "m"}, engine="vllm")
+        tfm_cfg = ExperimentConfig(
+            task={"model": "m"}, engine="transformers", serving_mode="offline"
+        )
+        vllm_cfg = ExperimentConfig(task={"model": "m"}, engine="vllm", serving_mode="offline")
 
         k_tfm = runner._baseline_cache_key(tfm_cfg)
         k_vllm = runner._baseline_cache_key(vllm_cfg)

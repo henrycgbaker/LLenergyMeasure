@@ -78,7 +78,7 @@ class TestDockerRunnerIntegration:
         measurement_fields = {"warmup", "baseline", "energy_sampler"}
 
         task_defaults = {"model": "gpt2", "dataset": DatasetConfig(n_prompts=3)}
-        ec_defaults = {"engine": "transformers"}
+        ec_defaults = {"engine": "transformers", "serving_mode": "offline"}
         measurement_defaults = {
             "warmup": WarmupConfig(enabled=False),
             "baseline": BaselineConfig(enabled=False),
@@ -171,6 +171,7 @@ class TestDockerRunnerIntegration:
         from llenergymeasure.study.runner import StudyRunner
 
         config = ExperimentConfig(
+            serving_mode="offline",
             task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=3)},
             engine="transformers",
             measurement={

@@ -47,7 +47,7 @@ def _mk_rule(
 
 
 def _mk_config(**overrides):
-    base = {"task": {"model": "gpt2"}, "engine": "transformers"}
+    base = {"task": {"model": "gpt2"}, "engine": "transformers", "serving_mode": "offline"}
     base.update(overrides)
     return ExperimentConfig(**base)
 
@@ -440,7 +440,9 @@ class TestVllmDormantDedup:
             payload["sampling_params"] = sampling
         if engine is not None:
             payload["engine_params"] = engine
-        return ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm=payload)
+        return ExperimentConfig(
+            task={"model": "gpt2"}, engine="vllm", vllm=payload, serving_mode="offline"
+        )
 
     def test_seed_neg1_and_unset_collapse(self):
         # seed=-1 is dormant (vLLM treats it as "no seed"); it must collapse
@@ -487,7 +489,9 @@ class TestIntFloatDedup:
         payload: dict = {}
         if engine is not None:
             payload["engine_params"] = engine
-        return ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm=payload)
+        return ExperimentConfig(
+            task={"model": "gpt2"}, engine="vllm", vllm=payload, serving_mode="offline"
+        )
 
     def test_int_default_and_explicit_float_collapse_into_one_group(self):
         cfg_int = self._vllm(engine={})  # cpu_offload_gb default -> python int 0

@@ -18,6 +18,7 @@ task:
   max_input_tokens: 32
   max_output_tokens: 8
 engine: vllm
+serving_mode: offline
 measurement:
   # Warmup + baseline disabled: CI proves boot + inference, not measurement
   # quality. Skipping them removes the 30s thermal floor and 5s+ baseline.

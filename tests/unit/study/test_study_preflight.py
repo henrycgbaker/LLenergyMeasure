@@ -24,8 +24,8 @@ def two_engine_study() -> StudyConfig:
     """A minimal multi-engine study (transformers + vllm)."""
     return StudyConfig(
         experiments=[
-            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
-            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers", serving_mode="offline"),
+            ExperimentConfig(task={"model": "m2"}, engine="vllm", serving_mode="offline"),
         ]
     )
 
@@ -60,8 +60,8 @@ def test_single_engine_passes(monkeypatch):
     patch_env(monkeypatch, docker=False)
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
-            ExperimentConfig(task={"model": "m2"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers", serving_mode="offline"),
+            ExperimentConfig(task={"model": "m2"}, engine="transformers", serving_mode="offline"),
         ]
     )
     run_study_preflight(study)  # should not raise
@@ -75,7 +75,9 @@ def test_single_engine_local_pin_not_import_checked(monkeypatch):
     """
     # importable=False would trip the multi-engine import check; single engine must not run it.
     patch_env(monkeypatch, docker=False, importable=False)
-    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="vllm")])
+    study = StudyConfig(
+        experiments=[ExperimentConfig(task={"model": "m1"}, engine="vllm", serving_mode="offline")]
+    )
     specs, overrides = run_study_preflight(study, yaml_runners={"vllm": "process"})
     assert specs["vllm"].mode == "process"
     assert specs["vllm"].source == "yaml"
@@ -145,8 +147,8 @@ def test_multi_engine_explicit_process_missing_package_raises(monkeypatch):
     patch_env(monkeypatch, docker=True, importable=False)
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
-            ExperimentConfig(task={"model": "m2"}, engine="tensorrt"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers", serving_mode="offline"),
+            ExperimentConfig(task={"model": "m2"}, engine="tensorrt", serving_mode="offline"),
         ]
     )
     with pytest.raises(PreFlightError) as exc_info:
@@ -196,7 +198,11 @@ def test_multi_engine_all_local_caution_fires_once(monkeypatch, two_engine_study
 def test_single_engine_no_all_local_caution(monkeypatch, caplog):
     """The all-process caution is a multi-engine concern - single-engine must not fire it."""
     patch_env(monkeypatch, docker=False, importable=True)
-    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(task={"model": "m1"}, engine="transformers", serving_mode="offline")
+        ]
+    )
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
         run_study_preflight(study, yaml_runners={"transformers": "process"})
     assert not [r for r in caplog.records if _ALL_LOCAL_CAUTION in r.message]
@@ -230,7 +236,11 @@ def test_preflight_forwards_runner_context(monkeypatch):
     )
 
     mock_user_config = MagicMock()
-    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(task={"model": "m1"}, engine="transformers", serving_mode="offline")
+        ]
+    )
 
     run_study_preflight(
         study, yaml_runners={"transformers": "process"}, user_config=mock_user_config
@@ -259,7 +269,11 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
         mock_resolve_study_runners,
     )
 
-    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(task={"model": "m1"}, engine="transformers", serving_mode="offline")
+        ]
+    )
 
     run_study_preflight(study)
 

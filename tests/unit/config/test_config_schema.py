@@ -20,14 +20,14 @@ from tests.conftest import make_config
 
 def test_minimal_valid_config():
     """ExperimentConfig(task={'model': 'gpt2'}, engine='transformers') succeeds."""
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     assert config.task.model == "gpt2"
     assert config.engine == "transformers"
 
 
 def test_model_only_uses_pytorch_default():
     """ExperimentConfig with only model= uses engine='transformers' default."""
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     assert config.engine == "transformers"
 
 
@@ -55,7 +55,7 @@ def test_multiple_extra_fields_all_rejected():
 
 def test_field_name_model():
     """v2.0 'model' field (not 'model_name') is accepted."""
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     assert config.task.model == "gpt2"
 
 
@@ -64,6 +64,7 @@ def test_field_name_dtype():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "float16"}},
     )
     assert config.transformers is not None
@@ -74,7 +75,9 @@ def test_field_name_n():
     """v2.0 dataset.n_prompts field (not 'num_input_prompts') is accepted."""
     from llenergymeasure.config.models import DatasetConfig
 
-    config = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)})
+    config = ExperimentConfig(
+        task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)}, serving_mode="offline"
+    )
     assert config.task.dataset.n_prompts == 50
 
 
@@ -104,12 +107,12 @@ def test_top_level_dtype_rejected():
 def test_invalid_engine_raises_validation_error():
     """Unknown engine value raises ValidationError."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(task={"model": "gpt2"}, engine="invalid_backend")
+        ExperimentConfig(task={"model": "gpt2"}, engine="invalid_backend", serving_mode="offline")
 
 
 def test_default_engine_is_pytorch():
     """Default engine is 'transformers' when not specified."""
-    config = ExperimentConfig(task={"model": "gpt2"})
+    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     assert config.engine == "transformers"
 
 
@@ -118,10 +121,10 @@ def test_default_engine_is_pytorch():
 # ---------------------------------------------------------------------------
 
 
-def test_serving_mode_defaults_offline():
-    """serving_mode defaults to 'offline' when not specified."""
-    config = ExperimentConfig(task={"model": "gpt2"})
-    assert config.serving_mode == "offline"
+def test_serving_mode_required_no_default():
+    """serving_mode is required with no default: omitting it fails loudly."""
+    with pytest.raises((ValidationError, ValueError), match="serving_mode is required"):
+        ExperimentConfig(task={"model": "gpt2"})  # type: ignore[call-arg]
 
 
 def test_serving_mode_offline_explicit():
@@ -132,7 +135,11 @@ def test_serving_mode_offline_explicit():
 
 def test_serving_mode_server_accepted():
     """serving_mode='server' is a valid config value (data model admits it)."""
-    config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="server")
+    config = ExperimentConfig(
+        task={"model": "gpt2"},
+        serving_mode="server",
+        server={"traffic": {"rate": 10, "window_seconds": 60}},
+    )
     assert config.serving_mode == "server"
 
 
@@ -142,22 +149,25 @@ def test_serving_mode_typo_rejected():
         ExperimentConfig(task={"model": "gpt2"}, serving_mode="offlien")  # type: ignore[arg-type]
 
 
-def test_omitting_serving_mode_matches_explicit_offline():
-    """An offline config with no serving_mode key dumps identically to explicit offline."""
-    without_key = ExperimentConfig(task={"model": "gpt2"})
-    explicit_offline = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
-    assert without_key.model_dump(mode="json") == explicit_offline.model_dump(mode="json")
+def test_server_section_under_offline_rejected():
+    """A server: section is illegal under serving_mode=offline (mode-section match)."""
+    with pytest.raises((ValidationError, ValueError), match="section provided but"):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            serving_mode="offline",
+            server={"traffic": {"rate": 10, "window_seconds": 60}},
+        )
 
 
 def test_vllm_engine_accepted():
     """engine='vllm' is accepted."""
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", serving_mode="offline")
     assert config.engine == "vllm"
 
 
 def test_tensorrt_engine_accepted():
     """engine='tensorrt' is accepted."""
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="tensorrt")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="tensorrt", serving_mode="offline")
     assert config.engine == "tensorrt"
 
 
@@ -175,6 +185,7 @@ def test_pytorch_config_section_composition():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"device_map": "auto"}},
     )
     assert config.transformers is not None
@@ -190,6 +201,7 @@ def test_transformers_llem_execution_is_a_typed_section_sibling():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={
             "engine_params": {"dtype": "bfloat16"},
             "llem_execution": {"batch_size": 8, "torch_compile": True},
@@ -208,6 +220,7 @@ def test_transformers_llem_execution_torch_compile_options_validated():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"llem_execution": {"torch_compile_mode": "reduce-overhead"}},
         )
 
@@ -217,6 +230,7 @@ def test_retired_top_level_harness_key_rejected_on_construction():
     payload = {
         "task": {"model": "gpt2"},
         "engine": "transformers",
+        "serving_mode": "offline",
         "harness": {"transformers": {"batch_size": 4}},
     }
     with pytest.raises(ValidationError, match="llem_execution"):
@@ -257,6 +271,7 @@ def test_pytorch_section_with_wrong_engine_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="vllm",
+            serving_mode="offline",
             transformers={"batch_size": 4},
         )
 
@@ -267,6 +282,7 @@ def test_vllm_section_with_pytorch_engine_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             vllm={"engine": {"max_num_seqs": 16}},
         )
 
@@ -277,6 +293,7 @@ def test_tensorrt_section_with_wrong_engine_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             tensorrt={"max_batch_size": 8},
         )
 
@@ -296,6 +313,7 @@ def test_transformers_dtype_no_longer_literal_validated():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "fp16"}},
     )
     assert config.transformers.engine_params.dtype == "fp16"
@@ -306,6 +324,7 @@ def test_valid_dtype_float32():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "float32"}},
     )
     assert config.transformers.engine_params.dtype == "float32"
@@ -316,6 +335,7 @@ def test_valid_dtype_float16():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "float16"}},
     )
     assert config.transformers.engine_params.dtype == "float16"
@@ -326,6 +346,7 @@ def test_valid_dtype_bfloat16():
     config = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "bfloat16"}},
     )
     assert config.transformers.engine_params.dtype == "bfloat16"
@@ -347,6 +368,7 @@ def test_passthrough_kwargs_accepted():
     """passthrough_kwargs with non-colliding keys are accepted."""
     config = ExperimentConfig(
         task={"model": "gpt2"},
+        serving_mode="offline",
         passthrough_kwargs={"custom_flag": True, "my_special_param": 42},
     )
     assert config.passthrough_kwargs is not None
@@ -358,6 +380,7 @@ def test_passthrough_kwargs_collision_with_top_level_field_rejected():
     with pytest.raises(ValidationError, match=r"passthrough_kwargs.*collide"):
         ExperimentConfig(
             task={"model": "gpt2"},
+            serving_mode="offline",
             passthrough_kwargs={"task": "override"},  # 'task' is a top-level field
         )
 
@@ -389,32 +412,44 @@ def test_make_config_override():
 
 def test_energy_sampler_default() -> None:
     """energy_sampler defaults to 'auto'."""
-    cfg = ExperimentConfig(task={"model": "gpt2"})
+    cfg = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     assert cfg.measurement.energy_sampler == "auto"
 
 
 def test_energy_sampler_null_disables() -> None:
     """energy_sampler=None disables energy measurement."""
-    cfg = ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": None})
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"}, serving_mode="offline", measurement={"energy_sampler": None}
+    )
     assert cfg.measurement.energy_sampler is None
 
 
 def test_energy_sampler_valid_engines() -> None:
     """All energy_sampler literal values are accepted."""
     for engine in ("auto", "nvml", "zeus", "codecarbon"):
-        cfg = ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": engine})
+        cfg = ExperimentConfig(
+            task={"model": "gpt2"},
+            serving_mode="offline",
+            measurement={"energy_sampler": engine},
+        )
         assert cfg.measurement.energy_sampler == engine
 
 
 def test_energy_sampler_invalid_engine() -> None:
     """Unknown energy_sampler values raise ValidationError."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": "unknown_backend"})
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            serving_mode="offline",
+            measurement={"energy_sampler": "unknown_backend"},
+        )
 
 
 def test_energy_sampler_override() -> None:
     """ExperimentConfig allows overriding energy_sampler."""
-    cfg = ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": "nvml"})
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"}, serving_mode="offline", measurement={"energy_sampler": "nvml"}
+    )
     assert cfg.measurement.energy_sampler == "nvml"
 
 
@@ -536,6 +571,7 @@ def test_vllm_dtype_float32_parses():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"dtype": "float32"}},
     )
     assert cfg.vllm.engine_params.dtype == "float32"
@@ -546,6 +582,7 @@ def test_vllm_fp8_float16_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"dtype": "float16", "quantization": "fp8"}},
     )
     assert cfg.vllm.engine_params.dtype == "float16"
@@ -556,6 +593,7 @@ def test_vllm_fp8_bfloat16_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"dtype": "bfloat16", "quantization": "fp8"}},
     )
     assert cfg.vllm.engine_params.dtype == "bfloat16"
@@ -566,6 +604,7 @@ def test_vllm_non_fp8_float16_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"dtype": "float16", "quantization": "awq"}},
     )
     assert cfg.vllm.engine_params.dtype == "float16"
@@ -576,6 +615,7 @@ def test_vllm_no_quantization_default_dtype_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {}},
     )
     # dtype defaults to "auto" on the generated EngineParams
@@ -598,6 +638,7 @@ def test_vllm_batched_tokens_less_than_model_len_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="vllm",
+            serving_mode="offline",
             vllm={"engine_params": {"max_num_batched_tokens": 512, "max_model_len": 1024}},
         )
 
@@ -607,6 +648,7 @@ def test_vllm_batched_tokens_equal_model_len_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"max_num_batched_tokens": 1024, "max_model_len": 1024}},
     )
     assert cfg.vllm.engine_params.max_num_batched_tokens == 1024
@@ -618,6 +660,7 @@ def test_vllm_batched_tokens_greater_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"max_num_batched_tokens": 2048, "max_model_len": 1024}},
     )
     assert cfg.vllm.engine_params.max_num_batched_tokens == 2048
@@ -628,6 +671,7 @@ def test_vllm_batched_tokens_one_none_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": {"max_num_batched_tokens": 512}},
     )
     assert cfg.vllm.engine_params.max_num_batched_tokens == 512
@@ -645,6 +689,7 @@ def test_pytorch_flash_attn2_float32_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={
                 "engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_2"}
             },
@@ -657,6 +702,7 @@ def test_pytorch_flash_attn3_float32_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={
                 "engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_3"}
             },
@@ -668,6 +714,7 @@ def test_pytorch_flash_attn2_bfloat16_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={
             "engine_params": {"dtype": "bfloat16", "attn_implementation": "flash_attention_2"}
         },
@@ -680,6 +727,7 @@ def test_pytorch_eager_float32_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "float32", "attn_implementation": "eager"}},
     )
     assert cfg.transformers.engine_params.dtype == "float32"
@@ -690,6 +738,7 @@ def test_pytorch_no_attn_impl_float32_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"dtype": "float32"}},
     )
     assert cfg.transformers.engine_params.dtype == "float32"
@@ -712,6 +761,7 @@ def test_trt_dtype_float32_accepted() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
+        serving_mode="offline",
         tensorrt={"engine_params": {"dtype": "float32"}},
     )
     assert cfg.tensorrt.engine_params.dtype == "float32"
@@ -722,6 +772,7 @@ def test_trt_fp8_accepts_float16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
+        serving_mode="offline",
         tensorrt={
             "engine_params": {
                 "backend": "trt",
@@ -738,6 +789,7 @@ def test_trt_fp8_accepts_bfloat16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
+        serving_mode="offline",
         tensorrt={
             "engine_params": {
                 "backend": "trt",
@@ -754,6 +806,7 @@ def test_trt_non_fp8_accepts_float16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
+        serving_mode="offline",
         tensorrt={
             "engine_params": {
                 "backend": "trt",

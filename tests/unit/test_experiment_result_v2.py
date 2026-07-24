@@ -265,7 +265,7 @@ def test_tokens_per_joule_zero_energy(make_result):
 
 def test_compute_declared_config_hash():
     """Known ExperimentConfig produces 16-char hex string."""
-    cfg = ExperimentConfig(task={"model": "gpt2"})
+    cfg = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     h = compute_declared_config_hash(cfg)
     assert len(h) == 16
     assert all(c in "0123456789abcdef" for c in h)
@@ -273,7 +273,7 @@ def test_compute_declared_config_hash():
 
 def test_config_hash_deterministic():
     """Same config always produces same hash."""
-    cfg = ExperimentConfig(task={"model": "gpt2"})
+    cfg = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
     h1 = compute_declared_config_hash(cfg)
     h2 = compute_declared_config_hash(cfg)
     assert h1 == h2
@@ -281,8 +281,8 @@ def test_config_hash_deterministic():
 
 def test_config_hash_different_configs():
     """Different configs produce different hashes."""
-    cfg1 = ExperimentConfig(task={"model": "gpt2"})
-    cfg2 = ExperimentConfig(task={"model": "meta-llama/Llama-2-7b-hf"})
+    cfg1 = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
+    cfg2 = ExperimentConfig(task={"model": "meta-llama/Llama-2-7b-hf"}, serving_mode="offline")
     h1 = compute_declared_config_hash(cfg1)
     h2 = compute_declared_config_hash(cfg2)
     assert h1 != h2
@@ -300,7 +300,12 @@ def test_config_hash_stable_across_json_round_trip():
     looked for. Hashing the json-mode dump makes both sides agree.
     """
     cfg = ExperimentConfig.model_validate(
-        {"engine": "vllm", "task": {"model": "gpt2"}, "vllm": {"engine_params": {}}}
+        {
+            "engine": "vllm",
+            "task": {"model": "gpt2"},
+            "vllm": {"engine_params": {}},
+            "serving_mode": "offline",
+        }
     )
     # cpu_offload_gb is int 0 in memory (defaults are not validated)...
     assert cfg.vllm is not None

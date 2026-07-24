@@ -9,6 +9,9 @@ All fields except `model` are optional and have sensible defaults.
 - [Top-Level Fields](#top-level-fields)
 - [Warmup (`warmup:`)](#warmup-warmup)
 - [Baseline (`baseline:`)](#baseline-baseline)
+- [Server Mode (`server:`)](#server-mode-server)
+- [Server Traffic (`server.traffic:`)](#server-traffic-servertraffic)
+- [Server Traffic SLO (`server.traffic.slo:`)](#server-traffic-slo-servertrafficslo)
 - [Transformers Engine (`transformers:`)](#transformers-engine-transformers)
 - [Transformers Engine Params (`transformers.engine_params:`)](#transformers-engine-params-transformersengine_params)
 - [Transformers Sampling Params (`transformers.sampling_params:`)](#transformers-sampling-params-transformerssampling_params)
@@ -26,12 +29,13 @@ All fields except `model` are optional and have sensible defaults.
 |-------|------|---------|-------------|
 | `task` | TaskConfig | *(see section)* | Task configuration: model, dataset, workload shape |
 | `engine` | Engine | *(see section)* | Inference engine |
-| `serving_mode` | 'offline' | 'server' | `offline` | Serving mode discriminator. 'offline' (the default) measures batch inference over a fixed prompt set; it is the only mode with an execution path today. 'server' selects online serving measurement: it is accepted by the config model but has no execution path yet. A conditioning identity axis - it enters the declared, resolved, and observed config hashes, so an offline config and a server config never deduplicate together. |
+| `serving_mode` | 'offline' | 'server' | *(required)* | Serving mode discriminator (required, no default). 'offline' measures batch inference over a fixed prompt set; it is the only mode with an execution path today. 'server' selects online serving measurement (requires a server: section with a traffic spec). A conditioning identity axis - it enters the declared, resolved, and observed config hashes, so an offline config and a server config never deduplicate together. The matching mode namespace (server:) is legal only under its own mode; a mismatch fails loudly. |
 | `measurement` | MeasurementConfig | *(see section)* | Measurement methodology: warmup, baseline, energy sampling |
 | `sampling_preset` | 'deterministic' | 'standard' | 'creative' | 'factual' | None | `null` | Sampling preset. When set, preset values are merged into the active engine's sampling section at parse time; explicit YAML values take precedence over preset values. |
 | `transformers` | TransformersSection | None | `null` | HuggingFace Transformers engine configuration (only used when engine=transformers) |
 | `vllm` | Config | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
 | `tensorrt` | Config | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
+| `server` | ServerSection | None | `null` | Server-mode namespace: online-serving traffic spec (only used when serving_mode=server) |
 | `passthrough_kwargs` | dict | None | `null` | Extra kwargs passed through to engine at execution time. Keys must not collide with ExperimentConfig top-level fields. |
 
 ### Warmup (`warmup:`)
@@ -57,6 +61,35 @@ All fields except `model` are optional and have sensible defaults.
 | `cache_ttl_seconds` | number | `7200.0` | How long a cached baseline remains valid before re-measurement, in seconds. Only used with strategy='cached' or 'validated'. |
 | `validation_interval` | integer | `5` | Re-validate baseline every N experiments. Only used with strategy='validated'. |
 | `drift_threshold` | number | `0.1` | Power drift threshold (fraction) to trigger re-measurement. Only used with strategy='validated'. |
+
+### Server Mode (`server:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `traffic` | TrafficConfig | *(see section)* | Online-serving traffic specification (rate, arrival, window, concurrency, slo). |
+
+### Server Traffic (`server.traffic:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `rate` | number | *(required)* | Request arrival rate in requests per second (scalar). A rate sweep is written as a study-level list axis (server.traffic.rate: [2, 10]) and expanded to independent per-window configs before hashing. |
+| `arrival` | 'poisson' | 'gamma' | `poisson` | Inter-arrival distribution. 'poisson' (default) is memoryless (CV=1); 'gamma' allows tunable burstiness via the burstiness field. |
+| `burstiness` | number | None | `null` | Coefficient of variation of inter-arrival times for arrival='gamma' (CV=1 reproduces Poisson, >1 is burstier, <1 smoother). Ignored for arrival='poisson'. |
+| `window_seconds` | number | None | `null` | Measurement window as a wall-clock duration in seconds. Exactly one of window_seconds or window_requests must be set. |
+| `window_requests` | integer | None | `null` | Measurement window as a completed-request count. Exactly one of window_seconds or window_requests must be set. |
+| `concurrency_cap` | integer | None | `null` | Maximum in-flight requests. None = uncapped (pure open-loop arrivals). |
+| `slo` | SloConfig | None | `null` | Optional SLO bounds (ttft_ms, tpot_ms at a shared percentile). Classifies results post-hoc; excluded from both config-hash families but stamped in the config sidecar and result provenance. |
+| `seed` | integer | None | `null` | Seed for the arrival-process RNG. None = unseeded (nondeterministic arrivals). |
+| `min_query_count` | integer | None | `null` | Minimum completed requests before the window may close (statistical-adequacy floor). None = governed by the window alone. |
+| `passthrough_kwargs` | dict | *(required)* | Native traffic-generator passthrough options (forwarded verbatim). Empty by default. |
+
+### Server Traffic SLO (`server.traffic.slo:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `ttft_ms` | number | None | `null` | Time-to-first-token SLO bound in milliseconds. None = unbounded. |
+| `tpot_ms` | number | None | `null` | Time-per-output-token SLO bound in milliseconds. None = unbounded. |
+| `percentile` | number | `0.99` | Tail quantile both ttft_ms and tpot_ms are evaluated at (shared). Default 0.99. |
 
 ### Transformers Engine (`transformers:`)
 

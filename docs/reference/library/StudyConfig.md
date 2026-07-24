@@ -66,8 +66,8 @@ from llenergymeasure.config.models import TaskConfig
 
 study = StudyConfig(
     experiments=[
-        ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers"),
-        ExperimentConfig(task=TaskConfig(model="gpt2-medium"), engine="transformers"),
+        ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers", serving_mode="offline"),
+        ExperimentConfig(task=TaskConfig(model="gpt2-medium"), engine="transformers", serving_mode="offline"),
     ],
     study_name="gpt2-family",
 )
@@ -177,7 +177,9 @@ from llenergymeasure import run_study, StudyConfig, ExperimentConfig
 from llenergymeasure.config.models import TaskConfig, ExecutionConfig
 
 study = StudyConfig(
-    experiments=[ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers")],
+    experiments=[
+        ExperimentConfig(task=TaskConfig(model="gpt2"), engine="transformers", serving_mode="offline")
+    ],
     study_name="quick-check",
     study_execution=ExecutionConfig(n_cycles=3, experiment_order="interleave"),
 )

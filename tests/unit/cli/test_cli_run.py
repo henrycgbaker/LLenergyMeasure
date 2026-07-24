@@ -212,7 +212,7 @@ def test_run_validation_error_exits_2(tmp_path):
     """Pydantic ValidationError from a bad field value exits with code 2."""
     # "pytorh" is a misspelled engine - Pydantic will raise ValidationError
     bad_yaml = tmp_path / "experiment.yaml"
-    bad_yaml.write_text("task:\n  model: gpt2\nengine: pytorh\n")
+    bad_yaml.write_text("serving_mode: offline\ntask:\n  model: gpt2\nengine: pytorh\n")
     result = runner.invoke(app, ["run", str(bad_yaml)])
     assert result.exit_code == 2, (
         f"Expected exit 2, got {result.exit_code}. Output: {result.output}"

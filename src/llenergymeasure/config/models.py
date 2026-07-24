@@ -44,6 +44,17 @@ RETIRED_HARNESS_KEY_MSG = (
     "'<engine>.llem_execution:' (e.g. transformers.llem_execution.batch_size)."
 )
 
+#: Migration message for a config that omits ``serving_mode``. The serving regime
+#: is a primary experimental condition (like the engine): an implicit mode would
+#: mislabel the measurement, so the field is required with no default. Surfaced by
+#: the loader's presence check and the ExperimentConfig before-validator so every
+#: construction path reports it.
+SERVING_MODE_REQUIRED_MSG = (
+    "serving_mode is required and has no default: declare 'serving_mode: offline' "
+    "(batch inference over a fixed prompt set) or 'serving_mode: server' (online "
+    "serving measurement, with a server: section)."
+)
+
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 
@@ -442,6 +453,164 @@ class MeasurementConfig(BaseModel):
 
 
 # =============================================================================
+# Server-mode Traffic Configuration (serving_mode=server namespace)
+# =============================================================================
+
+
+class SloConfig(BaseModel):
+    """Service-level-objective bounds for a server-mode run (post-hoc overlay).
+
+    ``ttft_ms`` / ``tpot_ms`` are latency targets and ``percentile`` (shared by
+    both) is the tail quantile they are evaluated at. SLO bounds classify a
+    result without changing the physical experiment: two runs that differ only in
+    their slo bounds are the same measurement, so slo is excluded from BOTH
+    config-hash families (declared and resolved/observed). It stays stamped in the
+    config.json sidecar and the result provenance, so the bounds a run was judged
+    against remain on the record.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    ttft_ms: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Time-to-first-token SLO bound in milliseconds. None = unbounded.",
+    )
+    tpot_ms: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Time-per-output-token SLO bound in milliseconds. None = unbounded.",
+    )
+    percentile: float = Field(
+        default=0.99,
+        gt=0.0,
+        le=1.0,
+        description="Tail quantile both ttft_ms and tpot_ms are evaluated at (shared). Default 0.99.",
+    )
+
+
+class TrafficConfig(BaseModel):
+    """Online-serving traffic specification (server mode).
+
+    Defines the arrival process and load shape for one online-serving measurement:
+    request rate, arrival distribution, measurement window, and optional
+    concurrency cap / SLO bounds. ``rate`` is a SCALAR here - the list sweep form
+    (``server.traffic.rate: [2, 10]``) is study-level grid syntax expanded to
+    independent per-window configs before hashing, so rate-identity (C4) holds per
+    window.
+
+    Every field except ``slo`` is part of the config identity: a sweep over rate,
+    arrival, window, concurrency, seed, or the passthrough dict must produce
+    distinct hashes rather than collapsing under dedup. ``slo`` is a post-hoc
+    overlay and is excluded from both hash families (see :class:`SloConfig`).
+    """
+
+    model_config = {"extra": "forbid"}
+
+    rate: float = Field(
+        ...,
+        gt=0.0,
+        description=(
+            "Request arrival rate in requests per second (scalar). A rate sweep is "
+            "written as a study-level list axis (server.traffic.rate: [2, 10]) and "
+            "expanded to independent per-window configs before hashing."
+        ),
+        json_schema_extra={"display_label": "Request Rate"},
+    )
+    arrival: Literal["poisson", "gamma"] = Field(
+        default="poisson",
+        description=(
+            "Inter-arrival distribution. 'poisson' (default) is memoryless (CV=1); "
+            "'gamma' allows tunable burstiness via the burstiness field."
+        ),
+    )
+    burstiness: float | None = Field(
+        default=None,
+        gt=0.0,
+        description=(
+            "Coefficient of variation of inter-arrival times for arrival='gamma' "
+            "(CV=1 reproduces Poisson, >1 is burstier, <1 smoother). Ignored for "
+            "arrival='poisson'."
+        ),
+    )
+    window_seconds: float | None = Field(
+        default=None,
+        gt=0.0,
+        description=(
+            "Measurement window as a wall-clock duration in seconds. Exactly one of "
+            "window_seconds or window_requests must be set."
+        ),
+    )
+    window_requests: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Measurement window as a completed-request count. Exactly one of "
+            "window_seconds or window_requests must be set."
+        ),
+    )
+    concurrency_cap: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum in-flight requests. None = uncapped (pure open-loop arrivals).",
+    )
+    slo: SloConfig | None = Field(
+        default=None,
+        description=(
+            "Optional SLO bounds (ttft_ms, tpot_ms at a shared percentile). Classifies "
+            "results post-hoc; excluded from both config-hash families but stamped in "
+            "the config sidecar and result provenance."
+        ),
+    )
+    seed: int | None = Field(
+        default=None,
+        description="Seed for the arrival-process RNG. None = unseeded (nondeterministic arrivals).",
+    )
+    min_query_count: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Minimum completed requests before the window may close "
+            "(statistical-adequacy floor). None = governed by the window alone."
+        ),
+    )
+    passthrough_kwargs: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Native traffic-generator passthrough options (forwarded verbatim). Empty by default.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_window(self) -> TrafficConfig:
+        """Exactly one of window_seconds / window_requests must be set."""
+        set_count = int(self.window_seconds is not None) + int(self.window_requests is not None)
+        if set_count != 1:
+            raise ValueError(
+                "traffic.window must set exactly one of window_seconds or window_requests "
+                f"(got {set_count} set)."
+            )
+        return self
+
+
+class ServerSection(BaseModel):
+    """The ``server:`` mode namespace (legal iff serving_mode=server).
+
+    The mode-conditioned namespace for online serving, mirroring the engine
+    namespaces (transformers:/vllm:/tensorrt:). Carries the traffic specification
+    today; the server warmup block joins here in a later slice. Its presence is
+    bound to serving_mode=server by
+    :meth:`ExperimentConfig.validate_mode_section_match` - an offline config
+    carrying a server: section, or a server config without one, fails loudly.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    traffic: TrafficConfig = Field(
+        ...,
+        description="Online-serving traffic specification (rate, arrival, window, concurrency, slo).",
+    )
+
+
+# =============================================================================
 # Main Experiment Configuration (v2.0)
 # =============================================================================
 
@@ -476,6 +645,20 @@ class ExperimentConfig(BaseModel):
             raise ValueError(RETIRED_HARNESS_KEY_MSG)
         return data
 
+    @model_validator(mode="before")
+    @classmethod
+    def _require_serving_mode(cls, data: Any) -> Any:
+        """Fail with a friendly message when ``serving_mode`` is omitted.
+
+        The field is required with no default (R4: the serving regime is a primary
+        experimental condition). Pydantic's bare "Field required" message does not
+        say what to write, so this before-validator raises the migration message
+        naming both modes on every dict-construction path (direct, grid, loader).
+        """
+        if isinstance(data, dict) and "serving_mode" not in data:
+            raise ValueError(SERVING_MODE_REQUIRED_MSG)
+        return data
+
     # Task - what to measure
     task: TaskConfig = Field(..., description="Task configuration: model, dataset, workload shape")
 
@@ -486,17 +669,20 @@ class ExperimentConfig(BaseModel):
         json_schema_extra={"display_label": "Engine"},
     )
 
-    # Serving mode - offline batch (today) vs online serving (arriving with server mode)
+    # Serving mode - offline batch (today) vs online serving (arriving with server mode).
+    # REQUIRED, no default: the serving regime is a primary experimental condition, so
+    # an implicit mode is forbidden (it would mislabel the measurement).
     serving_mode: Literal["offline", "server"] = Field(
-        default="offline",
+        ...,
         description=(
-            "Serving mode discriminator. 'offline' (the default) measures batch "
-            "inference over a fixed prompt set; it is the only mode with an "
-            "execution path today. 'server' selects online serving measurement: it "
-            "is accepted by the config model but has no execution path yet. A "
-            "conditioning identity axis - it enters the declared, resolved, and "
-            "observed config hashes, so an offline config and a server config never "
-            "deduplicate together."
+            "Serving mode discriminator (required, no default). 'offline' measures "
+            "batch inference over a fixed prompt set; it is the only mode with an "
+            "execution path today. 'server' selects online serving measurement "
+            "(requires a server: section with a traffic spec). A conditioning "
+            "identity axis - it enters the declared, resolved, and observed config "
+            "hashes, so an offline config and a server config never deduplicate "
+            "together. The matching mode namespace (server:) is legal only under "
+            "its own mode; a mismatch fails loudly."
         ),
         json_schema_extra={"display_label": "Serving Mode"},
     )
@@ -532,6 +718,14 @@ class ExperimentConfig(BaseModel):
     tensorrt: TensorRTConfig | None = Field(
         default=None,
         description="TensorRT-LLM configuration (only used when engine=tensorrt)",
+    )
+
+    # Mode namespace (None = not that mode). The server: section is the
+    # mode-conditioned namespace for online serving, mirroring the engine
+    # sections; it is legal only when serving_mode=server (validate_mode_section_match).
+    server: ServerSection | None = Field(
+        default=None,
+        description="Server-mode namespace: online-serving traffic spec (only used when serving_mode=server)",
     )
 
     # Escape hatch - explicitly declared for extra="forbid" compatibility
@@ -637,6 +831,23 @@ class ExperimentConfig(BaseModel):
         value = getattr(engine_params, name, None) if engine_params is not None else None
         return value if isinstance(value, dict) and value else None
 
+    def mode_section_identity(self) -> dict[str, Any]:
+        """Identity projection of the active mode namespace for the resolved/observed hash.
+
+        Returns the mode-conditioned namespace's hashed subset: for server mode,
+        all of ``traffic`` EXCEPT ``slo`` (slo is a post-hoc overlay, excluded from
+        identity per O5.3), keyed under ``traffic`` so the projection mirrors the
+        namespace shape (the server warmup block joins here in a later slice).
+        Offline has no mode namespace yet, so it projects an empty dict - an
+        offline config's mode_section slot is ``{}``, unchanged from before this
+        field existed. This is the allowlist half of the dual-family slo exclusion:
+        the declared hash excludes slo by an explicit dump exclude, the
+        resolved/observed views exclude it by simply not projecting it here.
+        """
+        if self.serving_mode == "server" and self.server is not None:
+            return {"traffic": self.server.traffic.model_dump(mode="python", exclude={"slo"})}
+        return {}
+
     # -------------------------------------------------------------------------
     # Pre-validators (run before field parsing)
     # -------------------------------------------------------------------------
@@ -678,6 +889,12 @@ class ExperimentConfig(BaseModel):
 
     _FLASH_ATTENTION_IMPLS: ClassVar[set[str]] = {"flash_attention_2", "flash_attention_3"}
 
+    #: Maps each serving_mode value to its mode-conditioned namespace attribute.
+    #: Only 'server' has a namespace today; 'offline' has none (its warmup block
+    #: arrives in a later slice), so an offline config needs no mode section.
+    #: Structurally mirrors ALL_ENGINES for validate_mode_section_match.
+    _MODE_SECTIONS: ClassVar[dict[str, str]] = {"server": "server"}
+
     @model_validator(mode="after")
     def validate_engine_section_match(self) -> ExperimentConfig:
         """Engine section must match the engine field.
@@ -692,6 +909,38 @@ class ExperimentConfig(BaseModel):
                     f"{engine}: config section provided but engine={self.engine!r}. "
                     f"Remove the {engine}: section or set engine: {engine}."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_mode_section_match(self) -> ExperimentConfig:
+        """Mode namespace must match the serving_mode field (mode's engine-match analogue).
+
+        Mode is the second conditioning axis and gets the same grammar the engine
+        axis has: a discriminator (serving_mode), a same-named top-level section
+        (server:), and this match validator. Two checks make illegal states
+        unrepresentable rather than merely discouraged:
+
+        - A mode section present under the wrong serving_mode is an error (the
+          researcher pasted the wrong block) - e.g. a server: section with
+          serving_mode=offline.
+        - The active serving_mode must carry its namespace when one exists: a
+          server config with no server: section (hence no traffic.rate) is
+          rejected, naming what is missing. offline has no mandatory namespace yet.
+        """
+        for mode, section_attr in self._MODE_SECTIONS.items():
+            if getattr(self, section_attr) is not None and self.serving_mode != mode:
+                raise ValueError(
+                    f"{section_attr}: config section provided but "
+                    f"serving_mode={self.serving_mode!r}. Remove the {section_attr}: "
+                    f"section or set serving_mode: {mode}."
+                )
+        active_section = self._MODE_SECTIONS.get(self.serving_mode)
+        if active_section is not None and getattr(self, active_section) is None:
+            raise ValueError(
+                f"serving_mode={self.serving_mode!r} requires a {active_section}: section "
+                f"(with a traffic spec including traffic.rate). Add the {active_section}: "
+                "section or set serving_mode: offline."
+            )
         return self
 
     @model_validator(mode="after")

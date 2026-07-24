@@ -499,7 +499,9 @@ def test_run_preflight_collects_hardware_errors(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
-    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
+    config = ExperimentConfig(
+        task={"model": "test-model"}, engine="tensorrt", serving_mode="offline"
+    )
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -529,7 +531,9 @@ def test_run_preflight_passes_when_hardware_check_empty(monkeypatch: pytest.Monk
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
-    config = ExperimentConfig(task={"model": "test-model"}, engine="transformers")
+    config = ExperimentConfig(
+        task={"model": "test-model"}, engine="transformers", serving_mode="offline"
+    )
     run_preflight(config)
 
 
@@ -551,7 +555,9 @@ def test_run_preflight_handles_engine_import_error(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", raise_error)
 
-    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
+    config = ExperimentConfig(
+        task={"model": "test-model"}, engine="tensorrt", serving_mode="offline"
+    )
     # Should not raise - the try/except in preflight catches ImportError from get_engine
     run_preflight(config)
 
@@ -576,7 +582,9 @@ def test_run_preflight_hardware_errors_counted_correctly(
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
-    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
+    config = ExperimentConfig(
+        task={"model": "test-model"}, engine="tensorrt", serving_mode="offline"
+    )
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -661,7 +669,9 @@ def test_run_preflight_checkpoint_compat_mock_plugin(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakePlugin())
 
-    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
+    config = ExperimentConfig(
+        task={"model": "test-model"}, engine="tensorrt", serving_mode="offline"
+    )
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 

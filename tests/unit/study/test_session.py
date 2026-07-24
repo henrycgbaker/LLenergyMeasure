@@ -43,6 +43,7 @@ def _make_config() -> ExperimentConfig:
         task={"model": "test/model"},
         engine="transformers",
         measurement={"baseline": {"enabled": False}},
+        serving_mode="offline",
     )
 
 

@@ -16,6 +16,9 @@
 
 study_name: tutorial-multi-engine
 
+# Serving mode is required (no default): this tutorial is offline batch inference.
+serving_mode: offline
+
 runners:
   transformers: container
   vllm: container

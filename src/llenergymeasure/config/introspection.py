@@ -464,6 +464,16 @@ _MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
     },
     {
         "engine": "all",
+        "validator": "validate_mode_section_match",
+        "combination": "mode section mismatch",
+        "reason": "The mode namespace must match the serving_mode field: a server: section "
+        "is legal only under serving_mode=server, and serving_mode=server requires a "
+        "server: section with a traffic spec (validate_mode_section_match).",
+        "resolution": "Ensure the server: section matches serving_mode; add a server: "
+        "section (with traffic.rate) for serving_mode=server, or set serving_mode: offline.",
+    },
+    {
+        "engine": "all",
         "validator": "validate_passthrough_kwargs_no_collision",
         "combination": "passthrough_kwargs key collision",
         "reason": "passthrough_kwargs keys must not collide with ExperimentConfig "

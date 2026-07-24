@@ -23,6 +23,7 @@ from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.grid import SkippedConfig, expand_grid
 from llenergymeasure.config.models import (
     RETIRED_HARNESS_KEY_MSG,
+    SERVING_MODE_REQUIRED_MSG,
     ExecutionConfig,
     ExperimentConfig,
     OutputConfig,
@@ -94,6 +95,13 @@ def load_experiment_config(
     if "harness" in merged:
         context = f" (in {path})" if path else ""
         raise ConfigError(RETIRED_HARNESS_KEY_MSG + context)
+
+    # Required serving_mode (no default): fail with the friendly migration message
+    # naming both modes, with file context, rather than Pydantic's bare
+    # "Field required".
+    if "serving_mode" not in merged:
+        context = f" (in {path})" if path else ""
+        raise ConfigError(SERVING_MODE_REQUIRED_MSG + context)
 
     # Collect unknown field errors before handing to Pydantic
     known_fields = set(ExperimentConfig.model_fields.keys())

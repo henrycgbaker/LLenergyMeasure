@@ -57,7 +57,12 @@ def test_rehomed_rule_rejects_violating_config(engine, section, field, value, fr
     """A violating value on the canonical nested path is rejected with the rule id."""
     section_payload = {section: {field: value}}
     with pytest.raises(ValueError, match=fragment):
-        ExperimentConfig(task={"model": "gpt2"}, engine=engine, **{engine: section_payload})
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine=engine,
+            serving_mode="offline",
+            **{engine: section_payload},
+        )
 
 
 def test_in_range_value_is_accepted():
@@ -65,6 +70,7 @@ def test_in_range_value_is_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={
             "engine_params": {"tensor_parallel_size": 2, "pipeline_parallel_size": 1},
             "sampling_params": {"presence_penalty": 0.5, "top_p": 0.9, "min_p": 0.0},
@@ -92,6 +98,7 @@ def test_cross_section_num_beams_lt_num_return_sequences_fires():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={
                 "engine_params": {"num_beams": 2},
                 "sampling_params": {"num_return_sequences": 4},
@@ -125,6 +132,7 @@ def test_cross_section_num_return_sequences_gt_num_beams_fires():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={
                 "engine_params": {"num_beams": 4},
                 "sampling_params": {"num_return_sequences": 5},
@@ -142,6 +150,7 @@ def test_cross_section_non_divisor_return_count_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={
             "engine_params": {"num_beams": 4},
             "sampling_params": {"num_return_sequences": 3},
@@ -178,6 +187,7 @@ def test_non_numeric_compile_config_no_uncaught_typeerror(compile_config):
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"sampling_params": {"compile_config": compile_config}},
         )
     # The bug was an uncaught TypeError from the mined ``{">": 0}`` bound; the
@@ -191,6 +201,7 @@ def test_numeric_bound_still_fires_after_incomparable_guard():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"sampling_params": {"min_new_tokens": 0}},
         )
 
@@ -222,6 +233,7 @@ def test_legitimate_transformers_value_validates_cleanly(section, field, value):
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={section: {field: value}},
     )
     assert getattr(getattr(cfg, "active_" + section)(), field) == value
@@ -235,7 +247,7 @@ def test_bare_vllm_config_has_no_phantom_dormant_observations():
     every config. A bare vllm config must now yield zero dormant observations
     from those rules.
     """
-    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
+    cfg = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", serving_mode="offline")
     purged = {
         "vllm_samplingparams_dormant_bad_words_unset_true",
         "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
@@ -263,6 +275,7 @@ def test_nested_compilation_config_bound_fires():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="vllm",
+            serving_mode="offline",
             vllm={
                 "engine_params": {
                     "compilation_config": {
@@ -293,6 +306,7 @@ def test_nested_compilation_config_bound_silent_when_not_violated(compilation_co
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
+        serving_mode="offline",
         vllm={"engine_params": engine_params},
     )
     assert cfg.engine == "vllm"
@@ -322,6 +336,7 @@ def test_early_stopping_never_accepted_public_path():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"early_stopping": "never"}},
     )
     assert cfg.transformers.engine_params.early_stopping == "never"
@@ -334,6 +349,7 @@ def test_early_stopping_never_accepted_via_loader():
         cli_overrides={
             "task.model": "gpt2",
             "engine": "transformers",
+            "serving_mode": "offline",
             "transformers.engine_params.early_stopping": "never",
         },
     )
@@ -345,6 +361,7 @@ def test_early_stopping_never_survives_roundtrip():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"early_stopping": "never"}},
     )
     reloaded = ExperimentConfig(**cfg.model_dump(mode="json"))
@@ -387,6 +404,7 @@ def test_three_never_rules_silent_on_constructed_never_config():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
+        serving_mode="offline",
         transformers={"engine_params": {"early_stopping": "never"}},
     )
     rules = EngineRulesLoader().load_rules("transformers").rules
@@ -406,5 +424,6 @@ def test_pydantic_union_rejects_sometimes_public_path():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
+            serving_mode="offline",
             transformers={"engine_params": {"early_stopping": "sometimes"}},
         )

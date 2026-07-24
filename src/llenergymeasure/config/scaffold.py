@@ -143,6 +143,9 @@ def render_study_bounds(
     lines.append("")
     lines.append(f"study_name: {_yaml_scalar(_study_name(model, engines))}")
     lines.append("")
+    lines.append("# Serving mode (required): 'offline' (batch) or 'server' (online serving).")
+    lines.append("serving_mode: offline")
+    lines.append("")
     lines.append("task:")
     lines.append(f"  model: {_yaml_scalar(model)}")
     if len(engines) == 1:
@@ -229,6 +232,7 @@ def _experiment_block(
     overrides, sub_models = _load_overrides_and_models(engine, overrides_root)
     lines = [
         f"  - engine: {engine}",
+        "    serving_mode: offline  # required: 'offline' (batch) or 'server' (online serving)",
         "    task:",
         f"      model: {_yaml_scalar(model)}",
         f"    {engine}:",

@@ -62,6 +62,9 @@ _SECTION_ORDER = [
     ("top-level", "Top-Level Fields"),
     ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
+    ("server", "Server Mode (`server:`)"),
+    ("server_traffic", "Server Traffic (`server.traffic:`)"),
+    ("server_traffic_slo", "Server Traffic SLO (`server.traffic.slo:`)"),
     ("transformers", "Transformers Engine (`transformers:`)"),
     ("transformers_engine_params", "Transformers Engine Params (`transformers.engine_params:`)"),
     (
@@ -86,6 +89,12 @@ _SECTION_ORDER = [
 _DEF_TO_SECTION: dict[str, str] = {
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
+    # Server mode namespace (serving_mode=server): the mode-conditioned section,
+    # rendered like the engine sections. ServerSection / TrafficConfig / SloConfig
+    # are hand-written (unique names), so pydantic emits them as simple $def keys.
+    "ServerSection": "server",
+    "TrafficConfig": "server_traffic",
+    "SloConfig": "server_traffic_slo",
     # TransformersSection / TransformersLlemExecution are hand-written (unique names),
     # so pydantic emits them as simple $def keys, not module-qualified ones.
     "TransformersSection": "transformers",

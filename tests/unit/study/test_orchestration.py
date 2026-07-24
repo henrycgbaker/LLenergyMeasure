@@ -22,7 +22,7 @@ _WARN_TARGET = "llenergymeasure.utils.env_config.warn_on_gpu_selector_conflict"
 def _study(gpu_indices: list[int] | None) -> StudyConfig:
     """A minimal study whose only relevant field is study_execution.gpu_indices."""
     return StudyConfig(
-        experiments=[ExperimentConfig(task={"model": "m1"}, engine="vllm")],
+        experiments=[ExperimentConfig(task={"model": "m1"}, engine="vllm", serving_mode="offline")],
         study_execution={"gpu_indices": gpu_indices},
     )
 

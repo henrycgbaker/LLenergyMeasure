@@ -99,7 +99,7 @@ def test_run_single_experiment_calls_gpu_memory_check(monkeypatch, tmp_path):
 
     mock_manifest = MagicMock(spec=ManifestWriter)
 
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     study = StudyConfig(experiments=[config])
 
     run_single_experiment(study, mock_manifest, tmp_path, runner_specs=None)
@@ -141,7 +141,7 @@ def test_single_experiment_passes_resolved_config_hash(monkeypatch, tmp_path):
     from llenergymeasure.study.manifest import ManifestWriter
 
     mock_manifest = MagicMock(spec=ManifestWriter)
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     study = StudyConfig(experiments=[config])
 
     run_single_experiment(study, mock_manifest, tmp_path, runner_specs=None)
@@ -180,7 +180,7 @@ def test_single_experiment_writes_runtime_observations(monkeypatch, tmp_path):
     from llenergymeasure.study.manifest import ManifestWriter
 
     mock_manifest = MagicMock(spec=ManifestWriter)
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     study = StudyConfig(experiments=[config])
 
     run_single_experiment(study, mock_manifest, tmp_path, runner_specs=None)
@@ -238,7 +238,7 @@ def test_config_sidecar_materialises_without_timeseries(monkeypatch, tmp_path):
     )
 
     mock_manifest = MagicMock(spec=ManifestWriter)
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     study = StudyConfig(experiments=[config], output={"save_timeseries": False})
     resolution_log = {"task.model": {"effective": "gpt2", "source": "yaml"}}
     resolution_logs = {compute_declared_config_hash(config): resolution_log}
@@ -289,7 +289,7 @@ def test_local_single_failure_persists_traceback(monkeypatch, tmp_path):
     )
 
     mock_manifest = MagicMock(spec=ManifestWriter)
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     study = StudyConfig(experiments=[config])
     config_hash = compute_declared_config_hash(config)
 
@@ -338,7 +338,7 @@ def test_docker_single_failure_marks_log_file(monkeypatch, tmp_path):
     )
 
     mock_manifest = MagicMock(spec=ManifestWriter)
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
     study = StudyConfig(experiments=[config])
     spec = RunnerSpec(mode="container", image="img:test", source="yaml")
 

@@ -32,6 +32,7 @@ the NVIDIA Container Toolkit are installed before proceeding.
 Create `experiment.yaml`:
 
 ```yaml
+serving_mode: offline
 engine: vllm
 task:
   model: gpt2
