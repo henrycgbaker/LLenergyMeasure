@@ -12,10 +12,10 @@ imports ``environment``; a shared low-level module is the only home that avoids
 an import cycle. The one model is serialised into BOTH per-experiment bundle
 artefacts (dual serialisation): ``result.json`` (via
 ``ExperimentResult.runner_provenance``, keeping result.json self-contained) and
-``environment.json`` (via ``EnvironmentSnapshot.runner``). It carries the
+``system.json`` (via ``EnvironmentSnapshot.runner``). It carries the
 superset of the fields the two sinks used to split across the retired
 ``RunnerEnvironment`` sibling: ``image_source`` (the result.json image-resolution
-provenance) and ``image_digest`` (the environment.json reproducibility anchor).
+provenance) and ``image_digest`` (the system.json reproducibility anchor).
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ class RunnerProvenance(BaseModel):
     """How an experiment was executed - host process or container.
 
     Persisted reproducibility metadata mirroring the fields of the config-layer
-    ``RunnerSpec``. Serialised into both result.json and environment.json.
+    ``RunnerSpec``. Serialised into both result.json and system.json.
     """
 
     mode: Literal["process", "container"] = Field(
@@ -56,7 +56,7 @@ class RunnerProvenance(BaseModel):
         default=None,
         description="Resolved image registry digest ('repo@sha256:...'). None for process runs "
         "or when the digest could not be resolved (locally-built image, docker unavailable, "
-        "inspect error) - resolution is best-effort and never fails a run. The environment.json "
+        "inspect error) - resolution is best-effort and never fails a run. The system.json "
         "reproducibility anchor pinning the full software stack.",
     )
 

@@ -343,7 +343,7 @@ def resolve_image_digest(image: str) -> str | None:
     Reads ``docker image inspect``'s first ``RepoDigests`` entry - the registry
     content digest that pins the full image (base image, CUDA, torch, patches)
     and is portable across hosts, making it the reproducibility anchor recorded
-    in ``environment.json``.
+    in ``system.json``.
 
     Returns None (never raises) when the digest cannot be resolved: docker
     missing, the image not pulled, a locally-built image with no registry

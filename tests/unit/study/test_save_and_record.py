@@ -20,7 +20,7 @@ from llenergymeasure.study.runner import (
     _provenance_from_spec,
     _save_and_record,
 )
-from tests.conftest import write_container_environment_sidecar
+from tests.conftest import write_container_system_sidecar
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -371,16 +371,16 @@ def _make_host_snapshot():
     )
 
 
-def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
-    """Under docker dispatch, the rescued in-container environment.json is
-    preferred over the host snapshot for the persisted environment.json."""
+def test_docker_rescued_system_overrides_host(tmp_path: Path) -> None:
+    """Under docker dispatch, the rescued in-container system.json is
+    preferred over the host snapshot for the persisted system.json."""
     import json
 
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    # Container rescued environment.json lives in the artefact (ts_source) dir.
-    write_container_environment_sidecar(tmp_path / "environment.json")
+    # Container rescued system.json lives in the artefact (ts_source) dir.
+    write_container_system_sidecar(tmp_path / "system.json")
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
@@ -403,7 +403,7 @@ def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
     )
 
     assert len(result_files) == 1
-    env_dest = Path(result_files[0]).parent / "environment.json"
+    env_dest = Path(result_files[0]).parent / "system.json"
     assert env_dest.exists()
     payload = json.loads(env_dest.read_text())
     # Container values must win over the host snapshot written first.
@@ -411,12 +411,12 @@ def test_docker_rescued_environment_overrides_host(tmp_path: Path) -> None:
     assert payload["cuda_version"] == "12.4", "container cuda must win, not host null"
     assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
     # The rescued file in the staging dir must be consumed (moved).
-    assert not (tmp_path / "environment.json").exists()
+    assert not (tmp_path / "system.json").exists()
 
 
-def test_docker_without_rescued_environment_warns(tmp_path: Path, caplog) -> None:
+def test_docker_without_rescued_system_warns(tmp_path: Path, caplog) -> None:
     """A docker run that lands without a rescued snapshot logs a loud warning
-    (the persisted environment.json would carry host, not container, values)."""
+    (the persisted system.json would carry host, not container, values)."""
     import logging
 
     study_dir = tmp_path / "study"
@@ -436,16 +436,16 @@ def test_docker_without_rescued_environment_warns(tmp_path: Path, caplog) -> Non
             result_files,
             model_name="gpt2",
             engine="transformers",
-            ts_source_dir=tmp_path,  # no environment.json inside
+            ts_source_dir=tmp_path,  # no system.json inside
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
                 mode="container", image="img:1.0", source="yaml", image_source="registry"
             ),
         )
 
-    assert any(
-        "No in-container environment.json rescued" in rec.message for rec in caplog.records
-    ), "docker dispatch without a rescued snapshot must warn loudly"
+    assert any("No in-container system.json rescued" in rec.message for rec in caplog.records), (
+        "docker dispatch without a rescued snapshot must warn loudly"
+    )
 
 
 def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) -> None:
@@ -470,20 +470,20 @@ def test_local_run_uses_host_snapshot_without_warning(tmp_path: Path, caplog) ->
             result_files,
             model_name="gpt2",
             engine="transformers",
-            ts_source_dir=tmp_path,  # local temp dir never holds environment.json
+            ts_source_dir=tmp_path,  # local temp dir never holds system.json
             environment_snapshot=_make_host_snapshot(),
             runner_provenance=RunnerProvenance(
                 mode="process", image=None, source=SOURCE_IMPLICIT, image_source=None
             ),
         )
 
-    env_dest = Path(result_files[0]).parent / "environment.json"
+    env_dest = Path(result_files[0]).parent / "system.json"
     assert env_dest.exists()
     payload = json.loads(env_dest.read_text())
     # Local: the host snapshot is authoritative and persisted as-is.
     assert payload["python_version"] == "3.12.12"
     assert not any(
-        "No in-container environment.json rescued" in rec.message for rec in caplog.records
+        "No in-container system.json rescued" in rec.message for rec in caplog.records
     ), "local dispatch must not emit the docker rescue warning"
 
 
@@ -542,10 +542,8 @@ def test_config_sidecar_rescue_permission_error_warns(tmp_path: Path, monkeypatc
     assert not config_sidecar_src.exists()
 
 
-def test_environment_sidecar_rescue_permission_error_warns(
-    tmp_path: Path, monkeypatch, caplog
-) -> None:
-    """An environment.json sidecar the host cannot read warns loudly.
+def test_system_sidecar_rescue_permission_error_warns(tmp_path: Path, monkeypatch, caplog) -> None:
+    """An system.json sidecar the host cannot read warns loudly.
 
     Same root cause as the config.json path: a 0600 root-owned rescued sidecar
     raised PermissionError that was swallowed at debug. Simulated by patching
@@ -556,8 +554,8 @@ def test_environment_sidecar_rescue_permission_error_warns(
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    # A rescued environment.json is present but "unreadable".
-    (tmp_path / "environment.json").write_text("{}", encoding="utf-8")
+    # A rescued system.json is present but "unreadable".
+    (tmp_path / "system.json").write_text("{}", encoding="utf-8")
 
     def _raise_permission(_path):
         raise PermissionError(13, "Permission denied")
@@ -587,12 +585,12 @@ def test_environment_sidecar_rescue_permission_error_warns(
 
     warnings = [rec.message for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert any(
-        "Failed to rescue in-container environment.json" in m and "Permission denied" in m
+        "Failed to rescue in-container system.json" in m and "Permission denied" in m
         for m in warnings
-    ), f"unreadable environment.json must warn loudly with the reason; got {warnings}"
+    ), f"unreadable system.json must warn loudly with the reason; got {warnings}"
     # result.json still lands; the unreadable staging file is cleaned up.
     assert len(result_files) == 1
-    assert not (tmp_path / "environment.json").exists()
+    assert not (tmp_path / "system.json").exists()
 
 
 def test_provenance_from_spec_none_defaults_to_implicit() -> None:
@@ -678,12 +676,12 @@ def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Runner block (environment.json)
+# Runner block (system.json)
 # ---------------------------------------------------------------------------
 
 
 def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
-    """Local dispatch: the runner block is written into environment.json via the host snapshot."""
+    """Local dispatch: the runner block is written into system.json via the host snapshot."""
     import json
 
     study_dir = tmp_path / "study"
@@ -702,14 +700,14 @@ def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
         result_files,
         model_name="gpt2",
         engine="transformers",
-        ts_source_dir=tmp_path,  # local temp dir never holds environment.json
+        ts_source_dir=tmp_path,  # local temp dir never holds system.json
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
             mode="process", image=None, source="default", image_source=None
         ),
     )
 
-    env_dest = Path(result_files[0]).parent / "environment.json"
+    env_dest = Path(result_files[0]).parent / "system.json"
     payload = json.loads(env_dest.read_text())
     assert payload["bundle_version"] == "2.0"
     assert payload["runner"] == {
@@ -724,7 +722,7 @@ def test_save_and_record_writes_local_runner_block(tmp_path: Path) -> None:
 def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> None:
     """Docker dispatch: the runner block (image + digest) is patched into the rescued env.json.
 
-    The container writes environment.json without runner facts the host alone
+    The container writes system.json without runner facts the host alone
     knows (image ref, registry digest, source), so the host patches them into
     the rescued snapshot while the container's hardware values still win.
     """
@@ -733,7 +731,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    write_container_environment_sidecar(tmp_path / "environment.json")
+    write_container_system_sidecar(tmp_path / "system.json")
 
     result = _make_result(with_timeseries=False)
     manifest = MagicMock()
@@ -759,7 +757,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
         ),
     )
 
-    env_dest = Path(result_files[0]).parent / "environment.json"
+    env_dest = Path(result_files[0]).parent / "system.json"
     payload = json.loads(env_dest.read_text())
     # Runner block (host-only facts) patched into the rescued snapshot.
     assert payload["runner"] == {
@@ -775,7 +773,7 @@ def test_save_and_record_docker_rescue_patches_runner_block(tmp_path: Path) -> N
     assert payload["python_version"] == "3.10.14"
     assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
     # Rescued staging file consumed.
-    assert not (tmp_path / "environment.json").exists()
+    assert not (tmp_path / "system.json").exists()
 
 
 def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Path) -> None:
@@ -798,7 +796,7 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
         result_files,
         model_name="gpt2",
         engine="transformers",
-        ts_source_dir=tmp_path,  # no environment.json rescued
+        ts_source_dir=tmp_path,  # no system.json rescued
         environment_snapshot=_make_host_snapshot(),
         runner_provenance=RunnerProvenance(
             mode="container",
@@ -809,7 +807,7 @@ def test_save_and_record_docker_without_rescue_writes_runner_block(tmp_path: Pat
         ),
     )
 
-    env_dest = Path(result_files[0]).parent / "environment.json"
+    env_dest = Path(result_files[0]).parent / "system.json"
     payload = json.loads(env_dest.read_text())
     # Runner block present even in the degraded no-rescue case (host snapshot carries it).
     assert payload["runner"]["mode"] == "container"
@@ -849,12 +847,12 @@ def test_provenance_from_spec_docker_digest_failure_is_none() -> None:
 def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
     tmp_path: Path, monkeypatch, caplog
 ) -> None:
-    """If the rescue write raises, the host-written environment.json (already carrying
+    """If the rescue write raises, the host-written system.json (already carrying
     the runner block via the host snapshot) survives and a loud warning fires.
 
     Covers the combination the earlier permission-error test omitted: rescue fails
     *and* a runner provenance block is present. The runner block must not be lost - it was
-    attached to the host snapshot and written by save_environment before the rescue.
+    attached to the host snapshot and written by save_system before the rescue.
     """
     import json
     import logging
@@ -862,8 +860,8 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    # A rescued environment.json is present but "unreadable" (0600 root simulated).
-    (tmp_path / "environment.json").write_text("{}", encoding="utf-8")
+    # A rescued system.json is present but "unreadable" (0600 root simulated).
+    (tmp_path / "system.json").write_text("{}", encoding="utf-8")
 
     def _raise_permission(_path):
         raise PermissionError(13, "Permission denied")
@@ -897,14 +895,14 @@ def test_save_and_record_docker_rescue_failure_keeps_host_runner_block(
 
     # Rescue failure warned loudly (never silent).
     warnings = [rec.message for rec in caplog.records if rec.levelno >= logging.WARNING]
-    assert any("Failed to rescue in-container environment.json" in m for m in warnings), (
+    assert any("Failed to rescue in-container system.json" in m for m in warnings), (
         f"rescue failure must warn loudly; got {warnings}"
     )
     # result.json still lands.
     assert len(result_files) == 1
-    # The host-written environment.json survived with its runner block intact
-    # (attached to the host snapshot and written by save_environment before rescue).
-    env_dest = Path(result_files[0]).parent / "environment.json"
+    # The host-written system.json survived with its runner block intact
+    # (attached to the host snapshot and written by save_system before rescue).
+    env_dest = Path(result_files[0]).parent / "system.json"
     payload = json.loads(env_dest.read_text())
     assert payload["runner"] == {
         "mode": "container",

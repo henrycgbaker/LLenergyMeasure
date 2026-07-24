@@ -26,8 +26,8 @@ from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import RUNNER_CONTAINER
 from llenergymeasure.domain.bundle_artefacts import (
-    ENVIRONMENT_FILENAME,
     STUDY_ARTEFACTS_DIR,
+    SYSTEM_FILENAME,
     SYSTEM_OVERRIDES_FILENAME,
 )
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
@@ -314,7 +314,7 @@ def _write_study_artefacts(
         except OSError as exc:
             logger.warning("Failed to write system_overrides.json: %s", exc)
 
-    # Write study-level environment.json (installed_packages + software constants).
+    # Write study-level system.json (installed_packages + software constants).
     try:
         from llenergymeasure.harness.environment import collect_software_environment
 
@@ -324,11 +324,11 @@ def _write_study_artefacts(
             "study_name": _study_name,
             **sw_env,
         }
-        env_path = artefacts_dir / ENVIRONMENT_FILENAME
+        env_path = artefacts_dir / SYSTEM_FILENAME
         env_path.write_text(json.dumps(study_env, indent=2), encoding="utf-8")
-        logger.info("Study-level environment written to %s", env_path)
+        logger.info("Study-level system snapshot written to %s", env_path)
     except Exception as exc:
-        logger.warning("Failed to write study-level environment.json: %s", exc)
+        logger.warning("Failed to write study-level system.json: %s", exc)
 
 
 def _build_resolution_logs(

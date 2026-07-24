@@ -31,7 +31,7 @@ from llenergymeasure.domain.environment import (
 from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
 from llenergymeasure.results.persistence import (
     load_result,
-    save_environment,
+    save_system,
 )
 from llenergymeasure.results.persistence import save_result as _persist_save_result
 
@@ -467,9 +467,9 @@ def test_load_result_attaches_environment_sidecar(
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """load_result() reads back the environment.json sidecar onto result.environment."""
+    """load_result() reads back the system.json sidecar onto result.environment."""
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.measurement_config_hash,
@@ -485,26 +485,26 @@ def test_load_result_attaches_environment_sidecar(
     assert loaded.environment.hardware.gpu.name == "NVIDIA A100-SXM4-80GB"
 
 
-def test_save_environment_includes_bundle_version(
+def test_save_system_includes_bundle_version(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """environment.json carries the single bundle_version stamp."""
+    """system.json carries the single bundle_version stamp."""
     import json
 
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.measurement_config_hash,
         result_path.parent,
     )
-    payload = json.loads((result_path.parent / "environment.json").read_text())
+    payload = json.loads((result_path.parent / "system.json").read_text())
     assert payload["bundle_version"] == BUNDLE_VERSION == "2.0"
 
 
-def test_save_environment_writes_docker_runner_block_roundtrip(
+def test_save_system_writes_docker_runner_block_roundtrip(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
@@ -524,7 +524,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
         }
     )
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         snapshot,
         minimal_result.experiment_id,
         minimal_result.measurement_config_hash,
@@ -532,7 +532,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     )
 
     # Raw JSON carries the runner block ...
-    payload = json.loads((result_path.parent / "environment.json").read_text())
+    payload = json.loads((result_path.parent / "system.json").read_text())
     assert payload["runner"] == {
         "mode": "container",
         "image": "ghcr.io/acme/vllm:1.19.0-cuda12",
@@ -551,7 +551,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     assert loaded.environment.runner.source == "auto_detected"
 
 
-def test_save_environment_writes_local_runner_block_roundtrip(
+def test_save_system_writes_local_runner_block_roundtrip(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
@@ -561,7 +561,7 @@ def test_save_environment_writes_local_runner_block_roundtrip(
         update={"runner": RunnerProvenance(mode="process", source="default")}
     )
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         snapshot,
         minimal_result.experiment_id,
         minimal_result.measurement_config_hash,
@@ -577,7 +577,7 @@ def test_save_environment_writes_local_runner_block_roundtrip(
     assert loaded.environment.runner.source == "default"
 
 
-def test_save_environment_runner_absent_when_snapshot_has_none(
+def test_save_system_runner_absent_when_snapshot_has_none(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
@@ -586,13 +586,13 @@ def test_save_environment_runner_absent_when_snapshot_has_none(
     import json
 
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.measurement_config_hash,
         result_path.parent,
     )
-    payload = json.loads((result_path.parent / "environment.json").read_text())
+    payload = json.loads((result_path.parent / "system.json").read_text())
     assert payload["runner"] is None
     loaded = load_result(result_path)
     assert loaded.environment is not None
@@ -611,9 +611,9 @@ def test_load_result_without_environment_sidecar(
 def test_load_result_corrupt_environment_sidecar(
     tmp_path: Path, minimal_result: ExperimentResult
 ) -> None:
-    """A corrupt environment.json must not break load_result (best-effort)."""
+    """A corrupt system.json must not break load_result (best-effort)."""
     result_path = save_result(minimal_result, tmp_path)
-    (result_path.parent / "environment.json").write_text("{ not valid json", encoding="utf-8")
+    (result_path.parent / "system.json").write_text("{ not valid json", encoding="utf-8")
 
     loaded = load_result(result_path)
 
@@ -628,7 +628,7 @@ def test_environment_field_excluded_from_result_json(
 ) -> None:
     """environment is loader-only - it never serialises back into result.json."""
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.measurement_config_hash,

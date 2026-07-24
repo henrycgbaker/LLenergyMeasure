@@ -9,10 +9,14 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 > **Format break (unreleased):** results-bundle format 2.0 as of commit `09ec455e`
 > ([#869]) - unified runner provenance block, single `bundle_version` stamp. The
-> runner-provenance `mode` values are renamed `local`/`docker` -> `process`/`container`
-> and the no-spec `source` sentinel `local` -> `implicit` within this same untagged
-> 2.0 stamp ([#880]). This is a clean break with no alias translation: `mode` is now a
-> closed `Literal`, so ANY bundle (1.0 or 2.0-era) whose runner block carries the old
+> per-experiment environment sidecar is renamed `environment.json` -> `system.json`
+> ([#879]), and the runner-provenance `mode` values are renamed `local`/`docker` ->
+> `process`/`container` with the no-spec `source` sentinel `local` -> `implicit`
+> ([#880]), all within this same untagged 2.0 stamp - every v0.7.0 format addition
+> rides this one break (no `2.1`). Both renames are clean breaks with no alias
+> translation: a pre-rename `environment.json` is not read (on such a bundle the
+> system sidecar is simply absent to the reader), and `mode` is now a closed
+> `Literal`, so ANY bundle (1.0 or 2.0-era) whose runner block carries the old
 > `docker`/`local` mode fails validation loudly on read (accepted - unreleased-era
 > bundles only; the open `source` field tolerates a stale `local` inertly). 1.0 bundles
 > otherwise remain readable best-effort (the retired `schema_version`/`baseline_power_w`
@@ -100,6 +104,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   tooling is provided. (NARROWED by [#880]: this structural runner-block tolerance
   no longer extends to the runner VALUES - a block carrying the pre-v0.7
   `docker`/`local` mode is rejected by the closed `mode` Literal on read.) ([#869])
+- **Breaking (results bundle):** the per-experiment hardware/runtime sidecar is
+  renamed `environment.json` -> `system.json` (MLPerf "system description" / SUT
+  alignment, and it removes the collision with conda/venv "environment"). Both the
+  per-experiment bundle sidecar and the study-level `_study-artefacts/` snapshot
+  adopt the new name; the artefact-registry constant becomes `SYSTEM_FILENAME` and
+  the internal writer/reader/rescue methods follow (`BundleWriter.write_system`,
+  `BundleReader._read_system_artefact`, `persistence.save_system`). This rides the
+  same untagged `bundle_version` `"2.0"` break - there is no version bump. It is a
+  clean break: a pre-rename `environment.json` is not read - the reader looks only
+  for `system.json`, so on an older bundle the system sidecar is simply absent (the
+  existing optional-sidecar path); there is no fallback and no converter. The
+  `EnvironmentSnapshot` model and `ExperimentResult.environment` field are
+  unchanged. ([#879])
 - **Breaking (runner vocabulary):** the runner mode is renamed `local`/`docker` ->
   `process`/`container` (image shorthand `docker:<image>` -> `container:<image>`), and
   the no-spec runner-provenance `source` sentinel `local` -> `implicit`. The new mode
@@ -1530,4 +1547,5 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
 [#872]: https://github.com/henrycgbaker/llenergymeasure/pull/872
 [#875]: https://github.com/henrycgbaker/llenergymeasure/pull/875
+[#879]: https://github.com/henrycgbaker/llenergymeasure/pull/879
 [#880]: https://github.com/henrycgbaker/llenergymeasure/pull/880

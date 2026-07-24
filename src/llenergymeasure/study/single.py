@@ -64,7 +64,7 @@ def run_single_experiment(
 
     check_gpu_memory_residual()
 
-    # Collect environment snapshot once - used for both harness and environment.json sidecar
+    # Collect environment snapshot once - used for both harness and system.json sidecar
     from llenergymeasure.harness.environment import collect_environment_snapshot
 
     snapshot = collect_environment_snapshot()
@@ -78,7 +78,7 @@ def run_single_experiment(
     # Artefact staging dir. Local path always creates one (below); docker path
     # inherits the DockerRunner rescue dir, which may be None.
     ts_tmpdir: Path | None = None
-    # Image that actually ran under docker dispatch (needed for the environment.json
+    # Image that actually ran under docker dispatch (needed for the system.json
     # runner block's digest resolution); None on the local path.
     resolved_docker_image: str | None = None
 

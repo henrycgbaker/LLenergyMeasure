@@ -59,11 +59,11 @@ def collect_environment_snapshot() -> EnvironmentSnapshot:
 
 
 def collect_software_environment() -> dict[str, object]:
-    """Collect study-level software environment for the environment.json artefact.
+    """Collect study-level software environment for the system.json artefact.
 
     This is a study-level constant (the container environment doesn't change
     between experiments), so it's collected once per study and written to
-    ``_study-artefacts/environment.json``.
+    ``_study-artefacts/system.json``.
 
     Returns:
         Dict with python_version, installed_packages, llenergymeasure_version,
