@@ -104,6 +104,22 @@ These are the run totals (post-warmup-exclusion when applicable).
 
 For the methodology that motivates baseline subtraction, see [Methodology &gt; Baseline power](/explanation/methodology/methodology#baseline-power).
 
+### Throttle indicators
+
+`throttle` (renamed from the earlier flat `thermal_throttle`) is a symmetric object over the two throttling axes NVML reports. Each axis carries a `hw`/`sw` cause split plus a combined `any` flag, so `throttle.thermal.any` and `throttle.power.any` are the two top-level "did this axis throttle" questions. The former flat `.power` field reflected only the software power cap; `throttle.power.any` is the previously-missing combined power indicator. Any throttling can invalidate energy and performance measurements. `null` when no throttle sampling was performed.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `throttle.thermal` | `ThrottleAxis` | Thermal throttling axis (hardware/software thermal slowdown) |
+| `throttle.power` | `ThrottleAxis` | Power throttling axis (hardware power brake / software power cap) |
+| `throttle.<axis>.hw` | bool | Hardware slowdown on this axis was seen |
+| `throttle.<axis>.sw` | bool | Software slowdown on this axis was seen |
+| `throttle.<axis>.any` | bool | Computed: `hw or sw` (either cause seen on this axis) |
+| `throttle.detected` | bool | Computed: `thermal.any or power.any` (any throttling occurred) |
+| `throttle.throttle_duration_sec` | float | Estimated total duration of throttling in seconds |
+| `throttle.max_temperature_c` | float &#124; null | Peak GPU temperature during the experiment in Celsius |
+| `throttle.throttle_timestamps` | list[float] | Seconds-from-start timestamps at which a throttle was detected |
+
 ### Extended efficiency metrics
 
 `extended_metrics` is a nested object with five always-present sub-objects

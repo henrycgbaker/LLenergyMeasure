@@ -38,6 +38,7 @@ jobs:
       workflows: ${{ steps.changes.outputs.workflows }}
       docs_inputs: ${{ steps.changes.outputs.docs_inputs }}
       plugin_kwargs: ${{ steps.changes.outputs.plugin_kwargs }}
+      product_src: ${{ steps.changes.outputs.product_src }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4
@@ -85,6 +86,14 @@ jobs:
               - 'engine_versions/*/*/outputs/schema.discovered.json'
               - 'scripts/check_plugin_kwargs.py'
               - '.github/workflows/ci.yml'
+            product_src:
+              # Product source only. changelog-check requires a changelog.d/
+              # fragment when shipped code changes; tests / pyproject / uv.lock
+              # do not gate (the broader `src` filter covers those). This
+              # deliberately omits this workflow file: a workflow-only edit is
+              # not a product change and must not demand a fragment. The job's
+              # shape is covered by actionlint on any workflow edit.
+              - 'src/llenergymeasure/**'
 
   lint:
     needs: filter
@@ -299,3 +308,33 @@ jobs:
       - uses: actions/checkout@v6
       - name: Check hand-typed plugin kwargs against the mined schema
         run: python3 scripts/check_plugin_kwargs.py
+
+  changelog-check:
+    # PR-hygiene gate: a PR that changes shipped code (src/llenergymeasure/**)
+    # must add a changelog.d/ fragment, so the [Unreleased] section is never
+    # hand-edited and parallel PRs stop conflicting on it. Opt out by applying
+    # the `no-changelog` label (housekeeping/refactor PRs with no user impact).
+    # towncrier check does the fragment detection; the src-path condition and
+    # label gate are wired around it here.
+    needs: filter
+    if: >-
+      always()
+      && github.event_name == 'pull_request'
+      && needs.filter.outputs.product_src == 'true'
+      && !contains(github.event.pull_request.labels.*.name, 'no-changelog')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so origin/main resolves as a comparison base.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: changelog-3.12
+          python-version: "3.12"
+      - run: uv sync --dev
+      - name: Fetch comparison base
+        run: git fetch --no-tags origin main
+      - name: Check for changelog fragment
+        run: uv run towncrier check --compare-with origin/main

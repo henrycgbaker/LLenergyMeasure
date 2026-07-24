@@ -62,15 +62,25 @@ re-exported from `__init__.py`.
 
    Both files must show the same version string.
 
-3. **Update `CHANGELOG.md`**
+3. **Assemble `CHANGELOG.md` from fragments**
 
-   Add an entry for the new version at the top of the changelog. Note key
-   changes shipped since the previous release. The format is free-form but
-   should be scannable.
+   Per-PR entries accumulate as fragment files under `changelog.d/` during the
+   cycle (see [development](/contributing/development#changelog-fragments)).
+   Fold them into `CHANGELOG.md` with towncrier, passing the tag as the version:
+
+   ```bash
+   uv run towncrier build --version v0.6.0
+   ```
+
+   This writes a new `## [v0.6.0] - <date>` section at the changelog marker and
+   deletes the consumed fragments. Review the result, and update the
+   `[Unreleased]` format-break callout at the top if the break it describes has
+   now shipped.
 
 4. **Commit**
 
-   Commit the three changed files with the message:
+   Commit the changed files (the two version files, the assembled
+   `CHANGELOG.md`, and the removed `changelog.d/` fragments) with the message:
 
    ```
    chore: release 0.6.0
