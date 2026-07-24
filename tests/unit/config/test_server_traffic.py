@@ -141,6 +141,47 @@ class TestSloHashExclusion:
             "percentile": 0.95,
         }
 
+    def test_slo_present_in_written_config_sidecar(self, tmp_path):
+        # (c) companion, pinned at the artefact level: drive the real sidecar
+        # writer end-to-end and assert slo survives into the written config.json
+        # declared block, so a future edit to the sidecar call site cannot
+        # silently drop the disclosure.
+        import json
+        from types import SimpleNamespace
+
+        from llenergymeasure.domain.bundle_artefacts import CONFIG_SIDECAR_FILENAME
+        from llenergymeasure.harness.result_assembly import _ConfigMethodology
+        from llenergymeasure.harness.staging import write_config_sidecar
+
+        cfg = _server({**_TRAFFIC, "slo": {"ttft_ms": 200, "tpot_ms": 20}})
+        output = SimpleNamespace(
+            extras={
+                "observed_engine_params": {},
+                "observed_sampling_params": {},
+                "library_version": "test",
+            }
+        )
+        result = SimpleNamespace(
+            experiment_id="slo-sidecar-001", declared_config_hash="abc123def4567890"
+        )
+        methodology = _ConfigMethodology(
+            measurement_methodology="total",
+            steady_state_window=None,
+            measurement_window_discard_fraction=None,
+            steady_state_not_detected=False,
+        )
+        write_config_sidecar(
+            output=output,
+            config=cfg,
+            result=result,
+            engine_name="transformers",
+            methodology=methodology,
+            output_dir=tmp_path,
+        )
+        written = json.loads((tmp_path / CONFIG_SIDECAR_FILENAME).read_text())
+        slo = written["declared_config"]["server"]["traffic"]["slo"]
+        assert slo["ttft_ms"] == 200.0 and slo["tpot_ms"] == 20.0
+
 
 class TestRateIdentity:
     def test_rate_distinct_declared_hash(self):
