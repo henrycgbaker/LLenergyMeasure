@@ -46,8 +46,8 @@ class TestM1ExitCriteria:
         from tests.conftest import EXPERIMENT_BUNDLE_VERSION
 
         assert result.bundle_version == EXPERIMENT_BUNDLE_VERSION
-        assert result.measurement_config_hash  # non-empty string
-        assert len(result.measurement_config_hash) == 16
+        assert result.declared_config_hash  # non-empty string
+        assert len(result.declared_config_hash) == 16
 
         # Energy values populated (non-zero on real GPU)
         assert result.total_energy_j > 0

@@ -137,9 +137,9 @@ Security utilities:
 
 ### `device/` (Layer 2)
 - `gpu_info.py` - `nvml_context()`, `_resolve_gpu_indices()`, `get_gpu_architecture()`
-- `power_thermal.py` - `PowerThermalSampler`, `ThermalThrottleInfo`
+- `power_thermal.py` - `PowerThermalSampler`, `ThrottleInfo`
 - `environment.py` - hardware metadata collection via NVML and CUDA version detection
-- Placed above `config/` and `domain/` because `power_thermal.py` returns `ThermalThrottleInfo`
+- Placed above `config/` and `domain/` because `power_thermal.py` returns `ThrottleInfo`
   from `domain/metrics.py` (valid downward import from Layer 2 to Layer 1)
 
 ### `config/` and `domain/` (Layer 1)

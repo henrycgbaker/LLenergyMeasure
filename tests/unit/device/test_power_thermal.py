@@ -71,11 +71,11 @@ def _make_sampler_with_samples(
     """Create a PowerThermalSampler with pre-populated samples (no real pynvml needed)."""
     sampler = PowerThermalSampler(gpu_indices=[gpu_index], sample_interval_ms=100)
     for i, reasons in enumerate(throttle_reasons_values):
-        # thermal_throttle flag not used by get_thermal_throttle_info (it reads throttle_reasons)
+        # thermal_throttle flag not used by get_throttle_info (it reads throttle_reasons)
         sample = PowerThermalSample(
             timestamp=float(i),
             throttle_reasons=reasons,
-            thermal_throttle=False,  # will be recalculated in get_thermal_throttle_info
+            thermal_throttle=False,  # will be recalculated in get_throttle_info
             gpu_index=gpu_index,
         )
         sampler._samples.append(sample)
@@ -128,11 +128,11 @@ def test_thermal_constants_are_distinct():
     sampler = _make_sampler_with_samples([0x40])  # hw thermal only
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        info = sampler.get_thermal_throttle_info()
+        info = sampler.get_throttle_info()
 
-    assert info.hw_thermal is True, "hw_thermal should be True (0x40 bit set)"
-    assert info.sw_thermal is False, "sw_thermal should be False (0x20 bit not set)"
-    assert info.thermal is True, "thermal (combined) should be True when hw_thermal=True"
+    assert info.thermal.hw is True, "hw_thermal should be True (0x40 bit set)"
+    assert info.thermal.sw is False, "sw_thermal should be False (0x20 bit not set)"
+    assert info.thermal.any is True, "thermal (combined) should be True when hw_thermal=True"
 
 
 # =============================================================================
@@ -147,11 +147,11 @@ def test_thermal_combined_detects_either():
     sampler = _make_sampler_with_samples([0x20])  # sw thermal only
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        info = sampler.get_thermal_throttle_info()
+        info = sampler.get_throttle_info()
 
-    assert info.thermal is True, "thermal (combined) should be True when sw_thermal=True"
-    assert info.sw_thermal is True, "sw_thermal should be True (0x20 bit set)"
-    assert info.hw_thermal is False, "hw_thermal should be False (0x40 bit not set)"
+    assert info.thermal.any is True, "thermal (combined) should be True when sw_thermal=True"
+    assert info.thermal.sw is True, "sw_thermal should be True (0x20 bit set)"
+    assert info.thermal.hw is False, "hw_thermal should be False (0x40 bit not set)"
 
 
 # =============================================================================
@@ -166,11 +166,11 @@ def test_thermal_no_throttle():
     sampler = _make_sampler_with_samples([0])
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        info = sampler.get_thermal_throttle_info()
+        info = sampler.get_throttle_info()
 
-    assert info.thermal is False, "thermal should be False when no throttle bits set"
-    assert info.sw_thermal is False, "sw_thermal should be False"
-    assert info.hw_thermal is False, "hw_thermal should be False"
+    assert info.thermal.any is False, "thermal should be False when no throttle bits set"
+    assert info.thermal.sw is False, "sw_thermal should be False"
+    assert info.thermal.hw is False, "hw_thermal should be False"
     assert info.detected is False, "detected should be False (no sample had thermal_throttle=True)"
 
 
@@ -191,11 +191,46 @@ def test_deprecated_name_fallback():
     sampler = _make_sampler_with_samples([0x60])  # 0x40 | 0x20
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        info = sampler.get_thermal_throttle_info()
+        info = sampler.get_throttle_info()
 
-    assert info.hw_thermal is True, "hw_thermal should be True via deprecated fallback"
-    assert info.sw_thermal is True, "sw_thermal should be True via deprecated fallback"
-    assert info.thermal is True, "thermal (combined) should be True"
+    assert info.thermal.hw is True, "hw_thermal should be True via deprecated fallback"
+    assert info.thermal.sw is True, "sw_thermal should be True via deprecated fallback"
+    assert info.thermal.any is True, "thermal (combined) should be True"
+
+
+# =============================================================================
+# Test: power axis - the symmetric hw/sw split + the combined `any` indicator
+# =============================================================================
+
+
+def test_power_axis_hw_only():
+    """hw power brake (0x80) sets power.hw + power.any; thermal axis stays clear."""
+    mock_pynvml = _make_pynvml_mock(sw_power_cap=0x04, hw_power_brake=0x80)
+
+    sampler = _make_sampler_with_samples([0x80])  # hw power brake only
+
+    with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
+        info = sampler.get_throttle_info()
+
+    assert info.power.hw is True, "power.hw should be True (0x80 bit set)"
+    assert info.power.sw is False, "power.sw should be False (0x04 bit not set)"
+    assert info.power.any is True, "power.any should be True when power.hw=True"
+    assert info.thermal.any is False, "thermal axis should stay clear for a power-only throttle"
+    assert info.detected is True, "detected should be True when any axis throttled"
+
+
+def test_power_axis_sw_only():
+    """sw power cap (0x04) sets power.sw + power.any; power.hw stays False."""
+    mock_pynvml = _make_pynvml_mock(sw_power_cap=0x04, hw_power_brake=0x80)
+
+    sampler = _make_sampler_with_samples([0x04])  # sw power cap only
+
+    with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
+        info = sampler.get_throttle_info()
+
+    assert info.power.sw is True, "power.sw should be True (0x04 bit set)"
+    assert info.power.hw is False, "power.hw should be False (0x80 bit not set)"
+    assert info.power.any is True, "power.any (combined) should be True when power.sw=True"
 
 
 # =============================================================================
@@ -327,19 +362,19 @@ def test_sampler_context_manager_lifecycle():
 
 
 # =============================================================================
-# Test 11: get_thermal_throttle_info with no samples returns default
+# Test 11: get_throttle_info with no samples returns default
 # =============================================================================
 
 
-def test_get_thermal_throttle_info_empty_samples():
-    """get_thermal_throttle_info with no samples returns default ThermalThrottleInfo."""
+def test_get_throttle_info_empty_samples():
+    """get_throttle_info with no samples returns default ThrottleInfo."""
     sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=100)
     assert sampler._samples == []
 
-    info = sampler.get_thermal_throttle_info()
+    info = sampler.get_throttle_info()
 
     assert info.detected is False
-    assert info.thermal is False
+    assert info.thermal.any is False
     assert info.throttle_duration_sec == 0.0
     assert info.max_temperature_c is None
 

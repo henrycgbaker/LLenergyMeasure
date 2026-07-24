@@ -236,7 +236,7 @@ class TestIntFloatCanonicalisation:
                 "cpu_offload_gb": 0.0,
             },
             observed_sampling_params=resolved_view.observed_sampling_params,
-            harness=resolved_view.harness,
+            llem_execution=resolved_view.llem_execution,
             measurement=resolved_view.measurement,
         )
         assert isinstance(observed_view.observed_engine_params["cpu_offload_gb"], float)

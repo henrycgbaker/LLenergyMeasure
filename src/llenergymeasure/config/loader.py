@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.grid import SkippedConfig, expand_grid
 from llenergymeasure.config.models import (
+    RETIRED_HARNESS_KEY_MSG,
     ExecutionConfig,
     ExperimentConfig,
     OutputConfig,
@@ -87,6 +88,12 @@ def load_experiment_config(
 
     # Strip optional version field - not an ExperimentConfig field
     merged.pop("version", None)
+
+    # Retired top-level ``harness:`` key: fail with the migration message naming
+    # the new location, before the generic unknown-field did-you-mean fires.
+    if "harness" in merged:
+        context = f" (in {path})" if path else ""
+        raise ConfigError(RETIRED_HARNESS_KEY_MSG + context)
 
     # Collect unknown field errors before handing to Pydantic
     known_fields = set(ExperimentConfig.model_fields.keys())

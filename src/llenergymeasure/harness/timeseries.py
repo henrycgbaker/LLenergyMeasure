@@ -45,7 +45,7 @@ def write_timeseries_parquet(
     gpu_index: int = 0,
     *,
     experiment_id: str | None = None,
-    measurement_config_hash: str | None = None,
+    declared_config_hash: str | None = None,
 ) -> Path:
     """Write 1 Hz downsampled timeseries to a Parquet file.
 
@@ -57,7 +57,7 @@ def write_timeseries_parquet(
     its own row per second. The ``gpu_index`` parameter is kept for backward
     compatibility but is only used as a fallback when samples lack the attribute.
 
-    When ``experiment_id`` and/or ``measurement_config_hash`` are supplied they are
+    When ``experiment_id`` and/or ``declared_config_hash`` are supplied they are
     written as Parquet file-level key-value metadata (not columns), so the artefact
     stays attributable if separated from its result directory. This mirrors the
     identity fields the JSON sidecars carry.
@@ -67,7 +67,7 @@ def write_timeseries_parquet(
         output_path: Destination path for the Parquet file.
         gpu_index: Fallback GPU device index when samples have no gpu_index attribute.
         experiment_id: Unique experiment identifier, stored as file metadata.
-        measurement_config_hash: Config hash for orphan attribution, stored as file metadata.
+        declared_config_hash: Config hash for orphan attribution, stored as file metadata.
 
     Returns:
         The output_path after writing.
@@ -83,7 +83,7 @@ def write_timeseries_parquet(
         key: value
         for key, value in (
             ("experiment_id", experiment_id),
-            ("measurement_config_hash", measurement_config_hash),
+            ("declared_config_hash", declared_config_hash),
         )
         if value is not None
     }

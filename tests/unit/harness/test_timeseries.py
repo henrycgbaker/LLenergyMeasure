@@ -1,7 +1,7 @@
 """Tests for the Parquet timeseries writer, focused on file-level identity metadata.
 
 The writer tags the Parquet artefact with ``experiment_id`` and
-``measurement_config_hash`` as file-level key-value metadata (not columns) so the
+``declared_config_hash`` as file-level key-value metadata (not columns) so the
 sidecar stays attributable if separated from its result directory.
 """
 
@@ -29,19 +29,19 @@ def _sample(**overrides: object) -> PowerThermalSample:
 
 
 def test_identity_metadata_round_trips(tmp_path: Path) -> None:
-    """experiment_id + measurement_config_hash survive a write/read cycle as KV metadata."""
+    """experiment_id + declared_config_hash survive a write/read cycle as KV metadata."""
     path = tmp_path / "timeseries.parquet"
     write_timeseries_parquet(
         [_sample()],
         path,
         experiment_id="gpt2_20260715_120000",
-        measurement_config_hash="abcdef0123456789",
+        declared_config_hash="abcdef0123456789",
     )
 
     metadata = pq.read_table(path).schema.metadata
     assert metadata is not None
     assert metadata[b"experiment_id"] == b"gpt2_20260715_120000"
-    assert metadata[b"measurement_config_hash"] == b"abcdef0123456789"
+    assert metadata[b"declared_config_hash"] == b"abcdef0123456789"
 
 
 def test_identity_metadata_on_empty_samples(tmp_path: Path) -> None:
@@ -51,13 +51,13 @@ def test_identity_metadata_on_empty_samples(tmp_path: Path) -> None:
         [],
         path,
         experiment_id="gpt2_20260715_120000",
-        measurement_config_hash="abcdef0123456789",
+        declared_config_hash="abcdef0123456789",
     )
 
     metadata = pq.read_table(path).schema.metadata
     assert metadata is not None
     assert metadata[b"experiment_id"] == b"gpt2_20260715_120000"
-    assert metadata[b"measurement_config_hash"] == b"abcdef0123456789"
+    assert metadata[b"declared_config_hash"] == b"abcdef0123456789"
 
 
 def test_no_identity_metadata_when_omitted(tmp_path: Path) -> None:
@@ -66,6 +66,6 @@ def test_no_identity_metadata_when_omitted(tmp_path: Path) -> None:
     write_timeseries_parquet([_sample()], path)
 
     metadata = pq.read_table(path).schema.metadata
-    identity_keys = {b"experiment_id", b"measurement_config_hash"}
+    identity_keys = {b"experiment_id", b"declared_config_hash"}
     present = set(metadata.keys()) if metadata else set()
     assert not (identity_keys & present)

@@ -34,7 +34,7 @@ result = run_experiment(model="gpt2", engine="transformers")
 
 print(f"Energy:     {result.total_energy_j:.1f} J")
 print(f"Throughput: {result.avg_tokens_per_second:.1f} tok/s")
-print(f"Efficiency: {result.mj_per_tok_total:.3f} mJ/tok")
+print(f"Efficiency: {result.energy_per_token_mj_total:.3f} mJ/tok")
 ```
 
 The return value is an [`ExperimentResult`](./ExperimentResult). For field definitions and
@@ -121,8 +121,8 @@ measurements. Key fields:
 result.total_energy_j          # float  - total GPU energy in joules
 result.energy_adjusted_j       # float | None - baseline-subtracted energy
 result.avg_tokens_per_second   # float  - throughput
-result.mj_per_tok_total        # float | None - millijoules per token (total)
-result.mj_per_tok_adjusted     # float | None - millijoules per token (baseline-adjusted)
+result.energy_per_token_mj_total        # float | None - millijoules per token (total)
+result.energy_per_token_mj_adjusted     # float | None - millijoules per token (baseline-adjusted)
 result.total_flops             # float  - estimated FLOPs (reference)
 result.total_inference_time_sec # float - wall time
 ```
@@ -169,7 +169,7 @@ result = run_experiment(
 result_a = run_experiment(model="gpt2", engine="transformers")
 result_b = run_experiment(model="gpt2-xl", engine="transformers")
 
-delta_pct = (result_b.mj_per_tok_total - result_a.mj_per_tok_total) / result_a.mj_per_tok_total * 100
+delta_pct = (result_b.energy_per_token_mj_total - result_a.energy_per_token_mj_total) / result_a.energy_per_token_mj_total * 100
 print(f"gpt2-xl uses {delta_pct:+.1f}% more energy per token than gpt2")
 ```
 

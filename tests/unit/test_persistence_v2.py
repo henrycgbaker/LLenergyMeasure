@@ -55,7 +55,7 @@ def minimal_result() -> ExperimentResult:
     """Minimal valid ExperimentResult."""
     return ExperimentResult(
         experiment_id="persist-test-001",
-        measurement_config_hash="abcdef0123456789",
+        declared_config_hash="abcdef0123456789",
         input_tokens=384,
         output_tokens=128,
         total_tokens=512,
@@ -74,7 +74,7 @@ def hf_model_result() -> ExperimentResult:
     """ExperimentResult used with a HuggingFace-style model path containing /."""
     return ExperimentResult(
         experiment_id="persist-test-hf",
-        measurement_config_hash="fedcba9876543210",
+        declared_config_hash="fedcba9876543210",
         input_tokens=768,
         output_tokens=256,
         total_tokens=1024,
@@ -93,7 +93,7 @@ def result_with_timeseries() -> ExperimentResult:
     """ExperimentResult that claims to have a timeseries sidecar."""
     return ExperimentResult(
         experiment_id="persist-test-ts",
-        measurement_config_hash="1122334455667788",
+        declared_config_hash="1122334455667788",
         input_tokens=192,
         output_tokens=64,
         total_tokens=256,
@@ -215,7 +215,7 @@ def test_from_json_loads_correctly(tmp_path: Path, minimal_result: ExperimentRes
     loaded = load_result(result_path)
 
     assert loaded.experiment_id == minimal_result.experiment_id
-    assert loaded.measurement_config_hash == minimal_result.measurement_config_hash
+    assert loaded.declared_config_hash == minimal_result.declared_config_hash
     from tests.conftest import EXPERIMENT_BUNDLE_VERSION
 
     assert loaded.bundle_version == EXPERIMENT_BUNDLE_VERSION
@@ -267,7 +267,7 @@ def test_convenience_identity_copies_round_trip(tmp_path: Path) -> None:
     """
     result = ExperimentResult(
         experiment_id="persist-convenience-001",
-        measurement_config_hash="abcdef0123456789",
+        declared_config_hash="abcdef0123456789",
         engine="vllm",
         model_name=_HF_MODEL,
         input_tokens=384,
@@ -472,7 +472,7 @@ def test_load_result_attaches_environment_sidecar(
     save_system(
         env_snapshot,
         minimal_result.experiment_id,
-        minimal_result.measurement_config_hash,
+        minimal_result.declared_config_hash,
         result_path.parent,
     )
 
@@ -497,7 +497,7 @@ def test_save_system_includes_bundle_version(
     save_system(
         env_snapshot,
         minimal_result.experiment_id,
-        minimal_result.measurement_config_hash,
+        minimal_result.declared_config_hash,
         result_path.parent,
     )
     payload = json.loads((result_path.parent / "system.json").read_text())
@@ -527,7 +527,7 @@ def test_save_system_writes_docker_runner_block_roundtrip(
     save_system(
         snapshot,
         minimal_result.experiment_id,
-        minimal_result.measurement_config_hash,
+        minimal_result.declared_config_hash,
         result_path.parent,
     )
 
@@ -564,7 +564,7 @@ def test_save_system_writes_local_runner_block_roundtrip(
     save_system(
         snapshot,
         minimal_result.experiment_id,
-        minimal_result.measurement_config_hash,
+        minimal_result.declared_config_hash,
         result_path.parent,
     )
 
@@ -589,7 +589,7 @@ def test_save_system_runner_absent_when_snapshot_has_none(
     save_system(
         env_snapshot,
         minimal_result.experiment_id,
-        minimal_result.measurement_config_hash,
+        minimal_result.declared_config_hash,
         result_path.parent,
     )
     payload = json.loads((result_path.parent / "system.json").read_text())
@@ -631,7 +631,7 @@ def test_environment_field_excluded_from_result_json(
     save_system(
         env_snapshot,
         minimal_result.experiment_id,
-        minimal_result.measurement_config_hash,
+        minimal_result.declared_config_hash,
         result_path.parent,
     )
 

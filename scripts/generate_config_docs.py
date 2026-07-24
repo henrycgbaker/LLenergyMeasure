@@ -68,14 +68,16 @@ _SECTION_ORDER = [
         "transformers_sampling_params",
         "Transformers Sampling Params (`transformers.sampling_params:`)",
     ),
+    (
+        "transformers_llem_execution",
+        "Transformers Execution Knobs (`transformers.llem_execution:`)",
+    ),
     ("vllm", "vLLM Engine (`vllm:`)"),
     ("vllm_engine_params", "vLLM Engine Params (`vllm.engine_params:`)"),
     ("vllm_sampling_params", "vLLM Sampling Params (`vllm.sampling_params:`)"),
     ("tensorrt", "TensorRT-LLM Engine (`tensorrt:`)"),
     ("tensorrt_engine_params", "TensorRT-LLM Engine Params (`tensorrt.engine_params:`)"),
     ("tensorrt_sampling_params", "TensorRT-LLM Sampling Params (`tensorrt.sampling_params:`)"),
-    ("harness", "Harness Overrides (`harness:`)"),
-    ("harness_transformers", "Transformers Harness (`harness.transformers:`)"),
 ]
 
 # Map from JSON schema $defs key to our section key. The per-engine Config
@@ -84,21 +86,22 @@ _SECTION_ORDER = [
 _DEF_TO_SECTION: dict[str, str] = {
     "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
-    "llenergymeasure__config__generated__transformers__Config": "transformers",
+    # TransformersSection / TransformersLlemExecution are hand-written (unique names),
+    # so pydantic emits them as simple $def keys, not module-qualified ones.
+    "TransformersSection": "transformers",
     "llenergymeasure__config__generated__transformers__EngineParams": (
         "transformers_engine_params"
     ),
     "llenergymeasure__config__generated__transformers__SamplingParams": (
         "transformers_sampling_params"
     ),
+    "TransformersLlemExecution": "transformers_llem_execution",
     "llenergymeasure__config__generated__vllm__Config": "vllm",
     "llenergymeasure__config__generated__vllm__EngineParams": "vllm_engine_params",
     "llenergymeasure__config__generated__vllm__SamplingParams": "vllm_sampling_params",
     "llenergymeasure__config__generated__tensorrt__Config": "tensorrt",
     "llenergymeasure__config__generated__tensorrt__EngineParams": "tensorrt_engine_params",
     "llenergymeasure__config__generated__tensorrt__SamplingParams": "tensorrt_sampling_params",
-    "HarnessConfig": "harness",
-    "TransformersHarness": "harness_transformers",
 }
 
 

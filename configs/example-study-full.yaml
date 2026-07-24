@@ -73,8 +73,9 @@ sweep:
   vllm.engine_params.dtype: [float16, bfloat16]
   tensorrt.engine_params.dtype: [float16, bfloat16]
 
-  # Engine-native batching knobs.
-  harness.transformers.batch_size: [1, 8]
+  # Batching knobs. Transformers batching is an llem-owned execution knob
+  # (llem_execution); vLLM/TensorRT use engine-native fields.
+  transformers.llem_execution.batch_size: [1, 8]
   vllm.engine_params.max_num_seqs: [64, 256]
   tensorrt.engine_params.max_batch_size: [1, 8]
 
@@ -95,6 +96,5 @@ experiments:
       engine_params:
         dtype: bfloat16
         prompt_lookup_num_tokens: 3
-    harness:
-      transformers:
+      llem_execution:
         batch_size: 1

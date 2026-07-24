@@ -143,11 +143,11 @@ baseline:
 - `baseline_power_w` - measured idle power in watts
 - `total_energy_j` - total GPU energy during inference
 - `energy_adjusted_j` - total energy minus baseline (inference-attributable only)
-- `mj_per_tok_adjusted` - the per-token form of the adjusted figure (preferred for
+- `energy_per_token_mj_adjusted` - the per-token form of the adjusted figure (preferred for
   cross-experiment comparison)
 
 For publication-quality results, always include baseline in your reported energy.
-`energy_adjusted_j` (and its per-token form `mj_per_tok_adjusted`) is the preferred
+`energy_adjusted_j` (and its per-token form `energy_per_token_mj_adjusted`) is the preferred
 metric for comparing configurations.
 
 ### Where baselines are measured
@@ -353,8 +353,8 @@ study_execution:
   cycle_gap_seconds: 0
 ```
 
-LLenergyMeasure also monitors thermal throttle events during measurement. If the GPU
-throttled during an experiment, `thermal_throttle_detected: true` is set in that
+LLenergyMeasure also monitors thermal and power throttle events during measurement. If
+the GPU throttled during an experiment, `throttle.detected: true` is set in that
 experiment's result, and the throttle duration and trigger reason are recorded.
 
 ---
@@ -469,7 +469,7 @@ API names.
 
 Everything else passes through without translation:
 
-- **Engine-specific configs** (`harness.transformers.batch_size`, `vllm.engine_params.max_num_seqs`,
+- **Engine-specific configs** (`transformers.llem_execution.batch_size`, `vllm.engine_params.max_num_seqs`,
   `tensorrt.engine_params.max_batch_size`, etc.) use native names - no mapping.
 - **Sub-configs** (`warmup`, `baseline`, `energy`) are consumed by the measurement harness,
   not by engines.

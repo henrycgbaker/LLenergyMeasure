@@ -19,7 +19,7 @@ LLenergyMeasure reports:
 - `energy_adjusted_j` - total energy minus baseline idle power (isolates the
   inference-attributable component)
 - `baseline_power_w` - idle GPU power measured before inference
-- `mj_per_tok_adjusted` - per-token form of the adjusted figure (preferred for
+- `energy_per_token_mj_adjusted` - per-token form of the adjusted figure (preferred for
   cross-experiment comparison)
 
 ### Throughput

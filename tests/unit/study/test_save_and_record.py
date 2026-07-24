@@ -34,7 +34,7 @@ def _make_result(
     """Construct a minimal ExperimentResult for testing _save_and_record."""
     return ExperimentResult(
         experiment_id="test-save-record-001",
-        measurement_config_hash="aabb1122ccdd3344",
+        declared_config_hash="aabb1122ccdd3344",
         input_tokens=192,
         output_tokens=64,
         total_tokens=256,
@@ -269,7 +269,7 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
             {
                 "bundle_version": "1.0",
                 "experiment_id": "test-prov-001",
-                "measurement_config_hash": "aabb1122ccdd3344",
+                "declared_config_hash": "aabb1122ccdd3344",
                 "engine": "transformers",
                 "engine_version": "4.50.0",
             }

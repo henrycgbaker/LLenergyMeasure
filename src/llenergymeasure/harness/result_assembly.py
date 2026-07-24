@@ -35,7 +35,7 @@ from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
     compute_declared_config_hash,
-    mj_per_token,
+    energy_per_token_mj,
 )
 
 if TYPE_CHECKING:
@@ -478,7 +478,7 @@ def assemble_experiment_result(
     baseline: Any,
     start_time: datetime,
     end_time: datetime,
-    thermal_info: Any,
+    throttle_info: Any,
     timeseries_path: str | None,
     base_warnings: list[str],
     model_load_time_sec: float | None,
@@ -524,10 +524,10 @@ def assemble_experiment_result(
 
     # mJ/tok derived fields (energy in millijoules per OUTPUT token, matching
     # avg_energy_per_token_j; input tokens are prefilled, not "generated").
-    _mj_total = mj_per_token(total_energy_j, windowed_output_tokens)
+    _mj_total = energy_per_token_mj(total_energy_j, windowed_output_tokens)
     energy_adjusted_j = energy_breakdown.adjusted_j if energy_breakdown else None
     _mj_adjusted = (
-        mj_per_token(energy_adjusted_j, windowed_output_tokens)
+        energy_per_token_mj(energy_adjusted_j, windowed_output_tokens)
         if energy_adjusted_j is not None
         else None
     )
@@ -538,7 +538,7 @@ def assemble_experiment_result(
 
     result = ExperimentResult(
         experiment_id=experiment_id,
-        measurement_config_hash=compute_declared_config_hash(config),
+        declared_config_hash=compute_declared_config_hash(config),
         llenergymeasure_version=__version__,
         serving_mode=metrics.serving_mode,
         # Convenience identity copies; authoritative home is config.json.
@@ -561,11 +561,11 @@ def assemble_experiment_result(
         flops_per_second=metrics.flops_per_second,
         start_time=start_time,
         end_time=end_time,
-        thermal_throttle=thermal_info,
+        throttle=throttle_info,
         energy_breakdown=energy_breakdown,
         timeseries=timeseries_path,
-        mj_per_tok_total=_mj_total,
-        mj_per_tok_adjusted=_mj_adjusted,
+        energy_per_token_mj_total=_mj_total,
+        energy_per_token_mj_adjusted=_mj_adjusted,
         energy_adjusted_j=energy_adjusted_j,
         energy_per_device_j=energy_per_device_j,
         multi_gpu=multi_gpu,
@@ -589,7 +589,7 @@ def build_result(
     start_time: datetime,
     end_time: datetime,
     duration_sec: float,
-    thermal_info: Any,
+    throttle_info: Any,
     energy_measurement: Any,
     baseline: Any,
     flops_result: Any,
@@ -628,7 +628,7 @@ def build_result(
         baseline=baseline,
         start_time=start_time,
         end_time=end_time,
-        thermal_info=thermal_info,
+        throttle_info=throttle_info,
         timeseries_path=timeseries_path,
         base_warnings=measurement_warnings,
         model_load_time_sec=model_load_time_sec,

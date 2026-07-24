@@ -84,15 +84,13 @@ def _is_group(value: object) -> bool:
 def _group_engine_scope(group_key: str) -> str | None:
     """Return engine name if a group key is engine-scoped, else None (universal).
 
-    Both engine-native keys (``transformers.engine_params.dtype``) and per-engine
-    harness keys (``harness.transformers.batch_size``) are scoped to that engine;
-    only the latter carries the ``harness.`` prefix.
+    Both engine-native keys (``transformers.engine_params.dtype``) and the
+    llem-owned execution knobs (``transformers.llem_execution.batch_size``) live
+    under the engine prefix, so a single leading-segment check covers both.
     """
     parts = group_key.split(".")
     if len(parts) >= 2 and parts[0] in ALL_ENGINES:
         return parts[0]
-    if len(parts) >= 3 and parts[0] == "harness" and parts[1] in ALL_ENGINES:
-        return parts[1]
     return None
 
 
@@ -251,9 +249,9 @@ def _expand_sweep(
         engine_scope = _group_engine_scope(key)
         if engine_scope is not None:
             # Store the full fully-qualified key so routing reconstructs the exact
-            # path (engine-native ``transformers.engine_params.dtype`` and
-            # harness-scoped ``harness.transformers.batch_size`` both round-trip
-            # verbatim).
+            # path (engine-native ``transformers.engine_params.dtype`` and the
+            # llem-execution knob ``transformers.llem_execution.batch_size`` both
+            # round-trip verbatim).
             scoped_dims.setdefault(engine_scope, {})[key] = values
         else:
             universal_dims[key] = values

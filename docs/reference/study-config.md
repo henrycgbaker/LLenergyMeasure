@@ -12,14 +12,13 @@ All fields except `model` are optional and have sensible defaults.
 - [Transformers Engine (`transformers:`)](#transformers-engine-transformers)
 - [Transformers Engine Params (`transformers.engine_params:`)](#transformers-engine-params-transformersengine_params)
 - [Transformers Sampling Params (`transformers.sampling_params:`)](#transformers-sampling-params-transformerssampling_params)
+- [Transformers Execution Knobs (`transformers.llem_execution:`)](#transformers-execution-knobs-transformersllem_execution)
 - [vLLM Engine (`vllm:`)](#vllm-engine-vllm)
 - [vLLM Engine Params (`vllm.engine_params:`)](#vllm-engine-params-vllmengine_params)
 - [vLLM Sampling Params (`vllm.sampling_params:`)](#vllm-sampling-params-vllmsampling_params)
 - [TensorRT-LLM Engine (`tensorrt:`)](#tensorrt-llm-engine-tensorrt)
 - [TensorRT-LLM Engine Params (`tensorrt.engine_params:`)](#tensorrt-llm-engine-params-tensorrtengine_params)
 - [TensorRT-LLM Sampling Params (`tensorrt.sampling_params:`)](#tensorrt-llm-sampling-params-tensorrtsampling_params)
-- [Harness Overrides (`harness:`)](#harness-overrides-harness)
-- [Transformers Harness (`harness.transformers:`)](#transformers-harness-harnesstransformers)
 
 ### Top-Level Fields
 
@@ -29,10 +28,9 @@ All fields except `model` are optional and have sensible defaults.
 | `engine` | Engine | *(see section)* | Inference engine |
 | `measurement` | MeasurementConfig | *(see section)* | Measurement methodology: warmup, baseline, energy sampling |
 | `sampling_preset` | 'deterministic' | 'standard' | 'creative' | 'factual' | None | `null` | Sampling preset. When set, preset values are merged into the active engine's sampling section at parse time; explicit YAML values take precedence over preset values. |
-| `transformers` | Config | None | `null` | HuggingFace Transformers engine configuration (only used when engine=transformers) |
+| `transformers` | TransformersSection | None | `null` | HuggingFace Transformers engine configuration (only used when engine=transformers) |
 | `vllm` | Config | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
 | `tensorrt` | Config | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
-| `harness` | HarnessConfig | None | `null` | Per-engine llem-orchestration knobs (batching, torch.compile, TF32, autocast). |
 | `passthrough_kwargs` | dict | None | `null` | Extra kwargs passed through to engine at execution time. Keys must not collide with ExperimentConfig top-level fields. |
 
 ### Warmup (`warmup:`)
@@ -65,6 +63,7 @@ All fields except `model` are optional and have sensible defaults.
 |-------|------|---------|-------------|
 | `engine_params` | EngineParams | None | `null` |  |
 | `sampling_params` | SamplingParams | None | `null` |  |
+| `llem_execution` | TransformersLlemExecution | None | `null` | llem-owned execution knobs (prompt-batching, torch.compile, TF32, autocast) that have no engine-native API. |
 
 ### Transformers Engine Params (`transformers.engine_params:`)
 
@@ -101,6 +100,18 @@ All fields except `model` are optional and have sensible defaults.
 | `repetition_penalty` | number | None | `null` |  |
 | `min_p` | number | None | `null` |  |
 | `min_new_tokens` | integer | None | `null` |  |
+
+### Transformers Execution Knobs (`transformers.llem_execution:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `batch_size` | integer | None | `null` | Prompt-batching size for llem's runner loop (None -> 1). |
+| `torch_compile` | boolean | None | `null` | Enable torch.compile on the loaded model (None -> False). |
+| `torch_compile_mode` | string | None | `null` | torch.compile mode: 'default', 'reduce-overhead', 'max-autotune' (None -> 'default'). |
+| `torch_compile_backend` | string | None | `null` | torch.compile backend (None -> 'inductor'). |
+| `allow_tf32` | boolean | None | `null` | Allow TF32 on Ampere GPUs via torch.backends (None -> PyTorch default). |
+| `autocast_enabled` | boolean | None | `null` | Wrap generation in torch.autocast mixed precision (None -> False). |
+| `autocast_dtype` | 'float16' | 'bfloat16' | None | `null` | torch.autocast dtype (None -> bfloat16 on Ampere). |
 
 ### vLLM Engine (`vllm:`)
 
@@ -190,24 +201,6 @@ All fields except `model` are optional and have sensible defaults.
 | `min_tokens` | integer | None | `null` |  |
 | `n` | integer | None | `1` |  |
 | `ignore_eos` | boolean | None | `false` |  |
-
-### Harness Overrides (`harness:`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `transformers` | TransformersHarness | None | `null` |  |
-
-### Transformers Harness (`harness.transformers:`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `batch_size` | integer | None | `null` | Prompt-batching size for llem's runner loop (None -> 1). |
-| `torch_compile` | boolean | None | `null` | Enable torch.compile on the loaded model (None -> False). |
-| `torch_compile_mode` | string | None | `null` | torch.compile mode: 'default', 'reduce-overhead', 'max-autotune' (None -> 'default'). |
-| `torch_compile_backend` | string | None | `null` | torch.compile backend (None -> 'inductor'). |
-| `allow_tf32` | boolean | None | `null` | Allow TF32 on Ampere GPUs via torch.backends (None -> PyTorch default). |
-| `autocast_enabled` | boolean | None | `null` | Wrap generation in torch.autocast mixed precision (None -> False). |
-| `autocast_dtype` | 'float16' | 'bfloat16' | None | `null` | torch.autocast dtype (None -> bfloat16 on Ampere). |
 
 ### Sweep-Axis Range Shorthands
 

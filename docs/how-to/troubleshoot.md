@@ -86,7 +86,7 @@ llem run study.yaml --skip-preflight
 
 **Fix (try in order):**
 1. Use a smaller model.
-2. Reduce `harness.transformers.batch_size` (default is 1 - already minimal for Transformers).
+2. Reduce `transformers.llem_execution.batch_size` (default is 1 - already minimal for Transformers).
 3. Switch to lower dtype: `dtype: float16` or `dtype: bfloat16`.
 4. Enable BitsAndBytes quantization: `transformers: { engine_params: { load_in_4bit: true } }`.
 5. For vLLM: reduce `vllm.engine_params.gpu_memory_utilization` (e.g. 0.7 instead of 0.9).

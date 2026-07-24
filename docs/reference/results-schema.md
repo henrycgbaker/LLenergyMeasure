@@ -43,7 +43,7 @@ The scientific record. One JSON file per experiment cell. Stamped with `bundle_v
 |-------|------|-------------|
 | `bundle_version` | str | Results-bundle version (currently `"2.0"`), shared across `result.json`, `config.json`, and `system.json` as one contract |
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
-| `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
+| `declared_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
 | `serving_mode` | str | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement (the only mode today); server mode (v0.8.0) will stamp `"server"`. A plain string, not a closed vocabulary |
 | `engine` | str | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar |
@@ -76,11 +76,11 @@ These are the run totals (post-warmup-exclusion when applicable).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `mj_per_tok_total` | float &#124; null | Millijoules per token from raw (unadjusted) energy |
-| `mj_per_tok_adjusted` | float &#124; null | Millijoules per token from baseline-adjusted energy. `null` when no baseline was measured. **This is the right field for cross-experiment comparisons.** |
+| `energy_per_token_mj_total` | float &#124; null | Millijoules per token from raw (unadjusted) energy |
+| `energy_per_token_mj_adjusted` | float &#124; null | Millijoules per token from baseline-adjusted energy. `null` when no baseline was measured. **This is the right field for cross-experiment comparisons.** |
 
 :::note Why adjusted beats total for comparisons
-`mj_per_tok_adjusted` subtracts idle GPU power before dividing by token count. Two experiments running on hardware with different idle power (or at different thermal states) will show a spurious difference in `mj_per_tok_total` even when inference is identical. See [Energy measurement](/explanation/methodology/energy-measurement) for the full reasoning.
+`energy_per_token_mj_adjusted` subtracts idle GPU power before dividing by token count. Two experiments running on hardware with different idle power (or at different thermal states) will show a spurious difference in `energy_per_token_mj_total` even when inference is identical. See [Energy measurement](/explanation/methodology/energy-measurement) for the full reasoning.
 :::
 
 ### FLOPs

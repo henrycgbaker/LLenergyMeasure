@@ -26,7 +26,7 @@ from typing import Any
 from unittest.mock import patch
 
 from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
-from llenergymeasure.domain.metrics import ThermalThrottleInfo
+from llenergymeasure.domain.metrics import ThrottleInfo
 from llenergymeasure.harness import MeasurementHarness
 from tests.fakes import FakeEnergySampler
 from tests.unit.harness.conftest import FakeBackendWithCapture
@@ -71,8 +71,8 @@ class _RecordingThermal:
     def __exit__(self, *exc: Any) -> None:
         self.stop()
 
-    def get_thermal_throttle_info(self) -> ThermalThrottleInfo:
-        return ThermalThrottleInfo()
+    def get_throttle_info(self) -> ThrottleInfo:
+        return ThrottleInfo()
 
     def get_samples(self) -> list[Any]:
         return []

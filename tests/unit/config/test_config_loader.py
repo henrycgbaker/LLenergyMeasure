@@ -105,6 +105,20 @@ def test_load_unknown_key_includes_did_you_mean(tmp_path):
         load_experiment_config(path)
 
 
+def test_load_retired_harness_key_names_new_location(tmp_path):
+    """The retired top-level ``harness:`` key fails with the migration message.
+
+    Clean break (no alias): the loader must name the new home
+    (``<engine>.llem_execution``) rather than emit a bare unknown-field error.
+    """
+    path = _write_yaml(
+        tmp_path,
+        "task:\n  model: gpt2\nengine: transformers\nharness:\n  transformers:\n    batch_size: 4\n",
+    )
+    with pytest.raises(ConfigError, match="llem_execution"):
+        load_experiment_config(path)
+
+
 def test_load_nonexistent_file_raises_config_error(tmp_path):
     """Loading a path that doesn't exist raises ConfigError."""
     path = tmp_path / "nonexistent.yaml"
@@ -480,12 +494,14 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
     sc = _load_study(study_yaml)
     # Pinned over the full resolved-config surface (config.model_dump). Re-pinned
     # when MeasurementConfig gained the measurement-window fields (methodology,
-    # window, warmup-discard, auto-detect): new defaulted fields shift the
-    # canonical JSON, so the fingerprint moves while the resolve -> dedup -> hash
-    # pipeline is unchanged (6 declared -> 4 unique below still holds). A value
-    # change with those structural assertions intact is a benign schema-surface
-    # shift; a change to the dedup counts is not.
-    assert sc.study_design_hash == "d46af75d621fc28a"
+    # window, warmup-discard, auto-detect) and again for the nomenclature sweep
+    # (top-level harness: retired; transformers section now nests llem_execution,
+    # so the canonical JSON gains that key and drops the harness one): new/moved
+    # defaulted fields shift the canonical JSON, so the fingerprint moves while
+    # the resolve -> dedup -> hash pipeline is unchanged (6 declared -> 4 unique
+    # below still holds). A value change with those structural assertions intact
+    # is a benign schema-surface shift; a change to the dedup counts is not.
+    assert sc.study_design_hash == "6661f86ad149d8dc"
     # 6 declared configs collapse to 4 unique under resolved-config dedup.
     assert len(sc.experiments) == 4
     assert len(sc.declared_resolved_config_hashes) == 6

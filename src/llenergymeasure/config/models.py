@@ -28,11 +28,21 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, Field, model_validator
 
-from llenergymeasure.config.harness import HarnessConfig
 from llenergymeasure.config.ssot import ALL_ENGINES, ENGINES, SAMPLING_PRESETS, Engine, engine_str
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
 logger = logging.getLogger(__name__)
+
+#: Migration message for the retired top-level ``harness:`` key. The knobs moved
+#: into the engine section under ``<engine>.llem_execution:`` (clean break, no
+#: alias). Surfaced both by the loader's unknown-key check and the
+#: ExperimentConfig before-validator so every construction path reports it.
+RETIRED_HARNESS_KEY_MSG = (
+    "The top-level 'harness:' section was removed. Move its knobs (batch_size, "
+    "torch_compile, torch_compile_mode, torch_compile_backend, allow_tf32, "
+    "autocast_enabled, autocast_dtype) into the engine section under "
+    "'<engine>.llem_execution:' (e.g. transformers.llem_execution.batch_size)."
+)
 
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
@@ -43,8 +53,8 @@ SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 if TYPE_CHECKING:
     from llenergymeasure.config.engine_rules.loader import EngineRulesLoader
     from llenergymeasure.config.generated.tensorrt import Config as TensorRTConfig
-    from llenergymeasure.config.generated.transformers import Config as TransformersConfig
     from llenergymeasure.config.generated.vllm import Config as VLLMConfig
+    from llenergymeasure.config.llem_execution import TransformersSection
 
 
 @lru_cache(maxsize=1)
@@ -452,6 +462,20 @@ class ExperimentConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_retired_harness_key(cls, data: Any) -> Any:
+        """Fail helpfully on the retired top-level ``harness:`` key (clean break).
+
+        The llem-owned execution knobs moved into the engine section under
+        ``<engine>.llem_execution:``; there is no alias. Raising here (before the
+        bare ``extra="forbid"`` rejection) names the new location on every
+        construction path that does not go through the loader.
+        """
+        if isinstance(data, dict) and "harness" in data:
+            raise ValueError(RETIRED_HARNESS_KEY_MSG)
+        return data
+
     # Task - what to measure
     task: TaskConfig = Field(..., description="Task configuration: model, dataset, workload shape")
 
@@ -478,8 +502,11 @@ class ExperimentConfig(BaseModel):
         ),
     )
 
-    # Engine sections (None = use engine's own defaults)
-    transformers: TransformersConfig | None = Field(
+    # Engine sections (None = use engine's own defaults). The transformers
+    # section is TransformersSection: the generated (mined) Config plus the
+    # hand-written llem_execution knobs; vllm/tensorrt are the generated Config
+    # directly (no llem_execution residual).
+    transformers: TransformersSection | None = Field(
         default=None,
         description="HuggingFace Transformers engine configuration (only used when engine=transformers)",
     )
@@ -490,14 +517,6 @@ class ExperimentConfig(BaseModel):
     tensorrt: TensorRTConfig | None = Field(
         default=None,
         description="TensorRT-LLM configuration (only used when engine=tensorrt)",
-    )
-
-    # llem-orchestration knobs that have no engine-native API (transformers-only
-    # residual today: prompt-batching, torch.compile, TF32, autocast). Engine
-    # config proper lives in the engine sections above.
-    harness: HarnessConfig | None = Field(
-        default=None,
-        description="Per-engine llem-orchestration knobs (batching, torch.compile, TF32, autocast).",
     )
 
     # Escape hatch - explicitly declared for extra="forbid" compatibility
@@ -527,27 +546,28 @@ class ExperimentConfig(BaseModel):
         section = getattr(self, self.engine.value, None)
         return getattr(section, "sampling_params", None) if section is not None else None
 
-    def active_harness(self) -> Any:
-        """Return the active engine's harness block (llem-orchestration knobs), or None.
+    def active_llem_execution(self) -> Any:
+        """Return the active engine's ``llem_execution`` block, or None.
 
-        Mirrors ``active_engine_params()`` for the hand-written orchestration
-        layer. Only transformers has a harness residual today (batch_size,
+        Mirrors ``active_engine_params()`` for the hand-written llem_execution layer.
+        Only transformers has an llem-execution residual today (batch_size,
         torch.compile, TF32, autocast); vllm and tensorrt drive those through
-        native engine APIs, so ``harness`` carries no block for them and this
-        returns None.
+        native engine APIs, so their sections carry no ``llem_execution`` block
+        and this returns None.
         """
-        return getattr(self.harness, self.engine.value, None) if self.harness is not None else None
+        section = getattr(self, self.engine.value, None)
+        return getattr(section, "llem_execution", None) if section is not None else None
 
-    def _harness_sourced_batch_size(self) -> int:
-        """The harness ``batch_size`` knob (default 1) shared by both batch semantics.
+    def _llem_execution_sourced_batch_size(self) -> int:
+        """The ``llem_execution.batch_size`` knob (default 1), shared by both batch semantics.
 
-        For harness-sourced engines (transformers) the declared capacity bound and
-        the static configured batch are the same fact - the orchestration knob on
-        ``harness.<engine>.batch_size`` - so both accessors defer here.
+        For llem-execution-sourced engines (transformers) the declared capacity bound
+        and the static configured batch are the same fact - the knob on
+        ``<engine>.llem_execution.batch_size`` - so both accessors defer here.
         """
-        harness = self.active_harness()
-        if harness is not None and harness.batch_size is not None:
-            return int(harness.batch_size)
+        execution = self.active_llem_execution()
+        if execution is not None and execution.batch_size is not None:
+            return int(execution.batch_size)
         return 1
 
     def capacity_batch_size(self) -> int:
@@ -555,13 +575,14 @@ class ExperimentConfig(BaseModel):
 
         The largest number of sequences the engine may hold at once, used to size a
         worst-case VRAM estimate. Reads the per-engine
-        :class:`~llenergymeasure.config.ssot.BatchSizeModel` descriptor: the harness
-        ``batch_size`` for transformers, the declared capacity field (``max_num_seqs``
-        for vLLM, ``max_batch_size`` for tensorrt) otherwise. Defaults to 1 when unset.
+        :class:`~llenergymeasure.config.ssot.BatchSizeModel` descriptor: the
+        ``llem_execution.batch_size`` for transformers, the declared capacity field
+        (``max_num_seqs`` for vLLM, ``max_batch_size`` for tensorrt) otherwise.
+        Defaults to 1 when unset.
         """
         model = ENGINES[self.engine].batch
-        if model.harness_sourced:
-            return self._harness_sourced_batch_size()
+        if model.llem_execution_sourced:
+            return self._llem_execution_sourced_batch_size()
         if model.capacity_field is not None:
             params = self.active_engine_params()
             if params is not None:
@@ -579,8 +600,8 @@ class ExperimentConfig(BaseModel):
         the per-engine :class:`~llenergymeasure.config.ssot.BatchSizeModel` descriptor.
         """
         model = ENGINES[self.engine].batch
-        if model.harness_sourced:
-            return self._harness_sourced_batch_size()
+        if model.llem_execution_sourced:
+            return self._llem_execution_sourced_batch_size()
         if model.static_field is not None:
             params = self.active_engine_params()
             if params is not None:
@@ -848,17 +869,19 @@ class ExperimentConfig(BaseModel):
 def _rebuild_experiment_config() -> None:
     """Rebuild ExperimentConfig to resolve forward references.
 
-    All three engines resolve to their generated nested ``Config``
-    (engine_params / sampling_params shape, projected from the mined schema).
+    vLLM and tensorrt resolve to their generated nested ``Config`` (engine_params
+    / sampling_params shape, projected from the mined schema); the transformers
+    section is ``TransformersSection`` - that generated Config subclassed with the
+    hand-written ``llem_execution`` block.
     """
     from llenergymeasure.config.generated.tensorrt import Config as TensorRTConfig
-    from llenergymeasure.config.generated.transformers import Config as TransformersConfig
     from llenergymeasure.config.generated.vllm import Config as VLLMConfig
+    from llenergymeasure.config.llem_execution import TransformersSection
 
     ExperimentConfig.model_rebuild(
         _types_namespace={
             "VLLMConfig": VLLMConfig,
-            "TransformersConfig": TransformersConfig,
+            "TransformersSection": TransformersSection,
             "TensorRTConfig": TensorRTConfig,
         }
     )

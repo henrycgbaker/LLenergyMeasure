@@ -12,8 +12,11 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 > per-experiment environment sidecar is renamed `environment.json` -> `system.json`
 > ([#879]), and the runner-provenance `mode` values are renamed `local`/`docker` ->
 > `process`/`container` with the no-spec `source` sentinel `local` -> `implicit`
-> ([#880]), all within this same untagged 2.0 stamp - every v0.7.0 format addition
-> rides this one break (no `2.1`). Both renames are clean breaks with no alias
+> ([#880]), and the result-field nomenclature is aligned (`measurement_config_hash`
+> -> `declared_config_hash`, `thermal_throttle` -> the symmetric `throttle` object,
+> `mj_per_tok_*` -> `energy_per_token_mj_*`) ([#881]) - all within this same untagged
+> 2.0 stamp; every v0.7.0 format addition rides this one break (no `2.1`). All of
+> these are clean breaks with no alias
 > translation: a pre-rename `environment.json` is not read (on such a bundle the
 > system sidecar is simply absent to the reader), and `mode` is now a closed
 > `Literal`, so ANY bundle (1.0 or 2.0-era) whose runner block carries the old
@@ -133,6 +136,37 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   validation loudly rather than loading a stale string (the open `source` field tolerates a
   stale `local` sentinel inertly). Update any pinned `runners:` values to the new
   vocabulary. ([#880])
+- **Breaking (results bundle, rides 2.0 - no version bump):** result-field
+  nomenclature alignment. `ExperimentResult.measurement_config_hash` is renamed
+  `declared_config_hash` (it hashes the whole declared config, matching the
+  `declared_config` term the `config.json` sidecar already uses; the
+  Parquet timeseries KV-metadata key of the same name follows).
+  `ExperimentResult.thermal_throttle` becomes `throttle`, restructured from a
+  flat bag into a symmetric object: `throttle.thermal` and `throttle.power` are
+  each a `ThrottleAxis` with `{any, hw, sw}` (`ThermalThrottleInfo` is replaced
+  by `ThrottleInfo` + `ThrottleAxis`). This adds the previously-missing combined
+  power indicator (`power.any`) and fixes the old flat `.power` field that only
+  reflected the software power cap. `mj_per_tok_total` / `mj_per_tok_adjusted`
+  are renamed `energy_per_token_mj_total` / `energy_per_token_mj_adjusted`, and
+  the study manifest's `mj_per_tok` becomes `energy_per_token_mj`. Clean break:
+  the old field names are not tolerated on read, so a pre-rename bundle fails
+  loudly under `extra="forbid"`; no read alias is provided. ([#881])
+- **Breaking (config):** the top-level `harness:` config key is retired. Its
+  llem-owned execution knobs (`batch_size`, `torch_compile*`, `allow_tf32`,
+  `autocast_*`) move into a per-engine `llem_execution:` sub-section, sibling of
+  `engine_params:` inside the engine section (e.g.
+  `transformers.llem_execution.batch_size`). Only transformers has these knobs.
+  Clean break with no alias: a config still carrying a top-level `harness:` key
+  is rejected with an error naming the new location. Internal renames follow
+  (`TransformersHarness` -> `TransformersLlemExecution`; the `HarnessConfig` wrapper
+  is dropped; the transformers section is now a `TransformersSection` that
+  subclasses the generated Config to add the typed `llem_execution` field). The
+  sweep-axis key is now `transformers.llem_execution.batch_size`. Because the
+  knobs move inside the engine section, the declared-config-hash of any config
+  that sets them shifts (dedup is within-study, so this is benign pre-1.0). The
+  resolved/observed config-hash identity slot is likewise renamed `harness` ->
+  `llem_execution`, so those hash values shift too (same within-study rationale).
+  ([#881])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their
@@ -1549,3 +1583,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#875]: https://github.com/henrycgbaker/llenergymeasure/pull/875
 [#879]: https://github.com/henrycgbaker/llenergymeasure/pull/879
 [#880]: https://github.com/henrycgbaker/llenergymeasure/pull/880
+[#881]: https://github.com/henrycgbaker/llenergymeasure/pull/881

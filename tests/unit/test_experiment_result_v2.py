@@ -31,7 +31,7 @@ def make_result():
     def _make(**kwargs):
         defaults = dict(
             experiment_id="test-001",
-            measurement_config_hash="abcdef0123456789",
+            declared_config_hash="abcdef0123456789",
             input_tokens=800,
             output_tokens=200,
             total_tokens=1000,
@@ -63,14 +63,14 @@ def test_bundle_version_default(make_result):
 
 
 # ---------------------------------------------------------------------------
-# Task 2.2: measurement_config_hash
+# Task 2.2: declared_config_hash
 # ---------------------------------------------------------------------------
 
 
-def test_measurement_config_hash_field(make_result):
-    """measurement_config_hash round-trips through construction."""
-    result = make_result(measurement_config_hash="abcdef0123456789")
-    assert result.measurement_config_hash == "abcdef0123456789"
+def test_declared_config_hash_field(make_result):
+    """declared_config_hash round-trips through construction."""
+    result = make_result(declared_config_hash="abcdef0123456789")
+    assert result.declared_config_hash == "abcdef0123456789"
 
 
 # ---------------------------------------------------------------------------
@@ -413,19 +413,19 @@ def test_engine_convenience_copy(make_result):
 
 
 # ---------------------------------------------------------------------------
-# mj_per_tok fields on ExperimentResult
+# energy_per_token_mj fields on ExperimentResult
 # ---------------------------------------------------------------------------
 
 
-def test_mj_per_tok_fields_exist(make_result):
-    """mj_per_tok_adjusted and mj_per_tok_total are accessible when set."""
-    result = make_result(mj_per_tok_adjusted=0.5, mj_per_tok_total=0.8)
-    assert result.mj_per_tok_adjusted == pytest.approx(0.5)
-    assert result.mj_per_tok_total == pytest.approx(0.8)
+def test_energy_per_token_mj_fields_exist(make_result):
+    """energy_per_token_mj_adjusted and energy_per_token_mj_total are accessible when set."""
+    result = make_result(energy_per_token_mj_adjusted=0.5, energy_per_token_mj_total=0.8)
+    assert result.energy_per_token_mj_adjusted == pytest.approx(0.5)
+    assert result.energy_per_token_mj_total == pytest.approx(0.8)
 
 
-def test_mj_per_tok_fields_default_to_none(make_result):
-    """mj_per_tok_adjusted and mj_per_tok_total default to None."""
+def test_energy_per_token_mj_fields_default_to_none(make_result):
+    """energy_per_token_mj_adjusted and energy_per_token_mj_total default to None."""
     result = make_result()
-    assert result.mj_per_tok_adjusted is None
-    assert result.mj_per_tok_total is None
+    assert result.energy_per_token_mj_adjusted is None
+    assert result.energy_per_token_mj_total is None

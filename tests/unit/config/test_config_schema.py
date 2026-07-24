@@ -133,8 +133,8 @@ def test_tensorrt_engine_accepted():
 def test_pytorch_config_section_composition():
     """config with transformers engine_params section is accepted.
 
-    batch_size moved to harness.transformers (HarnessConfig); the engine
-    section carries engine-native fields under engine_params.
+    batch_size moved to transformers.llem_execution (TransformersLlemExecution); the
+    engine section carries engine-native fields under engine_params.
     """
     config = ExperimentConfig(
         task={"model": "gpt2"},
@@ -143,6 +143,48 @@ def test_pytorch_config_section_composition():
     )
     assert config.transformers is not None
     assert config.transformers.engine_params.device_map == "auto"
+
+
+def test_transformers_llem_execution_is_a_typed_section_sibling():
+    """llem_execution nests inside the transformers section as a typed sibling.
+
+    It composes with engine_params (native passthrough) and validates strictly
+    against TransformersLlemExecution; active_llem_execution() reads it back.
+    """
+    config = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={
+            "engine_params": {"dtype": "bfloat16"},
+            "llem_execution": {"batch_size": 8, "torch_compile": True},
+        },
+    )
+    execution = config.active_llem_execution()
+    assert execution is not None
+    assert execution.batch_size == 8
+    assert execution.torch_compile is True
+    assert config.capacity_batch_size() == 8
+
+
+def test_transformers_llem_execution_torch_compile_options_validated():
+    """The strict TransformersLlemExecution validator still fires under the new nesting."""
+    with pytest.raises(ValidationError, match="requires torch_compile=True"):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            transformers={"llem_execution": {"torch_compile_mode": "reduce-overhead"}},
+        )
+
+
+def test_retired_top_level_harness_key_rejected_on_construction():
+    """Validating a payload with the retired top-level harness: key fails helpfully."""
+    payload = {
+        "task": {"model": "gpt2"},
+        "engine": "transformers",
+        "harness": {"transformers": {"batch_size": 4}},
+    }
+    with pytest.raises(ValidationError, match="llem_execution"):
+        ExperimentConfig.model_validate(payload)
 
 
 # ---------------------------------------------------------------------------

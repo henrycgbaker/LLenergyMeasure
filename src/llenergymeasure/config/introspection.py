@@ -276,9 +276,9 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     """Get all parameters for an engine from its generated ``Config`` model.
 
     Paths use the generated nested shape: ``<engine>.engine_params.<field>`` and
-    ``<engine>.sampling_params.<field>``. For transformers, the llem-orchestration
-    residual (batch_size, torch_compile, ...) is also included under the engine
-    prefix from ``TransformersHarness``.
+    ``<engine>.sampling_params.<field>``. For transformers, the llem-owned
+    execution residual (batch_size, torch_compile, ...) is also included under the
+    engine prefix from ``TransformersLlemExecution``.
 
     Args:
         engine: One of "transformers", "vllm", "tensorrt".
@@ -291,9 +291,9 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     params = get_params_from_model(model_class, prefix=engine)
 
     if engine == "transformers":
-        from llenergymeasure.config.harness import TransformersHarness
+        from llenergymeasure.config.llem_execution import TransformersLlemExecution
 
-        params.update(get_params_from_model(TransformersHarness, prefix=engine))
+        params.update(get_params_from_model(TransformersLlemExecution, prefix=engine))
 
     for param in params.values():
         param["engine_support"] = [engine]
@@ -337,16 +337,16 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         Dict mapping capability names to per-engine support status.
         Values are True/False for support.
     """
-    from llenergymeasure.config.harness import TransformersHarness
+    from llenergymeasure.config.llem_execution import TransformersLlemExecution
 
     # Engine fields live on each generated Config's ``engine_params`` sub-model.
     transformers_fields = _engine_params_field_names("transformers")
     vllm_fields = _engine_params_field_names("vllm")
     tensorrt_fields = _engine_params_field_names("tensorrt")
 
-    # torch.compile is an llem-orchestration knob on TransformersHarness, not an
-    # engine field.
-    transformers_harness_fields = set(TransformersHarness.model_fields.keys())
+    # torch.compile is an llem-owned execution knob on TransformersLlemExecution, not
+    # an engine field.
+    transformers_execution_fields = set(TransformersLlemExecution.model_fields.keys())
 
     return {
         "tensor_parallel": {
@@ -371,7 +371,7 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
             "tensorrt": False,
         },
         "torch_compile": {
-            "transformers": "torch_compile" in transformers_harness_fields,
+            "transformers": "torch_compile" in transformers_execution_fields,
             "vllm": False,
             "tensorrt": False,
         },

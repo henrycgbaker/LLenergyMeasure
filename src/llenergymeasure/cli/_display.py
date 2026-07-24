@@ -45,10 +45,10 @@ def print_result_summary(result: ExperimentResult) -> None:
     if result.energy_adjusted_j is not None:
         print(f"  Adjusted       {_sig3(result.energy_adjusted_j)} J")
     # Per-token energy (mJ/tok) - prefer adjusted, fall back to total, no recomputation
-    if result.mj_per_tok_adjusted is not None:
-        print(f"  Per token      {_sig3(result.mj_per_tok_adjusted)} mJ/tok (adjusted)")
-    elif result.mj_per_tok_total is not None:
-        print(f"  Per token      {_sig3(result.mj_per_tok_total)} mJ/tok")
+    if result.energy_per_token_mj_adjusted is not None:
+        print(f"  Per token      {_sig3(result.energy_per_token_mj_adjusted)} mJ/tok (adjusted)")
+    elif result.energy_per_token_mj_total is not None:
+        print(f"  Per token      {_sig3(result.energy_per_token_mj_total)} mJ/tok")
     print()
 
     # --- Performance ---
@@ -147,11 +147,11 @@ def print_dry_run(
     dtype_display = engine_dtype or "-"
     print(f"  Dtype          {dtype_display}{_annotate('dtype', engine_dtype)}")
 
-    # Batch size - transformers llem-orchestration knob (HarnessConfig), if present
+    # Batch size - transformers llem-owned execution knob (llem_execution), if present
     batch_size: int | None = None
-    harness = config.harness.transformers if config.harness is not None else None
-    if harness is not None:
-        batch_size = harness.batch_size
+    execution = config.active_llem_execution()
+    if execution is not None:
+        batch_size = execution.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")
 

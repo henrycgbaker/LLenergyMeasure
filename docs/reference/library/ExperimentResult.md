@@ -32,7 +32,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 |-------|------|-------------|
 | `bundle_version` | `str` | Results-bundle version (current: `"2.0"`), shared across `result.json`, `config.json`, and `system.json` as one contract. |
 | `experiment_id` | `str` | Unique identifier for this experiment run. |
-| `measurement_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
+| `declared_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
 | `llenergymeasure_version` | `str \| None` | Package version that produced this result. |
 | `serving_mode` | `str` | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement (the only mode today); `"server"` arrives with server mode (v0.8.0). A plain string, not a closed vocabulary. |
 | `engine` | `str` | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar. |
@@ -54,8 +54,8 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | `total_inference_time_sec` | `float` | seconds | Wall time for the inference phase. |
 | `avg_tokens_per_second` | `float` | tok/s | Throughput. |
 | `avg_energy_per_token_j` | `float` | J/tok | Mean energy per token. |
-| `mj_per_tok_total` | `float \| None` | mJ/tok | Millijoules per token from total (unadjusted) energy. |
-| `mj_per_tok_adjusted` | `float \| None` | mJ/tok | Millijoules per token from baseline-adjusted energy. `None` when `energy_adjusted_j` is `None`. |
+| `energy_per_token_mj_total` | `float \| None` | mJ/tok | Millijoules per token from total (unadjusted) energy. |
+| `energy_per_token_mj_adjusted` | `float \| None` | mJ/tok | Millijoules per token from baseline-adjusted energy. `None` when `energy_adjusted_j` is `None`. |
 
 ### FLOPs metrics
 
@@ -87,7 +87,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | `measurement_warnings` | `list[str]` | Quality warnings (e.g. short duration, thermal drift detected). |
 | `warmup_excluded_samples` | `int \| None` | Warmup iterations run before the measurement window (from `warmup_result.iterations_completed`). `None` when no warmup result is available. |
 | `reproducibility_notes` | `str` | Fixed disclaimer about NVML measurement accuracy (+/- 5%). |
-| `thermal_throttle` | `ThermalThrottleInfo \| None` | GPU thermal and power throttle events during the run. |
+| `throttle` | `ThrottleInfo \| None` | GPU throttling during the run, symmetric across a `thermal` and a `power` axis (each a `ThrottleAxis` with `any` / `hw` / `sw` flags). |
 | `warmup_result` | `WarmupResult \| None` | Warmup convergence result (populated when CV convergence detection is enabled). |
 
 ### Timing
@@ -127,8 +127,8 @@ result = run_experiment(model="gpt2", engine="transformers")
 
 print(f"Energy (total):    {result.total_energy_j:.2f} J")
 print(f"Energy (adjusted): {result.energy_adjusted_j or 'N/A'}")
-print(f"mJ/tok (total):    {result.mj_per_tok_total:.3f}")
-print(f"mJ/tok (adjusted): {result.mj_per_tok_adjusted or 'N/A'}")
+print(f"mJ/tok (total):    {result.energy_per_token_mj_total:.3f}")
+print(f"mJ/tok (adjusted): {result.energy_per_token_mj_adjusted or 'N/A'}")
 print(f"Throughput:        {result.avg_tokens_per_second:.1f} tok/s")
 print(f"FLOPs/s:           {result.flops_per_second or 'N/A'}")
 ```
@@ -139,7 +139,7 @@ print(f"FLOPs/s:           {result.flops_per_second or 'N/A'}")
 a = run_experiment(model="gpt2", engine="transformers")
 b = run_experiment(model="gpt2-medium", engine="transformers")
 
-ratio = b.mj_per_tok_total / a.mj_per_tok_total
+ratio = b.energy_per_token_mj_total / a.energy_per_token_mj_total
 print(f"gpt2-medium is {ratio:.2f}x more expensive per token than gpt2")
 ```
 
@@ -167,15 +167,15 @@ if result.measurement_warnings:
     for w in result.measurement_warnings:
         print(f"Warning: {w}")
 
-if result.thermal_throttle and result.thermal_throttle.throttle_detected:
-    print("Thermal throttling detected - results may be unreliable")
+if result.throttle and result.throttle.detected:
+    print("Thermal or power throttling detected - results may be unreliable")
 ```
 
 ---
 
 ## Pitfalls
 
-**`energy_adjusted_j` and `mj_per_tok_adjusted` are `None` when baseline is disabled.**
+**`energy_adjusted_j` and `energy_per_token_mj_adjusted` are `None` when baseline is disabled.**
 If `measurement.baseline.enabled=False`, neither field is populated. Always guard with
 `if result.energy_adjusted_j is not None` before using them.
 

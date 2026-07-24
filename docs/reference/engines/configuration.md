@@ -59,10 +59,8 @@ transformers:
     attn_implementation: sdpa
   sampling_params:
     temperature: 0.7
-
-# transformers-only orchestration knobs (see Harness section)
-harness:
-  transformers:
+  # transformers-only llem-owned execution knobs (see Execution knobs section)
+  llem_execution:
     batch_size: 4
 
 # Optional
@@ -143,18 +141,23 @@ identically across engines. Every one is `extra="forbid"`.
 | `sampling_preset` | `deterministic` \| `standard` \| `creative` \| `factual` \| null | null | Merges preset values into the active engine's `sampling_params:` section at parse time. Explicit YAML values take precedence. | `ExperimentConfig` (`expand_sampling_preset`, `SAMPLING_PRESETS`) |
 | `passthrough_kwargs` | dict \| null | null | Extra kwargs forwarded to the engine at execution time; keys must not collide with `ExperimentConfig` top-level field names | `ExperimentConfig` (`validate_passthrough_kwargs_no_collision`) |
 
-## Harness (`harness:`) - transformers-only orchestration knobs
+## Execution knobs (`transformers.llem_execution:`) - transformers-only
 
 Some knobs are features llem implements itself in its own runner loop, because
 the engine exposes no native API for them. They are not engine config, so they
-live under `harness:` (hand-written at `config/harness.py`), not under the
-generated engine block. Only transformers has a harness residual today; vllm
-and tensorrt drive batching and precision through native engine APIs, so
-`harness` carries no block for them.
+are hand-written (at `config/llem_execution.py`) rather than mined into the generated
+engine block. They are exposed as a per-engine `llem_execution:` sub-section,
+sibling of `engine_params:` / `sampling_params:` inside the engine section. Only
+transformers has an execution residual today; vllm and tensorrt drive batching
+and precision through native engine APIs, so their sections carry no
+`llem_execution` block.
+
+There is no top-level `harness:` key. A config that still carries one is rejected
+with an error naming the new location (`<engine>.llem_execution`).
 
 ```yaml
-harness:
-  transformers:
+transformers:
+  llem_execution:
     batch_size: 4
     torch_compile: true
     torch_compile_mode: reduce-overhead
@@ -162,17 +165,17 @@ harness:
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `batch_size` | int >= 1 | null (-> 1) | Prompt-batching size for llem's runner loop (`model.generate()` has no batch_size kwarg) | `TransformersHarness` |
-| `torch_compile` | bool | null (-> false) | Enable `torch.compile` on the loaded model | `TransformersHarness` |
-| `torch_compile_mode` | str | null (-> `default`) | `default` \| `reduce-overhead` \| `max-autotune`. Requires `torch_compile=true`. | `TransformersHarness` |
-| `torch_compile_backend` | str | null (-> `inductor`) | `torch.compile` backend. Requires `torch_compile=true`. | `TransformersHarness` |
-| `allow_tf32` | bool | null | Allow TF32 matmul on Ampere+ via `torch.backends` | `TransformersHarness` |
-| `autocast_enabled` | bool | null (-> false) | Wrap generation in `torch.autocast` | `TransformersHarness` |
-| `autocast_dtype` | `float16` \| `bfloat16` | null (-> bfloat16 on Ampere) | AMP dtype (used when `autocast_enabled=true`) | `TransformersHarness` |
+| `batch_size` | int >= 1 | null (-> 1) | Prompt-batching size for llem's runner loop (`model.generate()` has no batch_size kwarg) | `TransformersLlemExecution` |
+| `torch_compile` | bool | null (-> false) | Enable `torch.compile` on the loaded model | `TransformersLlemExecution` |
+| `torch_compile_mode` | str | null (-> `default`) | `default` \| `reduce-overhead` \| `max-autotune`. Requires `torch_compile=true`. | `TransformersLlemExecution` |
+| `torch_compile_backend` | str | null (-> `inductor`) | `torch.compile` backend. Requires `torch_compile=true`. | `TransformersLlemExecution` |
+| `allow_tf32` | bool | null | Allow TF32 matmul on Ampere+ via `torch.backends` | `TransformersLlemExecution` |
+| `autocast_enabled` | bool | null (-> false) | Wrap generation in `torch.autocast` | `TransformersLlemExecution` |
+| `autocast_dtype` | `float16` \| `bfloat16` | null (-> bfloat16 on Ampere) | AMP dtype (used when `autocast_enabled=true`) | `TransformersLlemExecution` |
 
 Naming `torch_compile_mode` or `torch_compile_backend` without
 `torch_compile=true` is rejected (`validate_torch_compile_options` in
-`harness.py`).
+`llem_execution.py`).
 
 ## Transformers engine (`transformers:`)
 
@@ -424,9 +427,7 @@ transformers:
     bnb_4bit_quant_type: nf4
     bnb_4bit_use_double_quant: true
     attn_implementation: flash_attention_2
-
-harness:
-  transformers:
+  llem_execution:
     batch_size: 4
     torch_compile: false
 ```

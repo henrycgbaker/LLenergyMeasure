@@ -37,7 +37,7 @@ class TestIsGroup:
         assert _is_group(["float16", "bfloat16"]) is False
 
     def test_list_of_dicts_is_group(self):
-        assert _is_group([{"harness.transformers.torch_compile": True}]) is True
+        assert _is_group([{"transformers.llem_execution.torch_compile": True}]) is True
 
     def test_list_with_empty_dict_is_group(self):
         assert _is_group([{}]) is True
@@ -90,8 +90,8 @@ class TestGroupBackendScope:
 class TestExpandGroupEntry:
     def test_scalar_entry_passes_through(self):
         entry = {
-            "harness.transformers.torch_compile": True,
-            "harness.transformers.torch_compile_mode": "default",
+            "transformers.llem_execution.torch_compile": True,
+            "transformers.llem_execution.torch_compile_mode": "default",
         }
         result = _expand_group_entry(entry)
         assert result == [entry]
@@ -141,10 +141,10 @@ class TestExpandGroupEntry:
 class TestExpandGroup:
     def test_simple_group(self):
         entries = [
-            {"harness.transformers.torch_compile": False},
+            {"transformers.llem_execution.torch_compile": False},
             {
-                "harness.transformers.torch_compile": True,
-                "harness.transformers.torch_compile_mode": "default",
+                "transformers.llem_execution.torch_compile": True,
+                "transformers.llem_execution.torch_compile_mode": "default",
             },
         ]
         result = _expand_group(entries)
@@ -169,10 +169,10 @@ class TestExpandGroup:
 
 class TestRouteKeyValue:
     def test_engine_scoped_key(self):
-        config = {"engine": "transformers", "harness": {"transformers": {"batch_size": 4}}}
-        result = _route_key_value(dict(config), "harness.transformers.torch_compile", True)
-        assert result["harness"]["transformers"]["torch_compile"] is True
-        assert result["harness"]["transformers"]["batch_size"] == 4  # preserved
+        config = {"engine": "transformers", "transformers": {"llem_execution": {"batch_size": 4}}}
+        result = _route_key_value(dict(config), "transformers.llem_execution.torch_compile", True)
+        assert result["transformers"]["llem_execution"]["torch_compile"] is True
+        assert result["transformers"]["llem_execution"]["batch_size"] == 4  # preserved
 
     def test_cross_section_key(self):
         config = {"engine": "transformers", "decoder": {"temperature": 1.0}}
@@ -193,10 +193,12 @@ class TestRouteKeyValue:
 
 class TestApplyGroupOverlay:
     def test_engine_scoped_key(self):
-        config = {"engine": "transformers", "harness": {"transformers": {"batch_size": 4}}}
-        result = _apply_group_overlay(dict(config), {"harness.transformers.torch_compile": True})
-        assert result["harness"]["transformers"]["torch_compile"] is True
-        assert result["harness"]["transformers"]["batch_size"] == 4  # preserved
+        config = {"engine": "transformers", "transformers": {"llem_execution": {"batch_size": 4}}}
+        result = _apply_group_overlay(
+            dict(config), {"transformers.llem_execution.torch_compile": True}
+        )
+        assert result["transformers"]["llem_execution"]["torch_compile"] is True
+        assert result["transformers"]["llem_execution"]["batch_size"] == 4  # preserved
 
     def test_cross_section_key(self):
         config = {"engine": "transformers", "decoder": {"temperature": 1.0}}
@@ -235,12 +237,14 @@ class TestApplyGroupOverlay:
 class TestValidateSweepGroups:
     def test_no_collision_passes(self):
         groups: dict[str, list[dict[str, object]]] = {"transformers.compilation": [{}]}
-        axis_keys = {"harness.transformers.batch_size"}
+        axis_keys = {"transformers.llem_execution.batch_size"}
         _validate_sweep_groups(groups, axis_keys)  # should not raise
 
     def test_collision_raises(self):
-        groups: dict[str, list[dict[str, object]]] = {"harness.transformers.batch_size": [{}]}
-        axis_keys = {"harness.transformers.batch_size"}
+        groups: dict[str, list[dict[str, object]]] = {
+            "transformers.llem_execution.batch_size": [{}]
+        }
+        axis_keys = {"transformers.llem_execution.batch_size"}
         with pytest.raises(ConfigError, match="collide"):
             _validate_sweep_groups(groups, axis_keys)
 
@@ -259,14 +263,14 @@ class TestExpandGridSweepGroups:
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "max-autotune",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "max-autotune",
                     },
                 ],
             },
@@ -274,7 +278,7 @@ class TestExpandGridSweepGroups:
         valid, _skipped = expand_grid(raw)
         assert len(valid) == 6  # 2 dtype x 3 compilation variants
         # Check that compile variants are present
-        compile_values = [c.harness.transformers.torch_compile for c in valid]
+        compile_values = [c.transformers.llem_execution.torch_compile for c in valid]
         assert compile_values.count(False) == 2
         assert compile_values.count(True) == 4
 
@@ -306,10 +310,10 @@ class TestExpandGridSweepGroups:
             "engine": "transformers",
             "sweep": {
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                 ],
                 "transformers.quantization": [
@@ -329,10 +333,10 @@ class TestExpandGridSweepGroups:
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -377,10 +381,10 @@ class TestExpandGridSweepGroups:
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -405,10 +409,10 @@ class TestExpandGridSweepGroups:
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "vllm.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -454,10 +458,10 @@ class TestExpandGridSweepGroups:
             "engine": "transformers",
             "sweep": {
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                 ],
             },
@@ -476,10 +480,10 @@ class TestExpandGridSweepGroupsMultiBackend:
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "vllm.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                 ],
                 "vllm.decoding": [
@@ -509,27 +513,27 @@ class TestCombinatorialWarnings:
         # invalid (flash_attention_2 + float32) = 120 valid experiments. Paths use
         # the nested shape so dtype/attn land on engine_params where the
         # FA2+float32 cross-validator can see them; batch_size + torch_compile are
-        # harness knobs.
+        # llem_execution knobs.
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.engine_params.dtype": ["float32", "float16", "bfloat16"],
-                "harness.transformers.batch_size": [1, 4, 8, 16, 32],
+                "transformers.llem_execution.batch_size": [1, 4, 8, 16, 32],
                 "transformers.engine_params.attn_implementation": [
                     "sdpa",
                     "flash_attention_2",
                     "eager",
                 ],
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "max-autotune",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "max-autotune",
                     },
                 ],
             },
@@ -556,10 +560,10 @@ class TestHashStabilityWithGroups:
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
-                    {"harness.transformers.torch_compile": False},
+                    {"transformers.llem_execution.torch_compile": False},
                     {
-                        "harness.transformers.torch_compile": True,
-                        "harness.transformers.torch_compile_mode": "default",
+                        "transformers.llem_execution.torch_compile": True,
+                        "transformers.llem_execution.torch_compile_mode": "default",
                     },
                 ],
             },

@@ -24,7 +24,7 @@ TEST_MODEL = "gpt2"
 TEST_ENGINE = "transformers"
 TEST_EXPERIMENT_ID = "test-001"
 TEST_CONFIG_HASH = "deadbeef12345678"
-TEST_MEASUREMENT_HASH = "abc123def4567890"
+TEST_DECLARED_CONFIG_HASH = "abc123def4567890"
 TEST_POWER_MW = 200_000  # 200 W in milliwatts (pynvml convention)
 TEST_POWER_W = 200.0
 
@@ -84,12 +84,12 @@ def make_config(**overrides) -> ExperimentConfig:
 def make_result(**overrides) -> ExperimentResult:
     """Return a valid ExperimentResult with sensible defaults.
 
-    Includes all required fields (measurement_config_hash, start_time, end_time)
+    Includes all required fields (declared_config_hash, start_time, end_time)
     to prevent ValidationError.
     """
     defaults: dict = {
         "experiment_id": TEST_EXPERIMENT_ID,
-        "measurement_config_hash": TEST_MEASUREMENT_HASH,
+        "declared_config_hash": TEST_DECLARED_CONFIG_HASH,
         "aggregation": AggregationMetadata(num_processes=1),
         "input_tokens": 800,
         "output_tokens": 200,
@@ -166,7 +166,7 @@ def write_container_system_sidecar(path: Path) -> dict:
 
     payload = {
         "experiment_id": "test-save-record-001",
-        "measurement_config_hash": "aabb1122ccdd3344",
+        "declared_config_hash": "aabb1122ccdd3344",
         "hardware": {
             "gpu": {"name": "NVIDIA A100-SXM4-80GB", "vram_total_mb": 81920.0},
             "cuda": {"version": "12.4", "driver_version": "535.104"},

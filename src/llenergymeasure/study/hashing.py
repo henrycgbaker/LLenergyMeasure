@@ -41,20 +41,22 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     constructs" from "what it generates with". Any section-level extras merge
     into the engine-params view.
 
-    The active engine's ``harness`` block (llem-orchestration knobs the engine
-    has no native API for - batch_size, torch_compile, allow_tf32, autocast) and
-    the ``measurement`` block (methodology dials) also join the view: both drive
-    execution or define distinct runs, so a sweep over either must produce
-    distinct resolved hashes rather than collapsing under dedup.
+    The active engine's ``llem_execution`` block (llem-owned execution knobs the
+    engine has no native API for - batch_size, torch_compile, allow_tf32,
+    autocast) and the ``measurement`` block (methodology dials) also join the
+    view: both drive execution or define distinct runs, so a sweep over either
+    must produce distinct resolved hashes rather than collapsing under dedup.
     """
     engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)
     dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
     engine_params = dump.pop("engine_params", None) or {}
     sampling = dump.pop("sampling_params", None) or {}
-
-    active_harness = config.active_harness()
-    harness_dump = active_harness.model_dump(mode="python") if active_harness is not None else {}
+    # llem_execution goes into its own hash-identity slot, not the engine-params
+    # view. The section dump already carries it (the transformers subclass has it
+    # as a real field), so capture the pop directly rather than re-fetching and
+    # re-dumping the same submodel via active_llem_execution().
+    execution_dump = dump.pop("llem_execution", None) or {}
 
     return ConfigHashView(
         engine=engine_name,
@@ -62,6 +64,6 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
         observed_engine_params={**engine_params, **dump},
         observed_sampling_params=sampling,
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
-        harness=harness_dump,
+        llem_execution=execution_dump,
         measurement=config.measurement.model_dump(mode="python"),
     )

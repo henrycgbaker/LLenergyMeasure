@@ -176,18 +176,18 @@ class TestExpandGridSweep:
         assert len(hashes) == 2
 
     def test_engine_scoped_sweep_routes_to_section(self):
-        """harness.transformers.batch_size routes to the transformers section, not top-level."""
+        """transformers.llem_execution.batch_size routes to the transformers section, not top-level."""
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "harness.transformers.batch_size": [1, 8],
+                "transformers.llem_execution.batch_size": [1, 8],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 2
         assert len(skipped) == 0
-        batch_sizes = {c.harness.transformers.batch_size for c in valid}
+        batch_sizes = {c.transformers.llem_execution.batch_size for c in valid}
         assert batch_sizes == {1, 8}
 
     def test_multi_engine_scoped_sweep(self):
@@ -198,7 +198,7 @@ class TestExpandGridSweep:
             "sweep": {
                 "transformers.engine_params.dtype": ["float16", "bfloat16"],
                 "vllm.engine_params.dtype": ["float16", "bfloat16"],
-                "harness.transformers.batch_size": [1, 8],
+                "transformers.llem_execution.batch_size": [1, 8],
                 "vllm.engine_params.max_num_seqs": [64, 256],
             },
         }
@@ -609,7 +609,7 @@ class TestMultiBackendSectionStripping:
             "sweep": {
                 "transformers.engine_params.dtype": ["bfloat16"],
                 "tensorrt.engine_params.dtype": ["bfloat16"],
-                "harness.transformers.batch_size": [1],
+                "transformers.llem_execution.batch_size": [1],
                 "tensorrt.engine_params.max_batch_size": [4],
             },
         }
@@ -654,7 +654,7 @@ class TestMultiBackendSectionStripping:
             "task": {"model": "gpt2"},
             "tensorrt": {"engine_params": {"max_input_len": 512}},
             "sweep": {
-                "harness.transformers.batch_size": [1],
+                "transformers.llem_execution.batch_size": [1],
                 "vllm.engine_params.max_num_seqs": [64],
                 "tensorrt.engine_params.max_batch_size": [4],
             },
@@ -985,8 +985,8 @@ class TestCountSweepStructure:
             "engine": ["transformers", "vllm"],
             "transformers.engine_params.dtype": ["float16", "bfloat16"],
             "transformers.compilation": [
-                {"harness.transformers.torch_compile": True},
-                {"harness.transformers.torch_compile": False},
+                {"transformers.llem_execution.torch_compile": True},
+                {"transformers.llem_execution.torch_compile": False},
             ],
         }
         assert count_sweep_structure(sweep) == (2, 1)

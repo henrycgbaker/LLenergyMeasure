@@ -154,16 +154,16 @@ def test_single_config_sweep_no_dedup(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Config-identity hash fixes (S9): harness + measurement join the dedup hash;
-# --no-dedup with a repeated declared config must not crash the runner.
+# Config-identity hash fixes (S9): llem_execution + measurement join the dedup
+# hash; --no-dedup with a repeated declared config must not crash the runner.
 # ---------------------------------------------------------------------------
 
 
-def test_harness_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
-    """A harness.batch_size sweep must expand to distinct experiments.
+def test_llem_execution_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
+    """A llem_execution.batch_size sweep must expand to distinct experiments.
 
-    Regression for the config-identity bug: build_resolved_view omitted
-    config.harness, so a batch_size sweep - which drives execution (the
+    Regression for the config-identity bug: build_resolved_view omitted the
+    execution knobs, so a batch_size sweep - which drives execution (the
     transformers plugin reads batch_size, torch_compile, allow_tf32, autocast) -
     collapsed to a single resolved_config_hash. Default dedup then ran ONE
     experiment and reported the other three as dedup-merged.
@@ -172,7 +172,7 @@ def test_harness_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
         "study_name": "batch_size_sweep",
         "engine": "transformers",
         "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
-        "sweep": {"harness.transformers.batch_size": [1, 4, 8, 16]},
+        "sweep": {"transformers.llem_execution.batch_size": [1, 4, 8, 16]},
     }
     path = _write_study(tmp_path, study)
     study_config = load_study_config_finalised(path)

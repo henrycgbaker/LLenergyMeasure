@@ -216,8 +216,8 @@ def _save_and_record(
             energy_joules=getattr(result, "total_energy_j", None),
             adj_energy_joules=getattr(result, "energy_adjusted_j", None),
             throughput_tok_s=getattr(result, "avg_tokens_per_second", None),
-            mj_per_tok=getattr(result, "mj_per_tok_adjusted", None)
-            or getattr(result, "mj_per_tok_total", None),
+            energy_per_token_mj=getattr(result, "energy_per_token_mj_adjusted", None)
+            or getattr(result, "energy_per_token_mj_total", None),
         )
     except Exception as exc:
         manifest.mark_failed(config_hash, cycle, type(exc).__name__, str(exc))
@@ -838,8 +838,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 throughput = getattr(result, "avg_tokens_per_second", None)
                 infer_sec = getattr(result, "total_inference_time_sec", None)
                 adj_energy_j = getattr(result, "energy_adjusted_j", None)
-                mj_per_tok_adjusted = getattr(result, "mj_per_tok_adjusted", None)
-                mj_per_tok_total = getattr(result, "mj_per_tok_total", None)
+                energy_per_token_mj_adjusted = getattr(result, "energy_per_token_mj_adjusted", None)
+                energy_per_token_mj_total = getattr(result, "energy_per_token_mj_total", None)
                 self._progress.end_experiment_ok(
                     index,
                     elapsed,
@@ -847,8 +847,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                     throughput_tok_s=throughput if throughput and throughput > 0 else None,
                     inference_time_sec=infer_sec if infer_sec and infer_sec > 0 else None,
                     adj_energy_j=adj_energy_j if adj_energy_j and adj_energy_j > 0 else None,
-                    mj_per_tok_adjusted=mj_per_tok_adjusted,
-                    mj_per_tok_total=mj_per_tok_total,
+                    energy_per_token_mj_adjusted=energy_per_token_mj_adjusted,
+                    energy_per_token_mj_total=energy_per_token_mj_total,
                 )
                 # Also store for finish() footer
                 if host_path is not None:

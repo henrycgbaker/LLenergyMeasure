@@ -17,7 +17,7 @@ from llenergymeasure.domain.metrics import (
     ExtendedEfficiencyMetrics,
     LatencyStatistics,
     MultiGPUMetrics,
-    ThermalThrottleInfo,
+    ThrottleInfo,
     WarmupResult,
 )
 
@@ -52,7 +52,7 @@ def compute_declared_config_hash(config: ExperimentConfig) -> str:
     return _hash_canonical(canonical)
 
 
-def mj_per_token(energy_j: float, total_tokens: float) -> float | None:
+def energy_per_token_mj(energy_j: float, total_tokens: float) -> float | None:
     """Millijoules per token. Returns None when total_tokens is non-positive.
 
     ``total_tokens`` is usually an integer count, but the windowed/steady-state
@@ -94,8 +94,12 @@ class ExperimentResult(BaseModel):
         "as one contract). Replaces the retired per-artefact result schema_version.",
     )
     experiment_id: str = Field(..., description="Unique experiment identifier")
-    measurement_config_hash: str = Field(
-        ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"
+    declared_config_hash: str = Field(
+        ...,
+        description="SHA-256[:16] of the whole declared ExperimentConfig "
+        "(compute_declared_config_hash). Environment fields are not part of "
+        "ExperimentConfig, so they are naturally excluded. Same term as the "
+        "declared_config block in the config.json sidecar.",
     )
     llenergymeasure_version: str | None = Field(
         default=None, description="Package version that produced this result"
@@ -140,12 +144,12 @@ class ExperimentResult(BaseModel):
     total_inference_time_sec: float = Field(..., description="Total inference time")
     avg_tokens_per_second: float = Field(..., description="Average throughput")
     avg_energy_per_token_j: float = Field(..., description="Average energy per token")
-    mj_per_tok_adjusted: float | None = Field(
+    energy_per_token_mj_adjusted: float | None = Field(
         default=None,
         description="Millijoules per token from adjusted (baseline-subtracted) energy. "
         "None when no baseline measurement was taken.",
     )
-    mj_per_tok_total: float | None = Field(
+    energy_per_token_mj_total: float | None = Field(
         default=None,
         description="Millijoules per token from total (unadjusted) energy.",
     )
@@ -247,7 +251,7 @@ class ExperimentResult(BaseModel):
     )
 
     # Optional detail fields used by aggregation/CLI
-    thermal_throttle: ThermalThrottleInfo | None = Field(
+    throttle: ThrottleInfo | None = Field(
         default=None, description="GPU thermal and power throttling information"
     )
     warmup_result: WarmupResult | None = Field(
@@ -277,6 +281,12 @@ class ExperimentResult(BaseModel):
         - ``schema_version`` (pre-``bundle_version`` per-artefact counter).
         - ``baseline_power_w`` (bundle 1.0 top-level copy; the single home is now
           ``energy_breakdown.baseline_power_w``).
+
+        The 2.0-window field renames (``measurement_config_hash`` ->
+        ``declared_config_hash``, ``thermal_throttle`` -> ``throttle``,
+        ``mj_per_tok_*`` -> ``energy_per_token_mj_*``) are a CLEAN BREAK: their
+        old keys are not tolerated, so a pre-rename bundle fails loudly under
+        ``extra="forbid"``.
         """
         legacy_keys = {"schema_version", "baseline_power_w"}
         if isinstance(data, dict) and legacy_keys & data.keys():

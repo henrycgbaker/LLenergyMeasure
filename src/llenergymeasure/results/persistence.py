@@ -56,7 +56,7 @@ def _experiment_dir_name(
     from llenergymeasure.utils.formatting import model_short_name
 
     model_short = model_short_name(model_name)
-    config_hash = result.measurement_config_hash[:8]
+    config_hash = result.declared_config_hash[:8]
 
     # Build slug: model_short-engine
     slug = f"{model_short}-{engine}"
@@ -187,7 +187,7 @@ def save_config_sidecar(
     payload: dict[str, object] = {
         "bundle_version": BUNDLE_VERSION,
         "experiment_id": experiment_id,
-        "measurement_config_hash": config_hash,
+        "declared_config_hash": config_hash,
         "engine": engine,
         "engine_version": engine_version,
         "model_name": model_name,
@@ -220,7 +220,7 @@ def save_config_sidecar(
 def save_system(
     snapshot: EnvironmentSnapshot,
     experiment_id: str,
-    measurement_config_hash: str,
+    declared_config_hash: str,
     experiment_dir: Path,
 ) -> Path:
     """Write per-experiment system.json sidecar.
@@ -231,7 +231,7 @@ def save_system(
     Args:
         snapshot: EnvironmentSnapshot with hardware/runtime metadata.
         experiment_id: Unique experiment identifier.
-        measurement_config_hash: Config hash for orphan attribution.
+        declared_config_hash: Config hash for orphan attribution.
         experiment_dir: Experiment result directory (must already exist).
 
     Returns:
@@ -240,7 +240,7 @@ def save_system(
     env_data: dict[str, object] = {
         "bundle_version": BUNDLE_VERSION,
         "experiment_id": experiment_id,
-        "measurement_config_hash": measurement_config_hash,
+        "declared_config_hash": declared_config_hash,
     }
     snapshot_dict = snapshot.model_dump()
     env_data["hardware"] = snapshot_dict["hardware"]

@@ -19,7 +19,7 @@ and consumed, see
 Total measured GPU energy minus the [baseline](#baseline) contribution:
 `adjusted_energy_j = total_energy_j - baseline_power_w * total_inference_time_sec`.
 Represents the energy specifically attributable to inference work, independent
-of what the GPU draws at idle. See `mj_per_tok_adjusted` in result.json for
+of what the GPU draws at idle. See `energy_per_token_mj_adjusted` in result.json for
 the per-token form.
 
 ---
@@ -181,7 +181,7 @@ Conversions: 1 Wh = 3,600 J. 1 kWh = 3,600,000 J. A 300 W GPU drawing full
 power for 10 minutes consumes 180,000 J (50 Wh).
 
 LLenergyMeasure reports energy in Joules (field `total_energy_j`) and
-millijoules per token (`mj_per_tok_adjusted`).
+millijoules per token (`energy_per_token_mj_adjusted`).
 
 ---
 
@@ -373,7 +373,7 @@ varies by language and tokeniser. Prompt length and output length are both
 measured in tokens.
 
 Energy and throughput figures in LLenergyMeasure are normalised per token
-(`mj_per_tok_adjusted`, `output_tokens_per_sec`) to allow comparison across
+(`energy_per_token_mj_adjusted`, `output_tokens_per_sec`) to allow comparison across
 different workloads.
 
 ---
