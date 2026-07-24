@@ -42,7 +42,7 @@ class CUDAEnvironment(BaseModel):
 
         Bundle 1.0 stored this driver-supported CUDA version under the ambiguous
         key ``version``. Map it onto ``driver_supported_version`` so an older
-        environment.json loads rather than failing the now-renamed required field.
+        system snapshot loads rather than failing the now-renamed required field.
         """
         if isinstance(data, dict) and "version" in data and "driver_supported_version" not in data:
             data = dict(data)
@@ -125,7 +125,7 @@ class EnvironmentSnapshot(BaseModel):
 
     Contains per-experiment hardware and runtime metadata. Software package
     listings (installed_packages) are study-level constants and live in the
-    study-level environment.json artefact instead.
+    study-level system.json artefact instead.
     """
 
     hardware: EnvironmentMetadata

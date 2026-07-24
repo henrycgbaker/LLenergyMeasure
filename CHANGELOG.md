@@ -8,9 +8,13 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 ## [Unreleased]
 
 > **Format break (unreleased):** results-bundle format 2.0 as of commit `09ec455e`
-> ([#869]) - unified runner provenance block, single `bundle_version` stamp. 1.0
-> bundles remain readable (best-effort). Ships with the v0.7.0 release; v0.6.0 is
-> the rollback anchor.
+> ([#869]) - unified runner provenance block, single `bundle_version` stamp, and
+> the per-experiment environment sidecar renamed `environment.json` -> `system.json`
+> ([#879]). All v0.7.0 format additions ride this one untagged 2.0 break (no `2.1`).
+> 1.0 bundles remain readable (best-effort); the sidecar rename is a clean break -
+> a pre-rename `environment.json` is not read, so on such a bundle the system
+> sidecar is simply absent to the reader. Ships with the v0.7.0 release;
+> v0.6.0 is the rollback anchor.
 
 ### Added
 
@@ -91,6 +95,19 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
   and the old separate runner block reads into the unified model; no converter
   tooling is provided. ([#869])
+- **Breaking (results bundle):** the per-experiment hardware/runtime sidecar is
+  renamed `environment.json` -> `system.json` (MLPerf "system description" / SUT
+  alignment, and it removes the collision with conda/venv "environment"). Both the
+  per-experiment bundle sidecar and the study-level `_study-artefacts/` snapshot
+  adopt the new name; the artefact-registry constant becomes `SYSTEM_FILENAME` and
+  the internal writer/reader/rescue methods follow (`BundleWriter.write_system`,
+  `BundleReader._read_system_artefact`, `persistence.save_system`). This rides the
+  same untagged `bundle_version` `"2.0"` break - there is no version bump. It is a
+  clean break: a pre-rename `environment.json` is not read - the reader looks only
+  for `system.json`, so on an older bundle the system sidecar is simply absent (the
+  existing optional-sidecar path); there is no fallback and no converter. The
+  `EnvironmentSnapshot` model and `ExperimentResult.environment` field are
+  unchanged. ([#879])
 - Internal restructure (no behavior or results change): the generated per-engine
   config models moved from `src/llenergymeasure/engines/<engine>/config.py` to the
   config layer at `src/llenergymeasure/config/generated/<engine>.py`, beside their
@@ -1505,3 +1522,4 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
 [#872]: https://github.com/henrycgbaker/llenergymeasure/pull/872
 [#875]: https://github.com/henrycgbaker/llenergymeasure/pull/875
+[#879]: https://github.com/henrycgbaker/llenergymeasure/pull/879

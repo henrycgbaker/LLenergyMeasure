@@ -18,7 +18,7 @@ from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import TEMP_PREFIX_EXCHANGE, TEMP_PREFIX_TIMESERIES
 from llenergymeasure.domain.bundle_artefacts import (
     CONFIG_SIDECAR_FILENAME,
-    ENVIRONMENT_FILENAME,
+    SYSTEM_FILENAME,
     TIMESERIES_FILENAME,
 )
 from llenergymeasure.infra.docker_errors import DockerContainerError
@@ -91,8 +91,8 @@ def rescue_artefacts(exchange_dir: Path) -> Path | None:
 
     The harness inside the container wrote its artefacts to /run/llem
     (= exchange_dir on host): config.json always (the sole home of provenance
-    and the authoritative home of identity), environment.json (the accurate
-    in-container environment snapshot - the host's own snapshot describes the
+    and the authoritative home of identity), system.json (the accurate
+    in-container system snapshot - the host's own snapshot describes the
     dispatching host, not this container), and timeseries.parquet when enabled.
     Move any that are present to a fresh temp dir so the caller can copy them
     into the study directory before the exchange dir is destroyed. config.json
@@ -102,7 +102,7 @@ def rescue_artefacts(exchange_dir: Path) -> Path | None:
     Returns the rescue temp dir, or ``None`` if no artefacts were present.
     """
     artefact_tmpdir: Path | None = None
-    for name in (CONFIG_SIDECAR_FILENAME, ENVIRONMENT_FILENAME, TIMESERIES_FILENAME):
+    for name in (CONFIG_SIDECAR_FILENAME, SYSTEM_FILENAME, TIMESERIES_FILENAME):
         src = exchange_dir / name
         if src.exists():
             if artefact_tmpdir is None:

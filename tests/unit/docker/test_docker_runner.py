@@ -1905,10 +1905,10 @@ class TestConfigSidecarRescue:
         assert (rescue_dir / "config.json").exists()
         assert (rescue_dir / "timeseries.parquet").read_bytes() == b"PARQUET_CONTENT"
 
-    def test_environment_sidecar_rescued_alongside_config(self, tmp_path):
-        """environment.json is rescued from the exchange dir before cleanup.
+    def test_system_sidecar_rescued_alongside_config(self, tmp_path):
+        """system.json is rescued from the exchange dir before cleanup.
 
-        The container writes the accurate in-container snapshot to environment.json;
+        The container writes the accurate in-container snapshot to system.json;
         it must survive alongside config.json so the host runner can prefer it over
         its own (dispatching-host) snapshot.
         """
@@ -1938,7 +1938,7 @@ class TestConfigSidecarRescue:
             (exchange_dir / "config.json").write_text(
                 json.dumps({"schema_version": "2.0"}), encoding="utf-8"
             )
-            (exchange_dir / "environment.json").write_text(
+            (exchange_dir / "system.json").write_text(
                 json.dumps({"python_version": "3.10.14", "cuda_version": "12.4"}),
                 encoding="utf-8",
             )
@@ -1947,11 +1947,11 @@ class TestConfigSidecarRescue:
             _returned, artefact_dir = runner.run(config)
 
         assert artefact_dir == rescue_dir
-        assert (rescue_dir / "environment.json").exists(), (
-            "environment.json must be rescued from the exchange dir before cleanup"
+        assert (rescue_dir / "system.json").exists(), (
+            "system.json must be rescued from the exchange dir before cleanup"
         )
         assert (rescue_dir / "config.json").exists()
-        rescued = json.loads((rescue_dir / "environment.json").read_text())
+        rescued = json.loads((rescue_dir / "system.json").read_text())
         assert rescued["python_version"] == "3.10.14"
         mock_rmtree.assert_called_once()
 

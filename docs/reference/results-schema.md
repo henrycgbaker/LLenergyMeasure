@@ -20,7 +20,7 @@ results/
     ├── 001_c0_<model>-<engine>_<hash>/          # one experiment cell
     │   ├── result.json                          # measurement metrics (bundle_version 2.0)
     │   ├── config.json                          # engine/model/methodology + resolved config + provenance
-    │   ├── environment.json                     # hardware/runtime snapshot + runner provenance
+    │   ├── system.json                          # hardware/runtime snapshot + runner provenance
     │   └── timeseries.parquet                   # GPU power/thermal/memory samples
     ├── 002_c0_.../
     ├── ...
@@ -41,7 +41,7 @@ The scientific record. One JSON file per experiment cell. Stamped with `bundle_v
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bundle_version` | str | Results-bundle version (currently `"2.0"`), shared across `result.json`, `config.json`, and `environment.json` as one contract |
+| `bundle_version` | str | Results-bundle version (currently `"2.0"`), shared across `result.json`, `config.json`, and `system.json` as one contract |
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
@@ -190,9 +190,9 @@ batch is attributed `batch_time / batch_size` (the `PER_REQUEST_BATCH` mode in
 
 `config.json` lives next to `result.json` in each experiment directory. It is the authoritative home of engine/model/methodology identity (`engine`, `engine_version`, `model_name`, `measurement_methodology`; `result.json` carries convenience copies of `engine` and `model_name` only) and carries the full user-declared `ExperimentConfig` under `declared_config` - every parameter value used, including engine defaults that were not explicitly specified - plus per-field `provenance` (where each non-default value came from: CLI flag, sweep, or YAML) and the observed post-construction engine state. **This is what reproduces the experiment.**
 
-### Environment sidecar (sibling file)
+### System sidecar (sibling file)
 
-`environment.json` lives next to `result.json` and records the hardware/runtime environment the experiment ran in (stamped with the shared `bundle_version` `2.0`): GPU, CUDA, driver, CPU, platform, Python and tool versions. Under Docker dispatch it captures the *in-container* environment, not the dispatching host.
+`system.json` lives next to `result.json` and records the hardware/runtime environment the experiment ran in (stamped with the shared `bundle_version` `2.0`): GPU, CUDA, driver, CPU, platform, Python and tool versions. Under Docker dispatch it captures the *in-container* environment, not the dispatching host. The rename from the earlier `environment.json` is a clean break: a sidecar written under the old name is not read - the reader looks only for `system.json`, so on a pre-rename bundle the system sidecar is simply treated as absent.
 
 Two distinct CUDA facts are recorded and must not be conflated: `hardware.cuda.driver_supported_version` is the maximum CUDA version the installed NVIDIA driver supports (from NVML, matching the `CUDA Version` in the `nvidia-smi` header), while the top-level `cuda_version` (with `cuda_version_source`) is the runtime CUDA version the software stack was actually built against (torch / version.txt / nvcc).
 
@@ -291,9 +291,9 @@ For the Python API equivalent (`StudyResult` object), see [Reference &gt; Librar
 
 ## Bundle versioning
 
-The whole bundle carries one `bundle_version` (currently `"2.0"`), stamped identically into `result.json`, `config.json`, and `environment.json` (`timeseries.parquet` is self-describing columnar data and stays unversioned). It versions the on-disk layout, the artefact set, and each artefact's schema as a single contract, so there is one number to bump and one changelog line per documented break. This replaces the three independent per-artefact `schema_version` counters that earlier releases carried. It follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
+The whole bundle carries one `bundle_version` (currently `"2.0"`), stamped identically into `result.json`, `config.json`, and `system.json` (`timeseries.parquet` is self-describing columnar data and stays unversioned). It versions the on-disk layout, the artefact set, and each artefact's schema as a single contract, so there is one number to bump and one changelog line per documented break. This replaces the three independent per-artefact `schema_version` counters that earlier releases carried. It follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
 
-Older bundles remain readable best-effort: the canonical reader (`llenergymeasure.results.bundle.BundleReader`, wrapped by `load_result`) tolerates a legacy shape rather than rejecting it, emitting a single warning per bundle. A bundle 1.0 (the provenance-unification break) reads with its retired top-level `baseline_power_w` copy and `schema_version` key dropped on load, its pre-rename `hardware.cuda.version` mapped onto `driver_supported_version`, its never-populated hardware fields (`pcie_gen`, `mig_enabled`, `cudnn_version`, `fan_speed_pct`) ignored, and its old separate runner block read into the unified `RunnerProvenance` model. There is no in-place migration and no converter tooling.
+Older bundles remain readable best-effort: the canonical reader (`llenergymeasure.results.bundle.BundleReader`, wrapped by `load_result`) tolerates a legacy shape rather than rejecting it, emitting a single warning per bundle. A bundle 1.0 (the provenance-unification break) reads with its retired top-level `baseline_power_w` copy and `schema_version` key dropped on load, its pre-rename `hardware.cuda.version` mapped onto `driver_supported_version`, its never-populated hardware fields (`pcie_gen`, `mig_enabled`, `cudnn_version`, `fan_speed_pct`) ignored, and its old separate runner block read into the unified `RunnerProvenance` model. The system sidecar's earlier filename `environment.json` is a clean break, not a tolerance: it is not read, so a pre-rename bundle's system sidecar is treated as absent. There is no in-place migration and no converter tooling.
 
 ## See also
 
