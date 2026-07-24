@@ -26,6 +26,7 @@ All fields except `model` are optional and have sensible defaults.
 |-------|------|---------|-------------|
 | `task` | TaskConfig | *(see section)* | Task configuration: model, dataset, workload shape |
 | `engine` | Engine | *(see section)* | Inference engine |
+| `serving_mode` | 'offline' | 'server' | `offline` | Serving mode discriminator. 'offline' (the default) measures batch inference over a fixed prompt set; it is the only mode with an execution path today. 'server' selects online serving measurement: it is accepted by the config model but has no execution path yet. A conditioning identity axis - it enters the declared, resolved, and observed config hashes, so an offline config and a server config never deduplicate together. |
 | `measurement` | MeasurementConfig | *(see section)* | Measurement methodology: warmup, baseline, energy sampling |
 | `sampling_preset` | 'deterministic' | 'standard' | 'creative' | 'factual' | None | `null` | Sampling preset. When set, preset values are merged into the active engine's sampling section at parse time; explicit YAML values take precedence over preset values. |
 | `transformers` | TransformersSection | None | `null` | HuggingFace Transformers engine configuration (only used when engine=transformers) |

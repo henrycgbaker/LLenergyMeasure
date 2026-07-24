@@ -193,6 +193,7 @@ def write_config_sidecar(
         observed_view = build_observed_view(
             engine=engine_name,
             task=task_dict,
+            serving_mode=config.serving_mode,
             observed_engine_params=obs_engine,
             observed_sampling_params=obs_sampling,
             llem_execution=execution_dump,
