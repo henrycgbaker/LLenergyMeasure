@@ -12,8 +12,8 @@ RESULTS_DIR="results"
 # Seconds to wait for manifest to appear before sending SIGINT
 POLL_TIMEOUT=120
 
-# Force local runner - inside a container, we already have CUDA.
-export LLEM_RUNNER_PYTORCH=local
+# Force process runner - inside a container, we already have CUDA.
+export LLEM_RUNNER_TRANSFORMERS=process
 
 # Use llem directly if available (container), else uv run (host)
 if command -v llem &>/dev/null; then

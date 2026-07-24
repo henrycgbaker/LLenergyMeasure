@@ -2,7 +2,7 @@
 # inference through the PyTorch backend (tensorrt_llm.LLM class dispatch).
 #
 # Driven by .github/workflows/gpu-ci.yml (engine-smoke matrix). The workflow
-# sets LLEM_RUNNER_TENSORRT=docker and LLEM_IMAGE_TENSORRT=<pinned NGC image>
+# sets LLEM_RUNNER_TENSORRT=container and LLEM_IMAGE_TENSORRT=<pinned NGC image>
 # (resolved from engine_versions/tensorrt/current.yaml), and LLEM_DOCKER_GPUS
 # pins to a free device on the shared box.
 #

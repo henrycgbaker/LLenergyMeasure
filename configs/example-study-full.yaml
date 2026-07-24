@@ -17,14 +17,14 @@
 
 study_name: full-suite-all-engines
 
-# --- Runners: where each engine runs (local process or Docker container) ---
-# Pin an engine to `local` to run it in-process (the package must be importable
+# --- Runners: where each engine runs (host process or container) ---
+# Pin an engine to `process` to run it in-process (the package must be importable
 # on the host); leave it on auto-detection and a multi-engine study elevates it
-# to Docker for isolation. An explicit pin is always honoured as-is.
+# to a container for isolation. An explicit pin is always honoured as-is.
 runners:
-  transformers: docker
-  vllm: docker
-  tensorrt: docker
+  transformers: container
+  vllm: container
+  tensorrt: container
 
 # --- Execution controls (study-level, non-sweepable) ---
 study_execution:
