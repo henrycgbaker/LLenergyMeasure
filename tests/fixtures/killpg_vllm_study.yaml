@@ -2,7 +2,7 @@
 # Uses facebook/opt-125m (smallest vLLM-compatible model) for fast loading.
 # High prompt count ensures the experiment won't finish before we kill it.
 # Warmup and baseline disabled to reduce pre-experiment wait time.
-# IMPORTANT: runner forced to local via LLEM_RUNNER_VLLM=local env var in script.
+# IMPORTANT: runner forced to process via LLEM_RUNNER_VLLM=process env var in script.
 
 name: killpg-test
 

@@ -2,7 +2,7 @@
 # inference through the real docker-dispatch plugin path.
 #
 # Driven by .github/workflows/gpu-ci.yml (engine-smoke matrix). The workflow
-# sets LLEM_RUNNER_VLLM=docker and LLEM_IMAGE_VLLM=<pinned upstream image>
+# sets LLEM_RUNNER_VLLM=container and LLEM_IMAGE_VLLM=<pinned upstream image>
 # (resolved from engine_versions/vllm/current.yaml) so dispatch uses the
 # pinned image, and LLEM_DOCKER_GPUS pins to a free device on the shared box.
 #

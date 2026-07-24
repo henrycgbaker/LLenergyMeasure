@@ -25,8 +25,8 @@ MEMORY_RETURN_TIMEOUT=30
 # Delta tolerance in MB: current <= baseline + tolerance counts as "returned"
 MEMORY_TOLERANCE_MB=100
 
-# Force local runner - inside a container, we already have CUDA.
-export LLEM_RUNNER_VLLM=local
+# Force process runner - inside a container, we already have CUDA.
+export LLEM_RUNNER_VLLM=process
 
 # Use llem directly if available (container), else uv run (host)
 if command -v llem &>/dev/null; then

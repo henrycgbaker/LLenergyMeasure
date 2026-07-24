@@ -131,7 +131,7 @@ Security utilities:
 
 ### `infra/` (Layer 3)
 - `docker_runner.py` - Docker dispatch (DockerRunner)
-- `runner_resolution.py` - local vs Docker selection
+- `runner_resolution.py` - process vs container runner selection
 - `image_registry.py` - Docker image registry and version tagging
 - `docker_preflight.py` - Docker-level pre-flight checks
 
