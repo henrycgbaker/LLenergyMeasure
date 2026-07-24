@@ -17,9 +17,9 @@
 study_name: tutorial-multi-engine
 
 runners:
-  transformers: docker
-  vllm: docker
-  tensorrt: docker
+  transformers: container
+  vllm: container
+  tensorrt: container
 
 study_execution:
   n_cycles: 1

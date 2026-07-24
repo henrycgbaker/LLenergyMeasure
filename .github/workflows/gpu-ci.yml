@@ -338,10 +338,10 @@ jobs:
       # (keeps CUDA and NVML indices consistent inside the container). Adjust
       # this value if the free-device layout on the runner changes.
       LLEM_DOCKER_GPUS: device=2
-      # Force docker dispatch for the upstream-image engines (they auto-elevate
+      # Force container dispatch for the upstream-image engines (they auto-elevate
       # anyway, but be explicit for a single-experiment run).
-      LLEM_RUNNER_VLLM: docker
-      LLEM_RUNNER_TENSORRT: docker
+      LLEM_RUNNER_VLLM: container
+      LLEM_RUNNER_TENSORRT: container
     steps:
       - name: Clean workspace (fix root-owned files from Docker)
         run: |

@@ -35,6 +35,23 @@ STUDY_CONFIGS = [
 ]
 
 
+def test_example_config_runner_values_parse() -> None:
+    """Every ``runners:`` pin in a shipped config passes the canonical parse edge.
+
+    ``load_study`` alone never reaches ``parse_runner_value`` (runner resolution
+    happens at preflight), so a retired runner value in a shipped example parses
+    green here yet errors for every user who actually runs it - which is exactly
+    how the v0.7 ``local``/``docker`` retirement shipped stale example configs.
+    Route each value through the parse edge so stale vocabulary fails loudly.
+    """
+    from llenergymeasure.infra.image_registry import parse_runner_value
+
+    for config_path in STUDY_CONFIGS:
+        raw = yaml.safe_load(config_path.read_text())
+        for value in (raw.get("runners") or {}).values():
+            parse_runner_value(value)  # raises ValueError on retired vocabulary
+
+
 def _field_submodels(annotation: object) -> list[type[BaseModel]]:
     """Return BaseModel subclasses referenced by a field annotation.
 
