@@ -217,6 +217,47 @@ docker run --rm \
   tests/unit/engines/test_engine_protocol.py
 ```
 
+## Changelog fragments
+
+User-facing changes are recorded as changelog *fragments* rather than by editing
+`CHANGELOG.md` directly, so parallel PRs never conflict on the `[Unreleased]`
+section. Each PR that changes shipped code (`src/llenergymeasure/`) drops one
+small Markdown file per section under `changelog.d/`, named
+`<PR-number>.<type>.md`, where `<type>` is one of `added`, `changed`,
+`deprecated`, `removed`, `fixed`, or `security` (the Keep a Changelog sections).
+
+The file body is 1-4 sentences of user impact: what changed, what breaks, and
+what to do. Keep breaking-change bullets prefixed with the bold
+`**Breaking (<area>):**` convention. The PR reference is automatic - the number
+in the filename becomes the `([#N])` link when the changelog is assembled. For a
+change with genuinely no PR number, prefix the filename with `+` (e.g.
+`+my-change.fixed.md`) and it renders without a link.
+
+```bash
+# Example: PR #900 adds a config field.
+printf 'The study config gains a `foo` field controlling ...\n' > changelog.d/900.added.md
+```
+
+Deep format-contract detail (exact field shapes, read-tolerance rules) belongs
+in the reference docs (e.g. `docs/reference/results-schema.md`), not the
+changelog; the changelog links out to it.
+
+Preview how the fragments will read once assembled (a draft only - it never
+consumes the fragments):
+
+```bash
+make changelog-draft            # or: uv run towncrier build --draft --version NEXT
+```
+
+The real assembly runs once at release time
+(`uv run towncrier build --version vX.Y.Z`), which folds every fragment into a
+new `CHANGELOG.md` version section and deletes them.
+
+CI enforces this: a PR that touches `src/llenergymeasure/` but adds no fragment
+fails the `changelog-check` job. For a change with no user impact (a pure
+internal refactor, test-only, or tooling change), apply the `no-changelog` label
+to the PR to skip the check.
+
 ## Why this contract
 
 The project previously offered three host extras (`[transformers]`, `[vllm]`,

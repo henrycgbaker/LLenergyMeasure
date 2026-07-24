@@ -2,6 +2,7 @@
 .PHONY: format lint lint-fix typecheck check
 .PHONY: test test-unit test-integration test-all
 .PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
+.PHONY: changelog-draft
 .PHONY: discover-schema discover-schemas-all scaffold-snapshot promote-schemas
 .PHONY: check-citations probe-candidates analyst-cold-read absorb rules-coverage check-corpus-literals
 .PHONY: check-plugin-kwargs
@@ -121,6 +122,14 @@ docs-check: docs-all ## Regenerate SSOT docs and fail if the committed copies dr
 		docs/reference/engines/invalid-combos.md \
 		|| (echo "Generated docs are stale. Commit the regenerated files above." && exit 1)
 	@echo "Generated docs are up to date"
+
+# Preview the changelog that the changelog.d/ fragments would assemble into
+# CHANGELOG.md, without consuming the fragments. The real build (which deletes
+# the fragments and writes the release section) happens once, at release time,
+# with `uv run towncrier build --version vX.Y.Z`. VERSION only labels the draft.
+VERSION ?= NEXT
+changelog-draft: ## Preview the assembled changelog from changelog.d/ fragments (no consume)
+	uv run towncrier build --draft --version "$(VERSION)"
 
 # Rediscover a vendored engine schema by running introspection inside the
 # engine's Docker image. Writes to src/llenergymeasure/engines/<engine>/schema.discovered.json

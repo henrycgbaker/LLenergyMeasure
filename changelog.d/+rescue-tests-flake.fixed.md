@@ -1,0 +1,1 @@
+Docker-runner rescue tests (`TestConfigSidecarRescue`, `TestTimeseriesParquetRescue`) no longer flake under randomized test ordering: the `tempfile.mkdtemp` mock now routes by prefix instead of assuming a fixed call count, so the process-cached dispatch-asset materialisation can no longer steal the rescue tempdir slot.

@@ -42,6 +42,7 @@ dev = [
     "mypy>=1.0",
     "types-pyyaml>=6.0.12",
     "import-linter>=2.9",
+    "towncrier>=23.11",
     "msgspec",
     # Backs scripts/engine_producers/regen_engine_configs.py. Pinned exactly:
     # the generated config.py is byte-compared in CI, and the generator's
@@ -183,6 +184,58 @@ exclude_lines = [
     "@abstractmethod",
 ]
 show_missing = true
+
+# Changelog assembly. Per-PR entries land as fragment files under changelog.d/
+# (one file per PR per section, named <PR>.<type>.md); `towncrier build` folds
+# them into CHANGELOG.md at release time. PRs no longer edit the [Unreleased]
+# section directly, so parallel PRs stop conflicting on it. See
+# docs/contributing/development.md for the contributor workflow.
+[tool.towncrier]
+name = "llenergymeasure"
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+# Insert new release sections at this marker, keeping the [Unreleased] format-
+# break callout above it untouched.
+start_string = "<!-- towncrier release notes start -->\n"
+# Keep a Changelog version header: `## [X.Y.Z] - YYYY-MM-DD`. The maintainer
+# passes the tag (e.g. v0.7.0) as `towncrier build --version`.
+title_format = "## [{version}] - {project_date}"
+# Reference each PR inline so the rendered link is self-contained; no bottom-of-
+# file link-reference definitions have to be maintained for new entries.
+issue_format = "[#{issue}](https://github.com/henrycgbaker/llenergymeasure/pull/{issue})"
+# Markdown output: no reStructuredText section underlines.
+underlines = ["", "", ""]
+
+# Sections mirror the Keep a Changelog headings the file already uses.
+[[tool.towncrier.type]]
+directory = "added"
+name = "Added"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "changed"
+name = "Changed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "deprecated"
+name = "Deprecated"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "Removed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
+name = "Fixed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "security"
+name = "Security"
+showcontent = true
 
 [tool.importlinter]
 root_packages = ["llenergymeasure", "engine_versions", "scripts"]
