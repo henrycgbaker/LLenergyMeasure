@@ -4,7 +4,7 @@ Docker runner, container entrypoint, pre-flight checks, and runner resolution. L
 
 ## Purpose
 
-Manages the full container lifecycle for Docker-isolated experiment execution. Also owns environment metadata collection and runner mode resolution (local vs Docker).
+Manages the full container lifecycle for Docker-isolated experiment execution. Also owns environment metadata collection and runner mode resolution (process vs container).
 
 ## Modules
 
@@ -17,7 +17,7 @@ Manages the full container lifecycle for Docker-isolated experiment execution. A
 | `docker/diagnostics.py` | Container failure classification (log tail, error payload, error mapping) |
 | `_container/` | Container-side dispatch assets: `container_entrypoint.sh` + the `probe_imports.py` dependency probe it invokes |
 | `container_entrypoint.py` | Container-side entry point (invoked inside Docker) |
-| `runner_resolution.py` | `resolve_runner()`, `resolve_study_runners()` - local vs Docker selection |
+| `runner_resolution.py` | `resolve_runner()`, `resolve_study_runners()` - process vs container selection |
 | `docker_preflight.py` | `run_docker_preflight()` - GPU visibility, CUDA/driver compat checks |
 | `docker_errors.py` | `translate_docker_error()`, typed Docker error classes |
 | `image_registry.py` | `get_default_image()`, `parse_runner_value()` - Docker image registry |
@@ -55,7 +55,7 @@ Reads config JSON, runs via library API (not CLI re-entry), writes result JSON b
 
 ## Runner resolution
 
-Determines whether each engine runs locally or in Docker:
+Determines whether each engine runs as a host process or in a container:
 
 ```python
 from llenergymeasure.infra.runner_resolution import resolve_study_runners, is_docker_available
@@ -68,7 +68,7 @@ Precedence chain (highest wins):
 1. `LLEM_RUNNER` environment variable
 2. `runners:` section in study YAML
 3. User config (`~/.config/llem/config.yaml`)
-4. Auto-detection (Docker + NVIDIA Container Toolkit available? → docker; else → local)
+4. Auto-detection (Docker + NVIDIA Container Toolkit available? → container; else → process)
 
 ## Docker image resolution
 
@@ -89,7 +89,7 @@ The full image resolution chain (highest wins):
 
 1. **Env var** `LLEM_IMAGE_{ENGINE}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
 2. **Study YAML** `images:` section
-3. **Runner spec** shorthand (`docker:my/custom:tag` in `runners:`)
+3. **Runner spec** shorthand (`container:my/custom:tag` in `runners:`)
 4. **User config** `images:` section
 5. **Smart default** via `get_default_image()`: local build → registry fallback
 
@@ -141,14 +141,14 @@ this as a "Preparing Docker images" section with per-image status and metadata.
 
 ```yaml
 runners:
-  transformers: local                                         # host, no Docker
-  vllm: docker                                           # default (local → registry)
-  tensorrt: "docker:ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.12.0"  # force registry
+  transformers: process                                       # host, no container
+  vllm: container                                        # default (local → registry)
+  tensorrt: "container:ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.12.0"  # force registry
 ```
 
 ```python
-runner_type, image_override = parse_runner_value("docker:my/custom-image:v1")
-# runner_type = "docker", image_override = "my/custom-image:v1"
+runner_type, image_override = parse_runner_value("container:my/custom-image:v1")
+# runner_type = "container", image_override = "my/custom-image:v1"
 ```
 
 ## Environment metadata

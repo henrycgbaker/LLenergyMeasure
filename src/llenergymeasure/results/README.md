@@ -10,7 +10,7 @@ low-level filesystem primitives it builds on.
 
 `BundleWriter` is the single owner of the assembly policy that turns a completed
 experiment into an on-disk bundle: the collision-free experiment directory,
-`result.json` (with runner provenance folded in), `environment.json`, the
+`result.json` (with runner provenance folded in), `system.json`, the
 `config.json` sidecar move and patch, and the timeseries attach, all driven by
 the `domain.bundle_artefacts.ARTEFACTS` registry. `BundleReader` is its
 read-side counterpart: given a bundle directory it discovers the artefacts via
@@ -30,7 +30,7 @@ Public functions:
 | `save_result(result, output_dir, ...)` | Write an `ExperimentResult` to a collision-safe per-experiment directory. Returns the `result.json` path. |
 | `load_result(path)` | Read an `ExperimentResult` back from a `result.json` path, re-attaching sidecars. |
 | `save_config_sidecar(...)` | Write the resolved-config `config.json` sidecar (carries `observed_config_hash`). |
-| `save_environment(snapshot, dir)` | Write the `environment.json` sidecar. |
+| `save_system(snapshot, dir)` | Write the `system.json` sidecar. |
 
 Writes are atomic (temp file plus `os.replace`) and directory names are made
 collision-free before writing.
@@ -45,12 +45,12 @@ collision-free before writing.
     result.json          # ExperimentResult, pydantic model_dump_json (the only typed dump)
     config.json          # resolved-config sidecar (save_config_sidecar); its
                          # provenance section records per-field override sources
-    environment.json     # environment snapshot (save_environment)
+    system.json          # system snapshot (save_system)
     timeseries.parquet   # GPU power/thermal/memory series (copied in when present)
 ```
 
 `load_result` reads `result.json` and best-effort re-attaches the
-`timeseries.parquet` and `environment.json` sidecars; a missing or corrupt
+`timeseries.parquet` and `system.json` sidecars; a missing or corrupt
 sidecar degrades gracefully (warning, not error) rather than failing the load.
 
 Study-level artefacts (the `_study-artefacts/` directory, `manifest.json`,

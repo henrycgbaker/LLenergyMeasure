@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.config.ssot import RUNNER_CONTAINER
 from llenergymeasure.domain.bundle_artefacts import STUDY_ARTEFACTS_DIR
 from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.study.image_prep import _sanitize_image_for_filename
@@ -80,7 +80,7 @@ class _BaselineMixin:
         separator and fail with ``invalid mode``.
         """
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
-        if spec is None or spec.mode != RUNNER_DOCKER or not spec.image:
+        if spec is None or spec.mode != RUNNER_CONTAINER or not spec.image:
             key = f"{_LOCAL_KEY_PREFIX}{config.engine}"
         else:
             key = f"image_{_sanitize_image_for_filename(spec.image)}"

@@ -41,7 +41,9 @@ from typing import TYPE_CHECKING, Any, Literal
 from llenergymeasure.config.grid import ExperimentOrder, cycle_boundary_indices
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
-    RUNNER_DOCKER,
+    RUNNER_CONTAINER,
+    RUNNER_PROCESS,
+    SOURCE_IMPLICIT,
     TIMEOUT_ENV_SNAPSHOT,
     TIMEOUT_INTERRUPT_POLL,
     engine_str,
@@ -95,24 +97,25 @@ def _provenance_from_spec(
     domain are independent sibling layers), so its execution-mode fields are
     mirrored onto the domain-layer ``RunnerProvenance``. The one model is
     serialised into both result.json (self-contained provenance) and the
-    environment.json ``runner`` block, so this single builder populates the full
-    superset - including the registry digest the environment block anchors on.
+    system.json ``runner`` block, so this single builder populates the full
+    superset - including the registry digest the system block anchors on.
 
-    For docker specs the digest is resolved host-side via ``docker image inspect``
+    For container specs the digest is resolved host-side via ``docker image inspect``
     on the image that actually ran (``resolved_image`` when the spec left the
     image implicit). Digest resolution is best-effort: an unresolved digest
     records None and is debug-logged, never raising - so provenance never fails a
-    run. Local specs (and no spec at all) record ``mode="local"`` with no image,
-    digest, or image_source and the spec's source (``"local"`` when no spec was
-    resolved).
+    run. Process specs (and no spec at all) record ``mode="process"`` with no image,
+    digest, or image_source and the spec's source (``"implicit"`` when no spec was
+    resolved - the resolution chain never ran, distinct from the ``"default"``
+    precedence layer, which is a real fall-through).
     """
     from llenergymeasure.domain.provenance import RunnerProvenance
 
-    if spec is None or spec.mode != RUNNER_DOCKER:
+    if spec is None or spec.mode != RUNNER_CONTAINER:
         return RunnerProvenance(
-            mode="local",
+            mode=RUNNER_PROCESS,
             image=None,
-            source=spec.source if spec is not None else "local",
+            source=spec.source if spec is not None else SOURCE_IMPLICIT,
             image_source=None,
             image_digest=None,
         )
@@ -166,13 +169,13 @@ def _save_and_record(
         model_name / engine: Identity for the experiment directory slug
             (authoritative home: config.json; the result keeps a convenience copy).
         ts_source_dir: Staging dir where the harness/container wrote config.json,
-            timeseries.parquet, and (under docker) the rescued environment.json.
-        environment_snapshot: Host EnvironmentSnapshot for environment.json (a
+            timeseries.parquet, and (under docker) the rescued system.json.
+        environment_snapshot: Host EnvironmentSnapshot for system.json (a
             rescued in-container snapshot is preferred over it when present).
         resolution_log / resolved_config_hash: Patched into the config.json sidecar.
         runner_provenance: The unified runner provenance (mode, image, source,
             image_source, image_digest); folded into result.json and written as
-            the environment.json ``runner`` block.
+            the system.json ``runner`` block.
 
     On any save failure, marks the experiment failed on the manifest.
     """
@@ -189,7 +192,7 @@ def _save_and_record(
             ts_source_dir=ts_source_dir,
         )
         result_path = writer.write_result(result, runner_provenance=runner_provenance)
-        writer.write_environment(
+        writer.write_system(
             host_snapshot=environment_snapshot,
             runner=runner_provenance,
         )
@@ -441,7 +444,8 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         config_gpu_indices = self.study.study_execution.gpu_indices
         uses_docker = bool(
-            self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values())
+            self._runner_specs
+            and any(s.mode == RUNNER_CONTAINER for s in self._runner_specs.values())
         )
 
         # Acquire per-GPU advisory locks before image preparation.
@@ -747,7 +751,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         # Docker dispatch path - check runner spec for this engine
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
-        if spec is not None and spec.mode == RUNNER_DOCKER:
+        if spec is not None and spec.mode == RUNNER_CONTAINER:
             return self._run_one_docker(
                 config, spec, config_hash=config_hash, cycle=cycle, index=index
             )
@@ -825,7 +829,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                     # The original container path is /run/llem; by this point output_dir
                     # has been rewritten to the host temp dir, so use the known constant.
                     spec = self._runner_specs.get(engine) if self._runner_specs else None
-                    is_docker = spec is not None and spec.mode == RUNNER_DOCKER
+                    is_docker = spec is not None and spec.mode == RUNNER_CONTAINER
                     if is_docker:
                         self._progress.on_substep("save", f"container: {CONTAINER_EXCHANGE_DIR}")
                     self._progress.on_substep("save", f"host: {host_path}")
@@ -867,7 +871,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         Args:
             config:      ExperimentConfig to run.
-            spec:        Resolved RunnerSpec (mode="docker") for this engine.
+            spec:        Resolved RunnerSpec (mode="container") for this engine.
             config_hash: Pre-computed config hash (avoids recomputing).
             cycle:       Current cycle number for manifest tracking.
             index:       1-based position in study for progress display.

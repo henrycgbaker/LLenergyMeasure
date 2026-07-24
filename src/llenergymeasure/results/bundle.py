@@ -2,14 +2,14 @@
 
 ``BundleWriter`` is the single home for the assembly policy that decides how a
 completed experiment becomes an on-disk bundle: the collision-free experiment
-directory, result.json (with runner provenance folded in), environment.json
+directory, result.json (with runner provenance folded in), system.json
 (host snapshot vs the preferred in-container rescue, plus the host-only runner
 block), the config.json sidecar move + patch, the timeseries attach, and the
 loudness backstops that make a silently-missing artefact visible.
 
 ``BundleReader`` is its read-side counterpart: given a bundle directory it
 discovers the artefacts via the same ``ARTEFACTS`` registry, parses result.json
-(the one required artefact), attaches the environment.json snapshot, and returns
+(the one required artefact), attaches the system.json snapshot, and returns
 a :class:`LoadedBundle` (result + environment + config payload + the discovered
 paths). ``persistence.load_result`` is a thin wrapper over it, kept for API
 stability. A registry-driven single-artefact accessor (:meth:`BundleReader.read_sidecar`)
@@ -41,12 +41,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.config.ssot import RUNNER_CONTAINER
 from llenergymeasure.domain.bundle_artefacts import (
     ARTEFACTS,
     BUNDLE_VERSION,
     CONFIG_SIDECAR_FILENAME,
-    ENVIRONMENT_FILENAME,
+    SYSTEM_FILENAME,
     TIMESERIES_FILENAME,
 )
 from llenergymeasure.results import persistence
@@ -67,7 +67,7 @@ class BundleWriter:
 
         writer = BundleWriter(study_dir, model_name=..., engine=..., config_hash=...)
         result_path = writer.write_result(result, runner_provenance=...)
-        writer.write_environment(host_snapshot=..., runner=...)
+        writer.write_system(host_snapshot=..., runner=...)
         writer.move_config_sidecar(resolved_config_hash=..., resolution_log=...)
         writer.finalize()
 
@@ -94,7 +94,7 @@ class BundleWriter:
         self._experiment_index = experiment_index
         # Directory the harness/container staged its artefacts in. Under docker
         # dispatch this is the rescue dir, which also carries the accurate
-        # in-container environment.json and config.json.
+        # in-container system.json and config.json.
         self._ts_source_dir = ts_source_dir
         self._dir: Path | None = None
         self._experiment_id: str | None = None
@@ -150,28 +150,28 @@ class BundleWriter:
             ts_source.unlink(missing_ok=True)
         return result_path
 
-    def write_environment(
+    def write_system(
         self,
         *,
         host_snapshot: EnvironmentSnapshot | None,
         runner: RunnerProvenance | None = None,
     ) -> None:
-        """Write environment.json with the rescue-preference policy.
+        """Write system.json with the rescue-preference policy.
 
         The host snapshot (patched with the host-only runner block) is written
         first. Under docker dispatch the accurate snapshot is collected INSIDE
         the container and rescued to ``ts_source_dir``; that file is preferred
         and overwrites the host-written one, with the runner block re-applied.
         A docker run that lands without a rescued snapshot warns loudly: the
-        persisted environment.json would then describe the dispatching host, not
+        persisted system.json would then describe the dispatching host, not
         the container the experiment actually ran in.
 
         ``runner`` is the unified runner provenance: it is both the
-        environment.json ``runner`` block (image + digest + source) and the
+        system.json ``runner`` block (image + digest + source) and the
         mode discriminator for the missing-rescue docker warning.
         """
         if self._dir is None:
-            raise RuntimeError("write_result() must be called before write_environment()")
+            raise RuntimeError("write_result() must be called before write_system()")
 
         # Attach the host-only runner block to the host snapshot so the host
         # write carries it (local path, and the docker no-rescue fallback).
@@ -179,43 +179,41 @@ class BundleWriter:
             host_snapshot = host_snapshot.model_copy(update={"runner": runner})
 
         if host_snapshot is not None:
-            persistence.save_environment(
+            persistence.save_system(
                 host_snapshot,
                 self._experiment_id or "",
                 self._config_hash,
                 self._dir,
             )
 
-        rescued = (
-            self._ts_source_dir / ENVIRONMENT_FILENAME if self._ts_source_dir is not None else None
-        )
+        rescued = self._ts_source_dir / SYSTEM_FILENAME if self._ts_source_dir is not None else None
         if rescued is not None and rescued.exists():
-            self._rescue_environment(rescued, runner)
-        elif runner is not None and runner.mode == RUNNER_DOCKER:
+            self._rescue_system(rescued, runner)
+        elif runner is not None and runner.mode == RUNNER_CONTAINER:
             logger.warning(
-                "No in-container environment.json rescued for %s (cycle %d) at %s - "
-                "environment.json records the dispatching host, not the container "
+                "No in-container system.json rescued for %s (cycle %d) at %s - "
+                "system.json records the dispatching host, not the container "
                 "the experiment ran in.",
                 self._config_hash,
                 self._cycle,
                 self._dir,
             )
 
-    def _rescue_environment(self, rescued: Path, runner: RunnerProvenance | None) -> None:
-        """Prefer the rescued in-container environment.json over the host write.
+    def _rescue_system(self, rescued: Path, runner: RunnerProvenance | None) -> None:
+        """Prefer the rescued in-container system.json over the host write.
 
         Loads the rescued snapshot, patches the host-only runner block into it,
-        and atomically overwrites the host-written environment.json. Best-effort:
+        and atomically overwrites the host-written system.json. Best-effort:
         a read/write failure warns loudly and leaves the host-written file (which
         already carries the runner block) in place. The staged rescue file is
         always consumed.
         """
         self._stage_json_artefact(
             rescued,
-            ENVIRONMENT_FILENAME,
+            SYSTEM_FILENAME,
             lambda payload: self._patch_runner_block(payload, runner),
             failure_note=(
-                "Failed to rescue in-container environment.json - environment.json will "
+                "Failed to rescue in-container system.json - system.json will "
                 "record the dispatching host, not the container the experiment ran in"
             ),
         )
@@ -230,8 +228,8 @@ class BundleWriter:
     ) -> None:
         """Move a staged JSON artefact into the bundle, applying ``patch``.
 
-        Shared scaffolding for the environment rescue and the config-sidecar move,
-        which differ only in their patch callback and failure message: load the
+        Shared scaffolding for the system-snapshot rescue and the config-sidecar
+        move, which differ only in their patch callback and failure message: load the
         staged file, apply ``patch``, atomically write it into the bundle dir
         under ``dest_filename``. Best-effort - a read/write failure logs
         ``failure_note`` with context and never raises; the staged source is
@@ -260,9 +258,9 @@ class BundleWriter:
     def _patch_runner_block(
         payload: dict[str, Any], runner: RunnerProvenance | None
     ) -> dict[str, Any]:
-        """Patch the host-only runner block into a rescued environment payload.
+        """Patch the host-only runner block into a rescued system payload.
 
-        The container writes environment.json without runner facts only the host
+        The container writes system.json without runner facts only the host
         knows (image ref, registry digest, precedence source). This patches them
         in and stamps ``bundle_version`` if the (older-image) payload omitted it.
         A no-op when no runner block is available.
@@ -347,7 +345,7 @@ class LoadedBundle:
         bundle_dir: The directory the bundle was read from.
         result: The parsed ``result.json`` (the one required artefact), with the
             environment snapshot attached to ``result.environment`` when present.
-        environment: The parsed ``environment.json`` snapshot, or None when the
+        environment: The parsed ``system.json`` snapshot, or None when the
             sidecar is absent or unparseable. The same object attached to
             ``result.environment``; exposed here for direct access.
         config: The raw ``config.json`` payload dict (provenance, declared
@@ -381,7 +379,7 @@ class BundleReader:
         Discovery is registry-driven: every entry in ``ARTEFACTS`` is checked for
         presence (populating ``LoadedBundle.paths``) and a missing ``required``
         artefact raises. result.json is parsed strictly via the shared payload
-        parser; environment.json and config.json are best-effort (a corrupt or
+        parser; system.json and config.json are best-effort (a corrupt or
         absent optional sidecar yields None, never an error). When the result
         references a timeseries whose parquet did not land, a ``UserWarning`` is
         emitted (matching the historical ``load_result`` behaviour).
@@ -410,7 +408,7 @@ class BundleReader:
 
         result = BundleReader._read_result_artefact(paths["result"])
 
-        environment = BundleReader._read_environment_artefact(paths.get("environment"))
+        environment = BundleReader._read_system_artefact(paths.get("system"))
         if environment is not None:
             result = result.model_copy(update={"environment": environment})
 
@@ -484,9 +482,9 @@ class BundleReader:
         validates the payload; the ExperimentResult before-validator drops keys
         retired across a bundle break (``schema_version``, the top-level
         ``baseline_power_w`` copy) so the legacy file falls back to the current
-        defaults rather than being rejected. Legacy environment.json shapes (the
+        defaults rather than being rejected. Legacy system.json shapes (the
         old separate runner block, the renamed CUDA field, the dropped hardware
-        fields) are tolerated on the environment read path, silently, so this one
+        fields) are tolerated on the system read path, silently, so this one
         warning is not multiplied per artefact.
         """
         from llenergymeasure.domain.result_payload import parse_experiment_result_payload
@@ -502,8 +500,8 @@ class BundleReader:
         return parse_experiment_result_payload(raw, tolerant=False, expected_version=None)
 
     @staticmethod
-    def _read_environment_artefact(path: Path | None) -> EnvironmentSnapshot | None:
-        """Load environment.json into an EnvironmentSnapshot (best-effort).
+    def _read_system_artefact(path: Path | None) -> EnvironmentSnapshot | None:
+        """Load system.json into an EnvironmentSnapshot (best-effort).
 
         Returns None when the sidecar is absent or cannot be parsed, so a missing
         or corrupt sidecar never breaks the read. The sidecar's extra

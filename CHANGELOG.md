@@ -8,9 +8,23 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 ## [Unreleased]
 
 > **Format break (unreleased):** results-bundle format 2.0 as of commit `09ec455e`
-> ([#869]) - unified runner provenance block, single `bundle_version` stamp. 1.0
-> bundles remain readable (best-effort). Ships with the v0.7.0 release; v0.6.0 is
-> the rollback anchor.
+> ([#869]) - unified runner provenance block, single `bundle_version` stamp. The
+> per-experiment environment sidecar is renamed `environment.json` -> `system.json`
+> ([#879]), and the runner-provenance `mode` values are renamed `local`/`docker` ->
+> `process`/`container` with the no-spec `source` sentinel `local` -> `implicit`
+> ([#880]), and the result-field nomenclature is aligned (`measurement_config_hash`
+> -> `declared_config_hash`, `thermal_throttle` -> the symmetric `throttle` object,
+> `mj_per_tok_*` -> `energy_per_token_mj_*`) ([#881]) - all within this same untagged
+> 2.0 stamp; every v0.7.0 format addition rides this one break (no `2.1`). All of
+> these are clean breaks with no alias
+> translation: a pre-rename `environment.json` is not read (on such a bundle the
+> system sidecar is simply absent to the reader), and `mode` is now a closed
+> `Literal`, so ANY bundle (1.0 or 2.0-era) whose runner block carries the old
+> `docker`/`local` mode fails validation loudly on read (accepted - unreleased-era
+> bundles only; the open `source` field tolerates a stale `local` inertly). 1.0 bundles
+> otherwise remain readable best-effort (the retired `schema_version`/`baseline_power_w`
+> keys are dropped and the pre-rename CUDA field is mapped - only the renamed runner
+> mode is rejected). Ships with the v0.7.0 release; v0.6.0 is the rollback anchor.
 
 ### Added
 
@@ -90,7 +104,38 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
   remain readable best-effort with a single warning: the retired top-level keys
   are dropped on load, the legacy CUDA key is mapped, the dead fields are ignored,
   and the old separate runner block reads into the unified model; no converter
-  tooling is provided. ([#869])
+  tooling is provided. (NARROWED by [#880]: this structural runner-block tolerance
+  no longer extends to the runner VALUES - a block carrying the pre-v0.7
+  `docker`/`local` mode is rejected by the closed `mode` Literal on read.) ([#869])
+- **Breaking (results bundle):** the per-experiment hardware/runtime sidecar is
+  renamed `environment.json` -> `system.json` (MLPerf "system description" / SUT
+  alignment, and it removes the collision with conda/venv "environment"). Both the
+  per-experiment bundle sidecar and the study-level `_study-artefacts/` snapshot
+  adopt the new name; the artefact-registry constant becomes `SYSTEM_FILENAME` and
+  the internal writer/reader/rescue methods follow (`BundleWriter.write_system`,
+  `BundleReader._read_system_artefact`, `persistence.save_system`). This rides the
+  same untagged `bundle_version` `"2.0"` break - there is no version bump. It is a
+  clean break: a pre-rename `environment.json` is not read - the reader looks only
+  for `system.json`, so on an older bundle the system sidecar is simply absent (the
+  existing optional-sidecar path); there is no fallback and no converter. The
+  `EnvironmentSnapshot` model and `ExperimentResult.environment` field are
+  unchanged. ([#879])
+- **Breaking (runner vocabulary):** the runner mode is renamed `local`/`docker` ->
+  `process`/`container` (image shorthand `docker:<image>` -> `container:<image>`), and
+  the no-spec runner-provenance `source` sentinel `local` -> `implicit`. The new mode
+  pair names the PACKAGING axis (host process vs container) symmetrically, freeing a
+  future PLACEMENT axis (here vs remote) to arrive additively. The canonical values
+  appear in `ssot.RunnerMode`, `RunnerSpec.mode`, and the `RunnerProvenance.mode`/`source`
+  serialised into results-bundle 2.0 (values change under the SAME untagged 2.0 stamp -
+  no version bump). This is a **clean break, not an alias**: every entry point that
+  parses a user-supplied runner value (study YAML `runners:`, the `LLEM_RUNNER_<ENGINE>`
+  env var, user config) rejects the old `local`/`docker`/`docker:<image>` values with a
+  migration error naming the replacement (e.g. "runner value 'docker' was renamed in v0.7
+  - use 'container'"). On the read side `RunnerProvenance.mode` is a closed
+  `Literal["process", "container"]`, so a pre-v0.7 bundle carrying the old mode fails
+  validation loudly rather than loading a stale string (the open `source` field tolerates a
+  stale `local` sentinel inertly). Update any pinned `runners:` values to the new
+  vocabulary. ([#880])
 - **Breaking (results bundle, rides 2.0 - no version bump):** result-field
   nomenclature alignment. `ExperimentResult.measurement_config_hash` is renamed
   `declared_config_hash` (it hashes the whole declared config, matching the
@@ -1536,4 +1581,6 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 [#871]: https://github.com/henrycgbaker/llenergymeasure/pull/871
 [#872]: https://github.com/henrycgbaker/llenergymeasure/pull/872
 [#875]: https://github.com/henrycgbaker/llenergymeasure/pull/875
+[#879]: https://github.com/henrycgbaker/llenergymeasure/pull/879
+[#880]: https://github.com/henrycgbaker/llenergymeasure/pull/880
 [#881]: https://github.com/henrycgbaker/llenergymeasure/pull/881

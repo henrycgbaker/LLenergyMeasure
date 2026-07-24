@@ -32,12 +32,15 @@ Overriding the image
 The ``runners:`` section in the study YAML accepts explicit image references::
 
     runners:
-      transformers: local               # host execution (no Docker)
-      vllm: docker                      # default resolution (local -> upstream)
-      tensorrt: "docker:my/custom:tag"  # explicit image override
+      transformers: process                # host execution (no container)
+      vllm: container                      # default resolution (local -> upstream)
+      tensorrt: "container:my/custom:tag"  # explicit image override
 
 ``parse_runner_value()`` converts these into a ``(runner_type, image_override)``
-tuple consumed by the runner resolution chain.
+tuple consumed by the runner resolution chain. The runner vocabulary was renamed
+in v0.7 (``local``/``docker``/``docker:<image>`` -> ``process``/``container``/
+``container:<image>``); the old values are a clean break and are rejected with a
+migration error naming the replacement.
 """
 
 from __future__ import annotations
@@ -52,12 +55,14 @@ from llenergymeasure.config.ssot import (
     ALL_ENGINES,
     ENGINES,
     ENV_IMAGE_PREFIX,
-    RUNNER_DOCKER,
-    RUNNER_LOCAL,
+    RUNNER_CONTAINER,
+    RUNNER_PROCESS,
     TIMEOUT_DOCKER_CLI,
     Engine,
     RunnerMode,
     engine_str,
+    legacy_runner_migration_message,
+    legacy_runner_replacement,
 )
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -128,7 +133,7 @@ def get_default_image(engine: str) -> str:
 
     The engine version tagging the vLLM/TRT upstream images comes from the
     wheel-shipped artefact envelope, kept equal to the ``current.yaml`` pin by
-    CI. To force a specific image, use ``runners: {engine}: "docker:<image:tag>"``
+    CI. To force a specific image, use ``runners: {engine}: "container:<image:tag>"``
     in the study YAML.
 
     Args:
@@ -142,7 +147,7 @@ def get_default_image(engine: str) -> str:
         ConfigError: The engine is unknown, or its pinned upstream version is
             unavailable at runtime (a partial or broken wheel). The message
             tells the user to set ``runners.<engine>`` to an explicit
-            ``docker:<image>`` reference.
+            ``container:<image>`` reference.
     """
     # 1. Prefer a locally-built image (fast local iteration). This precedence is
     #    intentional, but a months-stale dev tag can hijack resolution
@@ -186,7 +191,7 @@ def _default_image_version(engine: str) -> str:
             f"Cannot resolve a default Docker image for engine {engine!r}: its "
             f"pinned engine version is unavailable at runtime (the bundled rules "
             f"and schema artefacts are missing or disagree). Set "
-            f'runners.{engine} to "docker:<image>:<tag>" in your study YAML to '
+            f'runners.{engine} to "container:<image>:<tag>" in your study YAML to '
             f"pin an explicit image."
         )
     return version
@@ -206,7 +211,7 @@ def _resolve_pinned_default(engine: str) -> str:
     if template is None:
         raise ConfigError(
             f"No default Docker image is defined for engine {engine!r}. "
-            f'Set runners.{engine} to "docker:<image>:<tag>" in your study '
+            f'Set runners.{engine} to "container:<image>:<tag>" in your study '
             f"YAML to pin an explicit image."
         )
     return template.format(version=_default_image_version(engine))
@@ -338,7 +343,7 @@ def resolve_image_digest(image: str) -> str | None:
     Reads ``docker image inspect``'s first ``RepoDigests`` entry - the registry
     content digest that pins the full image (base image, CUDA, torch, patches)
     and is portable across hosts, making it the reproducibility anchor recorded
-    in ``environment.json``.
+    in ``system.json``.
 
     Returns None (never raises) when the digest cannot be resolved: docker
     missing, the image not pulled, a locally-built image with no registry
@@ -382,14 +387,14 @@ def resolve_image(
 
     1. ``LLEM_IMAGE_{ENGINE}`` env var (from shell or ``.env`` file)
     2. Study YAML ``images:`` section
-    3. Explicit image from runner spec (``docker:<image>`` shorthand)
+    3. Explicit image from runner spec (``container:<image>`` shorthand)
     4. User config ``images:`` section
     5. Smart default: local image → registry fallback
 
     Args:
         engine:              Engine name (e.g. ``"vllm"``).
-        spec_image:          Image override from ``docker:<image>`` runner
-                             shorthand.  None when runner was bare ``"docker"``.
+        spec_image:          Image override from ``container:<image>`` runner
+                             shorthand.  None when runner was bare ``"container"``.
         yaml_images:         ``images:`` dict from the study YAML (optional).
         user_config_images:  ``images:`` dict from user config (optional).
 
@@ -415,7 +420,7 @@ def resolve_image(
         logger.info("Image for %s resolved from study YAML images: %s", engine, img)
         return (img, "yaml")
 
-    # 3. Explicit image from runner spec (docker:<image> shorthand)
+    # 3. Explicit image from runner spec (container:<image> shorthand)
     if spec_image is not None:
         logger.info("Image for %s resolved from runner override: %s", engine, spec_image)
         return (spec_image, "runner_override")
@@ -455,38 +460,51 @@ def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
 
     Accepted forms::
 
-        "local"                → ("local", None)
-        "docker"               → ("docker", None)
-        "docker:image/name:tag" → ("docker", "image/name:tag")
+        "process"                  → ("process", None)
+        "container"                → ("container", None)
+        "container:image/name:tag" → ("container", "image/name:tag")
+
+    The runner vocabulary was renamed in v0.7 (``local`` -> ``process``,
+    ``docker`` -> ``container``, ``docker:<image>`` -> ``container:<image>``); the
+    old values are a clean break, not aliases - they are rejected with a migration
+    error naming the replacement.
 
     Args:
-        value: Raw string from ``runners.{engine}`` in YAML config.
+        value: Raw string from ``runners.{engine}`` in YAML config, the
+            ``LLEM_RUNNER_{ENGINE}`` env var, or user config.
 
     Returns:
         Tuple of ``(runner_type, image_override)`` where ``image_override`` is
         ``None`` when the built-in default image should be used.
 
     Raises:
-        ValueError: If ``"docker:"`` is given with an empty image name, or if
-                    the value is not one of the recognised runner types.
+        ValueError: If a legacy ``local`` / ``docker`` / ``docker:<image>`` value
+            is given (with a migration hint), if ``"container:"`` is given with an
+            empty image name, or if the value is not a recognised runner type.
     """
-    if value == RUNNER_LOCAL:
-        return (RUNNER_LOCAL, None)
+    # Canonical bare values.
+    if value == RUNNER_PROCESS:
+        return (RUNNER_PROCESS, None)
+    if value == RUNNER_CONTAINER:
+        return (RUNNER_CONTAINER, None)
 
-    if value == RUNNER_DOCKER:
-        return (RUNNER_DOCKER, None)
+    # Legacy vocabulary renamed in v0.7 - reject with the shared migration hint.
+    replacement = legacy_runner_replacement(value)
+    if replacement is not None:
+        raise ValueError(legacy_runner_migration_message(value, replacement))
 
-    if value.startswith("docker:"):
-        image = value[len("docker:") :]
+    # Canonical image-override form.
+    if value.startswith("container:"):
+        image = value[len("container:") :]
         if not image:
             raise ValueError(
-                "empty image name in runner value 'docker:' - "
-                "use 'docker' (bare) to select the built-in default image, "
-                "or 'docker:full/image:tag' for an explicit image."
+                "empty image name in runner value 'container:' - "
+                "use 'container' (bare) to select the built-in default image, "
+                "or 'container:full/image:tag' for an explicit image."
             )
-        return (RUNNER_DOCKER, image)
+        return (RUNNER_CONTAINER, image)
 
     raise ValueError(
         f"Unrecognised runner value {value!r}. "
-        "Accepted values: 'local', 'docker', or 'docker:<image-tag>'."
+        "Accepted values: 'process', 'container', or 'container:<image-tag>'."
     )

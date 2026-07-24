@@ -190,7 +190,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     # Collected here, inside the container, so it records the environment the
     # experiment ACTUALLY runs in (python, cuda, container flags). It is threaded
     # into the harness as the single source of truth for measurement and written
-    # to environment.json below for the host runner to rescue. Without this the
+    # to system.json below for the host runner to rescue. Without this the
     # host's own snapshot - which describes the DISPATCHING host, not this
     # container - would be recorded instead.
     from llenergymeasure.harness.environment import collect_environment_snapshot
@@ -237,17 +237,17 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     result_path = result_dir / f"{config_hash}_result.json"
     result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
-    # --- Persist the in-container environment snapshot as a sibling sidecar ---
-    # environment.json is excluded from result.json (the sidecar is its on-disk
+    # --- Persist the in-container system snapshot as a sibling sidecar ---
+    # system.json is excluded from result.json (the sidecar is its on-disk
     # home), so the accurate in-container snapshot must be written separately for
     # the host runner to rescue alongside config.json and timeseries.parquet.
     # Best-effort: a sidecar write failure must never discard a completed result.
     try:
-        from llenergymeasure.results.persistence import save_environment
+        from llenergymeasure.results.persistence import save_system
 
-        save_environment(snapshot, result.experiment_id, config_hash, result_dir)
+        save_system(snapshot, result.experiment_id, config_hash, result_dir)
     except Exception as exc:  # pragma: no cover - best-effort sidecar
-        print(f"[llem] WARNING: failed to persist environment.json: {exc}", file=sys.stderr)
+        print(f"[llem] WARNING: failed to persist system.json: {exc}", file=sys.stderr)
 
     return result_path
 

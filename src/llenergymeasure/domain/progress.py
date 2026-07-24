@@ -169,8 +169,8 @@ class StudyProgressCallback(ProgressCallback, Protocol):
                     Built by ``format_experiment_header()`` in ``utils/formatting.py``.
             steps: Ordered step names for this experiment's [x/y] counter.
             runner_info: Optional dict with runner/image provenance for display:
-                ``mode`` ("local" or "docker"), ``source`` (where mode was resolved),
-                ``image`` (Docker image tag or None), ``image_source`` (where image
+                ``mode`` ("process" or "container"), ``source`` (where mode was resolved),
+                ``image`` (container image tag or None), ``image_source`` (where image
                 was resolved: "local_build", "registry", "env", "yaml", etc.).
         """
         ...

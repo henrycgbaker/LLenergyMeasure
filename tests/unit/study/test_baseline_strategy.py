@@ -555,7 +555,7 @@ class TestDockerBaselineMount:
             study_design_hash=TEST_CONFIG_HASH,
         )
         manifest = MagicMock()
-        spec = RunnerSpec(mode="docker", image="test/image:latest", source="yaml")
+        spec = RunnerSpec(mode="container", image="test/image:latest", source="yaml")
         runner = StudyRunner(
             study,
             manifest,
@@ -805,7 +805,7 @@ class TestBaselineHostProgressEvents:
         the user now sees a live breakdown of launching container → CUDA init
         → sampling → teardown instead of one opaque parent step.
         """
-        spec = RunnerSpec(mode="docker", image="test/vllm:v0", source="yaml")
+        spec = RunnerSpec(mode="container", image="test/vllm:v0", source="yaml")
         runner, progress = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -995,7 +995,7 @@ class TestBaselineCacheKey:
         assert runner._baseline_cache_key(config_cached) == "local_transformers"
 
     def test_cache_key_local_for_local_spec(self, tmp_path: Path, config_cached: ExperimentConfig):
-        spec = RunnerSpec(mode="local", image=None, source="yaml")
+        spec = RunnerSpec(mode="process", image=None, source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -1011,8 +1011,8 @@ class TestBaselineCacheKey:
         now each measure their own baseline.
         """
         specs = {
-            "transformers": RunnerSpec(mode="local", image=None, source="yaml"),
-            "vllm": RunnerSpec(mode="local", image=None, source="yaml"),
+            "transformers": RunnerSpec(mode="process", image=None, source="yaml"),
+            "vllm": RunnerSpec(mode="process", image=None, source="yaml"),
         }
         runner, _ = _make_runner_with_progress(tmp_path, config_cached, runner_specs=specs)
         tfm_cfg = ExperimentConfig(task={"model": "m"}, engine="transformers")
@@ -1025,13 +1025,13 @@ class TestBaselineCacheKey:
         assert k_tfm != k_vllm
 
         # Docker keys remain image-derived and never collide with a local key.
-        docker = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        docker = RunnerSpec(mode="container", image="img:v1", source="yaml")
         runner._runner_specs = {"transformers": docker}
         assert runner._baseline_cache_key(tfm_cfg).startswith("image_")
 
     def test_cache_key_image_sanitisation(self, tmp_path: Path, config_cached: ExperimentConfig):
         spec = RunnerSpec(
-            mode="docker",
+            mode="container",
             image="ghcr.io/foo/bar:v1@sha256:abc",
             source="yaml",
         )
@@ -1048,7 +1048,7 @@ class TestBaselineCacheKey:
 
     def test_cache_key_image_length_clipped(self, tmp_path: Path, config_cached: ExperimentConfig):
         long_image = "a" * 500
-        spec = RunnerSpec(mode="docker", image=long_image, source="yaml")
+        spec = RunnerSpec(mode="container", image=long_image, source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -1072,7 +1072,7 @@ class TestBaselineCacheKey:
     ):
         """No GPU pin (config None, env unset) keeps the pre-PR key shape."""
         monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
-        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -1086,7 +1086,7 @@ class TestBaselineCacheKey:
     ):
         """A config GPU pin appends a sanitised ``_gpu-device_...`` suffix."""
         monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
-        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -1101,7 +1101,7 @@ class TestBaselineCacheKey:
     ):
         """The same pin yields the same key (a resumed study reuses its baseline)."""
         monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
-        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -1115,7 +1115,7 @@ class TestBaselineCacheKey:
     ):
         """Changing the GPU pin yields a distinct key (no stale cross-device reuse)."""
         monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
-        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -1130,7 +1130,7 @@ class TestBaselineCacheKey:
     ):
         """LLEM_DOCKER_GPUS wins over the config pin for the cache key too."""
         monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=7")
-        spec = RunnerSpec(mode="docker", image="img:v1", source="yaml")
+        spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
         runner, _ = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"transformers": spec}
         )
@@ -1145,7 +1145,7 @@ class TestBaselineCacheKey:
 
 
 def _docker_runner(tmp_path: Path, config: ExperimentConfig) -> tuple[StudyRunner, MagicMock]:
-    spec = RunnerSpec(mode="docker", image="test/pytorch:v0", source="yaml")
+    spec = RunnerSpec(mode="container", image="test/pytorch:v0", source="yaml")
     return _make_runner_with_progress(tmp_path, config, runner_specs={"transformers": spec})
 
 
@@ -1276,7 +1276,7 @@ class TestDockerPathOrdering:
             study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
             study_design_hash=TEST_CONFIG_HASH,
         )
-        spec = RunnerSpec(mode="docker", image="test/img:v1", source="yaml")
+        spec = RunnerSpec(mode="container", image="test/img:v1", source="yaml")
         manifest = MagicMock()
         progress = MagicMock()
         runner = StudyRunner(

@@ -82,8 +82,8 @@ class TestRunContainerExperiment:
         data = json.loads(result_path.read_text())
         assert "experiment_id" in data
 
-    def test_writes_environment_sidecar_from_incontainer_snapshot(self, config, result_dir: Path):
-        """environment.json is written from the in-container snapshot, and the
+    def test_writes_system_sidecar_from_incontainer_snapshot(self, config, result_dir: Path):
+        """system.json is written from the in-container snapshot, and the
         same snapshot is threaded into harness.run for measurement."""
         from datetime import datetime
 
@@ -125,8 +125,8 @@ class TestRunContainerExperiment:
 
             run_container_experiment(config_path, result_dir)
 
-        env_path = result_dir / "environment.json"
-        assert env_path.exists(), "environment.json sidecar must be written in the container"
+        env_path = result_dir / "system.json"
+        assert env_path.exists(), "system.json sidecar must be written in the container"
         payload = json.loads(env_path.read_text())
         assert payload["python_version"] == "3.10.14"
         assert payload["cuda_version"] == "12.4"

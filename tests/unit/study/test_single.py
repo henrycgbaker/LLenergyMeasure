@@ -340,7 +340,7 @@ def test_docker_single_failure_marks_log_file(monkeypatch, tmp_path):
     mock_manifest = MagicMock(spec=ManifestWriter)
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     study = StudyConfig(experiments=[config])
-    spec = RunnerSpec(mode="docker", image="img:test", source="yaml")
+    spec = RunnerSpec(mode="container", image="img:test", source="yaml")
 
     _files, results, _warnings = run_single_experiment(
         study, mock_manifest, tmp_path, runner_specs={"transformers": spec}

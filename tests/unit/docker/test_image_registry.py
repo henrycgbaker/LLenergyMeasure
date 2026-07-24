@@ -15,38 +15,59 @@ from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX, Engine
 
 
 class TestParseRunnerValue:
-    def test_local_returns_local_none(self):
+    def test_process_returns_process_none(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        assert parse_runner_value("local") == ("local", None)
+        assert parse_runner_value("process") == ("process", None)
 
-    def test_docker_returns_docker_none(self):
+    def test_container_returns_container_none(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        assert parse_runner_value("docker") == ("docker", None)
+        assert parse_runner_value("container") == ("container", None)
 
-    def test_docker_colon_image_returns_docker_with_image(self):
+    def test_container_colon_image_returns_container_with_image(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        assert parse_runner_value("docker:custom/img:v1") == ("docker", "custom/img:v1")
+        assert parse_runner_value("container:custom/img:v1") == ("container", "custom/img:v1")
 
-    def test_docker_colon_ghcr_image(self):
+    def test_container_colon_ghcr_image(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
-        result = parse_runner_value("docker:ghcr.io/org/vllm:1.19.0-cuda12")
-        assert result == ("docker", "ghcr.io/org/vllm:1.19.0-cuda12")
+        result = parse_runner_value("container:ghcr.io/org/vllm:1.19.0-cuda12")
+        assert result == ("container", "ghcr.io/org/vllm:1.19.0-cuda12")
 
-    def test_docker_colon_empty_string_raises(self):
+    def test_container_colon_empty_string_raises(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
         with pytest.raises(ValueError, match="empty image name"):
-            parse_runner_value("docker:")
+            parse_runner_value("container:")
 
     def test_unknown_runner_type_raises(self):
         from llenergymeasure.infra.image_registry import parse_runner_value
 
         with pytest.raises(ValueError, match="Unrecognised runner value"):
             parse_runner_value("kubernetes")
+
+    def test_legacy_docker_rejected_with_migration_hint(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        with pytest.raises(ValueError, match=r"'docker' was renamed in v0.7 - use 'container'"):
+            parse_runner_value("docker")
+
+    def test_legacy_local_rejected_with_migration_hint(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        with pytest.raises(ValueError, match=r"'local' was renamed in v0.7 - use 'process'"):
+            parse_runner_value("local")
+
+    def test_legacy_docker_colon_image_rejected_with_migration_hint(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        # The message must name the user's ACTUAL input, not a placeholder.
+        with pytest.raises(
+            ValueError, match=r"'docker:custom/img:v1' was renamed.*use 'container:custom/img:v1'"
+        ):
+            parse_runner_value("docker:custom/img:v1")
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +158,7 @@ class TestGetDefaultImage:
                 "llenergymeasure.infra.version_handshake.read_bundled_engine_version",
                 return_value=None,
             ),
-            pytest.raises(ConfigError, match=r'runners\.vllm to "docker:'),
+            pytest.raises(ConfigError, match=r'runners\.vllm to "container:'),
         ):
             get_default_image("vllm")
 

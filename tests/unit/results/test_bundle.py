@@ -4,9 +4,9 @@ The writer tests exercise the BundleWriter policies directly (not through
 study.runner._save_and_record, which tests/unit/study/test_save_and_record.py
 covers end-to-end):
 
-- bundle_version stamping across result.json / config.json / environment.json
+- bundle_version stamping across result.json / config.json / system.json
 - runner-provenance attach on result.json
-- the environment rescue-preference policy + runner-block patch
+- the system-snapshot rescue-preference policy + runner-block patch
 - the config-sidecar move + patch
 - the finalize loudness backstops (missing config, declared-but-missing timeseries)
 - the artefact registry as the server-mode extension point (register + sweep)
@@ -38,7 +38,7 @@ from llenergymeasure.domain.environment import (
 )
 from llenergymeasure.domain.experiment import RunnerProvenance
 from llenergymeasure.results.bundle import BundleReader, BundleWriter, LoadedBundle
-from tests.conftest import make_result, write_container_environment_sidecar
+from tests.conftest import make_result, write_container_system_sidecar
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -94,10 +94,10 @@ def test_write_result_attaches_runner_provenance(tmp_path: Path) -> None:
     writer = _writer(study_dir)
     result_path = writer.write_result(
         make_result(),
-        runner_provenance=RunnerProvenance(mode="docker", image="img:2.0", source="env"),
+        runner_provenance=RunnerProvenance(mode="container", image="img:2.0", source="env"),
     )
     payload = json.loads(result_path.read_text())
-    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["mode"] == "container"
     assert payload["runner_provenance"]["image"] == "img:2.0"
     assert payload["runner_provenance"]["source"] == "env"
 
@@ -112,25 +112,25 @@ def test_bundle_dir_requires_write_result(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# write_environment - rescue preference + stamps
+# write_system - rescue preference + stamps
 # ---------------------------------------------------------------------------
 
 
-def test_write_environment_local_stamps_bundle_version(tmp_path: Path) -> None:
+def test_write_system_local_stamps_bundle_version(tmp_path: Path) -> None:
     """Local dispatch writes the host snapshot with a bundle_version stamp."""
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir, ts_source_dir=tmp_path)
     writer.write_result(make_result())
-    writer.write_environment(
+    writer.write_system(
         host_snapshot=_make_snapshot(),
-        runner=RunnerProvenance(mode="local", source="default"),
+        runner=RunnerProvenance(mode="process", source="default"),
     )
-    payload = json.loads((writer.bundle_dir / "environment.json").read_text())
+    payload = json.loads((writer.bundle_dir / "system.json").read_text())
     assert payload["bundle_version"] == "2.0"
     assert payload["python_version"] == "3.12.12"
     assert payload["runner"] == {
-        "mode": "local",
+        "mode": "process",
         "image": None,
         "source": "default",
         "image_source": None,
@@ -138,26 +138,26 @@ def test_write_environment_local_stamps_bundle_version(tmp_path: Path) -> None:
     }
 
 
-def test_write_environment_prefers_rescued_over_host(tmp_path: Path) -> None:
-    """The rescued in-container environment.json wins over the host snapshot."""
+def test_write_system_prefers_rescued_over_host(tmp_path: Path) -> None:
+    """The rescued in-container system.json wins over the host snapshot."""
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     staging = tmp_path / "staging"
     staging.mkdir()
-    write_container_environment_sidecar(staging / "environment.json")
+    write_container_system_sidecar(staging / "system.json")
 
     writer = _writer(study_dir, ts_source_dir=staging)
     writer.write_result(make_result())
-    writer.write_environment(
+    writer.write_system(
         host_snapshot=_make_snapshot(),
         runner=RunnerProvenance(
-            mode="docker",
+            mode="container",
             image="ghcr.io/acme/vllm:1.0",
             image_digest="ghcr.io/acme/vllm@sha256:abc123",
             source="yaml",
         ),
     )
-    payload = json.loads((writer.bundle_dir / "environment.json").read_text())
+    payload = json.loads((writer.bundle_dir / "system.json").read_text())
     # Container hardware/runtime values win over the host snapshot.
     assert payload["python_version"] == "3.10.14"
     assert payload["hardware"]["gpu"]["name"] == "NVIDIA A100-SXM4-80GB"
@@ -165,30 +165,30 @@ def test_write_environment_prefers_rescued_over_host(tmp_path: Path) -> None:
     assert payload["runner"]["image_digest"] == "ghcr.io/acme/vllm@sha256:abc123"
     assert payload["bundle_version"] == "2.0"
     # Rescued staging file consumed.
-    assert not (staging / "environment.json").exists()
+    assert not (staging / "system.json").exists()
 
 
-def test_write_environment_docker_without_rescue_warns(tmp_path: Path, caplog) -> None:
+def test_write_system_docker_without_rescue_warns(tmp_path: Path, caplog) -> None:
     """A docker run with no rescued snapshot warns (host, not container, recorded)."""
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir, ts_source_dir=tmp_path)
     writer.write_result(make_result())
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
-        writer.write_environment(
+        writer.write_system(
             host_snapshot=_make_snapshot(),
-            runner=RunnerProvenance(mode="docker", image="img:1.0", source="yaml"),
+            runner=RunnerProvenance(mode="container", image="img:1.0", source="yaml"),
         )
-    assert any("No in-container environment.json rescued" in rec.message for rec in caplog.records)
+    assert any("No in-container system.json rescued" in rec.message for rec in caplog.records)
 
 
 def test_patch_runner_block_adds_block_and_stamps(tmp_path: Path) -> None:
     """_patch_runner_block injects the runner block and stamps bundle_version."""
     payload = BundleWriter._patch_runner_block(
         {"python_version": "3.10.14"},
-        RunnerProvenance(mode="docker", image="img:1.0", image_digest=None, source="yaml"),
+        RunnerProvenance(mode="container", image="img:1.0", image_digest=None, source="yaml"),
     )
-    assert payload["runner"]["mode"] == "docker"
+    assert payload["runner"]["mode"] == "container"
     assert payload["bundle_version"] == "2.0"
 
 
@@ -321,9 +321,9 @@ def _write_full_bundle(tmp_path: Path) -> Path:
 
     writer = _writer(study_dir, ts_source_dir=staging)
     writer.write_result(make_result())
-    writer.write_environment(
+    writer.write_system(
         host_snapshot=_make_snapshot(),
-        runner=RunnerProvenance(mode="local", source="default"),
+        runner=RunnerProvenance(mode="process", source="default"),
     )
     writer.move_config_sidecar(resolved_config_hash="resolved_h1", resolution_log=None)
     writer.finalize()
@@ -349,7 +349,7 @@ def test_bundle_reader_happy_path(tmp_path: Path) -> None:
     # Registry-keyed paths for every present artefact.
     assert loaded.paths["result"].name == "result.json"
     assert loaded.paths["config"].name == "config.json"
-    assert loaded.paths["environment"].name == "environment.json"
+    assert loaded.paths["system"].name == "system.json"
 
 
 def test_bundle_reader_registry_driven_discovery(tmp_path: Path, monkeypatch) -> None:
@@ -416,14 +416,23 @@ def test_bundle_reader_legacy_fallback_warns(tmp_path: Path) -> None:
 def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     """A full bundle 1.0 (pre-unification shape) reads best-effort, ONE warning.
 
-    Exercises every 2.0 break against a synthetic 1.0-shaped bundle written by
-    hand: result.json carries the retired top-level baseline_power_w copy and a
-    schema_version key with a runner_provenance block lacking image_digest;
-    environment.json carries the old separate RunnerEnvironment-shaped runner
-    block (no image_source), the never-populated hardware fields (pcie_gen,
-    mig_enabled, cudnn_version, fan_speed_pct), and the pre-rename cuda.version
-    key. The reader drops/maps the legacy shapes rather than rejecting them, and
-    emits exactly one bundle-level UserWarning.
+    Exercises the 2.0-break tolerances that REMAIN against a synthetic 1.0-shaped
+    bundle written by hand: result.json carries the retired top-level
+    baseline_power_w copy and a schema_version key with a runner_provenance block
+    lacking image_digest; the system sidecar (system.json) carries the old separate
+    RunnerEnvironment-shaped runner block (no image_source), the never-populated
+    hardware fields (pcie_gen, mig_enabled, cudnn_version, fan_speed_pct), and the
+    pre-rename cuda.version key. The reader drops/maps those legacy shapes rather
+    than rejecting them, and emits exactly one bundle-level UserWarning.
+
+    NOTE the clean breaks are exercised by their own tests, not tolerated here:
+    the sidecar rename means the 1.0 content is placed under the CURRENT filename
+    (system.json, not environment.json), and the runner blocks use the CURRENT
+    vocabulary (``mode: "container"``) deliberately - the v0.7 runner-mode rename
+    is a clean break, NOT a tolerated legacy shape, so a 1.0 (or 2.0-era) bundle
+    whose runner block carries the pre-v0.7 ``docker``/``local`` mode fails
+    validation on read. That exclusion is pinned by
+    ``test_bundle_reader_1_0_bundle_with_legacy_runner_mode_raises``.
     """
     bundle_dir = tmp_path / "study" / "exp-legacy"
     bundle_dir.mkdir(parents=True)
@@ -447,7 +456,7 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
         "end_time": "2026-01-01T00:00:01",
         # runner_provenance in its 1.0 shape: no image_digest key.
         "runner_provenance": {
-            "mode": "docker",
+            "mode": "container",
             "image": "img:1.0",
             "source": "yaml",
             "image_source": "registry",
@@ -481,13 +490,13 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
         "cuda_version_source": "torch",
         # runner in its old RunnerEnvironment shape: no image_source key.
         "runner": {
-            "mode": "docker",
+            "mode": "container",
             "image": "img:1.0",
             "image_digest": "img@sha256:abc",
             "source": "yaml",
         },
     }
-    (bundle_dir / "environment.json").write_text(json.dumps(env_payload), encoding="utf-8")
+    (bundle_dir / "system.json").write_text(json.dumps(env_payload), encoding="utf-8")
 
     with pytest.warns(UserWarning, match="legacy results bundle") as record:
         loaded = BundleReader.read(bundle_dir)
@@ -507,13 +516,52 @@ def test_bundle_reader_tolerates_1_0_bundle(tmp_path: Path) -> None:
     assert loaded.result.runner_provenance.image_source == "registry"
     assert loaded.result.runner_provenance.image_digest is None
 
-    # environment.json: dead fields ignored, cuda version mapped, runner unified.
+    # system.json: dead fields ignored, cuda version mapped, runner unified.
     assert loaded.environment is not None
     assert loaded.environment.hardware.cuda.driver_supported_version == "12.4"
     assert loaded.environment.cuda_version == "12.1"
     assert loaded.environment.runner is not None
     assert loaded.environment.runner.image_digest == "img@sha256:abc"
     assert loaded.environment.runner.image_source is None
+
+
+def test_bundle_reader_1_0_bundle_with_legacy_runner_mode_raises(tmp_path: Path) -> None:
+    """A bundle whose runner block carries the pre-v0.7 mode fails validation on read.
+
+    The runner-mode rename (``docker``/``local`` -> ``container``/``process``) is a
+    clean break, NOT a tolerated legacy shape: ``RunnerProvenance.mode`` is a closed
+    ``Literal``, so ``ExperimentResult.model_validate`` (via the strict read path)
+    hard-crashes on a stale value rather than silently loading it. This crash is the
+    INTENDED behavior and is pinned here - the companion
+    ``test_bundle_reader_tolerates_1_0_bundle`` covers the tolerances that remain.
+    """
+    import pydantic
+
+    bundle_dir = tmp_path / "study" / "exp-stale-runner"
+    bundle_dir.mkdir(parents=True)
+
+    result_payload = {
+        "bundle_version": "1.0",
+        "experiment_id": "legacy-002",
+        "measurement_config_hash": "deadbeef",
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "total_tokens": 30,
+        "total_energy_j": 5.0,
+        "total_inference_time_sec": 1.0,
+        "avg_tokens_per_second": 30.0,
+        "avg_energy_per_token_j": 0.25,
+        "total_flops": 0.0,
+        "energy_breakdown": {"raw_j": 5.0},
+        "start_time": "2026-01-01T00:00:00",
+        "end_time": "2026-01-01T00:00:01",
+        # Pre-v0.7 runner vocabulary - no longer accepted on read.
+        "runner_provenance": {"mode": "docker", "image": "img:1.0", "source": "yaml"},
+    }
+    (bundle_dir / "result.json").write_text(json.dumps(result_payload), encoding="utf-8")
+
+    with pytest.raises(pydantic.ValidationError, match=r"mode"):
+        BundleReader.read(bundle_dir)
 
 
 def test_bundle_reader_declared_but_missing_timeseries_warns(tmp_path: Path) -> None:
@@ -527,17 +575,40 @@ def test_bundle_reader_declared_but_missing_timeseries_warns(tmp_path: Path) -> 
         BundleReader.read(writer.bundle_dir)
 
 
-def test_bundle_reader_corrupt_environment_is_best_effort(tmp_path: Path) -> None:
-    """A corrupt environment.json yields environment=None, never an error."""
+def test_bundle_reader_corrupt_system_is_best_effort(tmp_path: Path) -> None:
+    """A corrupt system.json yields environment=None, never an error."""
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir)
     writer.write_result(make_result())
-    (writer.bundle_dir / "environment.json").write_text("{ not valid json", encoding="utf-8")
+    (writer.bundle_dir / "system.json").write_text("{ not valid json", encoding="utf-8")
 
     loaded = BundleReader.read(writer.bundle_dir)
     assert loaded.environment is None
     assert loaded.result.experiment_id == "test-001"
+
+
+def test_bundle_reader_ignores_pre_rename_environment_filename(tmp_path: Path) -> None:
+    """Clean break: a sidecar under the pre-rename environment.json is NOT read.
+
+    After the environment.json -> system.json rename the reader looks only for
+    system.json. A bundle carrying the snapshot under the old name (and no
+    system.json) loads with the system sidecar absent - no legacy fallback.
+    """
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result())
+    # Snapshot present ONLY under the pre-rename name; no system.json.
+    write_container_system_sidecar(writer.bundle_dir / "environment.json")
+    assert not (writer.bundle_dir / "system.json").exists()
+
+    loaded = BundleReader.read(writer.bundle_dir)
+
+    # The old-named file is invisible to the reader: no system artefact discovered.
+    assert loaded.environment is None
+    assert loaded.result.environment is None
+    assert "system" not in loaded.paths
 
 
 # ---------------------------------------------------------------------------

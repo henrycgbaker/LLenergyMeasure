@@ -69,8 +69,8 @@ def engine_str(engine: Any) -> str:
 # Runner mode constants
 # ---------------------------------------------------------------------------
 
-RUNNER_LOCAL: Final = "local"
-RUNNER_DOCKER: Final = "docker"
+RUNNER_PROCESS: Final = "process"
+RUNNER_CONTAINER: Final = "container"
 CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
 """Mount point inside Docker containers for config/result exchange."""
 
@@ -81,16 +81,53 @@ SOURCE_USER_CONFIG: Final = "user_config"
 SOURCE_AUTO_DETECTED: Final = "auto_detected"
 SOURCE_DEFAULT: Final = "default"
 SOURCE_MULTI_ENGINE_ELEVATION: Final = "multi_engine_elevation"
-"""RunnerSpec source tag when an engine is auto-elevated to Docker for multi-engine isolation."""
+"""RunnerSpec source tag when an engine is auto-elevated to container mode for multi-engine isolation."""
+SOURCE_IMPLICIT: Final = "implicit"
+"""RunnerProvenance source tag when no runner spec was resolved (the precedence chain never
+ran - distinct from ``default``, which is a real fall-through)."""
 
 EXPLICIT_RUNNER_SOURCES: Final[frozenset[str]] = frozenset(
     {SOURCE_ENV, SOURCE_YAML, SOURCE_USER_CONFIG}
 )
 """Runner source tags that represent an explicit user pin (env var, study YAML, or user
-config). In a multi-engine study these win over Docker elevation; only auto-resolved
-runners (``auto_detected`` / ``default``) are elevated to Docker for isolation."""
+config). In a multi-engine study these win over container elevation; only auto-resolved
+runners (``auto_detected`` / ``default``) are elevated to container mode for isolation."""
 
-RunnerMode = Literal["local", "docker"]
+RunnerMode = Literal["process", "container"]
+
+
+def legacy_runner_replacement(value: str) -> str | None:
+    """Return the canonical replacement for a legacy (pre-v0.7) runner value, or None.
+
+    The runner vocabulary was renamed in v0.7: ``local`` -> ``process``, ``docker`` ->
+    ``container``, ``docker:<image>`` -> ``container:<image>``. Returns the value to
+    migrate to, or ``None`` when ``value`` is not a legacy runner value. Pure string work
+    over the mode vocabulary - the single source of truth both the config edge
+    (``UserRunnersConfig``) and the parse edge (``image_registry.parse_runner_value``)
+    delegate to, so the migration mapping cannot drift between them.
+    """
+    if value == "local":
+        return RUNNER_PROCESS
+    if value == "docker":
+        return RUNNER_CONTAINER
+    if value.startswith("docker:"):
+        image = value[len("docker:") :]
+        return f"{RUNNER_CONTAINER}:{image}" if image else f"{RUNNER_CONTAINER}:<image>"
+    return None
+
+
+def legacy_runner_migration_message(
+    value: str, replacement: str, *, context: str | None = None
+) -> str:
+    """The one shared migration-error message for a renamed-in-v0.7 runner value.
+
+    Names the user's ACTUAL input ``value`` and the canonical ``replacement`` so the
+    wording stays identical across every edge that rejects a legacy value. ``context``
+    (e.g. ``"runners.transformers"``) is appended when the caller can name the field.
+    """
+    where = f" ({context})" if context else ""
+    return f"runner value {value!r} was renamed in v0.7{where} - use {replacement!r}"
+
 
 DOCKER_PULL_TIMEOUT: Final = 1800
 """Maximum seconds to wait for ``docker pull`` (30 min - generous for large images like TensorRT ~10 GB)."""
@@ -100,7 +137,7 @@ DOCKER_PULL_TIMEOUT: Final = 1800
 # ---------------------------------------------------------------------------
 
 ENV_RUNNER_PREFIX: Final = "LLEM_RUNNER_"
-"""Prefix for per-engine runner override env vars (e.g. ``LLEM_RUNNER_TRANSFORMERS=docker``)."""
+"""Prefix for per-engine runner override env vars (e.g. ``LLEM_RUNNER_TRANSFORMERS=container``)."""
 
 ENV_IMAGE_PREFIX: Final = "LLEM_IMAGE_"
 """Prefix for per-engine image override env vars (e.g. ``LLEM_IMAGE_VLLM=custom:tag``)."""
@@ -348,12 +385,13 @@ __all__ = [
     "ENV_SAVE_TIMESERIES",
     "ENV_TABLE_ROWS",
     "EXPLICIT_RUNNER_SOURCES",
-    "RUNNER_DOCKER",
-    "RUNNER_LOCAL",
+    "RUNNER_CONTAINER",
+    "RUNNER_PROCESS",
     "SAMPLING_PRESETS",
     "SOURCE_AUTO_DETECTED",
     "SOURCE_DEFAULT",
     "SOURCE_ENV",
+    "SOURCE_IMPLICIT",
     "SOURCE_MULTI_ENGINE_ELEVATION",
     "SOURCE_USER_CONFIG",
     "SOURCE_YAML",

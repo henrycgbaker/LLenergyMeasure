@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.models import StudyConfig
-from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES, engine_str
+from llenergymeasure.config.ssot import RUNNER_CONTAINER, TEMP_PREFIX_TIMESERIES, engine_str
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.progress import ProgressCallback
@@ -64,7 +64,7 @@ def run_single_experiment(
 
     check_gpu_memory_residual()
 
-    # Collect environment snapshot once - used for both harness and environment.json sidecar
+    # Collect environment snapshot once - used for both harness and system.json sidecar
     from llenergymeasure.harness.environment import collect_environment_snapshot
 
     snapshot = collect_environment_snapshot()
@@ -78,11 +78,11 @@ def run_single_experiment(
     # Artefact staging dir. Local path always creates one (below); docker path
     # inherits the DockerRunner rescue dir, which may be None.
     ts_tmpdir: Path | None = None
-    # Image that actually ran under docker dispatch (needed for the environment.json
+    # Image that actually ran under docker dispatch (needed for the system.json
     # runner block's digest resolution); None on the local path.
     resolved_docker_image: str | None = None
 
-    if spec is not None and spec.mode == RUNNER_DOCKER:
+    if spec is not None and spec.mode == RUNNER_CONTAINER:
         # Docker path: dispatch to container directly (no subprocess)
         from llenergymeasure.infra.docker_errors import docker_exc_to_failure
         from llenergymeasure.infra.docker_runner import DockerRunner

@@ -233,12 +233,12 @@ class ExperimentResult(BaseModel):
         "None when no runner spec was available.",
     )
 
-    # Environment sidecar (loaded from environment.json by load_result; excluded
+    # Environment sidecar (loaded from system.json by load_result; excluded
     # from result.json serialisation - the sidecar is the on-disk home).
     environment: EnvironmentSnapshot | None = Field(
         default=None,
         exclude=True,
-        description="Hardware/runtime environment loaded from the environment.json sidecar. "
+        description="Hardware/runtime environment loaded from the system.json sidecar. "
         "None when no sidecar is present. Not serialised back into result.json.",
     )
 

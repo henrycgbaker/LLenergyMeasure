@@ -156,8 +156,8 @@ def make_user_config(**overrides):
     return UserConfig(**defaults)
 
 
-def write_container_environment_sidecar(path: Path) -> dict:
-    """Write a rescued in-container environment.json (distinct CONTAINER values).
+def write_container_system_sidecar(path: Path) -> dict:
+    """Write a rescued in-container system.json (distinct CONTAINER values).
 
     Shared by the docker-rescue tests: distinct hardware/runtime values so a test
     can prove the container snapshot wins over the dispatching-host snapshot.

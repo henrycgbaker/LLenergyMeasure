@@ -145,7 +145,7 @@ Raw numbers only make sense in context. Here is how to compare results fairly:
 
 **Match prompt counts and input lengths.** Output token counts (and therefore energy) vary with input length. Comparing a run with 100 short prompts against a run with 100 long prompts is not a like-for-like comparison.
 
-**Note the hardware.** A result from an A100 GPU is not directly comparable to a result from a consumer GPU. The GPU model is recorded in the `environment.json` sidecar next to each `result.json`.
+**Note the hardware.** A result from an A100 GPU is not directly comparable to a result from a consumer GPU. The GPU model is recorded in the `system.json` sidecar next to each `result.json`.
 
 **Check the dtype setting.** Running at `float16` (16-bit) typically uses less energy than `float32` (32-bit). Results should use the same dtype to be comparable.
 

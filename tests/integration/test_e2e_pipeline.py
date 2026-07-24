@@ -46,7 +46,7 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
         "run_study_preflight",
         lambda study, **kw: (
             {
-                exp.engine: RunnerSpec(mode="local", image=None, source="default")
+                exp.engine: RunnerSpec(mode="process", image=None, source="default")
                 for exp in study.experiments
             },
             {},
@@ -66,7 +66,7 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.resolve_study_runners",
         lambda engines, yaml_runners=None, user_config=None: {
-            e: RunnerSpec(mode="local", image=None, source="default") for e in engines
+            e: RunnerSpec(mode="process", image=None, source="default") for e in engines
         },
     )
     monkeypatch.setattr(

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from llenergymeasure.config.ssot import SOURCE_IMPLICIT
 from llenergymeasure.domain.bundle_artefacts import BUNDLE_VERSION
 from llenergymeasure.domain.environment import (
     CPUEnvironment,
@@ -30,7 +31,7 @@ from llenergymeasure.domain.environment import (
 from llenergymeasure.domain.experiment import ExperimentResult, RunnerProvenance
 from llenergymeasure.results.persistence import (
     load_result,
-    save_environment,
+    save_system,
 )
 from llenergymeasure.results.persistence import save_result as _persist_save_result
 
@@ -301,7 +302,7 @@ def test_runner_provenance_docker_round_trips(
     result = minimal_result.model_copy(
         update={
             "runner_provenance": RunnerProvenance(
-                mode="docker",
+                mode="container",
                 image="ghcr.io/example/transformers:1.0.0",
                 source="yaml",
                 image_source="registry",
@@ -312,32 +313,57 @@ def test_runner_provenance_docker_round_trips(
 
     # Persisted into result.json (NOT excluded, unlike environment).
     payload = json.loads(result_path.read_text(encoding="utf-8"))
-    assert payload["runner_provenance"]["mode"] == "docker"
+    assert payload["runner_provenance"]["mode"] == "container"
     assert payload["runner_provenance"]["image"] == "ghcr.io/example/transformers:1.0.0"
     assert payload["runner_provenance"]["source"] == "yaml"
 
     loaded = load_result(result_path)
     assert loaded.runner_provenance is not None
-    assert loaded.runner_provenance.mode == "docker"
+    assert loaded.runner_provenance.mode == "container"
     assert loaded.runner_provenance.image == "ghcr.io/example/transformers:1.0.0"
     assert loaded.runner_provenance.source == "yaml"
     assert loaded.runner_provenance.image_source == "registry"
 
 
-def test_runner_provenance_local_round_trips(
+def test_runner_provenance_process_round_trips(
     tmp_path: Path, minimal_result: ExperimentResult
 ) -> None:
-    """A local runner_provenance survives save/load with no image."""
+    """A process runner_provenance survives save/load with no image."""
     result = minimal_result.model_copy(
-        update={"runner_provenance": RunnerProvenance(mode="local", image=None, source="local")}
+        update={
+            "runner_provenance": RunnerProvenance(
+                mode="process", image=None, source=SOURCE_IMPLICIT
+            )
+        }
     )
     result_path = save_result(result, tmp_path)
     loaded = load_result(result_path)
 
     assert loaded.runner_provenance is not None
-    assert loaded.runner_provenance.mode == "local"
+    assert loaded.runner_provenance.mode == "process"
     assert loaded.runner_provenance.image is None
-    assert loaded.runner_provenance.source == "local"
+    assert loaded.runner_provenance.source == "implicit"
+
+
+@pytest.mark.parametrize("stale_mode", ["docker", "local"])
+def test_runner_provenance_rejects_stale_mode_on_read(stale_mode):
+    """A pre-v0.7 bundle carrying the renamed mode fails validation loudly.
+
+    The runner mode is a closed ``Literal["process", "container"]`` - a clean break
+    with no alias translation - so reading an 09ec455e-era 2.0 block with the old
+    value raises a pydantic ValidationError naming the allowed values, rather than
+    silently loading a stale string.
+    """
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match=r"'process'.*'container'"):
+        RunnerProvenance.model_validate({"mode": stale_mode})
+
+    # The forward vocabulary still validates.
+    assert RunnerProvenance.model_validate({"mode": "process"}).mode == "process"
+    assert RunnerProvenance.model_validate({"mode": "container"}).mode == "container"
+    # source stays an open str: a stale sentinel there is inert, not rejected.
+    assert RunnerProvenance.model_validate({"mode": "process", "source": "local"}).source == "local"
 
 
 # ---------------------------------------------------------------------------
@@ -441,9 +467,9 @@ def test_load_result_attaches_environment_sidecar(
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """load_result() reads back the environment.json sidecar onto result.environment."""
+    """load_result() reads back the system.json sidecar onto result.environment."""
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.declared_config_hash,
@@ -459,26 +485,26 @@ def test_load_result_attaches_environment_sidecar(
     assert loaded.environment.hardware.gpu.name == "NVIDIA A100-SXM4-80GB"
 
 
-def test_save_environment_includes_bundle_version(
+def test_save_system_includes_bundle_version(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """environment.json carries the single bundle_version stamp."""
+    """system.json carries the single bundle_version stamp."""
     import json
 
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.declared_config_hash,
         result_path.parent,
     )
-    payload = json.loads((result_path.parent / "environment.json").read_text())
+    payload = json.loads((result_path.parent / "system.json").read_text())
     assert payload["bundle_version"] == BUNDLE_VERSION == "2.0"
 
 
-def test_save_environment_writes_docker_runner_block_roundtrip(
+def test_save_system_writes_docker_runner_block_roundtrip(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
@@ -489,7 +515,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     snapshot = env_snapshot.model_copy(
         update={
             "runner": RunnerProvenance(
-                mode="docker",
+                mode="container",
                 image="ghcr.io/acme/vllm:1.19.0-cuda12",
                 source="auto_detected",
                 image_source="registry",
@@ -498,7 +524,7 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
         }
     )
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         snapshot,
         minimal_result.experiment_id,
         minimal_result.declared_config_hash,
@@ -506,9 +532,9 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     )
 
     # Raw JSON carries the runner block ...
-    payload = json.loads((result_path.parent / "environment.json").read_text())
+    payload = json.loads((result_path.parent / "system.json").read_text())
     assert payload["runner"] == {
-        "mode": "docker",
+        "mode": "container",
         "image": "ghcr.io/acme/vllm:1.19.0-cuda12",
         "source": "auto_detected",
         "image_source": "registry",
@@ -519,23 +545,23 @@ def test_save_environment_writes_docker_runner_block_roundtrip(
     loaded = load_result(result_path)
     assert loaded.environment is not None
     assert loaded.environment.runner is not None
-    assert loaded.environment.runner.mode == "docker"
+    assert loaded.environment.runner.mode == "container"
     assert loaded.environment.runner.image == "ghcr.io/acme/vllm:1.19.0-cuda12"
     assert loaded.environment.runner.image_digest == "ghcr.io/acme/vllm@sha256:deadbeef"
     assert loaded.environment.runner.source == "auto_detected"
 
 
-def test_save_environment_writes_local_runner_block_roundtrip(
+def test_save_system_writes_local_runner_block_roundtrip(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
 ) -> None:
-    """A local runner block records mode=local with no image or digest."""
+    """A process runner block records mode=process with no image or digest."""
     snapshot = env_snapshot.model_copy(
-        update={"runner": RunnerProvenance(mode="local", source="default")}
+        update={"runner": RunnerProvenance(mode="process", source="default")}
     )
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         snapshot,
         minimal_result.experiment_id,
         minimal_result.declared_config_hash,
@@ -545,13 +571,13 @@ def test_save_environment_writes_local_runner_block_roundtrip(
     loaded = load_result(result_path)
     assert loaded.environment is not None
     assert loaded.environment.runner is not None
-    assert loaded.environment.runner.mode == "local"
+    assert loaded.environment.runner.mode == "process"
     assert loaded.environment.runner.image is None
     assert loaded.environment.runner.image_digest is None
     assert loaded.environment.runner.source == "default"
 
 
-def test_save_environment_runner_absent_when_snapshot_has_none(
+def test_save_system_runner_absent_when_snapshot_has_none(
     tmp_path: Path,
     minimal_result: ExperimentResult,
     env_snapshot: EnvironmentSnapshot,
@@ -560,13 +586,13 @@ def test_save_environment_runner_absent_when_snapshot_has_none(
     import json
 
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.declared_config_hash,
         result_path.parent,
     )
-    payload = json.loads((result_path.parent / "environment.json").read_text())
+    payload = json.loads((result_path.parent / "system.json").read_text())
     assert payload["runner"] is None
     loaded = load_result(result_path)
     assert loaded.environment is not None
@@ -585,9 +611,9 @@ def test_load_result_without_environment_sidecar(
 def test_load_result_corrupt_environment_sidecar(
     tmp_path: Path, minimal_result: ExperimentResult
 ) -> None:
-    """A corrupt environment.json must not break load_result (best-effort)."""
+    """A corrupt system.json must not break load_result (best-effort)."""
     result_path = save_result(minimal_result, tmp_path)
-    (result_path.parent / "environment.json").write_text("{ not valid json", encoding="utf-8")
+    (result_path.parent / "system.json").write_text("{ not valid json", encoding="utf-8")
 
     loaded = load_result(result_path)
 
@@ -602,7 +628,7 @@ def test_environment_field_excluded_from_result_json(
 ) -> None:
     """environment is loader-only - it never serialises back into result.json."""
     result_path = save_result(minimal_result, tmp_path)
-    save_environment(
+    save_system(
         env_snapshot,
         minimal_result.experiment_id,
         minimal_result.declared_config_hash,

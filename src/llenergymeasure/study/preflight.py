@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
-    RUNNER_DOCKER,
-    RUNNER_LOCAL,
+    RUNNER_CONTAINER,
+    RUNNER_PROCESS,
     SOURCE_MULTI_ENGINE_ELEVATION,
     Engine,
 )
@@ -108,7 +108,7 @@ def run_study_preflight(
     from llenergymeasure.infra.image_registry import resolve_image
 
     for engine_name, spec in runner_specs.items():
-        if spec.mode == RUNNER_DOCKER:
+        if spec.mode == RUNNER_CONTAINER:
             image, image_source = resolve_image(
                 engine_name,
                 spec_image=spec.image,
@@ -125,7 +125,7 @@ def run_study_preflight(
     # Docker pre-flight: run once if any engine resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
     effective_skip = skip_preflight or study.study_execution.skip_preflight
-    if any(spec.mode == RUNNER_DOCKER for spec in runner_specs.values()):
+    if any(spec.mode == RUNNER_CONTAINER for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 
         run_docker_preflight(skip=effective_skip)
@@ -161,16 +161,16 @@ def _apply_multi_engine_precedence(
     elevated: list[str] = []
     for engine_name, spec in runner_specs.items():
         if spec.is_explicit:
-            # User pinned this engine - honour it (whether local or docker).
+            # User pinned this engine - honour it (whether process or container).
             kept_explicit.append(engine_name)
-            # A local pin still needs a host importability check before dispatch.
-            if spec.mode == RUNNER_LOCAL:
+            # A process pin still needs a host importability check before dispatch.
+            if spec.mode == RUNNER_PROCESS:
                 explicit_local.append(engine_name)
         else:
-            # auto_detected / default -> elevate to Docker for isolation.
+            # auto_detected / default -> elevate to a container for isolation.
             elevated.append(engine_name)
 
-    # Import pre-flight: every engine pinned to local must be importable here.
+    # Import pre-flight: every engine pinned to process must be importable here.
     # Reuse the single-engine local-preflight availability check (find_spec on
     # the engine package) rather than duplicating it - it is a public helper on
     # harness/preflight, which owns the fact.
@@ -184,19 +184,19 @@ def _apply_multi_engine_precedence(
                 f"{engine_name}: package '{package}' is not importable in the host "
                 f"environment. Either install the engine extra "
                 f"(pip install 'llenergymeasure[{engine_name}]'), or drop the explicit "
-                f"'{engine_name}: local' runner pin so multi-engine elevation runs it "
-                f"in Docker."
+                f"'{engine_name}: {RUNNER_PROCESS}' runner pin so multi-engine elevation "
+                f"runs it in a container."
             )
     if import_failures:
         lines = "\n".join(f"  \u2717 {f}" for f in import_failures)
         raise PreFlightError(
-            "Multi-engine study pins engine(s) to a local runner, but the host "
+            f"Multi-engine study pins engine(s) to a {RUNNER_PROCESS} runner, but the host "
             f"environment cannot import them:\n{lines}"
         )
 
     # Docker is only required when an auto-resolved engine needs elevating.
-    # All-explicit studies (local and/or docker pins) do not gate on it here;
-    # explicit docker pins are validated by the Docker pre-flight downstream.
+    # All-explicit studies (process and/or container pins) do not gate on it here;
+    # explicit container pins are validated by the Docker pre-flight downstream.
     if elevated and not is_docker_available():
         raise PreFlightError(
             "Multi-engine study needs Docker isolation to run "
@@ -210,11 +210,11 @@ def _apply_multi_engine_precedence(
         spec = runner_specs[engine_name]
         system_overrides[f"runner.{engine_name}"] = {
             "declared": spec.mode,
-            "effective": RUNNER_DOCKER,
+            "effective": RUNNER_CONTAINER,
             "reason": "auto-elevated (multi-engine study)",
         }
         runner_specs[engine_name] = RunnerSpec(
-            mode=RUNNER_DOCKER, image=spec.image, source=SOURCE_MULTI_ENGINE_ELEVATION
+            mode=RUNNER_CONTAINER, image=spec.image, source=SOURCE_MULTI_ENGINE_ELEVATION
         )
 
     logger.info(
@@ -224,14 +224,14 @@ def _apply_multi_engine_precedence(
         ", ".join(sorted(kept_explicit)) or "(none)",
     )
 
-    # All engines explicitly pinned to local: allowed, but the isolation the
+    # All engines explicitly pinned to process: allowed, but the isolation the
     # Docker path would give is now the user's responsibility. Warn once (the
     # "mixed runners" warning downstream only fires when modes actually differ,
-    # so it never covers this all-local multi-engine state).
-    if all(spec.mode == RUNNER_LOCAL for spec in runner_specs.values()):
+    # so it never covers this all-process multi-engine state).
+    if all(spec.mode == RUNNER_PROCESS for spec in runner_specs.values()):
         logger.warning(
-            "Multi-engine study running all engines locally: ensure the host "
-            "environment genuinely satisfies every engine; Docker per engine "
+            "Multi-engine study running every engine as a host process: ensure the host "
+            "environment genuinely satisfies every engine; a container per engine "
             "remains the recommended isolation."
         )
 

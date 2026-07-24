@@ -45,7 +45,7 @@ run. Holds the final metrics (energy, throughput, FLOPs, latency) directly.
 `ExperimentResult` carries a `bundle_version` field (see its default in
 `experiment.py`, sourced from `bundle_artefacts.BUNDLE_VERSION`). It is the single
 version for the whole per-experiment bundle - the same value is stamped into
-`config.json` and `environment.json` - and it replaces the retired per-artefact
+`config.json` and `system.json` - and it replaces the retired per-artefact
 `schema_version` counters.
 
 ## Related
