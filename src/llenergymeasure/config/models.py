@@ -549,7 +549,7 @@ class ExperimentConfig(BaseModel):
     def active_llem_execution(self) -> Any:
         """Return the active engine's ``llem_execution`` block, or None.
 
-        Mirrors ``active_engine_params()`` for the hand-written execution layer.
+        Mirrors ``active_engine_params()`` for the hand-written llem_execution layer.
         Only transformers has an llem-execution residual today (batch_size,
         torch.compile, TF32, autocast); vllm and tensorrt drive those through
         native engine APIs, so their sections carry no ``llem_execution`` block
@@ -561,7 +561,7 @@ class ExperimentConfig(BaseModel):
     def _llem_execution_sourced_batch_size(self) -> int:
         """The ``llem_execution.batch_size`` knob (default 1), shared by both batch semantics.
 
-        For execution-sourced engines (transformers) the declared capacity bound
+        For llem-execution-sourced engines (transformers) the declared capacity bound
         and the static configured batch are the same fact - the knob on
         ``<engine>.llem_execution.batch_size`` - so both accessors defer here.
         """

@@ -159,7 +159,7 @@ def test_single_config_sweep_no_dedup(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_execution_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
+def test_llem_execution_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
     """A llem_execution.batch_size sweep must expand to distinct experiments.
 
     Regression for the config-identity bug: build_resolved_view omitted the
