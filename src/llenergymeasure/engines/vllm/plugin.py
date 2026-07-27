@@ -1,7 +1,12 @@
-"""vLLM inference engine - thin EnginePlugin.
+"""vLLM inference engine - thin EnginePlugin (+ ServerCapable adapter).
 
-Implements the 4-method EnginePlugin protocol:
-  load_model, warmup, run_inference, cleanup
+Implements the offline EnginePlugin protocol (load_model, warmup,
+run_inference, cleanup, ...) and, additively, the ServerCapable online-serving
+extension (launch, await_ready, shutdown) - a C1 sibling of the single-call
+offline contract, not a change to it. The serving methods delegate the generic
+launch/probe/shutdown mechanics to
+:mod:`llenergymeasure.infra.server_lifecycle` and hold only the vLLM command
+knowledge (``vllm serve``) in :mod:`llenergymeasure.engines.vllm._serving`.
 
 All measurement lifecycle is delegated to MeasurementHarness. This module
 owns only vLLM-specific inference: model loading via vllm.LLM(), a minimal
@@ -17,12 +22,19 @@ import contextlib
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.utils.exceptions import EngineError
 from llenergymeasure.utils.formatting import bytes_to_mb
+
+if TYPE_CHECKING:
+    from llenergymeasure.infra.server_lifecycle import (
+        ProbeRequest,
+        ServerHandle,
+        ServerPlacement,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -540,6 +552,64 @@ class VLLMEngine:
     def check_hardware(config: ExperimentConfig) -> list[str]:
         """No preflight hardware rules; vLLM resolves SM x dtype x quant inside EngineArgs."""
         return []
+
+    # -------------------------------------------------------------------------
+    # ServerCapable: online-serving lifecycle (additive C1 sibling of the
+    # offline run_inference contract; readiness gated by a real probe, R8)
+    # -------------------------------------------------------------------------
+
+    def launch(self, config: ExperimentConfig, placement: ServerPlacement) -> ServerHandle:
+        """Launch a vLLM server (``vllm serve``) and return a handle to it.
+
+        Container placement runs the pinned upstream ``vllm/vllm-openai`` image
+        (resolved via the image registry when ``placement.image`` is None) with
+        ``--network host`` and the serve arguments; process placement runs
+        ``vllm serve`` as a host subprocess. A free port is allocated here and
+        passed to ``vllm serve``; the issuer receives ``handle.base_url``.
+        """
+        from llenergymeasure.engines.vllm import _serving
+        from llenergymeasure.infra import server_lifecycle as sl
+
+        port = sl.allocate_free_port()
+        base_url = sl.base_url_for(port)
+        model = config.task.model
+
+        if placement.mode == sl.CONTAINER_MODE:
+            from llenergymeasure.infra.image_registry import get_default_image
+
+            image = placement.image or get_default_image(config.engine)
+            container_name = sl.server_container_name("vllm")
+            argv = sl.build_server_container_argv(
+                image=image,
+                container_name=container_name,
+                gpu_indices=placement.gpu_indices,
+                serve_args=_serving.serve_args(model, port),
+            )
+            return sl.launch_container_server(
+                argv, base_url=base_url, engine="vllm", container_name=container_name
+            )
+
+        argv = _serving.process_argv(model, port)
+        log_path = sl.default_server_log_path("vllm", port)
+        return sl.launch_process_server(argv, base_url=base_url, engine="vllm", log_path=log_path)
+
+    def await_ready(
+        self,
+        handle: ServerHandle,
+        probe_request: ProbeRequest,
+        *,
+        timeout: float,
+    ) -> None:
+        """Wait until vLLM is ready: liveness poll THEN a real probe (R8)."""
+        from llenergymeasure.infra import server_lifecycle as sl
+
+        sl.await_ready(handle, probe_request, timeout=timeout)
+
+    def shutdown(self, handle: ServerHandle) -> None:
+        """Stop the vLLM server (graceful, escalating to a hard kill); idempotent."""
+        from llenergymeasure.infra import server_lifecycle as sl
+
+        sl.shutdown(handle)
 
     # -------------------------------------------------------------------------
     # Private: model loading helpers

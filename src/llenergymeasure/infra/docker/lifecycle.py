@@ -164,9 +164,12 @@ def run_blocking(cmd: list[str], timeout: float | None) -> tuple[int, str]:
 def launch(cmd: list[str]) -> subprocess.Popen[str]:
     """Start the container process and return the ``Popen`` handle.
 
-    Detach-capable seam: this only starts the process (stdout/stderr piped). A
-    server measurement mode reuses this and adds its own health-poll + stop; it
-    does NOT call :func:`wait_to_completion` (which owns the watchdog).
+    Detach-capable seam for the offline batch dispatch: this only starts the
+    process (stdout/stderr piped) and is composed with
+    :func:`wait_to_completion` (which owns the watchdog) by the streaming path.
+    Server measurement mode does NOT reuse this: it owns an independent detached
+    ``docker run -d`` lifecycle (launch / readiness poll / stop) in
+    :mod:`llenergymeasure.infra.server_lifecycle`.
     """
     try:
         return subprocess.Popen(
