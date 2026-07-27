@@ -56,7 +56,6 @@ from typing import Any
 
 from llenergymeasure.config.ssot import (
     RUNNER_CONTAINER,
-    RUNNER_PROCESS,
     TIMEOUT_DOCKER_CLI,
     TIMEOUT_SIGTERM_GRACE,
     RunnerMode,
@@ -624,7 +623,6 @@ def _tail(text: str) -> str:
     return "..." + text[-_LOG_TAIL_CHARS:]
 
 
-# Re-export the mode constants callers pattern-match placement.mode against, so a
-# server adapter needs only this module.
-PROCESS_MODE: RunnerMode = RUNNER_PROCESS
+# Re-export the container-mode constant the launch router pattern-matches
+# placement.mode against, so a server adapter needs only this module.
 CONTAINER_MODE: RunnerMode = RUNNER_CONTAINER
