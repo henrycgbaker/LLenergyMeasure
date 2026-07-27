@@ -197,13 +197,6 @@ def _draw_interarrivals(
     return rng.exponential(1.0 / rate, size=count)
 
 
-def _resolve_schedule_count(config: TrafficConfig) -> int | None:
-    """Fixed schedule length from the window, or None for a duration window."""
-    if config.window_requests is not None:
-        return config.window_requests
-    return None
-
-
 def build_schedule(
     config: TrafficConfig, *, seed: int | None = None, count: int | None = None
 ) -> ArrivalSchedule:
@@ -222,7 +215,9 @@ def build_schedule(
     resolved_seed = seed if seed is not None else config.seed
     rng = np.random.default_rng(resolved_seed)
 
-    fixed_count = count if count is not None else _resolve_schedule_count(config)
+    # ``count`` overrides everything; otherwise ``window_requests`` fixes the
+    # length (None falls through to the duration-bounded ``window_seconds`` path).
+    fixed_count = count if count is not None else config.window_requests
     if fixed_count is not None:
         gaps = _draw_interarrivals(rng, config, fixed_count)
         offsets = np.cumsum(gaps)
