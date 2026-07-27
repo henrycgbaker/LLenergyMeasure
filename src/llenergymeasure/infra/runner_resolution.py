@@ -156,6 +156,11 @@ def is_container_socket_available() -> bool:
         1. ``DOCKER_HOST`` environment variable set (an explicit socket / TCP / SSH
            endpoint), or
         2. ``Path("/var/run/docker.sock")`` present (the default mounted-socket path).
+
+    Note: any ``DOCKER_HOST`` value counts as available, including a remote TCP/SSH
+    daemon where the sibling-container reasoning does not strictly hold. This shallow
+    check matches the module's existence-only philosophy; validated remote and podman
+    topologies are tracked in issue #891.
     """
     if os.environ.get("DOCKER_HOST"):
         return True
@@ -244,7 +249,9 @@ def resolve_runner(
             "Running inside a container without a Docker socket - auto-selecting "
             "process mode (avoids attempting docker-in-docker)."
         )
-        return RunnerSpec(mode=RUNNER_PROCESS, image=None, source=SOURCE_DEFAULT)
+        # auto_detected (not default): a positive detection ran and chose process,
+        # so the CLI renders "(auto-detected)" rather than the misleading "(default)".
+        return RunnerSpec(mode=RUNNER_PROCESS, image=None, source=SOURCE_AUTO_DETECTED)
 
     #    4b. On the host: Docker + NVIDIA Container Toolkit available?
     if is_docker_available():

@@ -4,7 +4,9 @@ Tiered execution model:
   Tier 1 (host-level checks, no container needed):
     1. Docker CLI on PATH
     2. NVIDIA Container Toolkit installed (any of nvidia-container-runtime,
-       nvidia-ctk, nvidia-container-cli)
+       nvidia-ctk, nvidia-container-cli). Skipped in the docker-outside-of-docker
+       topology (llem inside a container with a mounted host Docker socket), where
+       GPU injection is the host daemon's job and the toolkit is not on llem's PATH.
     3. Host nvidia-smi - warns if missing, does NOT hard-block (remote daemon support)
 
   Tier 2 (requires a running container - only reached if Tier 1 passes):
@@ -288,9 +290,29 @@ def run_docker_preflight(skip: bool = False) -> None:
     if docker_error is not None:
         tier1_failures.append(docker_error)
 
-    toolkit_error = _check_nvidia_toolkit()
-    if toolkit_error is not None:
-        tier1_failures.append(toolkit_error)
+    # NVIDIA Container Toolkit check. In the docker-outside-of-docker topology (llem
+    # itself inside a container, dispatching sibling containers via a mounted host
+    # Docker socket), GPU injection is performed by the HOST daemon - the toolkit lives
+    # on the host, not on llem's local PATH. The local PATH check would answer the wrong
+    # question and hard-fail with a misleading "NVIDIA Container Toolkit not found", so
+    # skip it in that topology. The Tier-2 probe (launched THROUGH the socket) remains
+    # the genuine end-to-end GPU-visibility check and still runs.
+    # Function-local import: runner_resolution imports this module (NVIDIA_TOOLKIT_BINS),
+    # so a module-level import here would be circular.
+    from llenergymeasure.infra.runner_resolution import (
+        is_container_socket_available,
+        is_running_in_container,
+    )
+
+    if is_running_in_container() and is_container_socket_available():
+        logger.info(
+            "DooD topology: GPU injection is performed by the host daemon; local toolkit "
+            "check skipped (the container GPU probe still validates GPU visibility)."
+        )
+    else:
+        toolkit_error = _check_nvidia_toolkit()
+        if toolkit_error is not None:
+            tier1_failures.append(toolkit_error)
 
     # Host nvidia-smi - warn-only (supports remote Docker daemon)
     host_driver_version = _get_host_driver_version()

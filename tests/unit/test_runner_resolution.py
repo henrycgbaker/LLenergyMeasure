@@ -555,7 +555,8 @@ class TestContainerSelfAwareAutoDetection:
         ):
             spec = resolve_runner("vllm")
         assert spec.mode == "process"
-        assert spec.source == "default"
+        # A positive detection ran and chose process -> auto_detected, not default.
+        assert spec.source == "auto_detected"
         assert any(
             "inside a container without a Docker socket" in r.message for r in caplog.records
         )
