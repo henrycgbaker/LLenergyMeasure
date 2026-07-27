@@ -31,6 +31,10 @@ dependencies = [
 # docs/development.md for the layer-split contract.
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
+# Server mode: online-serving traffic generation. httpx is pure-Python (zero
+# compiled deps), so this extra installs on any host - engines still run in
+# their Docker images, but the traffic issuer runs wherever llem does.
+server = ["httpx>=0.27"]
 
 [dependency-groups]
 dev = [
