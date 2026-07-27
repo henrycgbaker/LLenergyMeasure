@@ -30,13 +30,27 @@ def two_engine_study() -> StudyConfig:
     )
 
 
-def patch_env(monkeypatch, *, docker: bool, importable: bool = True) -> MagicMock:
-    """Patch the three preflight collaborators and return the docker-preflight mock.
+def patch_env(
+    monkeypatch,
+    *,
+    docker: bool,
+    importable: bool = True,
+    in_container: bool = False,
+    socket: bool = False,
+) -> MagicMock:
+    """Patch the preflight collaborators and return the docker-preflight mock.
+
+    Defaults describe the HOST topology (``in_container=False``), so existing
+    precedence tests are unaffected by the container-self-aware elevation gate.
+    In-container tests set ``in_container=True`` and choose ``socket`` to model
+    docker-outside-of-docker (socket mounted) vs a socketless container.
 
     Args:
-        docker: value returned by ``is_docker_available``.
+        docker: value returned by ``is_docker_available`` (host Docker + NVIDIA CT).
         importable: value returned by the reused host-availability check
             (``harness.preflight.check_engine_installed``).
+        in_container: value returned by ``is_running_in_container``.
+        socket: value returned by ``is_container_socket_available``.
 
     Returns:
         The ``run_docker_preflight`` MagicMock, so a caller can assert whether it
@@ -44,6 +58,12 @@ def patch_env(monkeypatch, *, docker: bool, importable: bool = True) -> MagicMoc
     """
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: docker
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_running_in_container", lambda: in_container
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_container_socket_available", lambda: socket
     )
     docker_preflight = MagicMock()
     monkeypatch.setattr(
@@ -280,3 +300,70 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
     assert len(captured_calls) == 1
     assert captured_calls[0]["yaml_runners"] is None
     assert captured_calls[0]["user_config"] is None
+
+
+# ---------------------------------------------------------------------------
+# Container-self-aware multi-engine elevation
+# ---------------------------------------------------------------------------
+#
+# When llem itself runs inside a container, auto-elevation to a container is only
+# viable as docker-outside-of-docker (a mounted host Docker socket). A socketless
+# container cannot start sibling containers, so elevation fails with an actionable
+# error rather than attempting docker-in-docker. The host path is unchanged.
+
+
+def test_multi_engine_in_container_no_socket_raises_actionable(monkeypatch, two_engine_study):
+    """In a socketless container, auto engines cannot elevate: raise, don't attempt DinD."""
+    # A stray docker CLI on PATH (docker=True) must NOT lure elevation into DinD.
+    patch_env(monkeypatch, docker=True, in_container=True, socket=False)
+    with pytest.raises(PreFlightError) as exc_info:
+        run_study_preflight(two_engine_study)
+
+    msg = str(exc_info.value)
+    assert "inside a container without a Docker socket" in msg
+    assert "docker-in-docker is not supported" in msg
+    # Actionable fixes: mount the socket, pin process, or use a single engine.
+    assert "/var/run/docker.sock" in msg
+    assert "process" in msg
+    assert "single engine" in msg
+    # Names the engines that could not be elevated.
+    assert "transformers" in msg
+    assert "vllm" in msg
+
+
+def test_multi_engine_in_container_with_socket_elevates(monkeypatch, two_engine_study):
+    """In a container WITH a Docker socket, auto engines elevate as DooD siblings.
+
+    Socket presence drives elevation; the host NVIDIA-toolkit PATH check
+    (is_docker_available=False here) does not apply inside llem's container.
+    """
+    patch_env(monkeypatch, docker=False, in_container=True, socket=True)
+    specs, overrides = run_study_preflight(two_engine_study)
+
+    assert specs["transformers"].mode == "container"
+    assert specs["transformers"].source == "multi_engine_elevation"
+    assert specs["vllm"].mode == "container"
+    assert specs["vllm"].source == "multi_engine_elevation"
+    assert overrides["runner.transformers"]["effective"] == "container"
+    assert overrides["runner.vllm"]["effective"] == "container"
+
+
+def test_multi_engine_in_container_no_socket_all_explicit_process_passes(
+    monkeypatch, two_engine_study
+):
+    """The container gate only fires when elevation is actually needed.
+
+    All engines explicitly pinned to process -> nothing to elevate -> a socketless
+    container is fine (runs all-process, same as the host all-explicit path).
+    """
+    docker_preflight = patch_env(
+        monkeypatch, docker=False, importable=True, in_container=True, socket=False
+    )
+    specs, overrides = run_study_preflight(
+        two_engine_study, yaml_runners={"transformers": "process", "vllm": "process"}
+    )
+
+    assert specs["transformers"].mode == "process"
+    assert specs["vllm"].mode == "process"
+    assert overrides == {}
+    docker_preflight.assert_not_called()

@@ -4,13 +4,15 @@ Tests cover:
   - parse_runner_value: "process", "container", "container:image" forms, plus the
     clean-break rejection of the legacy "local"/"docker"/"docker:image" vocabulary
   - is_docker_available: PATH inspection for docker + NVIDIA CT tools
-  - resolve_runner: full precedence chain (env > yaml > user_config > auto > default)
+  - is_running_in_container / is_container_socket_available: file-existence detection
+  - resolve_runner: full precedence chain (env > yaml > user_config > auto > default),
+    including the container-self-aware auto-detection branch
   - resolve_study_runners: multi-engine resolution
 """
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,7 +20,9 @@ from llenergymeasure.config.runner_spec import RunnerSpec
 from llenergymeasure.config.ssot import ENV_RUNNER_PREFIX
 from llenergymeasure.config.user_config import UserRunnersConfig
 from llenergymeasure.infra.runner_resolution import (
+    is_container_socket_available,
     is_docker_available,
+    is_running_in_container,
     parse_runner_value,
     resolve_runner,
     resolve_study_runners,
@@ -26,10 +30,25 @@ from llenergymeasure.infra.runner_resolution import (
 
 
 @pytest.fixture(autouse=True)
-def _clear_docker_cache():
+def _clear_detection_caches(monkeypatch):
+    """Clear detection caches and default to the HOST topology (not in a container).
+
+    Auto-detection is container-self-aware: it consults ``is_running_in_container``
+    and ``is_container_socket_available``. The existing precedence tests assert the
+    host topology, so both default to "on the host" here, making them deterministic
+    regardless of where the suite runs (host, CI VM, or a dev container). Tests that
+    exercise the in-container branches override these explicitly.
+    """
     is_docker_available.cache_clear()
+    is_running_in_container.cache_clear()
+    is_container_socket_available.cache_clear()
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_running_in_container", lambda: False
+    )
     yield
     is_docker_available.cache_clear()
+    is_running_in_container.cache_clear()
+    is_container_socket_available.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -428,3 +447,193 @@ class TestResolveStudyRunners:
         # tensorrt: "auto" falls through -> container auto-detected
         assert result["tensorrt"].mode == "container"
         assert result["tensorrt"].source == "auto_detected"
+
+
+# ---------------------------------------------------------------------------
+# Container-self detection helpers (file-existence / env, no shelling out)
+# ---------------------------------------------------------------------------
+
+
+def _fake_path(existing: set[str]):
+    """Return a drop-in for ``pathlib.Path`` where ``.exists()`` is True only for
+    the paths in *existing*. Used to make the file-existence probes hermetic."""
+
+    def factory(p):
+        obj = MagicMock()
+        obj.exists.return_value = str(p) in existing
+        return obj
+
+    return factory
+
+
+class TestIsRunningInContainer:
+    """File-existence self-detection: /.dockerenv (docker) or /run/.containerenv (podman)."""
+
+    def test_false_when_no_marker_files(self):
+        with patch("llenergymeasure.infra.runner_resolution.Path", new=_fake_path(set())):
+            assert is_running_in_container() is False
+
+    def test_true_when_dockerenv_present(self):
+        with patch(
+            "llenergymeasure.infra.runner_resolution.Path",
+            new=_fake_path({"/.dockerenv"}),
+        ):
+            assert is_running_in_container() is True
+
+    def test_true_when_podman_containerenv_present(self):
+        with patch(
+            "llenergymeasure.infra.runner_resolution.Path",
+            new=_fake_path({"/run/.containerenv"}),
+        ):
+            assert is_running_in_container() is True
+
+
+class TestIsContainerSocketAvailable:
+    """DooD signal: DOCKER_HOST env set, or /var/run/docker.sock present."""
+
+    def test_true_when_docker_host_env_set(self, monkeypatch):
+        monkeypatch.setenv("DOCKER_HOST", "tcp://127.0.0.1:2375")
+        # Even with no socket file, DOCKER_HOST alone signals a control endpoint.
+        with patch("llenergymeasure.infra.runner_resolution.Path", new=_fake_path(set())):
+            assert is_container_socket_available() is True
+
+    def test_true_when_socket_path_present(self, monkeypatch):
+        monkeypatch.delenv("DOCKER_HOST", raising=False)
+        with patch(
+            "llenergymeasure.infra.runner_resolution.Path",
+            new=_fake_path({"/var/run/docker.sock"}),
+        ):
+            assert is_container_socket_available() is True
+
+    def test_false_when_no_env_and_no_socket(self, monkeypatch):
+        monkeypatch.delenv("DOCKER_HOST", raising=False)
+        with patch("llenergymeasure.infra.runner_resolution.Path", new=_fake_path(set())):
+            assert is_container_socket_available() is False
+
+
+# ---------------------------------------------------------------------------
+# resolve_runner - container-self-aware auto-detection (the hardening slice)
+# ---------------------------------------------------------------------------
+
+
+class TestContainerSelfAwareAutoDetection:
+    """Auto-detection resolves by container-context, not blind PATH inspection.
+
+    The two known-good topologies are locked here: on the host Docker on PATH still
+    means container; inside a socketless container we now resolve process instead of
+    attempting docker-in-docker.
+    """
+
+    def test_host_with_docker_resolves_container_unchanged(self):
+        """Known-good topology 1: on the host, Docker on PATH -> container (as before)."""
+        # is_running_in_container defaults to False via the autouse fixture (host).
+        with patch(
+            "llenergymeasure.infra.runner_resolution.is_docker_available",
+            return_value=True,
+        ):
+            spec = resolve_runner("vllm")
+        assert spec.mode == "container"
+        assert spec.source == "auto_detected"
+
+    def test_in_container_no_socket_resolves_process_despite_docker_on_path(self, caplog):
+        """Known-good topology 2 fixed: in-container + no socket -> process, even with
+        the docker CLI on PATH (today's blindness would have attempted DinD)."""
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_container_socket_available",
+                return_value=False,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_docker_available",
+                return_value=True,  # docker CLI present, but no usable socket
+            ),
+            caplog.at_level("INFO", logger="llenergymeasure.infra.runner_resolution"),
+        ):
+            spec = resolve_runner("vllm")
+        assert spec.mode == "process"
+        assert spec.source == "default"
+        assert any(
+            "inside a container without a Docker socket" in r.message for r in caplog.records
+        )
+
+    def test_in_container_with_socket_resolves_container(self):
+        """In-container + Docker socket -> container (DooD siblings via host daemon).
+
+        Socket presence drives the decision; the NVIDIA-toolkit PATH check
+        (is_docker_available) does not apply inside llem's container."""
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_container_socket_available",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_docker_available",
+                return_value=False,  # NVIDIA CT not on PATH inside llem's container
+            ),
+        ):
+            spec = resolve_runner("vllm")
+        assert spec.mode == "container"
+        assert spec.source == "auto_detected"
+
+    # --- Explicit pins are unaffected by container-context in every case ---
+
+    def test_env_pin_process_unaffected_in_container_with_socket(self, monkeypatch):
+        """An env pin short-circuits before auto-detection: process stays process even
+        in a container-with-socket that auto-detection would resolve to container."""
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}VLLM", "process")
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_container_socket_available",
+                return_value=True,
+            ),
+        ):
+            spec = resolve_runner("vllm")
+        assert spec.mode == "process"
+        assert spec.source == "env"
+
+    def test_user_config_container_pin_unaffected_in_socketless_container(self):
+        """A user-config container pin short-circuits before auto-detection: container
+        stays container even in a socketless container that would auto-resolve process."""
+        user_config = UserRunnersConfig(vllm="container:ghcr.io/org/vllm:v1")
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_container_socket_available",
+                return_value=False,
+            ),
+        ):
+            spec = resolve_runner("vllm", user_config=user_config)
+        assert spec.mode == "container"
+        assert spec.image == "ghcr.io/org/vllm:v1"
+        assert spec.source == "user_config"
+
+    def test_yaml_pin_container_unaffected_in_socketless_container(self):
+        """A YAML container pin short-circuits before the container-aware auto branch."""
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_container_socket_available",
+                return_value=False,
+            ),
+        ):
+            spec = resolve_runner("vllm", yaml_runners={"vllm": "container"})
+        assert spec.mode == "container"
+        assert spec.source == "yaml"
