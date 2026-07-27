@@ -79,9 +79,11 @@ def run_study_preflight(
           ``declared``, ``effective``, and ``reason`` keys.
 
     Raises:
-        PreFlightError: Multi-engine study pins an engine to local that is not
-            importable on the host, or an auto-resolved engine needs Docker
-            elevation but Docker is unavailable.
+        PreFlightError: Multi-engine study pins an engine to process that is not
+            importable on the host; an auto-resolved engine needs container
+            elevation but Docker is unavailable on the host; or llem is running
+            inside a container without a Docker socket, so it cannot elevate to
+            sibling containers (docker-in-docker is not supported).
         DockerPreFlightError: Docker pre-flight check failed (inherits PreFlightError).
     """
     from llenergymeasure.config.runner_spec import RunnerSpec
@@ -149,12 +151,18 @@ def _apply_multi_engine_precedence(
     returns the system-override records for the elevated engines.
 
     Raises:
-        PreFlightError: an engine explicitly pinned to local is not importable
-            in the host environment, or Docker is required to elevate an
-            auto-resolved engine but is unavailable.
+        PreFlightError: an engine explicitly pinned to process is not importable
+            in the host environment; container elevation is required for an
+            auto-resolved engine but Docker is unavailable on the host; or llem is
+            running inside a container without a Docker socket, so it cannot elevate
+            to sibling containers (docker-in-docker is not supported).
     """
     from llenergymeasure.config.runner_spec import RunnerSpec
-    from llenergymeasure.infra.runner_resolution import is_docker_available
+    from llenergymeasure.infra.runner_resolution import (
+        is_container_socket_available,
+        is_docker_available,
+        is_running_in_container,
+    )
 
     explicit_local: list[str] = []
     kept_explicit: list[str] = []
@@ -194,16 +202,35 @@ def _apply_multi_engine_precedence(
             f"environment cannot import them:\n{lines}"
         )
 
-    # Docker is only required when an auto-resolved engine needs elevating.
-    # All-explicit studies (process and/or container pins) do not gate on it here;
-    # explicit container pins are validated by the Docker pre-flight downstream.
-    if elevated and not is_docker_available():
-        raise PreFlightError(
-            "Multi-engine study needs Docker isolation to run "
-            f"{', '.join(sorted(elevated))} (auto-resolved, not explicitly pinned), "
-            "but Docker is not available. Install Docker + NVIDIA Container Toolkit, "
-            "pin those engines to an explicit runner, or use a single engine."
-        )
+    # Container elevation is only required when an auto-resolved engine needs it.
+    # All-explicit studies (process and/or container pins) do not gate here; explicit
+    # container pins are validated by the Docker pre-flight downstream.
+    #
+    # The elevation path must be viable and must be container-self-aware: when llem
+    # itself runs inside a container, the viable path is a mounted Docker socket
+    # (docker-outside-of-docker siblings via the host daemon), never docker-in-docker.
+    # A socketless container therefore fails with an actionable error rather than
+    # silently attempting DinD. On the host, the gate is the usual Docker + NVIDIA
+    # Container Toolkit availability check (unchanged).
+    if elevated:
+        if is_running_in_container():
+            if not is_container_socket_available():
+                raise PreFlightError(
+                    "Multi-engine study needs container isolation to run "
+                    f"{', '.join(sorted(elevated))} (auto-resolved, not explicitly "
+                    "pinned), but llenergymeasure is running inside a container without "
+                    "a Docker socket, so it cannot start sibling containers "
+                    "(docker-in-docker is not supported). Mount the host Docker socket "
+                    "(-v /var/run/docker.sock:/var/run/docker.sock), pin those engines "
+                    f"to an explicit '{RUNNER_PROCESS}' runner, or use a single engine."
+                )
+        elif not is_docker_available():
+            raise PreFlightError(
+                "Multi-engine study needs Docker isolation to run "
+                f"{', '.join(sorted(elevated))} (auto-resolved, not explicitly pinned), "
+                "but Docker is not available. Install Docker + NVIDIA Container Toolkit, "
+                "pin those engines to an explicit runner, or use a single engine."
+            )
 
     system_overrides: dict[str, dict[str, str]] = {}
     for engine_name in elevated:
