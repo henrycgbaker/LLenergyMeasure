@@ -28,6 +28,7 @@ def launch_stub(tmp_path: Path) -> Iterator[Callable[..., ServerHandle]]:
         *,
         ignore_sigterm: bool = False,
         completions_ready_after: float = 0.0,
+        listen_after: float = 0.0,
     ) -> ServerHandle:
         port = sl.allocate_free_port()
         argv = [sys.executable, str(STUB_SERVER), "--port", str(port)]
@@ -35,6 +36,8 @@ def launch_stub(tmp_path: Path) -> Iterator[Callable[..., ServerHandle]]:
             argv.append("--ignore-sigterm")
         if completions_ready_after:
             argv += ["--completions-ready-after", str(completions_ready_after)]
+        if listen_after:
+            argv += ["--listen-after", str(listen_after)]
         handle = sl.launch_process_server(
             argv,
             base_url=sl.base_url_for(port),

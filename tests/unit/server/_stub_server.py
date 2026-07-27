@@ -9,6 +9,11 @@ serving-path probe). Deliberately covers the awkward cases:
   ``/v1/completions`` returns 503 for the first ``S`` seconds, so a test can
   prove readiness is NOT satisfied by ``/health`` alone (R8) - either it waits
   for the real probe, or (with a large S and a short timeout) it times out.
+- ``--listen-after S``: the process does NOT bind its port for the first ``S``
+  seconds, so every probe during that window is refused at the transport level
+  (ECONNREFUSED). Models the normal startup window of a real server that has not
+  started listening yet, so a test can prove the readiness loop keeps polling
+  through transient connection failures instead of aborting on the first one.
 - ``--ignore-sigterm``: the process ignores SIGTERM, forcing ``shutdown`` to
   escalate to SIGKILL (the kill-escalation path).
 
@@ -89,10 +94,17 @@ async def _main() -> None:
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--ignore-sigterm", action="store_true")
     parser.add_argument("--completions-ready-after", type=float, default=0.0)
+    parser.add_argument("--listen-after", type=float, default=0.0)
     args = parser.parse_args()
 
     if args.ignore_sigterm:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+    # Delay binding the port so probes are refused at the transport level during
+    # the startup window (the connection-failure case the readiness loop must
+    # poll through, not abort on).
+    if args.listen_after:
+        await asyncio.sleep(args.listen_after)
 
     ready_at = time.monotonic()
     server = await asyncio.start_server(

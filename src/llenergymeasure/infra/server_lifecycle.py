@@ -25,9 +25,12 @@ Design constraints this module enforces:
 - **DooD reachability:** when llenergymeasure itself runs inside a container and
   dispatches a sibling server with ``--network host``, ``localhost`` does not
   route to the sibling unless llenergymeasure's own container is also
-  ``--network host``. Rather than a-priori network-mode detection, the
-  connection failure surfaces as a topology-specific actionable error (see
-  :func:`_check_dood`) instead of a generic readiness timeout.
+  ``--network host``. Rather than a-priori network-mode detection (ruled out), a
+  transient connection failure is NEVER treated as terminal - the readiness loop
+  keeps polling - and only once the whole deadline is spent with every probe
+  having failed at the transport level does the unreachability surface as a
+  topology-specific actionable error (see :func:`_is_dood_topology`) instead of a
+  generic readiness timeout.
 
 Probe transport: a narrow stdlib ``urllib`` client (no ``httpx`` / third-party
 dependency, so no server extra is pulled in just to probe readiness). The
@@ -471,8 +474,19 @@ def _wait_for(
     request_timeout: float,
     phase: str,
 ) -> None:
-    """Poll ``url`` until it returns HTTP 200 or the deadline passes."""
+    """Poll ``url`` until it returns HTTP 200 or the deadline passes.
+
+    A transient connection failure (the server is still loading and not yet
+    listening) is NEVER terminal on its own: during the startup window it is
+    indistinguishable from permanent DooD-unreachability, so the loop keeps
+    polling. Topology is diagnosed only when the whole deadline is spent (see the
+    deadline branch), never on the first failure. ``saw_http_response`` tracks
+    whether any probe ever got an HTTP-level answer (as opposed to a transport
+    failure) - one answer proves the server was reachable, which downgrades a
+    deadline to a plain readiness timeout rather than a topology error.
+    """
     last: Any = "no attempt"
+    saw_http_response = False
     while True:
         # Fast-fail if the server died during startup (process leg: exited pid;
         # container leg: State.Running=false). Both capture the logs into the
@@ -483,19 +497,32 @@ def _wait_for(
             status = _http_probe(url, method=method, payload=payload, timeout=request_timeout)
             if status == 200:
                 return
+            saw_http_response = True
             last = f"HTTP {status}"
         except _ConnectionFailed as exc:
-            # DooD topology: surface an actionable error rather than looping to a
-            # generic timeout. No-op outside that topology.
-            _check_dood(handle)
+            # Transient during the startup window; never terminal on its own -
+            # keep polling. Topology is diagnosed only at the deadline (below).
             last = f"connection failed ({exc})"
         if time.monotonic() >= deadline:
+            # Diagnosis is a DEADLINE decision, never a first-failure one: a
+            # normal startup-window connection failure (model still loading,
+            # nothing listening yet) is indistinguishable from permanent
+            # DooD-unreachability, so an eager raise aborts valid launches.
             # read_logs() runs BEFORE the caller's cleanup (shutdown removes the
-            # container), so the timeout error carries the tail. With --rm dropped
-            # the container still exists here, so `docker logs` succeeds.
+            # container), so the error carries the tail; with --rm dropped the
+            # container still exists here, so `docker logs` succeeds.
+            logs = _tail(handle.read_logs())
+            if not saw_http_response and _is_dood_topology(handle):
+                # Every probe failed at the transport level AND we sit behind the
+                # DooD topology: the sibling may in fact be healthy and listening
+                # on the real host (the logs disambiguate) while llenergymeasure's
+                # own container simply cannot route to it. Explain the topology.
+                raise ServerTopologyError(f"{_dood_message(handle)}\nRecent logs:\n{logs}")
+            # A single HTTP response anywhere proves the server was reachable, so
+            # this is an ordinary readiness timeout, not a topology problem.
             raise ServerReadinessError(
                 f"{handle.engine} server {phase} did not succeed within the readiness "
-                f"timeout (last result: {last}). Recent logs:\n{_tail(handle.read_logs())}"
+                f"timeout (last result: {last}). Recent logs:\n{logs}"
             )
         time.sleep(poll_interval)
 
@@ -559,32 +586,40 @@ def _container_running(container_name: str) -> bool | None:
     return None
 
 
-def _check_dood(handle: ServerHandle) -> None:
-    """Raise a topology error when a sibling container is unreachable under DooD.
+def _is_dood_topology(handle: ServerHandle) -> bool:
+    """Whether an unreachable container-leg server sits behind the DooD topology.
 
-    Only meaningful for the container leg: when llenergymeasure runs inside a
+    True only for the container leg when llenergymeasure itself runs inside a
     container (``is_running_in_container``) with a mounted Docker socket
-    (``is_container_socket_available`` - the DooD signal), a sibling server on
+    (``is_container_socket_available`` - the DooD signal): a sibling server on
     ``--network host`` binds the real host network, which llenergymeasure's own
     container cannot reach via localhost unless it too runs ``--network host``.
-    Imported at use-site so detection is monkeypatchable in tests.
+    Imported at use-site so detection is monkeypatchable in tests. This is a pure
+    predicate - the readiness loop decides at the DEADLINE (not the first failure)
+    whether the topology is the actual explanation for the unreachability.
     """
     if handle.container_name is None:
-        return
+        return False
     from llenergymeasure.infra.runner_resolution import (
         is_container_socket_available,
         is_running_in_container,
     )
 
-    if is_running_in_container() and is_container_socket_available():
-        raise ServerTopologyError(
-            f"Cannot reach the {handle.engine} server at {handle.base_url} from inside "
-            "llenergymeasure's own container. The server runs as a sibling container with "
-            "--network host (bound to the real host network); llenergymeasure's container is "
-            "in a different network namespace, so localhost does not route to it. Fix: run "
-            "llenergymeasure's own container with --network host, or pin this engine to "
-            f"process mode (runners.{handle.engine}=process)."
-        )
+    return is_running_in_container() and is_container_socket_available()
+
+
+def _dood_message(handle: ServerHandle) -> str:
+    """The actionable DooD topology explanation (the ``docker logs`` tail is
+    appended separately by the caller, since a healthy sibling listening on the
+    real host is disambiguated from a crash only by its logs)."""
+    return (
+        f"Cannot reach the {handle.engine} server at {handle.base_url} from inside "
+        "llenergymeasure's own container. The server runs as a sibling container with "
+        "--network host (bound to the real host network); llenergymeasure's container is "
+        "in a different network namespace, so localhost does not route to it. Fix: run "
+        "llenergymeasure's own container with --network host, or pin this engine to "
+        f"process mode (runners.{handle.engine}=process)."
+    )
 
 
 # ---------------------------------------------------------------------------
