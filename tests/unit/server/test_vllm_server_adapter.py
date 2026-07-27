@@ -76,6 +76,7 @@ def test_container_argv_carries_ruled_flags():
         shm_size="8g",
     )
     assert "vllm/vllm-openai:v0.19.1" in argv
+    assert "--rm" not in argv  # crashed container must survive for docker-logs diagnostics
     assert argv[argv.index("--network") + 1] == "host"
     assert argv[argv.index("--gpus") + 1] == "device=2"
     # The entrypoint (vllm serve) supplies the verb; the image is followed by

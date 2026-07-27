@@ -172,6 +172,9 @@ def _patch_dood(monkeypatch, *, in_container: bool, socket_available: bool) -> N
 def test_dood_topology_raises_actionable_error(monkeypatch):
     """A sibling container unreachable under DooD raises a topology error, not a timeout."""
     _patch_dood(monkeypatch, in_container=True, socket_available=True)
+    # The container is reported running, so the connection failure is the topology,
+    # not a crash (and no real `docker inspect` runs).
+    monkeypatch.setattr(sl, "_container_running", lambda name: True)
     # Container-leg handle pointing at an unbound port -> every connect fails.
     handle = ServerHandle(
         base_url=sl.base_url_for(sl.allocate_free_port()),
@@ -201,6 +204,8 @@ def test_dood_check_skipped_for_process_leg(monkeypatch):
 def test_dood_check_skipped_when_not_in_container(monkeypatch):
     """On a bare host a container-leg connection failure is a plain timeout."""
     _patch_dood(monkeypatch, in_container=False, socket_available=True)
+    monkeypatch.setattr(sl, "_container_running", lambda name: True)
+    monkeypatch.setattr(sl.ServerHandle, "read_logs", lambda self, **k: "")
     handle = ServerHandle(
         base_url=sl.base_url_for(sl.allocate_free_port()),
         engine="vllm",
@@ -243,7 +248,10 @@ def test_container_argv_has_ruled_flags():
     )
 
     assert argv[:2] == ["docker", "run"]
-    assert "-d" in argv and "--rm" in argv
+    assert "-d" in argv
+    # No --rm: a crashed container must survive so `docker logs` can recover the
+    # startup diagnostic (the SM9 hand-off); leak-freeness is explicit in shutdown.
+    assert "--rm" not in argv
     # --network host is unconditional and adjacent.
     assert argv[argv.index("--network") + 1] == "host"
     assert argv[argv.index("--gpus") + 1] == "all"
@@ -328,3 +336,58 @@ def test_read_logs_container_leg_shells_docker_logs():
     argv = run.call_args.args[0]
     assert argv[:2] == ["docker", "logs"]
     assert "llem-vllm-server-logs" in argv
+
+
+def test_container_crash_during_startup_captures_logs(monkeypatch):
+    """A container that exits during startup fails fast with its logs (not lost to --rm)."""
+    _patch_dood(monkeypatch, in_container=False, socket_available=False)
+    handle = ServerHandle(
+        base_url=sl.base_url_for(sl.allocate_free_port()),
+        engine="vllm",
+        container_name="llem-vllm-server-crash",
+    )
+    calls: list[list[str]] = []
+
+    def _fake_run(argv, *a, **k):
+        calls.append(argv)
+        if argv[:2] == ["docker", "inspect"]:
+            return MagicMock(returncode=0, stdout="false\n", stderr="")  # exists but stopped
+        if argv[:2] == ["docker", "logs"]:
+            return MagicMock(returncode=0, stdout="CUDA error: out of memory\n", stderr="")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(ServerLaunchError) as excinfo,
+    ):
+        sl.await_ready(handle, COMPLETIONS_PROBE, timeout=5.0, poll_interval=0.2)
+
+    # The diagnostic --rm would have destroyed is preserved in the error, and the
+    # crashed container is force-removed only AFTER its logs were captured.
+    assert "out of memory" in str(excinfo.value)
+    assert any(c[:3] == ["docker", "rm", "-f"] for c in calls)
+
+
+def test_container_readiness_timeout_captures_logs(monkeypatch):
+    """The container-leg readiness timeout carries `docker logs` (--rm no longer eats them)."""
+    _patch_dood(monkeypatch, in_container=False, socket_available=False)
+    handle = ServerHandle(
+        base_url=sl.base_url_for(sl.allocate_free_port()),
+        engine="vllm",
+        container_name="llem-vllm-server-slow",
+    )
+
+    def _fake_run(argv, *a, **k):
+        if argv[:2] == ["docker", "inspect"]:
+            return MagicMock(returncode=0, stdout="true\n", stderr="")  # running, never ready
+        if argv[:2] == ["docker", "logs"]:
+            return MagicMock(returncode=0, stdout="still loading weights\n", stderr="")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(ServerReadinessError) as excinfo,
+    ):
+        sl.await_ready(handle, COMPLETIONS_PROBE, timeout=1.0, poll_interval=0.2)
+
+    assert "still loading weights" in str(excinfo.value)

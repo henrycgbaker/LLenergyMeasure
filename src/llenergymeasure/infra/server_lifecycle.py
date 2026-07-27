@@ -272,11 +272,19 @@ def build_server_container_argv(
 ) -> list[str]:
     """Build the ``docker run`` argv for a long-lived engine server container.
 
-    Detached (``-d``) so the launch returns immediately and readiness is polled;
-    ``--rm`` so a stopped server auto-removes. ``--network host`` is
-    UNCONDITIONAL (the ruled shape and the uncontested peer convention:
-    genai-perf, vllm benchmark_serving and MLPerf vendor repros co-locate
-    client + server on one host; docker bridge overhead is real and
+    Detached (``-d``) so the launch returns immediately and readiness is polled.
+    Deliberately NO ``--rm``: a container that crashes during startup must
+    SURVIVE so ``docker logs`` can recover the startup diagnostic (the SM9
+    failure-artefact hand-off ``read_logs`` promises). ``--rm`` destroys the
+    exited container within ~1s of the crash and the logs with it, so the
+    diagnostic would be permanently lost. Leak-freeness is instead the explicit
+    responsibility of :func:`shutdown` (``docker stop`` then ``docker rm -f``),
+    the crashed-startup fast-detection (:func:`_ensure_container_alive`), and the
+    failed-launch cleanup - all of which force-remove.
+
+    ``--network host`` is UNCONDITIONAL (the ruled shape and the uncontested peer
+    convention: genai-perf, vllm benchmark_serving and MLPerf vendor repros
+    co-locate client + server on one host; docker bridge overhead is real and
     directional). Because the container shares the host network namespace, the
     port is NOT published with ``-p`` - the server binds the host port directly,
     which the port passed inside ``serve_args`` (e.g. ``--port 8000``) selects.
@@ -292,7 +300,6 @@ def build_server_container_argv(
         "docker",
         "run",
         "-d",
-        "--rm",
         "--network",
         "host",
         "--gpus",
@@ -405,8 +412,14 @@ def await_ready(
     NEVER sufficient; (2) a REAL inference request (``probe_request``) driven
     through the serving path - readiness is only satisfied when that completes
     with HTTP 200. Raises :class:`ServerReadinessError` on timeout (with recent
-    logs), :class:`ServerLaunchError` if the process exited during startup, or
-    :class:`ServerTopologyError` in the docker-outside-of-docker topology.
+    logs), :class:`ServerLaunchError` if the process/container exited during
+    startup, or :class:`ServerTopologyError` in the docker-outside-of-docker
+    topology.
+
+    ``timeout`` is a SINGLE shared deadline spanning BOTH phases, not a per-phase
+    budget: the same wall-clock deadline is computed once and passed to each
+    phase, so a slow liveness phase eats into the probe phase's remaining time
+    (each phase is still guaranteed at least one attempt).
     """
     deadline = time.monotonic() + timeout
     base = handle.base_url.rstrip("/")
@@ -447,7 +460,11 @@ def _wait_for(
     """Poll ``url`` until it returns HTTP 200 or the deadline passes."""
     last: Any = "no attempt"
     while True:
+        # Fast-fail if the server died during startup (process leg: exited pid;
+        # container leg: State.Running=false). Both capture the logs into the
+        # ServerLaunchError before any cleanup, so the diagnostic is preserved.
         _ensure_process_alive(handle)
+        _ensure_container_alive(handle)
         try:
             status = _http_probe(url, method=method, payload=payload, timeout=request_timeout)
             if status == 200:
@@ -459,6 +476,9 @@ def _wait_for(
             _check_dood(handle)
             last = f"connection failed ({exc})"
         if time.monotonic() >= deadline:
+            # read_logs() runs BEFORE the caller's cleanup (shutdown removes the
+            # container), so the timeout error carries the tail. With --rm dropped
+            # the container still exists here, so `docker logs` succeeds.
             raise ServerReadinessError(
                 f"{handle.engine} server {phase} did not succeed within the readiness "
                 f"timeout (last result: {last}). Recent logs:\n{_tail(handle.read_logs())}"
@@ -474,6 +494,55 @@ def _ensure_process_alive(handle: ServerHandle) -> None:
             f"{handle.engine} server process exited during startup "
             f"(exit code {proc.returncode}). Recent logs:\n{_tail(handle.read_logs())}"
         )
+
+
+def _ensure_container_alive(handle: ServerHandle) -> None:
+    """Fail fast (container leg) if the server container crashed during startup.
+
+    Mirrors :func:`_ensure_process_alive`. When the container EXISTS but is no
+    longer running (``State.Running == false``), it crashed: capture its logs
+    NOW (while the container - and therefore ``docker logs`` - still exists, the
+    reason ``--rm`` was dropped), force-remove it, and raise a
+    :class:`ServerLaunchError` carrying the log tail. An unknown state (docker
+    unavailable, or the container not yet visible) is NOT treated as a crash -
+    the poll simply continues.
+    """
+    if handle.container_name is None:
+        return
+    if _container_running(handle.container_name) is False:
+        logs = _tail(handle.read_logs())
+        _force_remove_container(handle.container_name)
+        raise ServerLaunchError(
+            f"{handle.engine} server container {handle.container_name} exited during "
+            f"startup. Recent logs:\n{logs}"
+        )
+
+
+def _container_running(container_name: str) -> bool | None:
+    """Return the container's running state via ``docker inspect``.
+
+    ``True`` running, ``False`` exists-but-stopped (a definitive crash signal),
+    ``None`` unknown - the container is absent (a startup race, or already
+    removed) or docker is unavailable, neither of which should be read as a
+    crash. Never raises.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_DOCKER_CLI,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    state = result.stdout.strip().lower()
+    if state == "true":
+        return True
+    if state == "false":
+        return False
+    return None
 
 
 def _check_dood(handle: ServerHandle) -> None:
