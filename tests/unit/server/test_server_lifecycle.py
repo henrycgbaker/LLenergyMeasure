@@ -170,11 +170,20 @@ def _patch_dood(monkeypatch, *, in_container: bool, socket_available: bool) -> N
 
 
 def test_dood_topology_raises_actionable_error(monkeypatch):
-    """A sibling container unreachable under DooD raises a topology error, not a timeout."""
+    """Permanent DooD-unreachability raises a topology error at the DEADLINE, not eagerly.
+
+    A sibling container that never becomes reachable (unbound port -> every probe
+    a transport-level connection failure) raises the actionable topology error -
+    but only once the whole readiness budget is spent, never on the first poll
+    (the eager-abort defect). The captured `docker logs` tail is attached so a
+    container that is in fact healthy and listening on the real host can be told
+    apart from a crash.
+    """
     _patch_dood(monkeypatch, in_container=True, socket_available=True)
     # The container is reported running, so the connection failure is the topology,
     # not a crash (and no real `docker inspect` runs).
     monkeypatch.setattr(sl, "_container_running", lambda name: True)
+    monkeypatch.setattr(sl.ServerHandle, "read_logs", lambda self, **k: "listening on host")
     # Container-leg handle pointing at an unbound port -> every connect fails.
     handle = ServerHandle(
         base_url=sl.base_url_for(sl.allocate_free_port()),
@@ -182,10 +191,19 @@ def test_dood_topology_raises_actionable_error(monkeypatch):
         container_name="llem-vllm-server-test",
     )
 
+    timeout = 1.0
+    t0 = time.monotonic()
     with pytest.raises(ServerTopologyError) as excinfo:
-        sl.await_ready(handle, COMPLETIONS_PROBE, timeout=2.0, poll_interval=0.2)
+        sl.await_ready(handle, COMPLETIONS_PROBE, timeout=timeout, poll_interval=0.2)
+    elapsed = time.monotonic() - t0
 
+    # Diagnosed at the deadline, not on the first poll: the loop polled for about
+    # the whole budget before concluding topology (a first-poll abort would land
+    # in a small fraction of the timeout).
+    assert elapsed >= timeout * 0.5
     assert "--network host" in str(excinfo.value)
+    # The docker logs tail rides along on the topology error.
+    assert "listening on host" in str(excinfo.value)
 
 
 def test_dood_check_skipped_for_process_leg(monkeypatch):
@@ -210,6 +228,92 @@ def test_dood_check_skipped_when_not_in_container(monkeypatch):
         base_url=sl.base_url_for(sl.allocate_free_port()),
         engine="vllm",
         container_name="llem-vllm-server-test",
+    )
+
+    with pytest.raises(ServerReadinessError):
+        sl.await_ready(handle, COMPLETIONS_PROBE, timeout=1.0, poll_interval=0.2)
+
+
+def test_delayed_listen_is_not_aborted_under_dood(monkeypatch, launch_stub):
+    """A sibling that starts listening AFTER a startup window is NOT aborted eagerly.
+
+    This is the regression the eager first-poll DooD check hid: with DooD detected,
+    the normal startup-window ECONNREFUSED (the server is still loading and not yet
+    listening) must be polled through, not read as permanent unreachability. A real
+    stub refuses connections for ~1s (several poll intervals) then binds and serves;
+    driving it through the CONTAINER leg (where the topology check lives) under
+    patched DooD detection, readiness must SUCCEED well within the timeout.
+    """
+    _patch_dood(monkeypatch, in_container=True, socket_available=True)
+    monkeypatch.setattr(sl, "_container_running", lambda name: True)
+    # Real stub, refuses connections for the first second, then listens + serves.
+    proc_handle = launch_stub(listen_after=1.0)
+    # Exercise the container leg against that same real server: a container-leg
+    # handle carrying the process's base_url. During the window every probe is a
+    # connection failure (the topology-error trigger under the old eager check).
+    handle = ServerHandle(
+        base_url=proc_handle.base_url,
+        engine="vllm",
+        container_name="llem-vllm-server-delayed",
+    )
+
+    # Must NOT raise: the loop polls through the connection-refused window and
+    # succeeds once the stub binds and the real probe returns 200.
+    sl.await_ready(handle, COMPLETIONS_PROBE, timeout=20.0, poll_interval=0.2)
+
+
+def test_http_error_then_success_under_dood(monkeypatch):
+    """HTTP errors during startup under DooD still resolve to readiness (never topology).
+
+    A server that answers (503 while the model loads) is reachable, so even under
+    DooD detection it must simply wait for the 200 - an HTTP-level answer is never
+    a topology signal.
+    """
+    _patch_dood(monkeypatch, in_container=True, socket_available=True)
+    monkeypatch.setattr(sl, "_container_running", lambda name: True)
+    calls = {"n": 0}
+
+    def _probe(url, *, method, payload, timeout):
+        # 503 while the model loads, then 200 steadily (both readiness phases).
+        calls["n"] += 1
+        return 503 if calls["n"] <= 2 else 200
+
+    monkeypatch.setattr(sl, "_http_probe", _probe)
+    handle = ServerHandle(
+        base_url=sl.base_url_for(sl.allocate_free_port()),
+        engine="vllm",
+        container_name="llem-vllm-server-503",
+    )
+
+    # 503, 503, then 200: the liveness phase clears, then the real probe clears.
+    sl.await_ready(handle, COMPLETIONS_PROBE, timeout=5.0, poll_interval=0.05)
+
+
+def test_deadline_with_mixed_failures_is_readiness_not_topology(monkeypatch):
+    """A deadline after MIXED failures is a readiness timeout, not a topology error.
+
+    When some probes failed at the transport level but at least one got an HTTP
+    answer, the server WAS reachable at least once, so unreachability cannot be
+    the explanation - the deadline must raise ServerReadinessError even though the
+    DooD topology is detected.
+    """
+    _patch_dood(monkeypatch, in_container=True, socket_available=True)
+    monkeypatch.setattr(sl, "_container_running", lambda name: True)
+    monkeypatch.setattr(sl.ServerHandle, "read_logs", lambda self, **k: "still loading")
+    calls = {"n": 0}
+
+    def _mixed(url, *, method, payload, timeout):
+        calls["n"] += 1
+        # Alternate transport failures with a 503 answer; never 200 -> deadline.
+        if calls["n"] % 2 == 0:
+            raise sl._ConnectionFailed("connection refused")
+        return 503
+
+    monkeypatch.setattr(sl, "_http_probe", _mixed)
+    handle = ServerHandle(
+        base_url=sl.base_url_for(sl.allocate_free_port()),
+        engine="vllm",
+        container_name="llem-vllm-server-mixed",
     )
 
     with pytest.raises(ServerReadinessError):
