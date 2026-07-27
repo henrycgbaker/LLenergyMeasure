@@ -1,7 +1,13 @@
-"""TensorRT-LLM inference engine - thin EnginePlugin.
+"""TensorRT-LLM inference engine - thin EnginePlugin (+ ServerCapable adapter).
 
-Implements the EnginePlugin protocol:
-  load_model, warmup, run_inference, cleanup, check_hardware
+Implements the offline EnginePlugin protocol (load_model, warmup, run_inference,
+cleanup, check_hardware) and, additively, the ServerCapable online-serving
+extension (launch, await_ready, shutdown) - a C1 sibling of the single-call
+offline contract, not a change to it. The serving methods delegate the generic
+launch/probe/shutdown mechanics to
+:mod:`llenergymeasure.infra.server_lifecycle` and hold only the TRT-LLM command
+knowledge (``trtllm-serve``) in
+:mod:`llenergymeasure.engines.tensorrt._serving`.
 
 All measurement lifecycle is delegated to MeasurementHarness. This module
 owns only TRT-LLM-specific inference: model loading via tensorrt_llm.LLM(),
@@ -23,12 +29,19 @@ import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.utils.exceptions import ConfigError, EngineError
 from llenergymeasure.utils.io import load_json
+
+if TYPE_CHECKING:
+    from llenergymeasure.infra.server_lifecycle import (
+        ProbeRequest,
+        ServerHandle,
+        ServerPlacement,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -624,6 +637,69 @@ class TensorRTEngine:
                 )
 
         return errors
+
+    # -------------------------------------------------------------------------
+    # ServerCapable: online-serving lifecycle (additive C1 sibling of the
+    # offline run_inference contract; readiness gated by a real probe, R8)
+    # -------------------------------------------------------------------------
+
+    def launch(self, config: ExperimentConfig, placement: ServerPlacement) -> ServerHandle:
+        """Launch a TRT-LLM server (``trtllm-serve``) and return a handle to it.
+
+        Container placement runs the pinned upstream NGC
+        ``nvcr.io/nvidia/tensorrt-llm/release`` image (resolved via the image
+        registry when ``placement.image`` is None) with ``--network host``,
+        passing ``trtllm-serve <model> --port <port>`` as the command (the NGC
+        image is not entrypoint-baked with ``trtllm-serve`` - its entrypoint sets
+        up the CUDA libs and execs the command). Process placement runs the same
+        command as a host subprocess. A free port is allocated here and passed to
+        ``trtllm-serve``; the issuer receives ``handle.base_url``.
+        """
+        from llenergymeasure.engines.tensorrt import _serving
+        from llenergymeasure.infra import server_lifecycle as sl
+
+        port = sl.allocate_free_port()
+        base_url = sl.base_url_for(port)
+        model = config.task.model
+
+        if placement.mode == sl.CONTAINER_MODE:
+            from llenergymeasure.infra.image_registry import get_default_image
+
+            image = placement.image or get_default_image(config.engine)
+            container_name = sl.server_container_name("tensorrt")
+            argv = sl.build_server_container_argv(
+                image=image,
+                container_name=container_name,
+                gpu_indices=placement.gpu_indices,
+                serve_args=_serving.serve_command(model, port),
+            )
+            return sl.launch_container_server(
+                argv, base_url=base_url, engine="tensorrt", container_name=container_name
+            )
+
+        argv = _serving.serve_command(model, port)
+        log_path = sl.default_server_log_path("tensorrt", port)
+        return sl.launch_process_server(
+            argv, base_url=base_url, engine="tensorrt", log_path=log_path
+        )
+
+    def await_ready(
+        self,
+        handle: ServerHandle,
+        probe_request: ProbeRequest,
+        *,
+        timeout: float,
+    ) -> None:
+        """Wait until TRT-LLM is ready: liveness poll THEN a real probe (R8)."""
+        from llenergymeasure.infra import server_lifecycle as sl
+
+        sl.await_ready(handle, probe_request, timeout=timeout)
+
+    def shutdown(self, handle: ServerHandle) -> None:
+        """Stop the TRT-LLM server (graceful, escalating to a hard kill); idempotent."""
+        from llenergymeasure.infra import server_lifecycle as sl
+
+        sl.shutdown(handle)
 
     # -------------------------------------------------------------------------
     # Private: model loading helpers

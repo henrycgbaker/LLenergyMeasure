@@ -42,6 +42,7 @@ from llenergymeasure.config.ssot import (
 )
 from llenergymeasure.utils.env_config import (
     ENV_TRT_BUILD_CACHE_PATH,
+    HF_CACHE_CONTAINER_PATH,
     docker_gpus_arg,
     docker_hf_cache_dir,
     docker_shm_size,
@@ -79,10 +80,12 @@ _RESERVED_EXCHANGE_ENV: frozenset[str] = frozenset(
 # a host-set value still wins (forwarded later, docker -e is last-wins).
 _TRT_BUILD_CACHE_CONTAINER_PATH: Final = "/root/.cache/trt-llm"
 
-# Container-side mount target for the HuggingFace cache. The host source is
-# configurable via LLEM_DOCKER_HF_CACHE (see docker_hf_cache_dir); the in-
-# container target and HF_HOME are fixed.
-_HF_CACHE_CONTAINER_PATH: Final = "/root/.cache/huggingface"
+# Container-side mount target for the HuggingFace cache. Single-sourced from
+# env_config (HF_CACHE_CONTAINER_PATH) so the offline dispatch here and the
+# server-container launch (infra/server_lifecycle.py) cannot drift; the host
+# source is configurable via LLEM_DOCKER_HF_CACHE (see docker_hf_cache_dir),
+# the in-container target and HF_HOME are fixed.
+_HF_CACHE_CONTAINER_PATH: Final = HF_CACHE_CONTAINER_PATH
 
 # The in-container entrypoint script is shipped as package data (rather than
 # resolved from a repo-root scripts/ dir) so container dispatch works from an

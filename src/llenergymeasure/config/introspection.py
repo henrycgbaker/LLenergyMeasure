@@ -473,6 +473,17 @@ _MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
         "section (with traffic.rate) for serving_mode=server, or set serving_mode: offline.",
     },
     {
+        "engine": "transformers",
+        "validator": "validate_transformers_server_unsupported",
+        "combination": "engine=transformers and serving_mode=server",
+        "reason": "transformers server mode is a fast-follow: at the pinned version "
+        "`transformers serve` is upstream-scoped to moderate load and exposes no "
+        "first-class health endpoint, so it does not clear the server-mode stability "
+        "gate (validate_transformers_server_unsupported).",
+        "resolution": "Use engine=vllm or engine=tensorrt for server mode, or set "
+        "serving_mode=offline for transformers.",
+    },
+    {
         "engine": "all",
         "validator": "validate_passthrough_kwargs_no_collision",
         "combination": "passthrough_kwargs key collision",

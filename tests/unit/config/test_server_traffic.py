@@ -21,8 +21,12 @@ from llenergymeasure.domain.hashing import hash_config
 from llenergymeasure.study.hashing import build_resolved_view
 
 
+# These mode/traffic/hash tests are engine-agnostic in intent; they use vllm (a
+# server-capable engine) so both the offline and server sides are admissible.
+# transformers server mode is gated off as a fast-follow (E5), so a transformers
+# server config would be rejected before these mechanics could be exercised.
 def _offline(**overrides) -> ExperimentConfig:
-    base: dict = {"task": {"model": "gpt2"}, "engine": "transformers", "serving_mode": "offline"}
+    base: dict = {"task": {"model": "gpt2"}, "engine": "vllm", "serving_mode": "offline"}
     base.update(overrides)
     return ExperimentConfig(**base)
 
@@ -30,7 +34,7 @@ def _offline(**overrides) -> ExperimentConfig:
 def _server(traffic: dict, **overrides) -> ExperimentConfig:
     base: dict = {
         "task": {"model": "gpt2"},
-        "engine": "transformers",
+        "engine": "vllm",
         "serving_mode": "server",
         "server": {"traffic": traffic},
     }
@@ -174,7 +178,7 @@ class TestSloHashExclusion:
             output=output,
             config=cfg,
             result=result,
-            engine_name="transformers",
+            engine_name="vllm",
             methodology=methodology,
             output_dir=tmp_path,
         )
@@ -248,7 +252,7 @@ class TestModeScopedSweep:
         # resolved hashes differ - proving the axis is not a silent no-op (C4).
         raw_study = {
             "serving_mode": "server",
-            "engine": "transformers",
+            "engine": "vllm",
             "task": {"model": "gpt2"},
             "server": {"traffic": {"rate": 2, "window_seconds": 60}},
             "sweep": {"server.traffic.rate": [2, 10]},

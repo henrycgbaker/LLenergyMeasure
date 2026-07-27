@@ -285,6 +285,28 @@ def docker_hf_cache_dir() -> Path:
     return Path.home() / ".cache" / "huggingface"
 
 
+#: In-container mount target for the HuggingFace cache (and the value ``HF_HOME``
+#: is set to). Fixed: only the host source is configurable (via
+#: ``LLEM_DOCKER_HF_CACHE`` / :func:`docker_hf_cache_dir`). Single-sourced here so
+#: the offline batch dispatch and the online-server launch cannot drift on where
+#: weights are cached.
+HF_CACHE_CONTAINER_PATH: Final = "/root/.cache/huggingface"
+
+
+def hf_cache_mount_args() -> list[str]:
+    """Return the ``docker run`` args binding the HF cache and setting ``HF_HOME``.
+
+    ``["-v", "<host>:/root/.cache/huggingface", "-e",
+    "HF_HOME=/root/.cache/huggingface"]`` where the host source is
+    :func:`docker_hf_cache_dir`. The single constructor for this mount so the
+    offline batch dispatch (``infra/docker/command.py``) and the online-server
+    launch (``infra/server_lifecycle.py``) share one definition; without it a
+    launched server re-downloads the full model weights on every run.
+    """
+    host = docker_hf_cache_dir()
+    return ["-v", f"{host}:{HF_CACHE_CONTAINER_PATH}", "-e", f"HF_HOME={HF_CACHE_CONTAINER_PATH}"]
+
+
 ENV_TRT_BUILD_CACHE_ENABLED: Final = "LLEM_TRT_BUILD_CACHE_ENABLED"
 """Toggle for TRT-LLM on-disk engine build cache.
 

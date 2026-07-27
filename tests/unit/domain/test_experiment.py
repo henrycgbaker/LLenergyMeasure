@@ -152,11 +152,17 @@ class TestMeasurementConfigHash:
             ExperimentConfig(task={"model": "gpt2"}, engine="transformers")  # type: ignore[call-arg]
 
     def test_serving_mode_distinct_hash(self):
-        """serving_mode is an identity axis: offline and server hash differently."""
-        h_offline = compute_declared_config_hash(make_config(serving_mode="offline"))
+        """serving_mode is an identity axis: offline and server hash differently.
+
+        Both sides use a server-capable engine (vllm) so serving_mode is the axis
+        under test; transformers server mode is gated off (E5 fast-follow).
+        """
+        h_offline = compute_declared_config_hash(make_config(engine="vllm", serving_mode="offline"))
         h_server = compute_declared_config_hash(
             make_config(
-                serving_mode="server", server={"traffic": {"rate": 10, "window_seconds": 60}}
+                engine="vllm",
+                serving_mode="server",
+                server={"traffic": {"rate": 10, "window_seconds": 60}},
             )
         )
         assert h_offline != h_server

@@ -214,13 +214,19 @@ class TestServingModeIdentity:
 
     def test_resolved_view_carries_config_serving_mode(self):
         assert build_resolved_view(_mk_config()).serving_mode == "offline"
-        server = build_resolved_view(_mk_config(serving_mode="server", server=_SERVER_SECTION))
+        server = build_resolved_view(
+            _mk_config(engine="vllm", serving_mode="server", server=_SERVER_SECTION)
+        )
         assert server.serving_mode == "server"
 
     def test_resolved_offline_vs_server_hash_differ(self):
-        offline = hash_config(build_resolved_view(_mk_config(serving_mode="offline")))
+        offline = hash_config(
+            build_resolved_view(_mk_config(engine="vllm", serving_mode="offline"))
+        )
         server = hash_config(
-            build_resolved_view(_mk_config(serving_mode="server", server=_SERVER_SECTION))
+            build_resolved_view(
+                _mk_config(engine="vllm", serving_mode="server", server=_SERVER_SECTION)
+            )
         )
         assert offline != server
 
@@ -244,9 +250,11 @@ class TestServingModeIdentity:
         # views that differ in exactly two slots: serving_mode (the discriminator)
         # and mode_section (offline projects {}, server projects its traffic
         # identity). Nothing else shifts.
-        offline = asdict(build_resolved_view(_mk_config(serving_mode="offline")))
+        offline = asdict(build_resolved_view(_mk_config(engine="vllm", serving_mode="offline")))
         server = asdict(
-            build_resolved_view(_mk_config(serving_mode="server", server=_SERVER_SECTION))
+            build_resolved_view(
+                _mk_config(engine="vllm", serving_mode="server", server=_SERVER_SECTION)
+            )
         )
         differing = {k for k in offline if offline[k] != server[k]}
         assert differing == {"serving_mode", "mode_section"}
