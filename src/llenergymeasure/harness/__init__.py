@@ -41,6 +41,19 @@ from llenergymeasure.harness.measurement_warnings import (
     collect_measurement_warnings,
 )
 from llenergymeasure.harness.staging import write_timeseries_parquet
+from llenergymeasure.harness.traffic import (
+    ArrivalSchedule,
+    HttpxTransport,
+    IssuerReport,
+    OpenLoopPoissonSource,
+    RequestRecord,
+    RequestShape,
+    ShapeSource,
+    TrafficSource,
+    Transport,
+    build_schedule,
+    require_httpx,
+)
 from llenergymeasure.harness.window import (
     _capture_observed_params_into_output as _capture_observed_params_into_output,
 )
@@ -50,13 +63,24 @@ from llenergymeasure.harness.window import (
 )
 
 __all__ = [
+    "ArrivalSchedule",
+    "HttpxTransport",
+    "IssuerReport",
     "MeasurementHarness",
+    "OpenLoopPoissonSource",
     "PowerThermalSampler",
+    "RequestRecord",
+    "RequestShape",
+    "ShapeSource",
+    "TrafficSource",
+    "Transport",
+    "build_schedule",
     "collect_environment_snapshot",
     "collect_environment_snapshot_async",
     "collect_measurement_warnings",
     "estimate_flops_palm",
     "estimate_flops_palm_from_config",
     "measure_baseline_power",
+    "require_httpx",
     "write_timeseries_parquet",
 ]
