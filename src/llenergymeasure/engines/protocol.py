@@ -4,9 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from llenergymeasure.config.models import ExperimentConfig
+
+if TYPE_CHECKING:
+    # Server-lifecycle value types live at the infra altitude (the docker /
+    # process plumbing lives there). They are referenced only in annotations,
+    # so a TYPE_CHECKING import keeps this widely-imported core module free of a
+    # runtime infra dependency; runtime_checkable conformance keys on method
+    # names, not these types.
+    from llenergymeasure.infra.server_lifecycle import (
+        ProbeRequest,
+        ServerHandle,
+        ServerPlacement,
+    )
 
 
 @dataclass
@@ -163,4 +175,65 @@ class EnginePlugin(Protocol):
         Engines must never raise; any extraction failure should be caught and
         logged at DEBUG, returning empty dicts for the failed sub-field.
         """
+        ...
+
+
+@runtime_checkable
+class ServerCapable(Protocol):
+    """Additive server-lifecycle extension for engines that can serve online.
+
+    This is a SIBLING of :class:`EnginePlugin`'s single-call ``run_inference``
+    contract (constraint C1), never a tightening of it: an engine opts into
+    online-serving measurement by ALSO implementing these three methods, and the
+    offline ``run_inference`` surface is untouched. An engine "claims server
+    support" only by implementing all three - there are no partial
+    implementations, and the readiness probe is a required member (ruling R8):
+    an engine cannot be server-capable without driving a real request through
+    its serving path.
+
+    Lifecycle (a long-lived server, parallel to the run-to-completion batch
+    dispatch):
+
+    - :meth:`launch` starts the server (a sibling container under container
+      placement, or a host subprocess under process placement) and returns a
+      :class:`~llenergymeasure.infra.server_lifecycle.ServerHandle` exposing the
+      base URL, the process/container identity, and log access.
+    - :meth:`await_ready` polls liveness THEN drives a real inference request
+      through the serving path; readiness is satisfied ONLY when that request
+      completes (R8: ``/health`` alone never suffices). SM6 owns the probe
+      MECHANICS; the request SHAPE (``probe_request``) is supplied by the caller
+      (SM8 draws it from the measured traffic distribution).
+    - :meth:`shutdown` stops the server gracefully with a hard-kill escalation;
+      it is idempotent and leaves nothing leaked on any exit path.
+    """
+
+    def launch(self, config: ExperimentConfig, placement: ServerPlacement) -> ServerHandle:
+        """Launch the engine's server and return a handle to it.
+
+        Allocates a free port, resolves the image (container placement) or
+        builds the host command (process placement), starts the server, and
+        returns immediately (readiness is awaited separately). A launch that
+        fails part-way cleans up its own partial state before raising.
+        """
+        ...
+
+    def await_ready(
+        self,
+        handle: ServerHandle,
+        probe_request: ProbeRequest,
+        *,
+        timeout: float,
+    ) -> None:
+        """Block until the server is ready, or raise.
+
+        Liveness poll THEN a real inference request through the serving path
+        (R8). Returns ``None`` on success; raises a
+        :class:`~llenergymeasure.infra.server_lifecycle.ServerLifecycleError`
+        subclass on launch failure, readiness timeout, or an unreachable
+        docker-outside-of-docker topology.
+        """
+        ...
+
+    def shutdown(self, handle: ServerHandle) -> None:
+        """Stop the server (graceful, escalating to a hard kill); idempotent."""
         ...
