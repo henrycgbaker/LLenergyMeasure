@@ -292,9 +292,22 @@ def build_server_container_argv(
     ``serve_args`` are the engine command appended after the image; for vLLM the
     upstream ``vllm/vllm-openai`` image's ``ENTRYPOINT`` is ``["vllm", "serve"]``,
     so the adapter passes ``[<model>, "--port", <port>]`` and the entrypoint
-    supplies ``vllm serve``.
+    supplies ``vllm serve``. TRT-LLM's NGC image is NOT entrypoint-baked with
+    ``trtllm-serve``, so its adapter passes the full ``["trtllm-serve", <model>,
+    "--port", <port>]`` command (the NGC entrypoint sets up the CUDA libs and
+    execs it).
+
+    The host HuggingFace cache is bind-mounted at ``/root/.cache/huggingface``
+    with ``HF_HOME`` pointed at it (the SAME LLEM_DOCKER_HF_CACHE-driven mount the
+    offline docker dispatch uses, via :func:`hf_cache_mount_args`), so a launched
+    server reuses already-downloaded weights instead of re-downloading the full
+    model on every run.
     """
-    from llenergymeasure.utils.env_config import docker_gpus_arg, docker_shm_size
+    from llenergymeasure.utils.env_config import (
+        docker_gpus_arg,
+        docker_shm_size,
+        hf_cache_mount_args,
+    )
 
     argv = [
         "docker",
@@ -308,6 +321,7 @@ def build_server_container_argv(
     if container_name:
         argv += ["--name", container_name]
     argv += ["--shm-size", shm_size or docker_shm_size()]
+    argv += hf_cache_mount_args()
     argv.append(image)
     argv += list(serve_args)
     return argv

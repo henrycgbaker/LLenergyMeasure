@@ -389,8 +389,10 @@ def test_harness_build_result_stamps_config_serving_mode(serving_mode: str) -> N
     from llenergymeasure.engines.protocol import InferenceOutput
 
     server = {"traffic": {"rate": 10, "window_seconds": 60}} if serving_mode == "server" else None
+    # vllm is server-capable; transformers server mode is gated off (E5 fast-follow),
+    # so the server parametrisation uses an admissible server-mode engine.
     config = ExperimentConfig(
-        task={"model": "test/model"}, serving_mode=serving_mode, server=server
+        task={"model": "test/model"}, engine="vllm", serving_mode=serving_mode, server=server
     )
     output = InferenceOutput(
         elapsed_time_sec=10.0,

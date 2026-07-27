@@ -263,6 +263,30 @@ def test_container_argv_has_ruled_flags():
     assert "-p" not in argv
 
 
+def test_container_argv_mounts_hf_cache(monkeypatch):
+    """The server container binds the HF cache + sets HF_HOME (else weights re-download).
+
+    Same LLEM_DOCKER_HF_CACHE-driven mount the offline docker dispatch uses; the
+    mount/env precede the image (docker run options come before the image name).
+    """
+    monkeypatch.setenv("LLEM_DOCKER_HF_CACHE", "/data/hf")
+    argv = sl.build_server_container_argv(
+        image="vllm/vllm-openai:v0.19.1",
+        container_name="llem-vllm-server-abc",
+        gpu_indices=None,
+        serve_args=["m", "--port", "8123"],
+        shm_size="8g",
+    )
+    target = "/root/.cache/huggingface"
+    # -v <host>:<target> present, and it precedes the image.
+    assert f"/data/hf:{target}" in argv
+    mount_idx = argv.index(f"/data/hf:{target}")
+    assert argv[mount_idx - 1] == "-v"
+    assert mount_idx < argv.index("vllm/vllm-openai:v0.19.1")
+    # HF_HOME points at the in-container target.
+    assert f"HF_HOME={target}" in argv
+
+
 def test_launch_container_server_success_and_cleanup_on_failure():
     """A non-zero docker run force-removes the container; success returns a handle."""
     # Success: docker run -d returns 0 with a container id on stdout.

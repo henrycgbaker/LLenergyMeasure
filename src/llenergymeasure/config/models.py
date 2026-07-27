@@ -55,6 +55,21 @@ SERVING_MODE_REQUIRED_MSG = (
     "serving measurement, with a server: section)."
 )
 
+#: Rejection message for a transformers + server-mode config. Server-mode support
+#: for the transformers engine is a fast-follow: at the pinned transformers
+#: version, ``transformers serve`` is upstream-scoped to "evaluation,
+#: experimentation, and moderate load deployments" (it redirects large-scale /
+#: sustained load to vLLM or SGLang) and exposes no first-class health/liveness
+#: endpoint, so it does not clear the E5 stability gate for a sustained-load
+#: measurement harness. vLLM and TensorRT-LLM are the server-mode v1 engines.
+TRANSFORMERS_SERVER_UNSUPPORTED_MSG = (
+    "serving_mode=server is not supported for engine=transformers (a fast-follow). "
+    "At the pinned transformers version `transformers serve` is upstream-positioned "
+    "for evaluation and moderate load, not the sustained-load serving a measurement "
+    "harness drives, so transformers server mode is deferred. Use engine=vllm or "
+    "engine=tensorrt for server mode, or set serving_mode=offline for transformers."
+)
+
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 
@@ -941,6 +956,22 @@ class ExperimentConfig(BaseModel):
                 f"(with a traffic spec including traffic.rate). Add the {active_section}: "
                 "section or set serving_mode: offline."
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_transformers_server_unsupported(self) -> ExperimentConfig:
+        """Reject transformers + server mode (E5 gate failed; fast-follow).
+
+        Server-mode support ships for vLLM and TensorRT-LLM in v1; the
+        transformers server adapter is deferred because ``transformers serve`` at
+        the pinned version does not clear the E5 stability gate for a
+        sustained-load measurement harness (see
+        :data:`TRANSFORMERS_SERVER_UNSUPPORTED_MSG`). Enforced at config
+        validation (the loader/preflight edge) so the CLI and the YAML-driven API
+        paths reject it identically before any unbuilt serving path is reached.
+        """
+        if self.serving_mode == "server" and self.engine == Engine.TRANSFORMERS:
+            raise ValueError(TRANSFORMERS_SERVER_UNSUPPORTED_MSG)
         return self
 
     @model_validator(mode="after")

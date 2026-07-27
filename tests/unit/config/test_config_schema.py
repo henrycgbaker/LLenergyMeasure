@@ -134,9 +134,14 @@ def test_serving_mode_offline_explicit():
 
 
 def test_serving_mode_server_accepted():
-    """serving_mode='server' is a valid config value (data model admits it)."""
+    """serving_mode='server' is a valid config value (data model admits it).
+
+    Uses a server-capable engine (vllm): transformers server mode is gated off as
+    a fast-follow (E5), so the admissible server-mode engines are vllm/tensorrt.
+    """
     config = ExperimentConfig(
         task={"model": "gpt2"},
+        engine="vllm",
         serving_mode="server",
         server={"traffic": {"rate": 10, "window_seconds": 60}},
     )
@@ -147,6 +152,26 @@ def test_serving_mode_typo_rejected():
     """A serving_mode typo is rejected loudly (closed Literal, edge-validated)."""
     with pytest.raises(ValidationError):
         ExperimentConfig(task={"model": "gpt2"}, serving_mode="offlien")  # type: ignore[arg-type]
+
+
+def test_transformers_server_mode_rejected():
+    """transformers + server mode is gated off as a fast-follow (E5 verdict).
+
+    The E5 stability gate failed for `transformers serve` at the pinned version
+    (upstream-scoped to moderate load, no first-class health endpoint), so
+    transformers server support is deferred and rejected at config validation
+    with an actionable message pointing at vllm/tensorrt. vLLM and TensorRT-LLM
+    are the server-mode v1 engines.
+    """
+    with pytest.raises(
+        (ValidationError, ValueError), match="not supported for engine=transformers"
+    ):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="transformers",
+            serving_mode="server",
+            server={"traffic": {"rate": 10, "window_seconds": 60}},
+        )
 
 
 def test_server_section_under_offline_rejected():
