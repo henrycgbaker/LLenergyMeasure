@@ -424,6 +424,14 @@ def test_run_study_preflight_multi_engine_docker_available_auto_elevates(
 ) -> None:
     """All-auto multi-engine study elevates every engine (no error) when Docker is available."""
     monkeypatch.setattr("llenergymeasure.infra.runner_resolution.is_docker_available", lambda: True)
+    # Force the host (not in-container) elevation branch so the test exercises the
+    # docker-available auto-elevation path regardless of where the suite runs: the
+    # in-container CI job has /.dockerenv, which would otherwise route to the
+    # socketless-container guard. Mirrors the container-aware fixtures in
+    # test_study_preflight.py.
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_running_in_container", lambda: False
+    )
     monkeypatch.setattr(
         "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
     )
