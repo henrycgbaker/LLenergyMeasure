@@ -185,6 +185,94 @@ class TestTier1NvidiaToolkit:
 
 
 # ---------------------------------------------------------------------------
+# TestTier1DooDSkipsToolkit
+# ---------------------------------------------------------------------------
+
+
+class TestTier1DooDSkipsToolkit:
+    """In the docker-outside-of-docker topology (llem inside a container with a mounted
+    host Docker socket), the local NVIDIA Container Toolkit check is the wrong question:
+    GPU injection is the host daemon's job. It is skipped, but the Tier-2 container GPU
+    probe (launched through the socket) still runs as the genuine end-to-end check."""
+
+    def _which_docker_only(self, name: str) -> str | None:
+        """docker on PATH; no NVIDIA toolkit and no nvidia-smi (as inside llem's container)."""
+        return "/usr/bin/docker" if name == "docker" else None
+
+    def test_in_container_with_socket_skips_toolkit_but_runs_tier2(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """DooD: toolkit absent does NOT hard-fail; Tier-2 probe still runs."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_docker_only,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_container_socket_available",
+                return_value=True,
+            ),
+            caplog.at_level(logging.INFO, logger="llenergymeasure.infra.docker_preflight"),
+        ):
+            # Only the Tier-2 container probe subprocess runs (no host nvidia-smi present).
+            mock_run.return_value = _make_successful_probe()
+            run_docker_preflight()  # must not raise despite missing toolkit
+
+        # Tier-2 container probe was invoked (the genuine end-to-end check).
+        docker_run_invoked = any(
+            (c[0][0][:2] == ["docker", "run"]) for c in mock_run.call_args_list if c[0] and c[0][0]
+        )
+        assert docker_run_invoked, "Tier-2 container GPU probe must still run in the DooD topology"
+        # A single info line explains the skip.
+        assert any(
+            "host daemon" in r.message and "skipped" in r.message.lower() for r in caplog.records
+        )
+
+    def test_in_container_no_socket_still_hard_fails_toolkit(self) -> None:
+        """In-container but NO socket is not DooD: the toolkit check still hard-fails."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_docker_only,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=True,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_container_socket_available",
+                return_value=False,
+            ),
+            pytest.raises(DockerPreFlightError) as exc_info,
+        ):
+            run_docker_preflight()
+
+        assert "NVIDIA Container Toolkit" in str(exc_info.value)
+
+    def test_host_topology_toolkit_check_unchanged(self) -> None:
+        """Host (not in a container): the toolkit check still hard-fails when absent."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_docker_only,
+            ),
+            patch(
+                "llenergymeasure.infra.runner_resolution.is_running_in_container",
+                return_value=False,
+            ),
+            pytest.raises(DockerPreFlightError) as exc_info,
+        ):
+            run_docker_preflight()
+
+        assert "NVIDIA Container Toolkit" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
 # TestTier1HostNvidiaSmi
 # ---------------------------------------------------------------------------
 
