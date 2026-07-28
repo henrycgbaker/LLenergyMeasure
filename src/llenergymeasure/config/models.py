@@ -564,18 +564,19 @@ class TrafficConfig(BaseModel):
         default=None,
         gt=0.0,
         description=(
-            "Measured-span duration in seconds. At most one of window_seconds or "
-            f"window_requests may be set; if neither is, it defaults to "
-            f"{DEFAULT_WINDOW_SECONDS:g}s (the E2 minimum-window-duration floor)."
+            "Measured-span duration in seconds. Defaults to "
+            f"{DEFAULT_WINDOW_SECONDS:g}s (the E2 minimum-window-duration floor) when "
+            "omitted; the sole supported window form at v0.7."
         ),
     )
     window_requests: int | None = Field(
         default=None,
         ge=1,
         description=(
-            "Measured span as a completed-request count. At most one of window_seconds "
-            "or window_requests may be set (window_seconds wins the default when "
-            "neither is)."
+            "Measured span as a completed-request count. A server config using it is "
+            "rejected at v0.7: the server-mode measurement path (timing + stability "
+            "gate) is duration-grounded (E2). Reserved for a future release; use "
+            "window_seconds."
         ),
     )
     ramp_exclusion_seconds: float = Field(
@@ -626,8 +627,13 @@ class TrafficConfig(BaseModel):
         Both set is an error. Neither set applies the E2-ratified default duration
         (:data:`DEFAULT_WINDOW_SECONDS`), so window duration is a config-exposed
         DEFAULT rather than a required field - a server config may omit the window
-        entirely and measure over the default span. window_requests alone selects a
-        completed-request window and leaves the duration unset.
+        entirely and measure over the default span.
+
+        ``window_requests`` (count-bound windows) stays constructible here because the
+        traffic issuer supports count-bounded schedules; it is the server-mode
+        MEASUREMENT path that is duration-grounded, so a count-bound window in a
+        server config is rejected one level up
+        (:meth:`ExperimentConfig.validate_server_window_supported`).
         """
         if self.window_seconds is not None and self.window_requests is not None:
             raise ValueError(
@@ -1021,6 +1027,33 @@ class ExperimentConfig(BaseModel):
         """
         if self.serving_mode == "server" and self.engine == Engine.TRANSFORMERS:
             raise ValueError(TRANSFORMERS_SERVER_UNSUPPORTED_MSG)
+        return self
+
+    @model_validator(mode="after")
+    def validate_server_window_supported(self) -> ExperimentConfig:
+        """Reject count-bound measured windows in a server config at v0.7.
+
+        The server-mode measurement path is duration-grounded: the measured-span
+        timing and the per-level stability gate were calibrated by E2 on wall-clock
+        windows, so ``server.traffic.window_requests`` has no measurement path yet.
+        Reject it at this config edge (rather than at the window manager at runtime)
+        so the CLI and YAML-driven API paths fail identically and early. The traffic
+        issuer still supports count-bounded schedules, so ``window_requests`` stays
+        constructible on a bare :class:`TrafficConfig`; only a server experiment
+        config using it is rejected.
+        """
+        if (
+            self.serving_mode == "server"
+            and self.server is not None
+            and self.server.traffic.window_requests is not None
+        ):
+            raise ValueError(
+                "server.traffic.window_requests (count-bound windows) is not supported "
+                "at v0.7: the server-mode measurement path (measured-span timing and "
+                "the per-level stability gate) is duration-grounded (E2). Use "
+                "server.traffic.window_seconds instead (it defaults to "
+                f"{DEFAULT_WINDOW_SECONDS:g}s when omitted)."
+            )
         return self
 
     @model_validator(mode="after")

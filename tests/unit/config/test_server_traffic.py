@@ -104,10 +104,21 @@ class TestTrafficShape:
         )
         assert cfg.server.cooldown_seconds == 30.0
 
-    def test_window_requests_alone_valid(self):
-        cfg = _server({"rate": 10, "window_requests": 500})
-        assert cfg.server.traffic.window_requests == 500
-        assert cfg.server.traffic.window_seconds is None
+    def test_server_window_requests_rejected_at_v07(self):
+        # SM7: count-bound windows have no server-mode measurement path (the timing
+        # and stability gate are duration-grounded), so a server config using
+        # window_requests is rejected at the ExperimentConfig edge.
+        with pytest.raises((ValidationError, ValueError), match="window_requests"):
+            _server({"rate": 10, "window_requests": 500})
+
+    def test_bare_traffic_config_still_accepts_window_requests(self):
+        # The traffic issuer supports count-bounded schedules, so window_requests
+        # stays constructible on a bare TrafficConfig (only server configs reject it).
+        from llenergymeasure.config.models import TrafficConfig
+
+        cfg = TrafficConfig(rate=10, window_requests=500)
+        assert cfg.window_requests == 500
+        assert cfg.window_seconds is None
 
     def test_slo_shared_percentile_default(self):
         cfg = _server({**_TRAFFIC, "slo": {"ttft_ms": 200, "tpot_ms": 20}})
@@ -238,9 +249,9 @@ class TestRateIdentity:
         # non-slo traffic fields join identity: a sweep over them stays distinct.
         base = _server(_TRAFFIC)
         gamma = _server({**_TRAFFIC, "arrival": "gamma", "burstiness": 2.0})
-        by_requests = _server({"rate": 10, "window_requests": 500})
+        longer = _server({"rate": 10, "window_seconds": 120})
         assert compute_declared_config_hash(base) != compute_declared_config_hash(gamma)
-        assert compute_declared_config_hash(base) != compute_declared_config_hash(by_requests)
+        assert compute_declared_config_hash(base) != compute_declared_config_hash(longer)
 
 
 class TestWindowKnobIdentity:

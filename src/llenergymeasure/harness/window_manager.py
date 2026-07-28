@@ -6,7 +6,7 @@ window's energy, the dual boundary policies that keep energy and latency
 accounting distinct, per-level steady-state validation, and the multi-level
 orchestration that drives a rate sweep.
 
-Design anchors (server-mode plan, section 14):
+Design anchors (server-mode plan, section 14 as ratified):
 
 - **D7 - first-class window object + two coexisting boundary policies.** A window
   is ``{rate, duration_or_count, attribution_policy, ramp_exclusion}``. The ENERGY
@@ -24,18 +24,30 @@ Design anchors (server-mode plan, section 14):
   agent.
 - **C2 / C5 - reuse.** The default sink reuses
   :class:`~llenergymeasure.harness.bracket.MeasurementBracket` (a bracket brackets a
-  WINDOW, not a Python call). Per-level stability reuses windowing.py's CV /
-  stable-through-end machinery unchanged; only the multi-level orchestration,
-  prospective ramp exclusion, and 3-consecutive-window validation are new.
-- **E2 - ratified numeric defaults.** Measured span 240s, ramp exclusion 30s
-  absolute, per-level stability CoV <= 0.05 sustained over 3 consecutive
-  sub-windows (mirroring ``windowing.py``'s threshold). The duration / ramp
-  defaults are config-exposed under ``server.traffic``; this module carries them as
-  the :class:`WindowSpec` dataclass defaults.
+  WINDOW, not a Python call). The stability gate reuses windowing.py's
+  coefficient-of-variation, stable-through-end, clean, and clip machinery plus the
+  trapezoidal integrator unchanged; only the multi-window / multi-level
+  orchestration is new.
+- **E2 - ratified numeric defaults + gate formulation.** Measured span 240s, ramp
+  exclusion 30s absolute (both config-exposed under ``server.traffic``, carried here
+  as :class:`WindowSpec` defaults). The stability gate is calibrated on J/TOKEN, not
+  power (power is near-noise-free at these timescales and would always pass):
+
+  * Per window (DIAGNOSTIC, disclosed, feeds SM12): the coefficient of variation
+    over ``k = 4`` contiguous sub-windows' J/token. Each sub-window's J/token is the
+    trapezoidal integral of the power series over the sub-window divided by the
+    client-counted tokens attributed to it. ``k`` is fixed at 4: the 0.05 threshold
+    is calibrated at ``k = 4`` and changing it silently invalidates the threshold.
+  * Per level (the GATE): a level runs ``windows_per_level`` (default 3) consecutive
+    measured windows at the configured duration, contiguous at the same rate with NO
+    re-warmup between them; the level passes iff the window-level J/token values
+    agree within 0.05 (CoV over every 3 consecutive windows, stable through the end
+    of the level - the perf_analyzer convention E2 confirmed). A failing level is
+    stamped invalid-with-reason, never dropped.
 
 Out of scope (later slices): warmup EXECUTION behind the warmup-hook seam (SM8),
 server session lifecycle / persistence (SM9 / SM10), and metrics derivation
-(J/token, percentiles, goodput) beyond this module's own bookkeeping (SM12).
+(percentiles, goodput) beyond this module's own bookkeeping (SM12).
 """
 
 from __future__ import annotations
@@ -52,15 +64,18 @@ from llenergymeasure.config.models import (
     DEFAULT_RAMP_EXCLUSION_SECONDS,
     DEFAULT_WINDOW_SECONDS,
 )
+from llenergymeasure.energy.nvml import integrate_power_samples
 
 # REUSE BINDING (server-mode plan section 14, maintainer-confirmed): the CV /
-# steady-state detector is consumed from windowing.py, never reimplemented. These
-# live in the same package (Layer 3), so import altitude does not require an
-# extraction into a shared home - a direct import is the minimal faithful reuse.
-# NO math changes.
+# steady-state / clean / clip machinery is consumed from windowing.py, never
+# reimplemented. These live in the same package (Layer 3), so import altitude does
+# not require an extraction into a shared home - a direct import is the minimal
+# faithful reuse. NO math changes.
 from llenergymeasure.harness.windowing import (
     _AUTO_CV_THRESHOLD,
+    _clean_samples,
     _coefficient_of_variation,
+    _filter_to_window,
     _is_stable_through_end,
 )
 
@@ -87,16 +102,19 @@ if TYPE_CHECKING:
 #: alternative attributions stay re-derivable offline.
 ATTRIBUTION_STEADY_STATE_SPAN = "steady_state_span"
 
-#: Consecutive-window agreement count for per-level stability (E2 ratified;
+#: Consecutive-window agreement count for the LEVEL gate (E2 ratified;
 #: perf_analyzer's "3 consecutive windows within tolerance").
 STABILITY_CONSECUTIVE_WINDOWS = 3
 
-#: Number of equal sub-windows the measured span is sliced into for the stability
-#: CoV. Slicing granularity is a methodology choice (the E2 record is archived
-#: local-only); the CoV threshold (0.05) and the 3-consecutive count are the
-#: ratified values. 8 sub-windows over a 240s span (~30s each) leaves ample room
-#: for the 3-consecutive check.
-DEFAULT_STABILITY_SUBWINDOW_COUNT = 8
+#: Consecutive measured windows run per rate level by default (adjustable on the
+#: manager). Default 3 = the gate's consecutive-window count, so a default level
+#: yields exactly one 3-consecutive check.
+DEFAULT_WINDOWS_PER_LEVEL = 3
+
+#: Sub-windows per window for the intra-window diagnostic CoV. FIXED at 4: this is
+#: the E2 calibration constant - the 0.05 threshold is calibrated at k = 4, so
+#: changing k silently invalidates the threshold. Not configurable by design.
+_STABILITY_SUBWINDOWS = 4
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +128,9 @@ class WindowSpec:
 
     ``duration_seconds`` and ``request_count`` are the two forms of
     ``duration_or_count``; exactly one is resolved (``duration_seconds`` defaults to
-    the E2 floor when neither is given). ``ramp_exclusion_seconds`` is excluded
+    the E2 floor when neither is given). ``request_count`` is represented for a
+    future release but rejected at config validation at v0.7 (the manager also
+    guards it as an internal belt). ``ramp_exclusion_seconds`` is excluded
     PROSPECTIVELY - the measured span starts after the ramp, it is never trimmed
     afterwards. ``attribution_policy`` is disclosed, not chosen (single v0.7 value).
     """
@@ -145,8 +165,8 @@ class WindowSpec:
         """Build a :class:`WindowSpec` from an SM4 :class:`TrafficConfig`.
 
         ``TrafficConfig`` has already resolved its window default (window_seconds
-        defaults to the E2 floor when neither window field is set), so this is a
-        straight projection. The attribution policy is the single ratified value.
+        defaults to the E2 floor) and rejected count-bound windows at v0.7, so this
+        is a straight projection. The attribution policy is the single ratified value.
         """
         return cls(
             rate=traffic.rate,
@@ -164,18 +184,20 @@ class WindowSpec:
 
 @dataclass(frozen=True)
 class WindowStartEvent:
-    """Emitted when the measured span opens (after the prospective ramp)."""
+    """Emitted when a measured window opens (after the level's prospective ramp)."""
 
     level_index: int
+    window_index: int
     spec: WindowSpec
     monotonic_at: float
 
 
 @dataclass(frozen=True)
 class WindowStopEvent:
-    """Emitted when the measured span closes (energy accounting ends here)."""
+    """Emitted when a measured window closes (energy accounting ends here)."""
 
     level_index: int
+    window_index: int
     spec: WindowSpec
     monotonic_at: float
 
@@ -217,9 +239,10 @@ class BracketEnergySink:
     ``open_window`` enters a new bracket (energy tracker + thermal sampler start);
     ``close_window`` exits it (thermal sampler stop) and calls ``finish()`` (energy
     tracker stop), returning the :class:`MeasuredWindowCore`. A bracket is
-    single-use, so one is minted per window. The manual enter/exit (rather than a
-    ``with`` block) is required because the window body is the concurrently-running
-    traffic, not a synchronous call - the bracket brackets the WINDOW, not a call.
+    single-use, so one is minted per window (one bundle per window, SM10). The manual
+    enter/exit (rather than a ``with`` block) is required because the window body is
+    the concurrently-running traffic, not a synchronous call - the bracket brackets
+    the WINDOW, not a call.
     """
 
     def __init__(self, *, bracket_factory: BracketFactory) -> None:
@@ -275,10 +298,10 @@ class WarmupContext:
     spec: WindowSpec
 
 
-#: The warmup-hook seam: an opaque per-level callable run BEFORE a window opens.
-#: SM7 defines the signature and a no-op default; SM8 fills it with the
-#: convergence-composite warmup (re-warm per level is SM8's policy, behind this
-#: seam). The hook may be sync or async - the manager awaits it when awaitable.
+#: The warmup-hook seam: an opaque per-level callable run ONCE before a level's
+#: windows open. SM7 defines the signature and a no-op default; SM8 fills it with
+#: the convergence-composite warmup. The hook may be sync or async - the manager
+#: awaits it when awaitable.
 WarmupHook = Callable[[WarmupContext], Awaitable[None] | None]
 
 
@@ -292,10 +315,19 @@ async def _noop_warmup(context: WarmupContext) -> None:
 # ---------------------------------------------------------------------------
 
 #: Returns the monotonic receipt timestamps of a request's output tokens (one per
-#: token), used to attribute tokens to the energy span by RECEIPT time. Client-side
-#: token counting is SM11's job (O8: client counts are the canonical J/token
-#: denominator); until it lands the default returns no receipts, so the energy
-#: denominator is 0 and SM11 wires the real counter in. Tests inject fakes.
+#: token), the ONE mechanism that feeds BOTH the energy denominator and the
+#: stability gate's per-sub-window J/token. Client-side token counting is SM11's job
+#: (O8: client counts are the canonical denominator). Two granularities are legal:
+#:
+#: - token-granular (one timestamp per token) -> counting per interval is
+#:   span-received counting, the ratified energy-denominator rule;
+#: - request-granular (all of a request's tokens stamped at its completion time,
+#:   i.e. ``[completed_at] * n_tokens``) -> a request's whole token count falls in
+#:   the interval containing its completion, which is EXACTLY E2's
+#:   completion-timestamp attribution rule for sub-window J/token.
+#:
+#: Until SM11 lands the default returns no receipts, so denominators are 0 (the gate
+#: reports invalid-with-reason and the energy denominator is 0). Tests inject fakes.
 TokenReceiptFn = Callable[["RequestRecord"], Sequence[float]]
 
 
@@ -312,8 +344,8 @@ def _no_token_receipts(record: RequestRecord) -> Sequence[float]:
 class WindowBoundaries:
     """The window's monotonic-clock boundaries (shared clock with SM5's issuer).
 
-    ``window_start`` is when load began; ``span_start = window_start + ramp`` is
-    when the measured (energy) span opened; ``span_end`` is when it closed. Requests
+    ``window_start`` is when the level's load began; ``span_start`` is when this
+    window's measured (energy) span opened; ``span_end`` is when it closed. Requests
     keep being followed to completion past ``span_end`` for latency (drain), but
     energy never extends past it.
     """
@@ -350,7 +382,7 @@ class WindowBookkeeping:
     ``latency_records`` with its full latency yet contributes only its in-span
     tokens to ``energy_denominator_tokens`` - the two numbers never collapse.
 
-    SM12 derives J/token, percentiles, and goodput from these; SM7 only classifies.
+    SM12 derives percentiles and goodput from these; SM7 only classifies.
     """
 
     boundaries: WindowBoundaries
@@ -362,8 +394,25 @@ class WindowBookkeeping:
     straddling_count: int
 
 
-def _tokens_in_span(receipts: Sequence[float], span_start: float, span_end: float) -> int:
-    return sum(1 for t in receipts if span_start <= t <= span_end)
+def _count_tokens_in_interval(
+    records: Sequence[RequestRecord],
+    receipt_fn: TokenReceiptFn,
+    lo: float,
+    hi: float,
+    *,
+    closed_hi: bool,
+) -> int:
+    """Count output-token receipts in ``[lo, hi)`` (``[lo, hi]`` when ``closed_hi``).
+
+    Half-open by default so contiguous sub-windows partition without double-counting;
+    the final sub-window and the whole-span denominator close the upper edge.
+    """
+    total = 0
+    for record in records:
+        for t in receipt_fn(record):
+            if lo <= t < hi or (closed_hi and t == hi):
+                total += 1
+    return total
 
 
 def build_window_bookkeeping(
@@ -386,19 +435,17 @@ def build_window_bookkeeping(
     span_start = boundaries.span_start
     span_end = boundaries.span_end
 
-    energy_tokens = 0
+    energy_tokens = _count_tokens_in_interval(
+        report.records, token_receipt_fn, span_start, span_end, closed_hi=True
+    )
     latency_records: list[LatencyRecord] = []
     issued_in_span = 0
     completed_in_span = 0
     straddling = 0
 
     for record in report.records:
-        energy_tokens += _tokens_in_span(token_receipt_fn(record), span_start, span_end)
-
-        issued_in_span_flag = span_start <= record.issued_at <= span_end
-        if not issued_in_span_flag:
+        if not (span_start <= record.issued_at <= span_end):
             continue
-
         issued_in_span += 1
         completed_at = record.completed_at
         latency_s = (completed_at - record.issued_at) if completed_at is not None else None
@@ -429,7 +476,88 @@ def build_window_bookkeeping(
 
 
 # ---------------------------------------------------------------------------
-# Per-level stability validation (E2 thresholds, reused windowing.py math)
+# J/token measurement (window + intra-window CoV), reusing windowing.py
+# ---------------------------------------------------------------------------
+
+
+def _integrate_interval(cleaned: list[PowerThermalSample], lo_ts: float, hi_ts: float) -> float:
+    """Trapezoidal energy (J) over ``[lo_ts, hi_ts]`` with endpoint interpolation.
+
+    Reuses windowing.py's clip-with-interpolation (``_filter_to_window``) and the
+    trapezoidal integrator (``integrate_power_samples``); summed across GPUs.
+    """
+    if hi_ts <= lo_ts:
+        return 0.0
+    clipped = _filter_to_window(cleaned, lo_ts, 0.0, hi_ts - lo_ts)
+    return sum(integrate_power_samples(clipped).values())
+
+
+def _intra_window_cov(
+    cleaned: list[PowerThermalSample],
+    boundaries: WindowBoundaries,
+    report: IssuerReport,
+    receipt_fn: TokenReceiptFn,
+    power_lo: float,
+    power_hi: float,
+) -> float | None:
+    """CoV over ``k = 4`` sub-window J/token values (diagnostic; None if unformable).
+
+    Each clock is partitioned into 4 equal quarters of its OWN measured span - the
+    power series in its sampler clock, the token receipts in the issuer's monotonic
+    clock - so the quarters are fraction-aligned to the same physical span despite
+    the two clocks' different epochs (perf_counter vs monotonic). A sub-window with
+    zero attributed tokens makes the ratio unformable, so the diagnostic is None.
+    """
+    k = _STABILITY_SUBWINDOWS
+    power_q = (power_hi - power_lo) / k
+    token_q = (boundaries.span_end - boundaries.span_start) / k
+    if power_q <= 0.0 or token_q <= 0.0:
+        return None
+
+    j_per_token: list[float] = []
+    for i in range(k):
+        energy = _integrate_interval(cleaned, power_lo + i * power_q, power_lo + (i + 1) * power_q)
+        lo = boundaries.span_start + i * token_q
+        hi = boundaries.span_start + (i + 1) * token_q
+        tokens = _count_tokens_in_interval(
+            report.records, receipt_fn, lo, hi, closed_hi=(i == k - 1)
+        )
+        if tokens <= 0:
+            return None
+        j_per_token.append(energy / tokens)
+    return _coefficient_of_variation(j_per_token)
+
+
+def _window_measurements(
+    core: MeasuredWindowCore | None,
+    boundaries: WindowBoundaries,
+    report: IssuerReport,
+    receipt_fn: TokenReceiptFn,
+    window_tokens: int,
+) -> tuple[float | None, float | None, float | None]:
+    """Return ``(window_energy_j, window_j_per_token, intra_window_cov)``.
+
+    Energy is the trapezoidal integral of the (cleaned) power series over the
+    window; J/token is that over the window's client-counted token denominator; the
+    intra-window CoV is the k=4 sub-window diagnostic.
+    """
+    samples: list[PowerThermalSample] = list(core.timeseries_samples) if core is not None else []
+    if len(samples) < 2:
+        return None, None, None
+    cleaned = _clean_samples(samples)
+    if len(cleaned) < 2:
+        return None, None, None
+
+    power_lo = cleaned[0].timestamp
+    power_hi = cleaned[-1].timestamp
+    window_energy = _integrate_interval(cleaned, power_lo, power_hi)
+    window_j_per_token = (window_energy / window_tokens) if window_tokens > 0 else None
+    intra = _intra_window_cov(cleaned, boundaries, report, receipt_fn, power_lo, power_hi)
+    return window_energy, window_j_per_token, intra
+
+
+# ---------------------------------------------------------------------------
+# Per-level stability validation (E2 window-to-window J/token gate)
 # ---------------------------------------------------------------------------
 
 
@@ -439,74 +567,60 @@ class LevelValidation:
 
     valid: bool
     reason: str | None
-    cov_max: float | None
-    subwindow_count: int
-
-
-def _subwindow_means(power_series: Sequence[float], subwindow_count: int) -> list[float]:
-    """Slice ``power_series`` into ``subwindow_count`` contiguous groups, mean each.
-
-    Index-based slicing (matching windowing.py's index-based sliding window). Every
-    group is non-empty because the caller clamps ``subwindow_count`` to the sample
-    count.
-    """
-    n = len(power_series)
-    means: list[float] = []
-    for i in range(subwindow_count):
-        lo = i * n // subwindow_count
-        hi = (i + 1) * n // subwindow_count
-        group = power_series[lo:hi]
-        means.append(sum(group) / len(group))
-    return means
+    cov: float | None
+    windows_considered: int
 
 
 def validate_level_stability(
-    power_series: Sequence[float],
+    window_j_per_token: Sequence[float | None],
     *,
-    subwindow_count: int = DEFAULT_STABILITY_SUBWINDOW_COUNT,
     consecutive: int = STABILITY_CONSECUTIVE_WINDOWS,
 ) -> LevelValidation:
-    """Validate a level's measured-span stability against the E2 threshold.
+    """Validate a level's window-to-window J/token stability (the E2 gate).
 
-    ``power_series`` is the measured span's per-sample power (already time-ordered,
-    non-positive samples dropped by the caller). It is sliced into equal
-    sub-windows; the level is STABLE iff the coefficient of variation over every
-    ``consecutive`` sub-windows stays at or below ``windowing.py``'s
-    ``_AUTO_CV_THRESHOLD`` (0.05) through the end of the span - the reused
-    stable-through-end rule (the ramp already removed the onset transient, so the
-    check runs from the first sub-window). Too few samples for a meaningful
-    ``consecutive``-window check is a validation FAILURE with a reason, not a pass.
+    The level passes iff the window-level J/token values agree within
+    ``windowing.py``'s ``_AUTO_CV_THRESHOLD`` (0.05) over every ``consecutive``
+    windows, sustained through the end of the level (the reused stable-through-end
+    rule). Fewer than ``consecutive`` windows, or any window with no valid J/token
+    (zero attributed tokens), is a validation FAILURE with a reason - never a pass.
     """
-    n = len(power_series)
-    k = min(subwindow_count, n)
-    if k < consecutive:
+    n = len(window_j_per_token)
+    if n < consecutive:
         return LevelValidation(
             valid=False,
             reason=(
-                f"insufficient power samples for the {consecutive}-consecutive-window "
-                f"stability check: {n} sample(s) yield {k} sub-window(s), need "
-                f"at least {consecutive}."
+                f"the level ran {n} measured window(s); the stability gate needs at "
+                f"least {consecutive} consecutive windows."
             ),
-            cov_max=None,
-            subwindow_count=k,
+            cov=None,
+            windows_considered=n,
+        )
+    if any(v is None for v in window_j_per_token):
+        return LevelValidation(
+            valid=False,
+            reason=(
+                "one or more windows produced no J/token (zero attributed output "
+                "tokens), so window-to-window stability cannot be assessed."
+            ),
+            cov=None,
+            windows_considered=n,
         )
 
-    signals = _subwindow_means(power_series, k)
-    stable = _is_stable_through_end(signals, 0, consecutive)
-    cov_max = max(
-        _coefficient_of_variation(signals[s : s + consecutive])
-        for s in range(len(signals) - consecutive + 1)
+    values = [float(v) for v in window_j_per_token if v is not None]
+    stable = _is_stable_through_end(values, 0, consecutive)
+    cov = max(
+        _coefficient_of_variation(values[s : s + consecutive]) for s in range(n - consecutive + 1)
     )
     reason = (
         None
         if stable
         else (
-            f"steady-state not met: worst coefficient of variation over "
-            f"{consecutive} consecutive sub-windows was {cov_max:.4f}, exceeding the "
+            f"window-to-window J/token not steady: worst coefficient of variation "
+            f"over {consecutive} consecutive windows was {cov:.4f}, exceeding the "
             f"{_AUTO_CV_THRESHOLD} threshold."
         )
     )
-    return LevelValidation(valid=stable, reason=reason, cov_max=cov_max, subwindow_count=k)
+    return LevelValidation(valid=stable, reason=reason, cov=cov, windows_considered=n)
 
 
 # ---------------------------------------------------------------------------
@@ -519,9 +633,9 @@ class LevelPlan:
     """One rate level's inputs for the window manager.
 
     ``traffic_source`` and ``transport`` are pre-built by the caller (SM9) from the
-    level's config. CONTRACT: the source must keep issuing throughout the measured
-    span ``[ramp, ramp + duration]`` - the manager controls the energy-window timing
-    and does not resize the schedule.
+    level's config. CONTRACT: the source must keep issuing throughout the whole
+    level - the ramp plus ``windows_per_level`` measured spans - because the manager
+    controls the energy-window timing and does not resize the schedule.
     """
 
     spec: WindowSpec
@@ -531,54 +645,62 @@ class LevelPlan:
 
 
 @dataclass
-class LevelOutcome:
-    """Everything one level produced: energy, dual-policy bookkeeping, verdict."""
+class WindowRecord:
+    """One measured window's product within a level (one bundle per window, SM10)."""
 
-    level_index: int
-    spec: WindowSpec
+    window_index: int
+    boundaries: WindowBoundaries
     energy: MeasuredWindowCore | None
     bookkeeping: WindowBookkeeping
-    validation: LevelValidation
-    issuer_report: IssuerReport
+    window_energy_j: float | None
+    window_j_per_token: float | None
+    intra_window_cov: float | None
     start_event: WindowStartEvent
     stop_event: WindowStopEvent
 
 
-def _core_power_series(core: MeasuredWindowCore | None) -> list[float]:
-    """Extract the ordered, positive power readings from a measured core."""
-    if core is None:
-        return []
-    samples: list[PowerThermalSample] = core.timeseries_samples
-    return [s.power_w for s in samples if s.power_w is not None and s.power_w > 0.0]
+@dataclass
+class LevelOutcome:
+    """Everything one rate level produced: its windows and the window-to-window verdict."""
+
+    level_index: int
+    spec: WindowSpec
+    windows: list[WindowRecord]
+    validation: LevelValidation
+    issuer_report: IssuerReport
 
 
 class WindowManager:
-    """Drives a rate sweep as a list of measured windows (D7 / D19 / E2).
+    """Drives a rate sweep as a list of levels, each a run of measured windows.
 
-    Per level: run the warmup hook (SM8), start the open-loop traffic, exclude the
-    ramp PROSPECTIVELY, emit start-window (energy opens), hold the measured span,
-    emit stop-window (energy closes), drain the traffic to completion for latency,
-    then validate and cool down before the next level. The energy window is defined
-    by the emitted events - never by post-hoc timestamp diffing.
+    Per level: run the warmup hook ONCE (SM8), start the open-loop traffic, exclude
+    the ramp PROSPECTIVELY once, then run ``windows_per_level`` contiguous measured
+    windows (no re-warm between them) - each emitting start-window (energy opens) and
+    stop-window (energy closes) events - and finally drain the traffic to completion
+    for latency. The energy window is defined by the emitted events, never by
+    post-hoc timestamp diffing. Levels are validated on window-to-window J/token
+    stability and separated by an optional cooldown.
     """
 
     def __init__(
         self,
         energy_sink: WindowEnergySink,
         *,
+        windows_per_level: int = DEFAULT_WINDOWS_PER_LEVEL,
         cooldown_seconds: float = 0.0,
         warmup_hook: WarmupHook | None = None,
-        subwindow_count: int = DEFAULT_STABILITY_SUBWINDOW_COUNT,
         drain_timeout: float | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        if windows_per_level < 1:
+            raise ValueError("windows_per_level must be >= 1.")
         if cooldown_seconds < 0.0:
             raise ValueError("cooldown_seconds must be >= 0.")
         self._energy_sink = energy_sink
+        self._windows_per_level = windows_per_level
         self._cooldown_seconds = cooldown_seconds
         self._warmup_hook: WarmupHook = warmup_hook if warmup_hook is not None else _noop_warmup
-        self._subwindow_count = subwindow_count
         self._drain_timeout = drain_timeout
         self._sleep = sleep
         self._clock = clock
@@ -588,19 +710,19 @@ class WindowManager:
         outcomes: list[LevelOutcome] = []
         last = len(levels) - 1
         for level_index, level in enumerate(levels):
-            outcomes.append(await self.run_window(level_index, level))
+            outcomes.append(await self.run_level(level_index, level))
             if level_index != last and self._cooldown_seconds > 0.0:
                 await self._sleep(self._cooldown_seconds)
         return outcomes
 
-    async def run_window(self, level_index: int, level: LevelPlan) -> LevelOutcome:
-        """Run one level: warmup -> open -> drive traffic -> close -> drain -> validate."""
+    async def run_level(self, level_index: int, level: LevelPlan) -> LevelOutcome:
+        """Run one level: warmup -> ramp -> N contiguous windows -> drain -> validate."""
         spec = level.spec
         if spec.duration_seconds is None:
             raise ValueError(
                 "count-based measured windows (request_count without duration_seconds) "
-                "are not implemented at v0.7: the measured-span timing and sub-window "
-                "stability are duration-grounded (E2). Set a duration."
+                "are not supported at v0.7: the measured-span timing and the stability "
+                "gate are duration-grounded (E2). Set a duration."
             )
 
         await self._run_warmup_hook(WarmupContext(level_index=level_index, spec=spec))
@@ -609,23 +731,35 @@ class WindowManager:
         traffic_task: asyncio.Task[IssuerReport] = asyncio.create_task(
             level.traffic_source.run(level.transport, drain_timeout=self._drain_timeout)
         )
+        emitted: list[tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, Any]] = []
         try:
-            # Prospective ramp exclusion: the energy span opens AFTER the ramp.
+            # Prospective ramp exclusion, ONCE per level: the first window opens after
+            # the batch-fill transient; subsequent windows are contiguous (no re-warm).
             await self._sleep(spec.ramp_exclusion_seconds)
-            span_start = self._clock()
-            start_event = WindowStartEvent(
-                level_index=level_index, spec=spec, monotonic_at=span_start
-            )
-            self._energy_sink.open_window(start_event)
-
-            # Hold the measured span.
-            await self._sleep(spec.duration_seconds)
-            span_end = self._clock()
-            stop_event = WindowStopEvent(level_index=level_index, spec=spec, monotonic_at=span_end)
-            core = self._energy_sink.close_window(stop_event)
-
-            # Drain-before-close: energy has stopped; wait for every in-flight
-            # request to complete so its latency record is captured.
+            for window_index in range(self._windows_per_level):
+                span_start = self._clock()
+                start_event = WindowStartEvent(
+                    level_index=level_index,
+                    window_index=window_index,
+                    spec=spec,
+                    monotonic_at=span_start,
+                )
+                self._energy_sink.open_window(start_event)
+                await self._sleep(spec.duration_seconds)
+                span_end = self._clock()
+                stop_event = WindowStopEvent(
+                    level_index=level_index,
+                    window_index=window_index,
+                    spec=spec,
+                    monotonic_at=span_end,
+                )
+                core = self._energy_sink.close_window(stop_event)
+                boundaries = WindowBoundaries(
+                    window_start=window_start, span_start=span_start, span_end=span_end
+                )
+                emitted.append((boundaries, start_event, stop_event, core))
+            # Drain-before-close: energy has stopped; wait for every in-flight request
+            # to complete so its latency record is captured.
             report = await traffic_task
         except BaseException:
             traffic_task.cancel()
@@ -633,28 +767,48 @@ class WindowManager:
                 await traffic_task
             raise
 
-        boundaries = WindowBoundaries(
-            window_start=window_start, span_start=span_start, span_end=span_end
-        )
-        bookkeeping = build_window_bookkeeping(
-            boundaries,
-            report,
-            token_receipt_fn=level.token_receipt_fn,
-            attribution_policy=spec.attribution_policy,
-        )
-        validation = validate_level_stability(
-            _core_power_series(core), subwindow_count=self._subwindow_count
-        )
+        windows = self._build_window_records(emitted, report, level.token_receipt_fn, spec)
+        validation = validate_level_stability([w.window_j_per_token for w in windows])
         return LevelOutcome(
             level_index=level_index,
             spec=spec,
-            energy=core,
-            bookkeeping=bookkeeping,
+            windows=windows,
             validation=validation,
             issuer_report=report,
-            start_event=start_event,
-            stop_event=stop_event,
         )
+
+    @staticmethod
+    def _build_window_records(
+        emitted: list[tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, Any]],
+        report: IssuerReport,
+        token_receipt_fn: TokenReceiptFn,
+        spec: WindowSpec,
+    ) -> list[WindowRecord]:
+        records: list[WindowRecord] = []
+        for boundaries, start_event, stop_event, core in emitted:
+            bookkeeping = build_window_bookkeeping(
+                boundaries,
+                report,
+                token_receipt_fn=token_receipt_fn,
+                attribution_policy=spec.attribution_policy,
+            )
+            energy_j, j_per_token, intra = _window_measurements(
+                core, boundaries, report, token_receipt_fn, bookkeeping.energy_denominator_tokens
+            )
+            records.append(
+                WindowRecord(
+                    window_index=start_event.window_index,
+                    boundaries=boundaries,
+                    energy=core,
+                    bookkeeping=bookkeeping,
+                    window_energy_j=energy_j,
+                    window_j_per_token=j_per_token,
+                    intra_window_cov=intra,
+                    start_event=start_event,
+                    stop_event=stop_event,
+                )
+            )
+        return records
 
     async def _run_warmup_hook(self, context: WarmupContext) -> None:
         result = self._warmup_hook(context)
@@ -664,7 +818,7 @@ class WindowManager:
 
 __all__ = [
     "ATTRIBUTION_STEADY_STATE_SPAN",
-    "DEFAULT_STABILITY_SUBWINDOW_COUNT",
+    "DEFAULT_WINDOWS_PER_LEVEL",
     "STABILITY_CONSECUTIVE_WINDOWS",
     "BracketEnergySink",
     "LatencyRecord",
@@ -678,6 +832,7 @@ __all__ = [
     "WindowBoundaries",
     "WindowEnergySink",
     "WindowManager",
+    "WindowRecord",
     "WindowSpec",
     "WindowStartEvent",
     "WindowStopEvent",

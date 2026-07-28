@@ -485,6 +485,16 @@ _MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
     },
     {
         "engine": "all",
+        "validator": "validate_server_window_supported",
+        "combination": "serving_mode=server and server.traffic.window_requests set",
+        "reason": "Count-bound measured windows are not supported at v0.7: the "
+        "server-mode measurement path (measured-span timing and the per-level "
+        "stability gate) is duration-grounded (validate_server_window_supported).",
+        "resolution": "Use server.traffic.window_seconds instead (it defaults to the "
+        "E2 minimum-window-duration floor when omitted).",
+    },
+    {
+        "engine": "all",
         "validator": "validate_passthrough_kwargs_no_collision",
         "combination": "passthrough_kwargs key collision",
         "reason": "passthrough_kwargs keys must not collide with ExperimentConfig "
