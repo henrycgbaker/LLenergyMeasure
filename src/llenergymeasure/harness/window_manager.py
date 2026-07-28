@@ -731,7 +731,9 @@ class WindowManager:
         traffic_task: asyncio.Task[IssuerReport] = asyncio.create_task(
             level.traffic_source.run(level.transport, drain_timeout=self._drain_timeout)
         )
-        emitted: list[tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, Any]] = []
+        emitted: list[
+            tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, MeasuredWindowCore | None]
+        ] = []
         try:
             # Prospective ramp exclusion, ONCE per level: the first window opens after
             # the batch-fill transient; subsequent windows are contiguous (no re-warm).
@@ -779,7 +781,9 @@ class WindowManager:
 
     @staticmethod
     def _build_window_records(
-        emitted: list[tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, Any]],
+        emitted: list[
+            tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, MeasuredWindowCore | None]
+        ],
         report: IssuerReport,
         token_receipt_fn: TokenReceiptFn,
         spec: WindowSpec,
