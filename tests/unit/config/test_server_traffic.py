@@ -62,18 +62,63 @@ class TestTrafficShape:
         with pytest.raises((ValidationError, ValueError)):
             _server({"window_seconds": 60})
 
-    def test_window_exactly_one_neither(self):
-        with pytest.raises((ValidationError, ValueError), match="exactly one"):
-            _server({"rate": 10})
+    def test_window_defaults_when_neither_set(self):
+        # SM7 CONFIGURABILITY AMENDMENT: window duration is a config-exposed DEFAULT
+        # (E2 floor 240s), not a required field - a server config may omit the window.
+        cfg = _server({"rate": 10})
+        assert cfg.server.traffic.window_seconds == 240.0
+        assert cfg.server.traffic.window_requests is None
 
-    def test_window_exactly_one_both(self):
-        with pytest.raises((ValidationError, ValueError), match="exactly one"):
+    def test_window_at_most_one_both_rejected(self):
+        with pytest.raises((ValidationError, ValueError), match="at most one"):
             _server({"rate": 10, "window_seconds": 60, "window_requests": 100})
 
-    def test_window_requests_alone_valid(self):
-        cfg = _server({"rate": 10, "window_requests": 500})
-        assert cfg.server.traffic.window_requests == 500
-        assert cfg.server.traffic.window_seconds is None
+    def test_ramp_exclusion_default_is_30s(self):
+        assert _server(_TRAFFIC).server.traffic.ramp_exclusion_seconds == 30.0
+
+    def test_ramp_exclusion_configurable_and_zero_allowed(self):
+        assert (
+            _server({**_TRAFFIC, "ramp_exclusion_seconds": 0}).server.traffic.ramp_exclusion_seconds
+            == 0.0
+        )
+        assert (
+            _server(
+                {**_TRAFFIC, "ramp_exclusion_seconds": 45}
+            ).server.traffic.ramp_exclusion_seconds
+            == 45.0
+        )
+
+    def test_ramp_exclusion_negative_rejected(self):
+        with pytest.raises((ValidationError, ValueError)):
+            _server({**_TRAFFIC, "ramp_exclusion_seconds": -1})
+
+    def test_cooldown_default_is_zero(self):
+        assert _server(_TRAFFIC).server.cooldown_seconds == 0.0
+
+    def test_cooldown_configurable(self):
+        cfg = ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            serving_mode="server",
+            server={"traffic": _TRAFFIC, "cooldown_seconds": 30},
+        )
+        assert cfg.server.cooldown_seconds == 30.0
+
+    def test_server_window_requests_rejected_at_v07(self):
+        # SM7: count-bound windows have no server-mode measurement path (the timing
+        # and stability gate are duration-grounded), so a server config using
+        # window_requests is rejected at the ExperimentConfig edge.
+        with pytest.raises((ValidationError, ValueError), match="window_requests"):
+            _server({"rate": 10, "window_requests": 500})
+
+    def test_bare_traffic_config_still_accepts_window_requests(self):
+        # The traffic issuer supports count-bounded schedules, so window_requests
+        # stays constructible on a bare TrafficConfig (only server configs reject it).
+        from llenergymeasure.config.models import TrafficConfig
+
+        cfg = TrafficConfig(rate=10, window_requests=500)
+        assert cfg.window_requests == 500
+        assert cfg.window_seconds is None
 
     def test_slo_shared_percentile_default(self):
         cfg = _server({**_TRAFFIC, "slo": {"ttft_ms": 200, "tpot_ms": 20}})
@@ -204,9 +249,47 @@ class TestRateIdentity:
         # non-slo traffic fields join identity: a sweep over them stays distinct.
         base = _server(_TRAFFIC)
         gamma = _server({**_TRAFFIC, "arrival": "gamma", "burstiness": 2.0})
-        by_requests = _server({"rate": 10, "window_requests": 500})
+        longer = _server({"rate": 10, "window_seconds": 120})
         assert compute_declared_config_hash(base) != compute_declared_config_hash(gamma)
-        assert compute_declared_config_hash(base) != compute_declared_config_hash(by_requests)
+        assert compute_declared_config_hash(base) != compute_declared_config_hash(longer)
+
+
+class TestWindowKnobIdentity:
+    """SM7 window-duration / ramp / cooldown are identity in BOTH hash families.
+
+    They follow the existing discipline with NO new exclusion (server.traffic.slo
+    stays the sole declared-hash exclusion): user-set values enter the declared hash
+    (wholesale dump) and the resolved/observed views (mode_section projection).
+    """
+
+    def test_ramp_exclusion_is_identity_both_families(self):
+        a = _server({**_TRAFFIC, "ramp_exclusion_seconds": 30})
+        b = _server({**_TRAFFIC, "ramp_exclusion_seconds": 45})
+        assert compute_declared_config_hash(a) != compute_declared_config_hash(b)
+        assert hash_config(build_resolved_view(a)) != hash_config(build_resolved_view(b))
+
+    def _server_cd(self, cooldown: float):
+        return ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            serving_mode="server",
+            server={"traffic": _TRAFFIC, "cooldown_seconds": cooldown},
+        )
+
+    def test_cooldown_is_identity_both_families(self):
+        a = self._server_cd(0)
+        b = self._server_cd(30)
+        assert compute_declared_config_hash(a) != compute_declared_config_hash(b)
+        assert hash_config(build_resolved_view(a)) != hash_config(build_resolved_view(b))
+
+    def test_cooldown_projected_into_mode_section(self):
+        proj = self._server_cd(30).mode_section_identity()
+        assert proj["cooldown_seconds"] == 30.0
+        assert "traffic" in proj
+
+    def test_ramp_exclusion_in_mode_section_traffic(self):
+        proj = _server({**_TRAFFIC, "ramp_exclusion_seconds": 45}).mode_section_identity()
+        assert proj["traffic"]["ramp_exclusion_seconds"] == 45.0
 
 
 # ---------------------------------------------------------------------------

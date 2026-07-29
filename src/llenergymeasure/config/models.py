@@ -471,6 +471,18 @@ class MeasurementConfig(BaseModel):
 # Server-mode Traffic Configuration (serving_mode=server namespace)
 # =============================================================================
 
+#: Default measured-span duration in seconds (E2 minimum-window-duration spike,
+#: 2026-07-23: the max-across-rates per-rate floor at CoV <= 0.05). Applied when a
+#: server config sets neither window_seconds nor window_requests, so window
+#: duration is a config-exposed DEFAULT, not a required field.
+DEFAULT_WINDOW_SECONDS = 240.0
+
+#: Default ramp-exclusion in seconds (E2 spike, absolute form: batch-fill physics
+#: is window-length-independent). The measured span STARTS this many seconds after
+#: load begins; the pre-stable ramp is excluded prospectively, never trimmed after
+#: the fact.
+DEFAULT_RAMP_EXCLUSION_SECONDS = 30.0
+
 
 class SloConfig(BaseModel):
     """Service-level-objective bounds for a server-mode run (post-hoc overlay).
@@ -552,16 +564,30 @@ class TrafficConfig(BaseModel):
         default=None,
         gt=0.0,
         description=(
-            "Measurement window as a wall-clock duration in seconds. Exactly one of "
-            "window_seconds or window_requests must be set."
+            "Measured-span duration in seconds. Defaults to "
+            f"{DEFAULT_WINDOW_SECONDS:g}s (the E2 minimum-window-duration floor) when "
+            "omitted; the sole supported window form at v0.7."
         ),
     )
     window_requests: int | None = Field(
         default=None,
         ge=1,
         description=(
-            "Measurement window as a completed-request count. Exactly one of "
-            "window_seconds or window_requests must be set."
+            "Measured span as a completed-request count. A server config using it is "
+            "rejected at v0.7: the server-mode measurement path (timing + stability "
+            "gate) is duration-grounded (E2). Reserved for a future release; use "
+            "window_seconds."
+        ),
+    )
+    ramp_exclusion_seconds: float = Field(
+        default=DEFAULT_RAMP_EXCLUSION_SECONDS,
+        ge=0.0,
+        description=(
+            "Pre-stable ramp excluded from the measured span, in seconds (absolute, "
+            "E2 default). The measured span STARTS this many seconds after load begins "
+            "and is excluded PROSPECTIVELY (never trimmed retroactively). 0 disables "
+            "ramp exclusion. A measurement-methodology knob, so it joins the config "
+            "identity like the other traffic fields (only slo is excluded)."
         ),
     )
     concurrency_cap: int | None = Field(
@@ -596,13 +622,26 @@ class TrafficConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_window(self) -> TrafficConfig:
-        """Exactly one of window_seconds / window_requests must be set."""
-        set_count = int(self.window_seconds is not None) + int(self.window_requests is not None)
-        if set_count != 1:
+        """Resolve the measured span: at most one of window_seconds / window_requests.
+
+        Both set is an error. Neither set applies the E2-ratified default duration
+        (:data:`DEFAULT_WINDOW_SECONDS`), so window duration is a config-exposed
+        DEFAULT rather than a required field - a server config may omit the window
+        entirely and measure over the default span.
+
+        ``window_requests`` (count-bound windows) stays constructible here because the
+        traffic issuer supports count-bounded schedules; it is the server-mode
+        MEASUREMENT path that is duration-grounded, so a count-bound window in a
+        server config is rejected one level up
+        (:meth:`ExperimentConfig.validate_server_window_supported`).
+        """
+        if self.window_seconds is not None and self.window_requests is not None:
             raise ValueError(
-                "traffic.window must set exactly one of window_seconds or window_requests "
-                f"(got {set_count} set)."
+                "traffic.window accepts at most one of window_seconds or window_requests "
+                "(both were set)."
             )
+        if self.window_seconds is None and self.window_requests is None:
+            self.window_seconds = DEFAULT_WINDOW_SECONDS
         return self
 
 
@@ -622,6 +661,17 @@ class ServerSection(BaseModel):
     traffic: TrafficConfig = Field(
         ...,
         description="Online-serving traffic specification (rate, arrival, window, concurrency, slo).",
+    )
+    cooldown_seconds: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Inter-level cooldown in seconds: idle pause the window manager applies "
+            "AFTER a rate level closes and BEFORE the next level in a rate sweep. "
+            "Default 0 (no pause). A declared measurement-protocol knob, so it joins "
+            "the config identity in both hash families (it is projected into the "
+            "resolved/observed mode_section)."
+        ),
     )
 
 
@@ -852,7 +902,9 @@ class ExperimentConfig(BaseModel):
         Returns the mode-conditioned namespace's hashed subset: for server mode,
         all of ``traffic`` EXCEPT ``slo`` (slo is a post-hoc overlay, excluded from
         identity per O5.3), keyed under ``traffic`` so the projection mirrors the
-        namespace shape (the server warmup block joins here in a later slice).
+        namespace shape, plus the inter-level ``cooldown_seconds`` (a declared
+        measurement-protocol knob) so both hash families cover it symmetrically with
+        no new exclusion (the server warmup block joins here in a later slice).
         Offline has no mode namespace yet, so it projects an empty dict - an
         offline config's mode_section slot is ``{}``, unchanged from before this
         field existed. This is the allowlist half of the dual-family slo exclusion:
@@ -860,7 +912,10 @@ class ExperimentConfig(BaseModel):
         resolved/observed views exclude it by simply not projecting it here.
         """
         if self.serving_mode == "server" and self.server is not None:
-            return {"traffic": self.server.traffic.model_dump(mode="python", exclude={"slo"})}
+            return {
+                "traffic": self.server.traffic.model_dump(mode="python", exclude={"slo"}),
+                "cooldown_seconds": self.server.cooldown_seconds,
+            }
         return {}
 
     # -------------------------------------------------------------------------
@@ -972,6 +1027,33 @@ class ExperimentConfig(BaseModel):
         """
         if self.serving_mode == "server" and self.engine == Engine.TRANSFORMERS:
             raise ValueError(TRANSFORMERS_SERVER_UNSUPPORTED_MSG)
+        return self
+
+    @model_validator(mode="after")
+    def validate_server_window_supported(self) -> ExperimentConfig:
+        """Reject count-bound measured windows in a server config at v0.7.
+
+        The server-mode measurement path is duration-grounded: the measured-span
+        timing and the per-level stability gate were calibrated by E2 on wall-clock
+        windows, so ``server.traffic.window_requests`` has no measurement path yet.
+        Reject it at this config edge (rather than at the window manager at runtime)
+        so the CLI and YAML-driven API paths fail identically and early. The traffic
+        issuer still supports count-bounded schedules, so ``window_requests`` stays
+        constructible on a bare :class:`TrafficConfig`; only a server experiment
+        config using it is rejected.
+        """
+        if (
+            self.serving_mode == "server"
+            and self.server is not None
+            and self.server.traffic.window_requests is not None
+        ):
+            raise ValueError(
+                "server.traffic.window_requests (count-bound windows) is not supported "
+                "at v0.7: the server-mode measurement path (measured-span timing and "
+                "the per-level stability gate) is duration-grounded (E2). Use "
+                "server.traffic.window_seconds instead (it defaults to "
+                f"{DEFAULT_WINDOW_SECONDS:g}s when omitted)."
+            )
         return self
 
     @model_validator(mode="after")

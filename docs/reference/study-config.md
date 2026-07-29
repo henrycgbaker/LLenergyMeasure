@@ -67,6 +67,7 @@ All fields except `model` are optional and have sensible defaults.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `traffic` | TrafficConfig | *(see section)* | Online-serving traffic specification (rate, arrival, window, concurrency, slo). |
+| `cooldown_seconds` | number | `0.0` | Inter-level cooldown in seconds: idle pause the window manager applies AFTER a rate level closes and BEFORE the next level in a rate sweep. Default 0 (no pause). A declared measurement-protocol knob, so it joins the config identity in both hash families (it is projected into the resolved/observed mode_section). |
 
 ### Server Traffic (`server.traffic:`)
 
@@ -75,8 +76,9 @@ All fields except `model` are optional and have sensible defaults.
 | `rate` | number | *(required)* | Request arrival rate in requests per second (scalar). A rate sweep is written as a study-level list axis (server.traffic.rate: [2, 10]) and expanded to independent per-window configs before hashing. |
 | `arrival` | 'poisson' | 'gamma' | `poisson` | Inter-arrival distribution. 'poisson' (default) is memoryless (CV=1); 'gamma' allows tunable burstiness via the burstiness field. |
 | `burstiness` | number | None | `null` | Coefficient of variation of inter-arrival times for arrival='gamma' (CV=1 reproduces Poisson, >1 is burstier, <1 smoother). Ignored for arrival='poisson'. |
-| `window_seconds` | number | None | `null` | Measurement window as a wall-clock duration in seconds. Exactly one of window_seconds or window_requests must be set. |
-| `window_requests` | integer | None | `null` | Measurement window as a completed-request count. Exactly one of window_seconds or window_requests must be set. |
+| `window_seconds` | number | None | `null` | Measured-span duration in seconds. Defaults to 240s (the E2 minimum-window-duration floor) when omitted; the sole supported window form at v0.7. |
+| `window_requests` | integer | None | `null` | Measured span as a completed-request count. A server config using it is rejected at v0.7: the server-mode measurement path (timing + stability gate) is duration-grounded (E2). Reserved for a future release; use window_seconds. |
+| `ramp_exclusion_seconds` | number | `30.0` | Pre-stable ramp excluded from the measured span, in seconds (absolute, E2 default). The measured span STARTS this many seconds after load begins and is excluded PROSPECTIVELY (never trimmed retroactively). 0 disables ramp exclusion. A measurement-methodology knob, so it joins the config identity like the other traffic fields (only slo is excluded). |
 | `concurrency_cap` | integer | None | `null` | Maximum in-flight requests. None = uncapped (pure open-loop arrivals). |
 | `slo` | SloConfig | None | `null` | Optional SLO bounds (ttft_ms, tpot_ms at a shared percentile). Classifies results post-hoc; excluded from both config-hash families but stamped in the config sidecar and result provenance. |
 | `seed` | integer | None | `null` | Seed for the arrival-process RNG. None = unseeded (nondeterministic arrivals). |
