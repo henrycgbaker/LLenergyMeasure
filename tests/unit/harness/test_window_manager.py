@@ -35,10 +35,12 @@ from llenergymeasure.config.models import (
 from llenergymeasure.device.power_thermal import PowerThermalSample
 from llenergymeasure.harness.traffic import IssuerReport, RequestRecord, RequestShape
 from llenergymeasure.harness.window_manager import (
+    ABORTED_LEVEL_ATTR,
     ATTRIBUTION_STEADY_STATE_SPAN,
     DEFAULT_WINDOWS_PER_LEVEL,
     BracketEnergySink,
     LevelPlan,
+    WindowAbortEvent,
     WindowBoundaries,
     WindowManager,
     WindowSpec,
@@ -106,6 +108,10 @@ class RecordingEnergySink:
         self.events.append(("close", event))
         return self._core
 
+    def abort_window(self, event: WindowAbortEvent) -> None:
+        self._trace.append(("abort", event.window_index))
+        self.events.append(("abort", event))
+
 
 class ProducingEnergySink:
     """Builds a flat-power core spanning each window's actual [span_start, span_end]."""
@@ -123,6 +129,52 @@ class ProducingEnergySink:
         lo, hi = self._open_at, event.monotonic_at
         self._open_at = None
         return SimpleNamespace(timeseries_samples=_flat_samples(lo, hi, self._n, self._power))
+
+    def abort_window(self, event: WindowAbortEvent) -> None:
+        self._open_at = None
+
+
+class AbortTrackingSink:
+    """Records open/close/abort calls; can be told to raise from abort_window."""
+
+    def __init__(self, core: Any = None, *, abort_raises: bool = False) -> None:
+        self.core = core
+        self._abort_raises = abort_raises
+        self.calls: list[tuple[str, int]] = []
+
+    def open_window(self, event: WindowStartEvent) -> None:
+        self.calls.append(("open", event.window_index))
+
+    def close_window(self, event: WindowStopEvent) -> Any:
+        self.calls.append(("close", event.window_index))
+        return self.core
+
+    def abort_window(self, event: WindowAbortEvent) -> None:
+        self.calls.append(("abort", event.window_index))
+        if self._abort_raises:
+            raise RuntimeError("abort teardown failed")
+
+
+class RaisingClock:
+    """FakeClock that raises a chosen exception on the Nth sleep call."""
+
+    def __init__(self, raise_on_call: int, exc: BaseException, start: float = 1000.0) -> None:
+        self.now = start
+        self.sleeps: list[float] = []
+        self._raise_on = raise_on_call
+        self._exc = exc
+        self._calls = 0
+
+    def __call__(self) -> float:
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        self._calls += 1
+        if self._calls == self._raise_on:
+            raise self._exc
+        self.sleeps.append(seconds)
+        self.now += seconds
+        await asyncio.sleep(0)
 
 
 def _pts(ts: float, power: float = 100.0) -> PowerThermalSample:
@@ -693,3 +745,105 @@ class TestWarmupHookSeam:
         asyncio.run(manager.run_level(0, _level(spec, _report([]))))
         assert captured == [spec]
         assert captured[0].rate == 42.0
+
+
+async def _capture_abort(coro: Any, exc_type: type[BaseException]) -> BaseException:
+    """Await ``coro`` and return the ``exc_type`` it raises (same instance).
+
+    Catching at this level (rather than via asyncio.run's outer Task boundary)
+    preserves the raised instance and any attached AbortedLevel - exactly how an
+    immediate awaiter (SM9) sees it.
+    """
+    try:
+        await coro
+    except exc_type as exc:
+        return exc
+    raise AssertionError("expected the level to abort, but it completed")
+
+
+class TestAbortReleasesOnError:
+    """Release-on-error at the owner: an abort during an OPEN window frees the sink."""
+
+    def _spec(self) -> WindowSpec:
+        return WindowSpec(rate=10.0, duration_seconds=10.0, ramp_exclusion_seconds=30.0)
+
+    def test_cancellation_mid_span_aborts_once_and_propagates(self) -> None:
+        # Raise CancelledError on sleep call 2 (window 0's measured span) while open.
+        clock = RaisingClock(raise_on_call=2, exc=asyncio.CancelledError())
+        sink = AbortTrackingSink()
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+
+        exc = asyncio.run(
+            _capture_abort(
+                manager.run_level(0, _level(self._spec(), _report([]))), asyncio.CancelledError
+            )
+        )
+        # Exactly one abort for the open window, and it was never also closed.
+        assert sink.calls == [("open", 0), ("abort", 0)]
+        aborted = getattr(exc, ABORTED_LEVEL_ATTR)
+        assert aborted.aborted_window_index == 0
+        assert aborted.reason == "aborted: cancelled"
+        assert aborted.completed_cores == []
+
+    def test_plain_exception_mid_span_aborts_once_and_propagates(self) -> None:
+        clock = RaisingClock(raise_on_call=2, exc=ValueError("boom"))
+        sink = AbortTrackingSink()
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+
+        exc = asyncio.run(
+            _capture_abort(manager.run_level(0, _level(self._spec(), _report([]))), ValueError)
+        )
+        assert sink.calls == [("open", 0), ("abort", 0)]
+        aborted = getattr(exc, ABORTED_LEVEL_ATTR)
+        assert aborted.reason.startswith("aborted:")
+        assert "boom" in aborted.reason
+
+    def test_abort_raising_does_not_mask_or_double_close(self) -> None:
+        # The sink's abort_window raises; the ORIGINAL CancelledError must still
+        # propagate (not the abort's RuntimeError), and the window is not also closed.
+        clock = RaisingClock(raise_on_call=2, exc=asyncio.CancelledError())
+        sink = AbortTrackingSink(abort_raises=True)
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+
+        exc = asyncio.run(
+            _capture_abort(
+                manager.run_level(0, _level(self._spec(), _report([]))), asyncio.CancelledError
+            )
+        )
+        assert isinstance(exc, asyncio.CancelledError)
+        assert sink.calls == [("open", 0), ("abort", 0)]  # abort attempted once, no close
+        assert hasattr(exc, ABORTED_LEVEL_ATTR)  # partial state still attached
+
+    def test_completed_windows_preserved_on_abort(self) -> None:
+        # Abort during window 1's span (sleep call 3): window 0 completed normally,
+        # so its core is preserved on the AbortedLevel; window 1 is the aborted one.
+        sentinel = SimpleNamespace(timeseries_samples=_flat_samples(0.0, 1.0, 5))
+        clock = RaisingClock(raise_on_call=3, exc=asyncio.CancelledError())
+        sink = AbortTrackingSink(core=sentinel)
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+
+        exc = asyncio.run(
+            _capture_abort(
+                manager.run_level(0, _level(self._spec(), _report([]))), asyncio.CancelledError
+            )
+        )
+        assert sink.calls == [("open", 0), ("close", 0), ("open", 1), ("abort", 1)]
+        aborted = getattr(exc, ABORTED_LEVEL_ATTR)
+        assert aborted.aborted_window_index == 1
+        assert aborted.completed_cores == [sentinel]
+
+    def test_happy_path_emits_no_abort(self) -> None:
+        clock = FakeClock()
+        sink = AbortTrackingSink(core=None)
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+        spec = WindowSpec(rate=10.0, duration_seconds=2.0, ramp_exclusion_seconds=1.0)
+        asyncio.run(manager.run_level(0, _level(spec, _report([]))))
+        assert not any(kind == "abort" for kind, _ in sink.calls)
+        assert sink.calls == [
+            ("open", 0),
+            ("close", 0),
+            ("open", 1),
+            ("close", 1),
+            ("open", 2),
+            ("close", 2),
+        ]

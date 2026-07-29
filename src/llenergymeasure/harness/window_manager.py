@@ -202,14 +202,32 @@ class WindowStopEvent:
     monotonic_at: float
 
 
+@dataclass(frozen=True)
+class WindowAbortEvent:
+    """Emitted when an OPEN window is torn down early (cancellation / exception).
+
+    The manager owns the sink lifecycle, so when an exception or cancellation fires
+    while a window is open, it delivers this explicit event (D19: an abort is an
+    event, never inferred) so the sink RELEASES its live sampler/tracker. A window
+    is either closed or aborted, never both. ``cause`` describes the triggering
+    exception for the invalid-with-reason stamp.
+    """
+
+    level_index: int
+    window_index: int
+    spec: WindowSpec
+    monotonic_at: float
+    cause: str
+
+
 @runtime_checkable
 class WindowEnergySink(Protocol):
     """Consumes window events and controls the energy measurement (D19).
 
     The single seam between the window manager and the energy sampler: the manager
-    EMITS events, the sink translates them into energy start/stop. The default sink
-    drives a :class:`MeasurementBracket`; a future remote agent implements the same
-    two methods over the wire.
+    EMITS events, the sink translates them into energy start/stop/abort. The default
+    sink drives a :class:`MeasurementBracket`; a future remote agent implements the
+    same three methods over the wire.
     """
 
     def open_window(self, event: WindowStartEvent) -> None:
@@ -218,6 +236,15 @@ class WindowEnergySink(Protocol):
 
     def close_window(self, event: WindowStopEvent) -> MeasuredWindowCore | None:
         """End energy measurement and return the measured core (or None if unavailable)."""
+        ...
+
+    def abort_window(self, event: WindowAbortEvent) -> None:
+        """Release an OPEN window's live measurement without producing a core.
+
+        Called when a window is torn down early; must free the sampler/tracker and
+        must be safe when no window is open (a no-op). The manager guarantees a
+        window is closed XOR aborted, so this is never paired with close_window.
+        """
         ...
 
 
@@ -283,6 +310,22 @@ class BracketEnergySink:
         self._bracket = None
         bracket.__exit__(None, None, None)
         return bracket.finish()
+
+    def abort_window(self, event: WindowAbortEvent) -> None:
+        """Release the live bracket (thermal sampler + energy tracker), discard the core.
+
+        Best-effort per step so BOTH resources are freed even if one teardown raises;
+        pops the bracket first so a subsequent close/abort cannot double-release. A
+        no-op when no window is open.
+        """
+        if self._bracket is None:
+            return
+        bracket = self._bracket
+        self._bracket = None
+        with contextlib.suppress(BaseException):
+            bracket.__exit__(None, None, None)  # stop the thermal sampler
+        with contextlib.suppress(BaseException):
+            bracket.finish()  # stop the energy tracker; the returned core is discarded
 
 
 # ---------------------------------------------------------------------------
@@ -670,6 +713,32 @@ class LevelOutcome:
     issuer_report: IssuerReport
 
 
+#: Attribute name under which :func:`WindowManager.run_level` attaches an
+#: :class:`AbortedLevel` to the propagating exception when a level aborts mid-window.
+#: The exception itself is re-raised unchanged (CancelledError stays CancelledError);
+#: this carries the partial state so the never-silently-dropped posture holds without
+#: converting the error.
+ABORTED_LEVEL_ATTR = "llem_aborted_level"
+
+
+@dataclass
+class AbortedLevel:
+    """Partial state attached to the exception that aborts a level mid-window.
+
+    ``reason`` stamps the in-flight window invalid-with-reason ("aborted: <cause>");
+    ``completed_cores`` preserves the measured cores of the windows that closed
+    normally before the abort (in order) so the caller (SM9) can still persist them
+    (drain fields null, O7.4). Full bookkeeping for completed windows is not
+    reconstructed here because the level's traffic report is unavailable once the
+    issuer task is cancelled - that is the session layer's responsibility.
+    """
+
+    level_index: int
+    aborted_window_index: int
+    reason: str
+    completed_cores: list[MeasuredWindowCore | None]
+
+
 class WindowManager:
     """Drives a rate sweep as a list of levels, each a run of measured windows.
 
@@ -680,6 +749,12 @@ class WindowManager:
     for latency. The energy window is defined by the emitted events, never by
     post-hoc timestamp diffing. Levels are validated on window-to-window J/token
     stability and separated by an optional cooldown.
+
+    The manager owns the sink lifecycle, so if the level aborts (cancellation or
+    exception) while a window is OPEN, it emits an explicit abort event to release
+    the live sampler/tracker exactly once, stamps the in-flight window
+    invalid-with-reason via an :class:`AbortedLevel` attached to the exception, and
+    re-raises the original exception unchanged.
     """
 
     def __init__(
@@ -734,6 +809,11 @@ class WindowManager:
         emitted: list[
             tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, MeasuredWindowCore | None]
         ] = []
+        # The currently-OPEN window's start event, or None between windows. The only
+        # await inside an open window is the measured-span sleep; it is cleared (sync,
+        # no await) right before close_window. So an exception implies open_event is
+        # set iff a window is genuinely open -> close XOR abort, exactly once.
+        open_event: WindowStartEvent | None = None
         try:
             # Prospective ramp exclusion, ONCE per level: the first window opens after
             # the batch-fill transient; subsequent windows are contiguous (no re-warm).
@@ -747,6 +827,7 @@ class WindowManager:
                     monotonic_at=span_start,
                 )
                 self._energy_sink.open_window(start_event)
+                open_event = start_event
                 await self._sleep(spec.duration_seconds)
                 span_end = self._clock()
                 stop_event = WindowStopEvent(
@@ -755,6 +836,7 @@ class WindowManager:
                     spec=spec,
                     monotonic_at=span_end,
                 )
+                open_event = None  # a close attempt counts as closed: never also abort
                 core = self._energy_sink.close_window(stop_event)
                 boundaries = WindowBoundaries(
                     window_start=window_start, span_start=span_start, span_end=span_end
@@ -763,10 +845,35 @@ class WindowManager:
             # Drain-before-close: energy has stopped; wait for every in-flight request
             # to complete so its latency record is captured.
             report = await traffic_task
-        except BaseException:
+        except BaseException as exc:
             traffic_task.cancel()
             with contextlib.suppress(BaseException):
                 await traffic_task
+            if open_event is not None:
+                # A window was open when the level aborted: release its live sampler
+                # exactly once (best-effort - a raising sink must not mask exc), stamp
+                # the in-flight window invalid-with-reason, and preserve completed
+                # windows' cores on the exception. The original exc re-raises unchanged.
+                cause = self._describe_cause(exc)
+                abort_event = WindowAbortEvent(
+                    level_index=level_index,
+                    window_index=open_event.window_index,
+                    spec=spec,
+                    monotonic_at=self._clock(),
+                    cause=cause,
+                )
+                with contextlib.suppress(BaseException):
+                    self._energy_sink.abort_window(abort_event)
+                setattr(
+                    exc,
+                    ABORTED_LEVEL_ATTR,
+                    AbortedLevel(
+                        level_index=level_index,
+                        aborted_window_index=open_event.window_index,
+                        reason=f"aborted: {cause}",
+                        completed_cores=[core for (_, _, _, core) in emitted],
+                    ),
+                )
             raise
 
         windows = self._build_window_records(emitted, report, level.token_receipt_fn, spec)
@@ -819,11 +926,20 @@ class WindowManager:
         if inspect.isawaitable(result):
             await result
 
+    @staticmethod
+    def _describe_cause(exc: BaseException) -> str:
+        """Short cause string for the abort stamp (CancelledError reads as 'cancelled')."""
+        if isinstance(exc, asyncio.CancelledError):
+            return "cancelled"
+        return repr(exc)
+
 
 __all__ = [
+    "ABORTED_LEVEL_ATTR",
     "ATTRIBUTION_STEADY_STATE_SPAN",
     "DEFAULT_WINDOWS_PER_LEVEL",
     "STABILITY_CONSECUTIVE_WINDOWS",
+    "AbortedLevel",
     "BracketEnergySink",
     "LatencyRecord",
     "LevelOutcome",
@@ -832,6 +948,7 @@ __all__ = [
     "TokenReceiptFn",
     "WarmupContext",
     "WarmupHook",
+    "WindowAbortEvent",
     "WindowBookkeeping",
     "WindowBoundaries",
     "WindowEnergySink",
