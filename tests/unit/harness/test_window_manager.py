@@ -135,11 +135,18 @@ class ProducingEnergySink:
 
 
 class AbortTrackingSink:
-    """Records open/close/abort calls; can be told to raise from abort_window."""
+    """Records open/close/abort calls; can raise from close_window or abort_window."""
 
-    def __init__(self, core: Any = None, *, abort_raises: bool = False) -> None:
+    def __init__(
+        self,
+        core: Any = None,
+        *,
+        abort_raises: bool = False,
+        close_raises_on: int | None = None,
+    ) -> None:
         self.core = core
         self._abort_raises = abort_raises
+        self._close_raises_on = close_raises_on
         self.calls: list[tuple[str, int]] = []
 
     def open_window(self, event: WindowStartEvent) -> None:
@@ -147,12 +154,24 @@ class AbortTrackingSink:
 
     def close_window(self, event: WindowStopEvent) -> Any:
         self.calls.append(("close", event.window_index))
+        if self._close_raises_on is not None and event.window_index == self._close_raises_on:
+            raise RuntimeError("close teardown failed")
         return self.core
 
     def abort_window(self, event: WindowAbortEvent) -> None:
         self.calls.append(("abort", event.window_index))
         if self._abort_raises:
             raise RuntimeError("abort teardown failed")
+
+
+class RaisingTrafficSource:
+    """A traffic source whose run() raises - to exercise the drain-failure site."""
+
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+
+    async def run(self, transport: Any, *, drain_timeout: float | None = None) -> IssuerReport:
+        raise self._exc
 
 
 class RaisingClock:
@@ -539,8 +558,11 @@ class TestBracketEnergySink:
 # ---------------------------------------------------------------------------
 
 
-def _level(spec: WindowSpec, report: IssuerReport, receipt_fn: Any = None) -> LevelPlan:
-    plan = LevelPlan(spec=spec, traffic_source=FakeTrafficSource(report), transport=FakeTransport())
+def _level(
+    spec: WindowSpec, report: IssuerReport, receipt_fn: Any = None, source: Any = None
+) -> LevelPlan:
+    src = source if source is not None else FakeTrafficSource(report)
+    plan = LevelPlan(spec=spec, traffic_source=src, transport=FakeTransport())
     if receipt_fn is not None:
         plan.token_receipt_fn = receipt_fn
     return plan
@@ -847,3 +869,76 @@ class TestAbortReleasesOnError:
             ("open", 2),
             ("close", 2),
         ]
+
+    def test_drain_failure_after_clean_windows_preserves_all_cores(self) -> None:
+        # All 3 windows close cleanly, then the post-measurement drain raises: the
+        # cores stand (drain-failed site), no abort event, no double-close.
+        clock = FakeClock()
+        sentinel = SimpleNamespace(timeseries_samples=_flat_samples(0.0, 1.0, 5))
+        sink = AbortTrackingSink(core=sentinel)
+        source = RaisingTrafficSource(RuntimeError("transport gone"))
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+        spec = WindowSpec(rate=10.0, duration_seconds=2.0, ramp_exclusion_seconds=1.0)
+
+        exc = asyncio.run(
+            _capture_abort(
+                manager.run_level(0, _level(spec, _report([]), source=source)), RuntimeError
+            )
+        )
+        assert not any(kind == "abort" for kind, _ in sink.calls)
+        assert [k for k, _ in sink.calls] == ["open", "close", "open", "close", "open", "close"]
+        aborted = getattr(exc, ABORTED_LEVEL_ATTR)
+        assert aborted.aborted_window_index is None
+        assert aborted.reason.startswith("drain failed:")
+        assert aborted.completed_cores == [sentinel, sentinel, sentinel]
+
+    def test_cancellation_during_drain_stays_cancelled_with_cores(self) -> None:
+        clock = FakeClock()
+        sentinel = SimpleNamespace(timeseries_samples=_flat_samples(0.0, 1.0, 5))
+        sink = AbortTrackingSink(core=sentinel)
+        source = RaisingTrafficSource(asyncio.CancelledError())
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+        spec = WindowSpec(rate=10.0, duration_seconds=2.0, ramp_exclusion_seconds=1.0)
+
+        exc = asyncio.run(
+            _capture_abort(
+                manager.run_level(0, _level(spec, _report([]), source=source)),
+                asyncio.CancelledError,
+            )
+        )
+        assert isinstance(exc, asyncio.CancelledError)
+        aborted = getattr(exc, ABORTED_LEVEL_ATTR)
+        assert aborted.reason == "drain failed: cancelled"
+        assert aborted.completed_cores == [sentinel, sentinel, sentinel]
+        assert not any(kind == "abort" for kind, _ in sink.calls)
+
+    def test_close_window_raising_preserves_prior_cores_without_abort(self) -> None:
+        # Windows 0, 1 close cleanly; window 2's close_window raises: it is the failed
+        # window (no abort event), and the two prior cores are preserved.
+        clock = FakeClock()
+        sentinel = SimpleNamespace(timeseries_samples=_flat_samples(0.0, 1.0, 5))
+        sink = AbortTrackingSink(core=sentinel, close_raises_on=2)
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+        spec = WindowSpec(rate=10.0, duration_seconds=2.0, ramp_exclusion_seconds=1.0)
+
+        exc = asyncio.run(
+            _capture_abort(manager.run_level(0, _level(spec, _report([]))), RuntimeError)
+        )
+        assert not any(kind == "abort" for kind, _ in sink.calls)  # no abort for the failed close
+        aborted = getattr(exc, ABORTED_LEVEL_ATTR)
+        assert aborted.aborted_window_index == 2
+        assert aborted.reason.startswith("close failed:")
+        assert aborted.completed_cores == [sentinel, sentinel]  # windows 0 and 1 only
+
+    def test_ramp_phase_failure_attaches_nothing(self) -> None:
+        # Failure before any window opens (ramp sleep, call 1): nothing to preserve.
+        clock = RaisingClock(raise_on_call=1, exc=ValueError("ramp boom"))
+        sink = AbortTrackingSink()
+        manager = WindowManager(sink, windows_per_level=3, sleep=clock.sleep, clock=clock)
+        spec = WindowSpec(rate=10.0, duration_seconds=2.0, ramp_exclusion_seconds=1.0)
+
+        exc = asyncio.run(
+            _capture_abort(manager.run_level(0, _level(spec, _report([]))), ValueError)
+        )
+        assert not hasattr(exc, ABORTED_LEVEL_ATTR)
+        assert sink.calls == []

@@ -714,27 +714,38 @@ class LevelOutcome:
 
 
 #: Attribute name under which :func:`WindowManager.run_level` attaches an
-#: :class:`AbortedLevel` to the propagating exception when a level aborts mid-window.
-#: The exception itself is re-raised unchanged (CancelledError stays CancelledError);
-#: this carries the partial state so the never-silently-dropped posture holds without
-#: converting the error.
+#: :class:`AbortedLevel` to the propagating exception when a level fails with any
+#: measured cores to preserve (or a window open). The exception itself is re-raised
+#: unchanged (CancelledError stays CancelledError); this carries the partial state so
+#: the never-silently-dropped posture holds without converting the error.
 ABORTED_LEVEL_ATTR = "llem_aborted_level"
 
 
 @dataclass
 class AbortedLevel:
-    """Partial state attached to the exception that aborts a level mid-window.
+    """Partial state attached to the exception that fails a level.
 
-    ``reason`` stamps the in-flight window invalid-with-reason ("aborted: <cause>");
-    ``completed_cores`` preserves the measured cores of the windows that closed
-    normally before the abort (in order) so the caller (SM9) can still persist them
-    (drain fields null, O7.4). Full bookkeeping for completed windows is not
-    reconstructed here because the level's traffic report is unavailable once the
-    issuer task is cancelled - that is the session layer's responsibility.
+    ``reason`` names the failure site and cause, one of three disclosed forms:
+
+    - ``"aborted: <cause>"`` - an exception fired while a window was OPEN; its live
+      sampler/tracker was released via an abort event.
+    - ``"close failed: <cause>"`` - ``close_window`` itself raised; that window's
+      bracket state is untrustworthy (no abort event - close was already attempted).
+    - ``"drain failed: <cause>"`` - every window closed cleanly but the
+      post-measurement drain failed. The energy cores STAND; only straddler latency
+      records are lost or truncated - D7's two-policy separation working as designed
+      (energy is intact, latency is best-effort past close).
+
+    ``aborted_window_index`` is the open-or-failed-close window's index, or None for a
+    drain failure (all windows closed cleanly; the level failed post-measurement).
+    ``completed_cores`` holds the measured cores of the CLEANLY-CLOSED windows (in
+    order) so the caller (SM9) can still persist them (drain fields null, O7.4). Full
+    bookkeeping is not reconstructed here because the level's traffic report is
+    unavailable once the issuer task is cancelled - that is the session layer's job.
     """
 
     level_index: int
-    aborted_window_index: int
+    aborted_window_index: int | None
     reason: str
     completed_cores: list[MeasuredWindowCore | None]
 
@@ -750,11 +761,14 @@ class WindowManager:
     post-hoc timestamp diffing. Levels are validated on window-to-window J/token
     stability and separated by an optional cooldown.
 
-    The manager owns the sink lifecycle, so if the level aborts (cancellation or
-    exception) while a window is OPEN, it emits an explicit abort event to release
-    the live sampler/tracker exactly once, stamps the in-flight window
-    invalid-with-reason via an :class:`AbortedLevel` attached to the exception, and
-    re-raises the original exception unchanged.
+    The manager owns the sink lifecycle. If the level fails, it preserves whatever
+    was measured: a window OPEN at failure has its live sampler released via an
+    explicit abort event (exactly once); a failure while draining after every window
+    closed cleanly, or a ``close_window`` that itself raised, keeps the measured
+    cores of the cleanly-closed windows. The partial state is attached to the
+    propagating exception via an :class:`AbortedLevel`, and the original exception is
+    re-raised unchanged (CancelledError stays CancelledError). See
+    :class:`AbortedLevel` for the three disclosed failure sites.
     """
 
     def __init__(
@@ -809,11 +823,14 @@ class WindowManager:
         emitted: list[
             tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, MeasuredWindowCore | None]
         ] = []
-        # The currently-OPEN window's start event, or None between windows. The only
-        # await inside an open window is the measured-span sleep; it is cleared (sync,
-        # no await) right before close_window. So an exception implies open_event is
-        # set iff a window is genuinely open -> close XOR abort, exactly once.
+        # Failure-site tracking. ``open_event`` is the currently-OPEN window's start
+        # event (the only await inside an open window is the measured-span sleep, so
+        # a failure there means a window is genuinely open). ``closing_index`` is set
+        # only across the synchronous close_window call, so it identifies a window
+        # whose close raised. Both are cleared (sync, no await) so close XOR abort
+        # holds exactly once.
         open_event: WindowStartEvent | None = None
+        closing_index: int | None = None
         try:
             # Prospective ramp exclusion, ONCE per level: the first window opens after
             # the batch-fill transient; subsequent windows are contiguous (no re-warm).
@@ -837,7 +854,9 @@ class WindowManager:
                     monotonic_at=span_end,
                 )
                 open_event = None  # a close attempt counts as closed: never also abort
+                closing_index = window_index
                 core = self._energy_sink.close_window(stop_event)
+                closing_index = None  # closed cleanly
                 boundaries = WindowBoundaries(
                     window_start=window_start, span_start=span_start, span_end=span_end
                 )
@@ -849,31 +868,7 @@ class WindowManager:
             traffic_task.cancel()
             with contextlib.suppress(BaseException):
                 await traffic_task
-            if open_event is not None:
-                # A window was open when the level aborted: release its live sampler
-                # exactly once (best-effort - a raising sink must not mask exc), stamp
-                # the in-flight window invalid-with-reason, and preserve completed
-                # windows' cores on the exception. The original exc re-raises unchanged.
-                cause = self._describe_cause(exc)
-                abort_event = WindowAbortEvent(
-                    level_index=level_index,
-                    window_index=open_event.window_index,
-                    spec=spec,
-                    monotonic_at=self._clock(),
-                    cause=cause,
-                )
-                with contextlib.suppress(BaseException):
-                    self._energy_sink.abort_window(abort_event)
-                setattr(
-                    exc,
-                    ABORTED_LEVEL_ATTR,
-                    AbortedLevel(
-                        level_index=level_index,
-                        aborted_window_index=open_event.window_index,
-                        reason=f"aborted: {cause}",
-                        completed_cores=[core for (_, _, _, core) in emitted],
-                    ),
-                )
+            self._attach_level_abort(exc, level_index, spec, open_event, closing_index, emitted)
             raise
 
         windows = self._build_window_records(emitted, report, level.token_receipt_fn, spec)
@@ -925,6 +920,63 @@ class WindowManager:
         result = self._warmup_hook(context)
         if inspect.isawaitable(result):
             await result
+
+    def _attach_level_abort(
+        self,
+        exc: BaseException,
+        level_index: int,
+        spec: WindowSpec,
+        open_event: WindowStartEvent | None,
+        closing_index: int | None,
+        emitted: list[
+            tuple[WindowBoundaries, WindowStartEvent, WindowStopEvent, MeasuredWindowCore | None]
+        ],
+    ) -> None:
+        """Preserve partial state on the propagating exception (never converts it).
+
+        Attaches an :class:`AbortedLevel` unless the failure was a pure ramp-phase
+        error with nothing measured and no window open. The original ``exc`` is
+        re-raised unchanged by the caller.
+        """
+        completed_cores = [core for (_, _, _, core) in emitted]
+        cause = self._describe_cause(exc)
+        aborted_index: int | None
+        if open_event is not None:
+            # Failure mid-window: the sampler is live, so release it exactly once
+            # (best-effort - a raising sink must never mask exc).
+            abort_event = WindowAbortEvent(
+                level_index=level_index,
+                window_index=open_event.window_index,
+                spec=spec,
+                monotonic_at=self._clock(),
+                cause=cause,
+            )
+            with contextlib.suppress(BaseException):
+                self._energy_sink.abort_window(abort_event)
+            reason = f"aborted: {cause}"
+            aborted_index = open_event.window_index
+        elif closing_index is not None:
+            # close_window itself raised: the window's bracket state is untrustworthy,
+            # and close was already attempted (no abort - close XOR abort stands).
+            reason = f"close failed: {cause}"
+            aborted_index = closing_index
+        elif emitted:
+            # Drain failed after every window closed cleanly: the cores stand; only
+            # straddler latency records are lost (D7's two-policy separation).
+            reason = f"drain failed: {cause}"
+            aborted_index = None
+        else:
+            return  # ramp-phase failure: nothing measured, nothing open
+        setattr(
+            exc,
+            ABORTED_LEVEL_ATTR,
+            AbortedLevel(
+                level_index=level_index,
+                aborted_window_index=aborted_index,
+                reason=reason,
+                completed_cores=completed_cores,
+            ),
+        )
 
     @staticmethod
     def _describe_cause(exc: BaseException) -> str:
