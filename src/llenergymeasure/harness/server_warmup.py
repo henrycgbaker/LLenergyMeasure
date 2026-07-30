@@ -46,7 +46,7 @@ import contextlib
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from llenergymeasure.harness.windowing import (
     _AUTO_CV_THRESHOLD,
@@ -54,6 +54,7 @@ from llenergymeasure.harness.windowing import (
     _clean_samples,
     _detect_steady_state,
 )
+from llenergymeasure.utils.exceptions import LLEMError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ServerWarmupConfig
@@ -76,10 +77,71 @@ class _SamplerLike(Protocol):
     def get_samples(self) -> list[PowerThermalSample]: ...
 
 
+class WarmupTrafficError(LLEMError):
+    """The warmup traffic mechanism failed, so no valid warmup was delivered.
+
+    Raised (rather than proceeding) when the warmup traffic task dies before the
+    gate/duration finishes, or when warmup ends with zero successfully completed
+    requests. This is a DIFFERENT failure class from R5's proceed-on-timeout: a
+    convergence timeout is disclosed uncertainty (the warmup happened, equilibrium
+    is merely unconfirmed), whereas dead traffic means the warmup did not happen at
+    all - and the measured window's traffic on the same transport would fail too.
+    The hook raising propagates through the window manager's run_level, so the level
+    fails loudly BEFORE a measurement window is opened.
+    """
+
+
+class _CountingTransport:
+    """Wraps the injected transport to count SUCCESSFUL warmup completions.
+
+    The cheapest completion observation the warmup seam allows (no change to the
+    TrafficSource / Transport protocols): a request that returns without raising is
+    a completion; a request whose call raises (the issuer catches it as bookkeeping)
+    is not counted. Lets the warmup detect a traffic-alive-but-every-request-failing
+    server, which the composite gate's NVML observables cannot see.
+    """
+
+    def __init__(self, inner: Transport) -> None:
+        self._inner = inner
+        self.completed = 0
+
+    async def __call__(self, request: RequestShape) -> Any:
+        result = await self._inner(request)
+        self.completed += 1
+        return result
+
+
+def _traffic_cause(task: asyncio.Task[Any]) -> BaseException | None:
+    """The done traffic task's exception, or None for a clean (early) exit."""
+    if task.cancelled():
+        return None
+    return task.exception()
+
+
+def _traffic_death_message(elapsed: float, cause: BaseException | None) -> str:
+    if cause is not None:
+        return (
+            f"warmup traffic failed at t={elapsed:.1f}s: the traffic source raised "
+            "before warmup completed, so no valid warmup was delivered."
+        )
+    return (
+        f"warmup traffic ended at t={elapsed:.1f}s, before warmup completed: the traffic "
+        "source exhausted its schedule early, so the warmup was not sustained."
+    )
+
+
+def _zero_completions_message(elapsed: float) -> str:
+    return (
+        f"warmup delivered zero successfully completed requests in {elapsed:.1f}s: the "
+        "warmup traffic never reached the server (check the transport / serving endpoint)."
+    )
+
+
 __all__ = [
     "ObservableState",
     "ServerWarmup",
     "ServerWarmupResult",
+    "WarmupTrafficError",
     "build_probe_request",
     "describe_server_warmup_protocol",
 ]
@@ -304,18 +366,32 @@ class ServerWarmup:
         self.results.append(result)
 
     async def _warm_composite(self, context: WarmupContext) -> ServerWarmupResult:
-        """Composite gate: issuer-driven traffic until all three observables hold."""
+        """Composite gate: issuer-driven traffic until all three observables hold.
+
+        Fails fast if the traffic dies before the gate resolves (a dead warmup
+        mechanism is not disclosed uncertainty) or if warmup delivered zero
+        completed requests.
+        """
         sampler = self._sampler_factory()
+        counting = _CountingTransport(self._transport)
         source = self._traffic_factory(context, self._config.timeout_seconds)
         start = self._clock()
         deadline = start + self._config.timeout_seconds
         timed_out = False
+        traffic_died = False
+        cause: BaseException | None = None
         observables = ObservableState(False, False, False)
 
         sampler.start()
-        traffic_task: asyncio.Task[object] = asyncio.create_task(source.run(self._transport))
+        traffic_task: asyncio.Task[Any] = asyncio.create_task(source.run(counting))
         try:
             while True:
+                # Watch the traffic each poll: a completion (raise OR early clean
+                # exit) before the gate resolves means the warmup mechanism died.
+                if traffic_task.done():
+                    traffic_died = True
+                    cause = _traffic_cause(traffic_task)
+                    break
                 observables = _evaluate_observables(sampler.get_samples())
                 if observables.all_hold:
                     break
@@ -327,18 +403,28 @@ class ServerWarmup:
             await self._stop_traffic(traffic_task)
             sampler.stop()
 
+        elapsed = self._clock() - start
+        if traffic_died:
+            raise WarmupTrafficError(_traffic_death_message(elapsed, cause)) from cause
+        if counting.completed == 0:
+            raise WarmupTrafficError(_zero_completions_message(elapsed))
+
         return ServerWarmupResult(
             level_index=context.level_index,
             mode="composite",
             converged=not timed_out,
             timed_out=timed_out,
-            elapsed_s=self._clock() - start,
+            elapsed_s=elapsed,
             final_observables=observables,
             pre_window_protocol=describe_server_warmup_protocol(self._config),
         )
 
     async def _warm_fixed(self, context: WarmupContext) -> ServerWarmupResult:
-        """Fixed opt-out: issuer-driven traffic for a fixed duration, no gate."""
+        """Fixed opt-out: issuer-driven traffic for a fixed duration, no gate.
+
+        Same fail-fast contract as composite: dead traffic or zero completions is an
+        error, not a silent full-duration sleep.
+        """
         duration = self._config.duration_seconds
         protocol = describe_server_warmup_protocol(self._config)
         if duration <= 0.0:
@@ -352,25 +438,52 @@ class ServerWarmup:
                 final_observables=None,
                 pre_window_protocol=protocol,
             )
+        counting = _CountingTransport(self._transport)
         source = self._traffic_factory(context, duration)
         start = self._clock()
-        traffic_task: asyncio.Task[object] = asyncio.create_task(source.run(self._transport))
-        try:
+        traffic_died = False
+        cause: BaseException | None = None
+        traffic_task: asyncio.Task[Any] = asyncio.create_task(source.run(counting))
+
+        # Race the fixed duration against the traffic: whichever finishes first wins.
+        # The sleeper still awaits self._sleep(duration) exactly once, so the duration
+        # wait is preserved; a traffic death simply wins the race and short-circuits it.
+        # (Wrapped in a coroutine because the injected sleep is a plain Awaitable.)
+        async def _await_duration() -> None:
             await self._sleep(duration)
+
+        sleeper: asyncio.Task[None] = asyncio.create_task(_await_duration())
+        try:
+            done, _pending = await asyncio.wait(
+                {traffic_task, sleeper}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if traffic_task in done:
+                traffic_died = True
+                cause = _traffic_cause(traffic_task)
         finally:
+            sleeper.cancel()
+            with contextlib.suppress(BaseException):
+                await sleeper
             await self._stop_traffic(traffic_task)
+
+        elapsed = self._clock() - start
+        if traffic_died:
+            raise WarmupTrafficError(_traffic_death_message(elapsed, cause)) from cause
+        if counting.completed == 0:
+            raise WarmupTrafficError(_zero_completions_message(elapsed))
+
         return ServerWarmupResult(
             level_index=context.level_index,
             mode="fixed",
             converged=True,
             timed_out=False,
-            elapsed_s=self._clock() - start,
+            elapsed_s=elapsed,
             final_observables=None,
             pre_window_protocol=protocol,
         )
 
     @staticmethod
-    async def _stop_traffic(traffic_task: asyncio.Task[object]) -> None:
+    async def _stop_traffic(traffic_task: asyncio.Task[Any]) -> None:
         """Cancel the warmup traffic and await its unwind (mirrors the manager)."""
         traffic_task.cancel()
         with contextlib.suppress(BaseException):

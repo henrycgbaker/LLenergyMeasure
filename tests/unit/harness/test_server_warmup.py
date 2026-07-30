@@ -10,7 +10,10 @@ timed_out; each composite observable gates independently.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
+
+import pytest
 
 from llenergymeasure.config.models import ServerWarmupConfig
 from llenergymeasure.device.power_thermal import PowerThermalSample
@@ -18,6 +21,7 @@ from llenergymeasure.harness.server_warmup import (
     ObservableState,
     ServerWarmup,
     ServerWarmupResult,
+    WarmupTrafficError,
     _power_plateau,
     _temperature_settled,
     _throttle_clear,
@@ -25,7 +29,15 @@ from llenergymeasure.harness.server_warmup import (
     describe_server_warmup_protocol,
 )
 from llenergymeasure.harness.traffic import IssuerReport, RequestShape
-from llenergymeasure.harness.window_manager import WarmupContext, WindowSpec
+from llenergymeasure.harness.window_manager import (
+    LevelPlan,
+    WarmupContext,
+    WindowAbortEvent,
+    WindowManager,
+    WindowSpec,
+    WindowStartEvent,
+    WindowStopEvent,
+)
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -66,6 +78,7 @@ class FakeSampler:
 
     Mirrors production: the sampler starts EMPTY, so the gate cannot pass on the
     first poll - the warmup loop sleeps (letting the traffic task run) and re-polls.
+    ``stop_count`` lets tests assert the sampler is released exactly once.
     """
 
     def __init__(self, samples: list[PowerThermalSample], *, ready_after: int = 0) -> None:
@@ -74,12 +87,14 @@ class FakeSampler:
         self._polls = 0
         self.started = False
         self.stopped = False
+        self.stop_count = 0
 
     def start(self) -> None:
         self.started = True
 
     def stop(self) -> None:
         self.stopped = True
+        self.stop_count += 1
 
     def get_samples(self) -> list[PowerThermalSample]:
         polls = self._polls
@@ -87,26 +102,91 @@ class FakeSampler:
         return self._samples if polls >= self._ready_after else []
 
 
+def _empty_report(issued: int = 0) -> IssuerReport:
+    return IssuerReport(
+        records=[],
+        issued_count=issued,
+        completed_count=issued,
+        cap_bound_fraction=0.0,
+        issuance_duration_s=0.0,
+        concurrency_cap=None,
+    )
+
+
 class FakeSource:
-    """Runs until cancelled; records that it was started and torn down."""
+    """Issues requests through the transport until cancelled.
+
+    Mimics the real open-loop issuer: a transport call that raises is caught as
+    bookkeeping (it does NOT kill the source), so a traffic-alive-but-all-failing
+    server is expressible by pairing this with a failing transport.
+    """
 
     def __init__(self) -> None:
         self.started = False
         self.cancelled = False
+        self.issued = 0
 
     async def run(self, transport: Any, *, drain_timeout: float | None = None) -> IssuerReport:
         self.started = True
         try:
             while True:
+                with contextlib.suppress(Exception):
+                    await transport(RequestShape(index=self.issued))
+                self.issued += 1
                 await asyncio.sleep(0.001)
         except asyncio.CancelledError:
             self.cancelled = True
             raise
 
 
+class RaisingSource:
+    """The traffic source itself fails (not the transport): run() raises."""
+
+    def __init__(self, exc: BaseException | None = None) -> None:
+        self.started = False
+        self._exc = exc or RuntimeError("traffic source boom")
+
+    async def run(self, transport: Any, *, drain_timeout: float | None = None) -> IssuerReport:
+        self.started = True
+        raise self._exc
+
+
+class RaiseAfterSource:
+    """Issues ``n`` successful requests, then raises mid-warmup."""
+
+    def __init__(self, n: int = 3) -> None:
+        self._n = n
+
+    async def run(self, transport: Any, *, drain_timeout: float | None = None) -> IssuerReport:
+        for i in range(self._n):
+            await transport(RequestShape(index=i))
+            await asyncio.sleep(0.001)
+        raise RuntimeError("traffic died mid-warmup")
+
+
+class EarlyExitSource:
+    """Issues ``n`` successful requests, then returns cleanly (schedule exhausted)."""
+
+    def __init__(self, n: int = 3) -> None:
+        self._n = n
+
+    async def run(self, transport: Any, *, drain_timeout: float | None = None) -> IssuerReport:
+        for i in range(self._n):
+            await transport(RequestShape(index=i))
+            await asyncio.sleep(0.001)
+        return _empty_report(self._n)
+
+
 class FakeTransport:
-    async def __call__(self, request: Any) -> Any:  # pragma: no cover - never called by fakes
+    async def __call__(self, request: Any) -> Any:
         return None
+
+
+class AllFailTransport:
+    """Raises on every call: the server is reachable but every request fails."""
+
+    async def __call__(self, request: Any) -> Any:
+        raise RuntimeError("request failed")
 
 
 class FakeClock:
@@ -239,11 +319,13 @@ class TestProtocolDescription:
 # ---------------------------------------------------------------------------
 
 
-def _warmup(config: ServerWarmupConfig, sampler: FakeSampler, source: FakeSource, **kw):
+def _warmup(
+    config: ServerWarmupConfig, sampler: FakeSampler, source: Any, transport: Any = None, **kw
+):
     return ServerWarmup(
         config,
         traffic_factory=lambda ctx, horizon: source,
-        transport=FakeTransport(),
+        transport=transport if transport is not None else FakeTransport(),
         sampler_factory=lambda: sampler,
         poll_interval=kw.pop("poll_interval", 0.0),
         **kw,
@@ -252,7 +334,9 @@ def _warmup(config: ServerWarmupConfig, sampler: FakeSampler, source: FakeSource
 
 class TestServerWarmupComposite:
     def test_converges_when_gate_holds(self):
-        sampler = FakeSampler(_SETTLED)
+        # ready_after=1: gate fails the first poll, so the loop sleeps and the traffic
+        # task runs (delivers >= 1 completion) before converging on the second poll.
+        sampler = FakeSampler(_SETTLED, ready_after=1)
         source = FakeSource()
         sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, source)
         asyncio.run(sw(_ctx()))
@@ -262,6 +346,7 @@ class TestServerWarmupComposite:
         assert result.timed_out is False
         assert result.final_observables.all_hold is True
         assert result.mode == "composite"
+        assert source.issued >= 1  # warmup traffic actually ran
 
     def test_traffic_and_sampler_lifecycle(self):
         # ready_after=1: the first poll is empty (gate fails), so the loop sleeps and
@@ -324,6 +409,7 @@ class TestServerWarmupFixed:
         # NO pre-window idle cooldown: the only wait is the warmup duration itself.
         assert slept == [42.0]
         assert source.started and source.cancelled
+        assert source.issued >= 1  # warmup traffic actually ran
 
     def test_zero_duration_skips_warmup_traffic(self):
         source = FakeSource()
@@ -336,6 +422,110 @@ class TestServerWarmupFixed:
         assert source.started is False  # no traffic issued at all
 
 
+class TestServerWarmupFailFast:
+    """MUST-FIX 1: a dead warmup mechanism FAILS the level, never proceeds silently."""
+
+    def test_composite_source_raises_immediately(self):
+        sampler = FakeSampler([])  # never converges, so the loop observes the death
+        source = RaisingSource()
+        sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, source)
+        with pytest.raises(WarmupTrafficError) as exc:
+            asyncio.run(sw(_ctx()))
+        assert isinstance(exc.value.__cause__, RuntimeError)  # chained, not swallowed
+        assert sampler.stop_count == 1  # sampler released exactly once
+        assert sw.results == []  # no result recorded for a failed level
+
+    def test_fixed_source_raises_immediately(self):
+        source = RaisingSource()
+        sw = _warmup(
+            ServerWarmupConfig(mode="fixed", duration_seconds=60.0), FakeSampler([]), source
+        )
+        with pytest.raises(WarmupTrafficError) as exc:
+            asyncio.run(sw(_ctx()))
+        assert isinstance(exc.value.__cause__, RuntimeError)
+        assert sw.results == []
+
+    def test_composite_source_raises_mid_warmup(self):
+        sampler = FakeSampler([])  # never converges
+        source = RaiseAfterSource(n=3)
+        sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, source)
+        with pytest.raises(WarmupTrafficError):
+            asyncio.run(sw(_ctx()))
+
+    def test_composite_source_exits_cleanly_early(self):
+        sampler = FakeSampler([])  # never converges before the schedule exhausts
+        source = EarlyExitSource(n=3)
+        sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, source)
+        with pytest.raises(WarmupTrafficError) as exc:
+            asyncio.run(sw(_ctx()))
+        # A clean early exit chains no cause but still fails loudly.
+        assert exc.value.__cause__ is None
+        assert "ended" in str(exc.value)
+
+    def test_composite_all_requests_fail(self):
+        # Traffic stays alive but every request fails -> zero completions -> fail fast.
+        sampler = FakeSampler(_SETTLED, ready_after=1)
+        source = FakeSource()
+        sw = _warmup(
+            ServerWarmupConfig(mode="composite"), sampler, source, transport=AllFailTransport()
+        )
+        with pytest.raises(WarmupTrafficError) as exc:
+            asyncio.run(sw(_ctx()))
+        assert "zero" in str(exc.value)
+
+    def test_fixed_all_requests_fail(self):
+        # Traffic stays alive (all requests fail), so the duration sleeper wins the
+        # race; use a fast sleep so the 42s duration does not run in real time.
+        async def _fast_sleep(_d: float) -> None:
+            await asyncio.sleep(0)
+
+        source = FakeSource()
+        sw = _warmup(
+            ServerWarmupConfig(mode="fixed", duration_seconds=42.0),
+            FakeSampler([]),
+            source,
+            transport=AllFailTransport(),
+            sleep=_fast_sleep,
+        )
+        with pytest.raises(WarmupTrafficError) as exc:
+            asyncio.run(sw(_ctx()))
+        assert "zero" in str(exc.value)
+
+    def test_manager_fails_level_before_opening_window(self):
+        # Driven through the window manager: the hook raising fails the level BEFORE
+        # any measurement window opens, and the sampler is released exactly once.
+        sampler = FakeSampler([])
+        source = RaisingSource()
+        sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, source)
+        sink = _RecordingSink()
+        plan = LevelPlan(
+            spec=WindowSpec(rate=10.0, duration_seconds=1.0),
+            traffic_source=FakeSource(),  # the measured-window traffic, never reached
+            transport=FakeTransport(),
+        )
+        manager = WindowManager(sink, warmup_hook=sw, windows_per_level=1)
+        with pytest.raises(WarmupTrafficError):
+            asyncio.run(manager.run_level(0, plan))
+        assert sink.opened == 0  # no measurement window was opened
+        assert sampler.stop_count == 1
+
+
+class _RecordingSink:
+    """Minimal WindowEnergySink that records whether a window was ever opened."""
+
+    def __init__(self) -> None:
+        self.opened = 0
+
+    def open_window(self, event: WindowStartEvent) -> None:
+        self.opened += 1
+
+    def close_window(self, event: WindowStopEvent) -> Any:
+        return None
+
+    def abort_window(self, event: WindowAbortEvent) -> None:
+        pass
+
+
 class TestPerLevelReWarm:
     def test_rewarm_fires_and_records_per_level(self):
         # A fresh sampler + source per level (the factory is called each invocation).
@@ -343,7 +533,7 @@ class TestPerLevelReWarm:
             ServerWarmupConfig(mode="composite"),
             traffic_factory=lambda ctx, horizon: FakeSource(),
             transport=FakeTransport(),
-            sampler_factory=lambda: FakeSampler(_SETTLED),
+            sampler_factory=lambda: FakeSampler(_SETTLED, ready_after=1),
             poll_interval=0.0,
         )
         asyncio.run(sw(_ctx(level=0)))
