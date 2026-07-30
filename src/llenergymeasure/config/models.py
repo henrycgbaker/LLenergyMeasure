@@ -860,7 +860,7 @@ class ExperimentConfig(BaseModel):
     # Measurement - how to measure
     measurement: MeasurementConfig = Field(
         default_factory=MeasurementConfig,
-        description="Measurement methodology: warmup, baseline, energy sampling",
+        description="Measurement methodology: baseline, energy sampling (mode-invariant)",
     )
 
     # Sampling preset - expands into the active engine's sampling section

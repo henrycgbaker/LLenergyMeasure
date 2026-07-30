@@ -21,9 +21,15 @@ post-hoc provenance LOG (which value won, and why) - this module is the forward
 resolution that decides which value wins in the first place.
 
 v0.7 SCOPE (R7 boundary): this is the resolution CORE plus the warmup-protocol
-wiring (:func:`resolve_server_warmup`). The full setup UX (``llem init`` flow,
-``.env`` rationalisation, progressive disclosure, and routing every user-config
-field through the chain) stays with the setup-and-user-config workstream (#886).
+RESOLVER (:func:`resolve_server_warmup`). The resolver is STAGED, not yet wired at a
+production call site: there is no ``UserConfig`` home for a server-warmup default
+today, and the resolved-config view reads warmup off the DECLARED config object
+(``ExperimentConfig.mode_section_identity``), so making a user-config value show up
+in the resolved hash but NOT the declared hash needs a resolved-vs-declared split
+for the warmup subsection that does not exist yet. Adding the user-config home and
+that overlay - and routing every user-config field through the chain - stays with
+the server-session slice and the setup-and-user-config workstream (#886). The core
+and resolver are exercised by tests.
 
 Prior art: the pragmata ``ResolveSettings.resolve`` chain (external); the ruled
 sentinel scheme is option C of the internal setup-and-user-config design.
@@ -157,14 +163,16 @@ def resolve_server_warmup(
 ) -> ServerWarmupConfig:
     """Resolve the effective server warmup protocol through the R7 precedence chain.
 
-    The v0.7 wiring of the warmup-protocol overlay (R5/R7): the built-in
+    The v0.7 RESOLVER for the warmup-protocol overlay (R5/R7); STAGED, not yet wired
+    at a production call site (see the module docstring). The built-in
     ``ServerWarmupConfig`` defaults are the lowest layer; the study YAML's
     ``server.warmup`` block, an optional tool-wide user default, an env overlay, and
     an explicit call-site override stack above it in the ruled order. Any layer may
     be :data:`UNSET` ('not supplied - defer'). The resolved dict is validated back
     into a :class:`~llenergymeasure.config.models.ServerWarmupConfig`, so the
-    identity discipline holds: the DECLARED hash still names user intent (the study
-    config), while this resolved protocol is what the run actually realises.
+    identity discipline holds when this is eventually wired: the DECLARED hash still
+    names user intent (the study config), while this resolved protocol is what the
+    run actually realises.
     """
     from llenergymeasure.config.models import ServerWarmupConfig
 
