@@ -17,7 +17,51 @@ from collections.abc import Callable
 from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
 
+# REUSE (R6): the convergence check shares windowing.py's coefficient-of-variation
+# math with the server-warmup power-plateau observable; only the stable-through-end
+# semantics are lifted here, the threshold stays warmup's configurable cv_threshold.
+from llenergymeasure.harness.windowing import _coefficient_of_variation
+
 logger = logging.getLogger(__name__)
+
+
+def _stable_through_end(values: list[float], window: int, threshold: float) -> bool:
+    """True iff every ``window``-sized slice of ``values`` (start-to-end) is stable.
+
+    "Stable" is coefficient of variation at or below ``threshold``. Requiring every
+    trailing window (not merely the last one) to be stable is the stable-through-end
+    convergence semantics shared with the windowing detector and the server-warmup
+    gate (R6): a sustained plateau, not a single quiet window. Reuses windowing.py's
+    CoV math; the threshold stays warmup's configurable ``cv_threshold``.
+    """
+    n = len(values)
+    if n < window:
+        return False
+    return all(
+        _coefficient_of_variation(values[s : s + window]) <= threshold
+        for s in range(n - window + 1)
+    )
+
+
+def describe_offline_warmup_protocol(warmup: WarmupConfig) -> str:
+    """Human-readable description of the offline pre-window warmup protocol (D6).
+
+    The offline half of the divergence label SM14 renders offline-vs-server: what
+    the offline path does before measuring (prompt-loop convergence or a fixed
+    prompt count, then a thermal-floor idle wait).
+    """
+    if not warmup.enabled:
+        return "offline warmup disabled"
+    if warmup.convergence_detection:
+        return (
+            "offline convergence warmup: prompt-loop until latency CoV <= "
+            f"{warmup.cv_threshold:g} stable-through-end (>= {warmup.min_prompts} prompts, "
+            f"cap {warmup.max_prompts}), then a {warmup.thermal_floor_seconds:g}s thermal floor"
+        )
+    return (
+        f"offline fixed warmup: {warmup.n_prompts} prompt-loop inferences, then a "
+        f"{warmup.thermal_floor_seconds:g}s thermal floor"
+    )
 
 
 def thermal_floor_wait(config: ExperimentConfig) -> float:
@@ -103,12 +147,14 @@ def warmup_until_converged(
             recent = latencies[-config.window_size :]
             final_cv = compute_cv(recent)
 
-            if (
-                not fixed_mode
-                and len(latencies) >= max(config.min_prompts, config.window_size)
-                and final_cv < config.cv_threshold
-            ):
-                converged = True
+            # Stable-through-end convergence (R6 upgrade, was a single trailing
+            # window): once past the warm-start floor, converge iff the trailing
+            # eligible region is a sustained plateau - every window-sized slice
+            # stable, not just the last one.
+            if not fixed_mode and len(latencies) >= max(config.min_prompts, config.window_size):
+                eligible = latencies[-max(config.min_prompts, config.window_size) :]
+                if _stable_through_end(eligible, config.window_size, config.cv_threshold):
+                    converged = True
 
         if on_substep:
             cv_str = f"  CV: {final_cv:.3f}" if final_cv is not None else ""
