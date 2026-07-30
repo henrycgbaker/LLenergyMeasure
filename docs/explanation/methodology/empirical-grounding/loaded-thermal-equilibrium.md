@@ -110,10 +110,10 @@ high instead. Either direction, the temperature observable is what prevents the
 bias.
 
 **Verdict: the temperature observable is load-bearing.** The worst bias
-(-12.9%) exceeds the 0.05 tolerance the tool already accepts, and the cells that
-exceed it are exactly the cells whose power-to-temperature gap exceeds the 30 s
-tolerance, so the bias is fully explained by, and preventable by, the temperature
-observable. Power stability alone is **not** a sufficient warmup signal. The
+(-12.9%) exceeds the 0.05 tolerance the tool already accepts. Every cell whose
+bias exceeds that tolerance also has a power-to-temperature gap over 30 s, and no
+cell shows excess bias without such a gap, so the bias is explained by, and
+preventable by, the temperature observable. Power stability alone is **not** a sufficient warmup signal. The
 server warmup gate therefore requires all three observables (power plateau AND
 temperature settled AND zero active thermal throttle).
 
@@ -210,6 +210,11 @@ The study followed its protocol's own rule to disclose every departure:
   throttling.
 - **Temperature is coarse.** It is integer-Celsius NVML telemetry, lightly
   smoothed; the 2 C over 60 s criterion is the pre-registered anchor.
+- **The power-settle time absorbs some power creep.** Over a 600 s window the
+  die's heating raises power slightly through leakage, shifting the steady
+  reference upward, so the measured power-settle time is a conservative (larger)
+  estimate rather than the pure batch-fill transient. Temperature still settles
+  later than power in every cell, so the divergence conclusion is robust to this.
 - **Near-saturation is one point** (75 req/s).
 
 ---
