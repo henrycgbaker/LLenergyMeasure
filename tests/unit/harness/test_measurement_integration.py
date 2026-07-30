@@ -961,7 +961,7 @@ def test_warmup_excluded_samples_includes_probe() -> None:
     n_prompts = 3
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        measurement={
+        offline={
             "warmup": {
                 "enabled": True,
                 "convergence_detection": False,

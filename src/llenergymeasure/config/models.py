@@ -70,6 +70,20 @@ TRANSFORMERS_SERVER_UNSUPPORTED_MSG = (
     "engine=tensorrt for server mode, or set serving_mode=offline for transformers."
 )
 
+#: Migration message for the retired ``measurement.warmup`` section. Warmup became a
+#: per-mode protocol when server mode landed (offline uses prompt-loop convergence;
+#: server uses a convergence-composite gate), so its knobs moved into the mode
+#: namespace under ``offline.warmup:`` - a clean break with no alias. Surfaced by the
+#: MeasurementConfig before-validator so every construction path names the new home.
+MEASUREMENT_WARMUP_MIGRATED_MSG = (
+    "The 'measurement.warmup' section was moved to 'offline.warmup'. Warmup is now a "
+    "per-mode protocol (offline uses prompt-loop convergence; server uses a "
+    "convergence-composite gate), so it lives under the mode section rather than "
+    "'measurement:'. Move your warmup knobs under 'offline.warmup' (e.g. "
+    "offline.warmup.n_prompts). 'measurement:' now holds only mode-invariant "
+    "methodology (energy_sampler, baseline)."
+)
+
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 
@@ -365,17 +379,29 @@ class TaskConfig(BaseModel):
 
 
 class MeasurementConfig(BaseModel):
-    """How to measure: warmup, baseline, and energy sampling strategy.
+    """How to measure: baseline and energy sampling strategy (mode-invariant).
 
     These fields control the measurement methodology - changing them affects
-    measurement quality/accuracy but not the workload itself.
+    measurement quality/accuracy but not the workload itself. Warmup is NOT here:
+    it became a per-mode protocol (``offline.warmup`` / ``server.warmup``) when
+    server mode landed, so ``measurement:`` keeps only the mode-invariant core.
     """
 
     model_config = {"extra": "forbid"}
 
-    warmup: WarmupConfig = Field(
-        default_factory=WarmupConfig, description="Warmup phase configuration"
-    )
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_migrated_warmup(cls, data: Any) -> Any:
+        """Fail helpfully on the retired ``measurement.warmup`` key (clean break).
+
+        Warmup moved into the mode namespace (``offline.warmup:``); there is no
+        alias. Raising here (before the bare ``extra="forbid"`` rejection) names the
+        new location on every construction path.
+        """
+        if isinstance(data, dict) and "warmup" in data:
+            raise ValueError(MEASUREMENT_WARMUP_MIGRATED_MSG)
+        return data
+
     baseline: BaselineConfig = Field(
         default_factory=BaselineConfig, description="Baseline power measurement configuration"
     )
@@ -645,13 +671,84 @@ class TrafficConfig(BaseModel):
         return self
 
 
+class ServerWarmupConfig(BaseModel):
+    """Server-mode warmup protocol (mode-conditioned; lives under ``server:``).
+
+    The scientifically-correct default (R5) is the convergence-composite gate: warm
+    the server with issuer-driven traffic at the target rate and open the measured
+    window only once all three thermal-equilibrium observables hold together - GPU
+    power plateaued, temperature settled, and zero active thermal throttle bits. A
+    hard ``timeout_seconds`` failsafe (default 900s, the E3 cap rule) prevents a
+    hang: at timeout the harness PROCEEDS and stamps ``convergence: timed_out`` in
+    the result, never silently passing.
+
+    ``mode="fixed"`` is the explicit opt-out: the same issuer-driven traffic path,
+    no gate, for ``duration_seconds`` (default 300s, the E3 floor rule). 60s is a
+    citable convenience floor, NOT a thermal-equilibrium claim.
+
+    There is deliberately NO thermal-floor knob (contrast ``offline.warmup``): the
+    server's loaded equilibrium IS the measured thermal posture (D6), so an idle
+    settling wait would bias energy-per-token favourably. Illegal states are made
+    unrepresentable by structural absence rather than a forbidding validator.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    mode: Literal["composite", "fixed"] = Field(
+        default="composite",
+        description=(
+            "Warmup protocol: 'composite' (default) waits for the three-observable "
+            "thermal-equilibrium gate (power plateau + temperature settled + no thermal "
+            "throttle) with a timeout_seconds failsafe; 'fixed' warms for a fixed "
+            "duration_seconds with no gate (the explicit opt-out)."
+        ),
+    )
+    timeout_seconds: float = Field(
+        default=900.0,
+        gt=0.0,
+        description=(
+            "Composite-mode failsafe: hard upper bound on convergence gating. At the "
+            "timeout the harness proceeds and stamps convergence: timed_out in the "
+            "result (never hangs, never silently passes). Ignored in fixed mode."
+        ),
+    )
+    duration_seconds: float = Field(
+        default=300.0,
+        ge=0.0,
+        description=(
+            "Fixed-mode warmup duration in seconds (the E3 floor rule default). 60s is "
+            "a citable convenience floor, not a thermal-equilibrium claim; 0 skips "
+            "warmup traffic entirely. Ignored in composite mode."
+        ),
+    )
+
+
+class OfflineSection(BaseModel):
+    """The ``offline:`` mode namespace (legal iff serving_mode=offline).
+
+    The mode-conditioned namespace for offline batch measurement, mirroring the
+    ``server:`` namespace. Carries the offline warmup protocol (prompt-loop
+    convergence + thermal floor - the semantics migrated verbatim from the retired
+    ``measurement.warmup``). Unlike ``server:``, the section is OPTIONAL: an offline
+    config that never touches warmup knobs omits it and the built-in warmup defaults
+    apply. Its presence under serving_mode=server is rejected by
+    :meth:`ExperimentConfig.validate_mode_section_match`.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    warmup: WarmupConfig = Field(
+        default_factory=WarmupConfig,
+        description="Offline warmup phase configuration (prompt-loop convergence + thermal floor).",
+    )
+
+
 class ServerSection(BaseModel):
     """The ``server:`` mode namespace (legal iff serving_mode=server).
 
     The mode-conditioned namespace for online serving, mirroring the engine
     namespaces (transformers:/vllm:/tensorrt:). Carries the traffic specification
-    today; the server warmup block joins here in a later slice. Its presence is
-    bound to serving_mode=server by
+    and the server warmup protocol. Its presence is bound to serving_mode=server by
     :meth:`ExperimentConfig.validate_mode_section_match` - an offline config
     carrying a server: section, or a server config without one, fails loudly.
     """
@@ -661,6 +758,14 @@ class ServerSection(BaseModel):
     traffic: TrafficConfig = Field(
         ...,
         description="Online-serving traffic specification (rate, arrival, window, concurrency, slo).",
+    )
+    warmup: ServerWarmupConfig = Field(
+        default_factory=ServerWarmupConfig,
+        description=(
+            "Server warmup protocol (convergence-composite gate by default, fixed-"
+            "duration opt-out). A declared measurement-protocol knob, so it joins the "
+            "config identity in both hash families (projected into the mode_section)."
+        ),
     )
     cooldown_seconds: float = Field(
         default=0.0,
@@ -785,12 +890,18 @@ class ExperimentConfig(BaseModel):
         description="TensorRT-LLM configuration (only used when engine=tensorrt)",
     )
 
-    # Mode namespace (None = not that mode). The server: section is the
-    # mode-conditioned namespace for online serving, mirroring the engine
-    # sections; it is legal only when serving_mode=server (validate_mode_section_match).
+    # Mode namespaces (None = not that mode). The server:/offline: sections are the
+    # mode-conditioned namespaces, mirroring the engine sections; each is legal only
+    # under its own serving_mode (validate_mode_section_match). offline: is OPTIONAL
+    # (its warmup block defaults when omitted); server: is REQUIRED under server mode
+    # (traffic.rate has no default).
     server: ServerSection | None = Field(
         default=None,
         description="Server-mode namespace: online-serving traffic spec (only used when serving_mode=server)",
+    )
+    offline: OfflineSection | None = Field(
+        default=None,
+        description="Offline-mode namespace: warmup protocol (only used when serving_mode=offline)",
     )
 
     # Escape hatch - explicitly declared for extra="forbid" compatibility
@@ -899,24 +1010,41 @@ class ExperimentConfig(BaseModel):
     def mode_section_identity(self) -> dict[str, Any]:
         """Identity projection of the active mode namespace for the resolved/observed hash.
 
-        Returns the mode-conditioned namespace's hashed subset: for server mode,
-        all of ``traffic`` EXCEPT ``slo`` (slo is a post-hoc overlay, excluded from
-        identity per O5.3), keyed under ``traffic`` so the projection mirrors the
-        namespace shape, plus the inter-level ``cooldown_seconds`` (a declared
-        measurement-protocol knob) so both hash families cover it symmetrically with
-        no new exclusion (the server warmup block joins here in a later slice).
-        Offline has no mode namespace yet, so it projects an empty dict - an
-        offline config's mode_section slot is ``{}``, unchanged from before this
-        field existed. This is the allowlist half of the dual-family slo exclusion:
-        the declared hash excludes slo by an explicit dump exclude, the
-        resolved/observed views exclude it by simply not projecting it here.
+        Returns the mode-conditioned namespace's hashed subset:
+
+        - server mode: all of ``traffic`` EXCEPT ``slo`` (slo is a post-hoc overlay,
+          excluded from identity per O5.3), keyed under ``traffic`` so the projection
+          mirrors the namespace shape; the inter-level ``cooldown_seconds``; and the
+          ``warmup`` protocol block (a declared measurement-protocol knob). No new
+          exclusion - slo stays the sole one.
+        - offline mode: the ``warmup`` block when an ``offline:`` section is present;
+          ``{}`` (empty) for default-offline (no section), so a v0.6-style offline
+          config that never set warmup knobs projects an empty mode_section slot.
+
+        This is the allowlist half of the dual-family slo exclusion: the declared
+        hash excludes slo by an explicit dump exclude, the resolved/observed views
+        exclude it by simply not projecting it here.
         """
         if self.serving_mode == "server" and self.server is not None:
             return {
                 "traffic": self.server.traffic.model_dump(mode="python", exclude={"slo"}),
+                "warmup": self.server.warmup.model_dump(mode="python"),
                 "cooldown_seconds": self.server.cooldown_seconds,
             }
+        if self.serving_mode == "offline" and self.offline is not None:
+            return {"warmup": self.offline.warmup.model_dump(mode="python")}
         return {}
+
+    def offline_warmup(self) -> WarmupConfig:
+        """Return the offline warmup config (built-in defaults when ``offline:`` is absent).
+
+        The offline execution path (thermal floor + prompt-loop convergence) reads
+        warmup here rather than reaching into ``self.offline`` directly, so an offline
+        config that omits the optional ``offline:`` section still measures under the
+        default warmup protocol - identical behaviour to the pre-migration
+        ``measurement.warmup`` default.
+        """
+        return self.offline.warmup if self.offline is not None else WarmupConfig()
 
     # -------------------------------------------------------------------------
     # Pre-validators (run before field parsing)
@@ -960,10 +1088,14 @@ class ExperimentConfig(BaseModel):
     _FLASH_ATTENTION_IMPLS: ClassVar[set[str]] = {"flash_attention_2", "flash_attention_3"}
 
     #: Maps each serving_mode value to its mode-conditioned namespace attribute.
-    #: Only 'server' has a namespace today; 'offline' has none (its warmup block
-    #: arrives in a later slice), so an offline config needs no mode section.
+    #: Both modes now have a namespace (server: traffic + warmup; offline: warmup).
     #: Structurally mirrors ALL_ENGINES for validate_mode_section_match.
-    _MODE_SECTIONS: ClassVar[dict[str, str]] = {"server": "server"}
+    _MODE_SECTIONS: ClassVar[dict[str, str]] = {"server": "server", "offline": "offline"}
+
+    #: Mode namespaces that are REQUIRED when their mode is active. Only server: is
+    #: mandatory (traffic.rate has no default); offline: is optional (its warmup block
+    #: defaults when omitted), so a bare offline config stays valid.
+    _MODE_SECTIONS_REQUIRED: ClassVar[frozenset[str]] = frozenset({"server"})
 
     @model_validator(mode="after")
     def validate_engine_section_match(self) -> ExperimentConfig:
@@ -992,10 +1124,11 @@ class ExperimentConfig(BaseModel):
 
         - A mode section present under the wrong serving_mode is an error (the
           researcher pasted the wrong block) - e.g. a server: section with
-          serving_mode=offline.
-        - The active serving_mode must carry its namespace when one exists: a
-          server config with no server: section (hence no traffic.rate) is
-          rejected, naming what is missing. offline has no mandatory namespace yet.
+          serving_mode=offline, or an offline: section with serving_mode=server.
+        - A REQUIRED active-mode namespace must be present: a server config with no
+          server: section (hence no traffic.rate) is rejected, naming what is
+          missing. offline: is optional (its warmup defaults), so it is never
+          required.
         """
         for mode, section_attr in self._MODE_SECTIONS.items():
             if getattr(self, section_attr) is not None and self.serving_mode != mode:
@@ -1005,7 +1138,11 @@ class ExperimentConfig(BaseModel):
                     f"section or set serving_mode: {mode}."
                 )
         active_section = self._MODE_SECTIONS.get(self.serving_mode)
-        if active_section is not None and getattr(self, active_section) is None:
+        if (
+            self.serving_mode in self._MODE_SECTIONS_REQUIRED
+            and active_section is not None
+            and getattr(self, active_section) is None
+        ):
             raise ValueError(
                 f"serving_mode={self.serving_mode!r} requires a {active_section}: section "
                 f"(with a traffic spec including traffic.rate). Add the {active_section}: "

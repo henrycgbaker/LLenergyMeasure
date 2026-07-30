@@ -15,9 +15,10 @@ experiments:
       max_output_tokens: 32
     engine: transformers
     measurement:
-      warmup:
-        enabled: false
       baseline:
+        enabled: false
+    offline:
+      warmup:
         enabled: false
 
 study_execution:

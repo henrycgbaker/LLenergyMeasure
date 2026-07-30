@@ -529,14 +529,17 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
     # window, warmup-discard, auto-detect), again for the nomenclature sweep
     # (top-level harness: retired; transformers section now nests llem_execution,
     # so the canonical JSON gains that key and drops the harness one), again
-    # when the top-level serving_mode field was added, and again for the server:
+    # when the top-level serving_mode field was added, again for the server:
     # mode namespace: serving_mode became required (no default) and the new
     # server: key plus the resolved-view mode_section slot both enter the hashed
-    # projection, so the fingerprint moves while the resolve -> dedup -> hash
-    # pipeline is unchanged (6 declared -> 4 unique below still holds). A value
+    # projection, and again (342e907d -> 7e97b3ab) when warmup migrated from
+    # measurement.warmup to the offline: mode namespace (a D22 clean break): this
+    # default-offline study sets no warmup knobs, so measurement/mode_section both
+    # drop the warmup content and the fingerprint moves. The resolve -> dedup ->
+    # hash pipeline is unchanged (6 declared -> 4 unique below still holds). A value
     # change with those structural assertions intact is a benign schema-surface
     # shift; a change to the dedup counts is not.
-    assert sc.study_design_hash == "342e907db2bcc375"
+    assert sc.study_design_hash == "7e97b3ab3e85ae6d"
     # 6 declared configs collapse to 4 unique under resolved-config dedup.
     assert len(sc.experiments) == 4
     assert len(sc.declared_resolved_config_hashes) == 6

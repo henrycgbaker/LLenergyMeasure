@@ -20,9 +20,10 @@ task:
 engine: vllm
 serving_mode: offline
 measurement:
-  # Warmup + baseline disabled: CI proves boot + inference, not measurement
-  # quality. Skipping them removes the 30s thermal floor and 5s+ baseline.
-  warmup:
-    enabled: false
+  # Baseline disabled: CI proves boot + inference, not measurement quality.
   baseline:
+    enabled: false
+offline:
+  # Warmup disabled removes the 30s thermal floor from the smoke run.
+  warmup:
     enabled: false

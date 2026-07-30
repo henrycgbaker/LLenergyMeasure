@@ -125,11 +125,11 @@ class ConfigHashView:
       conditioning identity axis, so an offline and a server run of the same
       task never collapse under dedup.
     - ``mode_section`` - the ACTIVE mode namespace's identity projection (server:
-      -> all of traffic except slo; offline -> ``{}``). The allowlist half of the
-      dual-family slo exclusion: slo is simply never projected here, so a sweep
-      over rate/arrival/window produces distinct hashes while two runs differing
-      only in slo bounds collapse. The server warmup block joins this projection
-      in a later slice.
+      -> traffic-except-slo + warmup + cooldown_seconds; offline -> the warmup
+      block when an offline: section is present, else ``{}``). The allowlist half
+      of the dual-family slo exclusion: slo is simply never projected here, so a
+      sweep over rate/arrival/window/warmup produces distinct hashes while two runs
+      differing only in slo bounds collapse.
     - ``observed_engine_params`` - engine state (library-resolution mechanism output for
       resolved-config-hash, live library observation for observed-config-hash)
     - ``observed_sampling_params`` - sampling state (same sources as above)
@@ -138,9 +138,10 @@ class ConfigHashView:
       (batch_size, torch_compile, allow_tf32, autocast). These drive execution
       but have no engine-native API, so they must join the config identity or an
       llem-execution-knob sweep collapses to one run under dedup.
-    - ``measurement`` - measurement methodology (warmup, baseline, energy sampler,
-      windowing). Sweeping methodology creates distinct runs, so these join the
-      identity too; dedup then collapses only true duplicates.
+    - ``measurement`` - mode-invariant measurement methodology (baseline, energy
+      sampler, windowing). Sweeping methodology creates distinct runs, so these
+      join the identity too; dedup then collapses only true duplicates. Warmup is
+      NOT here - it is a per-mode protocol projected via ``mode_section``.
 
     Excluded: ``ExecutionConfig`` (runner/parallelism), ``experiment_id``,
     ``server.traffic.slo`` (post-hoc overlay, non-projected).

@@ -24,7 +24,8 @@ tensorrt:
   engine_params:
     backend: pytorch
 measurement:
-  warmup:
-    enabled: false
   baseline:
+    enabled: false
+offline:
+  warmup:
     enabled: false

@@ -180,9 +180,10 @@ study_execution:
   experiment_order: sequential
   experiment_gap_seconds: 0
 measurement:
-  warmup:
-    enabled: false
   baseline:
+    enabled: false
+offline:
+  warmup:
     enabled: false
 """
         yaml_path = tmp_path / "study.yaml"
