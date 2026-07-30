@@ -309,6 +309,10 @@ implementation details, or have single correct values:
 | Integration method | Trapezoidal rule | Standard for non-uniform timesteps; Simpson's offers no practical gain given +/-5% sensor noise. |
 | Power reading mode | Instantaneous | Uses least-smoothed NVML reading for best temporal resolution. |
 
+The provenance of these sampler choices, along with the baseline-measurement
+location and default token lengths, is catalogued in
+[Empirical grounding](/explanation/methodology/empirical-grounding).
+
 ---
 
 ## Design Rationale

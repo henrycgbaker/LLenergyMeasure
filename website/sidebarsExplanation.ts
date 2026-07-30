@@ -14,6 +14,17 @@ const sidebarsExplanation: SidebarsConfig = {
         'methodology/measurement-warnings',
         'methodology/comparison-context',
         'methodology/dataset-context',
+        {
+          type: 'category',
+          label: 'Empirical grounding',
+          collapsed: true,
+          link: {type: 'doc', id: 'methodology/empirical-grounding/index'},
+          items: [
+            'methodology/empirical-grounding/min-window-duration',
+            'methodology/empirical-grounding/loaded-thermal-equilibrium',
+            'methodology/empirical-grounding/open-loop-arrivals',
+          ],
+        },
         'methodology/glossary',
       ],
     },

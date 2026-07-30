@@ -106,6 +106,10 @@ engines confirms the engine is ready, rather than iterating multiple inference p
   (which use 5-10 warmup rounds)
 - `thermal_floor_seconds: 60.0` meets the MLPerf Power minimum (60s mandatory)
 
+These defaults, and the studies behind the server-mode window and warmup numbers,
+are catalogued with their sources in
+[Empirical grounding](/explanation/methodology/empirical-grounding).
+
 **For quick testing:** disable warmup to skip the warmup phase and thermal floor wait:
 
 ```yaml
