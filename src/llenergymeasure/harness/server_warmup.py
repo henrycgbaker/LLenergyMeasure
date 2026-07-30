@@ -118,10 +118,14 @@ def _power_plateau(samples: list[PowerThermalSample]) -> bool:
     cleaned = _clean_samples(samples)
     if len(cleaned) < _AUTO_MIN_WINDOW_SAMPLES * 2:
         return False
-    powers = [s.power_w for s in cleaned if s.power_w is not None]
-    times = [s.timestamp for s in cleaned if s.power_w is not None]
-    if len(powers) != len(times):
-        return False
+    # One pass so the power/time series are co-indexed by construction (the shape
+    # _detect_steady_state expects), rather than two predicate-matched comprehensions.
+    powers: list[float] = []
+    times: list[float] = []
+    for s in cleaned:
+        if s.power_w is not None:
+            powers.append(s.power_w)
+            times.append(s.timestamp)
     return _detect_steady_state(powers, times) is not None
 
 
