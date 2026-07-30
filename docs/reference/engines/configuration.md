@@ -51,13 +51,15 @@ task:
 engine: transformers
 
 measurement:
-  warmup:
-    enabled: true
-    n_prompts: 5
   baseline:
     enabled: true
     duration_seconds: 30.0
   energy_sampler: auto
+
+offline:
+  warmup:
+    enabled: true
+    n_prompts: 5
 
 transformers:
   engine_params:

@@ -227,4 +227,4 @@ Some warning combinations carry specific interpretations:
 - [Methodology: energy measurement](/explanation/methodology/energy-measurement) - NVML sampling and baseline subtraction
 - [Methodology: glossary](/explanation/methodology/glossary) - definitions for thermal stabilisation, baseline, NVML
 - [How to: interpret results](/how-to/interpret-results) - reading result.json fields
-- [Reference: study config](/reference/study-config#warmup-warmup) - warmup configuration options
+- [Reference: study config](/reference/study-config#offline-warmup-offlinewarmup) - warmup configuration options

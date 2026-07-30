@@ -26,10 +26,11 @@ computed for informational purposes but does not affect iteration count. Always 
 `converged: true`. Simple, predictable, and sufficient for most use cases.
 
 ```yaml
-warmup:
-  enabled: true                    # default: true
-  n_prompts: 5                     # default: 5
-  thermal_floor_seconds: 60.0     # default: 60.0
+offline:
+  warmup:
+    enabled: true                    # default: true
+    n_prompts: 5                     # default: 5
+    thermal_floor_seconds: 60.0     # default: 60.0
 ```
 
 #### CV convergence mode (opt-in)
@@ -39,13 +40,14 @@ recent latencies drops below `cv_threshold`. This mode replaces fixed iteration
 count - `n_prompts` is ignored when convergence detection is active.
 
 ```yaml
-warmup:
-  enabled: true
-  convergence_detection: true      # enable CV-based warmup
-  cv_threshold: 0.05              # stop when CV < 5% (default: 0.05)
-  window_size: 3                  # sliding window for CV calc (default: 3)
-  min_prompts: 5                  # minimum prompts before checking CV (default: 5)
-  max_prompts: 20                 # safety cap (default: 20)
+offline:
+  warmup:
+    enabled: true
+    convergence_detection: true      # enable CV-based warmup
+    cv_threshold: 0.05              # stop when CV < 5% (default: 0.05)
+    window_size: 3                  # sliding window for CV calc (default: 3)
+    min_prompts: 5                  # minimum prompts before checking CV (default: 5)
+    max_prompts: 20                 # safety cap (default: 20)
 ```
 
 CV convergence mode checks `len(latencies) >= max(min_prompts, window_size)` before
@@ -107,8 +109,9 @@ engines confirms the engine is ready, rather than iterating multiple inference p
 **For quick testing:** disable warmup to skip the warmup phase and thermal floor wait:
 
 ```yaml
-warmup:
-  enabled: false
+offline:
+  warmup:
+    enabled: false
 ```
 
 This significantly reduces total experiment time at the cost of measurement quality.

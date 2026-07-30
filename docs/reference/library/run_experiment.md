@@ -63,12 +63,14 @@ task:
 engine: transformers
 
 measurement:
-  warmup:
-    n_prompts: 5
   baseline:
     enabled: true
     strategy: validated
   energy_sampler: auto
+
+offline:
+  warmup:
+    n_prompts: 5
 ```
 
 Any kwarg you pass alongside a YAML path overrides the corresponding field:

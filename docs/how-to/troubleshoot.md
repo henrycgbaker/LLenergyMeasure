@@ -186,8 +186,9 @@ measuring.
 **Fix for quick testing:**
 
 ```yaml
-warmup:
-  enabled: false
+offline:
+  warmup:
+    enabled: false
 ```
 
 Or on the CLI:
