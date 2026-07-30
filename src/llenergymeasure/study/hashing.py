@@ -48,11 +48,12 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     must produce distinct resolved hashes rather than collapsing under dedup.
 
     The active mode namespace's identity projection (``config.mode_section_identity()``
-    - server traffic minus slo, ``{}`` for offline) joins the view too, so a
-    traffic-rate sweep produces distinct hashes while two runs differing only in
-    slo bounds collapse. traffic is llem-owned (no library-resolution pass, no
-    engine observation), so the resolved and observed views project the SAME
-    declared values at v0.7.
+    - server: traffic-minus-slo + warmup + cooldown; offline: the warmup block when
+    an offline: section is present, else ``{}``) joins the view too, so a
+    traffic-rate or warmup-protocol sweep produces distinct hashes while two runs
+    differing only in slo bounds collapse. These are llem-owned (no library-
+    resolution pass, no engine observation), so the resolved and observed views
+    project the SAME declared values at v0.7.
     """
     engine_name = engine_str(config.engine)
     section: Any = getattr(config, engine_name, None)

@@ -60,9 +60,11 @@ def _heading_anchor(title: str) -> str:
 
 _SECTION_ORDER = [
     ("top-level", "Top-Level Fields"),
-    ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
+    ("offline", "Offline Mode (`offline:`)"),
+    ("offline_warmup", "Offline Warmup (`offline.warmup:`)"),
     ("server", "Server Mode (`server:`)"),
+    ("server_warmup", "Server Warmup (`server.warmup:`)"),
     ("server_traffic", "Server Traffic (`server.traffic:`)"),
     ("server_traffic_slo", "Server Traffic SLO (`server.traffic.slo:`)"),
     ("transformers", "Transformers Engine (`transformers:`)"),
@@ -87,12 +89,16 @@ _SECTION_ORDER = [
 # models are code-generated, so Pydantic emits module-qualified $def names
 # (``llenergymeasure__config__generated__<engine>__<Model>``).
 _DEF_TO_SECTION: dict[str, str] = {
-    "WarmupConfig": "warmup",
     "BaselineConfig": "baseline",
-    # Server mode namespace (serving_mode=server): the mode-conditioned section,
-    # rendered like the engine sections. ServerSection / TrafficConfig / SloConfig
-    # are hand-written (unique names), so pydantic emits them as simple $def keys.
+    # Mode-conditioned namespaces (serving_mode=offline / server), rendered like the
+    # engine sections. OfflineSection / ServerSection / ServerWarmupConfig /
+    # TrafficConfig / SloConfig / WarmupConfig are hand-written (unique names), so
+    # pydantic emits them as simple $def keys. Warmup migrated out of measurement:
+    # into the mode namespaces (offline.warmup / server.warmup).
+    "OfflineSection": "offline",
+    "WarmupConfig": "offline_warmup",
     "ServerSection": "server",
+    "ServerWarmupConfig": "server_warmup",
     "TrafficConfig": "server_traffic",
     "SloConfig": "server_traffic_slo",
     # TransformersSection / TransformersLlemExecution are hand-written (unique names),

@@ -30,7 +30,8 @@ tensorrt:
     max_input_len: 1024
     max_seq_len: 2048
 measurement:
-  warmup:
-    enabled: false
   baseline:
+    enabled: false
+offline:
+  warmup:
     enabled: false

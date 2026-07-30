@@ -17,6 +17,8 @@ from llenergymeasure.config.models import (
     DatasetConfig,
     ExperimentConfig,
     MeasurementConfig,
+    OfflineSection,
+    ServerWarmupConfig,
     TaskConfig,
     WarmupConfig,
 )
@@ -39,7 +41,9 @@ __all__ = [
     "DiscoveryLimitation",
     "ExperimentConfig",
     "MeasurementConfig",
+    "OfflineSection",
     "SchemaLoader",
+    "ServerWarmupConfig",
     "TaskConfig",
     "UnsupportedSchemaVersionError",
     "UserConfig",

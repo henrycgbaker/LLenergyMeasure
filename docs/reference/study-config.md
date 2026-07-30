@@ -7,9 +7,11 @@ All fields except `model` are optional and have sensible defaults.
 
 **Sections:**
 - [Top-Level Fields](#top-level-fields)
-- [Warmup (`warmup:`)](#warmup-warmup)
 - [Baseline (`baseline:`)](#baseline-baseline)
+- [Offline Mode (`offline:`)](#offline-mode-offline)
+- [Offline Warmup (`offline.warmup:`)](#offline-warmup-offlinewarmup)
 - [Server Mode (`server:`)](#server-mode-server)
+- [Server Warmup (`server.warmup:`)](#server-warmup-serverwarmup)
 - [Server Traffic (`server.traffic:`)](#server-traffic-servertraffic)
 - [Server Traffic SLO (`server.traffic.slo:`)](#server-traffic-slo-servertrafficslo)
 - [Transformers Engine (`transformers:`)](#transformers-engine-transformers)
@@ -30,26 +32,14 @@ All fields except `model` are optional and have sensible defaults.
 | `task` | TaskConfig | *(see section)* | Task configuration: model, dataset, workload shape |
 | `engine` | Engine | *(see section)* | Inference engine |
 | `serving_mode` | 'offline' | 'server' | *(required)* | Serving mode discriminator (required, no default). 'offline' measures batch inference over a fixed prompt set; it is the only mode with an execution path today. 'server' selects online serving measurement (requires a server: section with a traffic spec). A conditioning identity axis - it enters the declared, resolved, and observed config hashes, so an offline config and a server config never deduplicate together. The matching mode namespace (server:) is legal only under its own mode; a mismatch fails loudly. |
-| `measurement` | MeasurementConfig | *(see section)* | Measurement methodology: warmup, baseline, energy sampling |
+| `measurement` | MeasurementConfig | *(see section)* | Measurement methodology: baseline, energy sampling (mode-invariant) |
 | `sampling_preset` | 'deterministic' | 'standard' | 'creative' | 'factual' | None | `null` | Sampling preset. When set, preset values are merged into the active engine's sampling section at parse time; explicit YAML values take precedence over preset values. |
 | `transformers` | TransformersSection | None | `null` | HuggingFace Transformers engine configuration (only used when engine=transformers) |
 | `vllm` | Config | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
 | `tensorrt` | Config | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
 | `server` | ServerSection | None | `null` | Server-mode namespace: online-serving traffic spec (only used when serving_mode=server) |
+| `offline` | OfflineSection | None | `null` | Offline-mode namespace: warmup protocol (only used when serving_mode=offline) |
 | `passthrough_kwargs` | dict | None | `null` | Extra kwargs passed through to engine at execution time. Keys must not collide with ExperimentConfig top-level fields. |
-
-### Warmup (`warmup:`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `enabled` | boolean | `true` | Enable warmup phase |
-| `n_prompts` | integer | `5` | Number of full-length warmup prompts in fixed mode |
-| `thermal_floor_seconds` | number | `60.0` | Minimum seconds to wait after warmup before measuring (thermal stabilisation). Minimum 30s enforced. |
-| `convergence_detection` | boolean | `false` | Enable CV-based adaptive convergence (governed by min_prompts, max_prompts, cv_threshold, window_size) |
-| `cv_threshold` | number | `0.05` | CV target for convergence (only used when convergence_detection=True) |
-| `max_prompts` | integer | `20` | Maximum warmup prompts when CV mode is on (safety cap) |
-| `window_size` | integer | `3` | Sliding window size for CV calculation (3 balances responsiveness and stability) |
-| `min_prompts` | integer | `5` | Minimum prompts before checking convergence (warm start) |
 
 ### Baseline (`baseline:`)
 
@@ -62,12 +52,40 @@ All fields except `model` are optional and have sensible defaults.
 | `validation_interval` | integer | `5` | Re-validate baseline every N experiments. Only used with strategy='validated'. |
 | `drift_threshold` | number | `0.1` | Power drift threshold (fraction) to trigger re-measurement. Only used with strategy='validated'. |
 
+### Offline Mode (`offline:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `warmup` | WarmupConfig | *(see section)* | Offline warmup phase configuration (prompt-loop convergence + thermal floor). |
+
+### Offline Warmup (`offline.warmup:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable warmup phase |
+| `n_prompts` | integer | `5` | Number of full-length warmup prompts in fixed mode |
+| `thermal_floor_seconds` | number | `60.0` | Minimum seconds to wait after warmup before measuring (thermal stabilisation). Minimum 30s enforced. |
+| `convergence_detection` | boolean | `false` | Enable CV-based adaptive convergence (governed by min_prompts, max_prompts, cv_threshold, window_size) |
+| `cv_threshold` | number | `0.05` | CV target for convergence (only used when convergence_detection=True) |
+| `max_prompts` | integer | `20` | Maximum warmup prompts when CV mode is on (safety cap) |
+| `window_size` | integer | `3` | Sliding window size for CV calculation (3 balances responsiveness and stability) |
+| `min_prompts` | integer | `5` | Minimum prompts before checking convergence (warm start) |
+
 ### Server Mode (`server:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `traffic` | TrafficConfig | *(see section)* | Online-serving traffic specification (rate, arrival, window, concurrency, slo). |
+| `warmup` | ServerWarmupConfig | *(see section)* | Server warmup protocol (convergence-composite gate by default, fixed-duration opt-out). A declared measurement-protocol knob, so it joins the config identity in both hash families (projected into the mode_section). |
 | `cooldown_seconds` | number | `0.0` | Inter-level cooldown in seconds: idle pause the window manager applies AFTER a rate level closes and BEFORE the next level in a rate sweep. Default 0 (no pause). A declared measurement-protocol knob, so it joins the config identity in both hash families (it is projected into the resolved/observed mode_section). |
+
+### Server Warmup (`server.warmup:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | 'composite' | 'fixed' | `composite` | Warmup protocol: 'composite' (default) waits for the three-observable thermal-equilibrium gate (power plateau + temperature settled + no thermal throttle) with a timeout_seconds failsafe; 'fixed' warms for a fixed duration_seconds with no gate (the explicit opt-out). |
+| `timeout_seconds` | number | `900.0` | Composite-mode failsafe: hard upper bound on convergence gating. At the timeout the harness proceeds and stamps convergence: timed_out in the result (never hangs, never silently passes). Ignored in fixed mode. |
+| `duration_seconds` | number | `300.0` | Fixed-mode warmup duration in seconds (the E3 floor rule default). 60s is a citable convenience floor, not a thermal-equilibrium claim; 0 skips warmup traffic entirely. Ignored in composite mode. |
 
 ### Server Traffic (`server.traffic:`)
 

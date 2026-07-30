@@ -186,18 +186,19 @@ def test_llem_execution_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
 
 
 def test_measurement_warmup_sweep_not_deduped(tmp_path: Path) -> None:
-    """A measurement.* sweep must expand to distinct experiments.
+    """An offline.warmup.* sweep must expand to distinct experiments.
 
-    Ruled 2026-07-11 (option A): measurement fields join the identity hash -
-    sweeping methodology creates distinct runs; dedup collapses only true
-    duplicates. build_resolved_view previously excluded MeasurementConfig, so a
-    warmup sweep collapsed to a single run.
+    Ruled 2026-07-11 (option A): measurement/mode-protocol fields join the identity
+    hash - sweeping methodology creates distinct runs; dedup collapses only true
+    duplicates. Warmup migrated to the offline: mode namespace, so it now enters the
+    identity via the mode_section projection rather than the measurement block; a
+    warmup sweep must still not collapse to a single run.
     """
     study = {
         "study_name": "warmup_sweep",
         "engine": "transformers",
         "task": {"model": "gpt2", "dataset": {"source": "arc", "n_prompts": 10}},
-        "sweep": {"measurement.warmup.n_prompts": [5, 10, 20]},
+        "sweep": {"offline.warmup.n_prompts": [5, 10, 20]},
     }
     path = _write_study(tmp_path, study)
     study_config = load_study_config_finalised(path)

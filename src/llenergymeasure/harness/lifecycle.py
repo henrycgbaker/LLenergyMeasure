@@ -269,20 +269,18 @@ def run_warmup(
     Returns the WarmupResult with thermal_floor_wait_s populated.
     """
     _p = progress
+    # Offline warmup protocol (migrated from measurement.warmup to the offline: mode
+    # namespace; defaults apply when the optional offline section is omitted).
+    warmup = config.offline_warmup()
 
     # 5. Warmup
     if _p:
-        _p.on_step_start(
-            "warmup", "Warming up", f"up to {config.measurement.warmup.max_prompts} prompts"
-        )
+        _p.on_step_start("warmup", "Warming up", f"up to {warmup.max_prompts} prompts")
         t0_warmup = time.perf_counter()
 
     # Probe call determines warmup strategy:
     # > 0.0 -> CV-based convergence (Transformers), 0.0 -> kernel warmup (vLLM/TRT-LLM)
-    if config.measurement.warmup.enabled:
-        first_latency = engine.run_warmup_prompt(config, model, prompts[0])
-    else:
-        first_latency = 0.0
+    first_latency = engine.run_warmup_prompt(config, model, prompts[0]) if warmup.enabled else 0.0
 
     if first_latency > 0.0:
         warmup_substep = (
@@ -290,7 +288,7 @@ def run_warmup(
         )
         warmup_result = warmup_until_converged(
             lambda: engine.run_warmup_prompt(config, model, prompts[0]),
-            config.measurement.warmup,
+            warmup,
             on_substep=warmup_substep,
         )
         # The probe at line above ran one extra discarded inference that
@@ -303,9 +301,9 @@ def run_warmup(
         warmup_result = WarmupResult(
             converged=True,
             final_cv=0.0,
-            iterations_completed=1 if config.measurement.warmup.enabled else 0,
-            target_cv=config.measurement.warmup.cv_threshold,
-            max_prompts=config.measurement.warmup.max_prompts,
+            iterations_completed=1 if warmup.enabled else 0,
+            target_cv=warmup.cv_threshold,
+            max_prompts=warmup.max_prompts,
         )
 
     if _p:
@@ -314,7 +312,7 @@ def run_warmup(
         converged = "converged" if warmup_result.converged else "not converged"
         iters_label = f"{iters} iteration{'s' if iters != 1 else ''}"
         # Kernel-only warmup (vLLM/TRT-LLM): no CV-based convergence
-        if first_latency == 0.0 and config.measurement.warmup.enabled:
+        if first_latency == 0.0 and warmup.enabled:
             _p.on_step_update("warmup", f"engine kernel warmup ({iters_label})")
         else:
             _p.on_step_update("warmup", f"{iters_label} ({converged}{cv_info})")
@@ -328,9 +326,7 @@ def run_warmup(
     )
 
     # 6. Thermal floor - show step before sleeping
-    floor_secs = (
-        config.measurement.warmup.thermal_floor_seconds if config.measurement.warmup.enabled else 0
-    )
+    floor_secs = warmup.thermal_floor_seconds if warmup.enabled else 0
     if _p:
         if floor_secs > 0:
             _p.on_step_start("thermal_floor", "Waiting", f"thermal floor ({floor_secs:.0f}s)")

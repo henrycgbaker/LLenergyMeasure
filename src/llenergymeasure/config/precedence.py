@@ -1,0 +1,191 @@
+"""Principled config-resolution core (R7): an UNSET-sentinel precedence chain.
+
+The settings a run resolves against arrive in layers - built-in defaults, the
+tool-wide user config, the study YAML, environment overrides, and explicit
+call-site arguments - and each layer must be able to say either "set this value"
+OR "defer to the layer below" WITHOUT that second choice colliding with an
+explicit ``None`` (which means "the value is genuinely null"). This module is the
+small, principled core that expresses exactly that:
+
+- :data:`UNSET` is a distinct sentinel meaning "use the layer below". It is NOT
+  ``None`` (an explicit null is a real, overriding value).
+- :func:`prune_unset` drops the UNSET keys from a layer so they cannot overwrite a
+  lower layer during the merge.
+- :func:`resolve_layers` deep-merges the pruned layers in ascending precedence
+  (lowest first), reusing :func:`llenergymeasure.config._dict_utils.deep_merge`.
+- :class:`PrecedenceChain` names the ruled order - call-site > env > study YAML >
+  user config > pydantic defaults (R7) - so a resolution reads as the chain it is.
+
+Not to be confused with :mod:`llenergymeasure.config.resolution`, which is the
+post-hoc provenance LOG (which value won, and why) - this module is the forward
+resolution that decides which value wins in the first place.
+
+v0.7 SCOPE (R7 boundary): this is the resolution CORE plus the warmup-protocol
+RESOLVER (:func:`resolve_server_warmup`). The resolver is STAGED, not yet wired at a
+production call site: there is no ``UserConfig`` home for a server-warmup default
+today, and the resolved-config view reads warmup off the DECLARED config object
+(``ExperimentConfig.mode_section_identity``), so making a user-config value show up
+in the resolved hash but NOT the declared hash needs a resolved-vs-declared split
+for the warmup subsection that does not exist yet. Adding the user-config home and
+that overlay - and routing every user-config field through the chain - stays with
+the server-session slice and the setup-and-user-config workstream (#886). The core
+and resolver are exercised by tests.
+
+Prior art: the pragmata ``ResolveSettings.resolve`` chain (external); the ruled
+sentinel scheme is option C of the internal setup-and-user-config design.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Final
+
+from llenergymeasure.config._dict_utils import deep_merge
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.models import ServerWarmupConfig
+
+__all__ = [
+    "UNSET",
+    "PrecedenceChain",
+    "is_unset",
+    "prune_unset",
+    "resolve_layers",
+    "resolve_server_warmup",
+]
+
+
+class _Unset:
+    """Singleton sentinel meaning 'use the layer below' (distinct from ``None``).
+
+    A dedicated type (not ``None``, not a bare ``object()``) so ``is_unset`` is an
+    identity check, the repr is legible, and it survives a deep copy as the SAME
+    object - a pruned layer must never smuggle a copied sentinel past an identity
+    prune.
+    """
+
+    _instance: _Unset | None = None
+
+    def __new__(cls) -> _Unset:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __copy__(self) -> _Unset:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _Unset:
+        return self
+
+
+#: The 'use the layer below' sentinel. Distinct from ``None`` (an explicit null).
+UNSET: Final[_Unset] = _Unset()
+
+
+def is_unset(value: Any) -> bool:
+    """True iff ``value`` is the :data:`UNSET` sentinel (identity check)."""
+    return value is UNSET
+
+
+def prune_unset(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``data`` with every :data:`UNSET` value dropped, recursively.
+
+    Nested mappings are pruned too, so a layer can defer individual leaf keys while
+    still setting its siblings. A key whose value is UNSET simply does not appear in
+    the result, so it cannot overwrite a lower layer during :func:`resolve_layers`.
+    An explicit ``None`` is kept - it is a real, overriding null.
+    """
+    pruned: dict[str, Any] = {}
+    for key, value in data.items():
+        if is_unset(value):
+            continue
+        if isinstance(value, Mapping):
+            pruned[key] = prune_unset(value)
+        else:
+            pruned[key] = value
+    return pruned
+
+
+def resolve_layers(*layers: Mapping[str, Any]) -> dict[str, Any]:
+    """Deep-merge ``layers`` in ASCENDING precedence (first = lowest), UNSET-pruned.
+
+    Each layer is pruned of its UNSET keys, then deep-merged onto the accumulator so
+    a higher layer's set keys win while its deferred (UNSET) keys leave the lower
+    value in place. Reuses the canonical ``deep_merge`` - the only new behaviour is
+    the UNSET prune.
+    """
+    result: dict[str, Any] = {}
+    for layer in layers:
+        result = deep_merge(result, prune_unset(layer))
+    return result
+
+
+@dataclass(frozen=True)
+class PrecedenceChain:
+    """The R7 precedence chain, named by layer (call-site highest, defaults lowest).
+
+    Ruled order (high -> low): call-site override > env > study YAML > user config >
+    pydantic defaults. Each layer is a mapping that may carry :data:`UNSET` values
+    ('defer to the layer below'); :meth:`resolve` prunes them and deep-merges low ->
+    high. Secrets are env-only by policy and never travel a study/user layer.
+    """
+
+    defaults: Mapping[str, Any]
+    user_config: Mapping[str, Any] = field(default_factory=dict)
+    study_yaml: Mapping[str, Any] = field(default_factory=dict)
+    env: Mapping[str, Any] = field(default_factory=dict)
+    call_site: Mapping[str, Any] = field(default_factory=dict)
+
+    def resolve(self) -> dict[str, Any]:
+        """Resolve the chain to a single dict (ascending-precedence merge)."""
+        return resolve_layers(
+            self.defaults,
+            self.user_config,
+            self.study_yaml,
+            self.env,
+            self.call_site,
+        )
+
+
+def resolve_server_warmup(
+    *,
+    study_yaml: Mapping[str, Any] | _Unset = UNSET,
+    user_config: Mapping[str, Any] | _Unset = UNSET,
+    env: Mapping[str, Any] | _Unset = UNSET,
+    call_site: Mapping[str, Any] | _Unset = UNSET,
+) -> ServerWarmupConfig:
+    """Resolve the effective server warmup protocol through the R7 precedence chain.
+
+    The v0.7 RESOLVER for the warmup-protocol overlay (R5/R7); STAGED, not yet wired
+    at a production call site (see the module docstring). The built-in
+    ``ServerWarmupConfig`` defaults are the lowest layer; the study YAML's
+    ``server.warmup`` block, an optional tool-wide user default, an env overlay, and
+    an explicit call-site override stack above it in the ruled order. Any layer may
+    be :data:`UNSET` ('not supplied - defer'). The resolved dict is validated back
+    into a :class:`~llenergymeasure.config.models.ServerWarmupConfig`, so the
+    identity discipline holds when this is eventually wired: the DECLARED hash still
+    names user intent (the study config), while this resolved protocol is what the
+    run actually realises.
+    """
+    from llenergymeasure.config.models import ServerWarmupConfig
+
+    chain = PrecedenceChain(
+        defaults=ServerWarmupConfig().model_dump(mode="python"),
+        user_config=_as_layer(user_config),
+        study_yaml=_as_layer(study_yaml),
+        env=_as_layer(env),
+        call_site=_as_layer(call_site),
+    )
+    return ServerWarmupConfig.model_validate(chain.resolve())
+
+
+def _as_layer(value: Mapping[str, Any] | _Unset) -> dict[str, Any]:
+    """A supplied mapping becomes a layer dict; :data:`UNSET` becomes an empty layer."""
+    return dict(value) if isinstance(value, Mapping) else {}

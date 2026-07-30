@@ -16,9 +16,10 @@ experiments:
       max_output_tokens: 128
     engine: vllm
     measurement:
-      warmup:
-        enabled: false
       baseline:
+        enabled: false
+    offline:
+      warmup:
         enabled: false
     vllm:
       engine:

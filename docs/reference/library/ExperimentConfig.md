@@ -103,11 +103,10 @@ Nested under `measurement:` in YAML, or `MeasurementConfig(...)` in Python:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `warmup` | `WarmupConfig` | `WarmupConfig()` | Warmup phase settings (see below). |
 | `baseline` | `BaselineConfig` | `BaselineConfig()` | Idle power baseline settings (see below). |
 | `energy_sampler` | `"auto" \| "nvml" \| "zeus" \| "codecarbon" \| None` | `"auto"` | Energy measurement sampler. `"auto"` selects the best available (Zeus > NVML > CodeCarbon). `None` disables energy measurement. |
 
-### `WarmupConfig` fields (nested under `measurement.warmup`)
+### `WarmupConfig` fields (nested under `offline.warmup`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|

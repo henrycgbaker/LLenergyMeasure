@@ -32,17 +32,15 @@ def thermal_floor_wait(config: ExperimentConfig) -> float:
     Returns:
         Actual elapsed wait time in seconds (>= 0.0).
     """
-    if (
-        not config.measurement.warmup.enabled
-        or config.measurement.warmup.thermal_floor_seconds <= 0
-    ):
+    warmup = config.offline_warmup()
+    if not warmup.enabled or warmup.thermal_floor_seconds <= 0:
         return 0.0
     logger.debug(
         "Thermal stabilisation: waiting %.0fs...",
-        config.measurement.warmup.thermal_floor_seconds,
+        warmup.thermal_floor_seconds,
     )
     t0 = time.monotonic()
-    time.sleep(config.measurement.warmup.thermal_floor_seconds)
+    time.sleep(warmup.thermal_floor_seconds)
     return time.monotonic() - t0
 
 

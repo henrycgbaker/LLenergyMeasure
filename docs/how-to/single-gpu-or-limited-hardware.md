@@ -125,9 +125,10 @@ differs in practice:
   convergence failures, try 90-120 seconds.
 
 ```yaml
-warmup:
-  thermal_floor_seconds: 90.0
-  max_prompts: 20
+offline:
+  warmup:
+    thermal_floor_seconds: 90.0
+    max_prompts: 20
 ```
 
 For the "Warmup did not converge" warning and what it means for your results,

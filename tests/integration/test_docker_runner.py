@@ -75,14 +75,13 @@ class TestDockerRunnerIntegration:
         )
 
         task_fields = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
-        measurement_fields = {"warmup", "baseline", "energy_sampler"}
+        measurement_fields = {"baseline", "energy_sampler"}
 
         task_defaults = {"model": "gpt2", "dataset": DatasetConfig(n_prompts=3)}
         ec_defaults = {"engine": "transformers", "serving_mode": "offline"}
-        measurement_defaults = {
-            "warmup": WarmupConfig(enabled=False),
-            "baseline": BaselineConfig(enabled=False),
-        }
+        measurement_defaults = {"baseline": BaselineConfig(enabled=False)}
+        # Warmup migrated to the offline: mode namespace (offline.warmup).
+        warmup = WarmupConfig(enabled=False)
 
         task_kw = {**task_defaults}
         ec_kw = {**ec_defaults}
@@ -91,12 +90,16 @@ class TestDockerRunnerIntegration:
         for key, value in overrides.items():
             if key in task_fields:
                 task_kw[key] = value
+            elif key == "warmup":
+                warmup = value
             elif key in measurement_fields:
                 measurement_kw[key] = value
             else:
                 ec_kw[key] = value
 
-        return ExperimentConfig(task=task_kw, measurement=measurement_kw, **ec_kw)
+        return ExperimentConfig(
+            task=task_kw, measurement=measurement_kw, offline={"warmup": warmup}, **ec_kw
+        )
 
     def test_round_trip_single_experiment(self, tmp_path):
         """DockerRunner.run() dispatches to container and returns ExperimentResult."""
@@ -174,10 +177,8 @@ class TestDockerRunnerIntegration:
             serving_mode="offline",
             task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=3)},
             engine="transformers",
-            measurement={
-                "warmup": WarmupConfig(enabled=False),
-                "baseline": BaselineConfig(enabled=False),
-            },
+            measurement={"baseline": BaselineConfig(enabled=False)},
+            offline={"warmup": WarmupConfig(enabled=False)},
         )
         study = StudyConfig(
             experiments=[config],

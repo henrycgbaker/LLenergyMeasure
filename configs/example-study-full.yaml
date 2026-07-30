@@ -51,12 +51,15 @@ task:
   max_input_tokens: 256
   max_output_tokens: 256
 
-# --- Measurement: how to measure ---
+# --- Measurement: how to measure (mode-invariant) ---
 measurement:
   energy_sampler: auto             # auto | nvml | zeus | codecarbon | null (disables)
   baseline:
     enabled: true
     duration_seconds: 30.0
+
+# --- Offline mode namespace: warmup protocol (offline: prompt-loop convergence) ---
+offline:
   warmup:
     enabled: true
     n_prompts: 3

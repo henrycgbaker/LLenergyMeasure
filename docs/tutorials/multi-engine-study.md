@@ -132,6 +132,8 @@ measurement:
   baseline:
     enabled: true
     duration_seconds: 30.0
+
+offline:
   warmup:
     enabled: true
     n_prompts: 3

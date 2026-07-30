@@ -45,9 +45,13 @@ def make_config(**overrides) -> ExperimentConfig:
     engine_params.
     """
     _TASK_FIELDS = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
-    _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler", "latency_profiling"}
+    _MEASUREMENT_FIELDS = {"baseline", "energy_sampler", "latency_profiling"}
 
     dtype = overrides.pop("dtype", None)
+    # Warmup migrated from measurement.warmup to the offline: mode namespace. The
+    # helper defaults to offline, so a bare warmup= kwarg routes into offline.warmup;
+    # server-mode tests set server.warmup via an explicit server= section.
+    warmup = overrides.pop("warmup", None)
 
     task_defaults: dict = {"model": TEST_MODEL}
     # serving_mode is required (no model default); default the helper to offline so
@@ -71,6 +75,8 @@ def make_config(**overrides) -> ExperimentConfig:
     ec = {**ec_defaults, **ec_overrides, "task": task}
     if measurement_overrides:
         ec["measurement"] = measurement_overrides
+    if warmup is not None:
+        ec["offline"] = {"warmup": warmup}
 
     if dtype is not None:
         engine_name = ec.get("engine", TEST_ENGINE)
