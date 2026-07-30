@@ -286,3 +286,52 @@ def test_warmup_until_converged_result_thermal_default() -> None:
     config = WarmupConfig(n_prompts=2, thermal_floor_seconds=30.0)
     result = warmup_until_converged(lambda: 10.0, config)
     assert result.thermal_floor_wait_s == 0.0
+
+
+# =============================================================================
+# Stable-through-end convergence upgrade (SM8 point 6, R6)
+# =============================================================================
+
+
+def test_stable_through_end_requires_sustained_plateau() -> None:
+    from llenergymeasure.harness.warmup import _stable_through_end
+
+    # Every 3-window slice stable -> a sustained plateau.
+    assert _stable_through_end([10.0, 10.0, 10.0, 10.0, 10.0], 3, 0.05) is True
+    # A quiet LAST window is not enough - an early spike breaks stable-through-end
+    # (the single-trailing-window check this replaced would have passed).
+    assert _stable_through_end([10.0, 20.0, 10.0, 10.0, 10.0], 3, 0.05) is False
+
+
+def test_convergence_needs_sustained_stability() -> None:
+    config = WarmupConfig(
+        convergence_detection=True, cv_threshold=0.05, min_prompts=5, window_size=3, max_prompts=20
+    )
+    latencies = iter([100.0] * 20)
+    result = warmup_until_converged(lambda: next(latencies), config)
+    assert result.converged is True
+    # Converged early (did not exhaust the cap) once the plateau was sustained.
+    assert result.iterations_completed < 20
+
+
+def test_oscillating_latency_does_not_converge() -> None:
+    config = WarmupConfig(
+        convergence_detection=True, cv_threshold=0.05, min_prompts=5, window_size=3, max_prompts=12
+    )
+    latencies = iter([100.0, 200.0] * 6)
+    result = warmup_until_converged(lambda: next(latencies), config)
+    assert result.converged is False
+
+
+def test_describe_offline_warmup_protocol() -> None:
+    from llenergymeasure.harness.warmup import describe_offline_warmup_protocol
+
+    fixed = describe_offline_warmup_protocol(WarmupConfig(convergence_detection=False, n_prompts=3))
+    assert "fixed" in fixed and "3" in fixed and "thermal floor" in fixed
+
+    conv = describe_offline_warmup_protocol(WarmupConfig(convergence_detection=True))
+    assert "convergence" in conv and "stable-through-end" in conv
+
+    assert (
+        describe_offline_warmup_protocol(WarmupConfig(enabled=False)) == "offline warmup disabled"
+    )
