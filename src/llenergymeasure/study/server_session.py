@@ -57,7 +57,7 @@ import contextlib
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.harness.server_warmup import (
@@ -158,6 +158,11 @@ class ServerLevelResult:
     when the level failed before it could run (aborted / warmup-failed).
     ``invalid_reason`` names the failure site when the level did not complete
     cleanly (never dropped - recorded invalid-with-reason, contract 3).
+    ``completed_cores`` holds the RAW measured cores of a failed level's
+    cleanly-closed windows (O7.4): full per-window bookkeeping was lost with the
+    abort, so no synthetic ``ServerWindowResult`` is built, but the measured GPU
+    energy is preserved and counted in the session total. SM10 decides their
+    bundle fate (drain-fields-null semantics).
     """
 
     level_index: int
@@ -167,6 +172,7 @@ class ServerLevelResult:
     warmup: ServerWarmupResult | None
     invalid_reason: str | None
     aborted_window_index: int | None = None
+    completed_cores: list[MeasuredWindowCore | None] = field(default_factory=list)
 
     @property
     def valid(self) -> bool:
@@ -399,9 +405,23 @@ async def _drive_levels(
                 aborted = getattr(exc, ABORTED_LEVEL_ATTR, None)
                 if aborted is not None:
                     failures_out.append(_LevelFailure.from_aborted(aborted))
+                else:
+                    # No AbortedLevel: the interrupt landed before any window opened
+                    # (e.g. mid-warmup or mid-ramp). Record a traceable partial so
+                    # the level is not indistinguishable from nothing-attempted.
+                    failures_out.append(
+                        _LevelFailure(
+                            level_index=level_index,
+                            reason="interrupted (warmup)",
+                            aborted_window_index=None,
+                            completed_cores=[],
+                        )
+                    )
                 raise
-            except BaseException as exc:
-                # Any other level failure is recorded and the session continues.
+            except Exception as exc:
+                # Any other level failure is recorded and the session continues
+                # (SystemExit / GeneratorExit are BaseException-not-Exception and
+                # propagate; CancelledError / KeyboardInterrupt are handled above).
                 # An AbortedLevel (window / close / drain failure) carries the
                 # cleanly-closed cores to preserve; a pure ramp-phase failure has
                 # nothing to preserve but still failed the level - record it too.
@@ -636,9 +656,12 @@ class ServerSession:
             )
         for failure in failures:
             warmup = warmup_by_level.get(failure.level_index)
-            # A failed level keeps its cleanly-closed cores (O7.4) but not full
-            # per-window bookkeeping (the traffic report is gone once the issuer
-            # task was cancelled); SM10 owns partial-window persistence.
+            # A failed level keeps its cleanly-closed cores RAW (O7.4): full
+            # per-window bookkeeping was lost with the abort (the traffic report is
+            # gone once the issuer task was cancelled), so no ServerWindowResult is
+            # built, but the measured cores are preserved on the level result and
+            # their energy still counts toward the session total. SM10 owns their
+            # bundle fate (drain-fields-null).
             by_level[failure.level_index] = ServerLevelResult(
                 level_index=failure.level_index,
                 spec=None,
@@ -647,6 +670,7 @@ class ServerSession:
                 warmup=warmup,
                 invalid_reason=failure.reason,
                 aborted_window_index=failure.aborted_window_index,
+                completed_cores=list(failure.completed_cores),
             )
         return [by_level[i] for i in sorted(by_level)]
 
@@ -887,12 +911,42 @@ def _is_server_capable(engine: Any) -> bool:
     )
 
 
+def _core_energy_j(core: MeasuredWindowCore | None) -> float | None:
+    """Raw window energy (J) from a measured core's power series (windowing reuse).
+
+    Mirrors the window manager's full-span energy statistic (clean the samples,
+    trapezoidally integrate the summed-across-GPU power series), so a failed
+    level's preserved-but-unbookkept cores still contribute their measured GPU
+    energy to the session total. Reuses windowing.py's cleaner and the nvml
+    integrator - the same REUSE BINDING the window manager follows - so no
+    integration math is duplicated.
+    """
+    from llenergymeasure.energy.nvml import integrate_power_samples
+    from llenergymeasure.harness.windowing import _clean_samples
+
+    samples = list(getattr(core, "timeseries_samples", []) or []) if core is not None else []
+    if len(samples) < 2:
+        return None
+    cleaned = _clean_samples(samples)
+    if len(cleaned) < 2:
+        return None
+    return sum(integrate_power_samples(cleaned).values())
+
+
 def _sum_window_energy(levels: list[ServerLevelResult]) -> float | None:
     total = 0.0
     seen = False
     for level in levels:
         for window in level.windows:
             energy = window.window.window_energy_j
+            if energy is not None:
+                total += energy
+                seen = True
+        # A failed level's preserved raw cores (no ServerWindowResult) still carry
+        # measured GPU energy: fold it in so the session total does not silently
+        # drop it (contract 3 / O7.4).
+        for core in level.completed_cores:
+            energy = _core_energy_j(core)
             if energy is not None:
                 total += energy
                 seen = True

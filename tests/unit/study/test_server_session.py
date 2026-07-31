@@ -30,6 +30,7 @@ import pytest
 
 from llenergymeasure.config.models import ExperimentConfig, ServerWarmupConfig
 from llenergymeasure.config.user_config import UserConfig, UserServerConfig
+from llenergymeasure.device.power_thermal import PowerThermalSample
 from llenergymeasure.harness.server_warmup import ServerWarmupResult, WarmupTrafficError
 from llenergymeasure.harness.traffic import IssuerReport, RequestRecord, RequestShape
 from llenergymeasure.harness.window_manager import (
@@ -51,6 +52,7 @@ from llenergymeasure.study.server_session import (
     ServerSessionError,
     ServerSessionResult,
     _CompletionsShapeSource,
+    _core_energy_j,
     _drive_levels,
     _level_traffic_source,
     server_reported_token_receipts,
@@ -222,6 +224,31 @@ def _level_outcome(
         validation=validation,
         issuer_report=_report([]),
     )
+
+
+def _flat_core(power_w: float = 100.0, duration: float = 10.0, n: int = 21) -> Any:
+    """A measured-core stand-in with a flat power series (energy = power * duration)."""
+    samples = [
+        PowerThermalSample(timestamp=1000.0 + duration * i / (n - 1), power_w=power_w, gpu_index=0)
+        for i in range(n)
+    ]
+    return SimpleNamespace(timeseries_samples=samples)
+
+
+def _abort_exc(level_index: int, *, window: int, cores: list[Any]) -> RuntimeError:
+    """A run_level-style exception carrying its AbortedLevel partial state."""
+    exc = RuntimeError("mid-window transport failure")
+    setattr(
+        exc,
+        ABORTED_LEVEL_ATTR,
+        AbortedLevel(
+            level_index=level_index,
+            aborted_window_index=window,
+            reason=f"aborted: window {window}",
+            completed_cores=cores,
+        ),
+    )
+    return exc
 
 
 def _warmup_result(level_index: int = 0) -> ServerWarmupResult:
@@ -470,6 +497,32 @@ class TestDriver:
         assert failures[0].reason == "aborted: cancelled"
         assert failures[0].completed_cores == [None]
 
+    def test_interrupt_without_aborted_level_records_warmup_partial(self) -> None:
+        # A mid-warmup / mid-ramp interrupt raises a bare CancelledError (no
+        # AbortedLevel): the driver synthesizes a traceable "interrupted (warmup)"
+        # partial rather than leaving the level indistinguishable from
+        # nothing-attempted, then propagates so __exit__ reaps (MF4).
+        manager = FakeManager([asyncio.CancelledError()])
+        outcomes: list[LevelOutcome] = []
+        failures: list[Any] = []
+        plans: list[Any] = [object()]
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(_drive_levels(manager, plans, outcomes, failures))
+        assert len(failures) == 1
+        assert failures[0].reason == "interrupted (warmup)"
+
+    def test_system_exit_propagates_not_recorded(self) -> None:
+        # SystemExit / GeneratorExit are BaseException-not-Exception: they must
+        # propagate, never become "level failed, continue" (MF2).
+        plans: list[Any] = [object()]
+        for exc_cls in (SystemExit, GeneratorExit):
+            manager = FakeManager([exc_cls()])
+            outcomes: list[LevelOutcome] = []
+            failures: list[Any] = []
+            with pytest.raises(exc_cls):
+                asyncio.run(_drive_levels(manager, plans, outcomes, failures))
+            assert failures == []  # not recorded as a level failure
+
 
 # ---------------------------------------------------------------------------
 # Lifecycle - launch / ready / shutdown, cleanup exactly once
@@ -683,3 +736,75 @@ class TestResolvedWarmupSeam:
 
         # The session ran the OVERLAY-RESOLVED protocol (fixed), read in-process.
         assert captured["mode"] == "fixed"
+
+
+# ---------------------------------------------------------------------------
+# Contract 3 / O7.4 - a failed level's cleanly-closed cores are preserved and
+# their measured GPU energy still counts (the verifier's HIGH must-fix)
+# ---------------------------------------------------------------------------
+
+
+class TestPreservedCores:
+    def test_core_energy_j_flat_series(self) -> None:
+        # Flat 100 W over 10 s -> 1000 J (trapezoidal of a flat series is exact).
+        assert _core_energy_j(_flat_core(power_w=100.0, duration=10.0)) == pytest.approx(1000.0)
+
+    def test_core_energy_j_none_and_too_short(self) -> None:
+        assert _core_energy_j(None) is None
+        assert _core_energy_j(SimpleNamespace(timeseries_samples=[])) is None
+        one = SimpleNamespace(timeseries_samples=[PowerThermalSample(1000.0, 100.0, gpu_index=0)])
+        assert _core_energy_j(one) is None
+
+    def test_mid_level_abort_preserves_cores_and_energy(self) -> None:
+        # The verifier's scenario: level 0 aborts on window 3 with 2 clean cores,
+        # level 1 succeeds. Both cores land on the failed level's result and their
+        # energy is counted in the session total (never silently dropped).
+        core0 = _flat_core(power_w=100.0, duration=10.0)  # 1000 J
+        core1 = _flat_core(power_w=50.0, duration=10.0)  # 500 J
+        engine = FakeEngine()
+        runner = _fake_runner()
+        session = _make_session(engine, runner=runner)
+        warmup = FakeWarmup([_warmup_result(0), _warmup_result(1)])
+        manager = FakeManager(
+            [_abort_exc(0, window=3, cores=[core0, core1]), _level_outcome(1, energy=10.0)]
+        )
+        _wire_run(session, manager, warmup, plans=[object(), object()])
+
+        with session:
+            result = session.run()
+
+        assert isinstance(result, ServerSessionResult)
+        assert result.valid is True  # level 1 passed
+        failed_level = result.levels[0]
+        assert failed_level.invalid_reason is not None
+        assert failed_level.aborted_window_index == 3
+        assert failed_level.completed_cores == [core0, core1]
+        # 1000 + 500 (preserved cores) + 3 windows x 10 J (level 1) = 1530 J.
+        assert result.total_window_energy_j == pytest.approx(1000.0 + 500.0 + 30.0)
+
+
+# ---------------------------------------------------------------------------
+# Real _make_level_plans - issuance horizon spans the whole level (contract 1)
+# ---------------------------------------------------------------------------
+
+
+class TestMakeLevelPlans:
+    def test_make_level_plans_covers_full_horizon_and_wires_receipts(self) -> None:
+        # Exercise the REAL (unstubbed) _make_level_plans: it builds one LevelPlan
+        # whose traffic source issues across ramp + windows_per_level x duration and
+        # whose token receipts flow through the interim server-reported seam.
+        config = _server_config(traffic={"rate": 20, "window_seconds": 40, "seed": 3})
+        engine = FakeEngine()
+        session = ServerSession(
+            _fake_runner(), config, None, config_hash="h", cycle=1, index=1, engine=engine
+        )
+        plans = session._make_level_plans(_FakeShapeSource(), SimpleNamespace())
+        assert len(plans) == 1
+        plan = plans[0]
+        horizon = 30.0 + 3 * 40.0  # default ramp + windows_per_level x duration
+        # The schedule spans the whole level, not just one 40 s window.
+        assert plan.traffic_source.schedule.offsets[-1] > 40.0
+        assert plan.traffic_source.schedule.offsets[-1] <= horizon
+        assert plan.token_receipt_fn is server_reported_token_receipts
+        assert plan.spec.rate == 20.0
+        assert plan.spec.duration_seconds == 40.0
