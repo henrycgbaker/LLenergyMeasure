@@ -402,13 +402,17 @@ class HttpxTransport:
 
     Lazily imports ``httpx`` (the ``server`` extra) and holds an async client
     bound to the engine server's ``base_url``. SM5 ships the seam and the
-    lazy-import guard; the per-engine request encoding and endpoint path are
-    wired by the engine-serving slice, which sets ``base_url`` from the launched
-    server. Call :meth:`aclose` to release the connection pool.
+    lazy-import guard; the server session (SM9) sets ``base_url`` from the
+    launched server and ``path`` to the engine's OpenAI-compatible serving
+    endpoint (e.g. ``/v1/completions``), with each request's ``payload`` the
+    JSON body. Call :meth:`aclose` to release the connection pool.
     """
 
     base_url: str
     timeout: float = 60.0
+    #: Serving endpoint each request is POSTed to. Defaults to root; the server
+    #: session sets it to the engine's OpenAI completions path.
+    path: str = "/"
     _client: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -416,7 +420,7 @@ class HttpxTransport:
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout)
 
     async def __call__(self, request: RequestShape) -> Any:
-        response = await self._client.post("/", json=request.payload)
+        response = await self._client.post(self.path, json=request.payload)
         response.raise_for_status()
         return response.json()
 
