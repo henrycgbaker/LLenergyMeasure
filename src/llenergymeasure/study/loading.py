@@ -14,7 +14,7 @@ parses *and* finalises in one call is ``llenergymeasure.api.load_study``.
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from llenergymeasure.config.grid import (
     ExperimentOrder,
@@ -25,10 +25,13 @@ from llenergymeasure.config.loader import LoadedStudyRaw
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.study.library_resolution import resolve_library_effective
 
+if TYPE_CHECKING:
+    from llenergymeasure.config.user_config import UserConfig
+
 __all__ = ["finalise_study"]
 
 
-def finalise_study(raw: LoadedStudyRaw) -> StudyConfig:
+def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None) -> StudyConfig:
     """Apply library-resolution dedup, design hash, and cycle ordering.
 
     Consumes the :class:`~llenergymeasure.config.loader.LoadedStudyRaw` produced
@@ -37,6 +40,9 @@ def finalise_study(raw: LoadedStudyRaw) -> StudyConfig:
     iterates over.
 
     Steps:
+      0. Overlay the tool-wide user-config server warmup onto each declared server
+         config (R7W), BEFORE dedup, so the resolved-config hash binds on the
+         realised warmup protocol.
       1. Library-resolution mechanism + resolved-config-hash dedup of the
          declared configs (see sweep-dedup.md §2).
       2. compute_study_design_hash() over the post-dedup configs - the hash
@@ -46,11 +52,28 @@ def finalise_study(raw: LoadedStudyRaw) -> StudyConfig:
 
     Args:
         raw: Parsed + sweep-expanded study material.
+        user_config: Tool-wide user config whose ``server.warmup`` defaults are
+            overlaid onto each declared server config. ``None`` (the default)
+            applies NO overlay - callers hand in a config only at the production
+            edge (``api.load_study``), keeping the finalise step hermetic for the
+            unit tests that construct one directly.
 
     Returns:
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
         mode, and pre-run equivalence groups.
     """
+    # R7W: overlay the tool-wide user-config server warmup onto each declared
+    # server config BEFORE dedup, so the resolved-config hash (hence dedup and
+    # resume) binds on the realised warmup protocol. Declared hashes are untouched
+    # (the overlay is side-channel state, never a field), and the overlay rides the
+    # sweep-dedup deep copies through to the runner. No-op for offline configs and
+    # when the user config carries no warmup layer.
+    if user_config is not None:
+        from llenergymeasure.config.precedence import apply_server_warmup_overlay
+
+        for exp in raw.valid_experiments:
+            apply_server_warmup_overlay(exp, user_config)
+
     execution = raw.execution
 
     # Apply library-resolution mechanism + resolved-config-hash dedup to the declared configs

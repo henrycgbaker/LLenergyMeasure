@@ -55,6 +55,12 @@ def load_study(
     public entry both the CLI and ``run_study`` use, so the config layer never
     imports upward into ``study`` and the CLI never imports ``study`` directly.
 
+    It also loads the tool-wide user config and hands it to ``finalise_study``,
+    which overlays its ``server.warmup`` defaults onto each declared server config
+    (R7W). The overlay shapes the resolved-config hash (dedup/resume bind on the
+    realised warmup protocol) but never the declared hash, so a shared study file
+    keeps its declared identity across machines.
+
     Args:
         path: Path to study YAML file.
         cli_overrides: Optional dict of CLI flag overrides for the execution
@@ -69,9 +75,16 @@ def load_study(
         ValidationError: Pydantic structural errors pass through unchanged.
     """
     from llenergymeasure.config.loader import load_study_config
+    from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.loading import finalise_study
 
-    return finalise_study(load_study_config(path, cli_overrides=cli_overrides))
+    # R7W: the production edge that folds the tool-wide user config into the study.
+    # finalise_study overlays its server.warmup defaults onto each declared server
+    # config, so the resolved-config hash binds on the realised warmup protocol.
+    return finalise_study(
+        load_study_config(path, cli_overrides=cli_overrides),
+        user_config=load_user_config(),
+    )
 
 
 # ---------------------------------------------------------------------------

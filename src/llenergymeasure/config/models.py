@@ -26,7 +26,7 @@ import warnings
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from llenergymeasure.config.ssot import ALL_ENGINES, ENGINES, SAMPLING_PRESETS, Engine, engine_str
 from llenergymeasure.config.warnings import ConfigValidationWarning
@@ -801,6 +801,16 @@ class ExperimentConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    # R7W overlay side-channel: the user-config-resolved server warmup protocol,
+    # attached at load time by apply_server_warmup_overlay when a tool-wide user
+    # config supplies warmup defaults. Deliberately NOT a pydantic field, so it
+    # never enters compute_declared_config_hash's wholesale dump - the declared
+    # hash keeps naming user intent (the shareable study config). The
+    # resolved/observed views read it via mode_section_identity, so dedup binds on
+    # the realised protocol. Survives model_copy(deep=True), so it rides through
+    # the sweep-dedup canonicalisation and reaches the runner unchanged.
+    _resolved_server_warmup: ServerWarmupConfig | None = PrivateAttr(default=None)
+
     @model_validator(mode="before")
     @classmethod
     def _reject_retired_harness_key(cls, data: Any) -> Any:
@@ -1021,19 +1031,51 @@ class ExperimentConfig(BaseModel):
           ``{}`` (empty) for default-offline (no section), so a v0.6-style offline
           config that never set warmup knobs projects an empty mode_section slot.
 
+        The server ``warmup`` block is projected from :meth:`resolved_server_warmup`
+        (R7W): the user-config overlay OUTPUT when a tool-wide warmup default was
+        applied, else the declared ``server.warmup``. This is why the resolved and
+        observed hashes carry the REALISED protocol while the declared hash (a
+        wholesale dump that reads the declared field) stays user intent - two runs
+        of one study under different user-config warmups deduplicate apart.
+
         This is the allowlist half of the dual-family slo exclusion: the declared
         hash excludes slo by an explicit dump exclude, the resolved/observed views
         exclude it by simply not projecting it here.
         """
         if self.serving_mode == "server" and self.server is not None:
+            warmup = self._resolved_server_warmup or self.server.warmup
             return {
                 "traffic": self.server.traffic.model_dump(mode="python", exclude={"slo"}),
-                "warmup": self.server.warmup.model_dump(mode="python"),
+                "warmup": warmup.model_dump(mode="python"),
                 "cooldown_seconds": self.server.cooldown_seconds,
             }
         if self.serving_mode == "offline" and self.offline is not None:
             return {"warmup": self.offline.warmup.model_dump(mode="python")}
         return {}
+
+    def attach_resolved_server_warmup(self, warmup: ServerWarmupConfig) -> None:
+        """Attach the R7-resolved server warmup protocol (load-time overlay output).
+
+        Stores the user-config-overlaid warmup as private side-channel state, read
+        by :meth:`resolved_server_warmup` and :meth:`mode_section_identity`.
+        Deliberately not a field: the declared-config hash must keep naming user
+        intent (the study config), so the overlay output stays out of the wholesale
+        ``model_dump``. Set by :func:`llenergymeasure.config.precedence.apply_server_warmup_overlay`
+        at study finalisation, before dedup runs.
+        """
+        self._resolved_server_warmup = warmup
+
+    def resolved_server_warmup(self) -> ServerWarmupConfig | None:
+        """Return the warmup protocol the run realises (server mode), else ``None``.
+
+        The load-time user-config overlay output when one was applied
+        (:meth:`attach_resolved_server_warmup`), otherwise the declared
+        ``server.warmup``. ``None`` outside server mode. This is the seam the
+        server session reads to run the overlay-resolved protocol.
+        """
+        if self.serving_mode != "server" or self.server is None:
+            return None
+        return self._resolved_server_warmup or self.server.warmup
 
     def offline_warmup(self) -> WarmupConfig:
         """Return the offline warmup config (built-in defaults when ``offline:`` is absent).
