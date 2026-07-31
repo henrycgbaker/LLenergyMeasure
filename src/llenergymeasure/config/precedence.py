@@ -20,16 +20,19 @@ Not to be confused with :mod:`llenergymeasure.config.resolution`, which is the
 post-hoc provenance LOG (which value won, and why) - this module is the forward
 resolution that decides which value wins in the first place.
 
-v0.7 SCOPE (R7 boundary): this is the resolution CORE plus the warmup-protocol
-RESOLVER (:func:`resolve_server_warmup`). The resolver is STAGED, not yet wired at a
-production call site: there is no ``UserConfig`` home for a server-warmup default
-today, and the resolved-config view reads warmup off the DECLARED config object
-(``ExperimentConfig.mode_section_identity``), so making a user-config value show up
-in the resolved hash but NOT the declared hash needs a resolved-vs-declared split
-for the warmup subsection that does not exist yet. Adding the user-config home and
-that overlay - and routing every user-config field through the chain - stays with
-the server-session slice and the setup-and-user-config workstream (#886). The core
-and resolver are exercised by tests.
+v0.7 SCOPE (R7 boundary): this is the resolution CORE, the warmup-protocol
+RESOLVER (:func:`resolve_server_warmup`), and its WIRING for the server warmup
+overlay (:func:`apply_server_warmup_overlay`, R7W). The ``UserConfig`` now carries a
+``server.warmup`` home (``config.user_config.UserServerConfig``), and the
+resolved-vs-declared split lives on ``ExperimentConfig``: the overlay output is
+attached as side-channel state (``attach_resolved_server_warmup``) that
+``mode_section_identity`` projects into the resolved/observed hashes, while the
+declared hash stays a wholesale dump of the DECLARED fields (user intent, no
+user-config leak). The overlay is applied at study finalisation, before dedup, so
+dedup binds on the realised protocol. Env/call-site chain layers stay
+supported-but-unfed at v0.7. The full setup UX (llem init flow, .env
+rationalisation, routing every user-config field through the chain) stays with the
+setup-and-user-config workstream (#886).
 
 Prior art: the pragmata ``ResolveSettings.resolve`` chain (external); the ruled
 sentinel scheme is option C of the internal setup-and-user-config design.
@@ -41,14 +44,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
+from pydantic import BaseModel
+
 from llenergymeasure.config._dict_utils import deep_merge
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.models import ServerWarmupConfig
+    from llenergymeasure.config.models import ExperimentConfig, ServerWarmupConfig
+    from llenergymeasure.config.user_config import UserConfig
 
 __all__ = [
     "UNSET",
     "PrecedenceChain",
+    "apply_server_warmup_overlay",
     "is_unset",
     "prune_unset",
     "resolve_layers",
@@ -189,3 +196,61 @@ def resolve_server_warmup(
 def _as_layer(value: Mapping[str, Any] | _Unset) -> dict[str, Any]:
     """A supplied mapping becomes a layer dict; :data:`UNSET` becomes an empty layer."""
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def apply_server_warmup_overlay(config: ExperimentConfig, user_config: UserConfig) -> None:
+    """Overlay a tool-wide user-config server warmup onto a server-mode config (R7W).
+
+    The production wiring of :func:`resolve_server_warmup`. For a server-mode
+    config, resolves the effective warmup protocol through the R7 chain - built-in
+    defaults < user config < study YAML - and attaches the OUTPUT as side-channel
+    state (:meth:`~llenergymeasure.config.models.ExperimentConfig.attach_resolved_server_warmup`).
+    Precedence is per-field: a warmup field the study YAML wrote always wins (study
+    YAML is the higher chain layer); a field the study left unset takes the
+    user-config value when present, else the built-in default.
+
+    The DECLARED config hash is untouched (the overlay never enters the pydantic
+    fields), while ``mode_section_identity`` projects the attached protocol into the
+    resolved/observed hashes, so dedup binds on the realised protocol - two runs of
+    one study under different user-config warmups are distinct measurements.
+
+    No-op outside server mode, and when the user config supplies no warmup layer, so
+    a config with no tool-wide warmup override is byte-identical to today.
+
+    Mutates ``config`` in place (attaching private side-channel state); the declared
+    fields are left exactly as parsed.
+    """
+    if config.serving_mode != "server" or config.server is None:
+        return
+    user_layer = _user_server_warmup_layer(user_config)
+    if not user_layer:
+        return
+    # UNSET-awareness: only the fields the study YAML actually wrote enter the study
+    # layer, so a field it left unset defers to the user/default layers below while a
+    # study-set field always wins. See _fields_set_layer.
+    study_layer = _fields_set_layer(config.server.warmup)
+    resolved = resolve_server_warmup(study_yaml=study_layer, user_config=user_layer)
+    config.attach_resolved_server_warmup(resolved)
+
+
+def _user_server_warmup_layer(user_config: UserConfig) -> dict[str, Any]:
+    """The user config's explicitly-set server-warmup fields (the per-field overlay layer).
+
+    Empty when the user config declares no ``server`` section, so no overlay is
+    applied; otherwise the fields-set layer of its ``server.warmup`` block.
+    """
+    server = user_config.server
+    if server is None:
+        return {}
+    return _fields_set_layer(server.warmup)
+
+
+def _fields_set_layer(model: BaseModel) -> dict[str, Any]:
+    """A model's explicitly-set fields as a precedence layer (the per-field overlay).
+
+    Only the fields actually written (``model_fields_set``) appear - a field set to
+    the built-in default's VALUE still counts as set, so it enters the layer and
+    wins over the layers below. This is the UNSET-aware projection both the declared
+    study warmup and the user-config warmup use to build their overlay layers.
+    """
+    return {name: getattr(model, name) for name in model.model_fields_set}

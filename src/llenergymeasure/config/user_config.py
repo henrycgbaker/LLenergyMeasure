@@ -18,7 +18,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from llenergymeasure.config.models import EnergySamplerName
+from llenergymeasure.config.models import EnergySamplerName, ServerWarmupConfig
 from llenergymeasure.config.ssot import (
     ALL_ENGINES,
     ENV_CARBON_INTENSITY,
@@ -129,6 +129,30 @@ class UserExecutionConfig(BaseModel):
     )
 
 
+class UserServerConfig(BaseModel):
+    """Server-mode preferences: a tool-wide warmup protocol default overlay.
+
+    Mirrors the R1 mode grammar - a ``server:`` namespace whose ``warmup`` block
+    supplies machine-local defaults for the server warmup protocol. The block is
+    ``ServerWarmupConfig``-shaped and overlaid PER FIELD: only the warmup fields the
+    user actually writes take effect, and a study YAML that sets a field always wins
+    (study YAML > user config > built-in default). The overlay lands in the RESOLVED
+    config hash, never the declared one, so sharing a study file reproduces the
+    declared identity while each machine's warmup default still shapes the realised
+    protocol (and dedup treats runs under different defaults as distinct).
+    """
+
+    model_config = {"extra": "forbid"}
+
+    warmup: ServerWarmupConfig = Field(
+        default_factory=ServerWarmupConfig,
+        description=(
+            "Tool-wide server warmup protocol defaults, overlaid beneath study YAML "
+            "(server mode only). Only the fields you set are overlaid."
+        ),
+    )
+
+
 class UserConfig(BaseModel):
     """User preferences loaded from ~/.config/llenergymeasure/config.yaml.
 
@@ -140,6 +164,13 @@ class UserConfig(BaseModel):
 
     output: UserOutputConfig = Field(default_factory=UserOutputConfig)
     runners: UserRunnersConfig = Field(default_factory=UserRunnersConfig)
+    server: UserServerConfig | None = Field(
+        default=None,
+        description=(
+            "Server-mode preferences: a tool-wide warmup protocol default overlaid "
+            "beneath study YAML (server mode only). None = no tool-wide warmup default."
+        ),
+    )
     images: dict[str, str] = Field(
         default_factory=dict,
         description=(
