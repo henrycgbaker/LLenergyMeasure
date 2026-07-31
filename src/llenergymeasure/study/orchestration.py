@@ -106,6 +106,16 @@ def orchestrate_study(
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
     user_config = load_user_config()
 
+    # Server-capable-entry-path contract (R7W CONTRACT NOTE): every entry that
+    # dispatches a server config must apply the user-config warmup overlay (or
+    # reject). ``api.load_study`` overlays before dedup, but ``run_experiment`` and
+    # ``run_study(StudyConfig)`` bypass it; this single choke point overlays every
+    # server experiment here so the ServerSession always reads the overlay-resolved
+    # protocol. Idempotent (re-applying on the load_study path recomputes the same
+    # value), a no-op for offline configs, and dedup-safe (the tool-wide overlay is
+    # uniform across a run, so it never regroups within-run dedup).
+    _apply_server_warmup_overlay_to_study(study, user_config)
+
     runner_specs, system_overrides = _resolve_runner_specs(
         study, user_config, preresolved, skip_preflight, progress
     )
@@ -138,7 +148,14 @@ def orchestrate_study(
     resolution_logs = _build_resolution_logs(study, cli_overrides)
 
     wall_start = time.monotonic()
-    is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1
+    # Server experiments always route through StudyRunner (the single server call
+    # site is StudyRunner._run_one -> ServerSession); the in-process single path
+    # is offline-only. Offline single experiments still take the fast path
+    # unchanged (byte-identical behaviour).
+    is_server_study = any(exp.serving_mode == "server" for exp in study.experiments)
+    is_single = (
+        len(study.experiments) == 1 and study.study_execution.n_cycles == 1 and not is_server_study
+    )
 
     if is_single:
         result_files, experiment_results, warnings = _run_single_experiment_dispatch(
@@ -264,6 +281,25 @@ def _resolve_runner_specs(
         warn_on_gpu_selector_conflict(study.study_execution.gpu_indices)
 
     return runner_specs, system_overrides
+
+
+def _apply_server_warmup_overlay_to_study(study: StudyConfig, user_config: Any) -> None:
+    """Overlay the tool-wide user-config server warmup onto every server experiment.
+
+    The server-capable-entry-path contract (R7W): ``api.load_study`` applies the
+    overlay before dedup, but ``run_experiment`` / ``run_study(StudyConfig)`` reach
+    the runner without it. Applying it here - the universal orchestration choke
+    point that already loaded the user config - guarantees the ServerSession reads
+    the overlay-resolved warmup on EVERY entry path. Idempotent and a no-op for
+    offline configs and when the user config carries no warmup layer.
+    """
+    if not any(exp.serving_mode == "server" for exp in study.experiments):
+        return
+    from llenergymeasure.config.precedence import apply_server_warmup_overlay
+
+    for exp in study.experiments:
+        if exp.serving_mode == "server":
+            apply_server_warmup_overlay(exp, user_config)
 
 
 def _write_study_artefacts(
@@ -462,13 +498,34 @@ def _run_via_runner(
     )
     raw_results = runner.run()
 
+    from llenergymeasure.study.server_session import ServerSessionResult
+
     warnings: list[str] = []
     experiment_results: list[ExperimentResult | None] = []
     for r in raw_results:
         if isinstance(r, dict):
             warnings.append(r.get("message", "Unknown error"))
             experiment_results.append(None)
+        elif isinstance(r, ServerSessionResult):
+            # A server session's N window results are not (yet) an ExperimentResult
+            # - per-window bundle persistence is SM10 and metrics derivation is SM12
+            # - so they do not enter StudyResult.experiments at SM9. Surface a
+            # one-line session summary and keep the offline energy sum untouched.
+            experiment_results.append(None)
+            warnings.append(_server_session_summary(r))
         else:
             experiment_results.append(r)
 
     return runner.result_files, experiment_results, warnings
+
+
+def _server_session_summary(result: Any) -> str:
+    """One-line human summary of a server session's outcome (SM9-interim surfacing)."""
+    valid = sum(1 for level in result.levels if level.valid)
+    total = len(result.levels)
+    verdict = "valid" if result.valid else ("aborted" if result.aborted else "invalid")
+    return (
+        f"server session ({result.engine}) {verdict}: {valid}/{total} level(s) passed "
+        f"the stability gate, {result.window_count} measured window(s). Per-window "
+        "bundles + metrics land with SM10/SM12."
+    )

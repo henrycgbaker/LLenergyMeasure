@@ -749,6 +749,13 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         cycle = self._cycle_counters.get(config_hash, 0) + 1
         self._cycle_counters[config_hash] = cycle
 
+        # Server dispatch path (C3): a server config drives a ServerSession - launch
+        # the engine server, warm up, run the window manager to N results, shut down
+        # - a sibling of the two offline dispatch paths. Routed FIRST so the offline
+        # subprocess/docker paths below stay byte-identical for offline configs.
+        if config.serving_mode == "server":
+            return self._run_one_server(config, config_hash=config_hash, cycle=cycle, index=index)
+
         # Docker dispatch path - check runner spec for this engine
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         if spec is not None and spec.mode == RUNNER_CONTAINER:
@@ -766,6 +773,43 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             self, config, mp_ctx, config_hash=config_hash, cycle=cycle, index=index
         ) as session:
             return session.run()
+
+    def _run_one_server(
+        self,
+        config: ExperimentConfig,
+        *,
+        config_hash: str,
+        cycle: int,
+        index: int,
+    ) -> Any:
+        """Dispatch one server-mode experiment via a ServerSession (C1/C3 sibling).
+
+        The session launches the engine server, warms up, drives the window
+        manager to N window results, and shuts the server down on every exit path.
+        A launch / readiness failure (the server never came up) is translated to a
+        non-fatal failure dict - recorded and the study continues, mirroring the
+        Docker path's DockerError translation. The N window results ride back as a
+        ServerSessionResult (or a failure dict); the manifest transitions are the
+        session's own.
+        """
+        from llenergymeasure.infra.server_lifecycle import ServerLifecycleError
+        from llenergymeasure.study.server_session import ServerSession, ServerSessionError
+
+        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
+        try:
+            with ServerSession(
+                self, config, spec, config_hash=config_hash, cycle=cycle, index=index
+            ) as session:
+                return session.run()
+        except (ServerLifecycleError, ServerSessionError) as exc:
+            # The server could not be launched / made ready / set up: record a
+            # non-fatal failure so the study continues, and reap is guaranteed by
+            # the session's __enter__-failure cleanup above.
+            failure = {"type": type(exc).__name__, "message": str(exc)}
+            self.manifest.mark_failed(config_hash, cycle, failure["type"], failure["message"])
+            if self._progress:
+                self._progress.end_experiment_fail(index, 0.0, error=failure["message"])
+            return failure
 
     def _handle_result(
         self,
