@@ -808,7 +808,12 @@ class ExperimentConfig(BaseModel):
     # hash keeps naming user intent (the shareable study config). The
     # resolved/observed views read it via mode_section_identity, so dedup binds on
     # the realised protocol. Survives model_copy(deep=True), so it rides through
-    # the sweep-dedup canonicalisation and reaches the runner unchanged.
+    # the sweep-dedup canonicalisation and reaches an in-process runner unchanged.
+    # SERIALIZATION BOUNDARY: a PrivateAttr is dropped by model_dump/JSON, so it
+    # does NOT cross a process/container boundary. A server-capable path that ships
+    # the config into a container must carry the resolved warmup explicitly, or the
+    # in-container observed view will project the DECLARED warmup (the SM9/SM12
+    # contract note).
     _resolved_server_warmup: ServerWarmupConfig | None = PrivateAttr(default=None)
 
     @model_validator(mode="before")

@@ -44,6 +44,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
+from pydantic import BaseModel
+
 from llenergymeasure.config._dict_utils import deep_merge
 
 if TYPE_CHECKING:
@@ -223,12 +225,10 @@ def apply_server_warmup_overlay(config: ExperimentConfig, user_config: UserConfi
     user_layer = _user_server_warmup_layer(user_config)
     if not user_layer:
         return
-    # UNSET-awareness: only the fields the study YAML actually wrote may not be
-    # overlaid. model_fields_set is the exact study-set set (a field set to the
-    # built-in default's VALUE still counts as set), so it is the pruned study
-    # layer the chain merges under nothing else.
-    declared = config.server.warmup
-    study_layer = {name: getattr(declared, name) for name in declared.model_fields_set}
+    # UNSET-awareness: only the fields the study YAML actually wrote enter the study
+    # layer, so a field it left unset defers to the user/default layers below while a
+    # study-set field always wins. See _fields_set_layer.
+    study_layer = _fields_set_layer(config.server.warmup)
     resolved = resolve_server_warmup(study_yaml=study_layer, user_config=user_layer)
     config.attach_resolved_server_warmup(resolved)
 
@@ -236,12 +236,21 @@ def apply_server_warmup_overlay(config: ExperimentConfig, user_config: UserConfi
 def _user_server_warmup_layer(user_config: UserConfig) -> dict[str, Any]:
     """The user config's explicitly-set server-warmup fields (the per-field overlay layer).
 
-    Only the fields the user actually wrote (``model_fields_set``) - a field set to
-    the built-in default's VALUE still counts as user-supplied. Empty when the user
-    config declares no ``server`` section, so no overlay is applied.
+    Empty when the user config declares no ``server`` section, so no overlay is
+    applied; otherwise the fields-set layer of its ``server.warmup`` block.
     """
     server = user_config.server
     if server is None:
         return {}
-    warmup = server.warmup
-    return {name: getattr(warmup, name) for name in warmup.model_fields_set}
+    return _fields_set_layer(server.warmup)
+
+
+def _fields_set_layer(model: BaseModel) -> dict[str, Any]:
+    """A model's explicitly-set fields as a precedence layer (the per-field overlay).
+
+    Only the fields actually written (``model_fields_set``) appear - a field set to
+    the built-in default's VALUE still counts as set, so it enters the layer and
+    wins over the layers below. This is the UNSET-aware projection both the declared
+    study warmup and the user-config warmup use to build their overlay layers.
+    """
+    return {name: getattr(model, name) for name in model.model_fields_set}
