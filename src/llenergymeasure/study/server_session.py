@@ -707,7 +707,7 @@ class ServerSession:
         return BracketEnergySink.from_measurement_config(
             self.config.measurement,
             self._measurement_gpu_indices(),
-            self._runner._progress if self._runner is not None else None,
+            getattr(self._runner, "_progress", None),
         )
 
     def _make_sampler_factory(self) -> Callable[[], Any]:
