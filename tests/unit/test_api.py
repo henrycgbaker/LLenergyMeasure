@@ -377,7 +377,7 @@ def test_run_preserves_runner_abort_status(monkeypatch, tmp_path, abort_status):
         else:
             manifest.mark_study_circuit_breaker()
         captured["manifest"] = manifest
-        return [], [None, None], []
+        return [], [None, None], [], []
 
     monkeypatch.setattr(api_module, "_run_via_runner", fake_run_via_runner)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
@@ -1027,7 +1027,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
         resolution_logs=None,
     ):
         result_files = [str(tmp_path / f"result-{i}.json") for i in range(6)]
-        return result_files, mock_results, []
+        return result_files, mock_results, [], []
 
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(

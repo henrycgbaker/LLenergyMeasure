@@ -786,14 +786,17 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         The session launches the engine server, warms up, drives the window
         manager to N window results, and shuts the server down on every exit path.
-        A launch / readiness failure (the server never came up) is translated to a
-        non-fatal failure dict - recorded and the study continues, mirroring the
-        Docker path's DockerError translation. The N window results ride back as a
-        ServerSessionResult (or a failure dict); the manifest transitions are the
-        session's own.
+        Any host-side construction / launch / readiness failure (a bad dataset, a
+        transport error, the server never coming up) is translated to a non-fatal
+        failure dict - recorded per-cell and the study continues, mirroring the
+        Docker path's DockerError translation - so one bad server cell never kills a
+        whole multi-experiment study. Interrupts (KeyboardInterrupt / SystemExit)
+        are BaseException-not-Exception and propagate. The N window results ride
+        back as a ServerSessionResult (or a failure dict); the manifest transitions
+        are the session's own, and reap is guaranteed by the session's
+        __enter__-failure cleanup above.
         """
-        from llenergymeasure.infra.server_lifecycle import ServerLifecycleError
-        from llenergymeasure.study.server_session import ServerSession, ServerSessionError
+        from llenergymeasure.study.server_session import ServerSession
 
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         try:
@@ -801,10 +804,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 self, config, spec, config_hash=config_hash, cycle=cycle, index=index
             ) as session:
                 return session.run()
-        except (ServerLifecycleError, ServerSessionError) as exc:
-            # The server could not be launched / made ready / set up: record a
-            # non-fatal failure so the study continues, and reap is guaranteed by
-            # the session's __enter__-failure cleanup above.
+        except Exception as exc:
             failure = {"type": type(exc).__name__, "message": str(exc)}
             self.manifest.mark_failed(config_hash, cycle, failure["type"], failure["message"])
             if self._progress:
