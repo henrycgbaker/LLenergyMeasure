@@ -149,7 +149,7 @@ def test_step_display_renders_registry_added_step_without_renderer_change():
                 label="Ramping",
                 phase="Server",
                 order=200,
-                surfaces=frozenset({progress.SURFACE_LOCAL}),
+                surfaces=frozenset({progress.SURFACE_PROCESS}),
             )
         )
         console, buf = _make_console()

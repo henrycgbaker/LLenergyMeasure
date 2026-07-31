@@ -201,16 +201,16 @@ def test_register_step_flows_through_labels_phases_and_ordering():
     saved_labels = dict(progress.STEP_LABELS)
     saved_phases = dict(progress.STEP_PHASES)
     try:
-        # A hypothetical server-mode step: it joins the existing local surface
+        # A hypothetical extra step: it joins the existing process surface
         # (positioned between preflight=10 and container_preflight=60) and its
-        # own brand-new "server" surface - the pattern server mode will use.
+        # own brand-new "future_mode" surface - the register_step extension seam.
         progress.register_step(
             progress.StepSpec(
                 id="server_health",
                 label="Polling",
                 phase="Server",
                 order=45,
-                surfaces=frozenset({progress.SURFACE_LOCAL, "server"}),
+                surfaces=frozenset({progress.SURFACE_PROCESS, "future_mode"}),
             )
         )
 
@@ -219,15 +219,15 @@ def test_register_step_flows_through_labels_phases_and_ordering():
         # Phase mapping flows - a brand-new phase name is carried verbatim.
         assert progress.STEP_PHASES["server_health"] == "Server"
 
-        # Ordering flows: the step lands at its declared position in the local
+        # Ordering flows: the step lands at its declared position in the process
         # surface, between preflight and container_preflight.
-        local = progress.steps_for_surface(progress.SURFACE_LOCAL)
+        local = progress.steps_for_surface(progress.SURFACE_PROCESS)
         assert "server_health" in local
         assert local.index(STEP_PREFLIGHT) < local.index("server_health")
         assert local.index("server_health") < local.index(STEP_CONTAINER_PREFLIGHT)
 
         # Ordering flows in a brand-new surface too: no builder changes needed.
-        assert progress.steps_for_surface("server") == ["server_health"]
+        assert progress.steps_for_surface("future_mode") == ["server_health"]
 
         # A step that opts out of the docker surfaces never appears there.
         assert "server_health" not in docker_steps(images_prepared=False, host_baseline=True)
