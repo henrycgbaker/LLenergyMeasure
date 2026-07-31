@@ -22,6 +22,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
+from llenergymeasure.config._dict_utils import deep_merge
 from llenergymeasure.config.cycle_ordering import (
     ExperimentOrder,
     apply_cycles,
@@ -186,12 +187,20 @@ def expand_grid(
     sweep_raw_configs = _expand_sweep(sweep, merged_fixed, synthesize_baseline=not explicit_entries)
 
     # Step 4: Append explicit experiments: list entries
+    # DEEP-merge each entry onto the fixed config, matching the sweep-axis path
+    # (sweep_expansion._expand_sweep also deep_merges) - a shallow {**fixed, **exp}
+    # would let an entry that re-declares any part of a nested section (e.g.
+    # server.traffic.rate) silently drop the fixed-level siblings of that section
+    # (e.g. a fixed server.warmup), which then reads as study-unset and lets the
+    # user-config overlay override what the study explicitly declared. Two ways of
+    # writing the same study must share merge semantics.
+    #
     # Strip non-matching engine sections *inherited from fixed*, but preserve
     # any the user wrote directly in the experiment entry (those are genuine
     # misconfigurations and should fail Pydantic validation).
     explicit_raw_configs = []
     for exp in explicit_entries:
-        merged = {**merged_fixed, **exp}
+        merged = deep_merge(merged_fixed, exp)
         engine = merged.get("engine", merged_fixed.get("engine", "transformers"))
         for key in ALL_ENGINES:
             if key != engine and key in merged and key not in exp:

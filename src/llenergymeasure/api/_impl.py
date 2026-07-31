@@ -57,9 +57,10 @@ def load_study(
 
     It also loads the tool-wide user config and hands it to ``finalise_study``,
     which overlays its ``server.warmup`` defaults onto each declared server config
-    (R7W). The overlay shapes the resolved-config hash (dedup/resume bind on the
-    realised warmup protocol) but never the declared hash, so a shared study file
-    keeps its declared identity across machines.
+    (R7W). The overlay shapes the resolved-config hash (which dedup binds on) but
+    never the declared hash, so a shared study file keeps its declared identity
+    across machines. Resume and drift-detection remain declared-hash-only, so they
+    are blind to a user-config warmup change between an original run and a resume.
 
     Args:
         path: Path to study YAML file.

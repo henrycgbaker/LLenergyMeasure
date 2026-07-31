@@ -63,11 +63,15 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
         mode, and pre-run equivalence groups.
     """
     # R7W: overlay the tool-wide user-config server warmup onto each declared
-    # server config BEFORE dedup, so the resolved-config hash (hence dedup and
-    # resume) binds on the realised warmup protocol. Declared hashes are untouched
-    # (the overlay is side-channel state, never a field), and the overlay rides the
+    # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
+    # binds on the realised warmup protocol. Declared hashes are untouched (the
+    # overlay is side-channel state, never a field), and the overlay rides the
     # sweep-dedup deep copies through to the runner. No-op for offline configs and
-    # when the user config carries no warmup layer.
+    # when the user config carries no warmup layer. Note: resume/drift-detection
+    # (validate_config_drift on study_design_hash, the skip-set on config_hash) key
+    # on the DECLARED family only, so a resumed study is blind to a user-config
+    # warmup change between runs (see resume.py; banked for the resolved-hash resume
+    # guard alongside SM10's persistence work).
     if user_config is not None:
         from llenergymeasure.config.precedence import apply_server_warmup_overlay
 

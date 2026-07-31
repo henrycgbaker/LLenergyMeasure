@@ -254,7 +254,7 @@ def _server_study(tmp_path: Path):
 def test_finalise_study_binds_dedup_on_the_overlay(tmp_path: Path) -> None:
     """Pin (a), end-to-end: two finalise_study runs of one study YAML under two
     user configs share declared identity but differ in the resolved family that
-    dedup/resume key on."""
+    dedup binds on."""
     raw_a = _server_study(tmp_path)
     raw_b = _server_study(tmp_path)
 
@@ -264,7 +264,7 @@ def test_finalise_study_binds_dedup_on_the_overlay(tmp_path: Path) -> None:
     # Declared identity (experiment_id) is byte-identical across the two runs.
     exp_a, exp_b = finalised_a.experiments[0], finalised_b.experiments[0]
     assert _declared(exp_a) == _declared(exp_b)
-    # The resolved-config-hash family (what dedup/resume bind on) differs.
+    # The resolved-config-hash family (what dedup binds on) differs.
     assert (
         finalised_a.declared_resolved_config_hashes != finalised_b.declared_resolved_config_hashes
     )
@@ -284,3 +284,95 @@ def test_finalise_study_without_user_config_is_todays_behaviour(tmp_path: Path) 
     )
     # And the config carries no overlay side-channel.
     assert finalised_none.experiments[0]._resolved_server_warmup is None
+
+
+# ---------------------------------------------------------------------------
+# Explicit-entries deep merge preserves the study-wins guarantee
+#
+# The overlay's study-wins guarantee depends on the study-declared warmup
+# surviving into the parsed config with its fields_set intact. An `experiments:`
+# entry that re-declares part of a nested section must NOT drop the fixed-level
+# siblings of that section (a shallow {**fixed, **entry} merge would - and the
+# vanished warmup would then read as study-unset, letting the user-config overlay
+# override what the study explicitly declared). The explicit-entries path must
+# deep-merge, matching the sweep-axis path.
+# ---------------------------------------------------------------------------
+
+
+def _load_first_experiment(tmp_path: Path, study: dict) -> ExperimentConfig:
+    path = tmp_path / "study.yaml"
+    path.write_text(yaml.safe_dump(study))
+    return load_study_config(path).valid_experiments[0]
+
+
+def test_entry_redeclaring_traffic_preserves_fixed_warmup(tmp_path: Path) -> None:
+    """Pin: an entry re-declaring server.traffic.rate keeps the fixed server.warmup
+    (and its fields_set), so the user-config overlay cannot override it."""
+    study = {
+        "study_name": "deep_merge_repro",
+        "serving_mode": "server",
+        "engine": "vllm",
+        "task": {"model": "gpt2"},
+        "server": {
+            "traffic": {"rate": 10, "window_seconds": 60},
+            "warmup": {"mode": "fixed"},
+        },
+        "experiments": [{"server": {"traffic": {"rate": 20}}}],
+    }
+    exp = _load_first_experiment(tmp_path, study)
+
+    # The entry overrode only rate; window_seconds and the whole warmup block
+    # survive from the fixed level.
+    assert exp.server.traffic.rate == 20.0
+    assert exp.server.traffic.window_seconds == 60.0
+    assert exp.server.warmup.mode == "fixed"
+    # fields_set must reflect the study-declared warmup - the UNSET signal the
+    # overlay reads to enforce study-wins.
+    assert exp.server.warmup.model_fields_set == {"mode"}
+
+    # A conflicting user-config overlay must lose to the study's fixed warmup.
+    apply_server_warmup_overlay(exp, _user(mode="composite", duration_seconds=42))
+    warmup = exp.resolved_server_warmup()
+    assert warmup.mode == "fixed"  # study still wins
+    assert warmup.duration_seconds == 42.0  # user fills the study-unset field
+
+
+def test_entry_redeclaring_warmup_mode_wins(tmp_path: Path) -> None:
+    """Pin: an entry that re-declares server.warmup.mode wins for that experiment
+    (over the fixed level and over the user config)."""
+    study = {
+        "study_name": "entry_warmup",
+        "serving_mode": "server",
+        "engine": "vllm",
+        "task": {"model": "gpt2"},
+        "server": {
+            "traffic": {"rate": 10, "window_seconds": 60},
+            "warmup": {"mode": "composite"},
+        },
+        "experiments": [{"server": {"warmup": {"mode": "fixed"}}}],
+    }
+    exp = _load_first_experiment(tmp_path, study)
+    assert exp.server.warmup.mode == "fixed"  # entry overrode the fixed level
+    assert "mode" in exp.server.warmup.model_fields_set
+    # Traffic still inherited from the fixed level (deep merge, not replacement).
+    assert exp.server.traffic.rate == 10.0
+
+    apply_server_warmup_overlay(exp, _user(mode="composite"))
+    assert exp.resolved_server_warmup().mode == "fixed"  # study entry wins
+
+
+def test_entry_top_level_scalar_override_unchanged(tmp_path: Path) -> None:
+    """Pin: an entry replacing a top-level scalar still overrides it (deep_merge on a
+    non-dict value is a plain override - behaves as the shallow merge did)."""
+    study = {
+        "study_name": "scalar_override",
+        "serving_mode": "offline",
+        "engine": "vllm",
+        "task": {"model": "gpt2", "max_input_tokens": 256},
+        "sampling_preset": "standard",
+        "experiments": [{"sampling_preset": "creative"}],
+    }
+    exp = _load_first_experiment(tmp_path, study)
+    assert exp.sampling_preset == "creative"  # entry scalar overrides fixed
+    # A sibling nested value the entry did not touch is still inherited.
+    assert exp.task.max_input_tokens == 256
