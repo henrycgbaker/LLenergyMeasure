@@ -295,6 +295,11 @@ STEP_MEASURE = "measure"
 STEP_FLOPS = "flops"
 STEP_SAVE = "save"
 
+# Server-mode-only steps (online-serving measurement): launch the engine server
+# and drive it to readiness before the measured windows open.
+STEP_SERVER_LAUNCH = "server_launch"
+STEP_SERVER_READY = "server_ready"
+
 # -------------------------------------------------------------------------
 # Step registry -- the single source of truth for the progress vocabulary.
 #
@@ -310,12 +315,21 @@ STEP_SAVE = "save"
 # run emits. A step declares which surfaces it belongs to and where it sits in
 # each. Future modes (server mode) add their own surface here without touching
 # any consumer.
-SURFACE_LOCAL = "local"  # direct harness run, no container
-SURFACE_DOCKER = "docker"  # container run, baseline measured in-container (fresh)
-SURFACE_DOCKER_HOST_BASELINE = "docker_host_baseline"  # baseline measured on host first
+#: Surface identifiers, aligned with the SM2 runner-mode vocabulary
+#: (process / container, formerly local / docker). Not serialized - internal
+#: step-list keys only - so the rename rides freely (banked from SM2).
+SURFACE_PROCESS = "process"  # direct host harness run, no container
+SURFACE_CONTAINER = "container"  # container run, baseline measured in-container (fresh)
+SURFACE_CONTAINER_HOST_BASELINE = "container_host_baseline"  # baseline measured on host first
+SURFACE_SERVER = "server"  # online-serving measurement (host-driven traffic + sampling)
 
-_ALL_SURFACES = frozenset({SURFACE_LOCAL, SURFACE_DOCKER, SURFACE_DOCKER_HOST_BASELINE})
-_DOCKER_SURFACES = frozenset({SURFACE_DOCKER, SURFACE_DOCKER_HOST_BASELINE})
+#: The offline surfaces (the batch-measurement modes). Setup + offline-only
+#: measurement steps belong here; ``_ALL_SURFACES`` keeps its name and membership
+#: so every existing offline StepSpec is untouched by the rename.
+_ALL_SURFACES = frozenset({SURFACE_PROCESS, SURFACE_CONTAINER, SURFACE_CONTAINER_HOST_BASELINE})
+_DOCKER_SURFACES = frozenset({SURFACE_CONTAINER, SURFACE_CONTAINER_HOST_BASELINE})
+#: The measurement-tail steps every mode shares (offline surfaces + server).
+_MEASUREMENT_SHARED = _ALL_SURFACES | frozenset({SURFACE_SERVER})
 
 
 @dataclass(frozen=True)
@@ -364,16 +378,20 @@ _STEP_SPECS: list[StepSpec] = [
         PHASE_MEASUREMENT,
         65,
         _ALL_SURFACES,
-        order_overrides={SURFACE_DOCKER_HOST_BASELINE: 40},
+        order_overrides={SURFACE_CONTAINER_HOST_BASELINE: 40},
     ),
     StepSpec(STEP_MODEL, "Loading", PHASE_MEASUREMENT, 70, _ALL_SURFACES),
     StepSpec(STEP_PROMPTS, "Loading", PHASE_MEASUREMENT, 80, _ALL_SURFACES),
-    StepSpec(STEP_WARMUP, "Warming up", PHASE_MEASUREMENT, 90, _ALL_SURFACES),
+    # Server-mode setup: launch the engine server and drive it to readiness.
+    StepSpec(STEP_SERVER_LAUNCH, "Launching", PHASE_SETUP, 45, frozenset({SURFACE_SERVER})),
+    StepSpec(STEP_SERVER_READY, "Awaiting", PHASE_SETUP, 55, frozenset({SURFACE_SERVER})),
+    # Warmup / measure / save are shared by offline and server surfaces.
+    StepSpec(STEP_WARMUP, "Warming up", PHASE_MEASUREMENT, 90, _MEASUREMENT_SHARED),
     StepSpec(STEP_THERMAL_FLOOR, "Waiting", PHASE_MEASUREMENT, 100, _ALL_SURFACES),
     StepSpec(STEP_ENERGY_SELECT, "Selecting", PHASE_MEASUREMENT, 110, _ALL_SURFACES),
-    StepSpec(STEP_MEASURE, "Measuring", PHASE_MEASUREMENT, 120, _ALL_SURFACES),
+    StepSpec(STEP_MEASURE, "Measuring", PHASE_MEASUREMENT, 120, _MEASUREMENT_SHARED),
     StepSpec(STEP_FLOPS, "Estimating", PHASE_MEASUREMENT, 130, _ALL_SURFACES),
-    StepSpec(STEP_SAVE, "Saving", PHASE_MEASUREMENT, 140, _ALL_SURFACES),
+    StepSpec(STEP_SAVE, "Saving", PHASE_MEASUREMENT, 140, _MEASUREMENT_SHARED),
 ]
 
 # Derived vocabulary maps. Mutated in place by ``register_step`` so importers
@@ -434,13 +452,22 @@ def docker_steps(*, images_prepared: bool, host_baseline: bool) -> list[str]:
     by the ``docker_host_baseline`` surface's baseline ``order`` override. The
     measurement-phase tail is identical in both.
     """
-    surface = SURFACE_DOCKER_HOST_BASELINE if host_baseline else SURFACE_DOCKER
+    surface = SURFACE_CONTAINER_HOST_BASELINE if host_baseline else SURFACE_CONTAINER
     exclude = _IMAGE_PREP_STEPS if images_prepared else frozenset()
     return steps_for_surface(surface, exclude=exclude)
 
 
-# Local path: no Docker steps, direct harness measurement.
-STEPS_LOCAL: list[str] = steps_for_surface(SURFACE_LOCAL)
+def server_steps() -> list[str]:
+    """Ordered step list for a server-mode (online-serving) experiment.
+
+    Launch -> await readiness -> warm up -> measure windows -> save. Derived from
+    the ``SURFACE_SERVER`` membership like every other surface, so adding a server
+    step is one registry entry (no consumer edits)."""
+    return steps_for_surface(SURFACE_SERVER)
+
+
+# Process path: no container steps, direct host harness measurement.
+STEPS_LOCAL: list[str] = steps_for_surface(SURFACE_PROCESS)
 
 
 # -------------------------------------------------------------------------
