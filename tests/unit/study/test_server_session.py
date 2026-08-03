@@ -11,9 +11,9 @@ Charter (server-mode plan section 4 / section 18):
 - cleanup-exactly-once on the normal, exception, and interrupt paths, with the
   server reaped on every exit (the F6 session-hardening invariant);
 - the three banked contracts: the issuance horizon covers ramp + N windows; the
-  client-counted tokens flow through the TokenReceiptFn seam (interim,
-  server-reported); an AbortedLevel is caught at the run_level await site and a
-  WarmupTrafficError aborts the session;
+  client-counted tokens flow through the TokenReceiptFn seam (client-side
+  streamed-delta counts, O8); an AbortedLevel is caught at the run_level await
+  site and a WarmupTrafficError aborts the session;
 - per-level ServerWarmupResult is stamped into each window result (D6 divergence
   label);
 - the resolved warmup is read in-process (the serialization-boundary contract).
@@ -32,7 +32,12 @@ from llenergymeasure.config.models import ExperimentConfig, ServerWarmupConfig
 from llenergymeasure.config.user_config import UserConfig, UserServerConfig
 from llenergymeasure.device.power_thermal import PowerThermalSample
 from llenergymeasure.harness.server_warmup import ServerWarmupResult, WarmupTrafficError
-from llenergymeasure.harness.traffic import IssuerReport, RequestRecord, RequestShape
+from llenergymeasure.harness.traffic import (
+    CompletionResult,
+    IssuerReport,
+    RequestRecord,
+    RequestShape,
+)
 from llenergymeasure.harness.window_manager import (
     ABORTED_LEVEL_ATTR,
     ATTRIBUTION_STEADY_STATE_SPAN,
@@ -55,7 +60,9 @@ from llenergymeasure.study.server_session import (
     _core_energy_j,
     _drive_levels,
     _level_traffic_source,
-    server_reported_token_receipts,
+    _sum_server_completion_tokens,
+    build_request_rows_by_window,
+    client_token_receipts,
 )
 
 # ---------------------------------------------------------------------------
@@ -294,12 +301,37 @@ def _wire_run(
 
 
 # ---------------------------------------------------------------------------
-# Contract 2 - token receipts flow from what the transport exposes (interim)
+# Contract 2 - client-side token receipts are the canonical denominator (O8)
 # ---------------------------------------------------------------------------
 
 
+def _completion(
+    token_times: list[float], *, prompt: int | None = None, completion: int | None = None
+) -> CompletionResult:
+    return CompletionResult(
+        text="x" * len(token_times),
+        output_token_times=list(token_times),
+        first_token_at=token_times[0] if token_times else None,
+        server_prompt_tokens=prompt,
+        server_completion_tokens=completion,
+    )
+
+
 class TestTokenReceipts:
-    def test_server_reported_tokens_stamped_at_completion(self) -> None:
+    def test_client_streamed_deltas_are_the_receipts(self) -> None:
+        rec = RequestRecord(
+            index=0,
+            issued_at=1.0,
+            request=RequestShape(index=0),
+            completed_at=5.0,
+            result=_completion([2.0, 3.0, 4.0], completion=99),
+        )
+        # Token-granular: one receipt at each streamed delta's arrival time. The
+        # server-reported usage (99) never reaches the denominator seam (O8).
+        assert client_token_receipts(rec) == (2.0, 3.0, 4.0)
+
+    def test_non_completion_result_yields_no_receipts(self) -> None:
+        # A legacy dict response (no client-counted deltas) is not a denominator.
         rec = RequestRecord(
             index=0,
             issued_at=1.0,
@@ -307,44 +339,163 @@ class TestTokenReceipts:
             completed_at=5.0,
             result={"usage": {"completion_tokens": 3}},
         )
-        # Request-granular attribution: n tokens at completed_at (E2 rule).
-        assert server_reported_token_receipts(rec) == (5.0, 5.0, 5.0)
-
-    def test_no_usage_yields_no_receipts(self) -> None:
-        rec = RequestRecord(
-            index=0,
-            issued_at=1.0,
-            request=RequestShape(index=0),
-            completed_at=5.0,
-            result={"choices": [{"text": "pong"}]},
-        )
-        assert server_reported_token_receipts(rec) == ()
+        assert client_token_receipts(rec) == ()
 
     def test_incomplete_or_errored_request_yields_no_receipts(self) -> None:
         never = RequestRecord(
             index=0, issued_at=1.0, request=RequestShape(index=0), completed_at=None
         )
-        assert server_reported_token_receipts(never) == ()
+        assert client_token_receipts(never) == ()
         errored = RequestRecord(
             index=1,
             issued_at=1.0,
             request=RequestShape(index=1),
             completed_at=5.0,
-            result={"usage": {"completion_tokens": 2}},
+            result=_completion([2.0, 3.0]),
             error=RuntimeError("boom"),
         )
-        assert server_reported_token_receipts(errored) == ()
+        assert client_token_receipts(errored) == ()
 
-    def test_zero_or_bool_token_count_rejected(self) -> None:
-        for n in (0, -1, True, "3", None):
-            rec = RequestRecord(
-                index=0,
-                issued_at=1.0,
-                request=RequestShape(index=0),
-                completed_at=5.0,
-                result={"usage": {"completion_tokens": n}},
-            )
-            assert server_reported_token_receipts(rec) == ()
+    def test_empty_stream_yields_no_receipts(self) -> None:
+        rec = RequestRecord(
+            index=0,
+            issued_at=1.0,
+            request=RequestShape(index=0),
+            completed_at=5.0,
+            result=_completion([]),
+        )
+        assert client_token_receipts(rec) == ()
+
+
+# ---------------------------------------------------------------------------
+# SM11 - per-window request-log rows (attribution flags, client-vs-server count)
+# ---------------------------------------------------------------------------
+
+
+def _win(window_index: int, span_start: float, span_end: float) -> WindowRecord:
+    spec = WindowSpec(rate=10.0)
+    boundaries = WindowBoundaries(window_start=0.0, span_start=span_start, span_end=span_end)
+    bookkeeping = WindowBookkeeping(
+        boundaries=boundaries,
+        attribution_policy=ATTRIBUTION_STEADY_STATE_SPAN,
+        energy_denominator_tokens=0,
+        latency_records=[],
+        issued_in_span_count=0,
+        completed_in_span_count=0,
+        straddling_count=0,
+    )
+    return WindowRecord(
+        window_index=window_index,
+        boundaries=boundaries,
+        energy=None,
+        bookkeeping=bookkeeping,
+        window_energy_j=None,
+        window_j_per_token=None,
+        intra_window_cov=None,
+        start_event=WindowStartEvent(0, window_index, spec, span_start),
+        stop_event=WindowStopEvent(0, window_index, spec, span_end),
+    )
+
+
+def _req(
+    index: int,
+    issued_at: float,
+    *,
+    result: Any = None,
+    completed_at: float | None = None,
+    error: BaseException | None = None,
+    dispatched_at: float | None = None,
+) -> RequestRecord:
+    return RequestRecord(
+        index=index,
+        issued_at=issued_at,
+        request=RequestShape(index=index),
+        dispatched_at=dispatched_at,
+        completed_at=completed_at,
+        result=result,
+        error=error,
+    )
+
+
+class TestRequestRows:
+    def test_attribution_ramp_window_and_drain_tail(self) -> None:
+        """Ramp, in-window, and drain-straddling requests get the right D7 flags."""
+        windows = [_win(0, 10.0, 20.0), _win(1, 20.0, 30.0)]
+        ramp = _req(0, 5.0, completed_at=12.0, result=_completion([11.0, 12.0]))
+        straddler = _req(1, 15.0, completed_at=25.0, result=_completion([15.5, 24.0, 25.0]))
+        in_win1 = _req(2, 22.0, completed_at=24.0, result=_completion([23.0]))
+
+        rows_by_window = build_request_rows_by_window(
+            [ramp, straddler, in_win1], windows, level_index=0
+        )
+
+        assert [len(rl) for rl in rows_by_window] == [2, 1]  # ramp + straddler own window 0
+        ramp_row, straddler_row = rows_by_window[0]
+        assert ramp_row.is_ramp is True
+        assert ramp_row.in_measurement_window is False
+        assert straddler_row.is_ramp is False
+        assert straddler_row.in_measurement_window is True
+        assert straddler_row.completed_in_drain is True  # completed after span_end 20
+        win1_row = rows_by_window[1][0]
+        assert win1_row.window_index == 1
+        assert win1_row.in_measurement_window is True
+        assert win1_row.completed_in_drain is False
+
+    def test_ttft_and_latency_populated_from_stream(self) -> None:
+        """TTFT / e2e / per-token times are derived from the streamed CompletionResult."""
+        windows = [_win(0, 10.0, 20.0)]
+        rec = _req(
+            0,
+            12.0,
+            dispatched_at=12.01,
+            completed_at=13.0,
+            result=_completion([12.5, 12.7, 12.9]),
+        )
+        row = build_request_rows_by_window([rec], windows, level_index=0)[0][0]
+        assert row.first_token_at == 12.5
+        assert row.ttft_ms == pytest.approx(500.0)  # (12.5 - 12.0) * 1000
+        assert row.e2e_latency_ms == pytest.approx(1000.0)  # (13.0 - 12.0) * 1000
+        assert row.output_token_times == [12.5, 12.7, 12.9]
+        assert row.client_output_tokens == 3
+
+    def test_client_count_is_denominator_server_count_is_auxiliary(self) -> None:
+        """The client-counted deltas drive client_output_tokens; server usage rides aside."""
+        windows = [_win(0, 10.0, 20.0)]
+        # Client streamed 3 deltas; the engine self-reports 99 (a divergence).
+        rec = _req(
+            0,
+            12.0,
+            completed_at=13.0,
+            result=_completion([12.5, 12.7, 12.9], prompt=41, completion=99),
+        )
+        row = build_request_rows_by_window([rec], windows, level_index=0)[0][0]
+        assert row.client_output_tokens == 3  # canonical = client count, never 99
+        assert row.server_completion_tokens == 99  # preserved as auxiliary
+        assert row.server_prompt_tokens == 41
+        # The window aggregate of the auxiliary is a sum, None when never reported.
+        assert _sum_server_completion_tokens([row]) == 99
+
+    def test_status_ok_error_timeout(self) -> None:
+        """Status classifies completed / raised / never-completed requests."""
+        windows = [_win(0, 10.0, 20.0)]
+        ok = _req(0, 11.0, completed_at=12.0, result=_completion([11.5]))
+        errored = _req(1, 12.0, completed_at=12.5, result=_completion([]), error=RuntimeError("x"))
+        timed_out = _req(2, 13.0, completed_at=None)
+        rows = build_request_rows_by_window([ok, errored, timed_out], windows, level_index=0)[0]
+        assert [r.status for r in rows] == ["ok", "error", "timeout"]
+
+    def test_sum_server_completion_none_when_unreported(self) -> None:
+        """The auxiliary window total is None (not 0) when no engine reported usage."""
+        windows = [_win(0, 10.0, 20.0)]
+        rec = _req(0, 11.0, completed_at=12.0, result=_completion([11.5]))  # no server usage
+        row = build_request_rows_by_window([rec], windows, level_index=0)[0][0]
+        assert row.server_completion_tokens is None
+        assert _sum_server_completion_tokens([row]) is None
+
+    def test_no_records_yields_empty_row_lists_per_window(self) -> None:
+        """A level with no requests still returns one (empty) row list per window."""
+        windows = [_win(0, 10.0, 20.0), _win(1, 20.0, 30.0)]
+        assert build_request_rows_by_window([], windows, level_index=0) == [[], []]
 
 
 # ---------------------------------------------------------------------------
@@ -610,7 +761,7 @@ class TestRun:
         assert result.valid is True
         # N results = one per window (C3).
         assert result.window_count == 3
-        assert result.token_counting == ss.TOKEN_COUNTING_SERVER_REPORTED
+        assert result.token_counting == ss.TOKEN_COUNTING_CLIENT_STREAMED
         # Warmup provenance stamped into EVERY window result (point 4 / D6 label).
         level = result.levels[0]
         assert all(w.warmup is not None for w in level.windows)
@@ -805,6 +956,6 @@ class TestMakeLevelPlans:
         # The schedule spans the whole level, not just one 40 s window.
         assert plan.traffic_source.schedule.offsets[-1] > 40.0
         assert plan.traffic_source.schedule.offsets[-1] <= horizon
-        assert plan.token_receipt_fn is server_reported_token_receipts
+        assert plan.token_receipt_fn is client_token_receipts
         assert plan.spec.rate == 20.0
         assert plan.spec.duration_seconds == 40.0
