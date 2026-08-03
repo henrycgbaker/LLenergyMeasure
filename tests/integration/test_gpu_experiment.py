@@ -56,7 +56,7 @@ class TestM1ExitCriteria:
 
         # Throughput values populated
         assert result.avg_tokens_per_second > 0
-        assert result.total_tokens > 0
+        assert result.total_tokens is not None and result.total_tokens > 0
         assert result.total_inference_time_sec > 0
 
         # FLOPs populated

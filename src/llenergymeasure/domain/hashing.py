@@ -197,6 +197,15 @@ def build_observed_view(
     as a false library-resolution gap. ``mode_section`` is the active mode
     namespace's identity projection (server traffic minus slo; ``{}`` for
     offline), computed by the caller via ``config.mode_section_identity()``.
+
+    SERVER MODE (v0.7): this view is built ONLY on the offline path (from the
+    harness/sidecar that ran the engine in-process and read its live library
+    state). A server-mode bundle has no in-container measurement harness observing
+    the served engine, so it carries NO observed hash at all - and its
+    declared/resolved hash is never projected here as a stand-in (that would poison
+    the observed-collision analysis with a synthetic observation). In-container
+    observation is post-v0.7; until then a server cell's observed identity is
+    genuinely absent, not zero.
     """
     return ConfigHashView(
         engine=engine,

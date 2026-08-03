@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.runner_spec import RunnerSpec
+    from llenergymeasure.domain.experiment import ServerWindowMetrics
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult
@@ -67,6 +68,10 @@ def print_result_summary(result: ExperimentResult) -> None:
             print(f"  Latency ITL    {_sig3(ls.itl_mean_ms)} ms")
     print()
 
+    # --- Server (online-serving metrics; only present for serving_mode=server) ---
+    if result.server_metrics is not None:
+        _print_server_metrics(result.server_metrics)
+
     # --- Timing ---
     print("Timing")
     print(f"  Meas. window   {_format_duration(result.duration_sec)}")
@@ -80,6 +85,38 @@ def print_result_summary(result: ExperimentResult) -> None:
         for warning in result.measurement_warnings:
             print(f"  {warning}")
         print()
+
+
+def _print_server_metrics(m: ServerWindowMetrics) -> None:
+    """Print the online-serving window metrics (SM12).
+
+    Display-only and truthful: shows the headline server figures (request rate,
+    tail latencies, and - when an SLO was configured - attainment / verdict /
+    goodput) where the offline path shows tokens/s. A missing datum renders '-'
+    rather than a zero; no value is recomputed here.
+    """
+    print("Server")
+    if m.request_throughput_req_s is not None:
+        print(f"  Req rate       {_sig3(m.request_throughput_req_s)} req/s")
+    print(
+        f"  Completed      {m.completed_count} (errors {m.error_count}, timeouts {m.timeout_count})"
+    )
+    if m.completion_rate is not None:
+        print(f"  Completion     {_sig3(m.completion_rate * 100.0)} %")
+    if m.ttft.p99_ms is not None:
+        print(f"  TTFT p99       {_sig3(m.ttft.p99_ms)} ms")
+    if m.tpot.p99_ms is not None:
+        print(f"  TPOT p99       {_sig3(m.tpot.p99_ms)} ms")
+    if m.slo is not None:
+        slo = m.slo
+        if slo.attainment_fraction is not None:
+            pct = _sig3(slo.percentile * 100.0)
+            print(f"  Attainment     {_sig3(slo.attainment_fraction * 100.0)} % (target {pct} %)")
+        verdict = "pass" if slo.slo_pass else "fail" if slo.slo_pass is not None else "-"
+        print(f"  SLO verdict    {verdict}")
+        if slo.goodput_tokens_s is not None:
+            print(f"  Goodput        {_sig3(slo.goodput_tokens_s)} tok/s")
+    print()
 
 
 def _print_vram_estimate(

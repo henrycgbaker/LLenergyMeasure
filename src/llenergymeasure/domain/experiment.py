@@ -128,8 +128,10 @@ class ServerWindowProvenance(BaseModel):
 
     The additive server-provenance block on a server-mode ExperimentResult. It
     locates the window within its rate level and records the warmup outcome and
-    the disclosed attribution policy. Derived server metrics (goodput, slo_pass,
-    energy-at-operating-point) are a later slice and deliberately absent.
+    the disclosed attribution policy. The DERIVED server metrics (latency
+    percentiles, goodput, slo_pass, energy-at-operating-point) live on the sibling
+    ExperimentResult.server_metrics (ServerWindowMetrics), not here - this block is
+    provenance, that block is measurement.
     """
 
     level_index: int = Field(..., description="0-based rate-level index within the session.")
@@ -175,6 +177,187 @@ class ServerWindowProvenance(BaseModel):
         "usage.completion_tokens across the window's completed requests, for cross-checking the "
         "client-side canonical count. None when no engine reported usage (e.g. a stream without "
         "include_usage) or for a degraded abort-core bundle.",
+    )
+
+
+class LatencyPercentiles(BaseModel):
+    """Tail-latency percentiles of one per-request (or per-interval) series, in ms.
+
+    A slo-INDEPENDENT measurement block: the p50/p90/p99 of one latency series over
+    a window's completed (``status == "ok"``) requests, drain-inclusive (D7 - a
+    request issued in-span keeps its full latency even when it completes in the
+    post-span drain). ``samples`` is the number of contributing requests (or, for
+    the inter-token series, intervals). Every percentile is None when the series is
+    empty (no completed request produced the datum), so an all-failed window reads
+    truthfully rather than as a zero.
+    """
+
+    p50_ms: float | None = Field(default=None, description="Median (p50) of the series, ms.")
+    p90_ms: float | None = Field(default=None, description="p90 of the series, ms.")
+    p99_ms: float | None = Field(default=None, description="p99 of the series, ms.")
+    samples: int = Field(default=0, description="Number of contributing requests/intervals.")
+
+
+class ServerSloEvaluation(BaseModel):
+    """SLO overlay: a PURE post-hoc re-judgement of a window against slo bounds (O5.3).
+
+    None on the parent metrics block when no slo was configured. Every field here is
+    a pure function of (the window's request records, the slo bounds) and the
+    span-clipped token throughput - no slo value ever leaked into the window's
+    identity or its physical measurement, so one window is re-judgeable against any
+    bounds offline over its ``requests.parquet`` and this whole block is regenerated.
+
+    ATTAINMENT (O5.2, verdict-bearing): the share of COMPLETED (``status == "ok"``)
+    requests that met ALL configured bounds jointly (a request must satisfy the ttft
+    bound AND the tpot bound to count; a request whose latency is exactly AT a bound
+    MEETS it - a violation is strictly-greater-than). ``slo_pass`` is the window
+    verdict - ``attainment_fraction >= percentile`` (the MLPerf server-scenario
+    reading: at least ``percentile`` of served requests inside the latency bound).
+    ``goodput`` is the DERIVED column ``attainment x throughput`` over the SAME
+    records, never separately sampled. ``energy_at_operating_point_valid`` gates the
+    window's J/token as a valid operating point (``slo_pass AND level_valid``).
+
+    GOODPUT CAVEAT: the ``throughput`` factor is the span-clipped client-token
+    throughput, which counts EVERY in-span delivered token - including the partial
+    tokens of requests that then errored or timed out - whereas ``attainment``'s
+    denominator is the COMPLETED requests only. At a high failure rate (the SLO
+    knee, where failed requests still delivered in-span tokens) ``goodput`` therefore
+    OVERSTATES the true SLO-meeting token throughput; read ``completion_rate`` on the
+    parent metrics block alongside it as the failure disclosure. The formula is the
+    maintainer-ratified O5.2 derived column and is deliberately not refined here.
+    """
+
+    ttft_bound_ms: float | None = Field(
+        default=None,
+        description="The configured ttft bound (ms) this window was judged against. A request "
+        "whose TTFT is exactly AT the bound PASSES; a violation is strictly-greater-than.",
+    )
+    tpot_bound_ms: float | None = Field(
+        default=None,
+        description="The configured tpot bound (ms) this window was judged against. A request "
+        "whose per-request TPOT is exactly AT the bound PASSES; a violation is strictly-greater-than.",
+    )
+    percentile: float = Field(
+        ..., description="The shared tail quantile the attainment verdict targets (e.g. 0.99)."
+    )
+    ttft_at_percentile_ms: float | None = Field(
+        default=None,
+        description="Observed TTFT at the slo percentile over completed requests (ms), a CROSS-CHECK "
+        "only. The count-based attainment_fraction is AUTHORITATIVE for the verdict; this "
+        "interpolated at-percentile value can straddle the bound at small n or on a discrete tail, "
+        "so slo_pass True beside an at-percentile value over ttft_bound_ms is expected, not a bug. "
+        "None when no completed request had a TTFT.",
+    )
+    tpot_at_percentile_ms: float | None = Field(
+        default=None,
+        description="Observed per-request TPOT at the slo percentile over completed requests (ms), a "
+        "CROSS-CHECK only (see ttft_at_percentile_ms: the count-based attainment_fraction is "
+        "authoritative for the verdict; this interpolated value can straddle the bound at small n / "
+        "discrete tails). None when no completed request had >= 2 output tokens.",
+    )
+    attainment_fraction: float | None = Field(
+        default=None,
+        description="Share of COMPLETED requests meeting ALL configured bounds jointly (O5.2). "
+        "None when the window had no completed request (0/0 is undefined, not 0.0).",
+    )
+    slo_pass: bool | None = Field(
+        default=None,
+        description="Window verdict: attainment_fraction >= percentile. False when no request "
+        "completed (a window that served nothing cannot pass). None is not used here - a "
+        "configured slo always yields a bool verdict. VACUOUS PASS: a bound with zero contributing "
+        "samples is not violated by any request (e.g. a tpot bound when every completion had < 2 "
+        "tokens), so it passes vacuously - read the sibling percentile blocks' samples counts "
+        "(server_metrics.tpot.samples / ttft.samples) alongside this verdict to see the evidence "
+        "base.",
+    )
+    goodput_tokens_s: float | None = Field(
+        default=None,
+        description="SLO-meeting throughput: attainment_fraction x the span-clipped client-token "
+        "throughput (tok/s), a derived column. None when attainment or throughput is undefined. "
+        "CAVEAT: the throughput factor counts every in-span delivered token, including failed "
+        "requests' partials, while attainment's denominator is completed-only - so at a high "
+        "failure rate this OVERSTATES SLO-meeting throughput; read completion_rate as the failure "
+        "disclosure.",
+    )
+    energy_at_operating_point_valid: bool | None = Field(
+        default=None,
+        description="Whether the window's J/token is a VALID energy-at-operating-point: "
+        "slo_pass AND level_valid. A window that failed its slo or its stability gate is not a "
+        "usable operating point.",
+    )
+
+
+class ServerWindowMetrics(BaseModel):
+    """Server-mode per-window DERIVED metrics (SM12). None for offline results.
+
+    Derived at persist time from the SAME in-memory request records that feed
+    ``requests.parquet`` (no re-sampling), and stamped into ``result.json`` as part
+    of the derived document. Every field except ``slo`` is slo-INDEPENDENT: the
+    physical measurement (throughput, counts, latency percentiles, J/token) does not
+    move when the slo bounds change - only the ``slo`` overlay is re-judged (O5.3).
+
+    Latency percentiles filter ``status == "ok"`` and are drain-inclusive (D7 full
+    request lifecycles). ``request_throughput_req_s`` and the J/token operating
+    point stay span-clipped (the authoritative span-clipped denominators are reused,
+    never recomputed). ``completion_rate`` is the error-rate disclosure: attainment
+    alone under-penalises failure because its denominator is completed requests, so
+    the completed/total ratio rides alongside it.
+    """
+
+    request_throughput_req_s: float | None = Field(
+        default=None,
+        description="Completed (status==ok) requests issued in the measured span, per second of "
+        "span duration. None when the span duration is non-positive.",
+    )
+    completed_count: int = Field(
+        default=0, description="In-span requests that completed (status == 'ok')."
+    )
+    error_count: int = Field(default=0, description="In-span requests that errored.")
+    timeout_count: int = Field(default=0, description="In-span requests that timed out.")
+    completion_rate: float | None = Field(
+        default=None,
+        description="completed / (completed + error + timeout) over in-span requests (the "
+        "error-rate disclosure). None when no request was issued in-span.",
+    )
+    length_truncated_count: int = Field(
+        default=0,
+        description="Completed requests that stopped at their output-token budget "
+        "(finish_reason == 'length'). Disclosed because such completions ARE attainment-eligible "
+        "at v0.7 (the workload fixes the output budget; a length stop is a normal completion).",
+    )
+    ttft: LatencyPercentiles = Field(
+        default_factory=LatencyPercentiles, description="Time-to-first-token percentiles (ms)."
+    )
+    tpot: LatencyPercentiles = Field(
+        default_factory=LatencyPercentiles,
+        description="Per-request time-per-output-token percentiles (ms): each request's decode "
+        "span divided by (output_tokens - 1). Requests with < 2 tokens contribute no TPOT.",
+    )
+    itl: LatencyPercentiles = Field(
+        default_factory=LatencyPercentiles,
+        description="Pooled inter-token-latency percentiles (ms) over consecutive receipt "
+        "differences. Approximate at fine grain (client-loop receipt jitter, M2).",
+    )
+    e2e: LatencyPercentiles = Field(
+        default_factory=LatencyPercentiles,
+        description="End-to-end request-latency percentiles (ms).",
+    )
+    energy_at_operating_point_j_per_token: float | None = Field(
+        default=None,
+        description="The window's J/token (the span-clipped operating point). Its VALIDITY as an "
+        "operating point is the slo overlay's energy_at_operating_point_valid. None when the "
+        "window attributed no tokens.",
+    )
+    server_reported_client_token_ratio: float | None = Field(
+        default=None,
+        description="Divergence disclosure: the engine's self-reported completion-token total over "
+        "the client-counted total across completed in-span requests (1.0 = agreement). None when "
+        "no engine reported usage or the client counted zero tokens.",
+    )
+    slo: ServerSloEvaluation | None = Field(
+        default=None,
+        description="The post-hoc slo overlay (attainment, slo_pass, goodput). None when no slo "
+        "was configured; re-derivable offline against any bounds from requests.parquet.",
     )
 
 
@@ -228,17 +411,25 @@ class ExperimentResult(BaseModel):
     )
 
     # Core metrics
-    input_tokens: int = Field(
+    input_tokens: int | None = Field(
         ...,
         description="Actual input (prefill) tokens as observed by the engine after "
-        "tokenisation. total_tokens = input_tokens + output_tokens.",
+        "tokenisation. total_tokens = input_tokens + output_tokens. None for server-mode "
+        "results: client-side prefill counting is post-v0.7, so prompt tokens are not "
+        "counted (the engine's self-reported prompt tokens ride only in requests.parquet). "
+        "A placeholder 0 would be a lie, so the mode-inapplicable field stays None.",
     )
     output_tokens: int = Field(
         ...,
         description="Actual output (decode) tokens as observed by the engine. "
-        "total_tokens = input_tokens + output_tokens.",
+        "total_tokens = input_tokens + output_tokens. In server mode this is the client-side "
+        "canonical count (span-received streamed deltas, O8), and is always real.",
     )
-    total_tokens: int = Field(..., description="Total tokens across all processes")
+    total_tokens: int | None = Field(
+        ...,
+        description="Total tokens across all processes. None for server-mode results: "
+        "total = input + output is undefined while input (prefill) is uncounted at v0.7.",
+    )
     total_energy_j: float = Field(..., description="Total energy (sum across processes)")
     total_inference_time_sec: float = Field(..., description="Total inference time")
     avg_tokens_per_second: float = Field(..., description="Average throughput")
@@ -350,6 +541,16 @@ class ExperimentResult(BaseModel):
         "warmup outcome, and the pre-window protocol label. None for offline results.",
     )
 
+    # Server-mode per-window DERIVED metrics (latency percentiles, throughput,
+    # attainment/slo overlay, goodput, energy-at-operating-point). None for offline
+    # results (stable schema; the field is additive under the 2.0 bundle break).
+    server_metrics: ServerWindowMetrics | None = Field(
+        default=None,
+        description="Server-mode per-window derived metrics: TTFT/ITL/TPOT/e2e percentiles, "
+        "request throughput, completion/error/timeout counts, and the post-hoc slo overlay "
+        "(attainment, slo_pass, goodput, energy-at-operating-point). None for offline results.",
+    )
+
     # Environment sidecar (loaded from system.json by load_result; excluded
     # from result.json serialisation - the sidecar is the on-disk home).
     environment: EnvironmentSnapshot | None = Field(
@@ -417,8 +618,8 @@ class ExperimentResult(BaseModel):
 
     @property
     def tokens_per_joule(self) -> float:
-        """Overall energy efficiency."""
-        if self.total_energy_j > 0:
+        """Overall energy efficiency. 0.0 when total_tokens is unknown (server mode)."""
+        if self.total_energy_j > 0 and self.total_tokens is not None:
             return self.total_tokens / self.total_energy_j
         return 0.0
 
