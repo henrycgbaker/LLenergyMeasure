@@ -31,6 +31,7 @@ _SCHEMA_COLUMNS = {
     "server_prompt_tokens",
     "server_completion_tokens",
     "status",
+    "finish_reason",
     "level_index",
     "window_index",
     "in_measurement_window",
@@ -53,6 +54,7 @@ def _row(**overrides: object) -> RequestLogRow:
         "server_prompt_tokens": 7,
         "server_completion_tokens": 3,
         "status": REQUEST_STATUS_OK,
+        "finish_reason": "stop",
         "level_index": 0,
         "window_index": 0,
         "in_measurement_window": True,
@@ -76,8 +78,14 @@ def test_empty_log_writes_schema_only_parquet(tmp_path: Path) -> None:
 def test_round_trip_preserves_every_column(tmp_path: Path) -> None:
     """write + read back returns each row's fields, including the token-time list."""
     rows = [
-        _row(request_index=0, output_token_times=[100.1, 100.3]),
-        _row(request_index=1, is_ramp=True, in_measurement_window=False, output_token_times=[]),
+        _row(request_index=0, output_token_times=[100.1, 100.3], finish_reason="stop"),
+        _row(
+            request_index=1,
+            is_ramp=True,
+            in_measurement_window=False,
+            output_token_times=[],
+            finish_reason="length",
+        ),
     ]
     write_requests_parquet(rows, tmp_path / "requests.parquet")
     read_back = read_requests_parquet(tmp_path / "requests.parquet")
@@ -88,6 +96,9 @@ def test_round_trip_preserves_every_column(tmp_path: Path) -> None:
     assert read_back[1]["is_ramp"] is True
     assert read_back[1]["in_measurement_window"] is False
     assert read_back[0]["status"] == REQUEST_STATUS_OK
+    # finish_reason distinguishes a natural stop from a length-truncation (SM12).
+    assert read_back[0]["finish_reason"] == "stop"
+    assert read_back[1]["finish_reason"] == "length"
 
 
 def test_null_auxiliary_and_timing_fields_round_trip(tmp_path: Path) -> None:
@@ -97,6 +108,7 @@ def test_null_auxiliary_and_timing_fields_round_trip(tmp_path: Path) -> None:
         ttft_ms=None,
         server_prompt_tokens=None,
         server_completion_tokens=None,
+        finish_reason=None,
         client_output_tokens=0,
         output_token_times=[],
     )
@@ -106,6 +118,7 @@ def test_null_auxiliary_and_timing_fields_round_trip(tmp_path: Path) -> None:
     assert read_back["ttft_ms"] is None
     assert read_back["server_prompt_tokens"] is None
     assert read_back["server_completion_tokens"] is None
+    assert read_back["finish_reason"] is None
     assert read_back["client_output_tokens"] == 0
 
 

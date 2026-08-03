@@ -4,9 +4,11 @@ One row per issued request per window: the client-observed request lifecycle
 (issue / dispatch / first-token / completion timestamps and the per-token
 receipt times), the client-side canonical output-token count (O8: llem's own
 count of the streamed deltas is the J/token denominator), the engine's
-self-reported usage as auxiliary provenance, and the D7 boundary-attribution
-flags (measurement-window vs ramp, drain-tail). SM12 derives TTFT / ITL
-percentiles, goodput, and SLO attainment from these rows WITHOUT re-sampling.
+self-reported usage as auxiliary provenance, the stream's finish reason (so a
+length-truncation is distinguishable from a natural stop), and the D7
+boundary-attribution flags (measurement-window vs ramp, drain-tail). SM12
+derives TTFT / ITL percentiles, goodput, and SLO attainment from these rows
+WITHOUT re-sampling.
 
 Mirrors :mod:`llenergymeasure.harness.timeseries`: a locked columnar schema
 written with pyarrow (a core dependency), with file-level identity metadata so
@@ -47,7 +49,10 @@ class RequestLogRow:
     entry per streamed content delta); ``client_output_tokens`` is its length -
     the count that feeds the J/token denominator (O8). ``server_prompt_tokens`` /
     ``server_completion_tokens`` are the engine's self-reported usage, auxiliary
-    only (None when the engine reported none). ``in_measurement_window`` /
+    only (None when the engine reported none). ``finish_reason`` is the stream's
+    terminal reason (e.g. ``"stop"`` vs ``"length"``), None for an error/timeout
+    row and when the engine reported none; SM12 needs it to tell a natural stop
+    from a length-truncation for goodput / SLO attainment. ``in_measurement_window`` /
     ``is_ramp`` / ``completed_in_drain`` are the D7 boundary attribution: a
     request issued in the level's prospective ramp (is_ramp) never counts toward
     the window's steady-state metrics; a request issued in-span but completing
@@ -66,6 +71,7 @@ class RequestLogRow:
     server_prompt_tokens: int | None
     server_completion_tokens: int | None
     status: str
+    finish_reason: str | None
     level_index: int
     window_index: int
     in_measurement_window: bool
@@ -95,6 +101,7 @@ def _requests_schema() -> Any:
             pa.field("server_prompt_tokens", pa.int64()),
             pa.field("server_completion_tokens", pa.int64()),
             pa.field("status", pa.string()),
+            pa.field("finish_reason", pa.string()),
             pa.field("level_index", pa.int32()),
             pa.field("window_index", pa.int32()),
             pa.field("in_measurement_window", pa.bool_()),
@@ -160,6 +167,7 @@ def write_requests_parquet(
         columns["server_prompt_tokens"].append(row.server_prompt_tokens)
         columns["server_completion_tokens"].append(row.server_completion_tokens)
         columns["status"].append(row.status)
+        columns["finish_reason"].append(row.finish_reason)
         columns["level_index"].append(row.level_index)
         columns["window_index"].append(row.window_index)
         columns["in_measurement_window"].append(row.in_measurement_window)

@@ -306,7 +306,11 @@ def _wire_run(
 
 
 def _completion(
-    token_times: list[float], *, prompt: int | None = None, completion: int | None = None
+    token_times: list[float],
+    *,
+    prompt: int | None = None,
+    completion: int | None = None,
+    finish_reason: str | None = None,
 ) -> CompletionResult:
     return CompletionResult(
         text="x" * len(token_times),
@@ -314,6 +318,7 @@ def _completion(
         first_token_at=token_times[0] if token_times else None,
         server_prompt_tokens=prompt,
         server_completion_tokens=completion,
+        finish_reason=finish_reason,
     )
 
 
@@ -466,12 +471,15 @@ class TestRequestRows:
             0,
             12.0,
             completed_at=13.0,
-            result=_completion([12.5, 12.7, 12.9], prompt=41, completion=99),
+            result=_completion(
+                [12.5, 12.7, 12.9], prompt=41, completion=99, finish_reason="length"
+            ),
         )
         row = build_request_rows_by_window([rec], windows, level_index=0)[0][0]
         assert row.client_output_tokens == 3  # canonical = client count, never 99
         assert row.server_completion_tokens == 99  # preserved as auxiliary
         assert row.server_prompt_tokens == 41
+        assert row.finish_reason == "length"  # threaded from the stream (SM12 SLO input)
         # The window aggregate of the auxiliary is a sum, None when never reported.
         assert _sum_server_completion_tokens([row]) == 99
 
@@ -483,6 +491,8 @@ class TestRequestRows:
         timed_out = _req(2, 13.0, completed_at=None)
         rows = build_request_rows_by_window([ok, errored, timed_out], windows, level_index=0)[0]
         assert [r.status for r in rows] == ["ok", "error", "timeout"]
+        # No CompletionResult on error / timeout rows -> null finish_reason.
+        assert [r.finish_reason for r in rows] == [None, None, None]
 
     def test_sum_server_completion_none_when_unreported(self) -> None:
         """The auxiliary window total is None (not 0) when no engine reported usage."""

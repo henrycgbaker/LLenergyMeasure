@@ -303,6 +303,9 @@ def _build_request_row(
             completion.server_completion_tokens if completion is not None else None
         ),
         status=_request_status(record),
+        # Only a successfully-streamed response carries a finish reason; error /
+        # timeout rows (no CompletionResult) leave it null.
+        finish_reason=completion.finish_reason if completion is not None else None,
         level_index=level_index,
         window_index=window.window_index,
         in_measurement_window=in_window,
