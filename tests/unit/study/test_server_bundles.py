@@ -193,8 +193,23 @@ def _report_with_receipts(times: list[float]) -> tuple[IssuerReport, Any]:
 
 
 # Fake-clock spans for 3 windows of duration=10 after a ramp of 30 (start 1000):
-# [1030,1040], [1040,1050], [1050,1060]. Three token receipts per window.
-_TOKEN_TIMES = [1032.0, 1035.0, 1038.0, 1042.0, 1045.0, 1048.0, 1052.0, 1055.0, 1058.0]
+# [1030,1040], [1040,1050], [1050,1060]. Four token receipts per window, one in
+# each k=4 sub-window quarter, so the level validates AND the within-window CoV
+# diagnostic is formable.
+_TOKEN_TIMES = [
+    1031.0,
+    1033.5,
+    1036.0,
+    1039.0,
+    1041.0,
+    1043.5,
+    1046.0,
+    1049.0,
+    1051.0,
+    1053.5,
+    1056.0,
+    1059.0,
+]
 
 
 def _server_config(rate: float = 10.0) -> ExperimentConfig:
@@ -539,6 +554,8 @@ class TestCleanSession:
             assert prov["level_valid"] is True
             assert prov["pre_window_protocol"] == "server warmup (test)"
             assert prov["warmup"]["converged"] is True
+            # The within-window CoV diagnostic is stamped (distinct from the gate).
+            assert prov["intra_window_cov"] is not None
             # The session block is ALSO in system.json (dual-serialised).
             sys_block = _read(bundle / SYSTEM_FILENAME)["session"]
             assert sys_block["drain_energy_j"] == pytest.approx(7.0)
@@ -632,6 +649,8 @@ class TestMidLevelAbort:
         for bundle in bundles:
             payload = _read(bundle / RESULT_FILENAME)
             assert payload["server"]["level_valid"] is False
+            # A degraded abort-core bundle has no within-window diagnostic.
+            assert payload["server"]["intra_window_cov"] is None
             # The abort site is disclosed (a close-window failure here).
             assert "close failed" in payload["server"]["invalid_reason"]
             assert payload["total_energy_j"] == pytest.approx(1000.0)  # 100 W over 10 s

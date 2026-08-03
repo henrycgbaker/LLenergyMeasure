@@ -130,6 +130,13 @@ class ServerWindowProvenance(BaseModel):
     level_valid: bool = Field(
         ..., description="Whether the level passed its window-to-window J/token stability gate."
     )
+    intra_window_cov: float | None = Field(
+        default=None,
+        description="Within-window J/token coefficient of variation (the k=4 sub-window "
+        "diagnostic): a WITHIN-window stability figure, distinct from the window-to-window gate "
+        "that sets level_valid. None when unformable (e.g. a window with no attributed tokens) or "
+        "for a degraded abort-core bundle.",
+    )
     invalid_reason: str | None = Field(
         default=None,
         description="Why the level was invalid (gate failure or abort site), or None when valid.",

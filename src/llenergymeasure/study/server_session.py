@@ -1129,6 +1129,7 @@ class ServerSession:
             window_index=window.window_index,
             level_window_count=level_window_count,
             level_valid=level_valid,
+            intra_window_cov=window.intra_window_cov,
             invalid_reason=invalid_reason,
             warmup=wr.warmup,
             pre_window_protocol=wr.pre_window_protocol,
@@ -1224,12 +1225,14 @@ class ServerSession:
         warmup: ServerWarmupResult | None,
         pre_window_protocol: str,
         attribution_policy: str,
+        intra_window_cov: float | None = None,
     ) -> ServerWindowProvenance:
         return ServerWindowProvenance(
             level_index=level_index,
             window_index=window_index,
             level_window_count=level_window_count,
             level_valid=level_valid,
+            intra_window_cov=intra_window_cov,
             invalid_reason=invalid_reason,
             warmup=_warmup_provenance(warmup),
             pre_window_protocol=pre_window_protocol,
