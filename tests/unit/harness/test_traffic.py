@@ -21,11 +21,14 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import AsyncIterator
+from types import SimpleNamespace
 
 import pytest
 
 from llenergymeasure.config.models import TrafficConfig
 from llenergymeasure.harness.traffic import (
+    CompletionResult,
     HttpxTransport,
     IssuerReport,
     OpenLoopPoissonSource,
@@ -293,3 +296,83 @@ def test_httpx_transport_construction_requires_server_extra(
     with pytest.raises(ImportError) as excinfo:
         HttpxTransport(base_url="http://localhost:8000")
     assert "llenergymeasure[server]" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Client-side streaming token counting (SM11 / O8) - a fake httpx stream
+# ---------------------------------------------------------------------------
+
+
+class _FakeStreamResponse:
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    def raise_for_status(self) -> None:
+        return None
+
+    async def aiter_lines(self) -> AsyncIterator[str]:
+        for line in self._lines:
+            yield line
+
+
+class _FakeStreamCtx:
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    async def __aenter__(self) -> _FakeStreamResponse:
+        return _FakeStreamResponse(self._lines)
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+
+class _FakeAsyncClient:
+    """Minimal fake of httpx.AsyncClient.stream over canned SSE lines."""
+
+    def __init__(self, lines: list[str], payloads: list[dict], **_kw: object) -> None:
+        self._lines = lines
+        self._payloads = payloads
+
+    def stream(self, method: str, path: str, *, json: dict) -> _FakeStreamCtx:
+        self._payloads.append(json)
+        return _FakeStreamCtx(self._lines)
+
+    async def aclose(self) -> None:
+        return None
+
+
+def test_httpx_transport_streams_and_counts_client_side(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The transport counts streamed deltas client-side; server usage is auxiliary."""
+    lines = [
+        'data: {"choices":[{"text":"Hel","finish_reason":null}]}',
+        'data: {"choices":[{"text":"lo","finish_reason":null}]}',
+        # An empty finish delta is a step with no text - not a counted token.
+        'data: {"choices":[{"text":"","finish_reason":"length"}]}',
+        # A usage-only terminal chunk (choices empty) carries the auxiliary count.
+        'data: {"choices":[],"usage":{"prompt_tokens":4,"completion_tokens":2}}',
+        "data: [DONE]",
+    ]
+    payloads: list[dict] = []
+    fake_httpx = SimpleNamespace(AsyncClient=lambda **kw: _FakeAsyncClient(lines, payloads, **kw))
+    monkeypatch.setattr("llenergymeasure.harness.traffic.require_httpx", lambda: fake_httpx)
+
+    transport = HttpxTransport(base_url="http://x", path="/v1/completions")
+    result = asyncio.run(
+        transport(RequestShape(index=0, payload={"model": "gpt2", "prompt": "hi"}))
+    )
+
+    assert isinstance(result, CompletionResult)
+    # Two non-empty deltas -> two client-counted tokens (the empty finish delta is not one).
+    assert len(result.output_token_times) == 2
+    assert result.text == "Hello"
+    assert result.first_token_at == result.output_token_times[0]
+    assert result.finish_reason == "length"
+    # The engine's self-reported usage rides as auxiliary provenance only.
+    assert result.server_prompt_tokens == 4
+    assert result.server_completion_tokens == 2
+    # Streaming was requested with the usage option, and the original payload is preserved.
+    assert payloads[0]["stream"] is True
+    assert payloads[0]["stream_options"] == {"include_usage": True}
+    assert payloads[0]["prompt"] == "hi"
