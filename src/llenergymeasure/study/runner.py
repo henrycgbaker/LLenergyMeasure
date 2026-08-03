@@ -400,7 +400,9 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
                 # Wall-clock timeout check: mark remaining experiments skipped.
                 if deadline is not None and time.monotonic() > deadline:
-                    self._mark_remaining_skipped(ordered, i, compute_declared_config_hash)
+                    self._mark_remaining_skipped(
+                        ordered, i, compute_declared_config_hash, consumed_by_group
+                    )
                     self.manifest.mark_study_timed_out()
                     logger.warning(
                         "Study timed out after %.1f hours",
@@ -424,7 +426,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 results.append(result)
 
                 # Circuit breaker integration: update state based on result.
-                if self._apply_circuit_breaker(breaker, result, ordered, i):
+                if self._apply_circuit_breaker(breaker, result, ordered, i, consumed_by_group):
                     _aborted = True
                     break
 
@@ -592,13 +594,19 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         return False
 
     def _apply_circuit_breaker(
-        self, breaker: Any, result: Any, ordered: list[Any], index: int
+        self,
+        breaker: Any,
+        result: Any,
+        ordered: list[Any],
+        index: int,
+        consumed: frozenset[int] | set[int] = frozenset(),
     ) -> bool:
         """Update the circuit breaker from an experiment result.
 
         Records failure/success, applies cooldown + probe on a trip, and on a failed
         probe marks the remaining experiments skipped. Returns True when the study must
-        abort (caller sets _aborted and breaks).
+        abort (caller sets _aborted and breaks). ``consumed`` carries the server-group
+        indices the skip sweep must not re-process (H1).
         """
         from llenergymeasure.domain.experiment import compute_declared_config_hash
 
@@ -618,7 +626,9 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
             elif action == "abort":
                 # Probe failed - abort the study immediately.
-                self._mark_remaining_skipped(ordered, index + 1, compute_declared_config_hash)
+                self._mark_remaining_skipped(
+                    ordered, index + 1, compute_declared_config_hash, consumed
+                )
                 self.manifest.mark_study_circuit_breaker()
                 logger.error("Circuit breaker: probe experiment failed, aborting study")
                 return True
@@ -727,18 +737,28 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         ordered: list[Any],
         start_index: int,
         hash_fn: Any,
+        consumed: frozenset[int] | set[int] = frozenset(),
     ) -> None:
         """Mark all experiments from start_index onwards as skipped in the manifest.
 
         Increments cycle counters to assign the correct cycle number for each
         remaining experiment before marking it skipped.
 
+        Indices already consumed by a dispatched server group are SKIPPED here
+        without touching their cycle counters: their session already resolved them
+        (completed / failed) and advanced their counters, so re-processing would
+        double-advance and mark a non-existent (future-cycle) entry - a KeyError
+        that would abort the study uncleanly (H1).
+
         Args:
             ordered: Full ordered experiment list (study.experiments).
             start_index: Index of the first experiment to mark as skipped.
             hash_fn: compute_declared_config_hash callable.
+            consumed: Indices a server group already dispatched (do not re-process).
         """
         for j in range(start_index, len(ordered)):
+            if j in consumed:
+                continue
             cfg = ordered[j]
             h = hash_fn(cfg)
             c = self._cycle_counters.get(h, 0) + 1

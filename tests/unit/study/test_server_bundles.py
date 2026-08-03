@@ -222,6 +222,10 @@ def _server_config(rate: float = 10.0) -> ExperimentConfig:
     )
 
 
+def _offline_config(model: str) -> ExperimentConfig:
+    return ExperimentConfig(task={"model": model}, engine="vllm", serving_mode="offline")
+
+
 def _srv_result(session_id: str, level_index: int, level_valid: bool, energy: float) -> Any:
     """A minimal server-mode ExperimentResult for cell-granular counting tests."""
     from llenergymeasure.domain.experiment import ExperimentResult, ServerWindowProvenance
@@ -386,6 +390,63 @@ class TestOfflineSessionBlock:
         assert block["launch_energy_j"] is None
         assert block["drain_energy_j"] is None
         assert block["session_id"]
+
+
+# ---------------------------------------------------------------------------
+# H1: circuit-breaker abort on a server-group failure is group-aware
+# ---------------------------------------------------------------------------
+
+
+class TestCircuitBreakerGroupAware:
+    def test_group_probe_failure_aborts_cleanly_without_keyerror(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        # A prior offline failure trips the breaker into probe; the probe is a server
+        # GROUP whose launch fails -> abort. The skip sweep must not re-process the
+        # group's consumed members (which would double-advance their counters and
+        # mark a non-existent future-cycle entry -> KeyError that aborts uncleanly).
+        from llenergymeasure.config.models import ExecutionConfig, StudyConfig
+        from llenergymeasure.study import server_session as ss
+        from llenergymeasure.study.runner import StudyRunner
+
+        offline_fail = _offline_config("gpt2-fail")
+        r10, r20 = _server_config(10.0), _server_config(20.0)
+        offline_c = _offline_config("gpt2-tail")
+        study = StudyConfig(
+            experiments=[offline_fail, r10, r20, offline_c],
+            study_execution=ExecutionConfig(
+                max_consecutive_failures=1, circuit_breaker_cooldown_seconds=0
+            ),
+        )
+        manifest = ManifestWriter(study, tmp_path)
+        runner = StudyRunner(study, manifest, tmp_path, no_lock=True)
+
+        # The offline dispatch fails (trips the breaker); the server-group launch
+        # fails (the probe), driving the real _run_one_server_group except path.
+        monkeypatch.setattr(
+            runner,
+            "_run_one",
+            lambda config, mp_ctx, index: {"type": "E", "message": "offline boom"},
+        )
+
+        def _boom(*a: Any, **k: Any) -> Any:
+            raise RuntimeError("launch boom")
+
+        monkeypatch.setattr(ss.ServerSession, "for_group", staticmethod(_boom))
+
+        runner.run()  # must not raise KeyError
+
+        h = compute_declared_config_hash
+        # Clean abort: the study is finalized circuit_breaker (never reached without
+        # the fix, since the KeyError would escape first).
+        assert manifest.manifest.status == "circuit_breaker"
+        # The group's cells were marked failed by the group dispatch...
+        assert manifest.entry_status(h(r10), 1) == "failed"
+        assert manifest.entry_status(h(r20), 1) == "failed"
+        # ...the genuinely-remaining offline cell is skipped (marked once, correctly)...
+        assert manifest.entry_status(h(offline_c), 1) == "skipped"
+        # ...and the consumed members were never re-marked to a phantom cycle 2.
+        assert manifest.entry_status(h(r20), 2) is None
 
 
 # ---------------------------------------------------------------------------
