@@ -402,6 +402,47 @@ def test_print_result_summary_with_warmup(capsys):
     assert "5 prompts excluded" in out
 
 
+def test_print_result_summary_with_server_metrics(capsys):
+    """A server result renders the Server section (rate, attainment, verdict, goodput)."""
+    from llenergymeasure.domain.experiment import (
+        LatencyPercentiles,
+        ServerSloEvaluation,
+        ServerWindowMetrics,
+    )
+    from tests.conftest import make_result
+
+    metrics = ServerWindowMetrics(
+        request_throughput_req_s=9.4,
+        completed_count=94,
+        error_count=4,
+        timeout_count=2,
+        completion_rate=0.94,
+        ttft=LatencyPercentiles(p50_ms=40.0, p90_ms=80.0, p99_ms=120.0, samples=94),
+        tpot=LatencyPercentiles(p50_ms=10.0, p90_ms=18.0, p99_ms=25.0, samples=94),
+        energy_at_operating_point_j_per_token=0.5,
+        slo=ServerSloEvaluation(
+            percentile=0.99,
+            ttft_bound_ms=150.0,
+            attainment_fraction=0.96,
+            slo_pass=False,
+            goodput_tokens_s=180.0,
+            energy_at_operating_point_valid=False,
+        ),
+    )
+    result = make_result(
+        serving_mode="server", input_tokens=None, total_tokens=None, server_metrics=metrics
+    )
+    print_result_summary(result)
+    out = capsys.readouterr().out
+
+    assert "Server" in out
+    assert "Req rate" in out
+    assert "Attainment" in out
+    assert "SLO verdict" in out
+    assert "fail" in out
+    assert "Goodput" in out
+
+
 # =============================================================================
 # print_dry_run tests
 # =============================================================================
