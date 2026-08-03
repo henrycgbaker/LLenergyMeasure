@@ -37,6 +37,10 @@ RESULT_FILENAME = "result.json"
 CONFIG_SIDECAR_FILENAME = "config.json"
 SYSTEM_FILENAME = "system.json"
 TIMESERIES_FILENAME = "timeseries.parquet"
+# Server-mode per-window request log (one row per issued request in the window).
+# Absent from offline bundles (there is no request-level traffic); its finalize
+# backstop is skipped for non-server bundles (BundleWriter.write_result).
+REQUESTS_FILENAME = "requests.parquet"
 
 # Study-level bundle files.
 MANIFEST_FILENAME = "manifest.json"
@@ -109,6 +113,16 @@ ARTEFACTS: dict[str, ArtefactSpec] = {
         kind="parquet",
         missing_note=(
             "the result references a timeseries but the parquet did not land in the bundle"
+        ),
+    ),
+    "requests": ArtefactSpec(
+        REQUESTS_FILENAME,
+        required=False,
+        warn_if_missing=True,
+        kind="parquet",
+        missing_note=(
+            "the server window produced no per-request log but requests.parquet is "
+            "expected for server-mode bundles (offline bundles skip this backstop)"
         ),
     ),
 }
