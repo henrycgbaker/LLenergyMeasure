@@ -10,15 +10,19 @@ view and then hashes it; production callers take both from here.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import engine_str
+from llenergymeasure.domain.experiment import compute_declared_config_hash
 from llenergymeasure.domain.hashing import ConfigHashView, hash_config
 
 __all__ = [
     "build_resolved_view",
     "hash_config",
+    "resolved_config_hash",
+    "resolved_hashes_by_declared",
 ]
 
 
@@ -77,3 +81,29 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
         llem_execution=execution_dump,
         measurement=config.measurement.model_dump(mode="python"),
     )
+
+
+def resolved_config_hash(config: ExperimentConfig) -> str:
+    """Resolved-config hash of a (resolved) config: hash of its resolved-config view.
+
+    The single home for ``hash_config(build_resolved_view(config))`` - the resolved
+    hash carries the realised warmup protocol (the R7W user-config overlay output),
+    so it moves when the resolved protocol changes even though the declared hash
+    does not.
+    """
+    return hash_config(build_resolved_view(config))
+
+
+def resolved_hashes_by_declared(experiments: Sequence[ExperimentConfig]) -> dict[str, str]:
+    """Map each declared config_hash to its resolved-config hash (first-wins on dupes).
+
+    Cycles produce duplicate declared hashes; the first occurrence wins (they all
+    resolve identically). Callers own the strictness: the manifest wraps this in a
+    best-effort try/except, resume calls it directly and lets a failure raise.
+    """
+    result: dict[str, str] = {}
+    for exp in experiments:
+        declared = compute_declared_config_hash(exp)
+        if declared not in result:
+            result[declared] = resolved_config_hash(exp)
+    return result

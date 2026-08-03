@@ -565,6 +565,9 @@ class ServerSession:
         # Per-cell resolved-config hash cache (the config.json sidecar's R7W
         # realised-protocol provenance; computed once per grid point).
         self._resolved_hash_cache: dict[str, str | None] = {}
+        # Runner provenance is fixed for the session lifetime (self.spec is), so it
+        # is built once and reused across every window bundle + abort core.
+        self._runner_provenance_cache: Any = None
         self._env_snapshot: EnvironmentSnapshot | None = None
         # Populated in __enter__.
         self._handle: ServerHandle | None = None
@@ -1008,9 +1011,9 @@ class ServerSession:
             return self._resolved_hash_cache[cell.config_hash]
         resolved: str | None
         try:
-            from llenergymeasure.study.hashing import build_resolved_view, hash_config
+            from llenergymeasure.study.hashing import resolved_config_hash
 
-            resolved = hash_config(build_resolved_view(cell.config))
+            resolved = resolved_config_hash(cell.config)
         except Exception:
             resolved = None
         self._resolved_hash_cache[cell.config_hash] = resolved
@@ -1347,10 +1350,16 @@ class ServerSession:
         return self._env_snapshot
 
     def _runner_provenance(self) -> Any:
-        """The runner provenance block (image provenance for a container placement)."""
-        from llenergymeasure.study.runner import _provenance_from_spec
+        """The runner provenance block (image provenance for a container placement).
 
-        return _provenance_from_spec(self.spec)
+        Built once and cached: ``self.spec`` is fixed for the session lifetime and
+        the mapping is deterministic, so every window bundle reuses one instance.
+        """
+        if self._runner_provenance_cache is None:
+            from llenergymeasure.study.runner import _provenance_from_spec
+
+            self._runner_provenance_cache = _provenance_from_spec(self.spec)
+        return self._runner_provenance_cache
 
     # -- seam construction (overridable for tests) ---------------------------
 

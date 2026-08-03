@@ -400,15 +400,9 @@ class ManifestWriter:
         inert).
         """
         try:
-            from llenergymeasure.domain.experiment import compute_declared_config_hash
-            from llenergymeasure.study.hashing import build_resolved_view, hash_config
+            from llenergymeasure.study.hashing import resolved_hashes_by_declared
 
-            result: dict[str, str] = {}
-            for exp in study.experiments:
-                declared = compute_declared_config_hash(exp)
-                if declared not in result:
-                    result[declared] = hash_config(build_resolved_view(exp))
-            return result
+            return resolved_hashes_by_declared(study.experiments)
         except Exception as exc:
             logger.debug("Failed to compute resolved hashes for manifest entries: %s", exc)
             return {}

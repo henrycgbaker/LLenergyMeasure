@@ -161,14 +161,9 @@ def validate_resolved_config_drift(manifest: StudyManifest, new_study: StudyConf
     Raises:
         StudyError: A completed experiment's resolved hash no longer matches.
     """
-    from llenergymeasure.domain.experiment import compute_declared_config_hash
-    from llenergymeasure.study.hashing import build_resolved_view, hash_config
+    from llenergymeasure.study.hashing import resolved_hashes_by_declared
 
-    resolved_by_declared: dict[str, str] = {}
-    for exp in new_study.experiments:
-        declared = compute_declared_config_hash(exp)
-        if declared not in resolved_by_declared:
-            resolved_by_declared[declared] = hash_config(build_resolved_view(exp))
+    resolved_by_declared = resolved_hashes_by_declared(new_study.experiments)
 
     for entry in manifest.experiments:
         if entry.status != "completed" or entry.resolved_config_hash is None:
