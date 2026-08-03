@@ -313,6 +313,41 @@ def test_finalize_no_timeseries_warning_when_none_declared(tmp_path: Path, caplo
     assert not any("timeseries.parquet" in rec.message for rec in caplog.records)
 
 
+def test_finalize_warns_missing_requests_for_server_bundle(tmp_path: Path, caplog) -> None:
+    """A server bundle with no requests.parquet trips the loud registry backstop."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result(serving_mode="server"))
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
+        writer.finalize()
+    assert any("requests.parquet" in rec.message for rec in caplog.records)
+
+
+def test_finalize_no_requests_warning_for_offline_bundle(tmp_path: Path, caplog) -> None:
+    """Offline bundles never produce a request log, so the backstop stays silent."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result())  # serving_mode defaults to "offline"
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
+        writer.finalize()
+    assert not any("requests.parquet" in rec.message for rec in caplog.records)
+
+
+def test_write_requests_lands_parquet_and_silences_backstop(tmp_path: Path, caplog) -> None:
+    """write_requests writes requests.parquet, so its finalize backstop does not fire."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result(serving_mode="server"))
+    writer.write_requests([])  # an empty (schema-only) log still lands the file
+    assert (writer.bundle_dir / "requests.parquet").exists()
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.results.bundle"):
+        writer.finalize()
+    assert not any("requests.parquet" in rec.message for rec in caplog.records)
+
+
 # ---------------------------------------------------------------------------
 # artefact registry - the server-mode extension point
 # ---------------------------------------------------------------------------

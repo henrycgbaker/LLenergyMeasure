@@ -46,6 +46,7 @@ from llenergymeasure.domain.bundle_artefacts import (
     ARTEFACTS,
     BUNDLE_VERSION,
     CONFIG_SIDECAR_FILENAME,
+    REQUESTS_FILENAME,
     SYSTEM_FILENAME,
     TIMESERIES_FILENAME,
 )
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.experiment import ExperimentResult
     from llenergymeasure.domain.provenance import RunnerProvenance
     from llenergymeasure.domain.session import SessionBlock
+    from llenergymeasure.results.request_log import RequestLogRow
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,13 @@ class BundleWriter:
         if not ts_filename:
             # No timeseries declared: its finalize backstop does not apply.
             self._skip_backstops.add("timeseries")
+        # requests.parquet is a server-mode artefact (one row per issued request
+        # per window). Offline and any non-server bundle produces none, so its
+        # finalize backstop is skipped here (the single opt-out point, mirroring
+        # the timeseries skip - no per-call-site hand-glue). Server bundles keep
+        # the backstop so a missing request log stays a loud warning.
+        if getattr(result, "serving_mode", "offline") != "server":
+            self._skip_backstops.add("requests")
         ts_source: Path | None = None
         if ts_filename and self._ts_source_dir is not None:
             candidate = self._ts_source_dir / ts_filename
@@ -341,6 +350,40 @@ class BundleWriter:
                 "Failed to move config.json sidecar - provenance and authoritative "
                 "engine/model identity will be missing from this result"
             ),
+        )
+
+    def write_requests(
+        self,
+        rows: list[RequestLogRow],
+        *,
+        experiment_id: str | None = None,
+        span_start: float | None = None,
+        span_end: float | None = None,
+    ) -> Path:
+        """Write the window's per-request log (requests.parquet) into the bundle.
+
+        The single writer method for the ``requests`` registry artefact (O7.7):
+        the server session hands one window's request rows and ``finalize()``
+        sweeps the outcome via the registry with no hand-glue. Must run after
+        :meth:`write_result` (it writes into the bundle dir). The Parquet carries
+        the same identity metadata as the result (experiment id + config hash) plus
+        the window's measured ``span_start`` / ``span_end`` (so per-row receipt
+        series can be re-clipped to the window offline), so it stays attributable
+        and re-derivable if separated from its directory. An empty ``rows`` still
+        writes a schema-only Parquet (a truthful empty log), so a window that issued
+        no requests never trips the missing-artefact backstop.
+        """
+        if self._dir is None:
+            raise RuntimeError("write_result() must be called before write_requests()")
+        from llenergymeasure.results.request_log import write_requests_parquet
+
+        return write_requests_parquet(
+            rows,
+            self._dir / REQUESTS_FILENAME,
+            experiment_id=experiment_id or self._experiment_id,
+            declared_config_hash=self._config_hash,
+            span_start=span_start,
+            span_end=span_end,
         )
 
     def mark_artefact_absent(self, name: str) -> None:

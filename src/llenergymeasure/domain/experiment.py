@@ -113,6 +113,16 @@ class ServerWarmupProvenance(BaseModel):
     elapsed_s: float = Field(..., description="Wall-clock seconds spent in this level's warmup.")
 
 
+#: Client-side token-counting mechanism vocabulary (O8). The canonical J/token
+#: denominator for server mode is llem's OWN count of the streamed response
+#: deltas (one receipt per streamed content chunk), measured identically for
+#: every OpenAI-compatible engine in the SUT callback - never the engine's
+#: self-reported usage block, which rides only as auxiliary provenance. This is
+#: the value stamped into ServerWindowProvenance.token_counting and
+#: ServerSessionResult.token_counting.
+TOKEN_COUNTING_CLIENT_STREAMED = "client_streamed_deltas"
+
+
 class ServerWindowProvenance(BaseModel):
     """Server-mode per-window provenance: which level/window, and its pre-window protocol.
 
@@ -151,6 +161,20 @@ class ServerWindowProvenance(BaseModel):
     )
     attribution_policy: str = Field(
         ..., description="The disclosed energy/token attribution policy the window used."
+    )
+    token_counting: str = Field(
+        default=TOKEN_COUNTING_CLIENT_STREAMED,
+        description="The client-side token-counting mechanism whose count is this window's "
+        "J/token denominator (O8). 'client_streamed_deltas' = llem counts the streamed "
+        "response deltas in its own SUT callback, identically across engines; the engine's "
+        "self-reported usage is auxiliary only (server_reported_output_tokens).",
+    )
+    server_reported_output_tokens: int | None = Field(
+        default=None,
+        description="AUXILIARY (never the denominator): sum of the engines' self-reported "
+        "usage.completion_tokens across the window's completed requests, for cross-checking the "
+        "client-side canonical count. None when no engine reported usage (e.g. a stream without "
+        "include_usage) or for a degraded abort-core bundle.",
     )
 
 

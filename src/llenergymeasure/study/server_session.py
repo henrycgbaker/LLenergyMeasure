@@ -37,11 +37,13 @@ Contract notes satisfied here (banked from SM7/SM8/R7W delivery):
    ``ramp_exclusion + windows_per_level * window_seconds`` - as one continuous
    run (the manager owns window timing and never resizes the schedule).
 2. TOKEN RECEIPTS: client-side counts flow through the SM7 ``TokenReceiptFn``
-   seam so the energy denominator and the stability gate receive counts. v0.7
-   wires the INTERIM count from what the transport exposes (the server-reported
-   ``usage.completion_tokens``); canonical client-side tokenisation +
-   ``requests.parquet`` are SM11. The limitation is stamped loudly in the result
-   (``token_counting``) and the module constant below.
+   seam so the energy denominator and the stability gate receive counts. The
+   canonical count is llem's OWN count of the streamed response deltas
+   (``client_token_receipts`` reading each transport ``CompletionResult``),
+   measured identically for every engine (O8); the engine's self-reported usage
+   rides as auxiliary provenance in ``requests.parquet`` and the per-window
+   provenance, never as the denominator. The mechanism is disclosed in
+   ``token_counting`` (``TOKEN_COUNTING_CLIENT_STREAMED``).
 3. ABORTED LEVEL: a level failure carries its partial state on the propagating
    exception as ``llem_aborted_level``; the driver catches it at the DIRECT
    ``run_level`` await site (an outer Task boundary would substitute a fresh
@@ -61,7 +63,11 @@ from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.domain.experiment import ServerWarmupProvenance, ServerWindowProvenance
+from llenergymeasure.domain.experiment import (
+    TOKEN_COUNTING_CLIENT_STREAMED,
+    ServerWarmupProvenance,
+    ServerWindowProvenance,
+)
 from llenergymeasure.harness.server_warmup import (
     ServerWarmup,
     ServerWarmupResult,
@@ -69,7 +75,7 @@ from llenergymeasure.harness.server_warmup import (
     build_probe_request,
     describe_server_warmup_protocol,
 )
-from llenergymeasure.harness.traffic import OpenLoopPoissonSource, RequestShape
+from llenergymeasure.harness.traffic import CompletionResult, OpenLoopPoissonSource, RequestShape
 from llenergymeasure.harness.window_manager import (
     ABORTED_LEVEL_ATTR,
     ATTRIBUTION_STEADY_STATE_SPAN,
@@ -82,6 +88,12 @@ from llenergymeasure.harness.window_manager import (
     WindowManager,
     WindowRecord,
     WindowSpec,
+)
+from llenergymeasure.results.request_log import (
+    REQUEST_STATUS_ERROR,
+    REQUEST_STATUS_OK,
+    REQUEST_STATUS_TIMEOUT,
+    RequestLogRow,
 )
 
 if TYPE_CHECKING:
@@ -106,17 +118,6 @@ logger = logging.getLogger(__name__)
 #: to a ``ServerCapable`` member (flagged).
 SERVING_COMPLETIONS_PATH = "/v1/completions"
 
-#: Loud provenance stamp for the INTERIM v0.7 token denominator: client-side
-#: canonical counting + requests.parquet are SM11 (O8). Until then the energy
-#: denominator and stability gate consume the SERVER-REPORTED completion-token
-#: count (auxiliary per O8), which the driver reads off each response.
-TOKEN_COUNTING_SERVER_REPORTED = (
-    "server_reported_usage_interim: the J/token denominator and stability gate "
-    "consume server-reported completion-token counts (usage.completion_tokens), "
-    "an INTERIM stand-in for the SM11 client-side canonical count. Treat J/token "
-    "as provisional until SM11 lands client-side tokenisation + requests.parquet."
-)
-
 #: Interrupt-watcher poll cadence (seconds): how promptly a mid-session SIGINT
 #: (which the study runner's handler records on its interrupt event) is noticed
 #: and cancels the driving task.
@@ -124,15 +125,16 @@ _INTERRUPT_POLL_INTERVAL_S = 0.2
 
 __all__ = [
     "SERVING_COMPLETIONS_PATH",
-    "TOKEN_COUNTING_SERVER_REPORTED",
+    "TOKEN_COUNTING_CLIENT_STREAMED",
     "ServerCell",
     "ServerLevelResult",
     "ServerSession",
     "ServerSessionError",
     "ServerSessionResult",
     "ServerWindowResult",
+    "build_request_rows_by_window",
+    "client_token_receipts",
     "partition_server_groups",
-    "server_reported_token_receipts",
 ]
 
 
@@ -193,9 +195,10 @@ class ServerSessionResult:
     """One server session's product: the N window results over one server lifetime.
 
     The session's internal return type. ``valid`` is True iff at least one level
-    passed its stability gate. ``token_counting`` carries the loud SM11-interim
-    limitation stamp. ``experiment_results`` / ``result_files`` are the per-window
-    bundles the session persisted (SM10): the mapped ExperimentResults that enter
+    passed its stability gate. ``token_counting`` names the client-side counting
+    mechanism whose count is the J/token denominator (``TOKEN_COUNTING_CLIENT_STREAMED``,
+    O8). ``experiment_results`` / ``result_files`` are the per-window bundles the
+    session persisted (SM10): the mapped ExperimentResults that enter
     ``StudyResult.experiments`` and their on-disk paths - orchestration consumes
     these (there is no experiments=None side-channel any more).
     """
@@ -224,39 +227,174 @@ class ServerSessionResult:
 
 
 # ---------------------------------------------------------------------------
-# Interim token-receipt seam wiring (contract 2). Reads the SERVER-REPORTED
-# completion-token count off the transport's captured response and stamps every
-# token at the request's completion time (E2's completion-timestamp attribution,
-# the request-granular TokenReceiptFn form SM7 documents).
+# Token-receipt seam wiring (contract 2, O8). The CANONICAL denominator is the
+# client-side count of the streamed response deltas the transport captured on
+# each RequestRecord.result (a CompletionResult), one receipt timestamp per
+# streamed token. Token-granular, so the window manager counts tokens RECEIVED
+# within the measured span (the ratified energy-denominator rule) and the k=4
+# sub-window J/token diagnostic is formable. The engine's self-reported usage is
+# auxiliary provenance only (it rides in requests.parquet), never the denominator.
 # ---------------------------------------------------------------------------
 
 
-def server_reported_token_receipts(record: RequestRecord) -> Sequence[float]:
-    """Return a request's output-token receipt timestamps (interim, server-reported).
+def client_token_receipts(record: RequestRecord) -> Sequence[float]:
+    """Return a request's client-counted output-token receipt timestamps (O8).
 
-    All of a request's ``usage.completion_tokens`` tokens are stamped at its
-    ``completed_at`` (request-granular attribution = E2's completion-timestamp
-    rule). Returns ``()`` when the request never completed, raised, or the
-    response carried no usable ``usage.completion_tokens`` - so an unformable
-    denominator degrades to the gate's invalid-with-reason path rather than a lie.
+    The monotonic receipt time of each streamed content delta, as the transport
+    counted them in its own callback (identical across engines). Receipts are
+    returned for a request whose ``result`` carries them REGARDLESS of terminal
+    status (H1): a request that streamed tokens in-span then died still delivered
+    that compute, so its tokens must count in the denominator (physics: J/token is
+    energy over tokens DELIVERED in-span). The transport preserves the partial
+    receipts of a mid-stream failure on the record, so error / timeout requests
+    contribute their real delivered tokens. The window manager clips receipts to
+    ``[span_start, span_end]``, so post-span drain-tail tokens are still excluded.
+    Returns ``()`` only when nothing streamed (no CompletionResult, or an empty
+    one) - the gate then degrades to invalid-with-reason rather than lying.
     """
-    completed_at = record.completed_at
     result = record.result
-    if completed_at is None or record.error is not None or not isinstance(result, dict):
+    if not isinstance(result, CompletionResult):
         return ()
-    usage = result.get("usage")
-    if not isinstance(usage, dict):
-        return ()
-    n = usage.get("completion_tokens")
-    if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
-        return ()
-    return (completed_at,) * n
+    return tuple(result.output_token_times)
+
+
+def _request_status(record: RequestRecord) -> str:
+    """Classify a request's outcome for the request log (ok / error / timeout)."""
+    if record.error is not None:
+        return REQUEST_STATUS_ERROR
+    if record.completed_at is None:
+        return REQUEST_STATUS_TIMEOUT
+    return REQUEST_STATUS_OK
+
+
+def _attribute_window(issued_at: float, span_ends: Sequence[float]) -> int:
+    """Index of the window that owns a request issued at ``issued_at`` (by span_end).
+
+    The first window whose measured span closes at or after the issue time owns it;
+    a request issued past the last span (schedule overrun; normally none) falls to
+    the last window. This partitions the level timeline so every record lands in
+    exactly one window - none is dropped.
+    """
+    for i, end in enumerate(span_ends):
+        if issued_at <= end:
+            return i
+    return len(span_ends) - 1
+
+
+def _build_request_row(
+    record: RequestRecord, *, window: WindowRecord, level_index: int, ramp_boundary: float
+) -> RequestLogRow:
+    """Build one request-log row from a request record and its owning window (D7).
+
+    Raw-record discipline: every column states its physical fact when it exists and
+    is null only when it does not - the row does not filter or judge by status
+    (that is SM12's consumer-side job). The client receipt series
+    (``output_token_times`` / ``client_output_tokens``) is carried for ALL statuses
+    (H1: a mid-stream failure still delivered those tokens, preserved on the
+    record). ``first_token_at`` / ``ttft_ms`` are the real first-token receipt and
+    latency whenever a token physically arrived (so an error / timeout row that
+    streamed keeps them, matching ``output_token_times[0]``); ``finish_reason`` is
+    the real terminal reason when a finish chunk physically arrived, else null (a
+    mid-stream death never finished). ``completed_at`` / ``e2e_latency_ms`` are the
+    time-to-terminal: an error row carries its to-failure latency, a timeout row
+    (no completion) leaves them null.
+    """
+    boundaries = window.boundaries
+    completion = record.result if isinstance(record.result, CompletionResult) else None
+    token_times = list(completion.output_token_times) if completion is not None else []
+    completed_at = record.completed_at
+    issued_at = record.issued_at
+    in_window = boundaries.span_start <= issued_at <= boundaries.span_end
+    # Raw physical facts, no status gate: first_token_at is real whenever a token
+    # arrived (it IS output_token_times[0]); finish_reason is real only when a
+    # finish chunk arrived (null on a mid-stream death). SM12 filters by status.
+    first_token_at = completion.first_token_at if completion is not None else None
+    finish_reason = completion.finish_reason if completion is not None else None
+    return RequestLogRow(
+        request_index=record.index,
+        issued_at=issued_at,
+        dispatched_at=record.dispatched_at,
+        first_token_at=first_token_at,
+        completed_at=completed_at,
+        ttft_ms=((first_token_at - issued_at) * 1000.0) if first_token_at is not None else None,
+        e2e_latency_ms=((completed_at - issued_at) * 1000.0) if completed_at is not None else None,
+        client_output_tokens=len(token_times),
+        server_prompt_tokens=completion.server_prompt_tokens if completion is not None else None,
+        server_completion_tokens=(
+            completion.server_completion_tokens if completion is not None else None
+        ),
+        status=_request_status(record),
+        finish_reason=finish_reason,
+        level_index=level_index,
+        window_index=window.window_index,
+        in_measurement_window=in_window,
+        # Only window 0 carries the level's prospective ramp (issued before its span).
+        is_ramp=issued_at < ramp_boundary,
+        # D7 straddler: issued in-span, completing in the post-span drain tail.
+        completed_in_drain=(
+            in_window and completed_at is not None and completed_at > boundaries.span_end
+        ),
+        output_token_times=token_times,
+    )
+
+
+def build_request_rows_by_window(
+    records: Sequence[RequestRecord],
+    windows: Sequence[WindowRecord],
+    *,
+    level_index: int,
+) -> list[list[RequestLogRow]]:
+    """Partition a level's issued requests into per-window request-log rows (D7).
+
+    Returns one row list per window, aligned to ``windows`` order. Every record is
+    attributed to EXACTLY ONE window by issue time so none is dropped: window 0
+    owns everything issued up to its span_end (so the level's prospective ramp
+    requests ride in window 0 flagged ``is_ramp``); window ``i`` owns records
+    issued after window ``i-1``'s span_end through its own span_end. Per-row flags
+    follow the D7 boundary policies: ``in_measurement_window`` (issued in the
+    window's [span_start, span_end]), ``is_ramp`` (issued before window 0's
+    span_start), and ``completed_in_drain`` (issued in-span, completing past
+    span_end). Timestamps are the issuer's ``time.monotonic`` basis (SM12 derives
+    every latency as a difference).
+    """
+    if not windows:
+        return []
+    span_ends = [w.boundaries.span_end for w in windows]
+    ramp_boundary = windows[0].boundaries.span_start
+    row_lists: list[list[RequestLogRow]] = [[] for _ in windows]
+    for record in records:
+        w_idx = _attribute_window(record.issued_at, span_ends)
+        row_lists[w_idx].append(
+            _build_request_row(
+                record,
+                window=windows[w_idx],
+                level_index=level_index,
+                ramp_boundary=ramp_boundary,
+            )
+        )
+    return row_lists
+
+
+def _sum_server_completion_tokens(rows: Sequence[RequestLogRow]) -> int | None:
+    """Sum the auxiliary server-reported completion tokens over a window's rows.
+
+    None when no row carried a server usage count (never a false 0), so the
+    provenance field distinguishes 'no engine reported usage' from 'zero tokens'.
+    """
+    total = 0
+    seen = False
+    for row in rows:
+        if row.server_completion_tokens is not None:
+            total += row.server_completion_tokens
+            seen = True
+    return total if seen else None
 
 
 # ---------------------------------------------------------------------------
 # Request-shape source: OpenAI completions payloads drawn from the config's
-# dataset prompts (SM11 refines the encoding; this is the minimal faithful shape
-# so warmup + measurement + probe all drive the path they measure).
+# dataset prompts (the minimal faithful shape so warmup + measurement + probe all
+# drive the path they measure; the streaming flags + client-side token counting
+# are added by the transport, SM11, not the shape).
 # ---------------------------------------------------------------------------
 
 
@@ -752,7 +890,7 @@ class ServerSession:
             index=self.index,
             serving_mode=self.config.serving_mode,
             levels=levels,
-            token_counting=TOKEN_COUNTING_SERVER_REPORTED,
+            token_counting=TOKEN_COUNTING_CLIENT_STREAMED,
             total_window_energy_j=total_energy,
             elapsed_s=elapsed,
             aborted=aborted,
@@ -866,7 +1004,9 @@ class ServerSession:
         No-op when the runner exposes no ``study_dir`` (the unit-test fakes drive
         the manager + manifest logic without a bundle root). Each window maps to one
         ExperimentResult (serving_mode="server") and is written through the existing
-        BundleWriter path; finalize is deferred to session close (O7.4).
+        BundleWriter path; the level's issued requests are partitioned per window
+        into requests.parquet (SM11), and finalize is deferred to session close
+        (O7.4).
         """
         if getattr(self._runner, "study_dir", None) is None:
             return
@@ -875,7 +1015,10 @@ class ServerSession:
         protocol = self._protocol_label(warmup)
         level_valid = outcome.validation.valid
         invalid_reason = None if level_valid else (outcome.validation.reason or "level invalid")
-        for window in outcome.windows:
+        rows_by_window = build_request_rows_by_window(
+            outcome.issuer_report.records, outcome.windows, level_index=outcome.level_index
+        )
+        for window, rows in zip(outcome.windows, rows_by_window, strict=True):
             wr = ServerWindowResult(
                 level_index=outcome.level_index,
                 window=window,
@@ -888,10 +1031,16 @@ class ServerSession:
                 level_window_count=len(outcome.windows),
                 level_valid=level_valid,
                 invalid_reason=invalid_reason,
+                server_output_tokens=_sum_server_completion_tokens(rows),
             )
             samples = self._window_samples(window.energy)
             self._persist_bundle(
-                result, samples=samples, cell=cell, level_index=outcome.level_index
+                result,
+                samples=samples,
+                cell=cell,
+                level_index=outcome.level_index,
+                request_rows=rows,
+                request_span=(window.boundaries.span_start, window.boundaries.span_end),
             )
 
     def _persist_abort_cores(self, levels: list[ServerLevelResult]) -> None:
@@ -899,7 +1048,10 @@ class ServerSession:
 
         A failed level lost its per-window bookkeeping with the abort, so the bundle
         carries the measured energy core only (tokens / boundaries null) with the
-        aborted-level disclosure in the server provenance. No-op without a study_dir.
+        aborted-level disclosure in the server provenance. The per-request log was
+        lost with the bookkeeping, so no requests.parquet is written and its
+        finalize backstop is suppressed (``request_rows=None``). No-op without a
+        study_dir.
         """
         if getattr(self._runner, "study_dir", None) is None:
             return
@@ -923,7 +1075,11 @@ class ServerSession:
                 )
                 samples = self._window_samples(core)
                 self._persist_bundle(
-                    result, samples=samples, cell=cell, level_index=level.level_index
+                    result,
+                    samples=samples,
+                    cell=cell,
+                    level_index=level.level_index,
+                    request_rows=None,
                 )
 
     def _persist_bundle(
@@ -933,6 +1089,8 @@ class ServerSession:
         samples: list[Any],
         cell: ServerCell,
         level_index: int,
+        request_rows: list[RequestLogRow] | None,
+        request_span: tuple[float, float] | None = None,
     ) -> None:
         """Write one window bundle through the existing writer path; defer finalize.
 
@@ -945,6 +1103,15 @@ class ServerSession:
         when the window core carried samples - is written directly into the bundle
         from those in-memory samples via the same writer the offline harness uses
         (no new sampling machinery).
+
+        ``request_rows`` is the window's per-request log (SM11): a list (possibly
+        empty) writes requests.parquet via the registry writer method; ``None`` (a
+        degraded abort core, whose bookkeeping was lost) writes none and suppresses
+        the finalize backstop for that server bundle. ``request_span`` is the
+        window's measured monotonic (span_start, span_end), stored as file metadata
+        so the receipt-unclipped rows are re-clippable offline (M1). A parquet-write
+        hiccup is swallowed so the finalize sweep reports the missing artefact
+        loudly rather than crashing persistence.
         """
         from llenergymeasure.results.bundle import BundleWriter
 
@@ -963,6 +1130,17 @@ class ServerSession:
         )
         if result.timeseries and samples:
             self._write_timeseries(writer.bundle_dir, samples, result)
+        if request_rows is not None:
+            span_start, span_end = request_span if request_span is not None else (None, None)
+            with contextlib.suppress(Exception):
+                writer.write_requests(
+                    request_rows,
+                    experiment_id=result.experiment_id,
+                    span_start=span_start,
+                    span_end=span_end,
+                )
+        else:
+            writer.mark_artefact_absent("requests")
         self._write_config_sidecar(writer.bundle_dir, cell, result)
         writer.write_system(
             host_snapshot=self._host_snapshot(),
@@ -1132,15 +1310,19 @@ class ServerSession:
         level_window_count: int,
         level_valid: bool,
         invalid_reason: str | None,
+        server_output_tokens: int | None,
     ) -> ExperimentResult:
         """Map one measured window to an ExperimentResult (serving_mode='server').
 
         Fills the shared-core quantities truthfully (window energy J, client-counted
         output tokens, window duration, J/token) and leaves the derived server
-        metrics (goodput, slo_pass, amortised breakdown) None - SM12. Prefill tokens
-        are 0 (client-side prefill counting is SM11). The interim token-counting
-        disclosure rides the measurement warnings. Identity is the CELL's grid-point
-        hash (rate is identity per C4), so the bundle lands under its own hash.
+        metrics (goodput, slo_pass, amortised breakdown) None - SM12. ``output_tokens``
+        is the client-side canonical count (span-received streamed deltas, O8);
+        prefill tokens are 0 (client-side input-token counting needs a host tokenizer
+        and is out of scope - the engine's prompt_tokens ride only in requests.parquet).
+        The counting mechanism and the auxiliary server-reported total are disclosed in
+        the server provenance. Identity is the CELL's grid-point hash (rate is identity
+        per C4), so the bundle lands under its own hash.
         """
         from llenergymeasure.domain.experiment import ExperimentResult
 
@@ -1161,6 +1343,7 @@ class ServerSession:
             warmup=wr.warmup,
             pre_window_protocol=wr.pre_window_protocol,
             attribution_policy=bk.attribution_policy,
+            server_reported_output_tokens=server_output_tokens,
         )
         return ExperimentResult(
             experiment_id=self._window_experiment_id(
@@ -1182,7 +1365,6 @@ class ServerSession:
             start_time=start_time,
             end_time=end_time,
             timeseries=self._timeseries_name(window.energy),
-            measurement_warnings=[TOKEN_COUNTING_SERVER_REPORTED],
             server=server_prov,
         )
 
@@ -1236,10 +1418,7 @@ class ServerSession:
             start_time=start_time,
             end_time=end_time,
             timeseries=self._timeseries_name(core),
-            measurement_warnings=[
-                TOKEN_COUNTING_SERVER_REPORTED,
-                f"degraded window bundle (level aborted): {invalid_reason}",
-            ],
+            measurement_warnings=[f"degraded window bundle (level aborted): {invalid_reason}"],
             server=server_prov,
         )
 
@@ -1255,6 +1434,7 @@ class ServerSession:
         pre_window_protocol: str,
         attribution_policy: str,
         intra_window_cov: float | None = None,
+        server_reported_output_tokens: int | None = None,
     ) -> ServerWindowProvenance:
         return ServerWindowProvenance(
             level_index=level_index,
@@ -1266,6 +1446,8 @@ class ServerSession:
             warmup=_warmup_provenance(warmup),
             pre_window_protocol=pre_window_protocol,
             attribution_policy=attribution_policy,
+            token_counting=TOKEN_COUNTING_CLIENT_STREAMED,
+            server_reported_output_tokens=server_reported_output_tokens,
         )
 
     @staticmethod
@@ -1508,7 +1690,7 @@ class ServerSession:
                     spec=spec,
                     traffic_source=source,
                     transport=transport,
-                    token_receipt_fn=server_reported_token_receipts,
+                    token_receipt_fn=client_token_receipts,
                 )
             )
         return plans

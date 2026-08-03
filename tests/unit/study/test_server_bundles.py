@@ -37,7 +37,12 @@ from llenergymeasure.domain.environment import (
 )
 from llenergymeasure.domain.experiment import compute_declared_config_hash
 from llenergymeasure.harness.server_warmup import ServerWarmupResult
-from llenergymeasure.harness.traffic import IssuerReport, RequestRecord, RequestShape
+from llenergymeasure.harness.traffic import (
+    CompletionResult,
+    IssuerReport,
+    RequestRecord,
+    RequestShape,
+)
 from llenergymeasure.harness.window_manager import LevelPlan, WindowSpec, WindowStopEvent
 from llenergymeasure.study.manifest import ManifestWriter
 from llenergymeasure.study.server_session import (
@@ -176,8 +181,23 @@ class FakeTrafficSource:
 
 
 def _report_with_receipts(times: list[float]) -> tuple[IssuerReport, Any]:
+    # Each record carries a one-token CompletionResult stamped at its receipt time,
+    # so the client-counted denominator and the requests.parquet rows agree (SM11).
     records = [
-        RequestRecord(index=i, issued_at=t, request=RequestShape(index=i), completed_at=t + 0.01)
+        RequestRecord(
+            index=i,
+            issued_at=t,
+            request=RequestShape(index=i),
+            dispatched_at=t,
+            completed_at=t + 0.01,
+            result=CompletionResult(
+                text="x",
+                output_token_times=[t],
+                first_token_at=t,
+                server_prompt_tokens=5,
+                server_completion_tokens=1,
+            ),
+        )
         for i, t in enumerate(times)
     ]
     receipts = {i: [t] for i, t in enumerate(times)}
@@ -664,11 +684,34 @@ class TestCleanSession:
             assert prov["warmup"]["converged"] is True
             # The within-window CoV diagnostic is stamped (distinct from the gate).
             assert prov["intra_window_cov"] is not None
+            # SM11: the denominator is the client-side streamed-delta count; the
+            # engine's self-reported total rides as auxiliary provenance, and the
+            # interim server-reported token warning is gone.
+            assert prov["token_counting"] == "client_streamed_deltas"
+            assert prov["server_reported_output_tokens"] == 4  # 4 requests x 1 aux token
+            assert payload["measurement_warnings"] == []
             # The session block is ALSO in system.json (dual-serialised).
             sys_block = _read(bundle / SYSTEM_FILENAME)["session"]
             assert sys_block["drain_energy_j"] == pytest.approx(7.0)
         # Timeseries parquet rode the existing writer path (the core carried samples).
         assert all((b / "timeseries.parquet").exists() for b in bundles)
+        # SM11: each window bundle carries its per-request log with client counts;
+        # the four fixture requests per window land as in-measurement-window rows.
+        import pyarrow.parquet as pq
+
+        from llenergymeasure.results.request_log import read_requests_parquet
+
+        for bundle in bundles:
+            assert (bundle / "requests.parquet").exists()
+            rows = read_requests_parquet(bundle / "requests.parquet")
+            assert len(rows) == 4
+            assert all(r["client_output_tokens"] == 1 for r in rows)
+            assert all(r["in_measurement_window"] is True for r in rows)
+            assert all(r["is_ramp"] is False for r in rows)
+            assert all(r["server_completion_tokens"] == 1 for r in rows)  # auxiliary preserved
+            # M1: the window's measured span rides as file metadata (re-clip support).
+            meta = pq.read_table(bundle / "requests.parquet").schema.metadata
+            assert float(meta[b"span_end"]) > float(meta[b"span_start"])
         # config.json is written host-side with the declared + resolved hashes; the
         # observed half and engine_version stay absent (container-boundary, SM12).
         for bundle in bundles:
@@ -762,6 +805,9 @@ class TestMidLevelAbort:
             # The abort site is disclosed (a close-window failure here).
             assert "close failed" in payload["server"]["invalid_reason"]
             assert payload["total_energy_j"] == pytest.approx(1000.0)  # 100 W over 10 s
+            # SM11: the per-request log was lost with the bookkeeping, so a degraded
+            # bundle writes no requests.parquet (and its backstop is suppressed).
+            assert not (bundle / "requests.parquet").exists()
         # The single grid point is marked failed (no valid level).
         assert runner.manifest.manifest.experiments[0].status == "failed"
 
