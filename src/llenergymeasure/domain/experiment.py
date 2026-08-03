@@ -209,32 +209,51 @@ class ServerSloEvaluation(BaseModel):
 
     ATTAINMENT (O5.2, verdict-bearing): the share of COMPLETED (``status == "ok"``)
     requests that met ALL configured bounds jointly (a request must satisfy the ttft
-    bound AND the tpot bound to count). ``slo_pass`` is the window verdict -
-    ``attainment_fraction >= percentile`` (the MLPerf server-scenario reading: at
-    least ``percentile`` of served requests inside the latency bound). ``goodput``
-    is the DERIVED column ``attainment x throughput`` over the SAME records, never
-    separately sampled. ``energy_at_operating_point_valid`` gates the window's
-    J/token as a valid operating point (``slo_pass AND level_valid``).
+    bound AND the tpot bound to count; a request whose latency is exactly AT a bound
+    MEETS it - a violation is strictly-greater-than). ``slo_pass`` is the window
+    verdict - ``attainment_fraction >= percentile`` (the MLPerf server-scenario
+    reading: at least ``percentile`` of served requests inside the latency bound).
+    ``goodput`` is the DERIVED column ``attainment x throughput`` over the SAME
+    records, never separately sampled. ``energy_at_operating_point_valid`` gates the
+    window's J/token as a valid operating point (``slo_pass AND level_valid``).
+
+    GOODPUT CAVEAT: the ``throughput`` factor is the span-clipped client-token
+    throughput, which counts EVERY in-span delivered token - including the partial
+    tokens of requests that then errored or timed out - whereas ``attainment``'s
+    denominator is the COMPLETED requests only. At a high failure rate (the SLO
+    knee, where failed requests still delivered in-span tokens) ``goodput`` therefore
+    OVERSTATES the true SLO-meeting token throughput; read ``completion_rate`` on the
+    parent metrics block alongside it as the failure disclosure. The formula is the
+    maintainer-ratified O5.2 derived column and is deliberately not refined here.
     """
 
     ttft_bound_ms: float | None = Field(
-        default=None, description="The configured ttft bound (ms) this window was judged against."
+        default=None,
+        description="The configured ttft bound (ms) this window was judged against. A request "
+        "whose TTFT is exactly AT the bound PASSES; a violation is strictly-greater-than.",
     )
     tpot_bound_ms: float | None = Field(
-        default=None, description="The configured tpot bound (ms) this window was judged against."
+        default=None,
+        description="The configured tpot bound (ms) this window was judged against. A request "
+        "whose per-request TPOT is exactly AT the bound PASSES; a violation is strictly-greater-than.",
     )
     percentile: float = Field(
         ..., description="The shared tail quantile the attainment verdict targets (e.g. 0.99)."
     )
     ttft_at_percentile_ms: float | None = Field(
         default=None,
-        description="Observed TTFT at the slo percentile over completed requests (ms), for "
-        "cross-checking against ttft_bound_ms. None when no completed request had a TTFT.",
+        description="Observed TTFT at the slo percentile over completed requests (ms), a CROSS-CHECK "
+        "only. The count-based attainment_fraction is AUTHORITATIVE for the verdict; this "
+        "interpolated at-percentile value can straddle the bound at small n or on a discrete tail, "
+        "so slo_pass True beside an at-percentile value over ttft_bound_ms is expected, not a bug. "
+        "None when no completed request had a TTFT.",
     )
     tpot_at_percentile_ms: float | None = Field(
         default=None,
-        description="Observed per-request TPOT at the slo percentile over completed requests (ms). "
-        "None when no completed request had >= 2 output tokens.",
+        description="Observed per-request TPOT at the slo percentile over completed requests (ms), a "
+        "CROSS-CHECK only (see ttft_at_percentile_ms: the count-based attainment_fraction is "
+        "authoritative for the verdict; this interpolated value can straddle the bound at small n / "
+        "discrete tails). None when no completed request had >= 2 output tokens.",
     )
     attainment_fraction: float | None = Field(
         default=None,
@@ -245,12 +264,20 @@ class ServerSloEvaluation(BaseModel):
         default=None,
         description="Window verdict: attainment_fraction >= percentile. False when no request "
         "completed (a window that served nothing cannot pass). None is not used here - a "
-        "configured slo always yields a bool verdict.",
+        "configured slo always yields a bool verdict. VACUOUS PASS: a bound with zero contributing "
+        "samples is not violated by any request (e.g. a tpot bound when every completion had < 2 "
+        "tokens), so it passes vacuously - read the sibling percentile blocks' samples counts "
+        "(server_metrics.tpot.samples / ttft.samples) alongside this verdict to see the evidence "
+        "base.",
     )
     goodput_tokens_s: float | None = Field(
         default=None,
         description="SLO-meeting throughput: attainment_fraction x the span-clipped client-token "
-        "throughput (tok/s), a derived column. None when attainment or throughput is undefined.",
+        "throughput (tok/s), a derived column. None when attainment or throughput is undefined. "
+        "CAVEAT: the throughput factor counts every in-span delivered token, including failed "
+        "requests' partials, while attainment's denominator is completed-only - so at a high "
+        "failure rate this OVERSTATES SLO-meeting throughput; read completion_rate as the failure "
+        "disclosure.",
     )
     energy_at_operating_point_valid: bool | None = Field(
         default=None,

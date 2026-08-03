@@ -34,15 +34,22 @@ Design invariants:
 ATTAINMENT SEMANTICS (O5.2, verdict-bearing). Attainment is a PER-REQUEST joint
 evaluation, not a per-metric percentile: the fraction of COMPLETED (``status ==
 "ok"``) requests that met ALL configured bounds AT ONCE - a request counts iff its
-TTFT is within ``ttft_ms`` AND its per-request TPOT is within ``tpot_ms``. The
-window verdict ``slo_pass`` is ``attainment >= percentile`` (the shared SLO tail
-quantile): at least ``percentile`` of served requests inside the bound, the MLPerf
-server-scenario reading. This joint per-request form is STRICTER than checking each
-metric's marginal percentile separately (a request can pass TTFT yet fail TPOT), and
-that strictness is deliberate - the ruling is "meeting ALL slo bounds". Goodput is
-the DERIVED column ``attainment x throughput`` over the SAME records, never sampled
-apart. ``ttft_at_percentile_ms`` / ``tpot_at_percentile_ms`` are reported for
-cross-checking the observed tail against the bound.
+TTFT is within ``ttft_ms`` AND its per-request TPOT is within ``tpot_ms``. AT-BOUND
+SEMANTICS: a latency exactly EQUAL to a bound MEETS it; a violation is
+strictly-greater-than (``metric > bound``). The window verdict ``slo_pass`` is
+``attainment >= percentile`` (the shared SLO tail quantile): at least ``percentile``
+of served requests inside the bound, the MLPerf server-scenario reading. This joint
+per-request form is STRICTER than checking each metric's marginal percentile
+separately (a request can pass TTFT yet fail TPOT), and that strictness is
+deliberate - the ruling is "meeting ALL slo bounds". Goodput is the DERIVED column
+``attainment x throughput`` over the SAME records, never sampled apart; its
+throughput factor counts every in-span delivered token (failed requests' partials
+included) while attainment counts only completions, so goodput OVERSTATES SLO-meeting
+throughput at a high failure rate - pair it with ``completion_rate``. The COUNT-BASED
+``attainment`` is AUTHORITATIVE for the verdict; ``ttft_at_percentile_ms`` /
+``tpot_at_percentile_ms`` are reported for cross-checking the observed tail against
+the bound and, being interpolated, can straddle the bound at small n or on a discrete
+tail (a pass beside an over-bound at-percentile value is expected, not a bug).
 
 FINISH-REASON RULING (v0.7). A completed request whose stream stopped at its
 output-token budget (``finish_reason == "length"``) is attainment-ELIGIBLE: it is a
@@ -97,7 +104,8 @@ class SloBounds:
     pure derivation needs no config import and an offline re-judger can pass any
     bounds without constructing a config. ``ttft_ms`` / ``tpot_ms`` are None when
     unbounded; ``percentile`` is the shared tail quantile the attainment verdict
-    targets.
+    targets. Comparison is inclusive at the bound: a latency exactly EQUAL to a
+    bound MEETS it, and only a strictly-greater latency violates it.
     """
 
     ttft_ms: float | None
@@ -163,7 +171,8 @@ def _inter_token_latencies_ms(row: RequestLogRow) -> list[float]:
 def _request_meets_slo(row: RequestLogRow, bounds: SloBounds) -> bool:
     """Whether one COMPLETED request met ALL configured bounds jointly (O5.2).
 
-    A missing TTFT under a configured TTFT bound FAILS; an undefined TPOT (fewer than
+    A latency exactly AT a bound MEETS it - only ``metric > bound`` violates. A
+    missing TTFT under a configured TTFT bound FAILS; an undefined TPOT (fewer than
     two tokens) passes the TPOT bound VACUOUSLY (see module docstring).
     """
     if bounds.ttft_ms is not None and (row.ttft_ms is None or row.ttft_ms > bounds.ttft_ms):
