@@ -35,6 +35,12 @@ clips receipts to the measured span). An alternative attribution is re-derivable
 offline by clipping each row's ``output_token_times`` to the window's
 ``span_start`` / ``span_end`` (persisted as this file's key-value metadata); the
 per-row ``client_output_tokens`` is NOT that clipped count.
+
+RECEIPT JITTER (M2). Receipt timestamps are stamped in the client's async event
+loop, not at the socket: under high concurrency the loop can defer resuming the
+reader after bytes arrive, adding scheduling jitter to each receipt time. TTFT and
+per-window aggregates absorb this, but sub-millisecond ITL claims from consecutive
+receipts are not reliable - SM12 should treat fine-grained ITL as approximate.
 """
 
 from __future__ import annotations
@@ -58,17 +64,28 @@ class RequestLogRow:
     Timestamps share the issuer's ``time.monotonic`` basis (relative seconds).
     ``output_token_times`` is the client-side canonical token receipt series (one
     entry per streamed content delta); ``client_output_tokens`` is its length -
-    the count that feeds the J/token denominator (O8). ``server_prompt_tokens`` /
+    the count that feeds the J/token denominator (O8). It is carried for ALL
+    statuses: a mid-stream failure still delivered those tokens (H1), so an
+    error / timeout row's token series is REAL, not zero. ``server_prompt_tokens`` /
     ``server_completion_tokens`` are the engine's self-reported usage, auxiliary
     only (None when the engine reported none). ``finish_reason`` is the stream's
-    terminal reason (e.g. ``"stop"`` vs ``"length"``), None for an error/timeout
-    row and when the engine reported none; SM12 needs it to tell a natural stop
-    from a length-truncation for goodput / SLO attainment. ``in_measurement_window`` /
-    ``is_ramp`` / ``completed_in_drain`` are the D7 boundary attribution: a
-    request issued in the level's prospective ramp (is_ramp) never counts toward
-    the window's steady-state metrics; a request issued in-span but completing
-    after span_end (completed_in_drain) keeps its full latency yet only its
-    in-span tokens count (the two-policy separation).
+    terminal reason (e.g. ``"stop"`` vs ``"length"``); SM12 needs it to tell a
+    natural stop from a length-truncation for goodput / SLO attainment.
+
+    Terminal-status field asymmetry (M2): the latency-SAMPLE and finish fields
+    ``first_token_at`` / ``ttft_ms`` / ``finish_reason`` are populated only for an
+    ``ok`` row - a failed / timed-out request is not a valid TTFT sample and its
+    stream never finished, so SM12 filters latency percentiles by status without
+    inspecting the token series (which stays real, see above). ``completed_at`` /
+    ``e2e_latency_ms`` follow the status: an ``error`` row carries its to-failure
+    latency (completion timestamp is the failure time), a ``timeout`` row never
+    completed so both are null.
+
+    ``in_measurement_window`` / ``is_ramp`` / ``completed_in_drain`` are the D7
+    boundary attribution: a request issued in the level's prospective ramp
+    (is_ramp) never counts toward the window's steady-state metrics; a request
+    issued in-span but completing after span_end (completed_in_drain) keeps its
+    full latency yet only its in-span tokens count (the two-policy separation).
     """
 
     request_index: int

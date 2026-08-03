@@ -429,6 +429,13 @@ class CompletionResult:
     tokens into one delta would make the client count an under-count; the
     self-reported usage rides alongside precisely so any such divergence is
     visible per request rather than hidden as a silent approximation.
+
+    Receipt timestamps carry client-loop jitter: each ``output_token_times`` entry
+    is stamped when the async event loop resumes this reader after the bytes
+    arrive, not at the socket, so under high concurrency the loop's scheduling
+    delay is folded into the receipt time. TTFT and per-window aggregates absorb
+    it; sub-millisecond inter-token-latency claims from consecutive receipts do
+    not (a downstream consumer should treat fine-grained ITL as approximate).
     """
 
     text: str
