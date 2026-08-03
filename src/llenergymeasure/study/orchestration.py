@@ -183,14 +183,10 @@ def orchestrate_study(
     if manifest.status not in ("timed_out", "circuit_breaker", "interrupted"):
         manifest.mark_study_completed()
 
-    # Natural counting over the mapped results: server sessions are now first-class
-    # (their per-window ExperimentResults enter experiment_results, no side channel),
-    # so a completed result is any non-None entry and a failure is a None (a failure
-    # dict). Server window energies fold into the study total the same way offline
-    # experiment energies do.
-    completed = sum(1 for r in experiment_results if r is not None)
-    failed = sum(1 for r in experiment_results if r is None)
-    total_energy = sum(r.total_energy_j for r in experiment_results if r is not None)
+    # Cell-granular counting: total_experiments is a cell count ex ante, so the
+    # summary counters must be cells too (a server session maps to N window results
+    # but is a handful of grid-point cells).
+    completed, failed, total_energy = _count_outcomes(experiment_results)
 
     # study.experiments is already cycle-expanded by apply_cycles(), so len() is the true total
     n_cycles = study.study_execution.n_cycles
@@ -526,3 +522,35 @@ def _run_via_runner(
             experiment_results.append(r)
 
     return runner.result_files + server_result_files, experiment_results, warnings
+
+
+def _count_outcomes(
+    experiment_results: list[ExperimentResult | None],
+) -> tuple[int, int, float]:
+    """Return ``(completed, failed, total_energy)`` counted CELL-granular.
+
+    An offline result is one cell. A server session's per-window results collapse
+    to their grid-point cell by ``(session_id, level_index)``: the cell completes
+    iff its level was valid, else fails. A ``None`` is a failure dict - one per
+    failed cell for a single cell, but ONE for a whole grouped-session launch
+    failure that dooms N cells (the per-cell manifest is the authoritative
+    cell-level record). ``total_energy`` sums every non-None result: a gate-failed
+    level still contributes its physically-measured window energy.
+    """
+    completed = 0
+    failed = 0
+    total_energy = 0.0
+    server_cells: dict[tuple[str | None, int], bool] = {}
+    for r in experiment_results:
+        if r is None:
+            failed += 1
+            continue
+        total_energy += r.total_energy_j
+        if r.server is None:
+            completed += 1  # an offline cell
+            continue
+        session_id = r.session.session_id if r.session is not None else None
+        server_cells[(session_id, r.server.level_index)] = r.server.level_valid
+    completed += sum(1 for valid in server_cells.values() if valid)
+    failed += sum(1 for valid in server_cells.values() if not valid)
+    return completed, failed, total_energy

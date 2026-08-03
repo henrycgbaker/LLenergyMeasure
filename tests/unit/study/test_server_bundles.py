@@ -207,6 +207,37 @@ def _server_config(rate: float = 10.0) -> ExperimentConfig:
     )
 
 
+def _srv_result(session_id: str, level_index: int, level_valid: bool, energy: float) -> Any:
+    """A minimal server-mode ExperimentResult for cell-granular counting tests."""
+    from llenergymeasure.domain.experiment import ExperimentResult, ServerWindowProvenance
+    from llenergymeasure.domain.session import SessionBlock
+
+    return ExperimentResult(
+        experiment_id="x",
+        declared_config_hash="h",
+        serving_mode="server",
+        input_tokens=0,
+        output_tokens=1,
+        total_tokens=1,
+        total_energy_j=energy,
+        total_inference_time_sec=1.0,
+        avg_tokens_per_second=1.0,
+        avg_energy_per_token_j=1.0,
+        total_flops=0.0,
+        start_time=datetime.now(),
+        end_time=datetime.now(),
+        session=SessionBlock(session_id=session_id, window_count=3),
+        server=ServerWindowProvenance(
+            level_index=level_index,
+            window_index=0,
+            level_window_count=3,
+            level_valid=level_valid,
+            pre_window_protocol="p",
+            attribution_policy="a",
+        ),
+    )
+
+
 def _snapshot() -> EnvironmentSnapshot:
     return EnvironmentSnapshot(
         hardware=EnvironmentMetadata(
@@ -386,6 +417,28 @@ class TestFirstClassOrchestration:
         assert exps == [r1, r2, None]
         assert files == ["/offline", "/a", "/b"]
         assert warnings == ["boom"]
+
+    def test_count_outcomes_is_cell_granular(self) -> None:
+        from llenergymeasure.study.orchestration import _count_outcomes
+        from tests.conftest import make_result
+
+        offline = make_result()
+        results = [
+            offline,  # one offline cell
+            _srv_result("s", 0, True, 10.0),  # server cell A (valid), three windows
+            _srv_result("s", 0, True, 10.0),
+            _srv_result("s", 0, True, 10.0),
+            _srv_result("s", 1, False, 5.0),  # server cell B (gate-failed), two windows
+            _srv_result("s", 1, False, 5.0),
+            None,  # a failure dict
+        ]
+        completed, failed, total_energy = _count_outcomes(results)
+        # Cells, not windows: offline + valid cell A = 2 completed; invalid cell B +
+        # the None = 2 failed (never 6/1 window-granular).
+        assert completed == 2
+        assert failed == 2
+        # total_energy still sums every non-None window (gate-failed levels count).
+        assert total_energy == pytest.approx(offline.total_energy_j + 30.0 + 10.0)
 
 
 # ---------------------------------------------------------------------------
