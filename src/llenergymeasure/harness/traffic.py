@@ -336,10 +336,21 @@ class OpenLoopPoissonSource:
         record.dispatched_at = time.monotonic()
         try:
             record.result = await transport(record.request)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as exc:
+            # A drain-timeout / cancellation still delivered whatever streamed so
+            # far: preserve the partial receipts (H1) so its in-span tokens count.
+            # completed_at stays None (timeout), and the cancellation propagates.
+            partial = _recover_partial_completion(exc)
+            if partial is not None:
+                record.result = partial
             raise
         except Exception as exc:  # bookkeeping only; a failed call never stops issuance
             record.error = exc
+            # A mid-stream failure keeps its delivered tokens in the denominator
+            # (H1): stash the partial the transport attached before re-raising.
+            partial = _recover_partial_completion(exc)
+            if partial is not None:
+                record.result = partial
         record.completed_at = time.monotonic()
 
     @staticmethod
@@ -428,6 +439,20 @@ class CompletionResult:
     finish_reason: str | None = None
 
 
+#: Attribute name under which a streaming transport attaches its partially
+#: accumulated :class:`CompletionResult` to the exception that aborts a stream
+#: (H1). The AbortedLevel precedent: the exception is re-raised unchanged and the
+#: issuer reads this off it, so a mid-stream failure still preserves the tokens
+#: actually delivered (they count toward the in-span energy denominator).
+PARTIAL_COMPLETION_ATTR = "llem_partial_completion"
+
+
+def _recover_partial_completion(exc: BaseException) -> CompletionResult | None:
+    """Return the partial CompletionResult a transport attached to ``exc``, or None."""
+    partial = getattr(exc, PARTIAL_COMPLETION_ATTR, None)
+    return partial if isinstance(partial, CompletionResult) else None
+
+
 @dataclass
 class HttpxTransport:
     """Production streaming HTTP transport for the issuer (the ``httpx`` use site).
@@ -481,43 +506,56 @@ class HttpxTransport:
         completion_tokens: int | None = None
         finish_reason: str | None = None
 
-        async with self._client.stream("POST", self.path, json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                data = self._sse_data(line)
-                if data is None:
-                    continue
-                if data == "[DONE]":
-                    break
-                chunk = json.loads(data)
-                choices = chunk.get("choices") or []
-                if choices:
-                    choice = choices[0]
-                    if choice.get("finish_reason") is not None:
-                        finish_reason = choice["finish_reason"]
-                    # Completions API streams the incremental text under "text".
-                    delta = choice.get("text") or ""
-                    if delta:
-                        now = time.monotonic()
-                        if first_token_at is None:
-                            first_token_at = now
-                        token_times.append(now)
-                        text_parts.append(delta)
-                usage = chunk.get("usage")
-                if isinstance(usage, dict):
-                    prompt_tokens = _usage_int(usage.get("prompt_tokens"), prompt_tokens)
-                    completion_tokens = _usage_int(
-                        usage.get("completion_tokens"), completion_tokens
-                    )
+        def snapshot() -> CompletionResult:
+            # Built from the mutable accumulators, so it reflects whatever streamed
+            # up to this point - the clean return AND the mid-stream-failure partial.
+            return CompletionResult(
+                text="".join(text_parts),
+                output_token_times=token_times,
+                first_token_at=first_token_at,
+                server_prompt_tokens=prompt_tokens,
+                server_completion_tokens=completion_tokens,
+                finish_reason=finish_reason,
+            )
 
-        return CompletionResult(
-            text="".join(text_parts),
-            output_token_times=token_times,
-            first_token_at=first_token_at,
-            server_prompt_tokens=prompt_tokens,
-            server_completion_tokens=completion_tokens,
-            finish_reason=finish_reason,
-        )
+        try:
+            async with self._client.stream("POST", self.path, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    data = self._sse_data(line)
+                    if data is None:
+                        continue
+                    if data == "[DONE]":
+                        break
+                    chunk = json.loads(data)
+                    choices = chunk.get("choices") or []
+                    if choices:
+                        choice = choices[0]
+                        if choice.get("finish_reason") is not None:
+                            finish_reason = choice["finish_reason"]
+                        # Completions API streams the incremental text under "text".
+                        delta = choice.get("text") or ""
+                        if delta:
+                            now = time.monotonic()
+                            if first_token_at is None:
+                                first_token_at = now
+                            token_times.append(now)
+                            text_parts.append(delta)
+                    usage = chunk.get("usage")
+                    if isinstance(usage, dict):
+                        prompt_tokens = _usage_int(usage.get("prompt_tokens"), prompt_tokens)
+                        completion_tokens = _usage_int(
+                            usage.get("completion_tokens"), completion_tokens
+                        )
+        except BaseException as exc:
+            # A connection reset, read-timeout between deltas, malformed chunk, or
+            # a drain cancellation must not discard the tokens already delivered
+            # (H1): attach the partial and re-raise unchanged (both Exception and
+            # BaseException/cancellation paths). The issuer stashes it on the record.
+            setattr(exc, PARTIAL_COMPLETION_ATTR, snapshot())
+            raise
+
+        return snapshot()
 
     @staticmethod
     def _sse_data(line: str) -> str | None:

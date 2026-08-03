@@ -346,11 +346,16 @@ class TestTokenReceipts:
         )
         assert client_token_receipts(rec) == ()
 
-    def test_incomplete_or_errored_request_yields_no_receipts(self) -> None:
+    def test_request_without_completion_yields_no_receipts(self) -> None:
+        # No CompletionResult on the record (nothing streamed) -> no receipts.
         never = RequestRecord(
             index=0, issued_at=1.0, request=RequestShape(index=0), completed_at=None
         )
         assert client_token_receipts(never) == ()
+
+    def test_errored_or_timed_out_request_preserves_partial_receipts(self) -> None:
+        # H1: a mid-stream failure's delivered tokens still count in the denominator,
+        # regardless of the error flag or a missing completion timestamp.
         errored = RequestRecord(
             index=1,
             issued_at=1.0,
@@ -359,7 +364,15 @@ class TestTokenReceipts:
             result=_completion([2.0, 3.0]),
             error=RuntimeError("boom"),
         )
-        assert client_token_receipts(errored) == ()
+        assert client_token_receipts(errored) == (2.0, 3.0)
+        timed_out = RequestRecord(
+            index=2,
+            issued_at=1.0,
+            request=RequestShape(index=2),
+            completed_at=None,
+            result=_completion([2.5]),
+        )
+        assert client_token_receipts(timed_out) == (2.5,)
 
     def test_empty_stream_yields_no_receipts(self) -> None:
         rec = RequestRecord(
@@ -484,15 +497,50 @@ class TestRequestRows:
         assert _sum_server_completion_tokens([row]) == 99
 
     def test_status_ok_error_timeout(self) -> None:
-        """Status classifies completed / raised / never-completed requests."""
+        """Status classifies requests and gates the latency-sample / finish fields (H1)."""
         windows = [_win(0, 10.0, 20.0)]
-        ok = _req(0, 11.0, completed_at=12.0, result=_completion([11.5]))
-        errored = _req(1, 12.0, completed_at=12.5, result=_completion([]), error=RuntimeError("x"))
-        timed_out = _req(2, 13.0, completed_at=None)
+        ok = _req(0, 11.0, completed_at=12.0, result=_completion([11.5], finish_reason="stop"))
+        # H1: error / timeout requests carry their REAL partial receipts.
+        errored = _req(
+            1, 12.0, completed_at=12.5, result=_completion([12.2, 12.3]), error=RuntimeError("x")
+        )
+        timed_out = _req(2, 13.0, completed_at=None, result=_completion([13.2]))
         rows = build_request_rows_by_window([ok, errored, timed_out], windows, level_index=0)[0]
+
         assert [r.status for r in rows] == ["ok", "error", "timeout"]
-        # No CompletionResult on error / timeout rows -> null finish_reason.
-        assert [r.finish_reason for r in rows] == [None, None, None]
+        # The token series is real for ALL statuses (the delivered tokens count).
+        assert [r.client_output_tokens for r in rows] == [1, 2, 1]
+        assert rows[1].output_token_times == [12.2, 12.3]
+        # Latency-sample + finish fields are ok-only; failed / timed-out rows null them.
+        assert rows[0].finish_reason == "stop" and rows[0].first_token_at is not None
+        assert [r.finish_reason for r in rows] == ["stop", None, None]
+        assert rows[1].first_token_at is None and rows[1].ttft_ms is None
+        assert rows[2].first_token_at is None and rows[2].ttft_ms is None
+        # completed_at / e2e: error carries its to-failure latency, timeout stays null.
+        assert rows[1].e2e_latency_ms is not None
+        assert rows[2].e2e_latency_ms is None
+
+    def test_mid_stream_failure_tokens_count_in_denominator(self) -> None:
+        """H1 regression: a clean straddler and a mid-stream-failed request with
+        identical in-span receipts contribute equally to the energy denominator."""
+        from llenergymeasure.harness.window_manager import build_window_bookkeeping
+
+        boundaries = WindowBoundaries(window_start=0.0, span_start=10.0, span_end=20.0)
+        in_span = [11.0, 12.0, 13.0, 14.0, 15.0]
+        clean = _req(0, 11.0, completed_at=25.0, result=_completion(in_span))  # ok straddler
+        failed = _req(
+            1, 11.0, completed_at=16.0, result=_completion(in_span), error=RuntimeError("reset")
+        )
+        report = IssuerReport(
+            records=[clean, failed],
+            issued_count=2,
+            completed_count=1,
+            cap_bound_fraction=0.0,
+            issuance_duration_s=0.0,
+            concurrency_cap=None,
+        )
+        bk = build_window_bookkeeping(boundaries, report, token_receipt_fn=client_token_receipts)
+        assert bk.energy_denominator_tokens == 10  # 5 + 5: the failed request counts equally
 
     def test_sum_server_completion_none_when_unreported(self) -> None:
         """The auxiliary window total is None (not 0) when no engine reported usage."""

@@ -241,14 +241,17 @@ def client_token_receipts(record: RequestRecord) -> Sequence[float]:
     """Return a request's client-counted output-token receipt timestamps (O8).
 
     The monotonic receipt time of each streamed content delta, as the transport
-    counted them in its own callback (identical across engines). Returns ``()``
-    when the request never completed, raised, or streamed no tokens - so an
-    unformable denominator degrades to the gate's invalid-with-reason path rather
-    than a lie. This is the canonical J/token denominator seam; server-reported
-    usage never reaches it.
+    counted them in its own callback (identical across engines). Receipts are
+    returned for a request whose ``result`` carries them REGARDLESS of terminal
+    status (H1): a request that streamed tokens in-span then died still delivered
+    that compute, so its tokens must count in the denominator (physics: J/token is
+    energy over tokens DELIVERED in-span). The transport preserves the partial
+    receipts of a mid-stream failure on the record, so error / timeout requests
+    contribute their real delivered tokens. The window manager clips receipts to
+    ``[span_start, span_end]``, so post-span drain-tail tokens are still excluded.
+    Returns ``()`` only when nothing streamed (no CompletionResult, or an empty
+    one) - the gate then degrades to invalid-with-reason rather than lying.
     """
-    if record.completed_at is None or record.error is not None:
-        return ()
     result = record.result
     if not isinstance(result, CompletionResult):
         return ()
@@ -281,14 +284,29 @@ def _attribute_window(issued_at: float, span_ends: Sequence[float]) -> int:
 def _build_request_row(
     record: RequestRecord, *, window: WindowRecord, level_index: int, ramp_boundary: float
 ) -> RequestLogRow:
-    """Build one request-log row from a request record and its owning window (D7)."""
+    """Build one request-log row from a request record and its owning window (D7).
+
+    The raw client receipt series (``output_token_times`` / ``client_output_tokens``)
+    is carried for ALL terminal statuses (H1): a mid-stream failure still delivered
+    those tokens, and the transport preserved them on the record. The latency-sample
+    and finish fields (``first_token_at`` / ``ttft_ms`` / ``finish_reason``) are
+    populated only for an ``ok`` request - a failed or timed-out request is not a
+    valid TTFT sample and its stream never finished, so SM12 filters latency
+    percentiles by status without inspecting the token series. ``completed_at`` /
+    ``e2e_latency_ms`` stay truthful per status: an error row carries its
+    to-failure latency, a timeout row (no completion) leaves them null.
+    """
     boundaries = window.boundaries
     completion = record.result if isinstance(record.result, CompletionResult) else None
     token_times = list(completion.output_token_times) if completion is not None else []
-    first_token_at = completion.first_token_at if completion is not None else None
     completed_at = record.completed_at
     issued_at = record.issued_at
     in_window = boundaries.span_start <= issued_at <= boundaries.span_end
+    ok = _request_status(record) == REQUEST_STATUS_OK
+    # Latency-sample + finish fields are ok-only (a failed request is not a valid
+    # TTFT sample and never finished); the token series above stays real regardless.
+    first_token_at = completion.first_token_at if (completion is not None and ok) else None
+    finish_reason = completion.finish_reason if (completion is not None and ok) else None
     return RequestLogRow(
         request_index=record.index,
         issued_at=issued_at,
@@ -303,9 +321,7 @@ def _build_request_row(
             completion.server_completion_tokens if completion is not None else None
         ),
         status=_request_status(record),
-        # Only a successfully-streamed response carries a finish reason; error /
-        # timeout rows (no CompletionResult) leave it null.
-        finish_reason=completion.finish_reason if completion is not None else None,
+        finish_reason=finish_reason,
         level_index=level_index,
         window_index=window.window_index,
         in_measurement_window=in_window,

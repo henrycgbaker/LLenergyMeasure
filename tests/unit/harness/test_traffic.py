@@ -28,6 +28,7 @@ import pytest
 
 from llenergymeasure.config.models import TrafficConfig
 from llenergymeasure.harness.traffic import (
+    PARTIAL_COMPLETION_ATTR,
     CompletionResult,
     HttpxTransport,
     IssuerReport,
@@ -376,3 +377,68 @@ def test_httpx_transport_streams_and_counts_client_side(
     assert payloads[0]["stream"] is True
     assert payloads[0]["stream_options"] == {"include_usage": True}
     assert payloads[0]["prompt"] == "hi"
+
+
+class _FailingStreamResponse:
+    def __init__(self, lines: list[str], fail_after: int) -> None:
+        self._lines = lines
+        self._fail_after = fail_after
+
+    def raise_for_status(self) -> None:
+        return None
+
+    async def aiter_lines(self) -> AsyncIterator[str]:
+        for i, line in enumerate(self._lines):
+            if i == self._fail_after:
+                raise ConnectionError("stream reset mid-response")
+            yield line
+
+
+class _FailingStreamCtx:
+    def __init__(self, lines: list[str], fail_after: int) -> None:
+        self._lines = lines
+        self._fail_after = fail_after
+
+    async def __aenter__(self) -> _FailingStreamResponse:
+        return _FailingStreamResponse(self._lines, self._fail_after)
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+
+class _FailingAsyncClient:
+    def __init__(self, lines: list[str], fail_after: int, **_kw: object) -> None:
+        self._lines = lines
+        self._fail_after = fail_after
+
+    def stream(self, method: str, path: str, *, json: dict) -> _FailingStreamCtx:
+        return _FailingStreamCtx(self._lines, self._fail_after)
+
+    async def aclose(self) -> None:
+        return None
+
+
+def test_httpx_transport_preserves_partial_on_mid_stream_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stream that dies mid-response attaches the tokens delivered so far (H1)."""
+    lines = [
+        'data: {"choices":[{"text":"Hel","finish_reason":null}]}',
+        'data: {"choices":[{"text":"lo","finish_reason":null}]}',
+        # The reset strikes here, before any finish / usage / [DONE] chunk.
+        'data: {"choices":[{"text":"!","finish_reason":null}]}',
+    ]
+    fake_httpx = SimpleNamespace(AsyncClient=lambda **kw: _FailingAsyncClient(lines, 2, **kw))
+    monkeypatch.setattr("llenergymeasure.harness.traffic.require_httpx", lambda: fake_httpx)
+
+    transport = HttpxTransport(base_url="http://x", path="/v1/completions")
+    with pytest.raises(ConnectionError) as excinfo:
+        asyncio.run(transport(RequestShape(index=0, payload={"prompt": "hi"})))
+
+    partial = getattr(excinfo.value, PARTIAL_COMPLETION_ATTR)
+    assert isinstance(partial, CompletionResult)
+    # The two deltas delivered before the reset are preserved (not discarded),
+    # so their in-span tokens can still count toward the energy denominator.
+    assert len(partial.output_token_times) == 2
+    assert partial.text == "Hello"
+    assert partial.finish_reason is None  # the stream never finished
