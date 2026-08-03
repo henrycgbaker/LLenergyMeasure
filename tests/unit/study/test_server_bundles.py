@@ -548,6 +548,33 @@ class TestGrouping:
         )
         assert partition_server_groups([a, b]) == [[0], [1]]
 
+    def test_sequential_multi_cycle_yields_singletons(self) -> None:
+        # Under the default sequential order a 3-rate x 2-cycle sweep lays out as
+        # [A,A,B,B,C,C]: no two cells are both consecutive AND same-cycle, so every
+        # grid point dispatches as its own singleton session (H2).
+        from llenergymeasure.config.cycle_ordering import ExperimentOrder, apply_cycles
+        from llenergymeasure.study.server_session import partition_server_groups
+
+        sweep = [_server_config(10.0), _server_config(20.0), _server_config(30.0)]
+        ordered = apply_cycles(sweep, 2, ExperimentOrder.SEQUENTIAL, "hash")
+        assert partition_server_groups(ordered) == [[0], [1], [2], [3], [4], [5]]
+
+    def test_interleave_multi_cycle_yields_one_group_per_pass(self) -> None:
+        # Under interleave the same sweep lays out as [A,B,C,A,B,C]: each same-cycle
+        # pass folds into one session (one launch per sweep per cycle).
+        from llenergymeasure.config.cycle_ordering import ExperimentOrder, apply_cycles
+        from llenergymeasure.study.server_session import partition_server_groups
+
+        sweep = [_server_config(10.0), _server_config(20.0), _server_config(30.0)]
+        ordered = apply_cycles(sweep, 2, ExperimentOrder.INTERLEAVE, "hash")
+        assert partition_server_groups(ordered) == [[0, 1, 2], [3, 4, 5]]
+
+    def test_single_cycle_sweep_folds(self) -> None:
+        from llenergymeasure.study.server_session import partition_server_groups
+
+        sweep = [_server_config(10.0), _server_config(20.0), _server_config(30.0)]
+        assert partition_server_groups(sweep) == [[0, 1, 2]]
+
     def test_group_dispatches_one_launch_and_per_cell_bundles(self, tmp_path: Path) -> None:
         a, b = _server_config(10.0), _server_config(20.0)
         ha, hb = compute_declared_config_hash(a), compute_declared_config_hash(b)

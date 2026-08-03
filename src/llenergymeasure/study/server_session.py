@@ -1660,41 +1660,53 @@ def partition_server_groups(configs: Sequence[ExperimentConfig]) -> list[list[in
     Returns a list of units, each a list of indices into ``configs``, in order and
     never reordered. A unit is either a single cell (an offline experiment, or a
     server experiment that folds with no neighbour) or a run of CONSECUTIVE
-    server cells whose configs are identical except ``server.traffic.rate``. A
-    non-server cell, any non-rate difference, or a repeated declared hash (a cycle
-    boundary - the same grid point coming round again) ends the current group and
-    starts a fresh one, so repeat cycles become fresh sessions.
+    server cells whose configs are identical except ``server.traffic.rate`` AND that
+    belong to the SAME cycle. Cycle membership is tracked prospectively: the nth
+    occurrence of a declared hash across the walk is its cycle n, so folding
+    requires both a matching rate-stripped key and an equal prospective cycle. A
+    non-server cell, any non-rate difference, or a cycle-number change ends the
+    current group and starts a fresh one, so repeat cycles become fresh sessions.
+
+    ORDERING CONSEQUENCE: under the DEFAULT ``sequential`` order the execution
+    sequence is ``[A, A, B, B, ...]`` (each grid point's cycles adjacent), so a
+    rate sweep's cells are never both consecutive AND same-cycle - sequential
+    server sweeps therefore dispatch as SINGLETON sessions (one launch per grid
+    point). Under ``interleave`` the sequence is ``[A, B, ..., A, B, ...]``, so
+    each pass folds into one session (one launch per sweep per cycle). A
+    single-cycle sweep folds under either order.
     """
     from llenergymeasure.domain.experiment import compute_declared_config_hash
 
     units: list[list[int]] = []
     current: list[int] = []
     current_key: str | None = None
-    current_hashes: set[str] = set()
+    current_cycle: int | None = None
+    occurrence_count: dict[str, int] = {}
 
     def _flush() -> None:
-        nonlocal current, current_key, current_hashes
+        nonlocal current, current_key, current_cycle
         if current:
             units.append(current)
         current = []
         current_key = None
-        current_hashes = set()
+        current_cycle = None
 
     for index, config in enumerate(configs):
         if config.serving_mode != "server":
             _flush()
             units.append([index])
             continue
-        key = _group_key(config)
         declared = compute_declared_config_hash(config)
-        if current and key == current_key and declared not in current_hashes:
+        prospective_cycle = occurrence_count.get(declared, 0) + 1
+        occurrence_count[declared] = prospective_cycle
+        key = _group_key(config)
+        if current and key == current_key and prospective_cycle == current_cycle:
             current.append(index)
-            current_hashes.add(declared)
         else:
             _flush()
             current = [index]
             current_key = key
-            current_hashes = {declared}
+            current_cycle = prospective_cycle
     _flush()
     return units
 
