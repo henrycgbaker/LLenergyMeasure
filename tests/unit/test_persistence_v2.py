@@ -223,6 +223,8 @@ def test_from_json_loads_correctly(tmp_path: Path, minimal_result: ExperimentRes
     assert loaded.output_tokens == minimal_result.output_tokens
     assert loaded.total_tokens == minimal_result.total_tokens
     # Token split is consistent: total is the sum of the input/output halves.
+    # (input/total are int | None to admit server results; offline carries real ints.)
+    assert loaded.input_tokens is not None and loaded.total_tokens is not None
     assert loaded.input_tokens + loaded.output_tokens == loaded.total_tokens
     assert loaded.total_energy_j == pytest.approx(minimal_result.total_energy_j)
 

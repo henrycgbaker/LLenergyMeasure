@@ -1049,7 +1049,7 @@ def test_harness_energy_none_still_produces_valid_result(minimal_config):
         result = harness.run(engine, minimal_config)
 
     assert isinstance(result, ExperimentResult)
-    assert result.total_tokens > 0
+    assert result.total_tokens is not None and result.total_tokens > 0
     assert result.energy_breakdown is None or result.energy_breakdown.raw_j == 0.0
 
 
@@ -1062,7 +1062,7 @@ def test_build_result_populates_energy_per_token_mj(minimal_config):
         result = harness.run(engine, minimal_config)
 
     # FakeBackend returns total_tokens = input(10) + output(20) = 30
-    assert result.total_tokens > 0
+    assert result.total_tokens is not None and result.total_tokens > 0
     assert result.energy_per_token_mj_total is not None
     # With no energy sampler (returns None), total_energy_j = 0.0 → 0.0 mJ/tok
     assert result.energy_per_token_mj_total == pytest.approx(0.0)
