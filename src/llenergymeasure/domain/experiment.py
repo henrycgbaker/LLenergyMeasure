@@ -174,9 +174,10 @@ class ServerWindowProvenance(BaseModel):
     server_reported_output_tokens: int | None = Field(
         default=None,
         description="AUXILIARY (never the denominator): sum of the engines' self-reported "
-        "usage.completion_tokens across the window's completed requests, for cross-checking the "
-        "client-side canonical count. None when no engine reported usage (e.g. a stream without "
-        "include_usage) or for a degraded abort-core bundle.",
+        "usage.completion_tokens over all rows attributed to the window (any status - ramp, "
+        "error, and timeout rows included), for cross-checking the client-side canonical "
+        "count. None when no engine reported usage (e.g. a stream without include_usage) or "
+        "for a degraded abort-core bundle.",
     )
 
 

@@ -400,6 +400,11 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
                 # Wall-clock timeout check: mark remaining experiments skipped.
                 if deadline is not None and time.monotonic() > deadline:
+                    # consumed_by_group is defensive symmetry here: the timeout check
+                    # runs BEFORE dispatching group i, so no already-consumed index can
+                    # fall in the [i, N) sweep (a spanning group would have made i itself
+                    # consumed and continued above). The circuit-breaker site (index+1,
+                    # mid-group) is where the consumed filter is load-bearing.
                     self._mark_remaining_skipped(
                         ordered, i, compute_declared_config_hash, consumed_by_group
                     )
